@@ -43,9 +43,7 @@ export class ReleaseInfoController {
         deploymentMode: this.config.DEPLOYMENT_MODE,
         // True only on a production copy with bachs-live: the release check compares it to what it was told to expect.
         paymentsLive: this.config.PAYMENTS_LIVE_ENABLED,
-        analytics:
-          this.config.ANALYTICS_ENABLED ??
-          this.config.NODE_ENV !== 'production',
+        analytics: this.config.ANALYTICS_ENABLED,
         paymentProvider: this.config.PAYMENT_PROVIDER,
         business: this.config.BUSINESS_ENABLED,
       },

@@ -17,7 +17,7 @@ export default function PrivacyPlaceholder() {
         'How long data is kept and how deletion works',
         'Which service providers process data, and where',
         'Recognising a returning supporter, only if they choose it, and how to stop',
-        'Consent for analytics, and your rights',
+        'Anonymous visit counts: what is counted, what is never stored, and how Global Privacy Control or Do Not Track stops it',
       ]}
     >
       {/* Business release 1 (plan B9 Task 24): what a business sees, written before it is turned on. */}
@@ -54,6 +54,10 @@ export default function PrivacyPlaceholder() {
           from the business’s view. The business keeps only its location’s
           totals. You can download where you have worked, and the notes written
           about you, from your settings.
+        </p>
+        <p>
+          A business may show its logo on its public pages, beside your name and
+          photo; its owners can remove it at any time.
         </p>
       </section>
       {/* Business release 2 (decisions log, 6 Nov 2026): what a share or a team tip shows to whom. */}

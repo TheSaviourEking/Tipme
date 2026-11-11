@@ -319,6 +319,59 @@ const wired = {
     payload: { profileId: await profileId(), feeBps: 250 },
     happened: async () => (await feeOf()) === 250,
   }),
+  // Paid Pro (ADR-0015): a price one naira-step away from whatever is current, each time.
+  'pro_price.change': async () => {
+    const [{ amount }] = await q(
+      `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+    );
+    const next = String(BigInt(amount) + 10000n);
+    return {
+      payload: { amountMinor: next },
+      happened: async () =>
+        (
+          await q(
+            `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+          )
+        )[0].amount === next,
+    };
+  },
+  // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
+  'pro.refund': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `refund_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: profileId }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live') RETURNING id`,
+      [userId, handle],
+    );
+    const [{ id: purchaseId }] = await q(
+      `INSERT INTO pro_purchases (id, profile_id, method, price_id, amount_minor, currency, status,
+                                  provider, provider_reference, idempotency_key, fingerprint,
+                                  paid_at, fee_minor, charge_reference)
+       SELECT gen_random_uuid(), $1, 'card', id, amount_minor, 'NGN', 'PAID', 'bachs',
+              'platform:cs_' || substr(md5(random()::text), 1, 12), gen_random_uuid()::text, 'x',
+              now(), 5000, 'ch_' || substr(md5(random()::text), 1, 12)
+         FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1
+       RETURNING id`,
+      [profileId],
+    );
+    await q(
+      `INSERT INTO pro_periods (id, profile_id, purchase_id, starts_at, ends_at, grace_ends_at, status, paid_by, amount_minor, currency)
+       VALUES (gen_random_uuid(), $1, $2, now(), now() + interval '30 days', now() + interval '33 days', 'ACTIVE', 'card', 250000, 'NGN')`,
+      [profileId, purchaseId],
+    );
+    return {
+      payload: { purchaseId },
+      happened: async () =>
+        (
+          await q(`SELECT 1 FROM pro_refunds WHERE purchase_id = $1`, [
+            purchaseId,
+          ])
+        ).length === 1,
+    };
+  },
   'username.take_back': async () => {
     const handle = `gate_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
     const [{ id: userId }] = await q(

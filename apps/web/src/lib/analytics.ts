@@ -5,6 +5,7 @@ import {
   vitalPayload,
 } from './analytics-core';
 import { newUuid } from './random-id';
+import { campaignFromPath } from './campaign-link';
 import { MY_TIPS_KEY } from './recognition';
 import type {
   AnalyticsChannel,
@@ -65,6 +66,8 @@ export function track(
     channel?: AnalyticsChannel;
     handle?: string;
     returning?: boolean;
+    /** Campaign Studio: the link ending the page was opened from. */
+    campaign?: string;
   } = {},
 ): void {
   if (typeof window === 'undefined') return;
@@ -89,11 +92,13 @@ export function recipientReturned(): void {
 /** A public page was opened: how the visitor arrived, and (from a QR code) a scan. */
 export function profileViewed(handle: string): void {
   const channel = referrerChannel(document.referrer, location.search);
+  const campaign = campaignFromPath(location.pathname);
   track('profile_viewed', {
     surface: 'profile',
     channel,
     handle,
     returning: returningVisitor(),
+    ...(campaign ? { campaign } : {}),
   });
   if (channel === 'qr') {
     track('qr_scanned', { surface: 'profile', channel, handle });

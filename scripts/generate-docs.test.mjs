@@ -58,6 +58,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/handles/{handle}/availability',
   'GET /v1/mail/unsubscribe',
   'POST /v1/mail/unsubscribe',
+  // Paid Pro (ADR-0015): the monthly price, read only and cached publicly; nothing private.
+  'GET /v1/pro/price',
   'GET /v1/profiles/{handle}',
   'POST /v1/profiles/{handle}/report',
   'GET /v1/qr-art/previews/{file}',

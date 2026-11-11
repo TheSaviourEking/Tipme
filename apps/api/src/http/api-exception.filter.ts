@@ -33,6 +33,16 @@ export class DependencyUnavailableError extends Error {
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
   BUSINESS_NOT_FOUND: 'That business does not exist.',
+  EARNINGS_PRO_REQUIRED:
+    'Past periods, your average tip, best day and notes are part of TipMe Pro.',
+  RECAP_PRO_REQUIRED: 'The monthly recap is part of TipMe Pro.',
+  CAMPAIGN_LIMIT:
+    'You’ve used all your campaign links. Stop one to make another.',
+  CAMPAIGN_SLUG_TAKEN:
+    'You already have a campaign with that link. Try another.',
+  CAMPAIGN_SLUG_UNAVAILABLE: 'That link ending can’t be used. Try another one.',
+  SUPPORT_TOO_MANY_OPEN:
+    'You have 3 requests waiting. We’ll answer those first.',
   BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
   LOCATION_SLUG_TAKEN:
     'This business already has a location with that address.',
@@ -95,6 +105,22 @@ const messages: Record<ApiErrorCode, string> = {
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Change it and try again.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
+  PRO_PRICE_CHANGED:
+    'The Pro price has changed. Check the new price and try again.',
+  PRO_PURCHASE_OPEN:
+    'A Pro payment is already open. Finish it, or wait for it to end.',
+  PRO_ALREADY_RENEWED: 'Your next Pro month is already paid.',
+  PRO_CHECKOUT_UNAVAILABLE:
+    'Paying for Pro isn’t available right now. Nothing was charged. Please try again later.',
+  PRO_BILLING_OFF: 'Buying Pro isn’t open yet.',
+  PRO_BALANCE_REFUSED:
+    'Our payment partner couldn’t take this from your balance. Nothing was paid. You can pay by card or bank transfer instead.',
+  PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
+  PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
+  PRO_AUTO_RENEW_OFF: 'Auto-renew isn’t available.',
+  PRO_AUTO_RENEW_NEEDS_EMAIL:
+    'Add an email address to your account to turn on auto-renew. Nothing was charged.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
@@ -333,6 +359,29 @@ const operationErrors: Partial<
     code: 'CHANGELOG_EDITED_ELSEWHERE',
   },
   CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  // Pro insights (11 Nov 2026).
+  CAMPAIGN_LIMIT: { status: 409, code: 'CAMPAIGN_LIMIT' },
+  CAMPAIGN_SLUG_TAKEN: { status: 409, code: 'CAMPAIGN_SLUG_TAKEN' },
+  CAMPAIGN_SLUG_UNAVAILABLE: {
+    status: 409,
+    code: 'CAMPAIGN_SLUG_UNAVAILABLE',
+  },
+  CAMPAIGN_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
+  // Paid Pro (ADR-0015).
+  PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
+  PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
+  PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },
+  PRO_ALREADY_RENEWED: { status: 409, code: 'PRO_ALREADY_RENEWED' },
+  PRO_CHECKOUT_UNAVAILABLE: { status: 503, code: 'PRO_CHECKOUT_UNAVAILABLE' },
+  PRO_PURCHASE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  PRO_BALANCE_REFUSED: { status: 409, code: 'PRO_BALANCE_REFUSED' },
+  PRO_REFUND_REFUSED: { status: 409, code: 'PRO_REFUND_REFUSED' },
+  PRO_AUTO_RENEW_OFF: { status: 404, code: 'PRO_AUTO_RENEW_OFF' },
+  PRO_AUTO_RENEW_NEEDS_EMAIL: {
+    status: 409,
+    code: 'PRO_AUTO_RENEW_NEEDS_EMAIL',
+  },
   CHANGELOG_TEXT_NOT_ALLOWED: {
     status: 422,
     code: 'CHANGELOG_TEXT_NOT_ALLOWED',

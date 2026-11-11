@@ -80,13 +80,17 @@ export const workerConfigSchema = z
     WEB_REVALIDATE_SECRET: z.string().min(32).optional(),
     // Provider, live switch and Bachs API keys: one definition with the API (no webhook secrets).
     ...paymentSettingsShape,
-    // Anonymous analytics (PR-009). Unset: on in development and test, off in production (D-07).
+    // Anonymous analytics. On unless set to false (owner's decision, 9 Nov 2026; D-07 stays open).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
-      .optional()
-      .transform((value) =>
-        value === undefined ? undefined : value === 'true',
-      ),
+      .default('true')
+      .transform((value) => value === 'true'),
+    // Auto-renew on a saved naira card (plan Task 10; ruling 9): the `pro.renew` sweep charges only
+    // with this on. Off by default, until the sandbox proof (evidence E8 to E10).
+    PRO_AUTO_RENEW: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z

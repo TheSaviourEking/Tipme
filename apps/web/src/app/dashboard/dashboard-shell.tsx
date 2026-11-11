@@ -47,6 +47,9 @@ const links = (
   [
     { href: '/dashboard', label: 'Home', phone: true },
     { href: '/dashboard/tips', label: 'Tips', phone: true },
+    // Pro insights: earnings for everyone (the basics on Free), and campaign links.
+    { href: '/dashboard/earnings', label: 'Earnings', phone: false },
+    { href: '/dashboard/campaigns', label: 'Campaigns', phone: false },
     ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
     { href: '/dashboard/qr', label: 'My QR', phone: false },
     // TipMe for businesses: only for someone who manages one, or works at or is invited to one.
@@ -59,6 +62,7 @@ const links = (
       : []),
     { href: WHATS_NEW, label: 'What’s new', phone: false },
     { href: '/dashboard/settings', label: 'Settings', phone: true },
+    { href: '/dashboard/help', label: 'Get help', phone: false },
   ] as const;
 
 /** The dot after an update goes live, with words for screen readers. */

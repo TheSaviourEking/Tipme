@@ -87,9 +87,9 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   });
 });
 
-// Settings explains Free and Pro in one place (#pro). It says what Pro includes and that staff
-// switch it on, and it names no price: pricing is still open (docs/00-DECISIONS.md).
-test('the Pro explanation lists QR designs, three handle changes and no footer link, with no price', async ({
+// Settings explains Free and Pro in one place (#pro): what Pro includes, and the price the server
+// sends (₦2,500 a month at launch, the owner's decision of 9 Nov 2026; the e2e API has billing on).
+test('the Pro explanation lists QR designs, three handle changes and no footer link, with the server’s price', async ({
   page,
   browser,
 }, testInfo) => {
@@ -104,19 +104,17 @@ test('the Pro explanation lists QR designs, three handle changes and no footer l
     'No “Get your own TipMe page” link at the foot of your page',
   );
   await expect(pro).toContainText('Photos and designs are free on every plan');
-  await expect(pro).not.toContainText(
-    /₦|NGN|\$|£|€|per month|\/month|monthly|price/i,
-  );
-  await expect(pro.getByRole('link', { name: /upgrade|buy/i })).toHaveCount(0);
-  await expect(pro.getByRole('button', { name: /upgrade|buy/i })).toHaveCount(
-    0,
-  );
+  await expect(pro).toContainText('₦2,500 a month');
+  await expect(
+    pro.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }),
+  ).toBeVisible();
+  await expect(pro).not.toContainText(/NGN|\$|£|€|upgrade/i);
 
   await makePagePro(browser, handle, testInfo);
   await page.reload();
-  await expect(pro).toContainText('Your page is on TipMe Pro.');
-  await expect(pro).not.toContainText(
-    /₦|NGN|\$|£|€|per month|\/month|monthly|price/i,
+  await expect(pro).toContainText(
+    'Your page is on TipMe Pro, turned on by the TipMe team.',
   );
+  await expect(pro).not.toContainText(/NGN|\$|£|€|upgrade/i);
   await expectAccessible(page);
 });

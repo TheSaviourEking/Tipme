@@ -97,6 +97,23 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await expect(attention.getByText('Your page is offline')).toHaveCount(0);
 });
 
+test('signing in returns only once the session is set and the page has moved on', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const other = await (await browser.newContext()).newPage();
+  try {
+    await signInWithEmail(other, who.email);
+    // Read at once, not retried: callers go straight on to other pages after the helper.
+    const names = (await other.context().cookies()).map(({ name }) => name);
+    expect(names).toContain('tipme_session');
+    expect(new URL(other.url()).pathname).toMatch(/^\/dashboard/);
+  } finally {
+    await other.context().close();
+  }
+});
+
 test('a session survives a reload and signing out ends it', async ({
   page,
 }, testInfo) => {

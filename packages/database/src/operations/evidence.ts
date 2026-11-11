@@ -16,6 +16,7 @@ import {
 } from '../schema.js';
 import { maskEmail } from './email.js';
 import { pageReportCounts } from './profile-reports.js';
+import { supportRequestBody } from './support.js';
 import { guarded } from './errors.js';
 import { issueById, relatedOpenIssues, withdrawalHoldPins } from './issues.js';
 import { phoneHint } from './phone.js';
@@ -280,6 +281,11 @@ export function revealPrivate(
         .from(tipMessages)
         .where(eq(tipMessages.tipId, issue.subject.tipId));
       if (message) out.message = message.body;
+    }
+    // Priority support: the person's own words, kept apart from the issue.
+    if (issue.kind === 'support_request') {
+      const body = await supportRequestBody(db, issue.id);
+      if (body) out.message = body;
     }
     let userId = issue.subject.userId;
     if (!userId && issue.subject.profileId) {

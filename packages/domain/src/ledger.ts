@@ -12,7 +12,11 @@ export type AccountCode =
   | 'promotions_expense'
   // What TipMe owes a business: its agreed share of staff tips (business release 2), on the
   // business's own account. Only a payment with a share credits it.
-  | 'business_payable';
+  | 'business_payable'
+  // Paid Pro (ADR-0015; ADR-0006 addendum, needs finance sign-off): what recipients paid TipMe for
+  // Pro, and TipMe's OWN partner balance, kept apart from provider_clearing (tips).
+  | 'subscription_revenue'
+  | 'platform_clearing';
 
 export interface LedgerLine {
   account: AccountCode;
@@ -239,4 +243,68 @@ export function isBalanced(lines: readonly LedgerLine[]): boolean {
   for (const entry of lines)
     total += entry.side === 'debit' ? entry.amountMinor : -entry.amountMinor;
   return lines.length >= 2 && total === 0n;
+}
+
+/**
+ * Paid Pro bought by checkout on TipMe's own account (ADR-0015). The partner keeps its fee from the
+ * gross; the fee is always the read-back's. Not a tip: no TipMe fee, no recipient payable.
+ */
+export function buildProCheckoutPosting(input: {
+  grossMinor: bigint;
+  feeMinor: bigint;
+}): LedgerLine[] {
+  const { grossMinor, feeMinor } = input;
+  if (grossMinor <= 0n) throw new RangeError('a Pro sale has a positive price');
+  if (feeMinor < 0n || feeMinor > grossMinor)
+    throw new RangeError('provider fee out of range');
+  return [
+    line('platform_clearing', 'debit', grossMinor - feeMinor),
+    line('provider_fee_expense', 'debit', feeMinor),
+    line('subscription_revenue', 'credit', grossMinor),
+  ].filter((entry) => entry.amountMinor > 0n);
+}
+
+/**
+ * Paid Pro from the TipMe balance (plan Task 8; ADR-0006 addendum, needs finance sign-off), posted
+ * only after the partner moved the money from the person's account to TipMe's own. What TipMe owed
+ * the person pays for Pro (`recipient_payable` down, `subscription_revenue` up), and the money moves
+ * from the connected accounts' balance (`provider_clearing`) to TipMe's own (`platform_clearing`).
+ * No fee: an account-to-platform transfer carries none.
+ */
+export function buildProBalancePosting(input: {
+  amountMinor: bigint;
+  profileId: string;
+}): LedgerLine[] {
+  const { amountMinor, profileId } = input;
+  if (amountMinor <= 0n)
+    throw new RangeError('a Pro sale has a positive price');
+  if (!profileId) throw new RangeError('a balance payment names its person');
+  return [
+    line('recipient_payable', 'debit', amountMinor, profileId),
+    line('subscription_revenue', 'credit', amountMinor),
+    line('platform_clearing', 'debit', amountMinor),
+    line('provider_clearing', 'credit', amountMinor),
+  ];
+}
+
+/**
+ * A card-paid Pro month refunded by the partner (`refund.paid`; plan Task 9, ruling 6): Pro revenue
+ * gives back what was refunded, out of TipMe's own balance. The original card fee is not returned by
+ * the partner and stays TipMe's expense; a fee the refund itself carries is TipMe's too.
+ */
+export function buildProRefundPosting(input: {
+  refundedMinor: bigint;
+  refundFeeMinor: bigint;
+  /** What the sale booked: a refund never takes back more. */
+  grossMinor: bigint;
+}): LedgerLine[] {
+  const { refundedMinor, refundFeeMinor, grossMinor } = input;
+  if (refundedMinor <= 0n || refundedMinor > grossMinor)
+    throw new RangeError('refund out of range');
+  if (refundFeeMinor < 0n) throw new RangeError('refund fee out of range');
+  return [
+    line('subscription_revenue', 'debit', refundedMinor),
+    line('provider_fee_expense', 'debit', refundFeeMinor),
+    line('platform_clearing', 'credit', refundedMinor + refundFeeMinor),
+  ].filter((entry) => entry.amountMinor > 0n);
 }

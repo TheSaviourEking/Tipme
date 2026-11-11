@@ -9,7 +9,12 @@ export function balanceQuery(profileId: string) {
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
         WHERE a.code = 'recipient_payable' AND a.profile_id = ${profileId}) AS payable,
       (SELECT COALESCE(SUM(p.amount_minor), 0) FROM payouts p
-        WHERE p.profile_id = ${profileId} AND p.status IN ('REQUESTED', 'PROCESSING')) AS reserved,
+        WHERE p.profile_id = ${profileId} AND p.status IN ('REQUESTED', 'PROCESSING'))
+      -- Paid Pro from the balance (plan Task 8): reserved from the moment it opens until it is
+      -- booked (then the ledger has it) or fails.
+      + (SELECT COALESCE(SUM(pp.amount_minor), 0) FROM pro_purchases pp
+          WHERE pp.profile_id = ${profileId} AND pp.method = 'balance'
+            AND pp.status IN ('COLLECTING', 'UNKNOWN')) AS reserved,
       (SELECT COALESCE(SUM(q.recipient_net_minor - COALESCE(s.share_minor, 0)), 0)
          FROM tips t
          JOIN payment_intents i ON i.id = t.intent_id
@@ -29,7 +34,8 @@ export function balanceQuery(profileId: string) {
  * refund or chargeback is booked even when the money was already withdrawn.
  *
  * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
- * payouts still in flight (REQUESTED / PROCESSING), which are reserved. Money still being
+ * payouts still in flight (REQUESTED / PROCESSING) and Pro paid from the balance still being moved
+ * (COLLECTING / UNKNOWN), which are reserved. Money still being
  * confirmed by the provider is reported separately and is never part of the balance.
  */
 export async function balanceIn(

@@ -68,12 +68,13 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `issues.resolve` | POST `/v1/ops/business-notes/{tipId}/review`<br>POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
-| `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan` |
+| `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan`<br>GET `/v1/ops/pages/{profileId}/pro` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
-| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `pro.price` | GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
@@ -125,6 +126,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/mail/unsubscribe` | – | `unsubscribe` | – |
 | GET | `/v1/mock-provider/checkout/{reference}` | n/a (read) | – | yes |
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
+| GET | `/v1/pro/price` | n/a (read) | – | – |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
 | POST | `/v1/profiles/{handle}/report` | – | `reports` | – |
 | GET | `/v1/qr-art/previews/{file}` | n/a (read) | – | – |
@@ -207,11 +209,19 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
+| GET | `/v1/me/campaigns` | n/a (read) | – | – |
+| POST | `/v1/me/campaigns` | yes | – | – |
+| GET | `/v1/me/campaigns/{id}` | n/a (read) | – | – |
+| PATCH | `/v1/me/campaigns/{id}` | yes | – | – |
+| POST | `/v1/me/campaigns/{id}/stop` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
 | PUT | `/v1/me/cover-design` | yes | `cover_designs` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
+| GET | `/v1/me/earnings` | n/a (read) | – | – |
+| GET | `/v1/me/earnings/period` | n/a (read) | – | – |
+| GET | `/v1/me/earnings/trend` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
 | POST | `/v1/me/email/code` | yes | `auth_code` | – |
@@ -238,11 +248,17 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/payout-destination/resolve` | yes | `bank_resolve` | – |
 | PUT | `/v1/me/phone` | yes | `auth_verify` | – |
 | POST | `/v1/me/phone/code` | yes | `auth_code` | – |
+| GET | `/v1/me/pro` | n/a (read) | – | – |
+| POST | `/v1/me/pro/auto-renew/off` | yes | – | – |
+| POST | `/v1/me/pro/purchases` | yes | – | – |
+| GET | `/v1/me/pro/purchases/{purchaseId}` | n/a (read) | – | – |
 | GET | `/v1/me/profile` | n/a (read) | – | – |
 | PATCH | `/v1/me/profile` | yes | – | – |
 | GET | `/v1/me/qr-art` | n/a (read) | `qr_art` | – |
 | GET | `/v1/me/qr-art/{file}` | n/a (read) | `qr_art` | – |
 | GET | `/v1/me/qr-art/thumbs/{file}` | n/a (read) | `qr_thumb` | – |
+| GET | `/v1/me/recaps` | n/a (read) | – | – |
+| GET | `/v1/me/recaps/{month}` | n/a (read) | – | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
 | GET | `/v1/me/recovery-email` | n/a (read) | – | – |
 | POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
@@ -255,6 +271,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/sessions` | n/a (read) | – | – |
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
+| GET | `/v1/me/support` | n/a (read) | – | – |
+| POST | `/v1/me/support` | yes | – | – |
 | PUT | `/v1/me/thanks` | yes | – | – |
 | PUT | `/v1/me/tip-amounts` | yes | – | – |
 | GET | `/v1/me/tip-totals` | n/a (read) | – | – |
@@ -356,10 +374,15 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/pages/{profileId}/images/{image}/remove` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/plan` | `pages.plan` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
+| GET | `/v1/ops/pages/{profileId}/pro` | `pages.plan` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | yes | – | – |
+| GET | `/v1/ops/pro-price` | `pro.price` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/pro-price` | `pro.price` | yes | `ops_request` | – |
+| GET | `/v1/ops/pro/pages/{profileId}/payments` | `payments.repair` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/pro/purchases/{purchaseId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/providers/mail` | `issues.view,providers.manage` | n/a (read) | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | `ops_request` | – |

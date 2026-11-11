@@ -11,6 +11,7 @@ import {
   MAX_HANDLE_CHANGE_GRANT,
   OPS_PAGE_LOOKUP_PERMISSIONS,
   type OpsPage,
+  type OpsPageProStatus,
   type OpsUsernameCheck,
   type OpsWithdrawalFreeze,
   type OpsWithdrawalFreezeState,
@@ -35,7 +36,7 @@ import { TakeBackForm } from '@/components/ops/take-back-form';
 import { takeBackStateWords } from '@/lib/take-back-words';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { can, useOpsAccess } from '@/lib/ops-client';
+import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { apiFetch } from '@/lib/session-client';
@@ -293,6 +294,15 @@ function FreezeWithdrawals({
   );
 }
 
+/**
+ * Whether staff gave this page Pro. Staff change only their grant: a paid month keeps Pro on until
+ * its grace ends (ADR-0015). An API older than paid Pro sends no source, so its plan is the grant.
+ */
+const staffGrantOf = (page: OpsPage) =>
+  page.proSource === undefined
+    ? page.plan === 'pro'
+    : page.proSource === 'staff';
+
 /** Free and Pro (PR-012): find a page by handle and change its plan. No billing; audited. */
 /**
  * Taking this page's username back (usernames.manage). What the server says about the name: any
@@ -383,8 +393,19 @@ export default function OpsPagesPage() {
   const allowed = OPS_PAGE_LOOKUP_PERMISSIONS.some((p) => can(access, p));
   const mayPlan = can(access, 'pages.plan');
 
-  const fetchPage = (wanted: string) =>
-    opsFetch<OpsPage>(`/v1/ops/pages/${encodeURIComponent(wanted)}`);
+  const fetchPage = async (wanted: string) => {
+    const result = await opsFetch<OpsPage>(
+      `/v1/ops/pages/${encodeURIComponent(wanted)}`,
+    );
+    // Paid Pro's dates are billing details, for whoever changes plans (ADR-0015).
+    if (!result.ok || !mayPlan) return result;
+    const pro = await opsFetch<OpsPageProStatus>(
+      `/v1/ops/pages/${result.data.profileId}/pro`,
+    );
+    return pro.ok
+      ? { ...result, data: { ...result.data, ...pro.data } }
+      : result;
+  };
   const show = (
     wanted: string,
     result: Awaited<ReturnType<typeof fetchPage>>,
@@ -431,7 +452,7 @@ export default function OpsPagesPage() {
   };
 
   const changePlan = async (current: OpsPage, reason: string) => {
-    const plan = current.plan === 'pro' ? 'free' : 'pro';
+    const plan = staffGrantOf(current) ? 'free' : 'pro';
     const result = await opsFetch<OpsPage>(
       `/v1/ops/pages/${current.profileId}/plan`,
       { method: 'POST', body: { plan, reason } },
@@ -439,9 +460,11 @@ export default function OpsPagesPage() {
     if (!result.ok) return 'That didn’t work. Please try again.';
     setPage(result.data);
     setDone(
-      plan === 'pro'
-        ? `@${result.data.handle} is now Pro: they can choose their own tip amounts in Settings.`
-        : `@${result.data.handle} is back on Free: their page shows the standard amounts and its first 3 links from Free sites. Other links are kept, hidden, not deleted.`,
+      plan === 'free' && result.data.plan === 'pro'
+        ? `The staff grant for @${result.data.handle} is removed. Their paid month keeps Pro${result.data.graceUntil ? ` until ${when(result.data.graceUntil)}` : ''}, then the page moves to Free.`
+        : plan === 'pro'
+          ? `@${result.data.handle} is now Pro: they can choose their own tip amounts in Settings.`
+          : `@${result.data.handle} is back on Free: their page shows the standard amounts and its first 3 links from Free sites. Other links are kept, hidden, not deleted.`,
     );
     return null;
   };
@@ -484,16 +507,23 @@ export default function OpsPagesPage() {
             {STATE_LABELS[page.pageState]}
             {page.suspended ? ' · Paused by TipMe' : ''}
           </p>
+          {page.proSource && (
+            <p data-testid="pro-source">
+              {page.proSource === 'staff' ? 'Pro by staff grant' : 'Paid Pro'}
+              {page.paidUntil && ` · paid until ${when(page.paidUntil)}`}
+              {page.graceUntil && ` · grace until ${when(page.graceUntil)}`}
+            </p>
+          )}
           {mayPlan && (
             <ReasonAction
-              key={page.plan}
-              open={page.plan === 'pro' ? 'Move back to Free…' : 'Make Pro…'}
+              key={`${page.plan}-${page.proSource ?? ''}`}
+              open={staffGrantOf(page) ? 'Move back to Free…' : 'Make Pro…'}
               field={
-                page.plan === 'pro'
+                staffGrantOf(page)
                   ? 'Why is this page going back to Free?'
                   : 'Why is this page getting Pro?'
               }
-              submit={page.plan === 'pro' ? 'Move to Free' : 'Make Pro'}
+              submit={staffGrantOf(page) ? 'Move to Free' : 'Make Pro'}
               onSubmit={(reason) => changePlan(page, reason)}
             />
           )}
