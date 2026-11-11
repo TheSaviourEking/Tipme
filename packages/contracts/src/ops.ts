@@ -259,6 +259,8 @@ export const ISSUE_KINDS = [
   'pro_late_payment',
   'pro_conflict',
   'pro_reversed',
+  // Priority support: a person's support request (its words are kept apart, read by reveal).
+  'support_request',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -326,6 +328,8 @@ export interface OpsIssue {
   resolvedAt: string | null;
   resolvedBy: string | null;
   resolutionOutcome: OpsIssueOutcome | null;
+  /** A Pro member's support request: answered first, sorted first among open issues. */
+  priority: boolean;
 }
 
 export const opsIssueListQuerySchema = z

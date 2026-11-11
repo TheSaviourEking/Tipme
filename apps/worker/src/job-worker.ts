@@ -33,6 +33,7 @@ import {
   mailSealing,
   pretendMailSink,
   runWeeklyReports,
+  runMonthlyRecaps,
   reconcileAttempts,
   reconcilePayouts,
   reconcileProPurchases,
@@ -537,6 +538,15 @@ export async function startJobWorker(
               sealing,
             });
             logger.info({ event: 'moments.monthly.completed', created });
+            // After the moments, so the month is whole: Pro pages' recaps (and their emails).
+            const recaps = await runMonthlyRecaps(database.db, {
+              sealing,
+              month: previousMonth(now),
+            });
+            logger.info({
+              event: 'recaps.monthly.completed',
+              created: recaps.created,
+            });
             processed.add(1, { outcome: 'celebrated' });
             return 'celebrated';
           }

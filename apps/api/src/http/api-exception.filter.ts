@@ -33,6 +33,16 @@ export class DependencyUnavailableError extends Error {
 // Fixed messages: framework and parser messages can quote request input.
 const messages: Record<ApiErrorCode, string> = {
   BUSINESS_NOT_FOUND: 'That business does not exist.',
+  EARNINGS_PRO_REQUIRED:
+    'Past periods, your average tip, best day and notes are part of TipMe Pro.',
+  RECAP_PRO_REQUIRED: 'The monthly recap is part of TipMe Pro.',
+  CAMPAIGN_LIMIT:
+    'You’ve used all your campaign links. Stop one to make another.',
+  CAMPAIGN_SLUG_TAKEN:
+    'You already have a campaign with that link. Try another.',
+  CAMPAIGN_SLUG_UNAVAILABLE: 'That link ending can’t be used. Try another one.',
+  SUPPORT_TOO_MANY_OPEN:
+    'You have 3 requests waiting. We’ll answer those first.',
   BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
   LOCATION_SLUG_TAKEN:
     'This business already has a location with that address.',
@@ -342,6 +352,15 @@ const operationErrors: Partial<
     code: 'CHANGELOG_EDITED_ELSEWHERE',
   },
   CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  // Pro insights (11 Nov 2026).
+  CAMPAIGN_LIMIT: { status: 409, code: 'CAMPAIGN_LIMIT' },
+  CAMPAIGN_SLUG_TAKEN: { status: 409, code: 'CAMPAIGN_SLUG_TAKEN' },
+  CAMPAIGN_SLUG_UNAVAILABLE: {
+    status: 409,
+    code: 'CAMPAIGN_SLUG_UNAVAILABLE',
+  },
+  CAMPAIGN_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },

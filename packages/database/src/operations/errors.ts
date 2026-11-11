@@ -125,7 +125,13 @@ export type OperationErrorCode =
   | 'APPROVAL_NO_APPROVER'
   | 'CHANGELOG_EDITED_ELSEWHERE'
   | 'CHANGELOG_TEXT_NOT_ALLOWED'
-  | 'CHANGELOG_NOT_FOUND';
+  | 'CHANGELOG_NOT_FOUND'
+  // Pro insights (11 Nov 2026).
+  | 'CAMPAIGN_LIMIT'
+  | 'CAMPAIGN_SLUG_TAKEN'
+  | 'CAMPAIGN_SLUG_UNAVAILABLE'
+  | 'CAMPAIGN_NOT_FOUND'
+  | 'SUPPORT_TOO_MANY_OPEN';
 
 /**
  * Expected business outcomes callers map to responses; never carries request values. `detail` is
