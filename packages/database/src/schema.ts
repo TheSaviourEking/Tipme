@@ -75,6 +75,8 @@ export const entityType = pgEnum('entity_type', [
   'payout',
   // Paid Pro (ADR-0015).
   'pro_purchase',
+  // A staff refund of a card-paid Pro month (plan Task 9, ruling 6).
+  'pro_refund',
 ]);
 export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
@@ -97,6 +99,8 @@ export const operationType = pgEnum('operation_type', [
   'reversal',
   // Paid Pro (ADR-0015): a Pro month bought on TipMe's own account. Never a tip.
   'pro_sale',
+  // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
+  'pro_refund',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -3071,6 +3075,14 @@ export const proPurchases = pgTable(
     paidAt: timestamp('paid_at', { withTimezone: true }),
     // The partner's fee, from the read-back, once paid.
     feeMinor: minor('fee_minor'),
+    // Paying from the balance (plan Task 8): the connected account the money is moved from.
+    accountReference: text('account_reference'),
+    // The partner's payment (charge) id, read back once paid: what a card refund names.
+    chargeReference: text('charge_reference'),
+    // Auto-renew (plan Task 10): the payer asked to save their card on this checkout.
+    saveCard: boolean('save_card').notNull().default(false),
+    // A saved-card renewal: the month it renews. One attempt per month, never a second.
+    renewsPeriodId: uuid('renews_period_id').unique(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -3104,3 +3116,79 @@ export const proPurchases = pgTable(
     currencyCheck('pro_purchases'),
   ],
 );
+
+export const PRO_REFUND_STATUSES = [
+  'REQUESTED',
+  'PROCESSING',
+  'UNKNOWN',
+  'PAID',
+  'FAILED',
+] as const;
+
+/**
+ * A staff refund of one card-paid Pro month (plan Task 9; ruling 6): asked on the member's request
+ * within 14 days, decided by a second person, then sent to the partner once (idempotency key
+ * `tipme-pro-refund-<id>`). Only `refund.paid` books it and ends the month; `refund.failed` changes
+ * nothing about Pro and lets staff try again (the partner allows one refund per payment, and a
+ * failed one doesn't count).
+ */
+export const proRefunds = pgTable(
+  'pro_refunds',
+  {
+    id: uuid('id').primaryKey(),
+    purchaseId: uuid('purchase_id')
+      .notNull()
+      .references(() => proPurchases.id),
+    status: text('status').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    // The partner's refund id once known, and what its refund.paid said.
+    providerRefundReference: text('provider_refund_reference'),
+    refundedMinor: minor('refunded_minor'),
+    refundFeeMinor: minor('refund_fee_minor'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    // Set when TipMe claims the partner call, before making it.
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // One refund per payment, but a failed one doesn't count (the partner's refund guide).
+    uniqueIndex('pro_refunds_one_per_purchase')
+      .on(table.purchaseId)
+      .where(sql`${table.status} <> 'FAILED'`),
+    index('pro_refunds_open').on(table.status, table.createdAt),
+    check(
+      'pro_refunds_status',
+      sql`${table.status} IN ('REQUESTED', 'PROCESSING', 'UNKNOWN', 'PAID', 'FAILED')`,
+    ),
+    check('pro_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    currencyCheck('pro_refunds'),
+  ],
+);
+
+/**
+ * Auto-renew on a saved naira card (plan Task 10; ruling 9), behind PRO_AUTO_RENEW. Opted into at
+ * purchase; the partner's ids only (no card details). Turning it off clears the saved method, so
+ * nothing can be charged until the person opts in again on a new checkout.
+ */
+export const proAutoRenew = pgTable('pro_auto_renew', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  provider: text('provider').notNull(),
+  enabled: boolean('enabled').notNull(),
+  customerReference: text('customer_reference'),
+  paymentMethodReference: text('payment_method_reference'),
+  // The month whose renewal was refused: reminders and grace apply to it as usual.
+  failedPeriodId: uuid('failed_period_id'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});

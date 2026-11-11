@@ -21,6 +21,7 @@ import { postLedgerTransaction } from './ledger.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
 import { recomputePlan, startPaidPeriod } from './pro-periods.js';
+import { recordSavedCardIn, renewalFailedIn } from './pro-auto-renew.js';
 import { currentProPrice } from './pro-price.js';
 import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
@@ -41,6 +42,10 @@ export interface ProVerified {
   /** Taken, but its evidence (the fee) isn't final yet: never expire it. */
   collected?: true;
   method?: 'NGN_CARD' | 'NGN_BANK_TRANSFER';
+  /** The partner's payment (charge) id: what a refund names (plan Task 9). */
+  chargeReference?: string;
+  /** Pretend provider only: the card saved while paying (the partner says so by webhook). */
+  savedMethod?: { customerReference: string; paymentMethodReference: string };
 }
 
 /** The provider calls a purchase needs. The database package never imports an adapter. */
@@ -52,6 +57,7 @@ export interface ProCheckoutProvider {
     successUrl: string;
     cancelUrl: string;
     idempotencyKey: string;
+    saveCard?: { customerReference: string };
   }): Promise<{
     providerReference: string;
     checkoutUrl: string;
@@ -59,6 +65,8 @@ export interface ProCheckoutProvider {
   }>;
   verifyTransaction(providerReference: string): Promise<ProVerified>;
 }
+
+export type ProPurchaseMethod = 'card' | 'balance' | 'saved_card';
 
 export interface ProPurchaseView {
   purchaseId: string;
@@ -70,9 +78,9 @@ export interface ProPurchaseView {
   paidAt: Date | null;
 }
 
-type PurchaseRow = typeof proPurchases.$inferSelect;
+export type PurchaseRow = typeof proPurchases.$inferSelect;
 
-const view = (row: PurchaseRow): ProPurchaseView => ({
+export const view = (row: PurchaseRow): ProPurchaseView => ({
   purchaseId: row.id,
   status: row.status as ProPurchaseStatus,
   amountMinor: row.amountMinor,
@@ -88,7 +96,7 @@ export const proIdempotencyKey = (purchaseId: string) =>
   `tipme-pro-${purchaseId}`;
 
 /** A definite refusal by name (the adapter's classes are not imported here). */
-function definitelyRefused(error: unknown): string | null {
+export function definitelyRefused(error: unknown): string | null {
   if (!(error instanceof Error)) return null;
   if (error.name === 'PlatformCheckoutUnavailableError') return 'unavailable';
   if (error.name === 'BachsRequestNotSentError') return 'not_sent';
@@ -102,7 +110,7 @@ function definitelyRefused(error: unknown): string | null {
   return null;
 }
 
-async function move(
+export async function move(
   tx: Tx,
   row: PurchaseRow,
   to: ProPurchaseStatus,
@@ -134,7 +142,10 @@ async function move(
   row.status = to;
 }
 
-async function lockPurchase(tx: Tx, purchaseId: string): Promise<PurchaseRow> {
+export async function lockPurchase(
+  tx: Tx,
+  purchaseId: string,
+): Promise<PurchaseRow> {
   const [row] = await tx
     .select()
     .from(proPurchases)
@@ -154,10 +165,21 @@ export function requestProPurchase(
   db: Database,
   input: {
     profileId: string;
-    method: 'card';
+    method: ProPurchaseMethod;
     expectedAmountMinor: bigint;
     idempotencyKey: string;
     now: Date;
+    /** The first status: PENDING for a checkout, COLLECTING for money moved by TipMe. */
+    status?: 'PENDING' | 'COLLECTING';
+    /** Columns this way of paying records (the account, the opt-in, the month renewed). */
+    extra?: Partial<
+      Pick<
+        typeof proPurchases.$inferInsert,
+        'accountReference' | 'saveCard' | 'renewsPeriodId' | 'provider'
+      >
+    >;
+    /** More checks under the profile lock, after the price and open checks (the balance's). */
+    guard?: (tx: Tx, price: { amountMinor: bigint }) => Promise<void>;
   },
 ): Promise<{ purchase: PurchaseRow; replayed: boolean }> {
   if (!/^[\w.:-]{8,200}$/.test(input.idempotencyKey))
@@ -217,7 +239,9 @@ export function requestProPurchase(
           ),
         );
       if (open) throw new OperationError('PRO_PURCHASE_OPEN');
+      if (input.guard) await input.guard(tx, price);
       const id = newId();
+      const status = input.status ?? 'PENDING';
       const [purchase] = await tx
         .insert(proPurchases)
         .values({
@@ -227,19 +251,20 @@ export function requestProPurchase(
           priceId: price.id,
           amountMinor: price.amountMinor,
           currency: 'NGN',
-          status: 'PENDING',
+          status,
           idempotencyKey: input.idempotencyKey,
           fingerprint,
           startClaimedAt: input.now,
           createdAt: input.now,
           updatedAt: input.now,
+          ...input.extra,
         })
         .returning();
       await recordTransition(tx, {
         entityType: 'pro_purchase',
         entityId: id,
         fromStatus: null,
-        toStatus: 'PENDING',
+        toStatus: status,
         cause: 'system',
         traceId: activeTraceId(),
       });
@@ -331,6 +356,8 @@ export async function buyProByCheckout(
     providerName: string;
     successUrl: string;
     cancelUrl: string;
+    /** Auto-renew opt-in (plan Task 10): save the card on this customer while paying. */
+    saveCard?: { customerReference: string };
     now: Date;
   },
 ): Promise<ProPurchaseView & { replayed: boolean }> {
@@ -340,6 +367,7 @@ export async function buyProByCheckout(
     expectedAmountMinor: input.expectedAmountMinor,
     idempotencyKey: input.idempotencyKey,
     now: input.now,
+    ...(input.saveCard ? { extra: { saveCard: true } } : {}),
   });
   if (replayed) return { ...view(purchase), replayed: true };
   const create = input.provider.initializePlatformCheckout;
@@ -358,6 +386,7 @@ export async function buyProByCheckout(
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       idempotencyKey: proIdempotencyKey(purchase.id),
+      ...(input.saveCard ? { saveCard: input.saveCard } : {}),
     });
   } catch (error) {
     if (definitelyRefused(error)) {
@@ -422,8 +451,22 @@ export async function findProPurchaseByReference(
     provider: string;
     providerReference: string | null;
     operationReference: string | null;
+    /** The partner's payment id (a refund's event names only the charge). */
+    chargeReference?: string | null;
   },
 ): Promise<string | null> {
+  if (input.chargeReference) {
+    const [row] = await db
+      .select({ id: proPurchases.id })
+      .from(proPurchases)
+      .where(
+        and(
+          eq(proPurchases.provider, input.provider),
+          eq(proPurchases.chargeReference, input.chargeReference),
+        ),
+      );
+    if (row) return row.id;
+  }
   if (input.providerReference) {
     const [row] = await db
       .select({ id: proPurchases.id })
@@ -567,7 +610,11 @@ export async function confirmProCheckout(
         return done('pending');
       }
       if (verified.status === 'failed') {
-        if (row.status === 'PENDING' || row.status === 'UNKNOWN') {
+        if (
+          row.status === 'PENDING' ||
+          row.status === 'UNKNOWN' ||
+          row.status === 'COLLECTING'
+        ) {
           const ended =
             row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime();
           await move(tx, row, ended ? 'EXPIRED' : 'FAILED', {
@@ -575,6 +622,9 @@ export async function confirmProCheckout(
             cause,
             ...event,
           });
+          // An automatic renewal refused: the normal reminders and grace take over.
+          if (row.method === 'saved_card')
+            await renewalFailedIn(tx, input.sealing, row, now);
         }
         return done('failed');
       }
@@ -596,7 +646,11 @@ export async function confirmProCheckout(
       }
       const late = row.status === 'EXPIRED' || row.status === 'FAILED';
       const paidBy =
-        verified.method === 'NGN_BANK_TRANSFER' ? 'bank_transfer' : 'card';
+        row.method === 'saved_card'
+          ? 'saved_card'
+          : verified.method === 'NGN_BANK_TRANSFER'
+            ? 'bank_transfer'
+            : 'card';
       let period: Awaited<ReturnType<typeof startPaidPeriod>>;
       try {
         period = await tx.transaction((savepoint) =>
@@ -631,8 +685,21 @@ export async function confirmProCheckout(
         now,
         cause,
         ...event,
-        set: { paidAt: now, feeMinor: verified.feeMinor },
+        set: {
+          paidAt: now,
+          feeMinor: verified.feeMinor,
+          ...(verified.chargeReference
+            ? { chargeReference: verified.chargeReference }
+            : {}),
+        },
       });
+      // The pretend partner reports a card saved while paying here; the real one by webhook.
+      if (row.saveCard && verified.savedMethod)
+        await recordSavedCardIn(tx, {
+          provider: row.provider ?? '',
+          ...verified.savedMethod,
+          now,
+        });
       await postLedgerTransaction(tx, {
         operationType: 'pro_sale',
         operationKey: `pro.${row.id}`,
@@ -705,6 +772,9 @@ export async function reconcileProPurchases(
     .where(
       and(
         inArray(proPurchases.status, ['PENDING', 'UNKNOWN']),
+        // Balance payments have their own read-back (pro-balance.ts); a saved-card charge whose
+        // answer was lost is asked again by the renewal sweep, with its own key.
+        inArray(proPurchases.method, ['card', 'saved_card']),
         eq(proPurchases.provider, input.providerName),
         lte(proPurchases.createdAt, before),
         or(
@@ -727,6 +797,7 @@ export async function reconcileProPurchases(
       if (
         !reference &&
         row.status === 'UNKNOWN' &&
+        row.method === 'card' &&
         input.provider.initializePlatformCheckout
       ) {
         const created = await input.provider.initializePlatformCheckout({
@@ -797,31 +868,45 @@ export async function endProForReversal(
           handleLower: null,
           planChanged: false,
         };
-      const [page] = await tx
-        .select({ handleLower: profiles.handleLower })
-        .from(profiles)
-        .where(eq(profiles.id, row.profileId))
-        .for('update');
-      // The month this payment bought ends now, grace included (it no longer covers `at`); a month
-      // not started yet shrinks to nothing. Nothing is deleted.
-      const at = input.now;
-      await tx.execute(sql`
-        UPDATE pro_periods
-           SET status = 'ENDED',
-               ends_at = GREATEST(starts_at + interval '1 millisecond',
-                                  LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds')),
-               grace_ends_at = GREATEST(starts_at + interval '1 millisecond',
-                                  LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds'))
-                               + interval '1 millisecond'
-         WHERE purchase_id = ${row.id} AND status <> 'ENDED'`);
-      const plan = await recomputePlan(tx, row.profileId, at);
-      return {
-        profileId: row.profileId,
-        handleLower: page?.handleLower ?? null,
-        planChanged: plan.changed,
-      };
+      return endPaidMonth(tx, row, input.now);
     }),
   );
+}
+
+/**
+ * Ends the month one payment bought, now, grace included (it no longer covers `at`); a month not
+ * started yet shrinks to nothing. Nothing is deleted. Pro stays if a staff grant or another month
+ * still covers now (ruling 4). Called under the purchase's lock.
+ */
+export async function endPaidMonth(
+  tx: Tx,
+  row: { id: string; profileId: string },
+  at: Date,
+): Promise<{
+  profileId: string;
+  handleLower: string | null;
+  planChanged: boolean;
+}> {
+  const [page] = await tx
+    .select({ handleLower: profiles.handleLower })
+    .from(profiles)
+    .where(eq(profiles.id, row.profileId))
+    .for('update');
+  await tx.execute(sql`
+    UPDATE pro_periods
+       SET status = 'ENDED',
+           ends_at = GREATEST(starts_at + interval '1 millisecond',
+                              LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds')),
+           grace_ends_at = GREATEST(starts_at + interval '1 millisecond',
+                              LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds'))
+                           + interval '1 millisecond'
+     WHERE purchase_id = ${row.id} AND status <> 'ENDED'`);
+  const plan = await recomputePlan(tx, row.profileId, at);
+  return {
+    profileId: row.profileId,
+    handleLower: page?.handleLower ?? null,
+    planChanged: plan.changed,
+  };
 }
 
 /** Everything `GET /v1/me/pro` shows, read at `now`. */

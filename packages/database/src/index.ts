@@ -95,3 +95,6 @@ export * from './operations/business-shifts.js';
 export * from './operations/pro-price.js';
 export * from './operations/pro-periods.js';
 export * from './operations/pro-purchases.js';
+export * from './operations/pro-balance.js';
+export * from './operations/pro-refunds.js';
+export * from './operations/pro-auto-renew.js';

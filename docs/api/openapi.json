@@ -5596,6 +5596,43 @@
         ]
       }
     },
+    "/v1/me/pro/auto-renew/off": {
+      "post": {
+        "operationId": "Pro.autoRenewOff",
+        "tags": [
+          "Pro"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/pro/purchases": {
       "post": {
         "operationId": "Pro.buy",
@@ -5612,6 +5649,16 @@
                   "expectedAmountMinor": {
                     "type": "string",
                     "pattern": "^[1-9][0-9]{0,11}$"
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "card",
+                      "balance"
+                    ]
+                  },
+                  "autoRenew": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -10889,7 +10936,9 @@
                 "pro_amount_mismatch",
                 "pro_late_payment",
                 "pro_conflict",
-                "pro_reversed"
+                "pro_reversed",
+                "pro_collect_unknown",
+                "pro_refund_failed"
               ]
             }
           },
@@ -13002,6 +13051,124 @@
           }
         ],
         "x-tipme-permission": "pro.price"
+      }
+    },
+    "/v1/ops/pro/pages/{profileId}/payments": {
+      "get": {
+        "operationId": "OpsProPayments.list",
+        "tags": [
+          "OpsProPayments"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
+      }
+    },
+    "/v1/ops/pro/purchases/{purchaseId}/refund": {
+      "post": {
+        "operationId": "OpsProPayments.refund",
+        "tags": [
+          "OpsProPayments"
+        ],
+        "parameters": [
+          {
+            "name": "purchaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
       }
     },
     "/v1/ops/providers/mail": {
@@ -16210,6 +16377,11 @@
                   "PRO_ALREADY_RENEWED",
                   "PRO_CHECKOUT_UNAVAILABLE",
                   "PRO_BILLING_OFF",
+                  "PRO_BALANCE_REFUSED",
+                  "PRO_REFUND_REFUSED",
+                  "PRO_REFUNDS_OFF",
+                  "PRO_AUTO_RENEW_OFF",
+                  "PRO_AUTO_RENEW_NEEDS_EMAIL",
                   "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",

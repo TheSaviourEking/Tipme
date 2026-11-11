@@ -1,5 +1,10 @@
 import type { Provider } from '@nestjs/common';
-import type { ProCheckoutProvider } from '@tipme/database';
+import type {
+  ProAutoRenewProvider,
+  ProCheckoutProvider,
+  ProCollectProvider,
+  ProRefundProvider,
+} from '@tipme/database';
 import {
   bachsEnvironment,
   recordedProviderName,
@@ -22,6 +27,10 @@ export interface ProCheckout {
   provider: ProCheckoutProvider;
   /** Real money: bachs-live. Only with PAYMENTS_LIVE_ENABLED and the page named. */
   live: boolean;
+  /** The adapter's own name ('mock', 'bachs-sandbox', 'bachs-live'): which account a payment uses. */
+  adapterName: string;
+  /** Paying from the balance, refunds and saved cards (plan Tasks 8 to 10), on the same adapter. */
+  money: ProCollectProvider & ProRefundProvider & ProAutoRenewProvider;
 }
 
 export const proCheckoutProvider: Provider<ProCheckout> = {
@@ -41,6 +50,8 @@ export const proCheckoutProvider: Provider<ProCheckout> = {
       return {
         name: recordedProviderName(name),
         live: name === 'bachs-live',
+        adapterName: name,
+        money: bachs,
         provider: {
           initializePlatformCheckout: (input) =>
             bachs.initializePlatformCheckout!(input),
@@ -51,6 +62,8 @@ export const proCheckoutProvider: Provider<ProCheckout> = {
     return {
       name: 'mock',
       live: false,
+      adapterName: 'mock',
+      money: mock,
       provider: {
         initializePlatformCheckout: (input) =>
           mock.initializePlatformCheckout!(input),

@@ -20,6 +20,8 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'capability.updated',
   'payout.paid',
   'payout.failed',
+  // Auto-renew (plan Task 10): a card saved on TipMe's own account while paying.
+  'payment_method.saved',
 ]);
 
 const eventEnvelopeSchema = z.object({
@@ -208,9 +210,29 @@ function normalizeEvent(
       'collection.failed',
       'collection.underpaid',
       'checkout.completed',
+      'payment_method.saved',
     ].includes(event.type)
   )
     return { kind: 'ignored', eventId: event.id, eventType: event.type };
+  // A saved card is TipMe's only on its own account; a connected account's is none of ours.
+  if (event.type === 'payment_method.saved') {
+    if (!platform)
+      return { kind: 'ignored', eventId: event.id, eventType: event.type };
+    const customer = data['customer'];
+    const customerReference =
+      typeof customer === 'object' && customer !== null
+        ? partnerId((customer as Record<string, unknown>)['customer_id'])
+        : null;
+    const paymentMethodReference = partnerId(data['payment_method_id']);
+    if (!customerReference || !paymentMethodReference) return undefined;
+    return {
+      kind: 'saved_method',
+      eventId: event.id,
+      eventType: 'payment_method.saved',
+      customerReference,
+      paymentMethodReference,
+    };
+  }
   const scoped = platform ? { scope: 'platform' as const } : {};
   if (
     accountReference !== null &&
@@ -266,6 +288,19 @@ function normalizeEvent(
   }
   const checkoutId = nullableString(data['checkout_id']);
   const operationReference = nullableString(data['reference']);
+  // TipMe's own account: the payment (charge) the event names. With no checkout, it is an
+  // off-session charge (auto-renew), matched as `platform-charge:<id>`.
+  const chargeReference = platform
+    ? (partnerId(data['charge_id']) ?? partnerId(data['payment_id']))
+    : null;
+  const charged = platform && !checkoutId && chargeReference !== null;
+  const reference = (id: string | null) =>
+    id
+      ? checkoutReference(scope, id)
+      : charged
+        ? `platform-charge:${chargeReference}`
+        : null;
+  const withCharge = platform ? { chargeReference } : {};
 
   if (event.type === 'collection.succeeded') {
     if (!accountReference && !platform) return undefined;
@@ -280,15 +315,14 @@ function normalizeEvent(
       amountMinor !== undefined && processingFeeCurrency === currency
         ? safeMinor(data['processing_fee'], currency)
         : undefined;
-    const hasCheckout = checkoutId !== null;
+    const hasCheckout = checkoutId !== null || charged;
     return {
       kind: 'payment',
       eventId: event.id,
       eventType: event.type,
       ...scoped,
-      providerReference: hasCheckout
-        ? checkoutReference(scope, checkoutId)
-        : null,
+      ...withCharge,
+      providerReference: reference(checkoutId),
       operationReference,
       accountReference,
       // A collection event does not prove who ultimately bore Bachs' processing fee.
@@ -306,12 +340,11 @@ function normalizeEvent(
       eventId: event.id,
       eventType: event.type,
       ...scoped,
-      providerReference: checkoutId
-        ? checkoutReference(scope, checkoutId)
-        : null,
+      ...withCharge,
+      providerReference: reference(checkoutId),
       operationReference,
       accountReference,
-      status: checkoutId ? 'failed' : 'review',
+      status: checkoutId || charged ? 'failed' : 'review',
       amountMinor: currency ? safeMinor(data['amount'], currency) : undefined,
       currency,
       feePaidBy: 'unknown',
@@ -404,6 +437,9 @@ function normalizeReversal(
     ...(scope.platform ? { scope: 'platform' as const } : {}),
     accountReference,
     providerReference: checkoutId ? checkoutReference(scope, checkoutId) : null,
+    ...(scope.platform
+      ? { chargeReference: partnerId(event.data['charge_id']) }
+      : {}),
     operationReference: nullableString(event.data['reference']),
     partnerReversalId: objectId ? `${family}.${objectId}` : null,
     disputeWon,

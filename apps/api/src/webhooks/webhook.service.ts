@@ -8,6 +8,8 @@ import {
 import { z } from 'zod';
 import {
   applyPayoutSignal,
+  applyProRefundEvent,
+  recordSavedCard,
   confirmProCheckout,
   endProForReversal,
   findProPurchaseByReference,
@@ -98,6 +100,7 @@ export class WebhookService {
       provider,
       providerReference: event.providerReference,
       operationReference: event.operationReference,
+      chargeReference: event.chargeReference ?? null,
     });
     if (!purchaseId) return this.unmatchedPro(event, provider);
     const { eventRowId } = await recordProEvent(db, {
@@ -108,6 +111,21 @@ export class WebhookService {
       payload: event,
     });
     const now = new Date();
+    // A refund's own events (plan Task 9): only refund.paid books it and ends that month.
+    if (event.kind === 'reversal' && event.refundState) {
+      const result = await applyProRefundEvent(db, {
+        purchaseId,
+        eventRowId,
+        refundState: event.refundState,
+        partnerRefundId: event.partnerReversalId,
+        operationReference: event.operationReference,
+        refundedMinor: event.refundedMinor,
+        refundFeeMinor: event.refundFeeMinor,
+        now,
+      });
+      this.signalPlan(result);
+      return `pro_refund_${result.outcome}`;
+    }
     if (event.kind === 'reversal') {
       const endPro =
         event.refundState === 'paid' ||
@@ -165,7 +183,11 @@ export class WebhookService {
     const { db } = this.database;
     const { reference } = event.data;
     // Paid Pro on pretend money: the same path as TipMe's own Bachs account.
-    if (reference.startsWith('mock_pro_') && event.type.startsWith('payment.'))
+    if (
+      (reference.startsWith('mock_pro_') ||
+        reference.startsWith('mock_charge_')) &&
+      event.type.startsWith('payment.')
+    )
       return this.applyProEvent(
         {
           kind: 'payment',
@@ -230,6 +252,17 @@ export class WebhookService {
       >,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
+    // Auto-renew (plan Task 10): a card saved on TipMe's own account. Only an opted-in customer
+    // turns auto-renew on; any other is unmatched.
+    if (event.kind === 'saved_method') {
+      const profileId = await recordSavedCard(this.database.db, {
+        provider: 'bachs',
+        customerReference: event.customerReference,
+        paymentMethodReference: event.paymentMethodReference,
+        now: new Date(),
+      });
+      return profileId ? 'pro_card_saved' : this.unmatchedBachs(event);
+    }
     // TipMe's own account (paid Pro): never a tip, never an account of a recipient.
     if (
       (event.kind === 'payment' || event.kind === 'reversal') &&

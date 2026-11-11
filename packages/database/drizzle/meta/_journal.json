@@ -638,6 +638,13 @@
       "when": 1794258786885,
       "tag": "0090_pro_purchases",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1794379661583,
+      "tag": "0091_pro_money",
+      "breakpoints": true
     }
   ]
 }

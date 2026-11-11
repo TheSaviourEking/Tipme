@@ -444,6 +444,9 @@ test('each Pro money alert becomes one inbox issue about the page', async (t) =>
     ['pro.late_payment', 'pro_late_payment', 'info'],
     ['pro.conflict', 'pro_conflict', 'money'],
     ['pro.reversed', 'pro_reversed', 'money'],
+    // Plan Tasks 8 and 9.
+    ['pro.collect_unknown', 'pro_collect_unknown', 'money'],
+    ['pro.refund_failed', 'pro_refund_failed', 'money'],
   ]) {
     const input = {
       eventType,

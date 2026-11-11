@@ -259,6 +259,9 @@ export const ISSUE_KINDS = [
   'pro_late_payment',
   'pro_conflict',
   'pro_reversed',
+  // Paid Pro: a balance payment the partner never answered, and a refund the partner refused.
+  'pro_collect_unknown',
+  'pro_refund_failed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

@@ -726,6 +726,7 @@ const PREVIOUS_SAMPLES = {
   pro_grace_started: MAIL_TYPES.pro_grace_started.sample,
   pro_ended: MAIL_TYPES.pro_ended.sample,
   pro_receipt: MAIL_TYPES.pro_receipt.sample,
+  pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
 };
 
 const settingsCtx = {

@@ -70,7 +70,8 @@ async function accountId(
 export async function postLedgerTransaction(
   tx: Tx,
   input: {
-    operationType: 'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale';
+    operationType:
+      'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale' | 'pro_refund';
     operationKey: string;
     currency: string;
     tipId?: string;

@@ -50,6 +50,7 @@ import {
   proEnded,
   proReceipt,
   proGraceStarted,
+  proRenewalFailed,
   proRenewalReminder,
 } from './types/pro-notices.js';
 import { tipReceived } from './types/tip-received.js';
@@ -70,6 +71,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     proGraceStarted,
     proEnded,
     proReceipt,
+    proRenewalFailed,
     weeklyReport,
     emailVerificationLink,
     recoveryLink,
