@@ -27,6 +27,7 @@ import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 import { TipAction } from './tip-action';
+import { campaignFromPath } from '@/lib/campaign-link';
 
 type QuoteState =
   | { kind: 'idle' }
@@ -312,6 +313,8 @@ export function AppreciationForm({
       }
     }
     const key = draftKey.current;
+    const campaign =
+      surface === 'profile' ? campaignFromPath(location.pathname) : undefined;
     // The same key and body: the API replays the original tip for it (intents.ts), so the quiet
     // second try can never start a second tip.
     const body = {
@@ -325,6 +328,8 @@ export function AppreciationForm({
         ? { celebrationMomentId: celebration.momentId }
         : {}),
       ...(business ? { businessMemberId: business.memberId } : {}),
+      // Campaign Studio: the link ending this page was opened from (never shown to the supporter).
+      ...(campaign ? { campaign } : {}),
     };
     const { result } = await sendWithOneRetry('tip-intent', () =>
       createTip(key, body),

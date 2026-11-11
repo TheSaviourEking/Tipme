@@ -111,6 +111,10 @@ export default function IssuesPage() {
                     {SEVERITY_LABELS[issue.severity]}
                   </Badge>
                   <strong>{ISSUE_KIND_LABELS[issue.kind] ?? issue.kind}</strong>
+                  {/* Priority support: a Pro member's request, sorted first. */}
+                  {issue.priority && (
+                    <Badge className="ops-priority">Pro · answer first</Badge>
+                  )}
                   <span className="tm-hint">
                     {issue.status === 'resolved' ? 'Resolved · ' : ''}
                     {age(issue.openedAt, now)}
