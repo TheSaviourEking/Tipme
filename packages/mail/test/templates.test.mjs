@@ -721,6 +721,11 @@ const PREVIOUS_SAMPLES = {
   // data they can meet is their own sample's shape.
   business_invitation: MAIL_TYPES.business_invitation.sample,
   share_proposed: MAIL_TYPES.share_proposed.sample,
+  // Paid Pro (ADR-0015): new types, so their own sample's shape.
+  pro_renewal_reminder: MAIL_TYPES.pro_renewal_reminder.sample,
+  pro_grace_started: MAIL_TYPES.pro_grace_started.sample,
+  pro_ended: MAIL_TYPES.pro_ended.sample,
+  pro_receipt: MAIL_TYPES.pro_receipt.sample,
 };
 
 const settingsCtx = {

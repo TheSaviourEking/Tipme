@@ -20,6 +20,9 @@ const KIND: Record<AccountCode, 'asset' | 'liability' | 'revenue' | 'expense'> =
     promotions_expense: 'expense',
     // What TipMe owes a business (release 2), on the business's own account.
     business_payable: 'liability',
+    // Paid Pro (ADR-0015; ADR-0006 addendum, needs finance sign-off).
+    subscription_revenue: 'revenue',
+    platform_clearing: 'asset',
   };
 
 async function accountId(
@@ -67,11 +70,13 @@ async function accountId(
 export async function postLedgerTransaction(
   tx: Tx,
   input: {
-    operationType: 'payment' | 'payout' | 'reward' | 'reversal';
+    operationType: 'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale';
     operationKey: string;
     currency: string;
     tipId?: string;
     payoutId?: string;
+    /** Paid Pro: the purchase a `pro_sale` books. */
+    proPurchaseId?: string;
     /** A reversal names the payment it takes back (the database checks it is this tip's). */
     reversesTransactionId?: string;
     lines: LedgerLine[];
@@ -90,6 +95,7 @@ export async function postLedgerTransaction(
       currency: input.currency,
       tipId: input.tipId ?? null,
       payoutId: input.payoutId ?? null,
+      proPurchaseId: input.proPurchaseId ?? null,
       reversesTransactionId: input.reversesTransactionId ?? null,
       traceId: input.traceId,
     })

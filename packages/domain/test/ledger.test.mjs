@@ -419,3 +419,65 @@ test('a refund of nothing, more than the payment owed, a negative fee, or of an 
     RangeError,
   );
 });
+
+// Paid Pro (ADR-0015, ADR-0006 addendum): a Pro month bought on TipMe's own account. Not a tip: no
+// TipMe fee, no recipient payable.
+test('pro checkout posting balances; fee 5000 to provider_fee_expense; revenue 250000', async () => {
+  const { buildProCheckoutPosting, isBalanced } =
+    await import('../dist/index.js');
+  const lines = buildProCheckoutPosting({
+    grossMinor: 250000n,
+    feeMinor: 5000n,
+  });
+  assert.ok(isBalanced(lines));
+  assert.deepEqual(lines, [
+    { account: 'platform_clearing', side: 'debit', amountMinor: 245000n },
+    { account: 'provider_fee_expense', side: 'debit', amountMinor: 5000n },
+    { account: 'subscription_revenue', side: 'credit', amountMinor: 250000n },
+  ]);
+  for (const entry of lines) {
+    assert.equal(entry.profileId, undefined);
+    assert.notEqual(entry.account, 'recipient_payable');
+    assert.notEqual(entry.account, 'platform_fee_revenue');
+  }
+  // A bank transfer's fee, and no fee at all.
+  assert.ok(
+    isBalanced(
+      buildProCheckoutPosting({ grossMinor: 250000n, feeMinor: 3750n }),
+    ),
+  );
+  assert.deepEqual(
+    buildProCheckoutPosting({ grossMinor: 250000n, feeMinor: 0n }).map(
+      (l) => l.account,
+    ),
+    ['platform_clearing', 'subscription_revenue'],
+  );
+});
+
+test('a pro fee above the gross, or below zero, throws', async () => {
+  const { buildProCheckoutPosting } = await import('../dist/index.js');
+  assert.throws(
+    () => buildProCheckoutPosting({ grossMinor: 250000n, feeMinor: 250001n }),
+    RangeError,
+  );
+  assert.throws(
+    () => buildProCheckoutPosting({ grossMinor: 250000n, feeMinor: -1n }),
+    RangeError,
+  );
+  assert.throws(
+    () => buildProCheckoutPosting({ grossMinor: 0n, feeMinor: 0n }),
+    RangeError,
+  );
+});
+
+test('a pro purchase never leaves PAID, and a late payment can still be PAID', async () => {
+  const { PRO_PURCHASE_TRANSITIONS, canTransition } =
+    await import('../dist/index.js');
+  assert.deepEqual(PRO_PURCHASE_TRANSITIONS.PAID, []);
+  assert.deepEqual(PRO_PURCHASE_TRANSITIONS.REVIEW, []);
+  assert.ok(canTransition(PRO_PURCHASE_TRANSITIONS, 'EXPIRED', 'PAID'));
+  assert.ok(canTransition(PRO_PURCHASE_TRANSITIONS, 'PENDING', 'REVIEW'));
+  assert.ok(canTransition(PRO_PURCHASE_TRANSITIONS, 'UNKNOWN', 'REVIEW'));
+  assert.ok(!canTransition(PRO_PURCHASE_TRANSITIONS, 'PAID', 'FAILED'));
+  assert.ok(!canTransition(PRO_PURCHASE_TRANSITIONS, 'EXPIRED', 'PENDING'));
+});

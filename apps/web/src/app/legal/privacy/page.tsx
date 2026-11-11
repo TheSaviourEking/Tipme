@@ -17,7 +17,7 @@ export default function PrivacyPlaceholder() {
         'How long data is kept and how deletion works',
         'Which service providers process data, and where',
         'Recognising a returning supporter, only if they choose it, and how to stop',
-        'Consent for analytics, and your rights',
+        'Anonymous visit counts: what is counted, what is never stored, and how Global Privacy Control or Do Not Track stops it',
       ]}
     >
       {/* Business release 1 (plan B9 Task 24): what a business sees, written before it is turned on. */}

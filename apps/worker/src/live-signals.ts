@@ -62,6 +62,11 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'payment.reversed': none,
   // A staff alert only. The owner's dashboard learns of the new username on its next profile read.
   'username.take_back_done': none,
+  // Paid Pro: staff alerts. A page whose plan changed is signalled where it changed.
+  'pro.amount_mismatch': none,
+  'pro.late_payment': none,
+  'pro.conflict': none,
+  'pro.reversed': none,
   // Nothing has changed yet when it is queued: the job worker signals after the start ran.
   [PAYOUT_START_EVENT]: none,
   [PLATFORM_REFUSAL_EVENT]: none,

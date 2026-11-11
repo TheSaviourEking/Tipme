@@ -34,7 +34,7 @@ export class EventsController {
     @Inject(API_CONFIG) config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {
-    this.enabled = config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+    this.enabled = config.ANALYTICS_ENABLED;
   }
 
   @Post('events')

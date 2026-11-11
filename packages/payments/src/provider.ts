@@ -10,7 +10,15 @@ export interface ProviderCapabilities {
   platformFees: boolean;
   payouts: boolean;
   lookupByOperationReference: boolean;
+  /** Paid Pro (ADR-0015): checkouts on TipMe's own account, with no connected account. */
+  platformCheckout?: boolean;
 }
+
+/**
+ * Whose money an event is about. Absent: a connected account's (a tip), as every event was before
+ * paid Pro. `platform`: TipMe's own account (a Pro purchase), routed only to Pro billing.
+ */
+export type ProviderEventScope = 'platform';
 
 export type PayoutFailureReason = 'in_debt' | 'destination' | 'other';
 
@@ -19,6 +27,7 @@ export type NormalizedProviderEvent =
       kind: 'payment';
       eventId: string;
       eventType: string;
+      scope?: ProviderEventScope;
       providerReference: string | null;
       operationReference: string | null;
       accountReference: string | null;
@@ -40,7 +49,9 @@ export type NormalizedProviderEvent =
       kind: 'reversal';
       eventId: string;
       eventType: string;
-      accountReference: string;
+      scope?: ProviderEventScope;
+      /** Null only for TipMe's own account (`scope: 'platform'`). */
+      accountReference: string | null;
       providerReference: string | null;
       operationReference: string | null;
       /**
@@ -118,6 +129,24 @@ export interface PaymentProvider<
   }): Promise<{ providerReference: string; checkoutUrl?: string }>;
   /** Returns null only for a definite absence; unsupported lookup must fail as uncertain. */
   findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
+  /**
+   * Paid Pro (ADR-0015): a checkout on TipMe's own account for one purchase, with no connected
+   * account and no platform fee. The price is the server's. Raises PlatformCheckoutUnavailableError
+   * when the provider definitely refuses TipMe's account, UncertainProviderOutcomeError when the
+   * outcome is unknown.
+   */
+  initializePlatformCheckout?(input: {
+    purchaseId: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+  }): Promise<{
+    providerReference: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }>;
   /** Server-to-server status check: the authority for reconciliation. */
   verifyTransaction(
     providerReference: string,
@@ -136,6 +165,8 @@ export interface PaymentProvider<
     collected?: true;
     /** Set when the provider settled the money in another currency than it was paid in. */
     settlementCurrency?: string;
+    /** How it was paid, when the provider says (TipMe's own checkouts: card or bank transfer). */
+    method?: 'NGN_CARD' | 'NGN_BANK_TRANSFER';
   }>;
   verifyWebhook(
     rawBody: Buffer,
@@ -268,6 +299,17 @@ export class PlatformRefusalError extends Error {
   ) {
     super('The payment provider refused the platform');
     this.name = 'PlatformRefusalError';
+  }
+}
+
+/**
+ * The provider definitely refused a checkout on TipMe's own account (e.g. the account isn't
+ * activated for live payments): nothing was created, and nobody can pay this way right now.
+ */
+export class PlatformCheckoutUnavailableError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused a checkout on TipMe’s own account');
+    this.name = 'PlatformCheckoutUnavailableError';
   }
 }
 

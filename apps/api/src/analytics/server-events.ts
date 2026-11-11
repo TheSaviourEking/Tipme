@@ -19,7 +19,7 @@ export class ServerEvents {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
-    this.enabled = config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+    this.enabled = config.ANALYTICS_ENABLED;
   }
 
   async record(

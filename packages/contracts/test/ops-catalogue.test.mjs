@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed fourteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 14);
+test('the serious actions are the agreed fifteen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 15);
   assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['business.verify'],
@@ -108,7 +108,7 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  assert.equal(OPS_PERMISSIONS.length, 23);
+  assert.equal(OPS_PERMISSIONS.length, 24);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],
@@ -118,4 +118,13 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     SERIOUS_ACTION_WORDS['changelog.publish'],
     'Show users a What’s new entry',
   );
+});
+
+// Paid Pro (owner, 9 Nov 2026): staff set the Pro price; a change needs a second person.
+test('pro.price is sensitive and in money; pro_price.change maps to it', () => {
+  assert.equal(OPS_CATALOGUE['pro.price'].sensitive, true);
+  assert.equal(OPS_CATALOGUE['pro.price'].group, 'money');
+  assert.ok(SERIOUS_ACTIONS.includes('pro_price.change'));
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['pro_price.change'], 'pro.price');
+  assert.match(SERIOUS_ACTION_WORDS['pro_price.change'], /Pro price/);
 });

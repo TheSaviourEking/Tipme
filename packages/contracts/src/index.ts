@@ -23,3 +23,4 @@ export * from './usernames.js';
 export * from './supporters.js';
 export * from './business.js';
 export * from './changelog.js';
+export * from './pro.js';

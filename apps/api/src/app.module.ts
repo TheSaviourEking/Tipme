@@ -3,6 +3,7 @@ import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from './config.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
+import { ProModule } from './pro/pro.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { MomentsModule } from './moments/moments.controller.js';
@@ -43,6 +44,7 @@ export class AppModule {
         CheckoutModule,
         AuthModule,
         ProfilesModule,
+        ProModule,
         DashboardModule,
         NotificationsModule,
         MomentsModule,

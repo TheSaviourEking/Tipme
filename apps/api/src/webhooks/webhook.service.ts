@@ -8,7 +8,12 @@ import {
 import { z } from 'zod';
 import {
   applyPayoutSignal,
+  confirmProCheckout,
+  endProForReversal,
+  findProPurchaseByReference,
   flagPaymentReversal,
+  recordProEvent,
+  type ProVerified,
   findBachsAttemptByOperationReference,
   ensurePayoutSetup,
   findPaymentAccountByReference,
@@ -28,6 +33,8 @@ import { LOGGER } from '../tokens.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { EventResult, MailSealing } from '@tipme/database';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { PAYMENT_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
 
 const PROVIDER = 'mock';
 
@@ -45,7 +52,98 @@ export class WebhookService {
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
+    // Paid Pro: the public page changes with the plan. Optional, as above.
+    @Optional()
+    @Inject(ProfileRevalidator)
+    private readonly revalidator: Pick<
+      ProfileRevalidator,
+      'revalidate'
+    > | null = null,
+    // The pretend provider, to read a pretend Pro payment back as Bachs' would be.
+    @Optional()
+    @Inject(PAYMENT_PROVIDER_TOKEN)
+    private readonly mockProvider: {
+      verifyTransaction(reference: string): Promise<ProVerified>;
+    } | null = null,
   ) {}
+
+  /** After a Pro payment changed a page's plan: its public page and open tabs re-read. */
+  private signalPlan(result: {
+    planChanged: boolean;
+    profileId: string;
+    handleLower: string | null;
+  }): void {
+    if (!result.planChanged) return;
+    if (result.handleLower) this.revalidator?.revalidate(result.handleLower);
+    void this.publishLive({
+      to: { profile: result.profileId },
+      type: 'profile.changed',
+    });
+  }
+
+  /**
+   * Paid Pro (ADR-0015): an event about a purchase on TipMe's own account. It is stored against the
+   * purchase (once per partner event) and only triggers a read-back, which decides. A refund or
+   * dispute is flagged to staff; a paid refund or a lost dispute ends that Pro month.
+   */
+  private async applyProEvent(
+    event: Extract<NormalizedProviderEvent, { kind: 'payment' | 'reversal' }>,
+    provider: string,
+    reader: {
+      verifyTransaction(reference: string): Promise<ProVerified>;
+    } | null,
+  ): Promise<string> {
+    const { db } = this.database;
+    const purchaseId = await findProPurchaseByReference(db, {
+      provider,
+      providerReference: event.providerReference,
+      operationReference: event.operationReference,
+    });
+    if (!purchaseId) return this.unmatchedPro(event, provider);
+    const { eventRowId } = await recordProEvent(db, {
+      provider,
+      providerEventId: event.eventId,
+      eventType: event.eventType,
+      purchaseId,
+      payload: event,
+    });
+    const now = new Date();
+    if (event.kind === 'reversal') {
+      const endPro =
+        event.refundState === 'paid' ||
+        (!event.disputeWon && /chargeback|\.lost$/.test(event.eventType));
+      this.signalPlan(
+        await endProForReversal(db, { purchaseId, eventRowId, endPro, now }),
+      );
+      return 'pro_reversed';
+    }
+    if (!reader || !event.providerReference) return 'pro_stored';
+    // A failed read throws: the partner delivers the event again, and reconciliation asks too.
+    const verified = await reader.verifyTransaction(event.providerReference);
+    const result = await confirmProCheckout(db, {
+      purchaseId,
+      verified,
+      now,
+      sealing: this.sealing,
+      providerEventRowId: eventRowId,
+    });
+    this.signalPlan(result);
+    return `pro_${result.outcome}`;
+  }
+
+  private async unmatchedPro(
+    event: { eventId: string; eventType: string },
+    provider: string,
+  ): Promise<string> {
+    await recordUnmatchedEvent(this.database.db, {
+      provider,
+      providerEventId: event.eventId,
+      eventType: event.eventType,
+      payload: event,
+      reason: 'unknown_attempt',
+    });
+    return 'unmatched';
+  }
 
   /**
    * After a provider event moved a tip to "still being confirmed": its page's dashboards re-read.
@@ -66,6 +164,23 @@ export class WebhookService {
   async apply(event: MockWebhook): Promise<string> {
     const { db } = this.database;
     const { reference } = event.data;
+    // Paid Pro on pretend money: the same path as TipMe's own Bachs account.
+    if (reference.startsWith('mock_pro_') && event.type.startsWith('payment.'))
+      return this.applyProEvent(
+        {
+          kind: 'payment',
+          eventId: event.id,
+          eventType: event.type,
+          scope: 'platform',
+          providerReference: reference,
+          operationReference: null,
+          accountReference: null,
+          status: 'pending',
+          feePaidBy: 'unknown',
+        },
+        PROVIDER,
+        this.mockProvider,
+      );
     if (event.type.startsWith('payment.')) {
       const attemptId = await findAttemptByReference(db, PROVIDER, reference);
       if (!attemptId) return this.unmatched(event, 'unknown_attempt');
@@ -115,6 +230,21 @@ export class WebhookService {
       >,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
+    // TipMe's own account (paid Pro): never a tip, never an account of a recipient.
+    if (
+      (event.kind === 'payment' || event.kind === 'reversal') &&
+      event.scope === 'platform'
+    )
+      return this.applyProEvent(
+        event,
+        'bachs',
+        bachs.verifyTransaction
+          ? {
+              verifyTransaction: (reference) =>
+                bachs.verifyTransaction!(reference),
+            }
+          : null,
+      );
     if (event.kind === 'payout') return this.applyBachsPayout(event, bachs);
     const { environment } = bachs;
     if (event.kind === 'account') return this.refreshBachsAccount(event, bachs);

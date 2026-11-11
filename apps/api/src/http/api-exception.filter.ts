@@ -95,6 +95,15 @@ const messages: Record<ApiErrorCode, string> = {
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Change it and try again.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
+  PRO_PRICE_CHANGED:
+    'The Pro price has changed. Check the new price and try again.',
+  PRO_PURCHASE_OPEN:
+    'A Pro payment is already open. Finish it, or wait for it to end.',
+  PRO_ALREADY_RENEWED: 'Your next Pro month is already paid.',
+  PRO_CHECKOUT_UNAVAILABLE:
+    'Paying for Pro isn’t available right now. Nothing was charged. Please try again later.',
+  PRO_BILLING_OFF: 'Buying Pro isn’t open yet.',
   SELF_ACCESS_CHANGE: 'You can’t change your own access.',
   ROLE_NAME_TAKEN: 'A role with that name already exists.',
   USERNAME_BUILT_IN:
@@ -333,6 +342,13 @@ const operationErrors: Partial<
     code: 'CHANGELOG_EDITED_ELSEWHERE',
   },
   CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  // Paid Pro (ADR-0015).
+  PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
+  PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
+  PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },
+  PRO_ALREADY_RENEWED: { status: 409, code: 'PRO_ALREADY_RENEWED' },
+  PRO_CHECKOUT_UNAVAILABLE: { status: 503, code: 'PRO_CHECKOUT_UNAVAILABLE' },
+  PRO_PURCHASE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   CHANGELOG_TEXT_NOT_ALLOWED: {
     status: 422,
     code: 'CHANGELOG_TEXT_NOT_ALLOWED',

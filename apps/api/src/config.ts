@@ -136,18 +136,22 @@ export const apiConfigSchema = z
     // pages. `off` hides the tick box, stops recording and (later) hides the recipient's list,
     // deleting nothing: the lever if the D-07 privacy review says to wait
     // (docs/runbooks/supporter-recognition.md). Default on.
+    // Paid Pro (ADR-0015): whether recipients may open a Pro purchase on this copy. Off by
+    // default: switched on per copy once checkout on TipMe's own account is wanted there. Live
+    // money still needs bachs-live with PAYMENTS_LIVE_ENABLED and the page in LIVE_CHECKOUT_HANDLES.
+    PRO_BILLING_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
     SUPPORTER_RECOGNITION: z
       .enum(['on', 'off'])
       .default('on')
       .transform((value) => value === 'on'),
-    // Anonymous analytics collection. Unset: on in development and test, off in production until
-    // the privacy decision (D-07) is made.
+    // Anonymous analytics. On unless set to false (owner's decision, 9 Nov 2026; D-07 stays open).
     ANALYTICS_ENABLED: z
       .enum(['true', 'false'])
-      .optional()
-      .transform((value) =>
-        value === undefined ? undefined : value === 'true',
-      ),
+      .default('true')
+      .transform((value) => value === 'true'),
     // Sign-in code requests per client per hour (each number is also limited to 3 an hour).
     RATE_LIMIT_AUTH_PER_HOUR: z.coerce.number().int().min(1).default(10),
     // Authenticator codes re-entered per staff member per hour (the code itself locks after 5 misses).

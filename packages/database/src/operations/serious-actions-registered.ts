@@ -50,6 +50,12 @@ import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import {
+  checkedProPrice,
+  currentProPrice,
+  nairaOf,
+  setProPrice,
+} from './pro-price.js';
+import {
   qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
@@ -519,6 +525,38 @@ const feeFree = acting<{ profileId: string; count: number }>({
       count,
       reason: context.reason,
     }),
+});
+
+/*
+ * Paid Pro (ADR-0015): the monthly price. Pinned on the current price, so a change made while this
+ * waited makes it stale. Nobody is its subject: it applies to every new month.
+ */
+const proPriceChange = acting<{ amountMinor: string }>({
+  name: 'pro_price.change',
+  permission: 'pro.price',
+  target: () => 'pro_price',
+  current: async (tx) => {
+    const price = await currentProPrice(tx);
+    return price
+      ? { id: price.id, amountMinor: String(price.amountMinor) }
+      : null;
+  },
+  describe: async (tx, { amountMinor }) => {
+    const to = checkedProPrice(amountMinor);
+    const from = await currentProPrice(tx);
+    return `Change the Pro price ${from ? `from ${nairaOf(from.amountMinor)} ` : ''}to ${nairaOf(to)} a month, for new months only`;
+  },
+  act: (tx, { amountMinor }, context) =>
+    setProPrice(tx, {
+      amountMinor: checkedProPrice(amountMinor),
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      amountMinor: String(set.amountMinor),
+    })),
 });
 
 /* TipMe for businesses */
@@ -1016,6 +1054,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(businessVerify);
   registerSeriousAction(tipReverse);
   registerSeriousAction(changelogPublishAction);
+  registerSeriousAction(proPriceChange);
 }
 
 /* Routes whose seriousness depends on what is being done */

@@ -5560,6 +5560,145 @@
         ]
       }
     },
+    "/v1/me/pro": {
+      "get": {
+        "operationId": "Pro.mine",
+        "tags": [
+          "Pro"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/pro/purchases": {
+      "post": {
+        "operationId": "Pro.buy",
+        "tags": [
+          "Pro"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "expectedAmountMinor": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,11}$"
+                  }
+                },
+                "required": [
+                  "expectedAmountMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/pro/purchases/{purchaseId}": {
+      "get": {
+        "operationId": "Pro.purchase",
+        "tags": [
+          "Pro"
+        ],
+        "parameters": [
+          {
+            "name": "purchaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/profile": {
       "get": {
         "operationId": "MeProfile.profile",
@@ -8143,6 +8282,13 @@
                       "pending-then-succeed",
                       "no-reply",
                       "wrong-amount"
+                    ]
+                  },
+                  "method": {
+                    "type": "string",
+                    "enum": [
+                      "card",
+                      "bank_transfer"
                     ]
                   }
                 },
@@ -10739,7 +10885,11 @@
                 "business_waiting",
                 "business_note_reported",
                 "share_report",
-                "balance_below_zero"
+                "balance_below_zero",
+                "pro_amount_mismatch",
+                "pro_late_payment",
+                "pro_conflict",
+                "pro_reversed"
               ]
             }
           },
@@ -12454,6 +12604,53 @@
         "x-tipme-permission": "fees.manage"
       }
     },
+    "/v1/ops/pages/{profileId}/pro": {
+      "get": {
+        "operationId": "OpsPages.pro",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.plan"
+      }
+    },
     "/v1/ops/pages/{profileId}/suspend": {
       "post": {
         "operationId": "OpsActions.suspend",
@@ -12704,6 +12901,107 @@
           }
         ],
         "x-tipme-permission": "payouts.resolve"
+      }
+    },
+    "/v1/ops/pro-price": {
+      "get": {
+        "operationId": "OpsProPrice.state",
+        "tags": [
+          "OpsProPrice"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
+      },
+      "post": {
+        "operationId": "OpsProPrice.change",
+        "tags": [
+          "OpsProPrice"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "amountMinor": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,11}$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
       }
     },
     "/v1/ops/providers/mail": {
@@ -13561,7 +13859,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 23,
+                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -13588,7 +13886,8 @@
                         "usernames.manage",
                         "businesses.manage",
                         "changelog.edit",
-                        "changelog.publish"
+                        "changelog.publish",
+                        "pro.price"
                       ]
                     }
                   }
@@ -13672,7 +13971,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 23,
+                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -13699,7 +13998,8 @@
                         "usernames.manage",
                         "businesses.manage",
                         "changelog.edit",
-                        "changelog.publish"
+                        "changelog.publish",
+                        "pro.price"
                       ]
                     }
                   }
@@ -13838,7 +14138,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 23,
+                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -13865,7 +14165,8 @@
                         "usernames.manage",
                         "businesses.manage",
                         "changelog.edit",
-                        "changelog.publish"
+                        "changelog.publish",
+                        "pro.price"
                       ]
                     }
                   }
@@ -13984,7 +14285,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 23,
+                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14011,12 +14312,13 @@
                         "usernames.manage",
                         "businesses.manage",
                         "changelog.edit",
-                        "changelog.publish"
+                        "changelog.publish",
+                        "pro.price"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 23,
+                    "maxItems": 24,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14043,7 +14345,8 @@
                         "usernames.manage",
                         "businesses.manage",
                         "changelog.edit",
-                        "changelog.publish"
+                        "changelog.publish",
+                        "pro.price"
                       ]
                     }
                   }
@@ -14980,6 +15283,37 @@
         ]
       }
     },
+    "/v1/pro/price": {
+      "get": {
+        "operationId": "ProPrice.price",
+        "tags": [
+          "ProPrice"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/profiles/{handle}": {
       "get": {
         "operationId": "PublicProfile.profile",
@@ -15870,6 +16204,12 @@
                   "CHANGELOG_EDITED_ELSEWHERE",
                   "CHANGELOG_TEXT_NOT_ALLOWED",
                   "CHANGELOG_NOT_FOUND",
+                  "PRO_PRICE_NOT_SET",
+                  "PRO_PRICE_CHANGED",
+                  "PRO_PURCHASE_OPEN",
+                  "PRO_ALREADY_RENEWED",
+                  "PRO_CHECKOUT_UNAVAILABLE",
+                  "PRO_BILLING_OFF",
                   "PAYOUT_CHANGED",
                   "SELF_ACCESS_CHANGE",
                   "ROLE_NAME_TAKEN",

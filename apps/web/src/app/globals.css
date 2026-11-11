@@ -11940,3 +11940,28 @@ body:has(.business-public) > .site-footer {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+/* The Pro price stepper (board OpsProPrice): −, the price, +. */
+.ops-stepper {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.ops-stepper > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 700;
+}
+
+.ops-stepper > output {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums lining-nums;
+}

@@ -319,6 +319,22 @@ const wired = {
     payload: { profileId: await profileId(), feeBps: 250 },
     happened: async () => (await feeOf()) === 250,
   }),
+  // Paid Pro (ADR-0015): a price one naira-step away from whatever is current, each time.
+  'pro_price.change': async () => {
+    const [{ amount }] = await q(
+      `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+    );
+    const next = String(BigInt(amount) + 10000n);
+    return {
+      payload: { amountMinor: next },
+      happened: async () =>
+        (
+          await q(
+            `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+          )
+        )[0].amount === next,
+    };
+  },
   'username.take_back': async () => {
     const handle = `gate_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
     const [{ id: userId }] = await q(

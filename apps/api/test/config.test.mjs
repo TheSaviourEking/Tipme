@@ -504,3 +504,23 @@ test('the changelog signing secret is optional, at least 32 characters, and blan
     /CHANGELOG_SIGNING_SECRET/,
   );
 });
+
+test('anonymous analytics is on in production unless set to false (owner, 9 Nov 2026; D-07 open)', () => {
+  const production = {
+    ...valid,
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    WEB_ORIGIN: 'https://tipme-demo.onrender.com',
+  };
+  assert.equal(loadApiConfig(production).ANALYTICS_ENABLED, true);
+  assert.equal(
+    loadApiConfig({ ...production, ANALYTICS_ENABLED: 'false' })
+      .ANALYTICS_ENABLED,
+    false,
+  );
+  assert.equal(
+    loadApiConfig({ ...valid, NODE_ENV: 'test' }).ANALYTICS_ENABLED,
+    true,
+  );
+});
