@@ -747,4 +747,36 @@ export interface BusinessBalance {
   /** May be negative after a reversal (Q8); withdrawals then stop. */
   balanceMinor: string;
   canWithdraw: boolean;
+  /**
+   * Option B: shares already in the balance whose money is still on its way to the business's own
+   * account (it moves once each tip's money is available with our payment partner).
+   */
+  onTheWayMinor: string;
+  /** Refunded tips' shares the business had already withdrawn, taken from its next shares. */
+  heldBackMinor: string;
+  /** The smallest withdrawal a business can make (no "everything" exception). */
+  minWithdrawalMinor: string;
+  /** Whether the business's own payout account with our payment partner is set up. */
+  payoutAccount: BusinessPayoutAccountState;
+}
+
+/** `not_needed` with the pretend partner; `needed` until set up; then `setting_up` or `ready`. */
+export type BusinessPayoutAccountState =
+  'not_needed' | 'needed' | 'setting_up' | 'ready';
+
+/** Setting up the business's payout account: done, or the partner's page to finish it on. */
+export interface BusinessPayoutAccountStart {
+  payoutAccount: BusinessPayoutAccountState;
+  /** Our payment partner's hosted page for the business's registered name, when it asks. */
+  onboardingUrl?: string;
+}
+
+/** Option B, the staff member's own view: what they have shared with a business they work at. */
+export interface MySharedTips {
+  memberId: string;
+  businessName: string;
+  /** This Lagos month's shares of their paid tips there, and how many tips. */
+  monthMinor: string;
+  monthTips: number;
+  totalMinor: string;
 }

@@ -247,7 +247,7 @@ test('a business balance and its withdrawals', async (t) => {
         locationId: shared.locationId,
       });
       const as = (userId) =>
-        codeOf(withdraw(shared.businessId, 200000n, { userId }));
+        codeOf(withdraw(shared.businessId, 500000n, { userId }));
       assert.equal(await as(TOBI.userId), 'OWNER_REQUIRED');
       assert.equal(await as(randomUUID()), 'NOT_A_MANAGER');
       // Another business's owner can't reach this one.
@@ -257,7 +257,7 @@ test('a business balance and its withdrawals', async (t) => {
           requestBusinessWithdrawal(db, {
             businessId: shared.businessId,
             userId: TOBI.userId,
-            amountMinor: 200000n,
+            amountMinor: 500000n,
             idempotencyKey: randomUUID(),
             provider: provider(),
           }),
@@ -287,7 +287,7 @@ test('a business balance and its withdrawals', async (t) => {
         idempotencyKey: randomUUID(),
         provider: provider(),
       });
-      const business = await withdraw(shared.businessId, 200000n);
+      const business = await withdraw(shared.businessId, 500000n);
       assert.equal(business.status, 'REQUESTED');
       const [row] = await q(
         'SELECT profile_id, business_id, status FROM payouts WHERE id = $1',
@@ -299,7 +299,7 @@ test('a business balance and its withdrawals', async (t) => {
         status: 'REQUESTED',
       });
       // Reserved at once, posted nowhere yet; the person's balance is untouched by it.
-      assert.equal(await businessBalance(shared.businessId), share - 200000n);
+      assert.equal(await businessBalance(shared.businessId), share - 500000n);
       assert.equal(await personBalance(), personBefore - 200000n);
       // One start job, as for a person.
       assert.deepEqual(
@@ -334,20 +334,20 @@ test('a business balance and its withdrawals', async (t) => {
           {
             code: 'business_payable',
             side: 'debit',
-            amount: '200000',
+            amount: '500000',
             business_id: shared.businessId,
             profile_id: null,
           },
           {
             code: 'provider_clearing',
             side: 'credit',
-            amount: '200000',
+            amount: '500000',
             business_id: null,
             profile_id: null,
           },
         ],
       );
-      assert.equal(await businessBalance(shared.businessId), share - 200000n);
+      assert.equal(await businessBalance(shared.businessId), share - 500000n);
       assert.equal(await personBalance(), personBefore - 200000n);
       await assertBalanced();
     },
@@ -363,12 +363,12 @@ test('a business balance and its withdrawals', async (t) => {
       );
       const shared = await atBusiness();
       const { share } = await paidTip(shared);
-      const paid = await withdraw(shared.businessId, 200000n);
+      const paid = await withdraw(shared.businessId, 500000n);
       await settle(paid.payoutId);
-      const failed = await withdraw(shared.businessId, 300000n);
-      assert.equal(await businessBalance(shared.businessId), share - 500000n);
+      const failed = await withdraw(shared.businessId, 600000n);
+      assert.equal(await businessBalance(shared.businessId), share - 1100000n);
       await settle(failed.payoutId, 'failed');
-      assert.equal(await businessBalance(shared.businessId), share - 200000n);
+      assert.equal(await businessBalance(shared.businessId), share - 500000n);
       // The worker's mail step: before R2-B it threw NOT_A_PERSON for every business payout.
       await mailForDomainEvent(db, sealing, 'payout.paid', {
         payoutId: paid.payoutId,
@@ -400,7 +400,7 @@ test('a business balance and its withdrawals', async (t) => {
       const input = {
         businessId: shared.businessId,
         userId: OWNER,
-        amountMinor: 200000n,
+        amountMinor: 500000n,
         idempotencyKey,
         provider: provider(),
       };
@@ -414,7 +414,7 @@ test('a business balance and its withdrawals', async (t) => {
       assert.equal(replay.replayed, true);
       assert.equal(
         await codeOf(
-          requestBusinessWithdrawal(db, { ...input, amountMinor: 300000n }),
+          requestBusinessWithdrawal(db, { ...input, amountMinor: 600000n }),
         ),
         'IDEMPOTENCY_CONFLICT',
       );
@@ -482,7 +482,7 @@ test('a business balance and its withdrawals', async (t) => {
         reason: 'A wrong payout amount: stopping while we look.',
       });
       assert.equal(
-        await codeOf(withdraw(shared.businessId, 200000n)),
+        await codeOf(withdraw(shared.businessId, 500000n)),
         'WITHDRAWALS_SWITCHED_OFF',
       );
       assert.deepEqual(
@@ -502,14 +502,14 @@ test('a business balance and its withdrawals', async (t) => {
       await database.fresh();
       const shared = await atBusiness();
       await paidTip(shared);
-      const queued = await withdraw(shared.businessId, 200000n);
+      const queued = await withdraw(shared.businessId, 500000n);
       await freezeWithdrawals(db, {
         profileId: ADA.id,
         staffUserId: STAFF,
         reason: 'The owner reported their account was taken over.',
       });
       assert.equal(
-        await codeOf(withdraw(shared.businessId, 200000n)),
+        await codeOf(withdraw(shared.businessId, 500000n)),
         'WITHDRAWALS_PAUSED',
       );
       assert.deepEqual(
@@ -691,7 +691,7 @@ test('a business balance and its withdrawals', async (t) => {
         bankName: 'Pretend Guaranty Bank',
         last4: '2222',
       });
-      const { payoutId } = await withdraw(shared.businessId, 200000n);
+      const { payoutId } = await withdraw(shared.businessId, 500000n);
       assert.deepEqual(
         await q(
           `SELECT d.account_last4 AS last4, d.business_id, d.profile_id

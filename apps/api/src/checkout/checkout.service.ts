@@ -138,6 +138,9 @@ export class CheckoutService {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
       currency: request.currency,
+      ...(this.sharesOn() && request.businessMemberId
+        ? { businessMemberId: request.businessMemberId, sharesOn: true }
+        : {}),
     });
     const { breakdown } = result;
     return {
@@ -153,7 +156,21 @@ export class CheckoutService {
       expiresAt: result.expiresAt.toISOString(),
       feePolicyVersion: result.feePolicyVersion,
       feeFree: result.feeFree,
+      ...(result.share
+        ? {
+            share: {
+              businessPercent: result.share.businessBps / 100,
+              personKeepsPercent: 100 - result.share.businessBps / 100,
+              businessName: result.share.businessName,
+            },
+          }
+        : {}),
     };
+  }
+
+  /** Business release 2: shares need both flags; off, nothing about a share is read or fixed. */
+  private sharesOn(): boolean {
+    return this.config.BUSINESS_ENABLED && this.config.BUSINESS_SHARES_ENABLED;
   }
 
   /** Creates or replays an intent, keeping external writes tied to one durable attempt claim. */
@@ -181,6 +198,7 @@ export class CheckoutService {
       ...(this.config.BUSINESS_ENABLED && request.businessMemberId
         ? { businessMemberId: request.businessMemberId }
         : {}),
+      ...(this.sharesOn() ? { sharesOn: true } : {}),
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');

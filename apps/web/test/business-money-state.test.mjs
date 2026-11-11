@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { businessMoneyState } from '../src/lib/business/money-state.ts';
+import {
+  businessCanSend,
+  businessMoneyState,
+} from '../src/lib/business/money-state.ts';
 
 // Business release 2, PR R2-B: what a business's Money section says and allows, from its quote.
 
@@ -71,4 +74,25 @@ test('copy never names the payment provider or implies approval', () => {
       /bachs|licen[cs]ed|approved/i,
     );
   }
+});
+
+// Option B: a business sets up its own payout account with our payment partner, and withdraws in
+// batches of at least the business minimum, with no "everything" exception.
+test('setup needed asks the owner to set up the business’s payout account', () => {
+  const { notice, canWithdraw } = businessMoneyState({
+    state: 'setup_needed',
+    requirementsDue: [],
+    inReview: false,
+  });
+  assert.equal(canWithdraw, false);
+  assert.equal(notice.title, 'Set up the business’s payout account');
+  assert.match(notice.body, /our payment partner/);
+});
+
+test('a business may send only from its minimum up to what it can withdraw', () => {
+  const min = BigInt(500000);
+  assert.equal(businessCanSend(BigInt(499999), BigInt(499999), min), false);
+  assert.equal(businessCanSend(BigInt(500000), BigInt(600000), min), true);
+  assert.equal(businessCanSend(BigInt(600001), BigInt(600000), min), false);
+  assert.equal(businessCanSend(BigInt(0), BigInt(600000), min), false);
 });

@@ -264,6 +264,9 @@ export const ISSUE_KINDS = [
   // Paid Pro: a balance payment the partner never answered, and a refund the partner refused.
   'pro_collect_unknown',
   'pro_refund_failed',
+  // Business release 2, option B: a share movement between partner accounts that needs a person
+  // (TipMe holds a business's share it could not send on, or a transfer's answer didn't match).
+  'share_transfer_stuck',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

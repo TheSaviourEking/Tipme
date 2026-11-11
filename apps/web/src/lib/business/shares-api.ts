@@ -1,6 +1,7 @@
 'use client';
 import type {
   BusinessShareRow,
+  MySharedTips,
   ShareAgreementView,
   ShareBps,
   ShareReport,
@@ -35,6 +36,9 @@ export const answerSuggestedShare = (
     { method: 'POST', body: {} },
   );
 
+/** Option B: what this person has shared with each business they work at (theirs alone). */
+export const loadMySharedTips = () =>
+  apiFetch<MySharedTips[]>('/v1/me/work/shared');
 export const loadMyShares = () =>
   apiFetch<ShareAgreementView[]>('/v1/me/work/shares');
 export const acceptShare = (agreementId: string) =>

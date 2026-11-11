@@ -46,8 +46,8 @@ export function businessMoneyState(
       });
     case 'setup_needed':
       return no({
-        title: 'Not available yet',
-        body: 'Withdrawals for a business aren’t available with our payment partner yet. The balance stays here and is safe.',
+        title: 'Set up the business’s payout account',
+        body: 'The business needs its own payout account with our payment partner before it can withdraw. The balance stays here and is safe.',
       });
     case 'no_destination':
       return no({
@@ -81,4 +81,20 @@ export function businessMoneyState(
       };
     }
   }
+}
+
+/**
+ * Option B: a business withdraws in batches, at least its minimum (our payment partner charges a
+ * fee on every payout), and never more than it can withdraw now. No "everything" exception.
+ */
+export function businessCanSend(
+  amountMinor: bigint,
+  withdrawableMinor: bigint,
+  minimumMinor: bigint,
+): boolean {
+  return (
+    amountMinor > BigInt(0) &&
+    amountMinor >= minimumMinor &&
+    amountMinor <= withdrawableMinor
+  );
 }

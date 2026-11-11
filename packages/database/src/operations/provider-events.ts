@@ -7,6 +7,7 @@ import {
   TIP_TRANSITIONS,
 } from '@tipme/domain';
 import type { AttemptStatus, TipStatus } from '@tipme/domain';
+import { recordedProviderName } from '@tipme/contracts';
 import { and, eq, gt, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -23,6 +24,7 @@ import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
+import { scheduleShareSweep } from './share-transfers.js';
 import { personOf } from './owner.js';
 
 /** A provider message about a payment. Only signature-verified events may reach this function. */
@@ -387,6 +389,17 @@ async function apply(
       ...(share ? { businessShare: share } : {}),
     }),
   });
+  // Option B (owner, 11 Nov 2026): the share's money is on the staff member's own account. It is
+  // moved to the business once it is available there, staff -> TipMe -> business (the worker).
+  if (share)
+    await scheduleShareSweep(tx, {
+      tipId: tip.id,
+      profileId: tip.profileId,
+      businessId: share.businessId,
+      amountMinor: share.amountMinor,
+      currency: tip.currency,
+      provider: recordedProviderName(event.provider),
+    });
   await enqueueOutbox(tx, {
     eventType: 'tip.succeeded',
     aggregateId: tip.id,

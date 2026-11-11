@@ -181,7 +181,7 @@ export function AppreciationForm({
     setQuote({ kind: 'loading', amount: minor });
     // A read: a dropped connection is tried once more, quietly.
     const { result } = await sendWithOneRetry('tip-quote', () =>
-      quoteTip(handle, minor),
+      quoteTip(handle, minor, business?.memberId),
     );
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
@@ -618,6 +618,16 @@ export function AppreciationForm({
       className="tip-quote"
       {...(onProfile ? {} : { 'aria-live': 'polite' })}
     >
+      {/* Business release 2 (Q9): the agreed share is told before paying, in words, never by
+          colour alone. Only the quote from the server says it. */}
+      {shown.kind === 'ready' && shown.quote.share && (
+        <p className="tip-quote__share" data-testid="tip-share">
+          Of what {recipient} receives, they keep{' '}
+          {shown.quote.share.personKeepsPercent}% and{' '}
+          {shown.quote.share.businessPercent}% goes to{' '}
+          {shown.quote.share.businessName}.
+        </p>
+      )}
       {shown.kind === 'failed' && (
         <div className="tip-quote__failed">
           <p className="tm-field-error" {...shownOnly}>

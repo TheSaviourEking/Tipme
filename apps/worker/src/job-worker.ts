@@ -38,6 +38,7 @@ import {
   reconcilePayouts,
   reconcileProPurchases,
   reconcileProCollections,
+  runShareTransfers,
   renewProAutomatically,
   sendProRefunds,
   sweepPayoutSetup,
@@ -496,6 +497,20 @@ export async function startJobWorker(
             // Paid Pro (ADR-0015): open purchases on TipMe's own account, read back from the same
             // provider that made them. A page whose plan changed is revalidated and signalled.
             const pro = await reconcileProEverywhere(now);
+            // Option B: business shares between partner accounts, each leg once and read back.
+            const shares = { checked: 0, failed: 0 };
+            if (config.BUSINESS_SHARES_ENABLED)
+              for (const provider of [mockProvider, bachsProvider]) {
+                if (!provider?.collectToPlatform || !provider.transferToAccount)
+                  continue;
+                const result = await runShareTransfers(database.db, {
+                  provider,
+                  now,
+                  settleWaitMs: config.BUSINESS_SHARE_SETTLE_HOURS * 3_600_000,
+                });
+                shares.checked += result.checked;
+                shares.failed += result.failed;
+              }
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,
@@ -526,6 +541,8 @@ export async function startJobWorker(
               pro_checked: pro.checked,
               pro_paid: pro.paid,
               pro_errors: pro.failed,
+              shares_checked: shares.checked,
+              shares_errors: shares.failed,
             });
             processed.add(1, { outcome: 'reconciled' });
             return 'reconciled';

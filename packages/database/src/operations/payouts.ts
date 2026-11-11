@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  BUSINESS_MIN_WITHDRAWAL_MINOR,
   FEE_POLICY_V1,
   buildPayoutFeePosting,
   buildPayoutPosting,
@@ -1687,6 +1688,14 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
+      // A business batches its shares (option B): our partner charges ₦50 on top of every
+      // payout, so its minimum is higher and has no "everything" exception (a ruling the owner
+      // can change: BUSINESS_MIN_WITHDRAWAL_MINOR).
+      if (
+        'businessId' in owner &&
+        input.amountMinor < BUSINESS_MIN_WITHDRAWAL_MINOR
+      )
+        throw new OperationError('WITHDRAWAL_TOO_SMALL');
       // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
       // they cannot withdraw, or an account they cannot close.
       if (

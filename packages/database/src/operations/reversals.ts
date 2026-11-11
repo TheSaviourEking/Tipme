@@ -19,6 +19,7 @@ import { guarded, OperationError } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
+import { planRefundTransfers } from './share-transfers.js';
 
 /** Whose balance a reversal left below zero (Q8). */
 export type BelowZero = { profileId: string } | { businessId: string };
@@ -218,6 +219,16 @@ export async function reverseTip(
   });
 
   const now = input.now ?? new Date();
+  // Option B: a shared tip's money is put right between the partner accounts too (TipMe's fee back
+  // to the staff member; the business's share back from it, or held back from its next shares).
+  // Only a tip with a share has anything to move, so every other reversal is exactly as before.
+  if (posted.created)
+    await planRefundTransfers(tx, {
+      tipId: tip.id,
+      reversalTransactionId: posted.transactionId,
+      lines,
+      now,
+    });
   const belowZero: BelowZero[] = [];
   const touched = new Set(lines.map(ownerKey));
   for (const profileId of people) {

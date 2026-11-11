@@ -9,6 +9,8 @@ export const tipQuoteRequestSchema = z
     handle: z.string().min(1).max(60),
     amountMinor: z.string().regex(/^\d{1,12}$/),
     currency: z.literal('NGN'),
+    /** The business membership the tip page is for: its share, if any, is shown before paying. */
+    businessMemberId: z.uuid().optional(),
   })
   .strict();
 export type TipQuoteRequest = z.infer<typeof tipQuoteRequestSchema>;

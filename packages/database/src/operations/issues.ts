@@ -115,6 +115,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   support_request: 'account',
   pro_collect_unknown: 'money',
   pro_refund_failed: 'money',
+  share_transfer_stuck: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -199,6 +200,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The partner could not refund a Pro card payment for ${page}. Their Pro month is unchanged and nothing was booked. A failed refund doesn't count, so it can be asked again.`;
     case 'pro_reversed':
       return `The partner reported a refund or dispute on a Pro payment for ${page}. A paid refund or a lost dispute ends that Pro month; nothing else was changed.`;
+    case 'share_transfer_stuck':
+      return `A business share movement for ${page} needs checking: TipMe's partner refused to send it on, or answered with another amount. TipMe may be holding the money. Check the partner dashboard for the transfers in its group before doing anything; nothing is sent again until then.`;
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }

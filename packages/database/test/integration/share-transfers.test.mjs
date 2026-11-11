@@ -1,0 +1,685 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import {
+  DEMO_PROFILES,
+  balanceOf,
+  businessBalanceOf,
+  businessShareMoney,
+  createPaymentIntent,
+  createQuote,
+  markAttemptInitiated,
+  recordProviderEvent,
+  requestBusinessWithdrawal,
+  reverseTip,
+  runShareTransfers,
+  shareInKey,
+  shareOutKey,
+} from '../../dist/index.js';
+import {
+  seedAgreement,
+  seedBusiness,
+  seedMember,
+} from './business-fixtures.mjs';
+import { useDatabase } from './helpers.mjs';
+
+/*
+ * Business release 2 on option B (owner, 11 Nov 2026). The tip is collected on the staff member's
+ * own partner account, as today; once it is available there, the business's share moves staff ->
+ * TipMe -> business in two idempotent transfers. On a refund, TipMe returns its fee to the staff
+ * member and the business gives its share back, or has it held back from its next shares.
+ *
+ * The partner here is a pretend one in memory, shaped on the sandbox evidence of 11 Nov 2026: a
+ * transfer draws only on the available balance (S3, INSUFFICIENT_BALANCE), the same key returns the
+ * same transfer and moves nothing twice (S3), and a business that withdrew its balance can't give a
+ * share back (S5). It has no call that moves money between two accounts, as the partner has none
+ * (S4); every call is recorded so the tests can say which side each one was on.
+ */
+
+const [ADA, TOBI] = DEMO_PROFILES;
+const OWNER = ADA.userId;
+const GROSS = 1000000n; // ₦10,000, the sandbox tip
+const BPS = 2000; // 80/20
+const MINUTE = 60_000;
+const SETTLE = 24 * 60 * MINUTE;
+
+class PayoutRejectedError extends Error {
+  name = 'PayoutRejectedError';
+  constructor(code) {
+    super(code);
+    this.providerCode = code;
+  }
+}
+class UncertainProviderOutcomeError extends Error {
+  name = 'UncertainProviderOutcomeError';
+}
+
+function pretendPartner() {
+  const available = new Map([['platform', 100000000n]]);
+  const transfers = new Map(); // key -> { ref, from, to, amountMinor, status }
+  const calls = [];
+  // Scripted answers for the next call to each method: 'lost' (moved, answer lost), 'down'
+  // (never arrived), 'pending'.
+  const next = { collect: [], send: [] };
+  const balance = (ref) => available.get(ref) ?? 0n;
+  const move = (key, from, to, amountMinor, status = 'paid') => {
+    const earlier = transfers.get(key);
+    if (earlier) {
+      if (earlier.amountMinor !== amountMinor || earlier.from !== from)
+        throw new Error('idempotency key reused with other details');
+      return earlier;
+    }
+    if (balance(from) < amountMinor)
+      throw new PayoutRejectedError('INSUFFICIENT_BALANCE');
+    available.set(from, balance(from) - amountMinor);
+    available.set(to, balance(to) + amountMinor);
+    const made = {
+      ref: `tr_${transfers.size + 1}`,
+      from,
+      to,
+      amountMinor,
+      status,
+    };
+    transfers.set(key, made);
+    return made;
+  };
+  const answer = (queue, key, from, to, amountMinor) => {
+    const scripted = queue.shift();
+    if (scripted === 'down')
+      throw new UncertainProviderOutcomeError('no answer');
+    const made = move(
+      key,
+      from,
+      to,
+      amountMinor,
+      scripted === 'pending' ? 'pending' : 'paid',
+    );
+    if (scripted === 'lost') throw new UncertainProviderOutcomeError('lost');
+    return { transferRef: made.ref, status: made.status };
+  };
+  return {
+    available,
+    transfers,
+    calls,
+    next,
+    provider: {
+      name: 'mock',
+      capabilities: { connectedAccounts: false },
+      async payoutBalance(accountRef) {
+        return { availableMinor: balance(accountRef) };
+      },
+      async collectToPlatform({ accountRef, amountMinor, idempotencyKey }) {
+        calls.push({
+          call: 'collect',
+          from: accountRef,
+          to: 'platform',
+          amountMinor,
+          idempotencyKey,
+        });
+        return answer(
+          next.collect,
+          idempotencyKey,
+          accountRef,
+          'platform',
+          amountMinor,
+        );
+      },
+      async transferToAccount({ accountRef, amountMinor, idempotencyKey }) {
+        calls.push({
+          call: 'send',
+          from: 'platform',
+          to: accountRef,
+          amountMinor,
+          idempotencyKey,
+        });
+        return answer(
+          next.send,
+          idempotencyKey,
+          'platform',
+          accountRef,
+          amountMinor,
+        );
+      },
+      async findPlatformCollection(accountRef, idempotencyKey) {
+        calls.push({ call: 'find', account: accountRef, idempotencyKey });
+        const made = transfers.get(idempotencyKey);
+        if (!made || (made.from !== accountRef && made.to !== accountRef))
+          return null;
+        return {
+          transferRef: made.ref,
+          status: made.status,
+          amountMinor: made.amountMinor,
+          currency: 'NGN',
+        };
+      },
+      // For the business's withdrawal (R2-B's path, unchanged).
+      payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
+      quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
+    },
+  };
+}
+
+test('option B: shares and their money', async (t) => {
+  const database = await useDatabase(t);
+  const { db } = database;
+  const q = (sql, params) =>
+    database.pool.query(sql, params).then((r) => r.rows);
+  const codeOf = async (promise) => {
+    try {
+      await promise;
+      return null;
+    } catch (error) {
+      return error.code ?? String(error);
+    }
+  };
+
+  const atBusiness = async () => {
+    const { businessId, locations } = await seedBusiness(database);
+    const { memberId } = await seedMember(database, {
+      locationId: locations[0].id,
+      profileId: TOBI.id,
+    });
+    const { agreementId } = await seedAgreement(database, {
+      memberId,
+      businessBps: BPS,
+    });
+    return { businessId, memberId, agreementId };
+  };
+
+  /** A tip to Tobi at the business (or on their own page), quoted, made and paid as the API does. */
+  const paidTip = async ({ shared, sharesOn = true, gross = GROSS } = {}) => {
+    const quote = await createQuote(db, {
+      handle: 'tobi',
+      tipMinor: gross,
+      currency: 'NGN',
+      ...(shared ? { businessMemberId: shared.memberId } : {}),
+      sharesOn,
+    });
+    const intent = await createPaymentIntent(db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+      ...(shared ? { businessMemberId: shared.memberId } : {}),
+      sharesOn,
+    });
+    const reference = `mock_pay_${randomUUID()}`;
+    await markAttemptInitiated(db, {
+      attemptId: intent.attemptId,
+      provider: 'mock',
+      providerReference: reference,
+    });
+    await recordProviderEvent(db, {
+      provider: 'mock',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId: intent.attemptId,
+      providerReference: reference,
+      amountMinor: gross,
+      currency: 'NGN',
+      providerFeeMinor: 20000n,
+      signatureVerified: true,
+      payload: {},
+    });
+    return { tipId: intent.tipId, quote };
+  };
+  /** What the partner does on a refund: the staff member's account pays it all (sandbox S5). */
+  const refund = async (partner, tipId, refundedMinor = GROSS) => {
+    partner.available.set(
+      TOBI.id,
+      (partner.available.get(TOBI.id) ?? 0n) - refundedMinor,
+    );
+    return db.transaction((tx) =>
+      reverseTip(tx, {
+        tipId,
+        partnerReversalId: `refund.${randomUUID()}`,
+        refundedMinor,
+      }),
+    );
+  };
+  const transfersOf = (tipId) =>
+    q(
+      `SELECT kind, status, amount_minor::text AS amount, deliver_minor::text AS deliver
+         FROM share_transfers WHERE tip_id = $1 ORDER BY created_at, kind`,
+      [tipId],
+    );
+  const run = (partner, now) =>
+    runShareTransfers(db, {
+      provider: partner.provider,
+      now,
+      settleWaitMs: SETTLE,
+    });
+  const later = (ms) => new Date(Date.now() + ms);
+
+  await t.test(
+    'the share is fixed at intent time, exactly, in kobo, only when shown',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const { tipId, quote } = await paidTip({ shared });
+      assert.equal(quote.breakdown.recipientNetMinor, 900000n);
+      assert.deepEqual(quote.share, {
+        businessBps: BPS,
+        businessName: 'The Yellow Chilli',
+      });
+      const [row] = await q(
+        'SELECT share_minor::text AS share, business_bps FROM tip_business_shares WHERE tip_id = $1',
+        [tipId],
+      );
+      assert.deepEqual(row, { share: '180000', business_bps: BPS });
+      // The ledger: Tobi ₦7,200, the business ₦1,800, of the ₦9,000 net.
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 720000n);
+      assert.equal(
+        (await businessBalanceOf(db, shared.businessId)).availableMinor,
+        180000n,
+      );
+
+      // An odd net rounds the share down; the kobo stays with Tobi.
+      const odd = await paidTip({ shared, gross: 1000010n });
+      const [oddRow] = await q(
+        `SELECT s.share_minor::text AS share, q.recipient_net_minor::text AS net
+         FROM tip_business_shares s JOIN tips t ON t.id = s.tip_id
+         JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
+        WHERE s.tip_id = $1`,
+        [odd.tipId],
+      );
+      assert.equal(BigInt(oddRow.share), (BigInt(oddRow.net) * 2000n) / 10000n);
+
+      // On Tobi's own page, and with the flag off, nothing is shared.
+      const own = await paidTip();
+      const off = await paidTip({ shared, sharesOn: false });
+      assert.deepEqual(
+        await q(
+          'SELECT tip_id FROM tip_business_shares WHERE tip_id = ANY($1)',
+          [[own.tipId, off.tipId]],
+        ),
+        [],
+      );
+      assert.deepEqual(await transfersOf(own.tipId), []);
+      assert.deepEqual(await transfersOf(off.tipId), []);
+
+      // A quote made before the split was in force can't fund a shared tip: re-quote and see it.
+      const fresh = await seedBusiness(database);
+      const { memberId } = await seedMember(database, {
+        locationId: fresh.locations[0].id,
+        profileId: TOBI.id,
+      });
+      const stale = await createQuote(db, {
+        handle: 'tobi',
+        tipMinor: GROSS,
+        currency: 'NGN',
+        businessMemberId: memberId,
+        sharesOn: true,
+      });
+      assert.equal(stale.share, undefined);
+      await seedAgreement(database, { memberId, businessBps: BPS });
+      assert.equal(
+        await codeOf(
+          createPaymentIntent(db, {
+            quoteId: stale.quoteId,
+            idempotencyKey: randomUUID(),
+            businessMemberId: memberId,
+            sharesOn: true,
+          }),
+        ),
+        'QUOTE_EXPIRED',
+      );
+    },
+  );
+
+  await t.test(
+    'the sweep waits for the money to be available, then moves staff -> TipMe -> business once',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      const { tipId } = await paidTip({ shared });
+      assert.deepEqual(await transfersOf(tipId), [
+        { kind: 'sweep', status: 'waiting', amount: '180000', deliver: null },
+      ]);
+
+      // Before the settlement wait, nothing is even tried.
+      await run(partner, new Date());
+      assert.deepEqual(partner.calls, []);
+      // After it, but the money is still pending on Tobi's account (available ₦0): still nothing sent.
+      await run(partner, later(SETTLE + MINUTE));
+      assert.equal(partner.calls.filter((c) => c.call !== 'find').length, 0);
+      assert.equal((await transfersOf(tipId))[0].status, 'waiting');
+
+      // Settled: Tobi's account holds the ₦9,000 net.
+      partner.available.set(TOBI.id, 900000n);
+      await run(partner, later(SETTLE + 7 * 60 * MINUTE));
+      const [sweep] = await q(
+        `SELECT id FROM share_transfers WHERE tip_id = $1`,
+        [tipId],
+      );
+      assert.deepEqual(partner.calls, [
+        {
+          call: 'collect',
+          from: TOBI.id,
+          to: 'platform',
+          amountMinor: 180000n,
+          idempotencyKey: shareOutKey(sweep.id),
+        },
+        {
+          call: 'send',
+          from: 'platform',
+          to: shared.businessId,
+          amountMinor: 180000n,
+          idempotencyKey: shareInKey(sweep.id),
+        },
+      ]);
+      assert.equal(partner.available.get(TOBI.id), 720000n);
+      assert.equal(partner.available.get(shared.businessId), 180000n);
+      assert.equal(partner.available.get('platform'), 100000000n);
+      assert.deepEqual(await transfersOf(tipId), [
+        { kind: 'sweep', status: 'done', amount: '180000', deliver: '180000' },
+      ]);
+      // Done is done: more runs send nothing.
+      await run(partner, later(2 * SETTLE));
+      assert.equal(partner.calls.length, 2);
+      // The ledger never moved: it already said who is owed what.
+      assert.equal(
+        (await businessBalanceOf(db, shared.businessId)).availableMinor,
+        180000n,
+      );
+    },
+  );
+
+  await t.test(
+    'two workers at once move the share once; no call ever goes account to account',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n * 3n);
+      for (let i = 0; i < 3; i += 1) await paidTip({ shared });
+      const at = later(SETTLE + MINUTE);
+      await Promise.all([run(partner, at), run(partner, at), run(partner, at)]);
+      const moves = partner.calls.filter((c) => c.call !== 'find');
+      assert.equal(moves.filter((c) => c.call === 'collect').length, 3);
+      assert.equal(moves.filter((c) => c.call === 'send').length, 3);
+      assert.equal(partner.available.get(shared.businessId), 540000n);
+      // Every movement has TipMe's own balance on exactly one side.
+      for (const call of moves)
+        assert.equal(
+          [call.from, call.to].filter((side) => side === 'platform').length,
+          1,
+        );
+      // And each send came after its own collect.
+      for (const send of moves.filter((c) => c.call === 'send')) {
+        const id = send.idempotencyKey.replace('tipme-share-in-', '');
+        assert.ok(
+          moves.indexOf(
+            moves.find((c) => c.idempotencyKey === shareOutKey(id)),
+          ) < moves.indexOf(send),
+        );
+      }
+    },
+  );
+
+  await t.test(
+    'a lost answer on either leg is read back, never sent blindly, and moves once',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const { tipId } = await paidTip({ shared });
+      const [{ id }] = await q(
+        `SELECT id FROM share_transfers WHERE tip_id = $1`,
+        [tipId],
+      );
+      const t0 = later(SETTLE + MINUTE);
+
+      // Leg 1 moved, but its answer was lost.
+      partner.next.collect.push('lost');
+      await run(partner, t0);
+      assert.equal((await transfersOf(tipId))[0].status, 'out_sent');
+      // The second leg never starts on an unconfirmed first.
+      assert.equal(partner.calls.filter((c) => c.call === 'send').length, 0);
+      // A run straight after doesn't ask again.
+      await run(partner, new Date(t0.getTime() + 30_000));
+      assert.equal(partner.calls.length, 1);
+      // Two minutes on it reads back, finds leg 1 paid, and sends leg 2 (whose answer is lost too).
+      partner.next.send.push('lost');
+      await run(partner, new Date(t0.getTime() + 3 * MINUTE));
+      await run(partner, new Date(t0.getTime() + 3 * MINUTE));
+      assert.equal((await transfersOf(tipId))[0].status, 'in_sent');
+      await run(partner, new Date(t0.getTime() + 6 * MINUTE));
+      assert.deepEqual(await transfersOf(tipId), [
+        { kind: 'sweep', status: 'done', amount: '180000', deliver: '180000' },
+      ]);
+      assert.equal(partner.calls.filter((c) => c.call === 'collect').length, 1);
+      assert.equal(partner.calls.filter((c) => c.call === 'send').length, 1);
+      assert.equal(partner.transfers.size, 2);
+      assert.equal(partner.available.get(shared.businessId), 180000n);
+      assert.equal(id.length, 36);
+    },
+  );
+
+  await t.test(
+    'a leg that never arrived is asked again only after 30 minutes, with the same key',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const { tipId } = await paidTip({ shared });
+      const t0 = later(SETTLE + MINUTE);
+      partner.next.collect.push('down');
+      await run(partner, t0);
+      await run(partner, new Date(t0.getTime() + 10 * MINUTE));
+      assert.equal((await transfersOf(tipId))[0].status, 'out_sent');
+      await run(partner, new Date(t0.getTime() + 31 * MINUTE)); // not found: back to waiting
+      await run(partner, new Date(t0.getTime() + 32 * MINUTE)); // asked again
+      const collects = partner.calls.filter((c) => c.call === 'collect');
+      assert.equal(collects.length, 2);
+      assert.equal(collects[0].idempotencyKey, collects[1].idempotencyKey);
+      assert.equal((await transfersOf(tipId))[0].status, 'done');
+      assert.equal(partner.available.get(shared.businessId), 180000n);
+    },
+  );
+
+  await t.test(
+    'a business withdraws at least ₦5,000, even when that is everything',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n * 3n);
+      for (let i = 0; i < 2; i += 1) await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      // ₦3,600 in the business's balance and on its account: everything, but under the minimum.
+      const withdraw = (amountMinor) =>
+        requestBusinessWithdrawal(db, {
+          businessId: shared.businessId,
+          userId: OWNER,
+          amountMinor,
+          idempotencyKey: randomUUID(),
+          provider: partner.provider,
+        });
+      assert.equal(await codeOf(withdraw(360000n)), 'WITHDRAWAL_TOO_SMALL');
+      await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      assert.equal(await codeOf(withdraw(499999n)), 'WITHDRAWAL_TOO_SMALL');
+      assert.equal((await withdraw(500000n)).status, 'REQUESTED');
+    },
+  );
+
+  await t.test(
+    'refunded before the sweep: TipMe returns its fee, the business is never asked',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const { tipId } = await paidTip({ shared });
+      await refund(partner, tipId); // Tobi's account: ₦9,000 - ₦10,000 = -₦1,000
+      assert.deepEqual(await transfersOf(tipId), [
+        { kind: 'sweep', status: 'cancelled', amount: '180000', deliver: null },
+        {
+          kind: 'fee_return',
+          status: 'out_paid',
+          amount: '100000',
+          deliver: '100000',
+        },
+      ]);
+      await run(partner, later(SETTLE + MINUTE));
+      assert.deepEqual(
+        partner.calls.map(({ call, from, to, amountMinor }) => ({
+          call,
+          from,
+          to,
+          amountMinor,
+        })),
+        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n }],
+      );
+      // Tobi ends even, on the partner and in the ledger.
+      assert.equal(partner.available.get(TOBI.id), 0n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      assert.equal(
+        (await businessBalanceOf(db, shared.businessId)).availableMinor,
+        0n,
+      );
+      assert.equal(partner.available.get(shared.businessId) ?? 0n, 0n);
+    },
+  );
+
+  await t.test(
+    'refunded after the sweep: the share comes back business -> TipMe -> staff, and the fee',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const { tipId } = await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      await refund(partner, tipId); // Tobi: ₦7,200 - ₦10,000 = -₦2,800
+      await run(partner, later(SETTLE + 2 * MINUTE));
+      const moves = partner.calls
+        .filter((c) => c.call !== 'find')
+        .slice(2)
+        .map(({ call, from, to, amountMinor }) => ({
+          call,
+          from,
+          to,
+          amountMinor,
+        }));
+      // The fee goes back at once; the share is pulled from the business, then sent on to Tobi.
+      assert.deepEqual(moves, [
+        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n },
+        {
+          call: 'collect',
+          from: shared.businessId,
+          to: 'platform',
+          amountMinor: 180000n,
+        },
+        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 180000n },
+      ]);
+      assert.equal(partner.available.get(TOBI.id), 0n);
+      assert.equal(partner.available.get(shared.businessId), 0n);
+      // TipMe gave its fee back and absorbs the partner's processing fee.
+      assert.equal(partner.available.get('platform'), 100000000n - 100000n);
+      const kinds = Object.fromEntries(
+        (await transfersOf(tipId)).map((r) => [r.kind, r.status]),
+      );
+      assert.deepEqual(kinds, {
+        sweep: 'done',
+        fee_return: 'done',
+        recover: 'done',
+      });
+    },
+  );
+
+  await t.test(
+    'refunded after the business withdrew: the gap is held back from its next shares, and it is told',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const first = await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      // The business withdrew its ₦1,800 at the partner (its account is empty).
+      partner.available.set(shared.businessId, 0n);
+      await refund(partner, first.tipId);
+      await run(partner, later(SETTLE + 2 * MINUTE));
+      const kinds = Object.fromEntries(
+        (await transfersOf(first.tipId)).map((r) => [r.kind, r.status]),
+      );
+      assert.deepEqual(kinds, {
+        sweep: 'done',
+        fee_return: 'done',
+        recover: 'gap',
+      });
+      assert.deepEqual(
+        await q(
+          `SELECT amount_minor::text AS amount, remaining_minor::text AS remaining, profile_id
+           FROM share_holdbacks WHERE business_id = $1`,
+          [shared.businessId],
+        ),
+        [{ amount: '180000', remaining: '180000', profile_id: TOBI.id }],
+      );
+      assert.deepEqual(await businessShareMoney(db, shared.businessId), {
+        onTheWayMinor: 0n,
+        heldBackMinor: 180000n,
+      });
+      // The owners are told in the app, with no email.
+      const told = await q(
+        `SELECT user_id, title FROM notifications WHERE kind = 'business_share_held_back' AND business_id = $1`,
+        [shared.businessId],
+      );
+      assert.deepEqual(told, [
+        { user_id: OWNER, title: 'A refunded tip’s share is held back' },
+      ]);
+
+      // The next shared tip's ₦1,800 goes back to Tobi instead of on to the business.
+      const second = await paidTip({ shared });
+      partner.available.set(TOBI.id, partner.available.get(TOBI.id) + 900000n);
+      await run(partner, later(2 * SETTLE));
+      await run(partner, later(2 * SETTLE));
+      const [secondSweep] = await transfersOf(second.tipId);
+      assert.deepEqual(secondSweep, {
+        kind: 'sweep',
+        status: 'done',
+        amount: '180000',
+        deliver: '0',
+      });
+      assert.equal(partner.available.get(shared.businessId), 0n);
+      assert.deepEqual(
+        await q(
+          `SELECT remaining_minor::text AS remaining, settled_at IS NOT NULL AS settled FROM share_holdbacks`,
+        ),
+        [{ remaining: '0', settled: true }],
+      );
+      const [repay] = await q(
+        `SELECT status, amount_minor::text AS amount, profile_id FROM share_transfers WHERE kind = 'holdback_repay'`,
+      );
+      assert.deepEqual(repay, {
+        status: 'done',
+        amount: '180000',
+        profile_id: TOBI.id,
+      });
+      // Tobi's account matches the ledger again: the first tip came to nothing (₦9,000 in, ₦10,000
+      // refunded, ₦1,000 fee back; ₦1,800 out to the business, ₦1,800 back from the second tip's
+      // share), and the second tip leaves them their ₦7,200.
+      assert.equal(partner.available.get(TOBI.id), 720000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 720000n);
+      // The business's account got nothing from the second tip: its share paid the gap.
+      assert.equal(partner.available.get(shared.businessId), 0n);
+    },
+  );
+
+  await t.test(
+    'flags off: a plain tip and its refund move nothing between accounts',
+    async () => {
+      await database.fresh();
+      const partner = pretendPartner();
+      const { tipId } = await paidTip({ sharesOn: false });
+      partner.available.set(TOBI.id, 900000n);
+      await refund(partner, tipId);
+      await run(partner, later(SETTLE + MINUTE));
+      assert.deepEqual(await transfersOf(tipId), []);
+      assert.deepEqual(partner.calls, []);
+    },
+  );
+});

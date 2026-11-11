@@ -476,6 +476,8 @@ export class WebhookService {
     });
     if (!known || !accounts.getRecipientAccount)
       return this.unmatchedBachs(event);
+    // A business's receive-only account: re-read when its owner opens the Money section.
+    if (known.profileId === null) return 'ignored';
     // A failed read throws, so Bachs retries the delivery later.
     const remote = await accounts.getRecipientAccount(event.accountReference);
     const { status, chargesEnabled } = bachsAccountReadiness(remote);

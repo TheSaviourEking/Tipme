@@ -91,6 +91,17 @@ export const workerConfigSchema = z
       .enum(['on', 'off'])
       .default('off')
       .transform((value) => value === 'on'),
+    // Business release 2, option B: move each shared tip's money staff -> TipMe -> business once
+    // it is available, and put refunds right. Off by default; on with the API's flag of the same
+    // name (both BUSINESS_ENABLED and it on there), never alone.
+    BUSINESS_SHARES_ENABLED: z
+      .enum(['true', 'false'])
+      .default('false')
+      .transform((value) => value === 'true'),
+    // How long after a shared tip is paid before its share is first tried (a ruling: partner
+    // question (e), the settlement delay for naira charges, is still open). Then it also waits
+    // until the staff member's available balance holds it.
+    BUSINESS_SHARE_SETTLE_HOURS: z.coerce.number().min(0).max(240).default(48),
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z

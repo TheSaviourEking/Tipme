@@ -596,10 +596,17 @@ export function findPaymentAccountByReference(
     environment: PaymentAccountEnvironment;
     providerAccountReference: string;
   },
-): Promise<{ profileId: string } | null> {
+): Promise<
+  | { profileId: string; businessId: null }
+  | { profileId: null; businessId: string }
+  | null
+> {
   return guarded(async () => {
     const [row] = await db
-      .select({ profileId: paymentAccounts.profileId })
+      .select({
+        profileId: paymentAccounts.profileId,
+        businessId: paymentAccounts.businessId,
+      })
       .from(paymentAccounts)
       .where(
         and(
@@ -611,7 +618,10 @@ export function findPaymentAccountByReference(
           ),
         ),
       );
-    // A business's account (R2-B) is refreshed by its own path.
-    return row ? { profileId: personOf(row.profileId) } : null;
+    if (!row) return null;
+    // A business's account (option B) is ours too: its payouts are matched like a person's, and
+    // its state is refreshed by its own path (the owner's Money section), never as a person's.
+    if (row.businessId) return { profileId: null, businessId: row.businessId };
+    return { profileId: personOf(row.profileId), businessId: null };
   });
 }
