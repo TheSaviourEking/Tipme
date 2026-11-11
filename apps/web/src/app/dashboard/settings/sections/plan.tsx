@@ -54,7 +54,6 @@ function useReturnedPurchase(onSettled: () => void) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const started = Date.now();
     const balance = balanceRef.current;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the stored id is only readable in the browser
     setFollowed({ kind: 'confirming', purchase: null, balance });
     const check = async (attempt: number) => {
       const result = await readPurchase(purchaseId);
