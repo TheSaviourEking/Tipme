@@ -7,7 +7,7 @@ import { isReservedHandle } from '@tipme/domain';
 // (review I3). The handles are read from the source, so a new example fails here until reserved.
 const sources = [
   '../src/components/marketing.tsx',
-  '../src/components/marketing/plan-preview.tsx',
+  '../src/app/pro/page.tsx',
   '../src/components/marketing/where-you-meet-people.tsx',
   '../src/components/demo-cards.tsx',
 ];
@@ -24,7 +24,7 @@ test('every example handle in the marketing components is reserved', () => {
       for (const match of list[1].matchAll(/'([a-z0-9_]{3,30})'/g))
         found.add(match[1]);
   }
-  for (const handle of ['ada', 'tobi', 'zainab', 'adaokafor'])
+  for (const handle of ['ada', 'tobi', 'zainab'])
     assert.ok(found.has(handle), `${handle} should be found in the examples`);
   for (const handle of found)
     assert.equal(isReservedHandle(handle), true, `${handle} must be reserved`);

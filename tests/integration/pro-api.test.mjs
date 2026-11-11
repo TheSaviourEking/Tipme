@@ -110,6 +110,27 @@ test('with PRO_BILLING_ENABLED off, buying is 404 PRO_BILLING_OFF and GET says b
   assert.equal(mine.data.billingOn, false);
 });
 
+test('GET /v1/pro/price tells a signed-out visitor whether buying is open on this copy', async () => {
+  // The /pro page shows "Get Pro" or "coming soon to buy" before anyone signs in.
+  for (const [api, open] of [
+    [stack.api, true],
+    [off.api, false],
+  ]) {
+    const response = await fetch(`${api}/v1/pro/price`, {
+      headers: { origin: WEB },
+    });
+    // The page reads it from the browser: the web app may, with no cookie.
+    assert.equal(response.headers.get('access-control-allow-origin'), WEB);
+    assert.equal(
+      response.headers.get('access-control-allow-credentials'),
+      null,
+    );
+    const { data } = await json(response);
+    assert.equal(data.amountMinor, '250000');
+    assert.equal(data.billingOn, open);
+  }
+});
+
 test('GET /v1/me/pro shows the server’s price, card only while paying from the balance is off', async () => {
   const { cookie } = await session(TOBI_PHONE);
   const response = await fetch(`${stack.api}/v1/me/pro`, {

@@ -1,4 +1,6 @@
 import { Fragment } from 'react';
+import { ExplainedProBadge } from './pro-badge-note.js';
+import { ProMark } from './pro-mark.js';
 import type { ComponentPropsWithRef, HTMLAttributes, ReactNode } from 'react';
 
 /** `continue` is the black continuation action: the one step forward on a screen. */
@@ -95,24 +97,27 @@ export function Badge({
 
 /**
  * The mark of a Pro page, shown with the person's name. The word is what it says; the spark is
- * decoration. It names the plan only: never a price.
+ * decoration. It names the plan only: never a price. With `explain` (the public tip page) it is a
+ * button that opens a short note: a paid plan, not a check on who runs the page.
  */
 export function ProBadge({
+  explain = false,
+  aboutHref,
   className,
   ...props
-}: HTMLAttributes<HTMLSpanElement>) {
-  return (
-    <span className={classes('tm-pro-badge', className)} {...props}>
-      <svg
-        viewBox="0 0 16 16"
-        aria-hidden="true"
-        className="tm-pro-badge__spark"
-      >
-        <path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z" />
-      </svg>
-      Pro
-    </span>
-  );
+}: HTMLAttributes<HTMLSpanElement> & {
+  explain?: boolean;
+  /** Where the note's "About Pro" leads; /pro unless given. */
+  aboutHref?: string;
+}) {
+  if (explain)
+    return (
+      <ExplainedProBadge
+        {...(className ? { className } : {})}
+        {...(aboutHref ? { aboutHref } : {})}
+      />
+    );
+  return <ProMark {...(className ? { className } : {})} {...props} />;
 }
 
 type FieldDetails = {

@@ -118,6 +118,8 @@ test('GET /v1/pro/price returns 250000 NGN a month, cached publicly for 60 secon
     amountMinor: '250000',
     currency: 'NGN',
     interval: 'month',
+    // This copy runs with PRO_BILLING_ENABLED unset, so buying is not open.
+    billingOn: false,
   });
 });
 
