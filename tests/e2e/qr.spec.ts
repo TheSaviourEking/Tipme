@@ -399,7 +399,7 @@ test('a Pro page chooses a format by its paper picture, and small formats print 
     ['lock', 'Phone lock screen', 'Prints on A6'],
     ['business', 'Business card', 'Prints 90 × 55 mm'],
     ['hang', 'Hang tag', 'Prints on A6'],
-  ]) {
+  ] as const) {
     const label = formats.locator('label', { hasText: name });
     await expect(label).toContainText(size);
     const art = label.locator(`.qr-pick__art[data-format="${id}"]`);
