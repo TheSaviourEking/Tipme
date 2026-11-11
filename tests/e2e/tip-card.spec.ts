@@ -17,7 +17,8 @@ const DISCLOSURE = 'Add a message, reason or your name';
 const WIDTHS = [320, 360, 390, 768, 1280];
 const OTHER = /^Other amount/;
 const PARTNER = {
-  live: 'Our payment partner handles this. You’ll confirm on its page.',
+  // One line in live mode (public-boards PR 9): it carries "you pay exactly this" too.
+  live: 'You pay exactly this. You’ll confirm on our partner’s page.',
   test: 'A test page stands in for our payment partner. Confirm there.',
 };
 
@@ -394,8 +395,14 @@ for (const m of ['test', 'live'] as const)
     await page.setViewportSize({ width: 1280, height: 900 });
     await at(m, '/@dr7', page, { pilotNotice: true });
     const panel = page.locator('[data-tip-panel]');
-    await expect(panel.locator('.composer-trust')).toHaveText(TRUST);
-    await expect(panel.getByText(/No account needed/)).toHaveCount(1);
+    // Test mode keeps its two lines; live mode says it in the one partner line.
+    if (m === 'test') {
+      await expect(panel.locator('.composer-trust')).toHaveText(TRUST);
+      await expect(panel.getByText(/No account needed/)).toHaveCount(1);
+    } else {
+      await expect(panel.locator('.composer-trust')).toHaveCount(0);
+      await expect(panel.getByText(/No account needed/)).toHaveCount(0);
+    }
     const words =
       m === 'test'
         ? 'TipMe is in test mode: no real money moves yet.'
@@ -410,7 +417,7 @@ for (const m of ['test', 'live'] as const)
     await expect(
       page.locator('.profile-foot').getByText(/partner/),
     ).toHaveCount(0);
-    await expect(panel.getByText(/payment partner/)).toHaveCount(1);
+    await expect(panel.getByText(/payment partner|our partner/)).toHaveCount(1);
     expect((await panel.ariaSnapshot()).split(PARTNER[m]).length - 1).toBe(1);
     expect(await page.locator('body').innerText()).not.toMatch(/bachs/i);
     if (m === 'live') {
@@ -1183,4 +1190,67 @@ test('a fault on our side says so, and that nothing was paid', async ({
   await expect(slip).toContainText(CONNECTION_COPY.ourSideTip);
   await expect(slip).not.toContainText(/your money/i);
   await expect(slip.locator('.tm-slip__safe')).toHaveCount(0);
+});
+
+// Public-boards PR 9, Task 9.1 (plan Q1 default): the minimum, said as a quiet hint after a pause.
+const MINIMUM_HINT =
+  'Enter an amount of NGN 10,000 or more, like 10,000 or 2,500.50.';
+
+test('typing an amount under the minimum shows the rule as a hint after a pause, not as an error', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const origin = await at('live', '/@dr7', page);
+  await answerApi(page, origin);
+  const field = page.getByLabel(OTHER);
+  await field.pressSequentially('5000');
+  const hint = card(page).locator('.tm-hint', { hasText: MINIMUM_HINT });
+  await expect(hint).toBeVisible();
+  const hintId = await hint.getAttribute('id');
+  expect(hintId).toBeTruthy();
+  await expect(field).toHaveAttribute(
+    'aria-describedby',
+    new RegExp(`(^| )${hintId}( |$)`),
+  );
+  await expect(field).toHaveAttribute('aria-invalid', 'false');
+  await expect(card(page).getByRole('alert')).toHaveCount(0);
+  expect(await hasRedEdge(field)).toBe(false);
+  // Fixing the amount takes the hint away.
+  await field.pressSequentially('0');
+  await expect(hint).toHaveCount(0);
+});
+
+test('typing 12,000 key by key never shows the hint', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const origin = await at('live', '/@dr7', page);
+  await answerApi(page, origin);
+  const field = page.getByLabel(OTHER);
+  const hint = card(page).locator('.tm-hint', { hasText: /Enter an amount/ });
+  for (const key of '12000') {
+    await field.press(key);
+    await page.waitForTimeout(100);
+    await expect(hint).toHaveCount(0);
+  }
+  await page.waitForTimeout(900);
+  await expect(hint).toHaveCount(0);
+  await expect(tipButton(page)).toHaveText(/^Tip ₦12,000/);
+});
+
+test('leaving the field under the minimum shows the hint after the pause; pressing Tip still starts nothing and shows the error', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  const origin = await at('live', '/@dr7', page);
+  const sent = await answerApi(page, origin);
+  const field = page.getByLabel(OTHER);
+  await field.fill('500');
+  await field.blur();
+  const hint = card(page).locator('.tm-hint', { hasText: MINIMUM_HINT });
+  await expect(hint).toBeVisible();
+  await tipButton(page).click();
+  // The error replaces the hint: the words are said once.
+  await expect(card(page).getByRole('alert')).toHaveText(MINIMUM_HINT);
+  await expect(hint).toHaveCount(0);
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  expect(sent.intents).toEqual([]);
 });

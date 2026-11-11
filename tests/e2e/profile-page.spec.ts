@@ -16,6 +16,7 @@ import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
 
 const TRUST = 'No account needed. You pay exactly this amount.';
+const LIVE_LINE = 'You pay exactly this. You’ll confirm on our partner’s page.';
 const openDetails = (page: Page) =>
   page.getByText('Add a message, reason or your name').click();
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
@@ -615,11 +616,16 @@ test.describe('the page in each payment state', () => {
       'position',
       'sticky',
     );
-    await expect(page.getByText(TRUST)).toBeVisible();
+    // Live mode says it in one line beside the Tip key (public-boards PR 9).
+    const line = page
+      .locator('[data-tip-panel] .composer-action__partner')
+      .getByText(LIVE_LINE);
+    await expect(line).toBeVisible();
+    await expect(page.getByText(TRUST)).toHaveCount(0);
     await expect(tipButton(page)).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     // Space for the live pilot notice: the wording stays directly under the button.
     const button = await tipButton(page).boundingBox();
-    const trust = await page.getByText(TRUST).boundingBox();
+    const trust = await line.boundingBox();
     expect(trust?.y).toBeGreaterThanOrEqual(
       (button?.y ?? 0) + (button?.height ?? 0),
     );
