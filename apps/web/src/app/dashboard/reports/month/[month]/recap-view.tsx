@@ -14,10 +14,10 @@ import { monthNameOf, recapShareable } from '@/lib/month-share';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 
 // A per-viewer convenience: whether this browser shows the total on the card. Nothing is sent.
-const TOTAL_KEY = 'tipme.recapTotal.v1';
+const TOTAL_STORAGE_NAME = 'tipme.recapTotal.v1';
 const readTotal = () => {
   try {
-    return localStorage.getItem(TOTAL_KEY) === '1';
+    return localStorage.getItem(TOTAL_STORAGE_NAME) === '1';
   } catch {
     return false;
   }
@@ -150,7 +150,7 @@ export default function MonthlyRecapPage() {
               setShowTotal(event.target.checked);
               try {
                 localStorage.setItem(
-                  TOTAL_KEY,
+                  TOTAL_STORAGE_NAME,
                   event.target.checked ? '1' : '0',
                 );
               } catch {
