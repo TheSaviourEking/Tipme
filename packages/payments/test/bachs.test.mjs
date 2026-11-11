@@ -12,7 +12,7 @@ import {
 
 const API_KEY = 'sk_sandbox_test';
 const CURRENT_SECRET = 'current-secret-0123456789';
-const PREVIOUS_SECRET = 'previous-secret-0123456789';
+const PREVIOUS_SECRET = 'previous-secret-0123456789'; // gitleaks:allow (a made-up test secret)
 const NOW = new Date('2026-10-26T12:00:00.000Z');
 
 function makeProvider(fetchImpl, config = {}) {
