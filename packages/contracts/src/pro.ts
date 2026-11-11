@@ -26,11 +26,20 @@ const kobo = z
     (value) => /^[0-9]+$/.test(value) && isAllowedProPrice(BigInt(value)),
   );
 
-/** `GET /v1/pro/price`: what a month of Pro costs today. */
+/** What a month of Pro costs today. */
 export interface ProPrice {
   amountMinor: string;
   currency: 'NGN';
   interval: 'month';
+}
+
+/**
+ * `GET /v1/pro/price`, for anyone: the price, and whether buying is switched on on this copy
+ * (PRO_BILLING_ENABLED), so the /pro page can say "Get Pro" or "coming soon to buy" before anyone
+ * signs in. Whether this person's page can buy is `MyPro.billingOn`.
+ */
+export interface PublicProPrice extends ProPrice {
+  billingOn: boolean;
 }
 
 /** One row of the price history, for staff. */

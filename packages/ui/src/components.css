@@ -258,6 +258,45 @@
   }
 }
 
+/* The badge a visitor can press (option A): a 44px target around the same pill, then its note. */
+.tm-pro-badge-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin-block: -10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.tm-pro-badge-button:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-pill);
+}
+
+.tm-pro-badge-note:not([hidden]) {
+  display: block;
+  flex-basis: 100%;
+  margin-top: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--radius-md);
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.tm-pro-badge-note a {
+  color: inherit;
+  font-weight: 700;
+}
+
 .tm-field {
   display: grid;
   gap: 0.5rem;
