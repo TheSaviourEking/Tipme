@@ -21,6 +21,8 @@ export interface ReviewScreen {
   board: string;
   /** Its phone shot is one screen tall, not the whole page, so fixed bars sit where they do on a phone. */
   viewport?: boolean;
+  /** false: every project is shot one screen tall, so a section reached by a link shows first. */
+  fullPage?: boolean;
   open(page: Page, ctx: ReviewContext): Promise<void>;
 }
 
@@ -622,8 +624,8 @@ export const SCREENS: ReviewScreen[] = [
       await page.locator('.tm-slip--unsure').waitFor();
     },
   },
-  // Settings (ScreenSettings): one shot per section, reached by its link. Shots are full-page, so
-  // each shows the whole of Settings; the section's link is the current one.
+  // Settings (ScreenSettings): one shot per section, opened at its link (#id) and shot one screen
+  // tall, so each shows its own section first (S1; the audit's "as a first view").
   ...(
     [
       ['My page', 'page'],
@@ -638,16 +640,13 @@ export const SCREENS: ReviewScreen[] = [
     group: 'Dashboard',
     name: `Settings, ${name}`,
     board: 'ScreenSettings',
+    fullPage: false,
     async open(page, ctx) {
       await ctx.recipient();
-      await page.goto('/dashboard/settings');
+      await page.goto(`/dashboard/settings#${id}`);
       // My page shows the preview following an edit that is not saved yet.
       if (id === 'page')
         await page.getByLabel('What you do').fill('Maths tutor');
-      await page
-        .locator('nav[aria-label="Settings"]')
-        .getByRole('link', { name, exact: true })
-        .click();
       await page
         .locator(`section#${id}`)
         .getByRole('heading', { level: 2, name, exact: true })
