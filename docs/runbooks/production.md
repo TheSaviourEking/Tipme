@@ -217,6 +217,8 @@ SELECT 'alias', handle_lower, NULL FROM handle_aliases
 
 Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until `BUSINESS_ENABLED=true` on the API. While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own flags (`BUSINESS_SHARES_ENABLED`, `TEAM_TIPS_ENABLED`) stay off; this section does not turn them on.
 
+Shares (option B, `docs/00-DECISIONS.md`, 11 Nov 2026) need `BUSINESS_SHARES_ENABLED=true` on **both** the API and the worker: the API fixes a share on a tip and shows it before paying; the worker moves each share staff → TipMe → business once its tip's money is available (`BUSINESS_SHARE_SETTLE_HOURS`, default 48), and puts refunds right. With the worker's flag off, shares sit on the staff accounts and nothing moves. A `share_transfer_stuck` issue means TipMe may be holding a business's share: check the partner dashboard for the transfers with the keys in the issue before doing anything.
+
 **Before turning it on:**
 
 1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.

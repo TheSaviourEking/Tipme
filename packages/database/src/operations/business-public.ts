@@ -18,6 +18,7 @@ import {
   handleAliases,
   profiles,
 } from '../schema.js';
+import { shareInForce } from './share-at-tip.js';
 import { guarded } from './errors.js';
 import {
   getReadyPaymentAccount,
@@ -36,6 +37,8 @@ export interface PublicReadOptions {
     provider: string;
     environment: PaymentAccountEnvironment;
   };
+  /** BUSINESS_SHARES_ENABLED: the staff page then tells the agreed split before any amount. */
+  sharesOn?: boolean;
 }
 
 /** At most this many people answer one search ("I don't see them"). */
@@ -389,7 +392,21 @@ export function publicStaffTipPage(
         )
       : [];
     if (!open || !row) return { redirectTo: `/@${profile.handle}` };
+    // R2-C2: the split in force, in percentages only, so the supporter knows before paying. The
+    // quote says it again and the intent fixes it only if it is still this one.
+    const share = options.sharesOn
+      ? await shareInForce(db, profile.id, row.memberId)
+      : null;
     return {
+      ...(share
+        ? {
+            share: {
+              businessPercent: share.businessBps / 100,
+              personKeepsPercent: 100 - share.businessBps / 100,
+              businessName: share.businessName,
+            },
+          }
+        : {}),
       business: open.business,
       location: { slug: open.location.slug, name: open.location.name },
       person: card(row, now),

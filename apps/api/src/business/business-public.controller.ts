@@ -49,9 +49,13 @@ export class BusinessPublicController {
   /** The same rule as the person's own page: tips through Bachs need their own ready account. */
   private options(): PublicReadOptions {
     const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
-    return environment
-      ? { requiredAccount: { provider: 'bachs', environment } }
-      : {};
+    const sharesOn = this.config.BUSINESS_SHARES_ENABLED;
+    return {
+      ...(environment
+        ? { requiredAccount: { provider: 'bachs', environment } }
+        : {}),
+      ...(sharesOn ? { sharesOn } : {}),
+    };
   }
 
   /** The business page: its open locations, no people. 404 unless verified with one open. */

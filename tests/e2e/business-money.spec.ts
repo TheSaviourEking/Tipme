@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
+import { startTip } from '../shared/tip-flow';
 import { chooseBank } from './bank-fixtures';
 import {
   accountOf,
@@ -61,13 +62,23 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
     businessBps: 5000,
   });
 
-  // A ₦40,000 tip at the business. R2-C2 will fix the share at intent time; until then the test
-  // writes the row itself, between the intent and the pretend payment.
+  // A ₦40,000 tip at the business, through the API the tip page uses: the quote tells the split
+  // before paying, and the intent fixes the share on the tip (R2-C2).
   const quote = await (
     await request.post(`${API_ORIGIN}/v1/tip-quotes`, {
-      data: { handle: who.handle, amountMinor: '4000000', currency: 'NGN' },
+      data: {
+        handle: who.handle,
+        amountMinor: '4000000',
+        currency: 'NGN',
+        businessMemberId: memberId,
+      },
     })
   ).json();
+  expect(quote.data.share).toEqual({
+    personKeepsPercent: 50,
+    businessPercent: 50,
+    businessName: 'The Yellow Chilli',
+  });
   const intent = await (
     await request.post(`${API_ORIGIN}/v1/tip-intents`, {
       headers: { 'idempotency-key': randomUUID() },
@@ -75,11 +86,11 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
     })
   ).json();
   const share = (BigInt(quote.data.recipientNetMinor) * 5000n) / 10000n;
-  await sql(
-    `INSERT INTO tip_business_shares (tip_id, agreement_id, business_id, business_bps, share_minor)
-     VALUES ($1, $2, $3, 5000, $4)`,
-    [intent.data.tipId, agreementId, business.businessId, share.toString()],
+  const [fixed] = await sql<{ share: string; agreement_id: string }>(
+    'SELECT share_minor::text AS share, agreement_id FROM tip_business_shares WHERE tip_id = $1',
+    [intent.data.tipId],
   );
+  expect(fixed).toEqual({ share: share.toString(), agreement_id: agreementId });
   const reference = String(intent.data.checkoutUrl).split('/mock-checkout/')[1];
   await request.post(`${API_ORIGIN}/v1/mock-provider/checkout/${reference}`, {
     data: { outcome: 'succeed' },
@@ -96,6 +107,13 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
       timeout: 2000,
     });
   }).toPass({ timeout: 30_000 });
+  // Option B: the share waits to move to the business's own account until its tip has settled.
+  await expect(money.getByTestId('business-on-the-way')).toContainText(
+    `On its way: ${shareText}`,
+  );
+  await expect(
+    money.getByText(/The smallest withdrawal for a business is ₦5,000/),
+  ).toBeVisible();
   // As for a person, the pretend partner pays without a bank on file ("Pretend bank").
   await expect(money.getByText('Ready to withdraw')).toBeVisible();
   await expect(money.getByText(/Pretend bank ••0000/)).toBeVisible();
@@ -135,4 +153,120 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
   });
   await expect(page.locator('body')).not.toContainText(/bachs/i);
   expect(await fitsViewport(page)).toBe(true);
+
+  // The staff member (the owner works there too) sees what they shared, on their Work page.
+  await page.goto('/dashboard/work');
+  const shared = page.getByTestId('work-shared');
+  await expect(shared).toContainText(
+    `This month you shared ${shareText} with The Yellow Chilli, from 1 tip.`,
+  );
+  await expectAccessible(page);
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('a business withdrawal under ₦5,000 is refused, in plain words', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo);
+  const { userId } = await accountOf(who.email);
+  const business = await seedBusiness({ owner: userId });
+  // Hold the balance at ₦3,600, the sandbox share of two ₦10,000 tips at 80/20.
+  await page.route(
+    `**/v1/me/businesses/${business.businessId}/balance`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            businessId: business.businessId,
+            currency: 'NGN',
+            balanceMinor: '360000',
+            canWithdraw: true,
+            onTheWayMinor: '0',
+            heldBackMinor: '180000',
+            minWithdrawalMinor: '500000',
+            payoutAccount: 'not_needed',
+          },
+        },
+      }),
+  );
+  await page.route(
+    `**/v1/me/businesses/${business.businessId}/withdrawal-quote`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            state: 'ready',
+            withdrawableMinor: '360000',
+            ledgerMinor: '360000',
+            providerMinor: '360000',
+            feeMinor: '5000',
+            destination: { bankName: 'Pretend bank', last4: '0000' },
+            inReview: false,
+          },
+        },
+      }),
+  );
+  await page.route('**/v1/me/events', (route) =>
+    route.fulfill({ status: 204, body: '' }),
+  );
+  await page.goto('/dashboard/business');
+  const money = page.locator('#money');
+  await expect(money.getByTestId('business-balance')).toHaveText('₦3,600');
+  await expect(
+    money.getByText('Held back from the next shares', { exact: true }),
+  ).toBeVisible();
+  await expect(money).toContainText(
+    '₦1,800 will be taken from the business’s next shares',
+  );
+  await money.getByRole('button', { name: 'Everything' }).click();
+  // Everything is under the minimum: the button can't send it.
+  await expect(
+    money.getByRole('button', { name: 'Withdraw ₦3,600' }),
+  ).toBeDisabled();
+  await expectAccessible(page);
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('a supporter is told the split before paying, at 360px, and the share is fixed on the tip', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo);
+  const { userId, profileId } = await accountOf(who.email);
+  const business = await seedBusiness({ owner: userId });
+  const { memberId } = await seedMember({
+    locationId: business.locations[0]!.id,
+    profileId,
+    shownName: 'Kemi',
+    onShift: true,
+  });
+  const { agreementId } = await seedAgreement({
+    memberId,
+    proposedByUser: userId,
+    businessBps: 2000,
+  });
+  const context = await browser.newContext({
+    viewport: { width: 360, height: 780 },
+  });
+  const supporter = await context.newPage();
+  await supporter.goto(
+    `/b/${business.slug}/${business.locations[0]!.slug}/${who.handle}`,
+  );
+  const panel = supporter.locator('[data-tip-panel]');
+  await expect(panel.getByTestId('tip-share')).toHaveText(
+    'Of what Kemi receives, they keep 80% and 20% goes to The Yellow Chilli.',
+  );
+  await expectAccessible(supporter);
+  expect(await fitsViewport(supporter)).toBe(true);
+  await startTip(supporter);
+  await supporter.waitForURL(/\/mock-checkout\//);
+  await supporter.getByRole('button', { name: /^Pay/ }).click();
+  await supporter.waitForURL(/\/tip\/[0-9a-f-]{36}/);
+  const tipId = new URL(supporter.url()).pathname.split('/')[2] ?? '';
+  const [fixed] = await sql<{ agreement_id: string; business_bps: number }>(
+    'SELECT agreement_id, business_bps FROM tip_business_shares WHERE tip_id = $1',
+    [tipId],
+  );
+  expect(fixed).toEqual({ agreement_id: agreementId, business_bps: 2000 });
+  await context.close();
 });

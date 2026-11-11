@@ -331,6 +331,8 @@ export interface PublicStaffTipPage {
   business: PublicLocation['business'];
   location: PublicLocation['location'];
   person: StaffCard;
+  /** Release 2 (R2-C2): the split agreed with the business, told before paying. */
+  share?: ShareDisclosure;
   /** Exactly what the person's own page gives the tip form, its "opens soon" state included. */
   profile: Pick<
     PublicProfile,

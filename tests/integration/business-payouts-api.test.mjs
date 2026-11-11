@@ -159,6 +159,12 @@ test('an owner reads the business balance from its share lines', async () => {
     currency: 'NGN',
     balanceMinor: share.toString(),
     canWithdraw: true,
+    // Option B: the paid share waits to move to the business's own account (the pretend partner
+    // needs no account of its own), and a business withdraws at least ₦5,000.
+    onTheWayMinor: share.toString(),
+    heldBackMinor: '0',
+    minWithdrawalMinor: '500000',
+    payoutAccount: 'not_needed',
   });
   const quote = await call('GET', `${base()}/withdrawal-quote`, {
     cookie: ada.cookie,
@@ -175,7 +181,7 @@ test('a location manager, or someone else, sees nothing of the money: 404', asyn
     ['GET', '/withdrawal-quote'],
     ['GET', '/payout-destination'],
     ['POST', '/payout-destination/code'],
-    ['POST', '/withdrawals', { amountMinor: '200000' }],
+    ['POST', '/withdrawals', { amountMinor: '500000' }],
   ]) {
     const response = await call(method, `${base()}${path}`, {
       cookie: tobi.cookie,
@@ -206,7 +212,7 @@ test('a location manager, or someone else, sees nothing of the money: 404', asyn
 
 test('an owner withdraws: CSRF and a key are required, a retry replays, too much is refused', async () => {
   const path = `${base()}/withdrawals`;
-  const body = { amountMinor: '200000' };
+  const body = { amountMinor: '500000' };
   const noCsrf = await call('POST', path, {
     body,
     headers: {
@@ -232,8 +238,14 @@ test('an owner withdraws: CSRF and a key are required, a retry replays, too much
   assert.deepEqual(row, {
     business_id: shared.businessId,
     profile_id: null,
-    amount: '200000',
+    amount: '500000',
   });
+  // A business batches its shares: under ₦5,000 is refused.
+  const tooSmall = await call('POST', path, {
+    body: { amountMinor: '499999' },
+    headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },
+  });
+  assert.equal(tooSmall.body.error.code, 'WITHDRAWAL_TOO_SMALL');
   const tooMuch = await call('POST', path, {
     body: { amountMinor: share.toString() },
     headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },
@@ -333,4 +345,75 @@ test("an owner sets the business's bank with a code sent to their own address", 
     bankName: bank.name,
     last4: '6789',
   });
+});
+
+// Option B, R2-C2 over HTTP: the quote at the business tells the split before paying, the intent
+// fixes exactly that share, and the staff member sees what they shared. The business never does.
+test('a quote at the business shows the split; the intent fixes that share; staff see their own', async () => {
+  const quote = await fetch(`${stack.api}/v1/tip-quotes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      handle: 'tobi',
+      amountMinor: GROSS.toString(),
+      currency: 'NGN',
+      businessMemberId: shared.memberId,
+    }),
+  }).then((r) => r.json());
+  assert.deepEqual(quote.data.share, {
+    personKeepsPercent: 50,
+    businessPercent: 50,
+    businessName: 'The Yellow Chilli',
+  });
+  // Without the membership (Tobi's own page) there is nothing to tell.
+  const own = await fetch(`${stack.api}/v1/tip-quotes`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      handle: 'tobi',
+      amountMinor: GROSS.toString(),
+      currency: 'NGN',
+    }),
+  }).then((r) => r.json());
+  assert.equal(own.data.share, undefined);
+
+  const intent = await fetch(`${stack.api}/v1/tip-intents`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'idempotency-key': randomUUID(),
+    },
+    body: JSON.stringify({
+      quoteId: quote.data.quoteId,
+      businessMemberId: shared.memberId,
+    }),
+  });
+  assert.equal(intent.status, 201);
+  const { data } = await intent.json();
+  const [row] = await q(
+    'SELECT share_minor::text AS share FROM tip_business_shares WHERE tip_id = $1',
+    [data.tipId],
+  );
+  assert.equal(
+    row.share,
+    ((BigInt(quote.data.recipientNetMinor) * 5000n) / 10000n).toString(),
+  );
+
+  // The paid tip from the start is Tobi's; this one isn't paid, so it isn't counted.
+  const mine = await call('GET', '/v1/me/work/shared', { cookie: tobi.cookie });
+  assert.equal(mine.status, 200);
+  assert.deepEqual(mine.body.data, [
+    {
+      memberId: shared.memberId,
+      businessName: 'The Yellow Chilli',
+      monthMinor: share.toString(),
+      monthTips: 1,
+      totalMinor: share.toString(),
+    },
+  ]);
+  // Ada (the owner) works nowhere: her own list is empty.
+  const theirs = await call('GET', '/v1/me/work/shared', {
+    cookie: ada.cookie,
+  });
+  assert.deepEqual(theirs.body.data, []);
 });
