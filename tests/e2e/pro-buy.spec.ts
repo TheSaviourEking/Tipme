@@ -77,26 +77,27 @@ for (const size of [PHONE, WIDE]) {
   });
 }
 
-test('every feature not built yet says Coming; what Free keeps is listed', async ({
+test('only features not built yet say Coming; what Free keeps is listed', async ({
   page,
 }) => {
   await page.setViewportSize(WIDE);
   await page.goto('/pro');
   const adds = page.getByRole('region', { name: 'What Pro adds' });
-  for (const name of [
-    'Earnings analytics',
-    'Monthly recap',
-    'Repeat supporters',
-    'Campaign links',
-    'Results per link',
-    'Priority support',
-    'Early access',
-  ])
+  for (const name of ['Repeat supporters', 'Early access'])
     await expect(
       adds.getByRole('listitem').filter({ hasText: name }),
       name,
     ).toContainText('Coming');
-  for (const name of ['QR studio', 'Three username changes'])
+  // Built in the Pro train (#188): earnings, the recap, Campaigns and priority support.
+  for (const name of [
+    'QR studio',
+    'Three username changes',
+    'Earnings analytics',
+    'Monthly recap',
+    'Campaign links',
+    'Results per link',
+    'Priority support',
+  ])
     await expect(
       adds.getByRole('listitem').filter({ hasText: name }),
       name,

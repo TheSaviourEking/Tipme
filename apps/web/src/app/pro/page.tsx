@@ -14,7 +14,7 @@ export const metadata = marketingMetadata(
 type Item = { name: string; detail: string; coming?: true };
 
 // The ProPage board (approved 11 Nov 2026). "Coming" comes off an item only when it ships to
-// everyone on Pro.
+// everyone on Pro: earnings, the recap, Campaigns and priority support shipped with #188.
 const MIN_TIP = formatNaira(FEE_POLICY_V1.minTipMinor);
 const GROUPS: { title: string; line: string; items: Item[] }[] = [
   {
@@ -57,13 +57,11 @@ const GROUPS: { title: string; line: string; items: Item[] }[] = [
       {
         name: 'Earnings analytics',
         detail: 'Week, month and year, your average tip, your best day.',
-        coming: true,
       },
       {
         name: 'Monthly recap',
         detail:
           'Your month in one card, ready to share. The naira total is off unless you switch it on.',
-        coming: true,
       },
       {
         name: 'Repeat supporters',
@@ -80,12 +78,10 @@ const GROUPS: { title: string; line: string; items: Item[] }[] = [
         name: 'Campaign links',
         detail:
           'A named link for each place you share, like “New single” or “Saturday gig”, with its own QR code.',
-        coming: true,
       },
       {
         name: 'Results per link',
         detail: 'Visits, tips and total for each link. Counts only, never who.',
-        coming: true,
       },
     ],
   },
@@ -96,7 +92,6 @@ const GROUPS: { title: string; line: string; items: Item[] }[] = [
       {
         name: 'Priority support',
         detail: 'Your requests are answered first.',
-        coming: true,
       },
       {
         name: 'Early access',

@@ -398,6 +398,19 @@ test('the Plan section lists card styles and a signature among Pro features', as
   await expect(pro.getByRole('listitem')).toContainText([
     'Card styles and your signature on your thank-you',
   ]);
+  // Built in the Pro train (#188), so the plan names them.
+  for (const built of [
+    /Earnings analytics/,
+    /Campaigns/,
+    /monthly recap/i,
+    /Priority support/,
+  ])
+    await expect(
+      pro.getByRole('listitem').filter({ hasText: built }),
+      String(built),
+    ).toHaveCount(1);
+  await expect(pro).not.toContainText(/Repeat supporters|Early access/i);
+  await expect(pro).not.toContainText(/Coming(?! soon to buy)/);
   // The only amount is the server's price (paid Pro, ADR-0015), never a number of the page's own.
   await expect(pro).toContainText('₦2,500 a month');
 });

@@ -474,6 +474,16 @@ export function ProPlan() {
           website, Telegram, LinkedIn and more. Free pages show 3.
         </li>
         <li>No “Get your own TipMe page” link at the foot of your page</li>
+        <li>
+          Earnings analytics: week, month and year, your average tip and your
+          best day
+        </li>
+        <li>
+          Campaigns: up to 20 running links, each with its own QR code and
+          results. Free pages get 1.
+        </li>
+        <li>Your monthly recap, a card ready to share</li>
+        <li>Priority support: Pro requests are answered first</li>
       </ul>
       <p className="tm-hint">
         Photos and designs are free on every plan, and Free includes three
