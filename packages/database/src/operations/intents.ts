@@ -15,6 +15,7 @@ import { tippableMember } from './business-access.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { recordSupporter, supporterKeyHash } from './supporters.js';
+import { attributeTip } from './campaigns.js';
 import { recordTransition } from './transitions.js';
 
 /** Only a moment this recipient actually shared can label a tip; anything else is ignored. */
@@ -60,6 +61,12 @@ export interface CreatePaymentIntentInput {
    * quote's page inside the transaction and ignored when it doesn't hold: never a refusal.
    */
   businessMemberId?: string;
+  /**
+   * The campaign link ending the tip page was opened from (Campaign Studio). Matched to this
+   * page's running campaign inside the transaction and ignored otherwise; not in the fingerprint,
+   * so a retried request replays the tip and it is counted once.
+   */
+  campaign?: string;
   traceId?: string | null;
   now?: Date;
   /** Test-only: throw after the named step to prove the transaction rolls back. Ignored unless NODE_ENV=test. */
@@ -261,6 +268,8 @@ export async function createPaymentIntent(
         cause: 'system',
         traceId,
       });
+      if (input.campaign)
+        await attributeTip(tx, { profileId, tipId, slug: input.campaign });
       // Pro only, read in this transaction: a page that left Pro records no new supporter.
       if (
         keyHash &&

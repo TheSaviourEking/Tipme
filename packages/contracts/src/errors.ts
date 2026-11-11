@@ -134,6 +134,13 @@ export const apiErrorCodes = [
   'CARD_NOT_FOUND',
   'BALANCE_BELOW_ZERO',
   'TIP_NOT_REVERSIBLE',
+  // Pro insights (earnings, Campaign Studio, recap, support).
+  'EARNINGS_PRO_REQUIRED',
+  'RECAP_PRO_REQUIRED',
+  'CAMPAIGN_LIMIT',
+  'CAMPAIGN_SLUG_TAKEN',
+  'CAMPAIGN_SLUG_UNAVAILABLE',
+  'SUPPORT_TOO_MANY_OPEN',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];

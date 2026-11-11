@@ -24,3 +24,6 @@ export * from './supporters.js';
 export * from './business.js';
 export * from './changelog.js';
 export * from './pro.js';
+export * from './earnings.js';
+export * from './campaigns.js';
+export * from './support.js';

@@ -27,6 +27,7 @@ import { ChangelogModule } from './changelog/changelog.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { LiveModule } from './live/live.module.js';
 import { BusinessModule } from './business/business.module.js';
+import { InsightsModule } from './insights/insights.controller.js';
 
 import { LOGGER } from './tokens.js';
 
@@ -54,6 +55,7 @@ export class AppModule {
         MailModule,
         BusinessModule,
         ChangelogModule,
+        InsightsModule,
         ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
         ...(config.MAIL_DEFAULT_PROVIDER === 'mock'
           ? [PretendInboxModule]

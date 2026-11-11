@@ -67,6 +67,9 @@ import {
   signInCodes,
   signInLockouts,
   supporters,
+  campaigns,
+  monthlyRecaps,
+  supportRequests,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
@@ -1132,6 +1135,17 @@ export function deleteAccount(
           .where(eq(profiles.id, row.id));
         // Opted-in supporters of this page go with it (their tip links cascade); the tips stay.
         await tx.delete(supporters).where(eq(supporters.profileId, row.id));
+        // Pro insights: campaign names, recaps and support words are the person's own; the tips stay.
+        await tx.execute(
+          sql`DELETE FROM tip_campaigns WHERE campaign_id IN (SELECT id FROM campaigns WHERE profile_id = ${row.id})`,
+        );
+        await tx.delete(campaigns).where(eq(campaigns.profileId, row.id));
+        await tx
+          .delete(monthlyRecaps)
+          .where(eq(monthlyRecaps.profileId, row.id));
+        await tx
+          .delete(supportRequests)
+          .where(eq(supportRequests.userId, input.userId));
         // The photo is personal data too: its bytes go with the page (PR-013).
         await tx
           .delete(profileAvatars)

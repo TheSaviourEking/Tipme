@@ -1,1 +1,3 @@
 788bd28f220f38e5c2898609581c83c11ff063be:packages/payments/test/bachs.test.mjs:generic-api-key:15
+# False positive: a localStorage key name (TOTAL_KEY) in the Pro recap view; renamed to TOTAL_STORAGE_NAME.
+d922e7fed2faaa76e81956659739d8e30eaa1567:apps/web/src/app/dashboard/reports/month/[month]/recap-view.tsx:generic-api-key:17

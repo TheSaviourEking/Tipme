@@ -95,3 +95,7 @@ export * from './operations/business-shifts.js';
 export * from './operations/pro-price.js';
 export * from './operations/pro-periods.js';
 export * from './operations/pro-purchases.js';
+export * from './operations/earnings.js';
+export * from './operations/campaigns.js';
+export * from './operations/recaps.js';
+export * from './operations/support.js';

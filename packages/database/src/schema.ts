@@ -1907,6 +1907,8 @@ export const issues = pgTable(
     rehearsal: boolean('rehearsal').notNull().default(false),
     // How staff settled a money issue (with their reason, in the audit log); no balance changes.
     resolutionOutcome: text('resolution_outcome'),
+    // A Pro member's support request (priority support): sorted first in the open queue.
+    priority: boolean('priority').notNull().default(false),
   },
   (table) => [
     check(
@@ -1966,6 +1968,8 @@ export const analyticsEvents = pgTable(
     dedupeKey: text('dedupe_key').unique(),
     // About a release-check page (PR-010): excluded from rollups and dashboards.
     rehearsal: boolean('rehearsal').notNull().default(false),
+    // Campaign Studio: the running campaign the page was opened from (its id only, never who).
+    campaignId: uuid('campaign_id'),
   },
   (table) => [
     check(
@@ -1977,6 +1981,9 @@ export const analyticsEvents = pgTable(
       sql`at_minute = date_trunc('minute', at_minute)`,
     ),
     index('analytics_events_at').on(table.atMinute),
+    index('analytics_events_campaign')
+      .on(table.campaignId, table.atMinute)
+      .where(sql`campaign_id IS NOT NULL`),
   ],
 );
 
@@ -3102,5 +3109,104 @@ export const proPurchases = pgTable(
       sql`${table.feeMinor} IS NULL OR (${table.feeMinor} >= 0 AND ${table.feeMinor} <= ${table.amountMinor})`,
     ),
     currencyCheck('pro_purchases'),
+  ],
+);
+
+// ---- Pro insights: Campaign Studio, monthly recap, priority support (11 Nov 2026) ----
+
+/**
+ * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>` to the
+ * normal tip page. Only a tracked link: no goal, target, end date or purpose. Stopping keeps its
+ * results; its link keeps opening the page. Never deleted while the page exists.
+ */
+export const campaigns = pgTable(
+  'campaigns',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    createdAt: createdAt(),
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+  },
+  (table) => [
+    unique('campaigns_profile_slug').on(table.profileId, table.slug),
+    check('campaigns_name_length', sql`char_length(name) BETWEEN 1 AND 40`),
+    check(
+      'campaigns_slug_format',
+      sql`slug ~ '^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$'`,
+    ),
+    index('campaigns_profile_active')
+      .on(table.profileId)
+      .where(sql`stopped_at IS NULL`),
+  ],
+);
+
+/** Which campaign a tip was started from. A label beside the tip: no money table reads it. */
+export const tipCampaigns = pgTable(
+  'tip_campaigns',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id),
+  },
+  (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
+);
+
+/** One recap per Pro page and Lagos month, however often the monthly job runs. */
+export const monthlyRecaps = pgTable(
+  'monthly_recaps',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    month: text('month').notNull(),
+    data: jsonb('data').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('monthly_recaps_once').on(table.profileId, table.month),
+    check('monthly_recaps_month', sql`month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
+  ],
+);
+
+/**
+ * A person's support request (priority support). Its words stay here, apart from the issue that
+ * puts it in the ops queue; staff read them through the audited reveal. `priority` is the plan
+ * when it was sent.
+ */
+export const supportRequests = pgTable(
+  'support_requests',
+  {
+    id: uuid('id').primaryKey(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .unique()
+      .references(() => issues.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    profileId: uuid('profile_id').references(() => profiles.id),
+    topic: text('topic').notNull(),
+    body: text('body').notNull(),
+    priority: boolean('priority').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check(
+      'support_requests_topic',
+      sql`topic IN ('withdrawal', 'tip', 'page', 'account', 'pro', 'other')`,
+    ),
+    check(
+      'support_requests_body_length',
+      sql`char_length(body) BETWEEN 1 AND 2000`,
+    ),
+    index('support_requests_user').on(table.userId, table.createdAt),
   ],
 );
