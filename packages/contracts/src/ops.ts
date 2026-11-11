@@ -252,6 +252,18 @@ export const ISSUE_KINDS = [
   // to the business), and a reversal left a person's or a business's balance below zero (Q8).
   'share_report',
   'balance_below_zero',
+  // Paid Pro (ADR-0015): a Pro payment that doesn't match its purchase (nothing booked), one that
+  // arrived after its checkout ended (credited), a contradiction after it was paid, and a refund
+  // or dispute on one.
+  'pro_amount_mismatch',
+  'pro_late_payment',
+  'pro_conflict',
+  'pro_reversed',
+  // Priority support: a person's support request (its words are kept apart, read by reveal).
+  'support_request',
+  // Paid Pro: a balance payment the partner never answered, and a refund the partner refused.
+  'pro_collect_unknown',
+  'pro_refund_failed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -319,6 +331,8 @@ export interface OpsIssue {
   resolvedAt: string | null;
   resolvedBy: string | null;
   resolutionOutcome: OpsIssueOutcome | null;
+  /** A Pro member's support request: answered first, sorted first among open issues. */
+  priority: boolean;
 }
 
 export const opsIssueListQuerySchema = z
@@ -689,7 +703,7 @@ export interface OpsVisibility {
   topPages: { handle: string; visits: number }[];
 }
 
-/** Every metrics answer says whether anonymous collection is on (off in production until D-07). */
+/** Every metrics answer says whether anonymous collection is on (on unless ANALYTICS_ENABLED=false; D-07 open). */
 export interface OpsMetricsEnvelope<T> {
   collecting: boolean;
   metrics: T;
@@ -781,7 +795,19 @@ export interface OpsPage {
   images?: { hasCover: boolean; hasPhoto: boolean };
   /** Search only: the name searched for was taken back from this page, on this date. */
   takenBackOn?: string;
+  /**
+   * Paid Pro (ADR-0015): why the page is Pro — a staff grant, a paid month, or neither — and, while
+   * a paid month runs, its end and its grace end (ISO). Optional: older APIs send nothing.
+   */
+  proSource?: 'staff' | 'paid' | null;
+  paidUntil?: string | null;
+  graceUntil?: string | null;
 }
+
+/** `GET /v1/ops/pages/:profileId/pro` (paid Pro, ADR-0015), for staff with `pages.plan`. */
+export type OpsPageProStatus = Required<
+  Pick<OpsPage, 'proSource' | 'paidUntil' | 'graceUntil'>
+>;
 
 /** A page's image, as staff review and remove it. */
 export const OPS_PAGE_IMAGES = ['cover', 'photo'] as const;

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pro badge options</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}a:hover{color:#4d16a8}
+.board{width:1840px;min-height:1700px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1300px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
+.ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}.rec{background:#000;color:#fff}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.paper{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -24px rgba(20,18,16,.4);padding:22px 24px}
+.paper h3{margin:0 0 6px;font:400 26px/1.1 'DM Serif Display',Georgia,serif}
+.paper p,.paper li{font-size:13.5px;line-height:1.5;color:#2c2a26}
+.paper ul{margin:8px 0 0;padding-left:18px}
+.lbl{margin:16px 0 8px;font-size:12px;font-weight:800;color:#5d5a54;letter-spacing:.02em}
+.page{background:#f3f2ee;border-radius:16px;overflow:hidden;border:1px solid rgba(20,18,16,.08)}
+.cov{height:84px;background:#204f3b}
+.av{display:block;width:64px;height:64px;margin:-32px 0 0 18px;border-radius:50%;object-fit:cover;object-position:50% 12%;border:3px solid #f3f2ee;position:relative}
+.nm{margin:8px 18px 0;font:400 28px/1 'DM Serif Display',Georgia,serif}
+.hd{margin:6px 18px 16px;font-size:13.5px;color:#5d5a54;font-weight:500;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(rgba(255,255,255,.26),transparent 48%),linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 12px/1 Manrope,Arial,sans-serif;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.3)}
+.pill svg{width:.9em;height:.9em;fill:#e6d6ff}
+.word{font:400 15px/1 'DM Serif Display',Georgia,serif;color:#4d16a8;display:inline-flex;align-items:center;gap:4px}
+.word svg{width:10px;height:10px;fill:#7a32f9}
+.tab{position:absolute;top:0;right:18px;padding:6px 10px 7px;border-radius:0 0 10px 10px;background:#000;color:#fff;font:800 11px/1 Manrope,Arial,sans-serif;letter-spacing:.08em;display:flex;align-items:center;gap:5px}
+.tab svg{width:9px;height:9px;fill:#c9adff}
+.dash{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:14px;background:#fffefa;border:1px solid rgba(20,18,16,.1)}
+.ver{display:inline-flex;align-items:center;gap:4px;color:#23623b;font-weight:800;font-size:13.5px}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border-radius:16px;overflow:hidden;border:1px solid rgba(20,18,16,.12)}
+.vs>div{padding:16px 18px;background:#fffefa}
+.vs>div+div{border-left:1px solid rgba(20,18,16,.12)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11.5px;color:#5d5a54;font-weight:700;padding:7px 8px;border-bottom:1px solid rgba(20,18,16,.12)}
+td{padding:9px 8px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top}
+</style>
+</helmet>
+<div class="board">
+  <h1 class="bh1">The Pro badge: a subscription mark, never a check</h1>
+  <p class="lead">Where it shows: after the handle on the public tip page, and on the dashboard’s page card and Settings Plan. The rule that matters: nobody should read “paid for Pro” as “TipMe checked this person”. So the Pro mark is never a tick, never green, never says “verified”, and never sits on the line where a business shows <span class="ver"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Verified business</span> (apps/web/src/components/business/business-header.tsx, green, with “TipMe checked this business’s name, address and contact.”). Three options; sample person.</p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;align-items:start">
+    <!-- A -->
+    <div class="paper" style="outline:3px solid #000;outline-offset:3px">
+      <span class="tag rec">Recommended</span><span class="tag ex">Exists</span>
+      <h3>A. The spark pill</h3>
+      <p>Today’s <b>ProBadge</b> (packages/ui/src/components.tsx:100, components.css:188): a purple pill, a four-point spark and the word “Pro”, with one soft shine after the page shows. Already on Settings Plan, the dashboard page card and the home demo.</p>
+      <p class="lbl">PUBLIC TIP PAGE</p>
+      <div class="page"><div class="cov"></div><img class="av" src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt=""><p class="nm">Ada Okafor</p><p class="hd">usetipme.xyz/@ada <button type="button" aria-label="TipMe Pro, a paid plan. What this means" style="border:0;background:none;padding:0;min-height:32px;cursor:pointer"><span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></button></p></div>
+      <p class="lbl">DASHBOARD PAGE CARD</p>
+      <div class="dash"><div><p style="margin:0;font:400 22px/1 'DM Serif Display',Georgia,serif;display:flex;align-items:center;gap:8px">Ada Okafor <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p><p style="margin:6px 0 0;font-size:13px;color:#5d5a54">Pro, paid until 9 Dec</p></div><a href="#" style="font-size:13.5px;font-weight:700">Manage</a></div>
+      <p class="lbl">TAPPED: A SMALL NOTE UNDER IT</p>
+      <div style="padding:12px 14px;border-radius:12px;background:#eeede8;font-size:13.5px;line-height:1.45"><b>TipMe Pro</b> is a paid plan for people who want more from their page. It doesn’t mean TipMe checked who runs it. <a href="#">About Pro</a></div>
+    </div>
+    <!-- B -->
+    <div class="paper">
+      <span class="tag pr">Proposed</span>
+      <h3>B. “TipMe Pro” in words</h3>
+      <p>No shape at all: a small purple “on TipMe Pro” after the handle, in the serif. Reads as a plan name, so it can’t be mistaken for a check. Quieter, but easy to miss, and nothing to tap.</p>
+      <p class="lbl">PUBLIC TIP PAGE</p>
+      <div class="page"><div class="cov"></div><img class="av" src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt=""><p class="nm">Ada Okafor</p><p class="hd">usetipme.xyz/@ada <span aria-hidden="true">·</span> <span class="word"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>on TipMe Pro</span></p></div>
+      <p class="lbl">DASHBOARD PAGE CARD</p>
+      <div class="dash"><div><p style="margin:0;font:400 22px/1 'DM Serif Display',Georgia,serif">Ada Okafor</p><p style="margin:6px 0 0;font-size:13px;color:#5d5a54"><span class="word" style="font-size:14px">on TipMe Pro</span> · paid until 9 Dec</p></div><a href="#" style="font-size:13.5px;font-weight:700">Manage</a></div>
+      <p class="src" style="margin-top:14px;font-size:12px;color:#5d5a54">Would replace today’s pill everywhere, a change to a shipped component.</p>
+    </div>
+    <!-- C -->
+    <div class="paper">
+      <span class="tag pr">Proposed</span>
+      <h3>C. A tab on the cover</h3>
+      <p>A small black “PRO” tab hanging from the top of the cover, away from the name and handle altogether. Feels like a product label, not an identity mark. But it fights some covers, and is lost when a page has no cover.</p>
+      <p class="lbl">PUBLIC TIP PAGE</p>
+      <div class="page"><div class="cov" style="position:relative"><span class="tab"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>PRO</span></div><img class="av" src="/_blob/5ce444bee12c51d4fe7f0f086f972214" alt=""><p class="nm">Ada Okafor</p><p class="hd">usetipme.xyz/@ada</p></div>
+      <p class="lbl">DASHBOARD PAGE CARD</p>
+      <div class="dash"><div><p style="margin:0;font:400 22px/1 'DM Serif Display',Georgia,serif">Ada Okafor</p><p style="margin:6px 0 0;font-size:13px;color:#5d5a54">Plan: <b>Pro</b> · paid until 9 Dec</p></div><a href="#" style="font-size:13.5px;font-weight:700">Manage</a></div>
+    </div>
+  </div>
+
+  <h2 class="serif" style="margin:44px 0 12px;font-size:30px">Side by side: Pro next to a verified business</h2>
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) 560px;gap:24px;align-items:start">
+    <div class="vs">
+      <div><p class="lbl" style="margin-top:0">A PERSON ON PRO (OPTION A)</p><p style="margin:0;font:400 28px/1 'DM Serif Display',Georgia,serif">Ada Okafor</p><p style="margin:8px 0 0;font-size:13.5px;color:#5d5a54;display:flex;align-items:center;gap:8px">usetipme.xyz/@ada <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p><p style="margin:10px 0 0;font-size:13px;color:#5d5a54">Purple, filled, a spark, a plan name. Says what they bought.</p></div>
+      <div><p class="lbl" style="margin-top:0">A BUSINESS TIPME CHECKED (TODAY)</p><p style="margin:0;font:400 28px/1 'DM Serif Display',Georgia,serif">Yellow Chilli</p><p style="margin:8px 0 0;font-size:13.5px"><span class="ver"><svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Verified business</span> <span style="color:#5d5a54">TipMe checked this business’s name, address and contact.</span></p><p style="margin:10px 0 0;font-size:13px;color:#5d5a54">Green, a tick, plain text, an explanation. Says what TipMe checked.</p></div>
+    </div>
+    <div class="paper">
+      <h3 style="font-size:22px">Rules, whichever option</h3>
+      <table>
+        <tr><th>Pro mark</th><th>Verified business</th></tr>
+        <tr><td>Purple, filled</td><td>Green text, no fill</td></tr>
+        <tr><td>Spark shape</td><td>Tick shape</td></tr>
+        <tr><td>Says “Pro”</td><td>Says “Verified business”</td></tr>
+        <tr><td>Bought by the person</td><td>Given by TipMe staff after a check</td></tr>
+        <tr><td>Screen reader: “TipMe Pro, a paid plan”</td><td>Screen reader: the text as shown</td></tr>
+      </table>
+      <p style="margin-top:10px">Proposed: a business page (/b/…) never shows the Pro mark, so the two never sit together on a real page. The badge hides the day Pro ends; nothing else changes.</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

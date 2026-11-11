@@ -175,6 +175,8 @@ export class CheckoutService {
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
       recognitionOn: this.config.SUPPORTER_RECOGNITION,
+      // Campaign Studio: which campaign link the page was opened from; ignored when not one.
+      ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).
       ...(this.config.BUSINESS_ENABLED && request.businessMemberId
         ? { businessMemberId: request.businessMemberId }

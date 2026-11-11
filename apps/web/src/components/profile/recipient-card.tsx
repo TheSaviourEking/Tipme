@@ -190,7 +190,7 @@ export function RecipientIdentity({
           <p className="profile-identity__handle">
             @{profile.handle}
             {profile.plan === 'pro' && (
-              <ProBadge className="profile-identity__pro" />
+              <ProBadge explain className="profile-identity__pro" />
             )}
           </p>
         </div>

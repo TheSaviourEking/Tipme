@@ -395,14 +395,14 @@ test('How it works in the header glides down Home to the steps', async ({
   expect(between.size).toBeGreaterThanOrEqual(3);
 });
 
-// The ScreenSmall board. A path under a handle matches no page, so it reaches the site's own
-// "not found" screen. (/@handle itself shows the one "isn't available" screen for every page that
-// cannot be shown, so it never says whether a handle exists.)
+// The ScreenSmall board. A deeper path under a handle matches no page, so it reaches the site's own
+// "not found" screen. (/@handle, and a campaign link /@handle/<ending>, show the one "isn't
+// available" screen for every page that cannot be shown, so they never say whether a handle exists.)
 test(
   'a missing page names the handle and offers a way on',
   { tag: '@mobile' },
   async ({ page }) => {
-    await page.goto('/@tobi_s/tips');
+    await page.goto('/@tobi_s/tips/more');
     await expect(
       page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
     ).toBeVisible();
@@ -421,14 +421,14 @@ test(
 test('a missing page normalises the handle, and never echoes anything else', async ({
   page,
 }) => {
-  await page.goto('/@Tobi_S/tips');
+  await page.goto('/@Tobi_S/tips/more');
   await expect(
     page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
   ).toBeVisible();
   for (const odd of [
-    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips',
-    `/@${'a'.repeat(60)}/tips`,
-    '/@ab/tips',
+    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips/more',
+    `/@${'a'.repeat(60)}/tips/more`,
+    '/@ab/tips/more',
     '/nothing-here/at-all',
   ]) {
     await page.goto(odd);
@@ -438,6 +438,18 @@ test('a missing page normalises the handle, and never echoes anything else', asy
     await expect(page.locator('main')).not.toContainText('script');
     await expect(page.locator('main')).not.toContainText('aaaaaaaa');
   }
+});
+
+test('a campaign link for a page that cannot be shown looks exactly like its /@handle', async ({
+  page,
+}) => {
+  await page.goto('/@tobi_s');
+  const heading = page.getByRole('main').getByRole('heading', { level: 1 });
+  await expect(heading).toBeVisible();
+  const unavailable = await heading.textContent();
+  await page.goto('/@tobi_s/tips');
+  await expect(heading).toHaveText(unavailable ?? '');
+  await expect(page.getByRole('main')).not.toContainText('tips');
 });
 
 test('an error says it is on our side and gives a reference', async ({

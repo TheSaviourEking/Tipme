@@ -51,6 +51,11 @@ async function writeFixture(cwd) {
     join(cwd, 'packages/ui/AGENTS.md'),
     'Read docs/design/DESIGN-CONSTITUTION.md before frontend work.\n',
   );
+  await mkdir(join(cwd, 'docs/adr'), { recursive: true });
+  await writeFile(
+    join(cwd, 'docs/adr/ADR-0015-paid-pro.md'),
+    'D-03, D-04, D-06 and D-07 stay OPEN\n',
+  );
 }
 
 test('governance rejects suspected live credentials without printing their values', async () => {
@@ -88,4 +93,13 @@ test('governance requires the approved design authority and frontend instruction
 
   await writeFixture(cwd);
   assert.equal(run().status, 0, 'complete design governance must pass');
+});
+
+test('governance requires ADR-0015 to say paid Pro is not a regulatory approval', async () => {
+  const cwd = await mkdtemp(join(tmpdir(), 'tipme-pro-governance-'));
+  await writeFixture(cwd);
+  const run = () => spawnSync('bash', [script], { cwd, encoding: 'utf8' });
+  assert.equal(run().status, 0);
+  await writeFile(join(cwd, 'docs/adr/ADR-0015-paid-pro.md'), 'approved');
+  assert.equal(run().status, 1);
 });

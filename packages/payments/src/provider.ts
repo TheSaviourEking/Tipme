@@ -10,7 +10,15 @@ export interface ProviderCapabilities {
   platformFees: boolean;
   payouts: boolean;
   lookupByOperationReference: boolean;
+  /** Paid Pro (ADR-0015): checkouts on TipMe's own account, with no connected account. */
+  platformCheckout?: boolean;
 }
+
+/**
+ * Whose money an event is about. Absent: a connected account's (a tip), as every event was before
+ * paid Pro. `platform`: TipMe's own account (a Pro purchase), routed only to Pro billing.
+ */
+export type ProviderEventScope = 'platform';
 
 export type PayoutFailureReason = 'in_debt' | 'destination' | 'other';
 
@@ -19,9 +27,12 @@ export type NormalizedProviderEvent =
       kind: 'payment';
       eventId: string;
       eventType: string;
+      scope?: ProviderEventScope;
       providerReference: string | null;
       operationReference: string | null;
       accountReference: string | null;
+      /** TipMe's own account: the partner's payment (charge) id, when the event names one. */
+      chargeReference?: string | null;
       status: 'succeeded' | 'failed' | 'pending' | 'review' | 'unknown';
       amountMinor?: bigint;
       expectedAmountMinor?: bigint;
@@ -40,9 +51,13 @@ export type NormalizedProviderEvent =
       kind: 'reversal';
       eventId: string;
       eventType: string;
-      accountReference: string;
+      scope?: ProviderEventScope;
+      /** Null only for TipMe's own account (`scope: 'platform'`). */
+      accountReference: string | null;
       providerReference: string | null;
       operationReference: string | null;
+      /** TipMe's own account: the charge refunded or disputed, when the event names it. */
+      chargeReference?: string | null;
       /**
        * The partner's refund or dispute this event is about, as `refund.<id>` or `dispute.<id>`.
        * Several events for one refund or dispute (created, processed, lost) share it, so they key
@@ -79,6 +94,17 @@ export type NormalizedProviderEvent =
       /** The reference TipMe set when it created the payout: its own payout id. */
       operationReference?: string;
       feeMinor?: bigint;
+    }
+  | {
+      /**
+       * Auto-renew (plan Task 10): a card saved on TipMe's own account while paying. The partner's
+       * ids only; card details never leave the adapter.
+       */
+      kind: 'saved_method';
+      eventId: string;
+      eventType: 'payment_method.saved';
+      customerReference: string;
+      paymentMethodReference: string;
     }
   | {
       kind: 'ignored';
@@ -118,6 +144,26 @@ export interface PaymentProvider<
   }): Promise<{ providerReference: string; checkoutUrl?: string }>;
   /** Returns null only for a definite absence; unsupported lookup must fail as uncertain. */
   findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
+  /**
+   * Paid Pro (ADR-0015): a checkout on TipMe's own account for one purchase, with no connected
+   * account and no platform fee. The price is the server's. Raises PlatformCheckoutUnavailableError
+   * when the provider definitely refuses TipMe's account, UncertainProviderOutcomeError when the
+   * outcome is unknown.
+   */
+  initializePlatformCheckout?(input: {
+    purchaseId: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+    /** Auto-renew opt-in: save the card on this customer while paying (NGN cards only). */
+    saveCard?: { customerReference: string };
+  }): Promise<{
+    providerReference: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }>;
   /** Server-to-server status check: the authority for reconciliation. */
   verifyTransaction(
     providerReference: string,
@@ -136,6 +182,47 @@ export interface PaymentProvider<
     collected?: true;
     /** Set when the provider settled the money in another currency than it was paid in. */
     settlementCurrency?: string;
+    /** How it was paid, when the provider says (TipMe's own checkouts: card or bank transfer). */
+    method?: 'NGN_CARD' | 'NGN_BANK_TRANSFER';
+    /** TipMe's own account: the partner's payment (charge) id, which a refund names. */
+    chargeReference?: string;
+    /** Pretend provider only: the card it saved while paying (the real one says so by webhook). */
+    savedMethod?: { customerReference: string; paymentMethodReference: string };
+  }>;
+  /**
+   * Paid Pro refunds (plan Task 9): refunds a charge on TipMe's own account, once per payment.
+   * Raises ProRefundRefusedError when the partner definitely refused (nothing was created) and
+   * UncertainProviderOutcomeError when the answer is unknown.
+   */
+  refundPlatformCharge?(input: {
+    chargeReference: string;
+    amountMinor: bigint;
+    reference: string;
+    idempotencyKey: string;
+  }): Promise<{
+    refundReference: string;
+    status: 'processing' | 'paid' | 'failed';
+  }>;
+  /** Auto-renew: a customer on TipMe's own account, to save a card on. */
+  createPlatformCustomer?(input: {
+    email: string;
+    name: string;
+    idempotencyKey: string;
+  }): Promise<{ customerReference: string }>;
+  /**
+   * Auto-renew: charges a saved card off-session, once per key. `pending` (processing) is never
+   * success. Raises SavedCardRefusedError when nothing can be charged (no or unusable card).
+   */
+  chargeSavedCard?(input: {
+    customerReference: string;
+    paymentMethodReference: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    reference: string;
+    idempotencyKey: string;
+  }): Promise<{
+    providerReference: string;
+    status: 'succeeded' | 'pending' | 'failed';
   }>;
   verifyWebhook(
     rawBody: Buffer,
@@ -198,6 +285,31 @@ export interface PayoutPort {
     idempotencyKey: string;
   }): Promise<{ transferRef: string }>;
   setManualPayouts(accountRef: string): Promise<void>;
+  /**
+   * Paid Pro from the balance (plan Task 8): moves the account's AVAILABLE balance to TipMe's own
+   * (`destination: "self"`). It can't be reversed. PayoutRejectedError (in debt, short) and
+   * PlatformRefusalError (the account's transfers capability, or the key) are definite;
+   * UncertainProviderOutcomeError is not.
+   */
+  collectToPlatform?(input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+  }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
+  /**
+   * The read-back for a collect whose answer was lost: the account's transfer with this key as its
+   * group, or null when none is listed. Anything unclear raises UncertainProviderOutcomeError.
+   */
+  findPlatformCollection?(
+    accountRef: string,
+    idempotencyKey: string,
+  ): Promise<{
+    transferRef: string;
+    status: 'paid' | 'pending';
+    amountMinor: bigint;
+    currency: string;
+  } | null>;
   /** Repeated requests with the same key must resolve to the same provider payout. */
   initiatePayout(input: {
     payoutId: string;
@@ -268,6 +380,33 @@ export class PlatformRefusalError extends Error {
   ) {
     super('The payment provider refused the platform');
     this.name = 'PlatformRefusalError';
+  }
+}
+
+/**
+ * The provider definitely refused a checkout on TipMe's own account (e.g. the account isn't
+ * activated for live payments): nothing was created, and nobody can pay this way right now.
+ */
+export class PlatformCheckoutUnavailableError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused a checkout on TipMe’s own account');
+    this.name = 'PlatformCheckoutUnavailableError';
+  }
+}
+
+/** The partner definitely refused a Pro refund (not refundable, no balance): nothing was created. */
+export class ProRefundRefusedError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused the refund');
+    this.name = 'ProRefundRefusedError';
+  }
+}
+
+/** The saved card can't be charged at all (none saved, removed, expired): nothing was charged. */
+export class SavedCardRefusedError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused to charge the saved card');
+    this.name = 'SavedCardRefusedError';
   }
 }
 

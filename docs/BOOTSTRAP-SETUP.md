@@ -90,7 +90,7 @@ It prints the tip's status, the provider evidence and a trace link. `no-reply` i
 ## Admin area (PR-009)
 
 - **Settings.** The API needs `OPS_TOTP_KEY` (32 random bytes, base64; it seals staff authenticator secrets). The local `.env` has a generated value, never printed. Optional settings:
-  - `ANALYTICS_ENABLED` (unset: on in development and test, off in production until D-07);
+  - `ANALYTICS_ENABLED` (unset: on everywhere, production included, by the owner's decision of 9 Nov 2026; `false` stops collection; D-07 stays open);
   - `RATE_LIMIT_ANALYTICS_PER_MIN` (default 120);
   - `OPS_TRACE_URL_TEMPLATE` (default: local Jaeger outside production).
 - **Become the Owner:**

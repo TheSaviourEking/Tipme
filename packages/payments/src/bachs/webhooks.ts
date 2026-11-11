@@ -20,6 +20,8 @@ const SUPPORTED_EVENT_TYPES = new Set([
   'capability.updated',
   'payout.paid',
   'payout.failed',
+  // Auto-renew (plan Task 10): a card saved on TipMe's own account while paying.
+  'payment_method.saved',
 ]);
 
 const eventEnvelopeSchema = z.object({
@@ -155,17 +157,83 @@ function safeMinor(value: unknown, currency: unknown): bigint | undefined {
 const REVERSAL_EVENT =
   /^(refund|dispute|chargeback)\.|^charge\.(refund|dispute)/;
 
+/**
+ * Whose event this is (plan Task 5, ADR-0015). A top-level `account` is a connected account's. With
+ * none, `organization_id` equal to TipMe's own organization is TipMe's own account (`platform`):
+ * a Pro purchase, never a tip. Anything else keeps the old reading: the organization is the
+ * connected account (events sent before the partner added `account`).
+ */
+function scopeOf(
+  event: z.infer<typeof eventEnvelopeSchema>,
+  platformOrganizationId: string | undefined,
+): { platform: boolean; accountReference: string | null } {
+  const account = nullableString(event.account);
+  if (account) return { platform: false, accountReference: account };
+  const organization = nullableString(event.organization_id);
+  if (
+    organization !== null &&
+    platformOrganizationId !== undefined &&
+    organization === platformOrganizationId
+  )
+    return { platform: true, accountReference: null };
+  return { platform: false, accountReference: organization };
+}
+
+/** The checkout reference initializePayment or initializePlatformCheckout returned for it. */
+const checkoutReference = (
+  scope: { platform: boolean; accountReference: string | null },
+  checkoutId: string,
+) =>
+  scope.platform
+    ? `platform:${checkoutId}`
+    : `${scope.accountReference}:${checkoutId}`;
+
 function normalizeEvent(
   event: z.infer<typeof eventEnvelopeSchema>,
+  platformOrganizationId: string | undefined,
 ): NormalizedProviderEvent | undefined {
-  if (REVERSAL_EVENT.test(event.type)) return normalizeReversal(event);
+  if (REVERSAL_EVENT.test(event.type))
+    return normalizeReversal(event, platformOrganizationId);
   if (!SUPPORTED_EVENT_TYPES.has(event.type))
     return { kind: 'ignored', eventId: event.id, eventType: event.type };
 
   const data = event.data;
   const currency = stringValue(data['currency']);
-  const accountReference =
-    nullableString(event.account) ?? nullableString(event.organization_id);
+  const scope = scopeOf(event, platformOrganizationId);
+  const platform = scope.platform;
+  const accountReference = scope.accountReference;
+  // TipMe's own account updates and payouts are not about any recipient.
+  if (
+    platform &&
+    ![
+      'collection.succeeded',
+      'collection.failed',
+      'collection.underpaid',
+      'checkout.completed',
+      'payment_method.saved',
+    ].includes(event.type)
+  )
+    return { kind: 'ignored', eventId: event.id, eventType: event.type };
+  // A saved card is TipMe's only on its own account; a connected account's is none of ours.
+  if (event.type === 'payment_method.saved') {
+    if (!platform)
+      return { kind: 'ignored', eventId: event.id, eventType: event.type };
+    const customer = data['customer'];
+    const customerReference =
+      typeof customer === 'object' && customer !== null
+        ? partnerId((customer as Record<string, unknown>)['customer_id'])
+        : null;
+    const paymentMethodReference = partnerId(data['payment_method_id']);
+    if (!customerReference || !paymentMethodReference) return undefined;
+    return {
+      kind: 'saved_method',
+      eventId: event.id,
+      eventType: 'payment_method.saved',
+      customerReference,
+      paymentMethodReference,
+    };
+  }
+  const scoped = platform ? { scope: 'platform' as const } : {};
   if (
     accountReference !== null &&
     (accountReference.length > 200 ||
@@ -220,9 +288,22 @@ function normalizeEvent(
   }
   const checkoutId = nullableString(data['checkout_id']);
   const operationReference = nullableString(data['reference']);
+  // TipMe's own account: the payment (charge) the event names. With no checkout, it is an
+  // off-session charge (auto-renew), matched as `platform-charge:<id>`.
+  const chargeReference = platform
+    ? (partnerId(data['charge_id']) ?? partnerId(data['payment_id']))
+    : null;
+  const charged = platform && !checkoutId && chargeReference !== null;
+  const reference = (id: string | null) =>
+    id
+      ? checkoutReference(scope, id)
+      : charged
+        ? `platform-charge:${chargeReference}`
+        : null;
+  const withCharge = platform ? { chargeReference } : {};
 
   if (event.type === 'collection.succeeded') {
-    if (!accountReference) return undefined;
+    if (!accountReference && !platform) return undefined;
     // The event is only a trigger (the payment is read back from Bachs), so an amount TipMe
     // cannot parse, such as a crypto collection in USDT_TRC20, is left out rather than refused.
     const amountMinor = currency
@@ -234,14 +315,14 @@ function normalizeEvent(
       amountMinor !== undefined && processingFeeCurrency === currency
         ? safeMinor(data['processing_fee'], currency)
         : undefined;
-    const hasCheckout = checkoutId !== null;
+    const hasCheckout = checkoutId !== null || charged;
     return {
       kind: 'payment',
       eventId: event.id,
       eventType: event.type,
-      providerReference: hasCheckout
-        ? `${accountReference}:${checkoutId}`
-        : null,
+      ...scoped,
+      ...withCharge,
+      providerReference: reference(checkoutId),
       operationReference,
       accountReference,
       // A collection event does not prove who ultimately bore Bachs' processing fee.
@@ -253,17 +334,17 @@ function normalizeEvent(
   }
 
   if (event.type === 'collection.failed') {
-    if (!accountReference) return undefined;
+    if (!accountReference && !platform) return undefined;
     return {
       kind: 'payment',
       eventId: event.id,
       eventType: event.type,
-      providerReference: checkoutId
-        ? `${accountReference}:${checkoutId}`
-        : null,
+      ...scoped,
+      ...withCharge,
+      providerReference: reference(checkoutId),
       operationReference,
       accountReference,
-      status: checkoutId ? 'failed' : 'review',
+      status: checkoutId || charged ? 'failed' : 'review',
       amountMinor: currency ? safeMinor(data['amount'], currency) : undefined,
       currency,
       feePaidBy: 'unknown',
@@ -271,7 +352,7 @@ function normalizeEvent(
   }
 
   if (event.type === 'collection.underpaid') {
-    if (!currency || !accountReference) return undefined;
+    if (!currency || (!accountReference && !platform)) return undefined;
     const amountMinor = safeMinor(data['amount_paid'], currency);
     const expectedAmountMinor = safeMinor(data['amount_expected'], currency);
     if (amountMinor === undefined || expectedAmountMinor === undefined)
@@ -280,8 +361,9 @@ function normalizeEvent(
       kind: 'payment',
       eventId: event.id,
       eventType: event.type,
+      ...scoped,
       providerReference: checkoutId
-        ? `${accountReference}:${checkoutId}`
+        ? checkoutReference(scope, checkoutId)
         : null,
       operationReference,
       accountReference,
@@ -294,14 +376,16 @@ function normalizeEvent(
   }
 
   if (event.type === 'checkout.completed') {
-    if (!currency || !accountReference || !checkoutId) return undefined;
+    if (!currency || (!accountReference && !platform) || !checkoutId)
+      return undefined;
     const amountMinor = safeMinor(data['amount'], currency);
     if (amountMinor === undefined) return undefined;
     return {
       kind: 'payment',
       eventId: event.id,
       eventType: event.type,
-      providerReference: `${accountReference}:${checkoutId}`,
+      ...scoped,
+      providerReference: checkoutReference(scope, checkoutId),
       operationReference,
       accountReference,
       status: data['payment_status'] === 'paid' ? 'pending' : 'unknown',
@@ -317,14 +401,16 @@ function normalizeEvent(
 /** Ids only: amounts, reasons and customer details stay out of TipMe. */
 function normalizeReversal(
   event: z.infer<typeof eventEnvelopeSchema>,
+  platformOrganizationId: string | undefined,
 ): NormalizedProviderEvent | undefined {
-  const accountReference =
-    nullableString(event.account) ?? nullableString(event.organization_id);
+  const scope = scopeOf(event, platformOrganizationId);
+  const { accountReference } = scope;
   if (
-    !accountReference ||
-    accountReference.length > 200 ||
-    accountReference.includes(':') ||
-    /[\u0000-\u001f\u007f]/.test(accountReference)
+    !scope.platform &&
+    (!accountReference ||
+      accountReference.length > 200 ||
+      accountReference.includes(':') ||
+      /[\u0000-\u001f\u007f]/.test(accountReference))
   )
     return undefined;
   const checkoutId = nullableString(event.data['checkout_id']);
@@ -348,8 +434,12 @@ function normalizeReversal(
     kind: 'reversal',
     eventId: event.id,
     eventType: event.type,
+    ...(scope.platform ? { scope: 'platform' as const } : {}),
     accountReference,
-    providerReference: checkoutId ? `${accountReference}:${checkoutId}` : null,
+    providerReference: checkoutId ? checkoutReference(scope, checkoutId) : null,
+    ...(scope.platform
+      ? { chargeReference: partnerId(event.data['charge_id']) }
+      : {}),
     operationReference: nullableString(event.data['reference']),
     partnerReversalId: objectId ? `${family}.${objectId}` : null,
     disputeWon,
@@ -386,6 +476,7 @@ export function verifyBachsWebhook(
   headers: Record<string, string | string[] | undefined>,
   secrets: readonly string[],
   now = new Date(),
+  platformOrganizationId?: string,
 ): WebhookVerification<NormalizedProviderEvent> {
   if (secrets.length === 0) return { ok: false, reason: 'bad_signature' };
 
@@ -401,7 +492,7 @@ export function verifyBachsWebhook(
 
   const parsed = eventEnvelopeSchema.safeParse(payload);
   if (!parsed.success) return { ok: false, reason: 'malformed' };
-  const event = normalizeEvent(parsed.data);
+  const event = normalizeEvent(parsed.data, platformOrganizationId);
   return event ? { ok: true, event } : { ok: false, reason: 'malformed' };
 }
 

@@ -28,6 +28,7 @@ import {
   type OpsPagePlanRequest,
   type OpsActedAlone,
   type OpsPagePricing,
+  type OpsPageProStatus,
   type OpsReasonRequest,
   type OpsSeriousPending,
   type OpsWithdrawalFreeze,
@@ -37,6 +38,7 @@ import {
   freezeWithdrawals,
   grantHandleChanges,
   opsPageByHandle,
+  opsPageProStatus,
   pagePricing,
   requestSeriousAction,
   type SeriousActionServices,
@@ -212,6 +214,19 @@ export class OpsPagesController {
         reason: body.reason,
       }),
     };
+  }
+
+  /**
+   * Paid Pro (ADR-0015): why the page is Pro (a staff grant or a paid month) and until when.
+   * Billing details, so for whoever changes plans; the page lookup itself stays public-level.
+   */
+  @Get(':profileId/pro')
+  @OpsPermission('pages.plan')
+  async pro(
+    @Param('profileId') profileId: string,
+  ): Promise<ApiDataResponse<OpsPageProStatus>> {
+    if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return { data: await opsPageProStatus(this.database.db, profileId) };
   }
 
   @Get(':profileId/pricing')

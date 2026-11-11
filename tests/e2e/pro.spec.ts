@@ -67,7 +67,7 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
   await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(visitor.locator('.tip-breakdown')).toHaveCount(0);
   await visitor.getByLabel(/^Other amount/).fill('1500');
-  await visitor.getByRole('button', { name: /^Tip/ }).click();
+  await visitor.getByRole('button', { name: /^Tip\b/ }).click();
   await expect(
     visitor.getByText(/Enter an amount of NGN 2,000 or more/),
   ).toBeVisible();
@@ -398,7 +398,21 @@ test('the Plan section lists card styles and a signature among Pro features', as
   await expect(pro.getByRole('listitem')).toContainText([
     'Card styles and your signature on your thank-you',
   ]);
-  await expect(pro).not.toContainText('₦');
+  // Built in the Pro train (#188), so the plan names them.
+  for (const built of [
+    /Earnings analytics/,
+    /Campaigns/,
+    /monthly recap/i,
+    /Priority support/,
+  ])
+    await expect(
+      pro.getByRole('listitem').filter({ hasText: built }),
+      String(built),
+    ).toHaveCount(1);
+  await expect(pro).not.toContainText(/Repeat supporters|Early access/i);
+  await expect(pro).not.toContainText(/Coming(?! soon to buy)/);
+  // The only amount is the server's price (paid Pro, ADR-0015), never a number of the page's own.
+  await expect(pro).toContainText('₦2,500 a month');
 });
 
 // Live updates, PR 2 (plan Task 13): an open dashboard follows a change made elsewhere. 5 s is

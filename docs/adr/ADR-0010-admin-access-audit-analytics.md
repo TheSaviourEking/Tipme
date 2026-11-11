@@ -109,6 +109,7 @@ There is one admin today, but "we should make provision for roles to be added in
 ### Anonymous analytics
 
 - **Collection switch:** `ANALYTICS_ENABLED`, read by the API and worker. Unset, it is on in development and test and **off in production until D-07**. The dashboards say when collection is off.
+  - _Addendum, 9 Nov 2026:_ by the owner's decision, unset now means **on in production too**; `ANALYTICS_ENABLED=false` turns it off. The collection rules above are unchanged, and D-07 stays OPEN as a compliance item (`docs/00-DECISIONS.md`).
 - **`POST /v1/events`:**
   - It takes a strict allow-list of event names and properties: surface, channel, public handle and a "returning" flag. There is no free text.
   - It is rate-limited, cross-origin from the web app only, and never credentialed. No cookies are set.

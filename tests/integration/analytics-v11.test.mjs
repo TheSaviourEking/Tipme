@@ -7,7 +7,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
 
 // PRD v1.1 §11 event taxonomy (PR-013): the events TipMe did not record yet. Same rules as
-// every analytics event: anonymous, deduplicated, off in production until D-07.
+// every analytics event: anonymous, deduplicated, on unless ANALYTICS_ENABLED=false (D-07 open).
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,

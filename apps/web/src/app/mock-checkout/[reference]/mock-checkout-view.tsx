@@ -25,6 +25,29 @@ const outcomes = [
   },
 ] as const;
 
+// Paid Pro on TipMe's own account (`mock_pro_`): the payer picks card or bank transfer here, as on
+// the partner's real checkout.
+const proOutcomes = [
+  {
+    outcome: 'succeed',
+    method: 'card',
+    label: 'Pay by card',
+    hint: 'The card payment succeeds.',
+  },
+  {
+    outcome: 'succeed',
+    method: 'bank_transfer',
+    label: 'Pay by bank transfer',
+    hint: 'The transfer arrives.',
+  },
+  {
+    outcome: 'decline',
+    method: 'card',
+    label: 'Decline',
+    hint: 'The card is declined.',
+  },
+] as const;
+
 const describeFailure = (code: string, status: number) =>
   code === 'TIP_NOT_PAYABLE'
     ? 'This payment has expired and can no longer be paid.'
@@ -59,9 +82,10 @@ export function MockCheckoutView() {
     });
   }, [reference, loads]);
 
-  const pay = async (outcome: string) => {
+  const pro = reference.startsWith('mock_pro_');
+  const pay = async (outcome: string, method?: 'card' | 'bank_transfer') => {
     setPaying(true);
-    const result = await mockCheckoutPay(reference, outcome);
+    const result = await mockCheckoutPay(reference, outcome, method);
     if (result.ok) {
       location.assign(result.data.returnUrl);
       return;
@@ -101,20 +125,37 @@ export function MockCheckoutView() {
           <p className="mock-provider__amount">
             {formatDemoAmount(Number(summary.amountMinor))}
           </p>
-          <p>To {summary.recipientDisplayName}, via TipMe</p>
+          <p>
+            {pro
+              ? 'One month of TipMe Pro, paid to TipMe'
+              : `To ${summary.recipientDisplayName}, via TipMe`}
+          </p>
           <fieldset className="mock-provider__outcomes" disabled={paying}>
             <legend>Choose what the test provider does</legend>
-            {outcomes.map(({ outcome, label, hint }) => (
-              <button
-                key={outcome}
-                type="button"
-                className="mock-provider__button"
-                onClick={() => void pay(outcome)}
-              >
-                <strong>{label}</strong>
-                <span>{hint}</span>
-              </button>
-            ))}
+            {pro &&
+              proOutcomes.map(({ outcome, method, label, hint }) => (
+                <button
+                  key={label}
+                  type="button"
+                  className="mock-provider__button"
+                  onClick={() => void pay(outcome, method)}
+                >
+                  <strong>{label}</strong>
+                  <span>{hint}</span>
+                </button>
+              ))}
+            {!pro &&
+              outcomes.map(({ outcome, label, hint }) => (
+                <button
+                  key={outcome}
+                  type="button"
+                  className="mock-provider__button"
+                  onClick={() => void pay(outcome)}
+                >
+                  <strong>{label}</strong>
+                  <span>{hint}</span>
+                </button>
+              ))}
           </fieldset>
         </>
       )}

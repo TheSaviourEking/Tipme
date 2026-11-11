@@ -69,7 +69,15 @@ export const profileVisibility = pgEnum('profile_visibility', [
   'hidden',
 ]);
 export const profileStatus = pgEnum('profile_status', ['active', 'suspended']);
-export const entityType = pgEnum('entity_type', ['tip', 'attempt', 'payout']);
+export const entityType = pgEnum('entity_type', [
+  'tip',
+  'attempt',
+  'payout',
+  // Paid Pro (ADR-0015).
+  'pro_purchase',
+  // A staff refund of a card-paid Pro month (plan Task 9, ruling 6).
+  'pro_refund',
+]);
 export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
   'system',
@@ -89,6 +97,10 @@ export const operationType = pgEnum('operation_type', [
   'reward',
   // Business release 2: a refund or chargeback taking back every line of a tip's payment (R2-A).
   'reversal',
+  // Paid Pro (ADR-0015): a Pro month bought on TipMe's own account. Never a tip.
+  'pro_sale',
+  // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
+  'pro_refund',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -559,6 +571,9 @@ export const profiles = pgTable(
     tipSound: boolean('tip_sound').notNull().default(true),
     // Free or Pro (PR-012). Staff set it; there is no billing while money is pretend.
     plan: text('plan').notNull().default('free'),
+    // Paid Pro (ADR-0015): Pro granted by staff, apart from paid months. `plan` is what every Pro
+    // check reads; recomputePlan derives it from this and the pro_periods that cover now.
+    staffPro: boolean('staff_pro').notNull().default(false),
     // A Pro page's own tip amounts (kobo), kept when the page goes back to Free.
     tipPresetsMinor: bigint('tip_presets_minor', { mode: 'bigint' }).array(),
     minTipMinor: minor('min_tip_minor'),
@@ -1389,6 +1404,10 @@ export const providerEvents = pgTable(
     payload: jsonb('payload').notNull(),
     attemptId: uuid('attempt_id').references(() => paymentAttempts.id),
     payoutId: uuid('payout_id').references(() => payouts.id),
+    // Paid Pro (ADR-0015): an event about a Pro purchase on TipMe's own account.
+    proPurchaseId: uuid('pro_purchase_id').references(
+      (): AnyPgColumn => proPurchases.id,
+    ),
     receivedAt: timestamp('received_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1469,6 +1488,10 @@ export const ledgerTransactions = pgTable(
     currency: currency(),
     tipId: uuid('tip_id').references(() => tips.id),
     payoutId: uuid('payout_id').references(() => payouts.id),
+    // Paid Pro (ADR-0015): the purchase a `pro_sale` books.
+    proPurchaseId: uuid('pro_purchase_id').references(
+      (): AnyPgColumn => proPurchases.id,
+    ),
     // Business release 2 (R2-A): a reversal names the payment it takes back. The database checks
     // that it is the same tip's payment, in its currency, and at commit that all reversals of a
     // payment mirror it and take back at most what it put on each account (a refund and a later
@@ -1888,6 +1911,8 @@ export const issues = pgTable(
     rehearsal: boolean('rehearsal').notNull().default(false),
     // How staff settled a money issue (with their reason, in the audit log); no balance changes.
     resolutionOutcome: text('resolution_outcome'),
+    // A Pro member's support request (priority support): sorted first in the open queue.
+    priority: boolean('priority').notNull().default(false),
   },
   (table) => [
     check(
@@ -1947,6 +1972,8 @@ export const analyticsEvents = pgTable(
     dedupeKey: text('dedupe_key').unique(),
     // About a release-check page (PR-010): excluded from rollups and dashboards.
     rehearsal: boolean('rehearsal').notNull().default(false),
+    // Campaign Studio: the running campaign the page was opened from (its id only, never who).
+    campaignId: uuid('campaign_id'),
   },
   (table) => [
     check(
@@ -1958,6 +1985,9 @@ export const analyticsEvents = pgTable(
       sql`at_minute = date_trunc('minute', at_minute)`,
     ),
     index('analytics_events_at').on(table.atMinute),
+    index('analytics_events_campaign')
+      .on(table.campaignId, table.atMinute)
+      .where(sql`campaign_id IS NOT NULL`),
   ],
 );
 
@@ -2929,4 +2959,341 @@ export const changelogReads = pgTable('changelog_reads', {
     .primaryKey()
     .references(() => users.id),
   seenThrough: timestamp('seen_through', { withTimezone: true }).notNull(),
+});
+
+// ---- Paid Pro (ADR-0015; the owner's decisions of 4, 5 and 9 Nov 2026) ----
+
+/**
+ * Every Pro price ever set, append-only. The current price is the latest row whose
+ * `effective_from` has passed. A purchase keeps the price it was opened at, so a change applies to
+ * new months only. The launch row (₦2,500) is seeded by its migration with no `set_by`.
+ */
+export const proPrices = pgTable(
+  'pro_prices',
+  {
+    id: uuid('id').primaryKey(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('pro_prices_effective_from').on(table.effectiveFrom),
+    check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
+    check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
+    check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+export const PRO_PERIOD_STATUSES = [
+  'SCHEDULED',
+  'ACTIVE',
+  'GRACE',
+  'ENDED',
+] as const;
+export const PRO_PAID_BY = [
+  'card',
+  'bank_transfer',
+  'balance',
+  'saved_card',
+] as const;
+
+/**
+ * One paid month of Pro. It covers `starts_at` up to `grace_ends_at` (its end plus 3 days' grace).
+ * One per payment (`purchase_id` unique), never two starting together, and at most one queued.
+ * `status` follows the clock (the expiry job moves it); the plan itself is read from the times.
+ */
+export const proPeriods = pgTable(
+  'pro_periods',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    // Null only for periods made in tests; every paid month has its purchase.
+    purchaseId: uuid('purchase_id').unique(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    graceEndsAt: timestamp('grace_ends_at', { withTimezone: true }).notNull(),
+    status: text('status').notNull(),
+    paidBy: text('paid_by').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('pro_periods_profile_start').on(table.profileId, table.startsAt),
+    uniqueIndex('pro_periods_one_scheduled')
+      .on(table.profileId)
+      .where(sql`${table.status} = 'SCHEDULED'`),
+    index('pro_periods_due').on(table.status, table.endsAt),
+    check(
+      'pro_periods_status',
+      sql`${table.status} IN ('SCHEDULED', 'ACTIVE', 'GRACE', 'ENDED')`,
+    ),
+    check(
+      'pro_periods_paid_by',
+      sql`${table.paidBy} IN ('card', 'bank_transfer', 'balance', 'saved_card')`,
+    ),
+    check(
+      'pro_periods_times',
+      sql`${table.startsAt} < ${table.endsAt} AND ${table.endsAt} < ${table.graceEndsAt}`,
+    ),
+    check('pro_periods_amount_positive', sql`${table.amountMinor} > 0`),
+    currencyCheck('pro_periods'),
+  ],
+);
+
+/**
+ * One Pro payment (ADR-0015): the price is fixed when it is opened, and the server is its only
+ * source. Card or bank transfer happen on the partner's checkout (`method` 'card' covers both; the
+ * month records which). At most one is open per page. Paid only from the partner's confirmed
+ * payment, read back; booked once (`pro.<id>`) and starts one month once.
+ */
+export const proPurchases = pgTable(
+  'pro_purchases',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    method: text('method').notNull(),
+    priceId: uuid('price_id')
+      .notNull()
+      .references(() => proPrices.id),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    status: text('status').notNull(),
+    provider: text('provider'),
+    providerReference: text('provider_reference'),
+    // The partner's hosted page, so an open purchase can be resumed. Not a secret.
+    checkoutUrl: text('checkout_url'),
+    idempotencyKey: text('idempotency_key').notNull(),
+    fingerprint: text('fingerprint').notNull(),
+    // Set when TipMe claims the one partner create call for this purchase, before making it.
+    startClaimedAt: timestamp('start_claimed_at', { withTimezone: true }),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastCheckedAt: timestamp('last_checked_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    // The partner's fee, from the read-back, once paid.
+    feeMinor: minor('fee_minor'),
+    // Paying from the balance (plan Task 8): the connected account the money is moved from.
+    accountReference: text('account_reference'),
+    // The partner's payment (charge) id, read back once paid: what a card refund names.
+    chargeReference: text('charge_reference'),
+    // Auto-renew (plan Task 10): the payer asked to save their card on this checkout.
+    saveCard: boolean('save_card').notNull().default(false),
+    // A saved-card renewal: the month it renews. One attempt per month, never a second.
+    renewsPeriodId: uuid('renews_period_id').unique(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('pro_purchases_idempotency').on(
+      table.profileId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('pro_purchases_one_open')
+      .on(table.profileId)
+      .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    uniqueIndex('pro_purchases_provider_reference')
+      .on(table.provider, table.providerReference)
+      .where(sql`${table.providerReference} IS NOT NULL`),
+    index('pro_purchases_open').on(table.status, table.createdAt),
+    check(
+      'pro_purchases_status',
+      sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN', 'PAID', 'FAILED', 'EXPIRED', 'REVIEW')`,
+    ),
+    check(
+      'pro_purchases_method',
+      sql`${table.method} IN ('card', 'bank_transfer', 'balance', 'saved_card')`,
+    ),
+    check('pro_purchases_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'pro_purchases_fee',
+      sql`${table.feeMinor} IS NULL OR (${table.feeMinor} >= 0 AND ${table.feeMinor} <= ${table.amountMinor})`,
+    ),
+    currencyCheck('pro_purchases'),
+  ],
+);
+
+// ---- Pro insights: Campaign Studio, monthly recap, priority support (11 Nov 2026) ----
+
+/**
+ * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>` to the
+ * normal tip page. Only a tracked link: no goal, target, end date or purpose. Stopping keeps its
+ * results; its link keeps opening the page. Never deleted while the page exists.
+ */
+export const campaigns = pgTable(
+  'campaigns',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    createdAt: createdAt(),
+    stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+  },
+  (table) => [
+    unique('campaigns_profile_slug').on(table.profileId, table.slug),
+    check('campaigns_name_length', sql`char_length(name) BETWEEN 1 AND 40`),
+    check(
+      'campaigns_slug_format',
+      sql`slug ~ '^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$'`,
+    ),
+    index('campaigns_profile_active')
+      .on(table.profileId)
+      .where(sql`stopped_at IS NULL`),
+  ],
+);
+
+/** Which campaign a tip was started from. A label beside the tip: no money table reads it. */
+export const tipCampaigns = pgTable(
+  'tip_campaigns',
+  {
+    tipId: uuid('tip_id')
+      .primaryKey()
+      .references(() => tips.id),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id),
+  },
+  (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
+);
+
+/** One recap per Pro page and Lagos month, however often the monthly job runs. */
+export const monthlyRecaps = pgTable(
+  'monthly_recaps',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    month: text('month').notNull(),
+    data: jsonb('data').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('monthly_recaps_once').on(table.profileId, table.month),
+    check('monthly_recaps_month', sql`month ~ '^\\d{4}-(0[1-9]|1[0-2])$'`),
+  ],
+);
+
+/**
+ * A person's support request (priority support). Its words stay here, apart from the issue that
+ * puts it in the ops queue; staff read them through the audited reveal. `priority` is the plan
+ * when it was sent.
+ */
+export const supportRequests = pgTable(
+  'support_requests',
+  {
+    id: uuid('id').primaryKey(),
+    issueId: uuid('issue_id')
+      .notNull()
+      .unique()
+      .references(() => issues.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id),
+    profileId: uuid('profile_id').references(() => profiles.id),
+    topic: text('topic').notNull(),
+    body: text('body').notNull(),
+    priority: boolean('priority').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    check(
+      'support_requests_topic',
+      sql`topic IN ('withdrawal', 'tip', 'page', 'account', 'pro', 'other')`,
+    ),
+    check(
+      'support_requests_body_length',
+      sql`char_length(body) BETWEEN 1 AND 2000`,
+    ),
+    index('support_requests_user').on(table.userId, table.createdAt),
+  ],
+);
+export const PRO_REFUND_STATUSES = [
+  'REQUESTED',
+  'PROCESSING',
+  'UNKNOWN',
+  'PAID',
+  'FAILED',
+] as const;
+
+/**
+ * A staff refund of one card-paid Pro month (plan Task 9; ruling 6): asked on the member's request
+ * within 14 days, decided by a second person, then sent to the partner once (idempotency key
+ * `tipme-pro-refund-<id>`). Only `refund.paid` books it and ends the month; `refund.failed` changes
+ * nothing about Pro and lets staff try again (the partner allows one refund per payment, and a
+ * failed one doesn't count).
+ */
+export const proRefunds = pgTable(
+  'pro_refunds',
+  {
+    id: uuid('id').primaryKey(),
+    purchaseId: uuid('purchase_id')
+      .notNull()
+      .references(() => proPurchases.id),
+    status: text('status').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    // The partner's refund id once known, and what its refund.paid said.
+    providerRefundReference: text('provider_refund_reference'),
+    refundedMinor: minor('refunded_minor'),
+    refundFeeMinor: minor('refund_fee_minor'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    // Set when TipMe claims the partner call, before making it.
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // One refund per payment, but a failed one doesn't count (the partner's refund guide).
+    uniqueIndex('pro_refunds_one_per_purchase')
+      .on(table.purchaseId)
+      .where(sql`${table.status} <> 'FAILED'`),
+    index('pro_refunds_open').on(table.status, table.createdAt),
+    check(
+      'pro_refunds_status',
+      sql`${table.status} IN ('REQUESTED', 'PROCESSING', 'UNKNOWN', 'PAID', 'FAILED')`,
+    ),
+    check('pro_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    currencyCheck('pro_refunds'),
+  ],
+);
+
+/**
+ * Auto-renew on a saved naira card (plan Task 10; ruling 9), behind PRO_AUTO_RENEW. Opted into at
+ * purchase; the partner's ids only (no card details). Turning it off clears the saved method, so
+ * nothing can be charged until the person opts in again on a new checkout.
+ */
+export const proAutoRenew = pgTable('pro_auto_renew', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  provider: text('provider').notNull(),
+  enabled: boolean('enabled').notNull(),
+  customerReference: text('customer_reference'),
+  paymentMethodReference: text('payment_method_reference'),
+  // The month whose renewal was refused: reminders and grace apply to it as usual.
+  failedPeriodId: uuid('failed_period_id'),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });

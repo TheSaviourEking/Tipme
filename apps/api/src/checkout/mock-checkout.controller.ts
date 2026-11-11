@@ -9,7 +9,12 @@ import {
   Req,
 } from '@nestjs/common';
 import type { ApiDataResponse } from '@tipme/contracts';
-import { findCheckoutByReference, OperationError } from '@tipme/database';
+import {
+  findCheckoutByReference,
+  findProPurchaseByReference,
+  myProPurchaseById,
+  OperationError,
+} from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import {
   mockProviderFee,
@@ -17,6 +22,7 @@ import {
   runScenario,
   type MockProvider,
 } from '@tipme/payments';
+import { randomUUID } from 'node:crypto';
 import type { Request } from 'express';
 import { z } from 'zod';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -26,6 +32,8 @@ import { LOGGER } from '../tokens.js';
 import { PAYMENT_PROVIDER_TOKEN } from './payment-provider.provider.js';
 
 const REFERENCE = /^mock_pay_[0-9a-f-]{36}$/;
+// Paid Pro (ADR-0015): a pretend checkout on TipMe's own account.
+const PRO_REFERENCE = /^mock_pro_[0-9a-f-]{36}$/;
 const outcomeSchema = z
   .object({
     outcome: z.enum([
@@ -35,6 +43,8 @@ const outcomeSchema = z
       'no-reply',
       'wrong-amount',
     ]),
+    // Pro only: how the pretend payer paid. Tips ignore it.
+    method: z.enum(['card', 'bank_transfer']).optional(),
   })
   .strict();
 
@@ -64,6 +74,16 @@ export class MockCheckoutController {
       recipientDisplayName: string;
     }>
   > {
+    if (PRO_REFERENCE.test(reference)) {
+      const purchase = await this.findPro(reference);
+      return {
+        data: {
+          amountMinor: purchase.amountMinor.toString(),
+          currency: purchase.currency,
+          recipientDisplayName: 'TipMe Pro',
+        },
+      };
+    }
     const checkout = await this.find(reference);
     return {
       data: {
@@ -81,6 +101,8 @@ export class MockCheckoutController {
     body: z.infer<typeof outcomeSchema>,
     @Req() request: Request,
   ): Promise<ApiDataResponse<{ returnUrl: string }>> {
+    if (PRO_REFERENCE.test(reference))
+      return this.payPro(reference, body, request);
     const checkout = await this.find(reference);
     // Only the first choice plays; a repeat (back button, double tap) just returns to the receipt.
     if (await this.provider.chooseScenario(reference, body.outcome)) {
@@ -117,6 +139,65 @@ export class MockCheckoutController {
     // No receipt token here: holding a provider reference must never be enough to read a receipt.
     // The tab that started the tip already keeps the token for this tip in its session.
     return { data: { returnUrl: `${this.webOrigin}/tip/${checkout.tipId}` } };
+  }
+
+  /**
+   * Pays a pretend Pro checkout: the pretend partner settles first, then says so in a signed
+   * webhook, which TipMe reads back (as it does Bachs'). Only the first choice plays.
+   */
+  private async payPro(
+    reference: string,
+    body: z.infer<typeof outcomeSchema>,
+    request: Request,
+  ): Promise<ApiDataResponse<{ returnUrl: string }>> {
+    const purchase = await this.findPro(reference);
+    const outcome = body.outcome === 'decline' ? 'decline' : 'succeed';
+    if (await this.provider.chooseScenario(reference, outcome)) {
+      await this.provider.markMethod(
+        reference,
+        body.method === 'bank_transfer' ? 'NGN_BANK_TRANSFER' : 'NGN_CARD',
+      );
+      await this.provider.settle(reference);
+      const local = request.socket.localAddress ?? '127.0.0.1';
+      const host = local.includes(':') ? `[${local}]` : local;
+      await runScenario({
+        plan: [
+          {
+            body: {
+              id: `evt_${randomUUID()}`,
+              type:
+                outcome === 'decline' ? 'payment.failed' : 'payment.succeeded',
+              data: {
+                reference,
+                amountMinor: purchase.amountMinor.toString(),
+                currency: purchase.currency,
+                feeMinor: mockProviderFee(purchase.amountMinor).toString(),
+              },
+            },
+            signed: true,
+            delayMs: 0,
+          },
+        ],
+        webhookUrl: `http://${host}:${request.socket.localPort}/v1/webhooks/mock`,
+        secret: this.config.MOCK_PROVIDER_WEBHOOK_SECRET ?? '',
+      });
+    }
+    return { data: { returnUrl: `${this.webOrigin}/dashboard/settings#plan` } };
+  }
+
+  private async findPro(reference: string) {
+    const purchaseId = await findProPurchaseByReference(this.database.db, {
+      provider: 'mock',
+      providerReference: reference,
+      operationReference: null,
+    });
+    const purchase = purchaseId
+      ? await myProPurchaseById(this.database.db, purchaseId)
+      : null;
+    if (!purchase) throw new NotFoundException();
+    // Like an expired hosted session: an ended purchase can't be paid here.
+    if (purchase.status !== 'PENDING') throw new NotFoundException();
+    return purchase;
   }
 
   private async find(reference: string) {

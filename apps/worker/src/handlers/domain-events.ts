@@ -31,6 +31,13 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'payment.mismatch',
   'payment.reversed',
   'username.take_back_done',
+  // Paid Pro (ADR-0015): money alerts that become inbox issues.
+  'pro.amount_mismatch',
+  'pro.late_payment',
+  'pro.conflict',
+  'pro.reversed',
+  'pro.collect_unknown',
+  'pro.refund_failed',
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;
@@ -103,7 +110,7 @@ export async function handleDomainEvent(
     rewardBudgetPerMonthMinor?: bigint;
     /** The outbox dedupe key (the job id). */
     dedupeKey?: string;
-    /** Record anonymous server-side outcomes (off in production until D-07). */
+    /** Record anonymous server-side outcomes (on unless ANALYTICS_ENABLED=false; D-07 open). */
     analyticsEnabled?: boolean;
     sealing: MailSealing;
     /** Payments are pretend (mock provider): the tip email says so. */
