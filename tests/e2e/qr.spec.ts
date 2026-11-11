@@ -106,12 +106,12 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   for (const name of ['Show full screen', 'Share image', 'Download image'])
     await expect(page.getByRole('button', { name })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Print card' })).toHaveCount(0);
-  // Upgrade leads to the Pro explanation, with no price and no billing.
+  // Upgrade leads to the Pro explanation, with the price the server sends.
   await page.getByRole('link', { name: 'Upgrade to use this design' }).click();
   await page.waitForURL(/\/dashboard\/settings#pro$/);
   await expect(page.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
   await expect(page.getByText('Three changes to your handle')).toBeVisible();
-  await expect(page.locator('#pro')).not.toContainText(/₦|NGN|\$|per month/);
+  await expect(page.locator('#pro')).toContainText('₦2,500 a month');
   await page.goBack();
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   // A screenshot of it leads to the TipMe home page, never to the person's page.

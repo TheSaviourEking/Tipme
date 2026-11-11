@@ -16,7 +16,9 @@ const fitsWidth = (page: Page) =>
       document.documentElement.clientWidth,
   );
 
-test('an owner asks to change the Pro price, a second person approves, and history lists it', async ({
+// @alone: approving changes the live price for every page, and other specs (pro-buy, pro) expect the
+// launch price, so nothing may run beside it or after it on the same database.
+test('@alone an owner asks to change the Pro price, a second person approves, and history lists it', async ({
   page,
   browser,
 }, testInfo) => {
