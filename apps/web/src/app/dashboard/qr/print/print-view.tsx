@@ -106,13 +106,19 @@ export default function PrintCardPage() {
           <fieldset className="print-hide qr-formats">
             <legend>Format</legend>
             {QR_FORMATS.map((option) => (
-              <label key={option.id} className="qr-style">
+              <label key={option.id} className="qr-style qr-pick">
                 <input
                   type="radio"
                   name={`${id}-format`}
                   value={option.id}
                   checked={format === option.id}
                   onChange={() => setFormat(option.id)}
+                />
+                {/* A small paper picture of the format; the words below name it. */}
+                <span
+                  className="qr-pick__art"
+                  data-format={option.id}
+                  aria-hidden="true"
                 />
                 <span>
                   {option.name}
@@ -149,13 +155,13 @@ export default function PrintCardPage() {
             Prints on A6 (postcard size). Cut along the edge and stand it on the
             counter.
           </p>
+          {/* The card draws the link itself, so it is printed once. */}
           <canvas
             ref={canvas}
             className="print-card__canvas"
             role="img"
             aria-label={`QR code for ${label}`}
           />
-          <p className="print-card__label">{label}</p>
         </>
       )}
       <div className="print-hide qr-actions">

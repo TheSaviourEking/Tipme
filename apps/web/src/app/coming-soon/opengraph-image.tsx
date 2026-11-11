@@ -1,11 +1,19 @@
 import { ImageResponse } from 'next/og';
+import { connection } from 'next/server';
 import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/components/brand';
+import { LAGOS_LAUNCH_TARGET, launchShortLabel } from '@/lib/countdown';
+import { parseProductionLaunchAt } from '@/lib/production-launch';
 
 export const alt = 'TipMe opens at midnight in Lagos';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-export default function ComingSoonOpenGraphImage() {
+export default async function ComingSoonOpenGraphImage() {
+  // The launch time is request-time state, as on the page itself.
+  await connection();
+  const target =
+    parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT) ??
+    Date.parse(LAGOS_LAUNCH_TARGET);
   return new ImageResponse(
     <div
       style={{
@@ -43,7 +51,7 @@ export default function ComingSoonOpenGraphImage() {
             textTransform: 'uppercase',
           }}
         >
-          27 October · 00:00 WAT
+          {launchShortLabel(target)}
         </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 42 }}>
