@@ -1,3 +1,10 @@
+# Current task: the backlog merge train, withdraw and audit fixes, missed visits, public boards (12 November 2026)
+
+- Branch `train/backlog` from `origin/dev` at `c4966605` (the Pro train, #190, merged): #191 (`feat/backlog-withdraw-visits`: R1, D1, S1, X1 and missed visits) and #192 (`feat/backlog-public`: coming soon from `PRODUCTION_LAUNCH_AT`, QR print, the tip form restyle and its two proposals) merged in that order with `--no-ff`. Merging it marks both merged. No conflicts.
+- No migration. One new route, `GET /v1/me/visits-today` (#191); OpenAPI and access-control docs regenerated (unchanged by the merge, `--check` passes).
+- Docs the feature PRs could not add: boards `ComingSoon`, `QrPrint` and `TipForm` copied unchanged into `docs/design/redesign/boards/` and listed in the README; DECISION-LOG entries for both PRs. The Linux visual baselines for the restyled tip form come from the train's CI run.
+- Open for the owner: whether the owner's own visits count as missed visits; the two unproven withdraw sentences; the tip form's minimum hint and one line under Tip (built with defaults); the QR Print key purple or black; "opens at midnight" wording.
+
 # Current task: merge train 3, the changelog and What's new (6 November 2026)
 
 - Branch `train/3` from `origin/dev` at `f03801bc` (trains 1 and 2 merged): #160 (schema), #164 (ingest), #166 (CI), #162 (admin API), #169 (admin screens) and #163 (What's new) merged in that order with `--no-ff`, so each PR's head commit is in it. One PR into `dev`.

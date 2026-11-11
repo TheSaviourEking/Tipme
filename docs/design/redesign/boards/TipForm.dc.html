@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Public page: the tip form, before Tip</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.board{width:1840px;height:2780px;box-sizing:border-box;padding:56px;background:#e9e6df;color:#000;font-family:Manrope,Arial,sans-serif}
+.title{margin:0;font:400 44px/1.05 'DM Serif Display',Georgia,serif}
+.sub{margin:10px 0 0;max-width:980px;font-size:16px;line-height:1.55;color:#5d5a54}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+.row1{margin-top:40px;display:flex;gap:56px;align-items:flex-start}
+/* materials, from TipJourney */
+.instrument{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.keys{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.key{display:flex;align-items:center;justify-content:center;min-height:52px;position:relative;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums lining-nums}
+.key.on{border-color:#6423d8;background:linear-gradient(rgba(255,255,255,.22),transparent 36%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.key.on::after{content:"";position:absolute;top:7px;right:7px;width:6px;height:6px;border-radius:50%;background:#fff}
+.flabel{margin:0 0 6px;font-size:13.5px;font-weight:700}
+.well{display:flex;align-items:center;min-height:50px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:15px;color:#8a867e}
+.well.typed{color:#000;font-weight:700}
+.well.bad{border-color:#b3261e;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),0 0 0 2px rgba(179,38,30,.16)}
+.well.area{min-height:96px;align-items:flex-start;padding-top:12px;line-height:1.45}
+.hint{margin:6px 0 0;font-size:12.5px;line-height:1.45;color:#5d5a54}
+.err{margin:6px 0 0;font-size:13px;line-height:1.45;font-weight:700;color:#b3261e}
+.drawer{display:flex;align-items:center;justify-content:space-between;min-height:44px;font-size:14px;font-weight:700;border-top:1px solid rgba(20,18,16,.1);padding-top:10px}
+.drawer svg{width:16px;height:16px}
+.check{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:600;line-height:1.4}
+.check small{display:block;font-weight:500;font-size:12.5px;color:#5d5a54}
+.box{width:22px;height:22px;flex:none;border-radius:7px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14)}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8;display:flex;align-items:center;justify-content:center}
+.go{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:56px;box-sizing:border-box;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font-size:16px;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24),0 10px 18px -8px rgba(20,18,16,.45)}
+.go svg{width:18px;height:18px}
+.soft{display:flex;align-items:center;justify-content:center;min-height:48px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:15px;font-weight:700}
+.small{margin:0;font-size:12.5px;line-height:1.45;color:#5d5a54;text-align:center}
+.notsent{padding:12px 14px;border-radius:14px;background:#fbeceb;border:1px solid rgba(179,38,30,.25);font-size:13.5px;line-height:1.45;color:#5c1410}
+.notsent b{display:block;margin-bottom:2px}
+.signature{border-radius:26px;padding:24px;background:linear-gradient(rgba(255,255,255,.18),transparent 30%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 18px 30px -20px rgba(77,22,168,.7)}
+.signature .go{background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000}
+.linkish{font-size:14px;font-weight:700;text-decoration:underline;text-underline-offset:3px}
+/* page */
+.desk{width:1240px;height:820px;flex:none;border-radius:18px;background:#f3f2ee;overflow:hidden;position:relative;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4)}
+.cover{height:300px;background:#204f3b;position:relative;overflow:hidden}
+.cover svg{position:absolute;fill:#3a7a5e}
+.avatar{display:flex;align-items:center;justify-content:center;border-radius:50%;background:#d9c7ff;color:#2d0b66;font:400 46px 'DM Serif Display',Georgia,serif;border:5px solid #f3f2ee;box-sizing:border-box;box-shadow:0 2px 3px rgba(20,18,16,.1),0 18px 42px rgba(20,18,16,.1)}
+.handle{display:flex;align-items:center;gap:8px;margin:6px 0 0;font-size:15px;font-weight:600;color:#5d5a54}
+.share{display:inline-flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:1px solid rgba(20,18,16,.14);border-radius:10px;background:#fffefa;font-size:14px;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.1)}
+.celebrate{display:inline-flex;align-items:center;gap:8px;margin:16px 0 0;padding:8px 12px;border-radius:999px;background:#f1e9ff;color:#2d0b66;font-size:14px;font-weight:700}
+.celebrate svg{width:16px;height:16px;fill:#7a32f9}
+.foot{position:absolute;left:0;right:0;bottom:0;padding:16px 56px;display:flex;justify-content:space-between;font-size:13px;color:#5d5a54;border-top:1px solid rgba(20,18,16,.1)}
+.phone{width:390px;height:844px;flex:none;box-sizing:border-box;border-radius:44px;background:#f3f2ee;overflow:hidden;position:relative;border:1px solid rgba(20,18,16,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.92),0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.bar{position:absolute;left:0;right:0;bottom:0;padding:14px 16px 22px;display:grid;gap:8px;background:linear-gradient(rgba(243,242,238,0),#f3f2ee 22%)}
+.states{margin-top:64px;display:grid;grid-template-columns:repeat(3,552px);gap:40px 36px;align-items:start}
+.state .instrument{padding:20px;display:grid;gap:12px}
+.state h3{margin:0;font:400 28px/1.1 'DM Serif Display',Georgia,serif}
+.why{margin:10px 2px 0;font-size:13.5px;line-height:1.5;color:#5d5a54}
+.notes{margin-top:56px;display:grid;grid-template-columns:1fr 1fr;gap:36px}
+.note{padding:24px 28px;border-radius:20px;background:#fffefa;border:1px solid rgba(20,18,16,.1)}
+.note.prop{background:#f1e9ff;border-color:rgba(122,50,249,.35)}
+.note h3{margin:0 0 10px;font-size:17px}
+.note ul{margin:0;padding-left:20px;font-size:14.5px;line-height:1.6}
+.note li{margin:4px 0}
+.tag{display:inline-block;margin-bottom:10px;padding:3px 10px;border-radius:999px;background:#7a32f9;color:#fff;font-size:12px;font-weight:800}
+</style>
+</helmet>
+<div class="board">
+  <h1 class="title">Public page: the tip form, before Tip</h1>
+  <p class="sub">The supporter's side of usetipme.xyz/@handle, restyled in the materials of the Tipper's journey board: pressable keys, recessed fields, the black Tip key. Every field, rule and line of copy here is what the page does today (live mode). Only the notes marked Proposed would change behaviour or wording.</p>
+
+  <div class="row1">
+    <div>
+      <p class="label">Desktop, below the site header: a Free page, ₦2,000 chosen on arrival</p>
+      <div class="desk">
+        <div class="cover">
+          <svg viewBox="0 0 24 24" aria-hidden="true" style="right:80px;top:40px;width:220px;height:220px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></svg>
+        </div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 408px;column-gap:72px;padding:0 56px">
+          <section style="margin-top:-72px;padding-left:40px">
+            <div style="display:flex;align-items:flex-end;gap:20px">
+              <div class="avatar" style="width:144px;height:144px">AO</div>
+              <div style="flex:1;padding-bottom:6px">
+                <h2 class="serif" style="margin:0;font-size:44px;line-height:1">Ada Okafor</h2>
+                <p class="handle">@ada</p>
+              </div>
+              <span class="share" aria-label="Share this page" style="margin-bottom:8px;width:44px;padding:0;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"></path></svg></span>
+            </div>
+            <p style="margin:18px 0 0;font-size:16px;font-weight:700">Content creator/Video editor</p>
+            <p style="margin:8px 0 0;font-size:16px;line-height:1.55;color:#3d3a35;max-width:440px">I edit long-form videos for creators in Lagos. Tips keep the late nights going.</p>
+            <p class="celebrate"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></svg>Celebrating Ada’s 10th tip</p>
+          </section>
+          <aside class="instrument" style="margin-top:-196px;padding:22px;display:grid;gap:12px;align-self:start">
+            <h3 class="serif" style="margin:0;font-size:32px;line-height:1.05">Tip Ada</h3>
+            <div class="keys"><span class="key on">₦2,000</span><span class="key">₦5,000</span><span class="key">₦10,000</span></div>
+            <div><p class="flabel">Other amount (NGN 2,000 or more)</p><div class="well">e.g. 2,000</div></div>
+            <div class="check"><span class="box"></span><span>Add to the celebration</span></div>
+            <div class="drawer"><span>Add a message, reason or your name</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></div>
+            <div class="go">Tip ₦2,000 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+            <p class="small">Our payment partner handles this. You’ll confirm on its page.</p>
+            <p class="small" style="font-weight:700;color:#000">No account needed. You pay exactly this amount.</p>
+          </aside>
+        </div>
+        <div class="foot"><span>Report this page &nbsp; Privacy &nbsp; Terms</span><span style="font-weight:700;color:#000">Get your own TipMe page</span></div>
+      </div>
+    </div>
+    <div>
+      <p class="label">Phone: the Tip key stays fixed at the bottom</p>
+      <div class="phone">
+        <div class="cover" style="height:150px"><svg viewBox="0 0 24 24" aria-hidden="true" style="right:26px;top:22px;width:120px;height:120px"><path d="M12 21s-7.5-4.6-9.6-9.3C1 8.4 3 5 6.4 5c2.2 0 4 1.2 5.6 3.4C13.6 6.2 15.4 5 17.6 5 21 5 23 8.4 21.6 11.7 19.5 16.4 12 21 12 21z"></path></svg></div>
+        <div style="padding:0 20px;margin-top:-44px;display:flex;align-items:flex-end;gap:12px">
+          <div class="avatar" style="width:96px;height:96px;font-size:32px;border-width:4px">AO</div>
+          <span class="share" aria-label="Share this page" style="margin-left:auto;margin-bottom:4px;width:44px;padding:0;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"></path></svg></span>
+        </div>
+        <div style="padding:10px 20px 12px">
+          <h2 class="serif" style="margin:0;font-size:34px;line-height:1">Ada Okafor</h2>
+          <p class="handle" style="margin-top:4px">@ada</p>
+          <p style="margin:6px 0 0;font-size:14px;font-weight:700">Content creator/Video editor</p>
+        </div>
+        <div class="instrument" style="margin:0 12px;padding:16px;display:grid;gap:12px">
+          <h3 class="serif" style="margin:0;font-size:26px">Tip Ada</h3>
+          <div class="keys"><span class="key on">₦2,000</span><span class="key">₦5,000</span><span class="key">₦10,000</span></div>
+          <div><p class="flabel">Other amount (NGN 2,000 or more)</p><div class="well">e.g. 2,000</div></div>
+          <div class="drawer"><span>Add a message, reason or your name</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></div>
+        </div>
+        <div class="bar">
+          <div class="go">Tip ₦2,000 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+          <p class="small">Our payment partner handles this. You’ll confirm on its page.</p>
+        </div>
+      </div>
+      <p class="why" style="max-width:390px">While a field is being typed in, the bar steps aside for the keyboard, as it does today.</p>
+    </div>
+  </div>
+
+  <div class="states">
+    <div class="state">
+      <p class="label">An amount of their own</p>
+      <div class="instrument">
+        <h3>Tip Ada</h3>
+        <div class="keys"><span class="key">₦2,000</span><span class="key">₦5,000</span><span class="key">₦10,000</span></div>
+        <div><p class="flabel">Other amount (NGN 2,000 or more)</p><div class="well typed">2,500.50</div></div>
+        <div class="go">Tip ₦2,500.50 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+        <p class="small">Our payment partner handles this. You’ll confirm on its page.</p>
+      </div>
+      <p class="why">Typing clears the keys. The Tip key always names the exact amount charged; there is no maximum.</p>
+    </div>
+
+    <div class="state">
+      <p class="label">Below the minimum, after pressing Tip</p>
+      <div class="instrument">
+        <h3>Tip Ada</h3>
+        <div class="keys"><span class="key">₦2,000</span><span class="key">₦5,000</span><span class="key">₦10,000</span></div>
+        <div><p class="flabel">Other amount (NGN 2,000 or more)</p><div class="well typed bad">1,500</div><p class="err">Enter an amount of NGN 2,000 or more, like 2,000 or 2,500.50.</p></div>
+        <div class="go">Tip <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+        <p class="small">Our payment partner handles this. You’ll confirm on its page.</p>
+      </div>
+      <p class="why">Below ₦2,000 the key reads just “Tip”. Pressing it shows this message and puts the cursor back in the field. Nothing is started.</p>
+    </div>
+
+    <div class="state">
+      <p class="label">A message, reason and name added</p>
+      <div class="instrument">
+        <h3>Tip Ada</h3>
+        <div class="keys"><span class="key">₦2,000</span><span class="key on">₦5,000</span><span class="key">₦10,000</span></div>
+        <div class="drawer"><span>Add a message, reason or your name</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg></div>
+        <div><p class="flabel">What is this tip for? (optional)</p><div class="well typed" style="justify-content:space-between">You helped me <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg></div></div>
+        <div><p class="flabel">Personal message (optional)</p><div class="well typed area" style="font-weight:500">Your edits saved my channel. Thank you.</div><p class="hint">39/280 characters. Sent privately with your tip.</p></div>
+        <div><p class="flabel">Your name (optional)</p><div class="well typed">Chidi</div><p class="hint">Shown to Ada with your tip. Leave it empty to stay anonymous.</p></div>
+        <div class="check"><span class="box"></span><span>Remember my tips on this phone<small>Kept only in this browser, so we can celebrate your tips. No amounts or messages.</small></span></div>
+        <div class="go">Tip ₦5,000 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+      </div>
+      <p class="why">Reasons offered: Saying thank you, Great service, You helped me, Celebrating something, A gift, Something else. Message up to 280 characters, name up to 60.</p>
+    </div>
+
+    <div class="state">
+      <p class="label">Tipping closed (checkout not open yet)</p>
+      <div class="signature">
+        <h3 style="margin:0;font:400 30px/1.1 'DM Serif Display',Georgia,serif">Tipping opens soon on Ada’s page.</h3>
+        <p style="margin:10px 0 18px;font-size:15px;line-height:1.5;color:#efe6ff">Claim your own page while you wait. No bank details needed yet.</p>
+        <div class="go">Claim your username</div>
+        <p style="margin:14px 0 0;font-size:14px;font-weight:700;color:#fff;text-decoration:underline;text-underline-offset:3px">Copy page link</p>
+      </div>
+      <p class="why">Shown instead of the form, with no amounts and no pay key. Already built to the ScreenSmall board; kept as it is.</p>
+    </div>
+
+    <div class="state">
+      <p class="label">The person hasn’t finished setting up payments</p>
+      <div class="instrument">
+        <h3>Ada can’t receive tips just yet.</h3>
+        <p style="margin:0;font-size:15px;line-height:1.5;color:#3d3a35">They’re still setting up payments. Come back soon: this page will take tips as soon as they’re ready.</p>
+      </div>
+      <p class="why">Said before an amount is chosen, never after pressing Tip.</p>
+    </div>
+
+    <div class="state">
+      <p class="label">Pressed Tip, but it didn’t start</p>
+      <div class="instrument">
+        <h3>Tip Ada</h3>
+        <div class="keys"><span class="key on">₦2,000</span><span class="key">₦5,000</span><span class="key">₦10,000</span></div>
+        <div class="notsent"><b>Not sent yet</b>We couldn’t reach TipMe. Check your connection and try again.</div>
+        <div class="go">Tip ₦2,000 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg></div>
+        <p class="small">Our payment partner handles this. You’ll confirm on its page.</p>
+      </div>
+      <p class="why">One example of the existing messages. Each one says whether anything was charged, and none names the payment provider.</p>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>Kept exactly as the page works today</h3>
+      <ul>
+        <li>Free pages offer ₦2,000, ₦5,000 and ₦10,000, starting on ₦2,000. A Pro page shows its own 1 to 4 amounts and starts on the one closest to ₦2,000.</li>
+        <li>The smallest tip is ₦2,000. There is no largest.</li>
+        <li>The key's label: “Tip ₦2,000”, then “Starting your tip…” while it starts. The supporter pays exactly that; TipMe's share comes out of the recipient's side.</li>
+        <li>“Add to the celebration” appears only when the person has shared a moment.</li>
+        <li>Test copies add “TipMe is in test mode: no real money moves yet.” With the pilot notice switched on, this line is added: “TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz”. On phones it sits in the Tip bar.</li>
+        <li>Every field, limit, error message and the order of the form are unchanged. Only the materials change: keys, recessed fields, the black Tip key and the paper panel.</li>
+      </ul>
+    </div>
+    <div class="note prop">
+      <span class="tag">Proposed, needs your yes</span>
+      <h3>Two small changes the page doesn't make today</h3>
+      <ul>
+        <li><b>Say the minimum while typing.</b> Today, typing ₦1,500 only changes the key to “Tip”; the message appears after pressing it. The proposal is to show the same message under the field as soon as the amount is below ₦2,000.</li>
+        <li><b>One line under the Tip key instead of two.</b> Today there are two: “Our payment partner handles this. You’ll confirm on its page.” and “No account needed. You pay exactly this amount.” The Tipper's journey board used one: “You pay exactly this. You'll confirm on our partner's page.” If you prefer that, the second line goes.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":2780}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
