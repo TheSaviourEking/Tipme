@@ -6695,9 +6695,116 @@ html:has(.confirm-dialog[open]) {
   height: auto;
 }
 
-.print-card__label {
-  margin: 0;
-  overflow-wrap: anywhere;
+/* QrPrint board: formats are keys with a small paper picture of each one. */
+.qr-formats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+  border: 0;
+  padding: 0;
+}
+
+.qr-formats legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: 700;
+}
+
+.qr-pick__art {
+  position: relative;
+  flex: none;
+  width: 1.75rem;
+  height: 2.25rem;
+  box-sizing: border-box;
+  border: 1px solid rgb(20 18 16 / 18%);
+  border-radius: 0.1875rem;
+  background:
+    linear-gradient(var(--key-face-dark), var(--key-face-dark)) center / 0.75rem
+      0.75rem no-repeat,
+    var(--surface-raised);
+  box-shadow: 0 1px 1px rgb(20 18 16 / 10%);
+}
+
+.qr-pick__art[data-format='poster'] {
+  background-position:
+    right 0.1875rem bottom 0.1875rem,
+    0 0;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='sticker'] {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+}
+
+.qr-pick__art[data-format='ticket'],
+.qr-pick__art[data-format='business'] {
+  width: 2.5rem;
+  height: 1.5rem;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='ticket'] {
+  border-style: dashed;
+}
+
+.qr-pick__art[data-format='business'] {
+  background-position:
+    right 0.25rem center,
+    0 0;
+}
+
+.qr-pick__art[data-format='receipt'] {
+  width: 1.25rem;
+  height: 2.5rem;
+  border-radius: 0;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='lock'] {
+  width: 1.375rem;
+  height: 2.5rem;
+  border: 2px solid var(--key-face-dark);
+  border-radius: 0.375rem;
+  background:
+    linear-gradient(#fff, #fff) center / 0.625rem 0.625rem no-repeat,
+    #1f4d3a;
+}
+
+.qr-pick__art[data-format='hang'] {
+  border-radius: 0.5rem 0.5rem 0.1875rem 0.1875rem;
+  background:
+    radial-gradient(
+        circle at 50% 0.3125rem,
+        var(--surface-recessed) 0.125rem,
+        transparent 0.1875rem
+      )
+      0 0 / auto no-repeat,
+    linear-gradient(var(--key-face-dark), var(--key-face-dark)) center 65% /
+      0.625rem 0.625rem no-repeat,
+    var(--surface-raised);
+}
+
+/* Cut lines: the formats smaller than the page show where to cut, faintly on screen. */
+.qr-format--receipt,
+.qr-format--lock {
+  margin: 0.5rem;
+  outline: 1px dashed rgb(20 18 16 / 22%);
+  outline-offset: 0.5rem;
+}
+
+@media (forced-colors: active) {
+  .qr-pick__art {
+    border-color: CanvasText;
+  }
 }
 
 @media print {
@@ -6717,6 +6824,23 @@ html:has(.confirm-dialog[open]) {
   .print-card__canvas {
     max-width: none;
     width: 100%;
+  }
+
+  /* Only the card on paper: no pilot, paused-page or "Needs your attention" notices. Names the
+     states classes too, so it holds before and after they replace Notice. */
+  body:has(.print-card)
+    .dashboard-page
+    :is(.owner-attention, .pilot-notice, .tm-notice, .tm-slip, .tm-warning):not(
+      .print-card *
+    ) {
+    display: none !important;
+  }
+
+  .qr-format--receipt,
+  .qr-format--lock {
+    margin: 3mm;
+    outline: 0.3mm dashed #000;
+    outline-offset: 3mm;
   }
 
   /* The business card and the sticker print at their real sizes, on pages of that size. */
