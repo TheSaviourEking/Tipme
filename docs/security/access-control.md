@@ -209,11 +209,19 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
+| GET | `/v1/me/campaigns` | n/a (read) | – | – |
+| POST | `/v1/me/campaigns` | yes | – | – |
+| GET | `/v1/me/campaigns/{id}` | n/a (read) | – | – |
+| PATCH | `/v1/me/campaigns/{id}` | yes | – | – |
+| POST | `/v1/me/campaigns/{id}/stop` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |
 | PUT | `/v1/me/cover-design` | yes | `cover_designs` | – |
 | GET | `/v1/me/dashboard` | n/a (read) | – | – |
+| GET | `/v1/me/earnings` | n/a (read) | – | – |
+| GET | `/v1/me/earnings/period` | n/a (read) | – | – |
+| GET | `/v1/me/earnings/trend` | n/a (read) | – | – |
 | POST | `/v1/me/email` | yes | `auth_code` | – |
 | GET | `/v1/me/email-recoveries` | n/a (read) | – | – |
 | POST | `/v1/me/email/code` | yes | `auth_code` | – |
@@ -248,6 +256,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/qr-art` | n/a (read) | `qr_art` | – |
 | GET | `/v1/me/qr-art/{file}` | n/a (read) | `qr_art` | – |
 | GET | `/v1/me/qr-art/thumbs/{file}` | n/a (read) | `qr_thumb` | – |
+| GET | `/v1/me/recaps` | n/a (read) | – | – |
+| GET | `/v1/me/recaps/{month}` | n/a (read) | – | – |
 | GET | `/v1/me/recovery` | n/a (read) | – | – |
 | GET | `/v1/me/recovery-email` | n/a (read) | – | – |
 | POST | `/v1/me/recovery-email` | yes | `auth_verify` | – |
@@ -260,6 +270,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/sessions` | n/a (read) | – | – |
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
+| GET | `/v1/me/support` | n/a (read) | – | – |
+| POST | `/v1/me/support` | yes | – | – |
 | PUT | `/v1/me/thanks` | yes | – | – |
 | PUT | `/v1/me/tip-amounts` | yes | – | – |
 | GET | `/v1/me/tip-totals` | n/a (read) | – | – |
