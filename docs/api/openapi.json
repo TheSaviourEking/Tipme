@@ -1185,27 +1185,6 @@
           "DevJobs",
           "pretend only"
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "isoWeek": {
-                    "type": "string",
-                    "pattern": "^\\d{4}-W\\d{2}$"
-                  },
-                  "handle": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9_]{3,30}$"
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Success.",
