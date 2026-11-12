@@ -8,7 +8,6 @@ import {
   Post,
   Res,
   SetMetadata,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
