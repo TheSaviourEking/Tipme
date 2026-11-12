@@ -50,3 +50,11 @@ test('the business sections claim no approval and name no provider', () => {
   );
   assert.doesNotMatch(sections, /bachs|paystack|flutterwave/i);
 });
+
+test('the privacy page says a business may show its logo, and owners can remove it', () => {
+  // Business logos (#179): an owner's square logo shows on the public business, location and
+  // staff pages, stored like page photos.
+  const sections = words.slice(words.indexOf('business-tipping'));
+  assert.match(sections, /A business may show its logo on its public pages/);
+  assert.match(sections, /its owners can remove it at any time/);
+});

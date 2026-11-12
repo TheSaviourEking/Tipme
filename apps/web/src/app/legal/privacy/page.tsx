@@ -55,6 +55,10 @@ export default function PrivacyPlaceholder() {
           totals. You can download where you have worked, and the notes written
           about you, from your settings.
         </p>
+        <p>
+          A business may show its logo on its public pages, beside your name and
+          photo; its owners can remove it at any time.
+        </p>
       </section>
       {/* Business release 2 (decisions log, 6 Nov 2026): what a share or a team tip shows to whom. */}
       <section aria-labelledby="business-shares">
