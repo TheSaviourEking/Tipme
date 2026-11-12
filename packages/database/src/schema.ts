@@ -3321,7 +3321,9 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
  *
  * - `sweep`: the business's share, staff -> TipMe -> business, once the tip's money is available.
  * - `recover`: a refunded tip's share the business still holds, business -> TipMe -> staff.
- * - `fee_return`: TipMe's fee on a refunded tip, TipMe -> staff (no `out` leg).
+ * - `fee_return`: TipMe's fee on a refunded tip, TipMe -> the person tipped (no `out` leg). On
+ *   every refunded tip once the refund is final (owner, 12 Nov 2026, behind REFUND_FEE_RETURN), and
+ *   on a lost dispute staff reverse; once per partner refund or dispute (`partner_reversal_id`).
  * - `holdback_repay`: part of a later sweep held back from the business for a share it had already
  *   withdrawn, TipMe -> the staff member it is owed to (no `out` leg: the sweep brought it in).
  *
@@ -3336,9 +3338,8 @@ export const shareTransfers = pgTable(
       .notNull()
       .references(() => tips.id),
     kind: text('kind').notNull(),
-    businessId: uuid('business_id')
-      .notNull()
-      .references(() => businesses.id),
+    // Every kind but fee_return is about a business; a fee goes back on any tip.
+    businessId: uuid('business_id').references(() => businesses.id),
     // The staff member the tip was for (sweep, recover, fee_return) or is owed (holdback_repay).
     profileId: uuid('profile_id')
       .notNull()
@@ -3353,10 +3354,12 @@ export const shareTransfers = pgTable(
     provider: text('provider').notNull(),
     outReference: text('out_reference'),
     inReference: text('in_reference'),
-    // recover and fee_return: the reversal that asked for them (one of each per reversal).
+    // recover: the reversal that asked for it (one per reversal).
     reversalTransactionId: uuid('reversal_transaction_id').references(
       () => ledgerTransactions.id,
     ),
+    // fee_return: the partner's refund or dispute it answers (`refund.<id>`, `dispute.<id>`).
+    partnerReversalId: text('partner_reversal_id'),
     // holdback_repay: the sweep that brought the money in, and the hold-back it pays.
     parentId: uuid('parent_id').references(
       (): AnyPgColumn => shareTransfers.id,
@@ -3396,15 +3399,24 @@ export const shareTransfers = pgTable(
     ),
     check(
       'share_transfers_links',
-      sql`(kind IN ('recover', 'fee_return')) = (reversal_transaction_id IS NOT NULL)
+      sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
+        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
         AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)`,
+    ),
+    check(
+      'share_transfers_business',
+      sql`kind = 'fee_return' OR business_id IS NOT NULL`,
     ),
     uniqueIndex('share_transfers_one_sweep')
       .on(table.tipId)
       .where(sql`kind = 'sweep'`),
     uniqueIndex('share_transfers_once_per_reversal')
-      .on(table.reversalTransactionId, table.kind)
-      .where(sql`reversal_transaction_id IS NOT NULL`),
+      .on(table.reversalTransactionId)
+      .where(sql`kind = 'recover'`),
+    // A fee goes back once per partner refund or dispute, however often its events arrive.
+    uniqueIndex('share_transfers_fee_once')
+      .on(table.partnerReversalId)
+      .where(sql`kind = 'fee_return'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),

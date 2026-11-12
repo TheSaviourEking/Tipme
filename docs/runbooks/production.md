@@ -219,6 +219,8 @@ Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are
 
 Shares (option B, `docs/00-DECISIONS.md`, 11 Nov 2026) need `BUSINESS_SHARES_ENABLED=true` on **both** the API and the worker: the API fixes a share on a tip and shows it before paying; the worker moves each share staff → TipMe → business once its tip's money is available (`BUSINESS_SHARE_SETTLE_HOURS`, default 48), and puts refunds right. With the worker's flag off, shares sit on the staff accounts and nothing moves. A `share_transfer_stuck` issue means TipMe may be holding a business's share: check the partner dashboard for the transfers with the keys in the issue before doing anything.
 
+`REFUND_FEE_RETURN=true` (API and worker, owner's call, 12 Nov 2026) returns TipMe's fee on every refunded tip once `refund.paid` arrives, and on a lost dispute staff reverse. It is off by default with our real partner. With only this flag on, the worker moves fee returns and nothing else.
+
 **Before turning it on:**
 
 1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.

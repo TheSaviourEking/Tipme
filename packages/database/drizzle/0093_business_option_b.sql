@@ -19,7 +19,7 @@ CREATE TABLE "share_transfers" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"tip_id" uuid NOT NULL,
 	"kind" text NOT NULL,
-	"business_id" uuid NOT NULL,
+	"business_id" uuid,
 	"profile_id" uuid NOT NULL,
 	"currency" char(3) NOT NULL,
 	"amount_minor" bigint NOT NULL,
@@ -29,6 +29,7 @@ CREATE TABLE "share_transfers" (
 	"out_reference" text,
 	"in_reference" text,
 	"reversal_transaction_id" uuid,
+	"partner_reversal_id" text,
 	"parent_id" uuid,
 	"holdback_id" uuid,
 	"attempts" integer DEFAULT 0 NOT NULL,
@@ -42,8 +43,10 @@ CREATE TABLE "share_transfers" (
 	CONSTRAINT "share_transfers_amount" CHECK (amount_minor > 0),
 	CONSTRAINT "share_transfers_deliver" CHECK (deliver_minor IS NULL OR (deliver_minor >= 0 AND deliver_minor <= amount_minor)),
 	CONSTRAINT "share_transfers_one_leg" CHECK (kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')),
-	CONSTRAINT "share_transfers_links" CHECK ((kind IN ('recover', 'fee_return')) = (reversal_transaction_id IS NOT NULL)
-        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL))
+	CONSTRAINT "share_transfers_links" CHECK ((kind = 'recover') = (reversal_transaction_id IS NOT NULL)
+        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
+        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)),
+	CONSTRAINT "share_transfers_business" CHECK (kind = 'fee_return' OR business_id IS NOT NULL)
 );
 --> statement-breakpoint
 ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
@@ -63,7 +66,8 @@ ALTER TABLE "share_transfers" ADD CONSTRAINT "share_transfers_parent_id_share_tr
 ALTER TABLE "share_transfers" ADD CONSTRAINT "share_transfers_holdback_id_share_holdbacks_id_fk" FOREIGN KEY ("holdback_id") REFERENCES "public"."share_holdbacks"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "share_holdbacks_open" ON "share_holdbacks" USING btree ("business_id","created_at") WHERE remaining_minor > 0;--> statement-breakpoint
 CREATE UNIQUE INDEX "share_transfers_one_sweep" ON "share_transfers" USING btree ("tip_id") WHERE kind = 'sweep';--> statement-breakpoint
-CREATE UNIQUE INDEX "share_transfers_once_per_reversal" ON "share_transfers" USING btree ("reversal_transaction_id","kind") WHERE reversal_transaction_id IS NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX "share_transfers_once_per_reversal" ON "share_transfers" USING btree ("reversal_transaction_id") WHERE kind = 'recover';--> statement-breakpoint
+CREATE UNIQUE INDEX "share_transfers_fee_once" ON "share_transfers" USING btree ("partner_reversal_id") WHERE kind = 'fee_return';--> statement-breakpoint
 CREATE UNIQUE INDEX "share_transfers_once_per_holdback" ON "share_transfers" USING btree ("parent_id","holdback_id") WHERE parent_id IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "share_transfers_due" ON "share_transfers" USING btree ("status","next_attempt_at");--> statement-breakpoint
 CREATE INDEX "share_transfers_business" ON "share_transfers" USING btree ("business_id","status");--> statement-breakpoint

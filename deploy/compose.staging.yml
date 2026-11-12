@@ -51,6 +51,8 @@ services:
       BUSINESS_ENABLED: ${BUSINESS_ENABLED:-false}
       # Business release 2, each on top of BUSINESS_ENABLED: off until the owner turns it on.
       BUSINESS_SHARES_ENABLED: ${BUSINESS_SHARES_ENABLED:-false}
+      # Owner, 12 Nov 2026: return TipMe's fee on every refunded tip. Off until the owner turns it on.
+      REFUND_FEE_RETURN: ${REFUND_FEE_RETURN:-false}
       TEAM_TIPS_ENABLED: ${TEAM_TIPS_ENABLED:-false}
       LIVE_MAX_STREAMS: ${LIVE_MAX_STREAMS:-2000}
       # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
@@ -178,6 +180,7 @@ services:
       # Option B: the worker moves business shares only with this on (with the API's).
       BUSINESS_SHARES_ENABLED: ${BUSINESS_SHARES_ENABLED:-false}
       BUSINESS_SHARE_SETTLE_HOURS: ${BUSINESS_SHARE_SETTLE_HOURS:-48}
+      REFUND_FEE_RETURN: ${REFUND_FEE_RETURN:-false}
       MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
       MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:-mock}
       ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}

@@ -8,6 +8,7 @@ import {
   businessShareMoney,
   createPaymentIntent,
   createQuote,
+  flagPaymentReversal,
   markAttemptInitiated,
   recordProviderEvent,
   requestBusinessWithdrawal,
@@ -219,18 +220,44 @@ test('option B: shares and their money', async (t) => {
       signatureVerified: true,
       payload: {},
     });
-    return { tipId: intent.tipId, quote };
+    return { tipId: intent.tipId, attemptId: intent.attemptId, quote };
   };
+  /** Our partner's refund events for a tip, as the webhook passes them on. */
+  const refundEvent = (attemptId, refundId, refundState, extra = {}) =>
+    flagPaymentReversal(db, {
+      attemptId,
+      eventId: `evt_${randomUUID()}`,
+      eventType: `refund.${refundState === 'pending' ? 'created' : refundState}`,
+      partnerReversalId: `refund.${refundId}`,
+      refundState,
+      ...(refundState === 'paid'
+        ? { refundedMinor: extra.refundedMinor ?? GROSS, refundFeeMinor: 0n }
+        : {}),
+      ...(extra.feeReturnOn ? { feeReturnOn: true } : {}),
+    });
   /** What the partner does on a refund: the staff member's account pays it all (sandbox S5). */
-  const refund = async (partner, tipId, refundedMinor = GROSS) => {
+  /**
+   * A refund as it happens: our partner takes it from the staff member's account and says
+   * refund.paid (the webhook), then staff confirm the reversal (tip.reverse).
+   */
+  const refund = async (
+    partner,
+    { tipId, attemptId },
+    { refundedMinor = GROSS, feeReturnOn = false } = {},
+  ) => {
     partner.available.set(
       TOBI.id,
       (partner.available.get(TOBI.id) ?? 0n) - refundedMinor,
     );
+    const refundId = randomUUID();
+    await refundEvent(attemptId, refundId, 'paid', {
+      refundedMinor,
+      feeReturnOn,
+    });
     return db.transaction((tx) =>
       reverseTip(tx, {
         tipId,
-        partnerReversalId: `refund.${randomUUID()}`,
+        partnerReversalId: `refund.${refundId}`,
         refundedMinor,
       }),
     );
@@ -512,8 +539,9 @@ test('option B: shares and their money', async (t) => {
       const shared = await atBusiness();
       const partner = pretendPartner();
       partner.available.set(TOBI.id, 900000n);
-      const { tipId } = await paidTip({ shared });
-      await refund(partner, tipId); // Tobi's account: ₦9,000 - ₦10,000 = -₦1,000
+      const tip = await paidTip({ shared });
+      const { tipId } = tip;
+      await refund(partner, tip); // Tobi's account: ₦9,000 - ₦10,000 = -₦1,000
       assert.deepEqual(await transfersOf(tipId), [
         { kind: 'sweep', status: 'cancelled', amount: '180000', deliver: null },
         {
@@ -551,9 +579,10 @@ test('option B: shares and their money', async (t) => {
       const shared = await atBusiness();
       const partner = pretendPartner();
       partner.available.set(TOBI.id, 900000n);
-      const { tipId } = await paidTip({ shared });
+      const tip = await paidTip({ shared });
+      const { tipId } = tip;
       await run(partner, later(SETTLE + MINUTE));
-      await refund(partner, tipId); // Tobi: ₦7,200 - ₦10,000 = -₦2,800
+      await refund(partner, tip); // Tobi: ₦7,200 - ₦10,000 = -₦2,800
       await run(partner, later(SETTLE + 2 * MINUTE));
       const moves = partner.calls
         .filter((c) => c.call !== 'find')
@@ -601,7 +630,7 @@ test('option B: shares and their money', async (t) => {
       await run(partner, later(SETTLE + MINUTE));
       // The business withdrew its ₦1,800 at the partner (its account is empty).
       partner.available.set(shared.businessId, 0n);
-      await refund(partner, first.tipId);
+      await refund(partner, first);
       await run(partner, later(SETTLE + 2 * MINUTE));
       const kinds = Object.fromEntries(
         (await transfersOf(first.tipId)).map((r) => [r.kind, r.status]),
@@ -674,12 +703,151 @@ test('option B: shares and their money', async (t) => {
     async () => {
       await database.fresh();
       const partner = pretendPartner();
-      const { tipId } = await paidTip({ sharesOn: false });
+      const tip = await paidTip({ sharesOn: false });
+      const { tipId } = tip;
       partner.available.set(TOBI.id, 900000n);
-      await refund(partner, tipId);
+      await refund(partner, tip);
       await run(partner, later(SETTLE + MINUTE));
       assert.deepEqual(await transfersOf(tipId), []);
       assert.deepEqual(partner.calls, []);
+    },
+  );
+
+  // Owner, 12 Nov 2026: TipMe returns its fee on EVERY refunded tip once the refund is final
+  // (refund.paid), behind REFUND_FEE_RETURN, keyed on the refund so it happens exactly once.
+  const feeReturns = (tipId) =>
+    q(
+      `SELECT status, amount_minor::text AS amount, partner_reversal_id AS refund
+         FROM share_transfers WHERE tip_id = $1 AND kind = 'fee_return'`,
+      [tipId],
+    );
+
+  await t.test(
+    'an individual tip refunded: its fee goes back once refund.paid says so, however often it is said',
+    async () => {
+      await database.fresh();
+      const partner = pretendPartner();
+      const tip = await paidTip({ sharesOn: false });
+      partner.available.set(TOBI.id, 900000n - GROSS); // the partner took the refund
+      const refundId = randomUUID();
+      await refundEvent(tip.attemptId, refundId, 'pending', {
+        feeReturnOn: true,
+      });
+      assert.deepEqual(await feeReturns(tip.tipId), []);
+      // refund.paid, delivered twice (a replayed webhook), and a second event about it.
+      for (let i = 0; i < 3; i += 1)
+        await refundEvent(tip.attemptId, refundId, 'paid', {
+          feeReturnOn: true,
+        });
+      assert.deepEqual(await feeReturns(tip.tipId), [
+        { status: 'out_paid', amount: '100000', refund: `refund.${refundId}` },
+      ]);
+      await run(partner, later(MINUTE));
+      await run(partner, later(2 * MINUTE));
+      assert.deepEqual(
+        partner.calls.map(({ call, from, to, amountMinor }) => ({
+          call,
+          from,
+          to,
+          amountMinor,
+        })),
+        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n }],
+      );
+      // Tobi ends even at the partner; staff confirming the reversal later adds nothing.
+      assert.equal(partner.available.get(TOBI.id), 0n);
+      await db.transaction((tx) =>
+        reverseTip(tx, {
+          tipId: tip.tipId,
+          partnerReversalId: `refund.${refundId}`,
+          refundedMinor: GROSS,
+        }),
+      );
+      await run(partner, later(3 * MINUTE));
+      assert.equal(partner.calls.length, 1);
+      assert.equal((await feeReturns(tip.tipId))[0].status, 'done');
+      // The ledger already took TipMe's fee back in the reversal: Tobi's balance and partner match.
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+    },
+  );
+
+  await t.test('a refund that failed returns nothing', async () => {
+    await database.fresh();
+    const partner = pretendPartner();
+    const tip = await paidTip({ sharesOn: false });
+    const refundId = randomUUID();
+    await refundEvent(tip.attemptId, refundId, 'pending', {
+      feeReturnOn: true,
+    });
+    await refundEvent(tip.attemptId, refundId, 'failed', { feeReturnOn: true });
+    // A late paid after the failure is ignored: a final state is never undone.
+    await refundEvent(tip.attemptId, refundId, 'paid', { feeReturnOn: true });
+    assert.deepEqual(await feeReturns(tip.tipId), []);
+    await run(partner, later(MINUTE));
+    assert.deepEqual(partner.calls, []);
+  });
+
+  await t.test(
+    'a business tip with a share: the fee goes back once, not twice, beside the share coming back',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, 900000n);
+      const tip = await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      await refund(partner, tip, { feeReturnOn: true });
+      await run(partner, later(SETTLE + 2 * MINUTE));
+      const kinds = (await transfersOf(tip.tipId)).map((r) => [
+        r.kind,
+        r.status,
+      ]);
+      assert.deepEqual(kinds.sort(), [
+        ['fee_return', 'done'],
+        ['recover', 'done'],
+        ['sweep', 'done'],
+      ]);
+      const fees = partner.calls.filter(
+        (c) => c.call === 'send' && c.amountMinor === 100000n,
+      );
+      assert.equal(fees.length, 1);
+      assert.equal(partner.available.get(TOBI.id), 0n);
+    },
+  );
+
+  await t.test(
+    'with REFUND_FEE_RETURN off, a plain tip’s refund returns nothing',
+    async () => {
+      await database.fresh();
+      const tip = await paidTip({ sharesOn: false });
+      await refundEvent(tip.attemptId, randomUUID(), 'paid');
+      assert.deepEqual(await feeReturns(tip.tipId), []);
+    },
+  );
+
+  await t.test(
+    'a lost dispute reversed by staff returns the fee once, keyed on the dispute',
+    async () => {
+      await database.fresh();
+      const partner = pretendPartner();
+      const tip = await paidTip({ sharesOn: false });
+      const dispute = `dispute.${randomUUID().replaceAll('-', '')}`;
+      const reverse = () =>
+        db.transaction((tx) =>
+          reverseTip(tx, {
+            tipId: tip.tipId,
+            partnerReversalId: dispute,
+            refundedMinor: GROSS,
+            feeReturnOn: true,
+          }),
+        );
+      await reverse();
+      await reverse(); // a repeat of the same dispute is a no-op
+      assert.deepEqual(await feeReturns(tip.tipId), [
+        { status: 'out_paid', amount: '100000', refund: dispute },
+      ]);
+      partner.available.set(TOBI.id, 0n);
+      await run(partner, later(MINUTE));
+      assert.equal(partner.available.get(TOBI.id), 100000n);
     },
   );
 });

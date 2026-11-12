@@ -55,6 +55,7 @@ import {
   withdrawalsSwitchState,
 } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
+import { scheduleFeeReturn } from './share-transfers.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -500,6 +501,8 @@ export function flagPaymentReversal(
     refundState?: 'pending' | 'paid' | 'failed' | null;
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
+    /** REFUND_FEE_RETURN (owner, 12 Nov 2026): a final refund sends TipMe's fee back. */
+    feeReturnOn?: boolean;
     now?: Date;
   },
 ): Promise<'flagged' | 'dispute_won'> {
@@ -595,6 +598,21 @@ export function flagPaymentReversal(
         });
         issueId = issue.id;
       }
+      // A final refund (refund.paid, never after a final failure): TipMe's fee goes back to the
+      // person once, keyed on the refund, however often the event arrives. A shared tip always.
+      if (
+        state === 'paid' &&
+        input.refundedMinor &&
+        partnerReversalId &&
+        tip &&
+        known?.subject.refundState !== 'failed' &&
+        (input.feeReturnOn || tip.businessId)
+      )
+        await scheduleFeeReturn(tx, {
+          tipId: tip.id,
+          partnerReversalId,
+          refundedMinor: input.refundedMinor,
+        });
       // A failed refund moved nothing: no hold for it.
       if (state === 'failed') return 'flagged' as const;
       // Everyone the tip paid waits: the person, or each person of a team tip (R2-D). Never a

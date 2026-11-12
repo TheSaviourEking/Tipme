@@ -124,6 +124,12 @@ const DESTINATION: Record<ShareTransferKind, 'staff' | 'business'> = {
 
 type Row = typeof shareTransfers.$inferSelect;
 
+/** Every kind but a fee return is about a business (the database checks it). */
+function businessOf(row: Row): string {
+  if (!row.businessId) throw new Error('this share transfer names no business');
+  return row.businessId;
+}
+
 /**
  * Called with the payment's posting, in its transaction: a paid shared tip gets one sweep, waiting
  * for the tip's money to become available on the staff member's account. Once per tip.
@@ -160,8 +166,7 @@ export async function scheduleShareSweep(
  * Our partner takes the whole refund from the staff member's account and keeps TipMe's fee with
  * TipMe (sandbox S5), so to leave them even (owner, 11 Nov 2026):
  *
- * - TipMe sends back what the reversal took from its fee (`fee_return`, TipMe -> staff); TipMe
- *   absorbs the partner's own processing fee.
+ * - TipMe's fee: `scheduleFeeReturn`, once per partner refund (see there).
  * - The business's part: a sweep still waiting simply moves less (or nothing): the money never left
  *   the staff member's account. Once the sweep has started, the business gives it back
  *   (`recover`, business -> TipMe -> staff), after the sweep has finished.
@@ -193,7 +198,9 @@ export async function planRefundTransfers(
     )
     .for('update');
   if (!sweep) return;
-  const { feeReturnMinor, businessBackMinor } = refundMoves(input.lines, {
+  // TipMe's fee goes back through `scheduleFeeReturn` (reverseTip calls it for every tip it
+  // applies to, keyed on the partner's refund), never here: one fee return per refund.
+  const { businessBackMinor } = refundMoves(input.lines, {
     businessId: share.businessId,
   });
   const base = {
@@ -204,18 +211,6 @@ export async function planRefundTransfers(
     provider: sweep.provider,
     reversalTransactionId: input.reversalTransactionId,
   };
-  if (feeReturnMinor > 0n)
-    await tx
-      .insert(shareTransfers)
-      .values({
-        ...base,
-        id: newId(),
-        kind: 'fee_return',
-        amountMinor: feeReturnMinor,
-        deliverMinor: feeReturnMinor,
-        status: 'out_paid',
-      })
-      .onConflictDoNothing();
   if (businessBackMinor <= 0n) return;
   if (sweep.status === 'waiting') {
     // Under the sweep's lock: the worker claims it with a conditional update, so it is still unsent.
@@ -241,6 +236,81 @@ export async function planRefundTransfers(
       status: 'waiting',
     })
     .onConflictDoNothing();
+}
+
+/**
+ * TipMe returns its platform fee on a refunded tip (owner, 12 Nov 2026; for a shared tip already on
+ * 11 Nov): our partner takes the whole refund from the person's account and keeps TipMe's fee with
+ * TipMe, so TipMe sends it back, TipMe -> the person's account, and absorbs the partner's own
+ * processing fee. Called when a refund is final (`refund.paid`) and when staff reverse a lost
+ * dispute. Exactly once per partner refund or dispute (the `share_transfers_fee_once` index), and
+ * never more than the tip's fee in all. `amountMinor` is the reversal's own figure when there is
+ * one; otherwise the fee in proportion to what was refunded, rounded down.
+ *
+ * The ledger needs nothing more: the reversal already takes TipMe's fee back from its revenue
+ * (`buildReversalPosting`), and both balances this moves between are the partner balance
+ * (`provider_clearing`). This makes the person's partner balance match what the ledger says.
+ */
+export async function scheduleFeeReturn(
+  tx: Tx,
+  input: {
+    tipId: string;
+    partnerReversalId: string;
+    refundedMinor: bigint;
+    amountMinor?: bigint;
+  },
+): Promise<boolean> {
+  const result = await tx.execute<{
+    profile_id: string | null;
+    currency: string;
+    gross: string;
+    fee: string;
+    provider: string | null;
+    business_id: string | null;
+    returned: string;
+  }>(sql`
+    SELECT t.profile_id, t.currency, q.tip_minor::text AS gross,
+           -- What our partner kept for TipMe: its platform fee is TipMe's fee plus the provider
+           -- fee TipMe took from the tip (the checkout's tipmeShareMinor), both returned.
+           (q.platform_fee_minor + q.provider_fee_minor)::text AS fee,
+           (SELECT a.provider FROM payment_attempts a
+             WHERE a.intent_id = t.intent_id AND a.status = 'VERIFIED_SUCCEEDED' LIMIT 1) AS provider,
+           (SELECT s.business_id FROM tip_business_shares s WHERE s.tip_id = t.id) AS business_id,
+           (SELECT COALESCE(SUM(r.amount_minor), 0) FROM share_transfers r
+             WHERE r.tip_id = t.id AND r.kind = 'fee_return')::text AS returned
+      FROM tips t
+      JOIN payment_intents i ON i.id = t.intent_id
+      JOIN tip_quotes q ON q.id = i.quote_id
+     WHERE t.id = ${input.tipId}
+     FOR UPDATE OF t`);
+  const tip = result.rows[0];
+  // A team tip (no one person) and a tip never confirmed paid have nothing to send back here.
+  if (!tip?.profile_id || !tip.provider) return false;
+  const fee = BigInt(tip.fee);
+  const gross = BigInt(tip.gross);
+  const proportional = gross > 0n ? (fee * input.refundedMinor) / gross : 0n;
+  const wanted = input.amountMinor ?? proportional;
+  const left = fee - BigInt(tip.returned);
+  const amountMinor = wanted < left ? wanted : left;
+  if (amountMinor <= 0n) return false;
+  const inserted = await tx
+    .insert(shareTransfers)
+    .values({
+      id: newId(),
+      tipId: input.tipId,
+      kind: 'fee_return',
+      businessId: tip.business_id,
+      profileId: tip.profile_id,
+      currency: tip.currency,
+      amountMinor,
+      deliverMinor: amountMinor,
+      status: 'out_paid',
+      provider: tip.provider,
+      partnerReversalId: input.partnerReversalId,
+    })
+    .onConflictDoNothing()
+    .returning({ id: shareTransfers.id });
+  return inserted.length === 1;
 }
 
 /** The partner account of a staff member or a business, or (the pretend partner) their own id. */
@@ -275,7 +345,7 @@ async function accountOf(
 const sideOf = (row: Row, side: 'staff' | 'business') =>
   side === 'staff'
     ? { profileId: row.profileId }
-    : { businessId: row.businessId };
+    : { businessId: businessOf(row) };
 
 /** A conditional move: only from `from`, so of two workers exactly one gets it. */
 async function claim(
@@ -352,7 +422,7 @@ async function confirmOut(
         .from(shareHoldbacks)
         .where(
           and(
-            eq(shareHoldbacks.businessId, current.businessId),
+            eq(shareHoldbacks.businessId, businessOf(current)),
             gt(shareHoldbacks.remainingMinor, 0n),
           ),
         )
@@ -377,7 +447,7 @@ async function confirmOut(
           id: newId(),
           tipId: holdback.tipId,
           kind: 'holdback_repay',
-          businessId: current.businessId,
+          businessId: businessOf(current),
           profileId: holdback.profileId,
           currency: current.currency,
           amountMinor: part.amountMinor,
@@ -419,7 +489,7 @@ async function recordGap(db: Database, row: Row, now: Date): Promise<void> {
     const holdbackId = newId();
     await tx.insert(shareHoldbacks).values({
       id: holdbackId,
-      businessId: current.businessId,
+      businessId: businessOf(current),
       profileId: current.profileId,
       tipId: current.tipId,
       recoverId: current.id,
@@ -430,16 +500,16 @@ async function recordGap(db: Database, row: Row, now: Date): Promise<void> {
     const [business] = await tx
       .select({ name: businesses.name })
       .from(businesses)
-      .where(eq(businesses.id, current.businessId));
+      .where(eq(businesses.id, businessOf(current)));
     const naira = `₦${new Intl.NumberFormat('en-NG', { minimumFractionDigits: 2 }).format(Number(current.amountMinor) / 100)}`;
-    for (const userId of await businessManagerUsers(tx, current.businessId, {
+    for (const userId of await businessManagerUsers(tx, businessOf(current), {
       owners: true,
     }))
       await tx.insert(notifications).values({
         id: newId(),
         userId,
         kind: 'business_share_held_back',
-        businessId: current.businessId,
+        businessId: businessOf(current),
         title: 'A refunded tip’s share is held back',
         body: `A tip shared with ${business?.name ?? 'your business'} was refunded after its share had been withdrawn. ${naira} will be held back from the business’s next shares and returned to the staff member.`,
         createdAt: now,
@@ -676,6 +746,8 @@ export async function runShareTransfers(
     settleWaitMs: number;
     readBackAfterMs?: number;
     limit?: number;
+    /** Only these kinds (the worker: fee returns alone while shares are off). */
+    kinds?: readonly ShareTransferKind[];
   },
 ): Promise<{ checked: number; failed: number }> {
   const { now, provider } = input;
@@ -690,6 +762,9 @@ export async function runShareTransfers(
       .where(
         and(
           eq(shareTransfers.provider, recordedProviderName(provider.name)),
+          ...(input.kinds
+            ? [inArray(shareTransfers.kind, [...input.kinds])]
+            : []),
           or(
             and(
               eq(shareTransfers.status, 'waiting'),

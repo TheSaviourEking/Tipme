@@ -30,6 +30,7 @@ import {
   recordUnmatchedEvent,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
@@ -67,6 +68,10 @@ export class WebhookService {
     private readonly mockProvider: {
       verifyTransaction(reference: string): Promise<ProVerified>;
     } | null = null,
+    // REFUND_FEE_RETURN (owner, 12 Nov 2026). Optional, as above: without it nothing is returned.
+    @Optional()
+    @Inject(API_CONFIG)
+    private readonly config: Pick<ApiConfig, 'REFUND_FEE_RETURN'> | null = null,
   ) {}
 
   /** After a Pro payment changed a page's plan: its public page and open tabs re-read. */
@@ -444,6 +449,7 @@ export class WebhookService {
       refundState: event.refundState,
       refundedMinor: event.refundedMinor,
       refundFeeMinor: event.refundFeeMinor,
+      ...(this.config?.REFUND_FEE_RETURN ? { feeReturnOn: true } : {}),
     });
     return flagged === 'dispute_won' ? 'dispute_won' : 'reversal_flagged';
   }

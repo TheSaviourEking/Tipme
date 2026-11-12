@@ -499,7 +499,7 @@ export async function startJobWorker(
             const pro = await reconcileProEverywhere(now);
             // Option B: business shares between partner accounts, each leg once and read back.
             const shares = { checked: 0, failed: 0 };
-            if (config.BUSINESS_SHARES_ENABLED)
+            if (config.BUSINESS_SHARES_ENABLED || config.REFUND_FEE_RETURN)
               for (const provider of [mockProvider, bachsProvider]) {
                 if (!provider?.collectToPlatform || !provider.transferToAccount)
                   continue;
@@ -507,6 +507,10 @@ export async function startJobWorker(
                   provider,
                   now,
                   settleWaitMs: config.BUSINESS_SHARE_SETTLE_HOURS * 3_600_000,
+                  // With only REFUND_FEE_RETURN on, only refunded tips' fees move.
+                  ...(config.BUSINESS_SHARES_ENABLED
+                    ? {}
+                    : { kinds: ['fee_return' as const] }),
                 });
                 shares.checked += result.checked;
                 shares.failed += result.failed;

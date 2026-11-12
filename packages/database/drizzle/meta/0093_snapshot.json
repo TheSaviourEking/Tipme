@@ -1,5 +1,5 @@
 {
-  "id": "e53dd20f-1d8d-4cdd-bc5a-bc8473cffe40",
+  "id": "cc9be844-767d-4ef5-b923-b8ea20eb8fff",
   "prevId": "a3ad442d-ffab-4a82-b4b2-60cc45f04c46",
   "version": "7",
   "dialect": "postgresql",
@@ -9254,7 +9254,7 @@
           "name": "business_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "profile_id": {
           "name": "profile_id",
@@ -9307,6 +9307,12 @@
         "reversal_transaction_id": {
           "name": "reversal_transaction_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "partner_reversal_id": {
+          "name": "partner_reversal_id",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -9382,16 +9388,26 @@
               "isExpression": false,
               "asc": true,
               "nulls": "last"
-            },
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'recover'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_transfers_fee_once": {
+          "name": "share_transfers_fee_once",
+          "columns": [
             {
-              "expression": "kind",
+              "expression": "partner_reversal_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
-          "where": "reversal_transaction_id IS NOT NULL",
+          "where": "kind = 'fee_return'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -9547,7 +9563,11 @@
         },
         "share_transfers_links": {
           "name": "share_transfers_links",
-          "value": "(kind IN ('recover', 'fee_return')) = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)"
+          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)"
+        },
+        "share_transfers_business": {
+          "name": "share_transfers_business",
+          "value": "kind = 'fee_return' OR business_id IS NOT NULL"
         }
       },
       "isRLSEnabled": false

@@ -102,6 +102,12 @@ export const workerConfigSchema = z
     // question (e), the settlement delay for naira charges, is still open). Then it also waits
     // until the staff member's available balance holds it.
     BUSINESS_SHARE_SETTLE_HOURS: z.coerce.number().min(0).max(240).default(48),
+    // Owner, 12 Nov 2026: TipMe returns its platform fee on every refunded tip (once refund.paid
+    // is final) and on a lost dispute staff reverse, by transfer to the person's account. Unset:
+    // on with the pretend provider (and e2e), off with our real partner until the owner turns it
+    // on. The worker sends what the API asked for while this is on.
+    REFUND_FEE_RETURN: z.enum(['true', 'false']).optional(),
+
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z
@@ -226,6 +232,10 @@ export const workerConfigSchema = z
     REWARD_CASH_BUDGET_MINOR_PER_MONTH:
       config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ??
       (isProductionCopy(config) ? 0n : PRETEND_REWARD_CASH_BUDGET_MINOR),
+    REFUND_FEE_RETURN:
+      config.REFUND_FEE_RETURN === undefined
+        ? config.PAYMENT_PROVIDER === 'mock'
+        : config.REFUND_FEE_RETURN === 'true',
   }));
 export type WorkerConfig = z.infer<typeof workerConfigSchema>;
 

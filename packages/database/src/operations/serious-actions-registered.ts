@@ -751,6 +751,8 @@ const tipReverse = acting<TipReversePayload>({
       partnerReversalId: payload.partnerReversalId,
       refundFeeMinor: BigInt(refundFeeMinor ?? '0'),
       refundedMinor: BigInt(payload.refundedMinor),
+      // A lost dispute's fee goes back here; a refund's was already asked for at refund.paid.
+      ...(context.services?.refundFeeReturn ? { feeReturnOn: true } : {}),
       now: context.now,
     });
     return {
