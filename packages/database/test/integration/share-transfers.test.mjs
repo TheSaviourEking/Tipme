@@ -593,9 +593,8 @@ test('option B: shares and their money', async (t) => {
           to,
           amountMinor,
         }));
-      // The fee goes back at once; the share is pulled from the business, then sent on to Tobi.
+      // Both are asked for by the reversal, in one transaction: the share back, then the fee.
       assert.deepEqual(moves, [
-        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n },
         {
           call: 'collect',
           from: shared.businessId,
@@ -603,6 +602,7 @@ test('option B: shares and their money', async (t) => {
           amountMinor: 180000n,
         },
         { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 180000n },
+        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n },
       ]);
       assert.equal(partner.available.get(TOBI.id), 0n);
       assert.equal(partner.available.get(shared.businessId), 0n);
@@ -723,22 +723,33 @@ test('option B: shares and their money', async (t) => {
     );
 
   await t.test(
-    'an individual tip refunded: its fee goes back once refund.paid says so, however often it is said',
+    'shares off, fee return on: an individual tip’s refund.paid posts the reversal and returns the fee, each once',
     async () => {
       await database.fresh();
       const partner = pretendPartner();
       const tip = await paidTip({ sharesOn: false });
-      partner.available.set(TOBI.id, 900000n - GROSS); // the partner took the refund
+      // The ₦9,000 net reached Tobi's account; then the partner takes the whole ₦10,000 refund.
+      partner.available.set(TOBI.id, 900000n - GROSS);
+      const reversals = () =>
+        q(
+          `SELECT operation_key FROM ledger_transactions WHERE tip_id = $1 AND operation_type = 'reversal'`,
+          [tip.tipId],
+        );
       const refundId = randomUUID();
       await refundEvent(tip.attemptId, refundId, 'pending', {
         feeReturnOn: true,
       });
       assert.deepEqual(await feeReturns(tip.tipId), []);
-      // refund.paid, delivered twice (a replayed webhook), and a second event about it.
+      assert.deepEqual(await reversals(), []);
+      // refund.paid, delivered three times (replayed webhooks).
       for (let i = 0; i < 3; i += 1)
         await refundEvent(tip.attemptId, refundId, 'paid', {
           feeReturnOn: true,
         });
+      // The reversal is posted with the money, once; so is the fee's return.
+      assert.deepEqual(await reversals(), [
+        { operation_key: `reversal.refund.${refundId}` },
+      ]);
       assert.deepEqual(await feeReturns(tip.tipId), [
         { status: 'out_paid', amount: '100000', refund: `refund.${refundId}` },
       ]);
@@ -753,20 +764,39 @@ test('option B: shares and their money', async (t) => {
         })),
         [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 100000n }],
       );
-      // Tobi ends even at the partner; staff confirming the reversal later adds nothing.
-      assert.equal(partner.available.get(TOBI.id), 0n);
-      await db.transaction((tx) =>
+      // Staff confirming it afterwards posts nothing more, and nothing more moves.
+      const again = await db.transaction((tx) =>
         reverseTip(tx, {
           tipId: tip.tipId,
           partnerReversalId: `refund.${refundId}`,
           refundedMinor: GROSS,
+          feeReturnOn: true,
         }),
       );
+      assert.equal(again.created, false);
       await run(partner, later(3 * MINUTE));
       assert.equal(partner.calls.length, 1);
       assert.equal((await feeReturns(tip.tipId))[0].status, 'done');
-      // The ledger already took TipMe's fee back in the reversal: Tobi's balance and partner match.
+      assert.equal((await reversals()).length, 1);
+      // The ledger matches the partner: Tobi's balance is what their account holds (₦0), and TipMe's
+      // books show its fee gone (revenue back to zero for this tip), every transaction balanced.
+      assert.equal(partner.available.get(TOBI.id), 0n);
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      const [revenue] = await q(
+        `SELECT COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+           FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+           JOIN ledger_transactions x ON x.id = e.transaction_id
+          WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')`,
+        [tip.tipId],
+      );
+      assert.equal(revenue.net, '0');
+      assert.deepEqual(
+        await q(
+          `SELECT transaction_id FROM ledger_entries GROUP BY transaction_id, currency
+            HAVING sum(CASE WHEN side = 'debit' THEN amount_minor ELSE -amount_minor END) <> 0`,
+        ),
+        [],
+      );
     },
   );
 

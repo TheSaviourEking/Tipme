@@ -55,7 +55,7 @@ import {
   withdrawalsSwitchState,
 } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
-import { scheduleFeeReturn } from './share-transfers.js';
+import { reverseTip } from './reversals.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -598,21 +598,42 @@ export function flagPaymentReversal(
         });
         issueId = issue.id;
       }
-      // A final refund (refund.paid, never after a final failure): TipMe's fee goes back to the
-      // person once, keyed on the refund, however often the event arrives. A shared tip always.
+      // Owner, 12 Nov 2026 (REFUND_FEE_RETURN): once a refund is final (refund.paid, for the
+      // amount it gave back; never after a final failure), it is reversed in the ledger here, in
+      // this transaction, and that reversal asks for TipMe's fee to go back (`reverseTip`). Money
+      // never moves without its posting, and both are keyed on the refund: a replayed event finds
+      // the reversal done and does nothing. Staff confirming it later is refused as done. If it
+      // can't be reversed here (more than is left), it waits for staff, as before.
       if (
+        input.feeReturnOn &&
         state === 'paid' &&
         input.refundedMinor &&
         partnerReversalId &&
         tip &&
-        known?.subject.refundState !== 'failed' &&
-        (input.feeReturnOn || tip.businessId)
-      )
-        await scheduleFeeReturn(tx, {
-          tipId: tip.id,
-          partnerReversalId,
-          refundedMinor: input.refundedMinor,
-        });
+        known?.subject.refundState !== 'failed'
+      ) {
+        try {
+          const reversed = await tx.transaction((savepoint) =>
+            reverseTip(savepoint, {
+              tipId: tip.id,
+              partnerReversalId,
+              refundedMinor: input.refundedMinor!,
+              refundFeeMinor: input.refundFeeMinor ?? 0n,
+              feeReturnOn: true,
+              now,
+            }),
+          );
+          if (reversed.created)
+            await tx
+              .update(issues)
+              .set({
+                summary: sql`${issues.summary} || ${' TipMe reversed it in the ledger when the refund was final, and its fee is going back to the person. Check it, then close this issue.'}`,
+              })
+              .where(eq(issues.id, issueId));
+        } catch (error) {
+          if (!(error instanceof OperationError)) throw error;
+        }
+      }
       // A failed refund moved nothing: no hold for it.
       if (state === 'failed') return 'flagged' as const;
       // Everyone the tip paid waits: the person, or each person of a team tip (R2-D). Never a

@@ -729,9 +729,9 @@ const tipReverse = acting<TipReversePayload>({
       issue.subject.tipId !== payload.tipId
     )
       throw new OperationError('INVALID_INPUT');
-    // Approval may come after the flags were turned off: then nothing posts (review finding 3).
-    if (!context.services?.businessSharesEnabled)
-      throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
+    // Every refunded or charged-back tip is reversed, whatever the release 2 flags (owner, 12 Nov
+    // 2026: money never moves without its posting). The shares flag gates only what is about a
+    // share: the worker moves a business's share back only while it is on.
     // Each partner refund or dispute is reversed once; a second request for it is refused.
     if (await alreadyReversed(tx, payload.partnerReversalId))
       throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed_this');
