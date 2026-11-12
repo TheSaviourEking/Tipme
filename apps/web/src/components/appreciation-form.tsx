@@ -136,6 +136,17 @@ export function AppreciationForm({
   // when the name is emptied, so a new name always asks again.
   const [recognise, setRecognise] = useState(false);
   const [error, setError] = useState('');
+  // The minimum, said quietly while typing (public-boards PR 9, Q1): only after a 700 ms pause, so
+  // typing 2,000 through 2, 20 and 200 is never scolded. Not on blur: a hint appearing as the
+  // field loses focus to the Tip key would move the key under the pointer mid-click.
+  // The typed text at the last pause: any keystroke after it means typing again.
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const typingPaused = pausedAt === custom;
+  useEffect(() => {
+    if (!custom) return;
+    const timer = window.setTimeout(() => setPausedAt(custom), 700);
+    return () => window.clearTimeout(timer);
+  }, [custom]);
   // The optional details stay mounted when closed, so what was typed survives closing.
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [messageError, setMessageError] = useState('');
@@ -170,6 +181,7 @@ export function AppreciationForm({
   const form = useRef<HTMLFormElement>(null);
   const onProfile = surface === 'profile';
 
+  const minimumRule = `Enter an amount of ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`;
   const amount =
     selection === 'other'
       ? options.parse(custom)
@@ -252,7 +264,7 @@ export function AppreciationForm({
     if (!amount) {
       setError(
         selection === 'other'
-          ? `Enter an amount of ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`
+          ? minimumRule
           : 'Choose an amount or enter your own.',
       );
       if (selection === 'other') customField.current?.focus();
@@ -485,6 +497,12 @@ export function AppreciationForm({
   // lights up (states plan, Task 9). A mistyped one gets the line alone.
   const belowMinimum =
     selection === 'other' && Boolean(error) && options.belowMinimum(custom);
+  // The same words as the error, as a hint (not an alert, no red edge) until Tip is pressed.
+  const minimumHint =
+    selection === 'other' &&
+    !error &&
+    typingPaused &&
+    options.belowMinimum(custom);
   const extras = (
     <>
       <div className="tm-field">
@@ -753,9 +771,15 @@ export function AppreciationForm({
             setCustom(event.target.value);
             setError('');
           }}
+          aria-describedby={minimumHint ? `${id}-minimum` : undefined}
           error={selection === 'other' && error ? error : undefined}
           flag={belowMinimum ? `below ${options.minLabel}` : ''}
         />
+        {minimumHint && (
+          <p id={`${id}-minimum`} className="tm-hint tip-minimum-hint">
+            {minimumRule}
+          </p>
+        )}
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
             {shown.kind === 'failed' ? shown.message : ''}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Coming soon</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}
+.board{width:1840px;height:1200px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.label{margin:0 0 12px;font-size:13px;font-weight:700;color:#5d5a54}
+.tag{display:inline-block;margin:0 0 12px;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:800}
+.tag.now{background:#fffefa;border:1px solid rgba(20,18,16,.16);color:#5d5a54}
+.tag.new{background:#7a32f9;color:#fff}
+.tag.red{background:#141210;color:#fff}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.note{margin:12px 0 0;font-size:13.5px;line-height:1.55;color:#5d5a54;max-width:62ch}
+.note b{color:#000}
+.src{font-size:12px;color:#7a766f}
+.paper{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32)}
+.ico{display:inline-flex;align-items:center;justify-content:center;flex:none;background:radial-gradient(120% 90% at 30% 15%,#9a63ff 0,#7a32f9 55%,#5f1fd6 100%);box-shadow:inset 0 1px 0 rgba(255,255,255,.3),inset 0 -2px 0 rgba(40,8,110,.35)}
+
+.frame{border-radius:18px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4)}
+.cs{background:linear-gradient(135deg,rgba(122,50,249,.035),transparent 34%),#f3f2ee;box-sizing:border-box;display:grid}
+.cs .eyebrow{margin:0 0 12px;font-size:14px;font-weight:700;color:#5d5a54}
+.cs h1{margin:0;font-family:'DM Serif Display',Georgia,serif;font-weight:400;line-height:.95;letter-spacing:-.02em;text-wrap:balance}
+.cs .lede{margin:16px 0 0;color:#3d3a35;line-height:1.5}
+.well{border-radius:28px;background:#eceae4;border:1px solid rgba(20,18,16,.12);box-shadow:inset 0 2px 4px rgba(20,18,16,.12)}
+.keys{display:grid;gap:12px}
+.k{position:relative;display:flex;flex-direction:column;justify-content:space-between;border-radius:20px;background:linear-gradient(rgba(255,255,255,.95),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 6px 0 #d8d5cd,0 18px 26px -18px rgba(20,18,16,.45)}
+.k b{font-family:'DM Serif Display',Georgia,serif;font-weight:400;line-height:.85;font-variant-numeric:tabular-nums}
+.k span{font-size:13px;font-weight:700;color:#5d5a54}
+.k.on{background:radial-gradient(120% 90% at 30% 15%,#9a63ff 0,#7a32f9 55%,#5f1fd6 100%);border-color:#6420dc;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 6px 0 #4f16af,0 18px 26px -16px rgba(77,22,168,.7)}
+.k.on span{color:#efe6ff}
+.foot{display:flex;justify-content:space-between;align-items:center;border-top:1px solid rgba(20,18,16,.14);padding-top:12px;font-size:13px;color:#5d5a54}
+.foot time{color:#000;font-weight:700}
+.finding{padding:16px 18px;border-radius:14px;background:#141210;color:#fff;font-size:13.5px;line-height:1.55}
+.finding b{color:#fff}
+.finding code{font-size:12px;color:#d9c8ff}
+
+</style>
+</helmet>
+<div class="board">
+
+<div style="display:grid;grid-template-columns:1200px 390px;gap:56px;align-items:start">
+  <div>
+    <span class="tag new">Redesigned</span>
+    <p class="label">/coming-soon on a desktop: every page shows it while a launch time is set and still ahead</p>
+    <div class="frame"><div class="cs" style="width:1200px;height:820px;padding:40px 56px;grid-template-rows:auto 1fr auto auto;gap:26px">
+      <svg viewBox="0 0 778 293" width="106" height="40" aria-label="TipMe"><path d="M104.783 205.877C98.8829 208.86 92.9836 210.052 86.2434 210.052C71.0736 210.052 61.2378 202.3 61.2378 180.535V102.715H106.188V77.0691H61.2378V30.2578H32.8681V77.0691H0V102.715H32.8681V187.393C32.8681 222.278 51.9696 238.081 79.4979 238.081C88.4907 238.081 96.0715 236.59 104.783 232.415V205.877Z" fill="#000000"></path><path d="M156.458 40.365C156.458 28.7368 148.032 20.3906 135.95 20.3906C123.874 20.3906 115.164 28.7368 115.164 40.365C115.164 51.6984 123.874 60.3437 135.95 60.3437C148.032 60.3437 156.458 51.6984 156.458 40.365ZM150.275 235.069V77.0398H121.91V235.069H150.275Z" fill="#000000"></path><path d="M320.497 156.054C320.497 108.345 294.37 74.0586 254.76 74.0586C233.695 74.0586 215.436 85.6866 204.762 105.96V77.0371H178.352V292.613H206.726V208.234C217.399 227.315 234.535 238.049 254.76 238.049C294.651 238.049 320.497 203.759 320.497 156.054ZM291.001 156.054C291.001 191.532 273.301 211.212 248.866 211.212C224.984 211.212 206.726 190.938 206.726 156.054C206.726 120.571 225.266 100.593 248.866 100.593C273.301 100.593 291.001 120.571 291.001 156.054Z" fill="#000000"></path><path d="M366.358 235.066V144.426C366.358 117.888 381.803 100.593 401.469 100.593C422.257 100.593 433.212 116.097 433.212 142.336V235.066H461.586V144.426C461.586 117.888 477.316 100.593 496.701 100.593C517.489 100.593 528.443 116.097 528.443 142.336V235.066H556.813V132.794C556.813 95.2255 537.148 74.0586 506.527 74.0586C483.777 74.0586 466.641 86.5803 456.245 106.854C449.505 85.982 432.93 74.0586 411.02 74.0586C390.514 74.0586 374.501 85.0889 364.391 103.277V77.0371H337.984V235.066H366.358Z" fill="#7A32F9"></path><path d="M644.652 238.049C679.766 238.049 705.332 216.879 712.636 181.695H684.545C679.767 202.268 665.159 214.494 644.094 214.494C619.091 214.494 603.923 195.708 601.675 163.507H712.636C717.691 112.221 688.198 74.0586 643.815 74.0586C602.802 74.0586 572.742 108.345 572.742 155.157C572.742 204.952 601.673 238.049 644.652 238.049ZM643.252 96.7172C666.288 96.7172 681.174 114.311 682.578 143.528H601.954C605.047 114.012 620.497 96.7172 643.252 96.7172Z" fill="#7A32F9"></path><path d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z" fill="#7A32F9"></path><path d="M136.033 62.121C123.884 62.121 114.035 52.2722 114.035 40.123C114.035 27.9738 123.884 18.125 136.033 18.125C148.182 18.125 158.031 27.9738 158.031 40.123C158.031 52.2722 148.182 62.121 136.033 62.121Z" fill="#7A32F9"></path></svg>
+      <div style="align-self:end;display:grid;grid-template-columns:1fr 300px;gap:40px;align-items:end">
+        <div>
+          <p class="eyebrow">Coming soon</p>
+          <h1 style="font-size:84px;max-width:11ch">A little thanks is almost here.</h1>
+          <p class="lede" style="font-size:19px">TipMe opens at midnight in Lagos.</p>
+        </div>
+        <div class="paper" style="padding:22px;border-radius:26px;transform:rotate(-2deg)">
+          <div style="height:70px;border-radius:16px;background:radial-gradient(circle at 80% 20%,#b48cff 0 10%,transparent 11%),#7a32f9"></div>
+          <div style="width:52px;height:52px;margin:-26px 0 0 14px;border-radius:50%;border:4px solid #fffefa;background:#7a32f9;display:flex;align-items:center;justify-content:center"><svg viewBox="668 -13 120 120" width="26" height="26" aria-hidden="true"><path d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z" fill="#fff" transform="translate(728 47) scale(0.78) translate(-732.13 -45.83)"></path></svg></div>
+          <p class="serif" style="margin:8px 0 0;font-size:24px">Your page</p>
+          <p style="margin:2px 0 12px;font-size:13px;color:#5d5a54;font-weight:600">usetipme.xyz/@yourname</p>
+          <div style="height:44px;border-radius:12px;background:#000;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 3px 0 #2a2826">Tip</div>
+        </div>
+      </div>
+      <div class="well" style="padding:16px"><div class="keys" style="grid-template-columns:repeat(4,1fr);gap:14px"><div class="k" style="height:150px;padding:20px"><b style="font-size:92px">06</b><span>Days</span></div><div class="k" style="height:150px;padding:20px"><b style="font-size:92px">14</b><span>Hours</span></div><div class="k" style="height:150px;padding:20px"><b style="font-size:92px">32</b><span>Minutes</span></div><div class="k on" style="height:150px;padding:20px"><b style="font-size:92px">08</b><span>Seconds</span></div></div></div>
+      <div class="foot"><time>27 October 2026 · 00:00 WAT</time><span>For the people who make a difference.</span></div>
+    </div></div>
+  </div>
+  <div>
+    <span class="tag new">Redesigned</span>
+    <p class="label">On a phone</p>
+    <div class="frame" style="border-radius:44px;border:10px solid #141210"><div class="cs" style="width:370px;height:760px;padding:26px 20px;grid-template-rows:auto 1fr auto auto;gap:22px">
+      <svg viewBox="0 0 778 293" width="80" height="30" aria-label="TipMe"><path d="M104.783 205.877C98.8829 208.86 92.9836 210.052 86.2434 210.052C71.0736 210.052 61.2378 202.3 61.2378 180.535V102.715H106.188V77.0691H61.2378V30.2578H32.8681V77.0691H0V102.715H32.8681V187.393C32.8681 222.278 51.9696 238.081 79.4979 238.081C88.4907 238.081 96.0715 236.59 104.783 232.415V205.877Z" fill="#000000"></path><path d="M156.458 40.365C156.458 28.7368 148.032 20.3906 135.95 20.3906C123.874 20.3906 115.164 28.7368 115.164 40.365C115.164 51.6984 123.874 60.3437 135.95 60.3437C148.032 60.3437 156.458 51.6984 156.458 40.365ZM150.275 235.069V77.0398H121.91V235.069H150.275Z" fill="#000000"></path><path d="M320.497 156.054C320.497 108.345 294.37 74.0586 254.76 74.0586C233.695 74.0586 215.436 85.6866 204.762 105.96V77.0371H178.352V292.613H206.726V208.234C217.399 227.315 234.535 238.049 254.76 238.049C294.651 238.049 320.497 203.759 320.497 156.054ZM291.001 156.054C291.001 191.532 273.301 211.212 248.866 211.212C224.984 211.212 206.726 190.938 206.726 156.054C206.726 120.571 225.266 100.593 248.866 100.593C273.301 100.593 291.001 120.571 291.001 156.054Z" fill="#000000"></path><path d="M366.358 235.066V144.426C366.358 117.888 381.803 100.593 401.469 100.593C422.257 100.593 433.212 116.097 433.212 142.336V235.066H461.586V144.426C461.586 117.888 477.316 100.593 496.701 100.593C517.489 100.593 528.443 116.097 528.443 142.336V235.066H556.813V132.794C556.813 95.2255 537.148 74.0586 506.527 74.0586C483.777 74.0586 466.641 86.5803 456.245 106.854C449.505 85.982 432.93 74.0586 411.02 74.0586C390.514 74.0586 374.501 85.0889 364.391 103.277V77.0371H337.984V235.066H366.358Z" fill="#7A32F9"></path><path d="M644.652 238.049C679.766 238.049 705.332 216.879 712.636 181.695H684.545C679.767 202.268 665.159 214.494 644.094 214.494C619.091 214.494 603.923 195.708 601.675 163.507H712.636C717.691 112.221 688.198 74.0586 643.815 74.0586C602.802 74.0586 572.742 108.345 572.742 155.157C572.742 204.952 601.673 238.049 644.652 238.049ZM643.252 96.7172C666.288 96.7172 681.174 114.311 682.578 143.528H601.954C605.047 114.012 620.497 96.7172 643.252 96.7172Z" fill="#7A32F9"></path><path d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z" fill="#7A32F9"></path><path d="M136.033 62.121C123.884 62.121 114.035 52.2722 114.035 40.123C114.035 27.9738 123.884 18.125 136.033 18.125C148.182 18.125 158.031 27.9738 158.031 40.123C158.031 52.2722 148.182 62.121 136.033 62.121Z" fill="#7A32F9"></path></svg>
+      <div style="align-self:end">
+        <p class="eyebrow">Coming soon</p>
+        <h1 style="font-size:54px">A little thanks is almost here.</h1>
+        <p class="lede" style="font-size:16px">TipMe opens at midnight in Lagos.</p>
+      </div>
+      <div class="well" style="padding:10px;border-radius:22px"><div class="keys" style="grid-template-columns:repeat(2,1fr);gap:10px"><div class="k" style="height:104px;padding:14px"><b style="font-size:58px">06</b><span>Days</span></div><div class="k" style="height:104px;padding:14px"><b style="font-size:58px">14</b><span>Hours</span></div><div class="k" style="height:104px;padding:14px"><b style="font-size:58px">32</b><span>Minutes</span></div><div class="k on" style="height:104px;padding:14px"><b style="font-size:58px">08</b><span>Seconds</span></div></div></div>
+      <div class="foot" style="flex-direction:column;align-items:flex-start;gap:4px"><time>27 October 2026 · 00:00 WAT</time><span>For the people who make a difference.</span></div>
+    </div></div>
+  </div>
+</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:28px;margin-top:34px">
+  <div>
+    <p class="label">What stays exactly as today</p>
+    <p class="note" style="margin:0">Every line of copy (coming-soon/page.tsx:28–35), the four units Days, Hours, Minutes, Seconds with Seconds the purple one (countdown.tsx:14–19, globals.css .launch-countdown__tile--seconds), two-by-two tiles on a phone, “––” before the clock starts, the screen-reader announcement once a minute, and the reload at zero. Header and footer stay hidden on this page. The sample digits are illustrative.</p>
+  </div>
+  <div>
+    <p class="label">What changes</p>
+    <p class="note" style="margin:0">The tiles become pressed keys in a recessed well, like the amount keys; the headline moves to DM Serif; the eyebrow is sentence case, as the redesign uses everywhere. <b>One proposed addition:</b> the hand-drawn ring and dot become a small paper card showing what is coming, with three new bits of text: “Your page”, “usetipme.xyz/@yourname” and “Tip”. Drop it if you want the page to stay words-only.</p>
+  </div>
+  <div class="finding">
+    <b>Found while checking, for you to decide:</b> the clock counts to <code>PRODUCTION_LAUNCH_AT</code> when it is set (page.tsx:19–21), but the date line under it is fixed text, “27 October 2026 · 00:00 WAT” (lib/countdown.ts:2), and so is the share card's “27 October · 00:00 WAT” (coming-soon/opengraph-image.tsx:46). A launch set for another day would show the wrong date. <b>Proposed:</b> write the date from the same launch time. The page only appears while that time is set and still ahead (lib/production-launch.ts:80–96).
+  </div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

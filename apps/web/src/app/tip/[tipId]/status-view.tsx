@@ -405,24 +405,45 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
             </Button>
           )}
         </Surface>
-      ) : (
-        pilotNotice
-      )}
-      {notices}
+      ) : null}
       {paid ? (
-        <Link className="tip-thanks__own" href="/sign-up">
-          Know someone who deserves thanks too? Get your own TipMe page
-        </Link>
+        <>
+          {notices}
+          <Link className="tip-thanks__own" href="/sign-up">
+            Know someone who deserves thanks too? Get your own TipMe page
+          </Link>
+        </>
       ) : (
-        <div className="tip-status-actions">
-          {retry && (
-            <ActionLink variant="continue" href={profile}>
-              Try again
-            </ActionLink>
+        // Beside the live region on a desktop (R1), under it on a phone: the figures the page
+        // already has, then the next steps. A wrapper only; the live region above never moves.
+        <div className="tip-status-side">
+          {tip.state === 'declined' && (
+            // Decoration: the heading says it, so screen readers skip the stamp.
+            <span
+              className="tm-slip__stamp tm-slip__stamp--red tip-status-stamp"
+              aria-hidden="true"
+            >
+              Not
+              <br />
+              sent
+            </span>
           )}
-          <Button variant="secondary" onClick={() => void copyReceipt()}>
-            {copied ? 'Receipt link copied' : 'Copy receipt link'}
-          </Button>
+          <p className="tip-status-amount">{amount}</p>
+          {tip.reference && (
+            <p className="tip-status-ref">Reference {tip.reference}</p>
+          )}
+          {pilotNotice}
+          {notices}
+          <div className="tip-status-actions">
+            {retry && (
+              <ActionLink variant="continue" href={profile}>
+                Try again
+              </ActionLink>
+            )}
+            <Button variant="secondary" onClick={() => void copyReceipt()}>
+              {copied ? 'Receipt link copied' : 'Copy receipt link'}
+            </Button>
+          </div>
         </div>
       )}
     </Surface>
