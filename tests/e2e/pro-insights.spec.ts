@@ -46,7 +46,7 @@ test('earnings: Pro sees the chart, period tiles and notes; Free sees the basics
   const totals = main.getByRole('region', { name: 'Your totals' });
   await expect(totals.getByText('This week')).toBeVisible();
   await expect(totals.getByText('This year')).toBeVisible();
-  await expect(totals.getByText('₦1,800').first()).toBeVisible();
+  await expect(totals.getByText('₦1,860').first()).toBeVisible();
   await expect(
     main.getByRole('heading', { name: 'Week by week' }),
   ).toBeVisible();

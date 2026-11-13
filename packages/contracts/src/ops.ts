@@ -841,13 +841,20 @@ export interface OpsWithdrawalFreezeState {
   issueOpen: boolean;
 }
 
-/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+/**
+ * One page's pricing for staff (ADR-0014): a staff-set share (null for none), the page's plan and
+ * its rate (owner, 12 Nov 2026: Free 700, Pro 500 bps), and the rate new quotes use: the deal only
+ * when it is below the plan's rate.
+ */
 export interface OpsPagePricing {
   customFeeBps: number | null;
   feeFreeRemaining: number;
+  plan: 'free' | 'pro';
+  planFeeBps: number;
+  feeBps: number;
 }
 
-/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+/** Staff set one page's TipMe fee in basis points (600 = 6%), or clear it with null (ADR-0014). Capped at the plan's rate when quoted. */
 export const opsPageFeeSchema = opsReasonSchema
   .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
   .strict();

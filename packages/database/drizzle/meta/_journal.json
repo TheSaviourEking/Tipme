@@ -652,6 +652,20 @@
       "when": 1794389732515,
       "tag": "0092_pro_money",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794577037902,
+      "tag": "0093_pro_price_5000",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1794577039196,
+      "tag": "0094_fee_deals_capped",
+      "breakpoints": true
     }
   ]
 }

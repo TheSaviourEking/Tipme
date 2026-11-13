@@ -24,7 +24,7 @@
 | D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
-| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: flat 10% TipMe fee, provider paid from it, recipient gets 90% (ADR-0014); refunds and chargebacks OPEN; Pro refunds: see the Pro billing block (9 Nov 2026) |
+| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: plan-based TipMe fee from the next production release (owner, 12 Nov 2026): Free 7%, Pro 5%, processing paid from it (before: flat 10%, ADR-0014; see the 12 Nov block); refunds and chargebacks OPEN; Pro refunds: see the Pro billing block (9 Nov 2026) |
 | D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-08 | Hosting, monitoring budget and supported response coverage | Cost model + staffing | Engineering | OPEN |
@@ -69,7 +69,7 @@
 >   - Every page starts on **Free**: standard amounts of ₦2,000, ₦5,000 and ₦10,000, plus any custom amount from ₦2,000.
 >   - **Pro** lets the recipient choose 1–4 preset amounts and their own minimum, never below ₦2,000. Amounts saved under the old floor are no longer offered. The fee and withdrawal minimum are the same as Free.
 >   - Pro is granted by staff with a written reason and is audited. Paying for Pro: see "Paying for Pro" (9 Nov 2026) below.
->   - Pro does not change the tip fee. The Pro price: see "Paying for Pro" (9 Nov 2026) below.
+>   - Pro does not change the tip fee (superseded 12 Nov 2026: Pro keeps 5%, Free 7%). The Pro price: see "Paying for Pro" (9 Nov 2026) below.
 >   - **Leftover balances:** a withdrawal under ₦2,000 is allowed only when it takes the whole available balance, so nobody is left with money they cannot withdraw or an account they cannot close (the user's decision).
 > - **What the new fee changes in rewards and reports:**
 >   - A fee-free tip now gives the recipient the whole tip, and costs TipMe its whole 10% (processing included).
@@ -246,6 +246,16 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 >   - Q8, a reversal after the money was withdrawn posts anyway: the balance may go below zero, withdrawals for that person or business stop until it is back above zero, and a money issue opens. Nothing is collected automatically. (Default kept.)
 >   - Q9, the share is of what the person receives after TipMe's 10% fee (ADR-0014), so TipMe's fee and the supporter's total are unchanged. The tip page says: "Of what Tobi receives, they keep 90% and 10% goes to The Yellow Chilli." (Owner's answer.)
 >   - Q10, team tips carry no business share. A team tip is split equally among the people on shift at that location when the tip is made; the earliest check-in takes any remaining kobo. (Default kept.)
+
+> **Pricing: Free 7%, Pro 5%, Pro ₦5,000 a month (owner, 12 Nov 2026).** The owner's pricing decision. It is not legal advice, and it is not regulatory or payment-partner approval (D-02, D-03 and D-05 stay as listed).
+> - **TipMe Free:** 7% of each successful tip, no subscription. **TipMe Pro:** ₦5,000 a month plus 5% of each successful tip. Both rates include processing (TipMe pays processing out of its share; the supporter still pays exactly the tip). This replaces the flat 10% (D-05, ADR-0014) and an earlier "flat 5%" instruction the same day.
+> - **When:** from the next production release. A new fee policy (`v2-free-7pct`, `v2-pro-5pct`) applies to quotes created after deploy. A quote already shown (15-minute life) is charged as shown. Tips before keep their recorded 10% (`proposed-v1.1`). Nothing is retroactive.
+> - **Which rate:** the recipient's plan when the quote is made (`profiles.plan`: a staff grant or a paid Pro month, grace included). The rate is recorded on the quote in its version and amounts, so a later plan change never alters a recorded tip. When Pro lapses, the next quotes are 7%. Business tips use the staff member's own plan.
+> - **Old per-page deals:** capped at the page's plan rate. A deal at or above the rate becomes the rate (deals of 7% or more were cleared by migration `0094_fee_deals_capped`, each with a system audit row); a deal below it stays. Fee-free tips already granted stay.
+> - **Pro price:** the default becomes ₦5,000 a month through the price history (migration `0093_pro_price_5000`, with a system audit row). Staff can still change it in ops. Months already paid keep their price.
+> - **Cash rewards** stay at 50% of the fees TipMe recorded on each tip.
+> - **Withdrawals:** the user pays the partner's transfer fee (decided earlier; built in a separate change).
+> - **Claude's defaults (changeable):** both rates are "processing included" (no extra supporter line); the ₦2,000 minimum tip stays.
 
 > **Changelog and What's new (owner, 5–6 Nov 2026).** The owner asked for the full changelog in admin, and for users to see what an update brings when it ships. The `Changelog.dc.html` board was approved on 5–6 Nov 2026. It is on the design canvas only, not in the repo. On 6 Nov the owner said "use the defaults for the changelogs".
 >

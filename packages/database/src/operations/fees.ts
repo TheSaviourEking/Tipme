@@ -1,3 +1,4 @@
+import { feePolicyForPlan, planShareBps, type FeePlan } from '@tipme/domain';
 import { and, eq, ne } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { feeFreeCredits, profiles } from '../schema.js';
@@ -94,15 +95,26 @@ export function grantFeeFreeTips(
   );
 }
 
-/** One page's pricing for staff, or null when there is no such (non-deleted) page. */
+/**
+ * One page's pricing for staff, or null when there is no such (non-deleted) page: the deal staff
+ * set, the page's plan and its rate (Free 7%, Pro 5%), and the rate new quotes use (the deal only
+ * below the plan's rate, planShareBps).
+ */
 export function pagePricing(
   db: Database,
   profileId: string,
-): Promise<{ customFeeBps: number | null; feeFreeRemaining: number } | null> {
+): Promise<{
+  customFeeBps: number | null;
+  feeFreeRemaining: number;
+  plan: FeePlan;
+  planFeeBps: number;
+  feeBps: number;
+} | null> {
   return guarded(async () => {
     const [row] = await db
       .select({
         customFeeBps: profiles.customFeeBps,
+        plan: profiles.plan,
         remaining: feeFreeCredits.remaining,
       })
       .from(profiles)
@@ -110,8 +122,19 @@ export function pagePricing(
       .where(
         and(eq(profiles.id, profileId), ne(profiles.pageState, 'deleted')),
       );
-    return row
-      ? { customFeeBps: row.customFeeBps, feeFreeRemaining: row.remaining ?? 0 }
-      : null;
+    if (!row) return null;
+    const plan: FeePlan = row.plan === 'pro' ? 'pro' : 'free';
+    return {
+      customFeeBps: row.customFeeBps,
+      feeFreeRemaining: row.remaining ?? 0,
+      plan,
+      planFeeBps: Number(feePolicyForPlan(plan).tipmeShareBps),
+      feeBps: Number(
+        planShareBps(
+          plan,
+          row.customFeeBps === null ? null : BigInt(row.customFeeBps),
+        ).bps,
+      ),
+    };
   });
 }

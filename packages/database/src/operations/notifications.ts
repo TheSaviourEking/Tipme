@@ -1,5 +1,5 @@
 import type { NotificationView } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import {
@@ -86,7 +86,7 @@ export function notifyTipSucceeded(
             supporterLabel: row.label,
             pretendPayment: input.pretendPayment ?? false,
             hasNote: row.hasNote,
-            minWithdrawalMinor: FEE_POLICY_V1.minWithdrawalMinor.toString(),
+            minWithdrawalMinor: CURRENT_FEE_POLICY.minWithdrawalMinor.toString(),
           },
           dedupeKey: `tip_received.${input.tipId}`,
           ...(input.now ? { now: input.now } : {}),

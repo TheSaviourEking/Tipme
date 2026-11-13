@@ -53,23 +53,61 @@ test('only a tip priced under the current rule says "includes processing"', () =
   assert.ok(!old.label.includes('includes processing'));
 });
 
-test('only the current fee policy and its own suffixes count as the current rule', () => {
-  const base = 'proposed-v1.1';
-  // What the quote writer records today (packages/database/src/operations/quotes.ts).
+test('a tip priced under any "processing included" policy (old 10%, Free 7%, Pro 5%) keeps that label', () => {
+  // Owner, 12 Nov 2026: tips before the switch keep their recorded 10%. The quote writer records
+  // the policy's version alone or with its suffixes; every one of these pays processing from the share.
+  const versions = ['proposed-v1.1', 'v2-free-7pct', 'v2-pro-5pct'];
   for (const v of [
     'proposed-v1.1',
     'proposed-v1.1-custom-750',
     'proposed-v1.1-fee-free',
     'proposed-v1.1-custom-750-fee-free',
+    'v2-free-7pct',
+    'v2-free-7pct-custom-600',
+    'v2-free-7pct-fee-free',
+    'v2-pro-5pct',
+    'v2-pro-5pct-custom-300-fee-free',
   ])
-    assert.equal(followsCurrentRule(v, base), true, v);
-  // Older rules, and a later version that merely starts with the same characters.
+    assert.equal(followsCurrentRule(v, versions), true, v);
+  // Older rules, and versions that merely start with the same characters.
   for (const v of [
     'mock-v0',
     'mock-v1',
     'test',
     'proposed-v1.10',
     'proposed-v1.1x',
+    'v2-free-7pctx',
+    'v2-pro-5pct2',
   ])
-    assert.equal(followsCurrentRule(v, base), false, v);
+    assert.equal(followsCurrentRule(v, versions), false, v);
+  // Each tip shows the rate it really paid, from its own amounts.
+  const label = (platform, provider, gross, version) =>
+    feeLine(platform, provider, gross, followsCurrentRule(version, versions)).label;
+  // An old 10% tip, after the switch: unchanged.
+  assert.equal(
+    label('17000', '3000', '200000', 'proposed-v1.1'),
+    'TipMe fee (10%, includes processing)',
+  );
+  assert.equal(
+    label('11000', '3000', '200000', 'v2-free-7pct'),
+    'TipMe fee (7%, includes processing)',
+  );
+  assert.equal(
+    label('7000', '3000', '200000', 'v2-pro-5pct'),
+    'TipMe fee (5%, includes processing)',
+  );
+  // An odd amount still reads as its plan's whole rate (₦2,000.50 at 7%: ₦140.04 rounded).
+  assert.equal(
+    label('11003', '3001', '200050', 'v2-free-7pct'),
+    'TipMe fee (7%, includes processing)',
+  );
+});
+
+test('the tip detail passes every "processing included" version from the domain, not only the current one', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(
+    new URL('../src/app/dashboard/tips/[tipId]/tip-view.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(src, /followsCurrentRule\(\s*tip\.feePolicyVersion,\s*PROCESSING_INCLUDED_FEE_VERSIONS/);
 });
