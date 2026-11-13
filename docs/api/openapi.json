@@ -16913,6 +16913,7 @@
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
+                  "WITHDRAWAL_BELOW_FEE",
                   "WITHDRAWAL_UNAVAILABLE",
                   "WITHDRAWALS_PAUSED",
                   "WITHDRAWALS_SWITCHED_OFF",

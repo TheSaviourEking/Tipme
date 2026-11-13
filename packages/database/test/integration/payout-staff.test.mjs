@@ -660,9 +660,11 @@ test('the tools act only on withdrawal issues', async (t) => {
 test('a start marked failed while it was topping up the fee never sends the payout', async (t) => {
   const s = await setup(t);
   const payoutId = await s.withdraw();
+  // Requested under the old rule (before 12 Nov 2026), when TipMe topped the fee up first.
   await s.q(
     `UPDATE payouts SET account_reference = 'acct_1', provider = 'bachs',
-       destination_id = NULL WHERE id = $1`,
+       destination_id = NULL, fee_payer = 'tipme',
+       amount_minor = amount_minor + user_fee_minor, user_fee_minor = 0 WHERE id = $1`,
     [payoutId],
   );
   const [{ id: destinationId }] = await s.q(

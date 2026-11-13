@@ -43,6 +43,7 @@ const readyQuote = (over: Record<string, unknown> = {}) => ({
   ledgerMinor: '540000',
   providerMinor: '540000',
   feeMinor: '0',
+  feePaidBy: 'user',
   destination: { bankName: 'GTBank', last4: '1234' },
   ...over,
 });
@@ -65,7 +66,10 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.reload();
   await expect(meter(page)).toContainText('Ready to withdraw ₦1,860');
-  await expect(meter(page)).toContainText('TipMe pays the ₦50 transfer fee.');
+  // Owner, 12 Nov 2026: the user pays the transfer fee, from the amount.
+  await expect(meter(page)).toContainText(
+    'The ₦50 transfer fee comes off the amount you withdraw.',
+  );
   const chip = meter(page).locator('.withdraw__chip');
   await expect(chip).toContainText(/to .+ ••\d{4}/);
   await expect(chip.getByRole('link', { name: 'Change' })).toHaveAttribute(
@@ -138,6 +142,7 @@ test('the withdraw page says every state the provider can put it in', async ({
         ledgerMinor: '180000',
         providerMinor: '0',
         feeMinor: '5000',
+        feePaidBy: 'user',
         destination: { bankName: 'GTBank', last4: '1234' },
       },
       'Your tips are still on the way to your account with our payment partner. You can withdraw them once they arrive.',
@@ -177,6 +182,7 @@ test('the withdraw page says every state the provider can put it in', async ({
     ledgerMinor: '180000',
     providerMinor: '180000',
     feeMinor: '5000',
+    feePaidBy: 'user',
     destination: { bankName: 'GTBank', last4: '1234' },
   });
   await page.goto('/dashboard/withdraw');
@@ -237,6 +243,7 @@ for (const [code, message] of [
       ledgerMinor: '186000',
       providerMinor: '100000',
       feeMinor: '5000',
+      feePaidBy: 'user',
       destination: { bankName: 'GTBank', last4: '1234' },
     });
     await page.route('**/v1/me/withdrawals', (route) =>
@@ -329,9 +336,10 @@ test('the summary says where it goes, what arrives and what is left', async ({
     '/dashboard/settings#get-paid',
   );
   await expect(summary.getByText('Going to')).toHaveCount(0);
-  await expect(summary.getByText('You receive')).toBeVisible();
-  // Withdrawing is free (TipMe pays the transfer fee), so what arrives is the amount.
-  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,860');
+  await expect(summary.getByText('You’ll receive')).toBeVisible();
+  // The ₦50 transfer fee comes off the amount (owner, 12 Nov 2026): Everything sends the rest.
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,810');
   await expect(summary.getByText('Balance afterwards')).toBeVisible();
   await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
   await expectAccessible(page);
@@ -447,7 +455,7 @@ test('an older withdrawal stays listed after many tips', async ({
     );
   await page.goto('/dashboard/withdraw');
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,860' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(/Requested|On its way|Paid/);
   await expect(row).toContainText('to GTBank ••6789');
@@ -467,7 +475,7 @@ test('a past withdrawal keeps its bank after the bank changes', async ({
   await saveBank(handle, 'Kuda', '9876');
   await page.reload();
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,860' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
   await expect(row).toContainText('to GTBank ••6789');
   await expect(row).not.toContainText('9876');
   await expect(row).not.toContainText('Kuda');
@@ -705,7 +713,7 @@ test('figures are shown only for an amount that can be sent', async ({
   await page.getByLabel('Amount (NGN)').fill('5000');
   await expect(page.getByTestId('you-receive')).toHaveText('—');
   await page.getByRole('button', { name: 'Everything' }).click();
-  await expect(page.getByTestId('you-receive')).toHaveText('₦1,860');
+  await expect(page.getByTestId('you-receive')).toHaveText('₦1,810');
   await expect(
     page.getByRole('button', { name: 'Withdraw ₦1,860' }),
   ).toBeEnabled();
@@ -800,7 +808,7 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
 
   const history = watching.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,860' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
   // Requested, then paid: the pretend partner pays within seconds.
   await expect(row).toBeVisible({ timeout: 10_000 });
   await expect(row.getByText('Paid', { exact: true })).toBeVisible({
@@ -897,7 +905,7 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
   await expect(done.locator('.tm-slip__title')).toHaveText(
     'Withdrawal requested',
   );
-  await expect(done).toContainText('₦1,860 is on its way to your test bank.');
+  await expect(done).toContainText('₦1,810 is on its way to your test bank.');
   await expect(
     done.getByRole('link', { name: 'Back to your dashboard' }),
   ).toHaveAttribute('href', '/dashboard');
@@ -989,4 +997,54 @@ test('a visit reads the quote once, and a refusal over the amount reads it once 
   await page.keyboard.press('Tab');
   await page.waitForTimeout(1500);
   expect(reads).toBe(2);
+});
+
+// Owner, 12 Nov 2026: users pay the ₦50 transfer fee, taken from the amount.
+test('withdraw ₦10,000: the screen shows the ₦50 fee and that ₦9,950 arrives', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '1000000');
+  await fakeQuote(
+    page,
+    readyQuote({
+      withdrawableMinor: '1000000',
+      ledgerMinor: '1000000',
+      providerMinor: '1000000',
+      feeMinor: '5000',
+    }),
+  );
+  await page.goto('/dashboard/withdraw');
+  await page.getByLabel('Amount (NGN)').fill('10000');
+  const summary = page.getByRole('region', { name: 'Summary' });
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦9,950');
+  await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
+  await expect(
+    page.getByRole('button', { name: 'Withdraw ₦10,000' }),
+  ).toBeEnabled();
+  await expect(page.getByText(/TipMe pays the ₦50/)).toHaveCount(0);
+});
+
+test('a balance of ₦50 or less says why it can’t be withdrawn', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '4000');
+  await fakeQuote(
+    page,
+    readyQuote({
+      withdrawableMinor: '4000',
+      ledgerMinor: '4000',
+      providerMinor: '4000',
+      feeMinor: '5000',
+    }),
+  );
+  await page.goto('/dashboard/withdraw');
+  await expect(
+    page.getByText(
+      'Your ₦40 isn’t more than the ₦50 transfer fee, so it can’t be withdrawn yet. It stays in your balance.',
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Withdraw/ })).toBeDisabled();
 });

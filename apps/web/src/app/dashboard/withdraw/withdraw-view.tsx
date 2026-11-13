@@ -36,6 +36,7 @@ import {
   TOO_SMALL,
   withdrawableNow,
   withdrawFee,
+  withdrawSummary,
   withdrawLamp,
   withdrawRefusal,
   withdrawState,
@@ -289,7 +290,8 @@ export default function WithdrawPage({
     // shows below: money that moved is always said.
     const stale = key.current !== sent;
     if (result.ok) {
-      setDone(formatNaira(amount));
+      // What arrives: the amount less the fee when the user pays it (owner, 12 Nov 2026).
+      setDone(formatNaira(figures ? Number(figures.receiveMinor) : amount));
       setRaw('');
       setChecked(false);
       key.current = null;
@@ -347,10 +349,12 @@ export default function WithdrawPage({
     chosen <= withdrawable &&
     (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
       chosen === withdrawable);
-  // Withdrawing is free: TipMe pays the payout's transfer fee (the terms; buildPayoutFeePosting
-  // books it as TipMe's expense). The quote's feeMinor is that TipMe-paid cost, never taken from
-  // the recipient, so what arrives is the amount asked for.
-  const covered = sendable;
+  // Users pay the transfer fee from the amount (owner, 12 Nov 2026): what arrives is the amount
+  // less the fee, and the whole amount leaves the balance. Only an amount that sends something
+  // gets figures.
+  const figures =
+    sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
+  const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
   // Ready with money to send: the lamp line and the bank chip say what the notice used to.
@@ -507,13 +511,23 @@ export default function WithdrawPage({
                 {ready && (
                   <section aria-label="Summary">
                     <dl className="withdraw__summary">
-                      <dt>You receive</dt>
+                      <dt>Transfer fee</dt>
+                      <dd data-testid="transfer-fee">
+                        {figures
+                          ? figures.feePaidBy === 'tipme'
+                            ? 'Paid by TipMe'
+                            : formatNaira(figures.feeMinor)
+                          : '—'}
+                      </dd>
+                      <dt>You’ll receive</dt>
                       <dd data-testid="you-receive">
-                        {covered ? formatNaira(chosen) : '—'}
+                        {figures ? formatNaira(figures.receiveMinor) : '—'}
                       </dd>
                       <dt>Balance afterwards</dt>
                       <dd data-testid="balance-afterwards">
-                        {covered ? formatNaira(available - chosen) : '—'}
+                        {covered && chosen !== null
+                          ? formatNaira(available - chosen)
+                          : '—'}
                       </dd>
                     </dl>
                   </section>
@@ -522,7 +536,7 @@ export default function WithdrawPage({
                   type="submit"
                   variant="continue"
                   disabled={
-                    busy || !state.canWithdraw || (amount !== null && !sendable)
+                    busy || !state.canWithdraw || (amount !== null && !covered)
                   }
                   aria-busy={busy}
                 >

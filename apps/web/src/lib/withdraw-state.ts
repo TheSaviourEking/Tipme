@@ -158,6 +158,24 @@ export function withdrawState(input: {
             tone: 'neutral',
           },
         };
+      // Users pay the transfer fee from the amount (owner, 12 Nov 2026): a balance that is not more
+      // than the fee would send nothing, so it can't be withdrawn, and the page says why.
+      if (
+        quote.feePaidBy === 'user' &&
+        BigInt(quote.withdrawableMinor) <= BigInt(quote.feeMinor)
+      )
+        return {
+          kind: 'ready',
+          canWithdraw: false,
+          showForm: true,
+          review,
+          place: 'instrument',
+          notice: {
+            title: NOTHING_NOW,
+            body: `Your ${formatNaira(quote.withdrawableMinor)} isn’t more than the ${formatNaira(quote.feeMinor)} transfer fee, so it can’t be withdrawn yet. It stays in your balance.`,
+            tone: 'neutral',
+          },
+        };
       const fee = withdrawFee(quote);
       return {
         kind: 'ready',
@@ -176,14 +194,36 @@ export function withdrawState(input: {
 }
 
 /**
- * Who pays the transfer fee, when the quote has one: TipMe does (buildPayoutFeePosting books it as
- * TipMe's expense), so it is never taken from the recipient. Null for no fee or no ready quote.
+ * Who pays the transfer fee, when the quote has one (owner, 12 Nov 2026): the user, from the amount
+ * they withdraw; or TipMe, while an unused top-up it already sent can pay it. Null for no fee or no
+ * ready quote.
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,
 ): string | null {
   if (quote?.state !== 'ready' || quote.feeMinor === '0') return null;
-  return `TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee.`;
+  return quote.feePaidBy === 'tipme'
+    ? `TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee this time.`
+    : `The ${formatNaira(quote.feeMinor)} transfer fee comes off the amount you withdraw.`;
+}
+
+/**
+ * The summary for an amount chosen: the fee, who pays it, and what arrives (withdraw ₦10,000, receive
+ * ₦9,950 when the user pays). Null when there is no ready quote or nothing would arrive.
+ */
+export function withdrawSummary(
+  quote: WithdrawalQuoteResponse | null,
+  chosen: bigint,
+): {
+  feeMinor: bigint;
+  feePaidBy: 'user' | 'tipme';
+  receiveMinor: bigint;
+} | null {
+  if (quote?.state !== 'ready') return null;
+  const feeMinor = BigInt(quote.feeMinor);
+  const receiveMinor = quote.feePaidBy === 'user' ? chosen - feeMinor : chosen;
+  if (receiveMinor <= BigInt(0)) return null;
+  return { feeMinor, feePaidBy: quote.feePaidBy, receiveMinor };
 }
 
 /**
@@ -247,6 +287,12 @@ export function withdrawRefusal(code: string | undefined): {
   if (code === 'WITHDRAWAL_TOO_SMALL')
     return {
       message: `The smallest withdrawal is ${formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}.`,
+      reload: true,
+    };
+  if (code === 'WITHDRAWAL_BELOW_FEE')
+    return {
+      message:
+        'The amount must be more than the ₦50 transfer fee, which comes off it.',
       reload: true,
     };
   if (code === 'IDEMPOTENCY_CONFLICT')

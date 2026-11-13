@@ -193,3 +193,22 @@ export function tipStartAllowed(
 ): boolean {
   return presetsMinor.includes(startMinor);
 }
+
+/**
+ * A withdrawal whose partner fee the user pays (owner, 12 Nov 2026): the fee is taken from the
+ * amount chosen, so withdrawing ₦10,000 sends ₦9,950 and ₦10,000 leaves the balance. Null when
+ * nothing would arrive: a balance of ₦50 or less can't be withdrawn.
+ */
+export function userPaidWithdrawal(input: {
+  chosenMinor: bigint;
+  feeMinor: bigint;
+}): { sendMinor: bigint; feeMinor: bigint; leavesBalanceMinor: bigint } | null {
+  if (input.feeMinor < 0n) throw new RangeError('fee must not be negative');
+  const sendMinor = input.chosenMinor - input.feeMinor;
+  if (sendMinor <= 0n) return null;
+  return {
+    sendMinor,
+    feeMinor: input.feeMinor,
+    leavesBalanceMinor: input.chosenMinor,
+  };
+}

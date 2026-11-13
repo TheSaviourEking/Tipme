@@ -47,8 +47,10 @@ export default function TermsPlaceholder() {
         </p>
         <p>
           <strong>Withdrawals:</strong> The smallest withdrawal is ₦2,000,
-          unless you are withdrawing your whole balance. TipMe does not charge
-          you to withdraw.
+          unless you are withdrawing your whole balance. Each withdrawal has our
+          payment partner’s ₦50 transfer fee, taken from the amount: if you
+          withdraw ₦10,000, you receive ₦9,950. A balance of ₦50 or less can’t
+          be withdrawn.
         </p>
       </section>
       {/* The owner's decision, 3 Nov 2026: a username can be taken back, with 7 days of notice. */}
