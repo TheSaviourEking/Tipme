@@ -345,7 +345,8 @@ export default function WithdrawPage({
   const sendable =
     chosen !== null &&
     chosen <= withdrawable &&
-    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor || chosen === withdrawable);
+    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
+      chosen === withdrawable);
   // Withdrawing is free: TipMe pays the payout's transfer fee (the terms; buildPayoutFeePosting
   // books it as TipMe's expense). The quote's feeMinor is that TipMe-paid cost, never taken from
   // the recipient, so what arrives is the amount asked for.

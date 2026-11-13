@@ -11,7 +11,9 @@ export const metadata = marketingMetadata(
   '/for-creators',
 );
 
-const MIN_WITHDRAWAL = formatNaira(Number(CURRENT_FEE_POLICY.minWithdrawalMinor));
+const MIN_WITHDRAWAL = formatNaira(
+  Number(CURRENT_FEE_POLICY.minWithdrawalMinor),
+);
 
 /** Individuals, built to the PageCreators board. The page is server HTML; only the demo is a client island. */
 export default function ForCreators() {

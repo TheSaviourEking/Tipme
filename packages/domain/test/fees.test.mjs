@@ -45,8 +45,14 @@ test('the parts always add up to the tip, rounding half up, and processing never
 
 test('tips below ₦2,000 are refused; there is no maximum: supporters tip what they want', () => {
   assert.throws(() => priceTip(199999n, FEE_POLICY_V1), AmountOutOfRangeError);
-  assert.equal(priceTip(10_000_001n, FEE_POLICY_V1).recipientNetMinor, 9_000_001n);
-  assert.equal(priceTip(500_000_000_00n, FEE_POLICY_V1).recipientNetMinor, 450_000_000_00n);
+  assert.equal(
+    priceTip(10_000_001n, FEE_POLICY_V1).recipientNetMinor,
+    9_000_001n,
+  );
+  assert.equal(
+    priceTip(500_000_000_00n, FEE_POLICY_V1).recipientNetMinor,
+    450_000_000_00n,
+  );
   assert.equal('maxTipMinor' in FEE_POLICY_V1, false);
   assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
   assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200000n);

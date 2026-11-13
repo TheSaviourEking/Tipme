@@ -101,13 +101,13 @@ async function collectedTip(t, { collected = true, settlementCurrency } = {}) {
 }
 
 /** Bachs' answer for the collected payment, with the fee bearer and TipMe fee as given. */
-const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 50000n } = {}) => ({
+const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 35000n } = {}) => ({
   asked: 0,
   async verifyTransaction(reference, expectation) {
     this.asked += 1;
     assert.equal(reference, REFERENCE);
-    // ₦5,000 tip: TipMe's whole share is ₦500 (₦425 platform + ₦75 processing).
-    assert.deepEqual(expectation, { platformFeeMinor: 50000n });
+    // ₦5,000 tip on Free: TipMe's whole share is ₦350 (₦275 platform + ₦75 processing).
+    assert.deepEqual(expectation, { platformFeeMinor: 35000n });
     return {
       status: feePaidBy === 'platform' ? 'succeeded' : 'pending',
       amountMinor: 500000n,
@@ -115,7 +115,7 @@ const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 50000n } = {}) => ({
       feeMinor: 7500n,
       feePaidBy,
       platformFeeMinor,
-      ...(feePaidBy === 'platform' && platformFeeMinor === 50000n
+      ...(feePaidBy === 'platform' && platformFeeMinor === 35000n
         ? {}
         : { collected: true }),
     };

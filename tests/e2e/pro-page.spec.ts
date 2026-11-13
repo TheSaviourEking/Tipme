@@ -24,11 +24,14 @@ test('Pro keeps 5% instead of 7%, said in the offer, the Free list and the FAQ',
     ),
   ).toBeVisible();
   await expect(
-    main.getByText('On Pro, TipMe keeps 5% of each tip instead of 7%, processing included.', {
-      exact: false,
-    }),
+    main.getByText(
+      'On Pro, TipMe keeps 5% of each tip instead of 7%, processing included.',
+      {
+        exact: false,
+      },
+    ),
   ).toBeAttached();
-  await expect(main).not.toContainText('on both plans.');
+  await expect(main).not.toContainText('of each tip on both plans');
 });
 
 test('the price is never in the page’s code: it comes from the server', async () => {

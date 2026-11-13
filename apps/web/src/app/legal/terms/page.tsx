@@ -35,12 +35,12 @@ export default function TermsPlaceholder() {
           choose. TipMe adds no charge on top. The smallest tip is ₦2,000.
         </p>
         <p>
-          <strong>If you receive tips,</strong> TipMe keeps{' '}
-          {FREE_SHARE_PERCENT}% of each tip on the Free plan, or{' '}
-          {PRO_SHARE_PERCENT}% on TipMe Pro, unless we have agreed a lower fee
-          with you, and you receive the rest. The fee includes the cost of
-          processing the payment. From a {formatNaira(Number(EXAMPLE_TIP))}{' '}
-          tip, you receive {exampleNet(FEE_POLICY_V2_FREE)} on Free, or{' '}
+          <strong>If you receive tips,</strong> TipMe keeps {FREE_SHARE_PERCENT}
+          % of each tip on the Free plan, or {PRO_SHARE_PERCENT}% on TipMe Pro,
+          unless we have agreed a lower fee with you, and you receive the rest.
+          The fee includes the cost of processing the payment. From a{' '}
+          {formatNaira(Number(EXAMPLE_TIP))} tip, you receive{' '}
+          {exampleNet(FEE_POLICY_V2_FREE)} on Free, or{' '}
           {exampleNet(FEE_POLICY_V2_PRO)} on Pro. The fee is set by your plan
           when the supporter sees the amount, so a tip keeps the fee it was
           shown with if your plan changes afterwards.

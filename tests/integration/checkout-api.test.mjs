@@ -63,7 +63,7 @@ const intent = (api, body, key = randomUUID()) =>
 test('a quote shows what the recipient receives', async () => {
   const { status, body } = await quote(stack.api);
   assert.equal(status, 201);
-  assert.equal(body.data.recipientNetMinor, '180000');
+  assert.equal(body.data.recipientNetMinor, '186000');
   assert.equal(body.data.tipMinor, '200000');
   assert.equal(body.data.payerTotalMinor, '200000');
   assert.equal(body.data.displayName.length > 0, true);

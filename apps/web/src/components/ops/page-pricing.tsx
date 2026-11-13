@@ -12,7 +12,6 @@ import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
-
 const problem = (answer: { status: number; code: string; message?: string }) =>
   answer.code === 'VALIDATION_FAILED'
     ? 'Check the values: a reason of at least 10 characters is needed.'
@@ -125,8 +124,8 @@ export function PagePricing({ profileId }: { profileId: string }) {
           : ' (set by staff for this page)'}
         , processing included.
         {capped &&
-          ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`} Fee-free tips left:{' '}
-        <strong>{pricing.feeFreeRemaining}</strong>
+          ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
+        Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>
       </p>
       <p className="tm-hint">
         Changes apply to new tips only; a price already shown to a supporter is

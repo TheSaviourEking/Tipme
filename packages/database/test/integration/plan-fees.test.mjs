@@ -70,9 +70,15 @@ test('a plan change between the quote and the payment never alters the quote', a
   await setPlan(db, staff, 'free');
   // What the partner is asked to charge is what each quote showed.
   const freeCharge = await findQuoteCharge(db.db, onFree.quoteId);
-  assert.equal(freeCharge.platformFeeMinor + freeCharge.providerFeeMinor, 70_000n);
+  assert.equal(
+    freeCharge.platformFeeMinor + freeCharge.providerFeeMinor,
+    70_000n,
+  );
   const proCharge = await findQuoteCharge(db.db, onPro.quoteId);
-  assert.equal(proCharge.platformFeeMinor + proCharge.providerFeeMinor, 50_000n);
+  assert.equal(
+    proCharge.platformFeeMinor + proCharge.providerFeeMinor,
+    50_000n,
+  );
   const { rows } = await db.pool.query(
     `SELECT fee_policy_version AS v FROM tip_quotes WHERE id = ANY($1) ORDER BY created_at`,
     [[onFree.quoteId, onPro.quoteId]],
@@ -95,13 +101,19 @@ test('a paid Pro month gives 5%, its grace too, and once it lapses the next quot
       now: START,
     }),
   );
-  assert.equal(share((await quoteAda(db, 1_000_000n, START)).breakdown), 50_000n);
+  assert.equal(
+    share((await quoteAda(db, 1_000_000n, START)).breakdown),
+    50_000n,
+  );
   const end = proPeriodEnd(START);
   const graceEnd = proGraceEnd(end);
   // In grace: still Pro.
   const inGrace = new Date(end.getTime() + 60_000);
   await expireDuePeriods(db.db, { now: inGrace, sealing });
-  assert.equal(share((await quoteAda(db, 1_000_000n, inGrace)).breakdown), 50_000n);
+  assert.equal(
+    share((await quoteAda(db, 1_000_000n, inGrace)).breakdown),
+    50_000n,
+  );
   const after = new Date(graceEnd.getTime() + 60_000);
   await expireDuePeriods(db.db, { now: after, sealing });
   const lapsed = await quoteAda(db, 1_000_000n, after);

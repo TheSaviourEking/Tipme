@@ -89,7 +89,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     chosen !== null &&
     chosen > BigInt(0) &&
     chosen <= withdrawable &&
-    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor || chosen === withdrawable);
+    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
+      chosen === withdrawable);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -202,8 +203,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         </Button>
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal is{' '}
-          {formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or the whole balance
-          if it’s less.
+          {formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or the whole
+          balance if it’s less.
         </p>
       </form>
       <GetPaidCard

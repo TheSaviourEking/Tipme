@@ -173,7 +173,10 @@ export default function ProPage() {
               where your tips come from.
             </p>
           </div>
-          <ProOffer freePercent={FREE_SHARE_PERCENT} proPercent={PRO_SHARE_PERCENT} />
+          <ProOffer
+            freePercent={FREE_SHARE_PERCENT}
+            proPercent={PRO_SHARE_PERCENT}
+          />
         </section>
       </Container>
 

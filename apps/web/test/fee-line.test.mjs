@@ -82,7 +82,8 @@ test('a tip priced under any "processing included" policy (old 10%, Free 7%, Pro
     assert.equal(followsCurrentRule(v, versions), false, v);
   // Each tip shows the rate it really paid, from its own amounts.
   const label = (platform, provider, gross, version) =>
-    feeLine(platform, provider, gross, followsCurrentRule(version, versions)).label;
+    feeLine(platform, provider, gross, followsCurrentRule(version, versions))
+      .label;
   // An old 10% tip, after the switch: unchanged.
   assert.equal(
     label('17000', '3000', '200000', 'proposed-v1.1'),
@@ -109,5 +110,8 @@ test('the tip detail passes every "processing included" version from the domain,
     new URL('../src/app/dashboard/tips/[tipId]/tip-view.tsx', import.meta.url),
     'utf8',
   );
-  assert.match(src, /followsCurrentRule\(\s*tip\.feePolicyVersion,\s*PROCESSING_INCLUDED_FEE_VERSIONS/);
+  assert.match(
+    src,
+    /followsCurrentRule\(\s*tip\.feePolicyVersion,\s*PROCESSING_INCLUDED_FEE_VERSIONS/,
+  );
 });

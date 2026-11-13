@@ -86,7 +86,8 @@ export function notifyTipSucceeded(
             supporterLabel: row.label,
             pretendPayment: input.pretendPayment ?? false,
             hasNote: row.hasNote,
-            minWithdrawalMinor: CURRENT_FEE_POLICY.minWithdrawalMinor.toString(),
+            minWithdrawalMinor:
+              CURRENT_FEE_POLICY.minWithdrawalMinor.toString(),
           },
           dedupeKey: `tip_received.${input.tipId}`,
           ...(input.now ? { now: input.now } : {}),
