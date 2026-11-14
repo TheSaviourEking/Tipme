@@ -198,7 +198,7 @@ export async function planRefundTransfers(
     )
     .for('update');
   if (!sweep) return;
-  // TipMe's fee goes back through `scheduleFeeReturn` (reverseTip calls it for every tip it
+  // On a chargeback, TipMe's fee goes back through `scheduleFeeReturn` (reverseTip calls it for every tip it
   // applies to, keyed on the partner's refund), never here: one fee return per refund.
   const { businessBackMinor } = refundMoves(input.lines, {
     businessId: share.businessId,
@@ -239,11 +239,11 @@ export async function planRefundTransfers(
 }
 
 /**
- * TipMe returns its platform fee on a refunded tip (owner, 12 Nov 2026; for a shared tip already on
- * 11 Nov): our partner takes the whole refund from the person's account and keeps TipMe's fee with
- * TipMe, so TipMe sends it back, TipMe -> the person's account, and absorbs the partner's own
- * processing fee. Called when a refund is final (`refund.paid`) and when staff reverse a lost
- * dispute. Exactly once per partner refund or dispute (the `share_transfers_fee_once` index), and
+ * TipMe returns its fee on a charged-back tip (owner, 14 Nov 2026; never on a refund, where TipMe
+ * keeps it): the network takes the whole tip from the person's account and our partner keeps
+ * TipMe's fee with TipMe, so TipMe sends it back, TipMe -> the person's account, and bears it: the
+ * person loses only what they received. Called when staff reverse a lost dispute (`reverseTip`).
+ * Exactly once per dispute (the `share_transfers_fee_once` index), and
  * never more than the tip's fee in all. `amountMinor` is the reversal's own figure when there is
  * one; otherwise the fee in proportion to what was refunded, rounded down.
  *

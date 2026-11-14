@@ -98,6 +98,27 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
   assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
+  // Owner, 14 Nov 2026: TipMe keeps its fee on a refund. This one was the whole ₦4,000, made at the
+  // partner: the person and the business gave back what they received, TipMe's ₦280 stays in its
+  // books, and staff are told the partner refunded ₦280 more.
+  const [kept] = await q(
+    `SELECT COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+       FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+       JOIN ledger_transactions x ON x.id = e.transaction_id
+      WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')`,
+    [before.tipId],
+  );
+  assert.equal(kept.net, (GROSS - NET).toString());
+  const over = await q(
+    `SELECT summary FROM issues WHERE kind = 'payment_reversed' AND dedupe_key LIKE 'refund_over_net.%'
+        AND subject->>'tipId' = $1`,
+    [before.tipId],
+  );
+  assert.equal(over.length, 1);
+  assert.match(
+    over[0].summary,
+    /₦280 more than this tip's recipients received/,
+  );
   const audits = await q(
     `SELECT action, reason FROM audit_events WHERE action = 'serious_action.ran_alone'
       AND staff_user_id = $1 ORDER BY seq DESC LIMIT 1`,

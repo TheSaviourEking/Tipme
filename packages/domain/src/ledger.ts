@@ -187,6 +187,42 @@ export function buildReversalPosting(
   ];
 }
 
+/**
+ * A refund (owner, 14 Nov 2026): TipMe keeps its fee, and the supporter gets back the tip minus it.
+ * So a refund takes back only what the payment owed the person and the business (`owed`: what is
+ * left of its credit lines), in proportion and each never beyond its own part, and never TipMe's fee
+ * or the processing it recovered. The partner balance drops by what is taken back (plus a fee the
+ * refund itself carries, TipMe's expense). A refund for more than they have left to give (a full
+ * refund made at the partner) takes all of it; the rest is `excessMinor`, reported for staff and
+ * never charged to anyone here. A chargeback is not a refund: it uses `buildReversalPosting`.
+ */
+export function buildRefundReversalPosting(
+  owed: readonly LedgerLine[],
+  refund: { refundedMinor: bigint; refundFeeMinor?: bigint },
+): { lines: LedgerLine[]; excessMinor: bigint } {
+  if (refund.refundedMinor <= 0n) throw new RangeError('refund out of range');
+  const theirs = owed.filter(
+    (l) =>
+      l.side === 'credit' &&
+      l.amountMinor > 0n &&
+      (l.account === 'recipient_payable' || l.account === 'business_payable'),
+  );
+  const left = theirs.reduce((sum, l) => sum + l.amountMinor, 0n);
+  if (left === 0n)
+    throw new RangeError('nothing the person or business received is left');
+  const taken = refund.refundedMinor < left ? refund.refundedMinor : left;
+  const lines = buildReversalPosting(
+    [line('provider_clearing', 'debit', left), ...theirs],
+    {
+      refundedMinor: taken,
+      ...(refund.refundFeeMinor !== undefined
+        ? { refundFeeMinor: refund.refundFeeMinor }
+        : {}),
+    },
+  );
+  return { lines, excessMinor: refund.refundedMinor - taken };
+}
+
 /** Paying a recipient settles what TipMe owed them out of the provider balance. */
 export function buildPayoutPosting({
   amountMinor,

@@ -248,6 +248,7 @@ test('S1: a business account only receives: recipient payouts and transfers, no 
   assert.equal(call.path, '/v1/accounts');
   assert.equal(call.body.entity_type, 'company');
   assert.equal(call.body.configuration.merchant, undefined);
+  assert.deepEqual(call.body.dashboard_features, { refunds: false });
   assert.deepEqual(call.body.configuration.recipient.capabilities, {
     payouts: { requested: true },
     transfers: { requested: true },

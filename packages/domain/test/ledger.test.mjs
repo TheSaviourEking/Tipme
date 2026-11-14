@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { describe, it, test } from 'node:test';
 import {
   buildPaymentPosting,
   buildPayoutPosting,
+  buildRefundReversalPosting,
   buildReversalPosting,
   isBalanced,
   priceTip,
@@ -480,4 +481,87 @@ test('a pro purchase never leaves PAID, and a late payment can still be PAID', a
   assert.ok(canTransition(PRO_PURCHASE_TRANSITIONS, 'UNKNOWN', 'REVIEW'));
   assert.ok(!canTransition(PRO_PURCHASE_TRANSITIONS, 'PAID', 'FAILED'));
   assert.ok(!canTransition(PRO_PURCHASE_TRANSITIONS, 'EXPIRED', 'PENDING'));
+});
+
+// Owner, 14 Nov 2026: TipMe keeps its fee on a refund. The supporter gets back the tip minus TipMe's
+// fee, so a refund takes back only what the payment owed the person and the business (each its own
+// part), never TipMe's fee or the processing it recovered. A refund for more than they received (a
+// full refund made at the partner) takes all they received; the rest is reported, never charged.
+describe('a refund under the 14 Nov 2026 rule', () => {
+  const PERSON = '00000000-0000-7000-8000-0000000000aa';
+  const FIRM = '00000000-0000-7000-8000-0000000000bb';
+  // A Free ₦10,000 tip: TipMe's ₦700 is ₦550 fee and ₦150 processing; ₦9,300 net, ₦1,860 shared.
+  const shared = buildPaymentPosting({
+    grossMinor: 1000000n,
+    platformFeeMinor: 55000n,
+    quotedProviderFeeMinor: 15000n,
+    actualProviderFeeMinor: 15000n,
+    recipientNetMinor: 930000n,
+    profileId: PERSON,
+    businessShare: { businessId: FIRM, amountMinor: 186000n },
+  });
+  const owedOf = (lines) => lines.filter((l) => l.side === 'credit');
+
+  it('the tip minus TipMe’s fee: the person and the business each give back exactly their part', () => {
+    const { lines, excessMinor } = buildRefundReversalPosting(owedOf(shared), {
+      refundedMinor: 930000n,
+    });
+    assert.equal(excessMinor, 0n);
+    assert.deepEqual(
+      lines.map((l) => [
+        l.account,
+        l.side,
+        l.amountMinor,
+        l.profileId ?? l.businessId ?? null,
+      ]),
+      [
+        ['recipient_payable', 'debit', 744000n, PERSON],
+        ['business_payable', 'debit', 186000n, FIRM],
+        ['provider_clearing', 'credit', 930000n, null],
+      ],
+    );
+    assert.equal(isBalanced(lines), true);
+  });
+
+  it('a full refund made at the partner: all they received is taken back, the ₦700 is reported', () => {
+    const { lines, excessMinor } = buildRefundReversalPosting(owedOf(shared), {
+      refundedMinor: 1000000n,
+    });
+    assert.equal(excessMinor, 70000n);
+    assert.equal(
+      lines.some(
+        (l) =>
+          l.account === 'platform_fee_revenue' ||
+          l.account === 'provider_fee_recovered',
+      ),
+      false,
+    );
+    assert.equal(
+      lines.find((l) => l.account === 'provider_clearing').amountMinor,
+      930000n,
+    );
+  });
+
+  it('a partial refund: each part in proportion, the remainder kobo on the person', () => {
+    const { lines, excessMinor } = buildRefundReversalPosting(owedOf(shared), {
+      refundedMinor: 465001n,
+    });
+    assert.equal(excessMinor, 0n);
+    const part = (account) =>
+      lines.find((l) => l.account === account).amountMinor;
+    assert.equal(part('recipient_payable'), 372001n);
+    assert.equal(part('business_payable'), 93000n);
+    assert.equal(part('provider_clearing'), 465001n);
+  });
+
+  it('nothing the person or business received is left: refused', () => {
+    assert.throws(
+      () =>
+        buildRefundReversalPosting(
+          owedOf(shared).filter((l) => l.account === 'platform_fee_revenue'),
+          { refundedMinor: 1000n },
+        ),
+      RangeError,
+    );
+  });
 });

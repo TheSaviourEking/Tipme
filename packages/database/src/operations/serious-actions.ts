@@ -74,7 +74,7 @@ export interface SeriousActionServices {
    * `tip.reverse` runs only then, also when it is approved later.
    */
   businessSharesEnabled?: boolean;
-  /** REFUND_FEE_RETURN (owner, 12 Nov 2026): a reversed tip's fee goes back to the person. */
+  /** REFUND_FEE_RETURN: a charged-back tip's fee goes back to the person (owner, 14 Nov 2026: never a refund's). */
   refundFeeReturn?: boolean;
   mail?: {
     production: boolean;

@@ -504,7 +504,11 @@ export function flagPaymentReversal(
     refundState?: 'pending' | 'paid' | 'failed' | null;
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
-    /** REFUND_FEE_RETURN (owner, 12 Nov 2026): a final refund sends TipMe's fee back. */
+    /**
+     * REFUND_FEE_RETURN (owner, 12 Nov 2026): a final refund is recorded in the ledger at once. Since
+     * 14 Nov 2026 a refund returns nothing of TipMe's fee (the flag keeps its name; it still gates
+     * this automatic recording, an open question for the owner).
+     */
     feeReturnOn?: boolean;
     now?: Date;
   },
@@ -603,7 +607,7 @@ export function flagPaymentReversal(
       }
       // Owner, 12 Nov 2026 (REFUND_FEE_RETURN): once a refund is final (refund.paid, for the
       // amount it gave back; never after a final failure), it is reversed in the ledger here, in
-      // this transaction, and that reversal asks for TipMe's fee to go back (`reverseTip`). Money
+      // this transaction (`reverseTip`; TipMe keeps its fee on a refund, owner 14 Nov 2026). Money
       // never moves without its posting, and both are keyed on the refund: a replayed event finds
       // the reversal done and does nothing. Staff confirming it later is refused as done. If it
       // can't be reversed here (more than is left), it waits for staff, as before.
@@ -630,7 +634,7 @@ export function flagPaymentReversal(
             await tx
               .update(issues)
               .set({
-                summary: sql`${issues.summary} || ${' TipMe reversed it in the ledger when the refund was final, and its fee is going back to the person. Check it, then close this issue.'}`,
+                summary: sql`${issues.summary} || ${' TipMe reversed it in the ledger when the refund was final, taking back what the tip gave its recipients; TipMe keeps its fee. Check it, then close this issue.'}`,
               })
               .where(eq(issues.id, issueId));
         } catch (error) {

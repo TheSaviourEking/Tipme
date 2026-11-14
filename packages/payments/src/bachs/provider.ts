@@ -27,6 +27,15 @@ import { decimalToMinor, minorToDecimal } from './money.js';
 import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
+/**
+ * Owner, 14 Nov 2026: a tip is refunded only by TipMe (the supporter gets back the tip minus TipMe's
+ * fee), never by the account holder from the partner's dashboard. Its `dashboard_features.refunds`
+ * switch starts off; TipMe sends it off explicitly on every account it creates, and never turns it on.
+ */
+const NO_DASHBOARD_REFUNDS = {
+  dashboard_features: { refunds: false },
+} as const;
+
 const checkoutCreatedSchema = z.object({
   checkout_id: z.string().min(1),
   checkout_url: z.string().url(),
@@ -1051,6 +1060,7 @@ export function createBachsProvider(
           responsibilities: {
             fees: { collector: 'platform' },
           },
+          ...NO_DASHBOARD_REFUNDS,
         },
         schema: accountSchema,
       });
@@ -1074,6 +1084,7 @@ export function createBachsProvider(
           entity_type: 'company',
           configuration: { ...PAYOUT_CONFIGURATION },
           responsibilities: { fees: { collector: 'platform' } },
+          ...NO_DASHBOARD_REFUNDS,
         },
         schema: accountSchema,
       });

@@ -40,6 +40,9 @@ import { useDatabase } from './helpers.mjs';
 const [ADA, TOBI] = DEMO_PROFILES;
 const OWNER = ADA.userId;
 const GROSS = 1000000n; // ₦10,000, the sandbox tip: Tobi is on Free, so TipMe's fee is 7% (₦700)
+// What Tobi receives of it. Owner, 14 Nov 2026: TipMe keeps its fee on a refund, so a refund gives the
+// supporter back the tip minus TipMe's fee: exactly this. A chargeback takes the whole tip.
+const NET = 930000n;
 const BPS = 2000; // 80/20
 const MINUTE = 60_000;
 const SETTLE = 24 * 60 * MINUTE;
@@ -231,7 +234,7 @@ test('option B: shares and their money', async (t) => {
       partnerReversalId: `refund.${refundId}`,
       refundState,
       ...(refundState === 'paid'
-        ? { refundedMinor: extra.refundedMinor ?? GROSS, refundFeeMinor: 0n }
+        ? { refundedMinor: extra.refundedMinor ?? NET, refundFeeMinor: 0n }
         : {}),
       ...(extra.feeReturnOn ? { feeReturnOn: true } : {}),
     });
@@ -243,7 +246,7 @@ test('option B: shares and their money', async (t) => {
   const refund = async (
     partner,
     { tipId, attemptId },
-    { refundedMinor = GROSS, feeReturnOn = false } = {},
+    { refundedMinor = NET, feeReturnOn = false } = {},
   ) => {
     partner.available.set(
       TOBI.id,
@@ -544,7 +547,7 @@ test('option B: shares and their money', async (t) => {
   );
 
   await t.test(
-    'refunded before the sweep: TipMe returns its fee, the business is never asked',
+    'refunded before the sweep: the tip minus TipMe’s fee goes back, TipMe keeps its fee, the business is never asked',
     async () => {
       await database.fresh();
       const shared = await atBusiness();
@@ -552,26 +555,13 @@ test('option B: shares and their money', async (t) => {
       partner.available.set(TOBI.id, 930000n);
       const tip = await paidTip({ shared });
       const { tipId } = tip;
-      await refund(partner, tip); // Tobi's account: ₦9,300 - ₦10,000 = -₦700
+      await refund(partner, tip); // Tobi's account: ₦9,300 - ₦9,300 = ₦0
       assert.deepEqual(await transfersOf(tipId), [
         { kind: 'sweep', status: 'cancelled', amount: '186000', deliver: null },
-        {
-          kind: 'fee_return',
-          status: 'out_paid',
-          amount: '70000',
-          deliver: '70000',
-        },
       ]);
       await run(partner, later(SETTLE + MINUTE));
-      assert.deepEqual(
-        partner.calls.map(({ call, from, to, amountMinor }) => ({
-          call,
-          from,
-          to,
-          amountMinor,
-        })),
-        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n }],
-      );
+      // Nothing moves between accounts: TipMe keeps its fee, and the share never left.
+      assert.deepEqual(partner.calls, []);
       // Tobi ends even, on the partner and in the ledger.
       assert.equal(partner.available.get(TOBI.id), 0n);
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
@@ -584,7 +574,7 @@ test('option B: shares and their money', async (t) => {
   );
 
   await t.test(
-    'refunded after the sweep: the share comes back business -> TipMe -> staff, and the fee',
+    'refunded after the sweep: the share comes back business -> TipMe -> staff; TipMe keeps its fee',
     async () => {
       await database.fresh();
       const shared = await atBusiness();
@@ -593,7 +583,7 @@ test('option B: shares and their money', async (t) => {
       const tip = await paidTip({ shared });
       const { tipId } = tip;
       await run(partner, later(SETTLE + MINUTE));
-      await refund(partner, tip); // Tobi: ₦7,440 - ₦10,000 = -₦2,560
+      await refund(partner, tip); // Tobi: ₦7,440 - ₦9,300 = -₦1,860
       await run(partner, later(SETTLE + 2 * MINUTE));
       const moves = partner.calls
         .filter((c) => c.call !== 'find')
@@ -604,7 +594,8 @@ test('option B: shares and their money', async (t) => {
           to,
           amountMinor,
         }));
-      // Both are asked for by the reversal, in one transaction: the share back, then the fee.
+      // The reversal asks only for the share back: the business gives back exactly its ₦1,860, the
+      // person their ₦7,440, together the tip minus TipMe's fee.
       assert.deepEqual(moves, [
         {
           call: 'collect',
@@ -613,20 +604,31 @@ test('option B: shares and their money', async (t) => {
           amountMinor: 186000n,
         },
         { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 186000n },
-        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n },
       ]);
       assert.equal(partner.available.get(TOBI.id), 0n);
       assert.equal(partner.available.get(shared.businessId), 0n);
-      // TipMe gave its fee back and absorbs the partner's processing fee.
-      assert.equal(partner.available.get('platform'), 100000000n - 70000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      // TipMe sends nothing of its fee.
+      assert.equal(partner.available.get('platform'), 100000000n);
       const kinds = Object.fromEntries(
         (await transfersOf(tipId)).map((r) => [r.kind, r.status]),
       );
-      assert.deepEqual(kinds, {
-        sweep: 'done',
-        fee_return: 'done',
-        recover: 'done',
-      });
+      assert.deepEqual(kinds, { sweep: 'done', recover: 'done' });
+      // Each side gave back exactly what it received; TipMe's ₦700 stays in its books.
+      assert.deepEqual(
+        await q(
+          `SELECT a.code, e.amount_minor::text AS amount
+             FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+             JOIN ledger_transactions x ON x.id = e.transaction_id
+            WHERE x.tip_id = $1 AND x.operation_type = 'reversal' AND e.side = 'debit'
+            ORDER BY a.code`,
+          [tipId],
+        ),
+        [
+          { code: 'business_payable', amount: '186000' },
+          { code: 'recipient_payable', amount: '744000' },
+        ],
+      );
     },
   );
 
@@ -646,11 +648,7 @@ test('option B: shares and their money', async (t) => {
       const kinds = Object.fromEntries(
         (await transfersOf(first.tipId)).map((r) => [r.kind, r.status]),
       );
-      assert.deepEqual(kinds, {
-        sweep: 'done',
-        fee_return: 'done',
-        recover: 'gap',
-      });
+      assert.deepEqual(kinds, { sweep: 'done', recover: 'gap' });
       assert.deepEqual(
         await q(
           `SELECT amount_minor::text AS amount, remaining_minor::text AS remaining, profile_id
@@ -699,9 +697,9 @@ test('option B: shares and their money', async (t) => {
         amount: '186000',
         profile_id: TOBI.id,
       });
-      // Tobi's account matches the ledger again: the first tip came to nothing (₦9,300 in, ₦10,000
-      // refunded, ₦700 fee back; ₦1,860 out to the business, ₦1,860 back from the second tip's
-      // share), and the second tip leaves them their ₦7,440.
+      // Tobi's account matches the ledger again: the first tip came to nothing (₦9,300 in, ₦9,300
+      // refunded, TipMe keeping its fee; ₦1,860 out to the business, ₦1,860 back from the second
+      // tip's share), and the second tip leaves them their ₦7,440.
       assert.equal(partner.available.get(TOBI.id), 744000n);
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 744000n);
       // The business's account got nothing from the second tip: its share paid the gap.
@@ -734,13 +732,15 @@ test('option B: shares and their money', async (t) => {
     );
 
   await t.test(
-    'shares off, fee return on: an individual tip’s refund.paid posts the reversal and returns the fee, each once',
+    'a final refund (recorded at refund.paid) takes back the tip minus TipMe’s fee, once; TipMe keeps its fee and sends nothing',
     async () => {
+      // Owner, 14 Nov 2026: the supporter gets back the tip minus TipMe's fee (₦9,300 of ₦10,000);
+      // Tobi gives back exactly the ₦9,300 they received, and TipMe keeps its ₦700.
       await database.fresh();
       const partner = pretendPartner();
       const tip = await paidTip({ sharesOn: false });
-      // The ₦9,300 net reached Tobi's account; then the partner takes the whole ₦10,000 refund.
-      partner.available.set(TOBI.id, 930000n - GROSS);
+      // The ₦9,300 net reached Tobi's account; then the partner takes the ₦9,300 refund from it.
+      partner.available.set(TOBI.id, NET - NET);
       const reversals = () =>
         q(
           `SELECT operation_key FROM ledger_transactions WHERE tip_id = $1 AND operation_type = 'reversal'`,
@@ -750,47 +750,30 @@ test('option B: shares and their money', async (t) => {
       await refundEvent(tip.attemptId, refundId, 'pending', {
         feeReturnOn: true,
       });
-      assert.deepEqual(await feeReturns(tip.tipId), []);
       assert.deepEqual(await reversals(), []);
       // refund.paid, delivered three times (replayed webhooks).
       for (let i = 0; i < 3; i += 1)
         await refundEvent(tip.attemptId, refundId, 'paid', {
           feeReturnOn: true,
         });
-      // The reversal is posted with the money, once; so is the fee's return.
       assert.deepEqual(await reversals(), [
         { operation_key: `reversal.refund.${refundId}` },
       ]);
-      assert.deepEqual(await feeReturns(tip.tipId), [
-        { status: 'out_paid', amount: '70000', refund: `refund.${refundId}` },
-      ]);
+      assert.deepEqual(await feeReturns(tip.tipId), []);
       await run(partner, later(MINUTE));
-      await run(partner, later(2 * MINUTE));
-      assert.deepEqual(
-        partner.calls.map(({ call, from, to, amountMinor }) => ({
-          call,
-          from,
-          to,
-          amountMinor,
-        })),
-        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n }],
-      );
-      // Staff confirming it afterwards posts nothing more, and nothing more moves.
+      assert.deepEqual(partner.calls, []);
+      // Staff confirming it afterwards posts nothing more.
       const again = await db.transaction((tx) =>
         reverseTip(tx, {
           tipId: tip.tipId,
           partnerReversalId: `refund.${refundId}`,
-          refundedMinor: GROSS,
+          refundedMinor: NET,
           feeReturnOn: true,
         }),
       );
       assert.equal(again.created, false);
-      await run(partner, later(3 * MINUTE));
-      assert.equal(partner.calls.length, 1);
-      assert.equal((await feeReturns(tip.tipId))[0].status, 'done');
       assert.equal((await reversals()).length, 1);
-      // The ledger matches the partner: Tobi's balance is what their account holds (₦0), and TipMe's
-      // books show its fee gone (revenue back to zero for this tip), every transaction balanced.
+      // The ledger matches the partner (Tobi ₦0), and TipMe's ₦700 stays in its books.
       assert.equal(partner.available.get(TOBI.id), 0n);
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
       const [revenue] = await q(
@@ -800,7 +783,7 @@ test('option B: shares and their money', async (t) => {
           WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')`,
         [tip.tipId],
       );
-      assert.equal(revenue.net, '0');
+      assert.equal(revenue.net, '70000');
       assert.deepEqual(
         await q(
           `SELECT transaction_id FROM ledger_entries GROUP BY transaction_id, currency
@@ -808,6 +791,42 @@ test('option B: shares and their money', async (t) => {
         ),
         [],
       );
+    },
+  );
+
+  await t.test(
+    'a full ₦10,000 refund made at the partner: Tobi gives back only the ₦9,300 they received, TipMe keeps its fee, staff are told',
+    async () => {
+      await database.fresh();
+      const partner = pretendPartner();
+      const tip = await paidTip({ sharesOn: false });
+      const refundId = randomUUID();
+      const result = await db.transaction(async (tx) => {
+        await refundEvent(tip.attemptId, refundId, 'paid', {
+          refundedMinor: GROSS,
+        });
+        return reverseTip(tx, {
+          tipId: tip.tipId,
+          partnerReversalId: `refund.${refundId}`,
+          refundedMinor: GROSS,
+        });
+      });
+      assert.equal(result.excessMinor, 70000n);
+      // Never charged more than they received.
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      assert.deepEqual(await feeReturns(tip.tipId), []);
+      await run(partner, later(MINUTE));
+      assert.deepEqual(partner.calls, []);
+      const [issue] = await q(
+        `SELECT kind, summary FROM issues WHERE dedupe_key = $1`,
+        [`refund_over_net.reversal.refund.${refundId}`],
+      );
+      assert.equal(issue.kind, 'payment_reversed');
+      assert.match(
+        issue.summary,
+        /₦700 more than this tip's recipients received/,
+      );
+      assert.match(issue.summary, /TipMe keeps its fee/);
     },
   );
 
@@ -828,12 +847,12 @@ test('option B: shares and their money', async (t) => {
   });
 
   await t.test(
-    'a business tip with a share: the fee goes back once, not twice, beside the share coming back',
+    'a business tip with a share, refunded: the share comes back, and nothing of TipMe’s fee is sent',
     async () => {
       await database.fresh();
       const shared = await atBusiness();
       const partner = pretendPartner();
-      partner.available.set(TOBI.id, 930000n);
+      partner.available.set(TOBI.id, NET);
       const tip = await paidTip({ shared });
       await run(partner, later(SETTLE + MINUTE));
       await refund(partner, tip, { feeReturnOn: true });
@@ -843,15 +862,46 @@ test('option B: shares and their money', async (t) => {
         r.status,
       ]);
       assert.deepEqual(kinds.sort(), [
-        ['fee_return', 'done'],
         ['recover', 'done'],
         ['sweep', 'done'],
       ]);
-      const fees = partner.calls.filter(
-        (c) => c.call === 'send' && c.amountMinor === 70000n,
-      );
-      assert.equal(fees.length, 1);
       assert.equal(partner.available.get(TOBI.id), 0n);
+      assert.equal(partner.available.get('platform'), 100000000n);
+    },
+  );
+
+  // Owner, 14 Nov 2026: a chargeback is not TipMe's refund. The network takes the whole tip from
+  // the person's account, so TipMe sends its fee back and bears it: they lose only what they received.
+  await t.test(
+    'a shared tip charged back: each side gives back what it received, and TipMe sends its whole fee to the person once',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const partner = pretendPartner();
+      partner.available.set(TOBI.id, NET);
+      const tip = await paidTip({ shared });
+      await run(partner, later(SETTLE + MINUTE));
+      // The network takes the whole ₦10,000 from Tobi's account.
+      partner.available.set(TOBI.id, partner.available.get(TOBI.id) - GROSS);
+      const dispute = `dispute.${randomUUID().replaceAll('-', '')}`;
+      for (let i = 0; i < 2; i += 1)
+        await db.transaction((tx) =>
+          reverseTip(tx, {
+            tipId: tip.tipId,
+            partnerReversalId: dispute,
+            refundedMinor: GROSS,
+          }),
+        );
+      await run(partner, later(SETTLE + 2 * MINUTE));
+      assert.deepEqual(await feeReturns(tip.tipId), [
+        { status: 'done', amount: '70000', refund: dispute },
+      ]);
+      // Tobi lost only what they received: ₦7,440 kept, ₦1,860 to the business, all back to ₦0.
+      assert.equal(partner.available.get(TOBI.id), 0n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      assert.equal(partner.available.get(shared.businessId), 0n);
+      // TipMe bears its ₦700: sent from its own balance, and gone from its books.
+      assert.equal(partner.available.get('platform'), 100000000n - 70000n);
     },
   );
 
@@ -893,10 +943,10 @@ test('option B: shares and their money', async (t) => {
   );
 
   await t.test(
-    'a business tip takes the staff member’s plan rate, and a refund returns the fee its own quote took',
+    'a business tip takes the staff member’s plan rate: a refund gives back the tip minus that fee, a chargeback returns that fee',
     async () => {
-      // Owner, 12 Nov 2026: Free 7%, Pro 5%. The fee's return reads each tip's quote, so a plan
-      // change between the tip and its refund never changes what goes back.
+      // Owner, 12 and 14 Nov 2026: Free 7%, Pro 5%. Each tip's own quote decides, so a plan change
+      // between the tip and its refund or chargeback never changes what goes back.
       await database.fresh();
       const shared = await atBusiness();
       const partner = pretendPartner();
@@ -916,24 +966,38 @@ test('option B: shares and their money', async (t) => {
       );
       partner.available.set(TOBI.id, 930000n + 950000n);
       await run(partner, later(SETTLE + MINUTE));
-      // Back on Free when the Pro tip is refunded; on Pro when the Free tip is.
+      // Back on Free when the Pro tip is refunded: the supporter gets ₦9,500 back (₦10,000 less Pro's
+      // 5%), Tobi gives back ₦7,600 and the business ₦1,900, and TipMe keeps its ₦500.
       await plan('free');
-      await refund(partner, pro, { feeReturnOn: true });
-      await plan('pro');
-      await refund(partner, free, { feeReturnOn: true });
+      await refund(partner, pro, { refundedMinor: 950000n, feeReturnOn: true });
+      assert.deepEqual(await feeReturns(pro.tipId), []);
       assert.deepEqual(
-        (await feeReturns(pro.tipId)).map((r) => r.amount),
-        ['50000'],
+        await q(
+          `SELECT a.code, e.amount_minor::text AS amount
+             FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+             JOIN ledger_transactions x ON x.id = e.transaction_id
+            WHERE x.tip_id = $1 AND x.operation_type = 'reversal' AND e.side = 'debit'
+            ORDER BY a.code`,
+          [pro.tipId],
+        ),
+        [
+          { code: 'business_payable', amount: '190000' },
+          { code: 'recipient_payable', amount: '760000' },
+        ],
+      );
+      // On Pro when the Free tip is charged back: TipMe returns that tip's own 7%, ₦700.
+      await plan('pro');
+      await db.transaction((tx) =>
+        reverseTip(tx, {
+          tipId: free.tipId,
+          partnerReversalId: `dispute.${randomUUID().replaceAll('-', '')}`,
+          refundedMinor: GROSS,
+        }),
       );
       assert.deepEqual(
         (await feeReturns(free.tipId)).map((r) => r.amount),
         ['70000'],
       );
-      await run(partner, later(SETTLE + 2 * MINUTE));
-      const fees = partner.calls
-        .filter((c) => c.call === 'send' && c.to === TOBI.id)
-        .map((c) => c.amountMinor);
-      assert.ok(fees.includes(50000n) && fees.includes(70000n));
       assert.deepEqual(
         await q(
           `SELECT transaction_id FROM ledger_entries GROUP BY transaction_id, currency
