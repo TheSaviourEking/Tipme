@@ -73,12 +73,12 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `payments.recheck` | POST `/v1/ops/recheck` |
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
-| `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
+| `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup`<br>POST `/v1/ops/users/{id}/reveal` |
 | `pro.price` | GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
-| `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search` |
+| `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search`<br>GET `/v1/ops/users` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 | `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
@@ -414,6 +414,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/usernames/{name}/take-back` | `usernames.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames/check/{name}` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/usernames/take-backs/{id}/cancel` | `usernames.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/users` | `search.view` | n/a (read) | – | – |
+| POST | `/v1/ops/users/{id}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/users/{userId}/cancel-recovery` | `recoveries.cancel` | yes | – | – |
 | GET | `/v1/ops/withdrawals-switch` | `payouts.resolve` | n/a (read) | – | – |
 | POST | `/v1/ops/withdrawals-switch` | `payouts.resolve` | yes | – | – |

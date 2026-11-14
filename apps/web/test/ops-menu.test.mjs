@@ -16,7 +16,7 @@ test('each entry needs what its page reads', () => {
     ['fees.manage', ['/ops/pages']],
     ['payouts.resolve', ['/ops/pages']],
     ['recoveries.manage', ['/ops/pages']],
-    ['search.view', ['/ops/search']],
+    ['search.view', ['/ops/search', '/ops/users']],
     ['audit.view', ['/ops/audit']],
     ['staff.manage', ['/ops/staff/people', '/ops/staff/roles']],
   ];
@@ -30,6 +30,7 @@ test('a permission opens nothing else', () => {
     '/ops',
     '/ops/approvals',
     '/ops/search',
+    '/ops/users',
     '/ops/staff',
   ]);
   assert.ok(!hrefs(['issues.view']).includes('/ops/staff/people'));
@@ -113,10 +114,10 @@ test('the menu comes in the board’s groups, in order', () => {
     groups.map((group) => group.links.map((link) => link.label)),
     [
       ['Overview', 'Approvals'],
-      ['Issues', 'Search', 'Pages', 'Usernames'],
+      ['Issues', 'Search', 'People', 'Pages', 'Usernames'],
       ['Visibility', 'Market'],
       ['Providers', 'Email', 'Audit log'],
-      ['People', 'Roles', 'Your access'],
+      ['Staff members', 'Roles', 'Your access'],
     ],
   );
   // The flat menu is the groups read in order.
@@ -141,7 +142,11 @@ test('the open page is its own link, or the section it sits in', () => {
   const links = opsMenu(OWNER);
   assert.equal(opsMenuCurrent(links, '/ops')?.label, 'Overview');
   assert.equal(opsMenuCurrent(links, '/ops/staff')?.label, 'Your access');
-  assert.equal(opsMenuCurrent(links, '/ops/staff/people')?.label, 'People');
+  assert.equal(
+    opsMenuCurrent(links, '/ops/staff/people')?.label,
+    'Staff members',
+  );
+  assert.equal(opsMenuCurrent(links, '/ops/users')?.label, 'People');
   assert.equal(opsMenuCurrent(links, '/ops/issues/abc')?.label, 'Issues');
   assert.equal(
     opsMenuCurrent(links, '/ops/providers/confirm')?.label,
@@ -158,7 +163,7 @@ test('Businesses joins the Work group while the business feature is on', () => {
     opsMenuGroups(OWNER, { business: true })
       .find((group) => group.label === 'Work')
       ?.links.map((link) => link.label),
-    ['Issues', 'Search', 'Pages', 'Usernames', 'Businesses'],
+    ['Issues', 'Search', 'People', 'Pages', 'Usernames', 'Businesses'],
   );
 });
 
@@ -200,4 +205,15 @@ test('Pro price sits in Work, after Usernames, only with pro.price', () => {
       ?.links.map((link) => link.label),
     ['Pages', 'Usernames', 'Pro price'],
   );
+});
+
+test('People sits in Work right after Search, for search.view only', () => {
+  assert.ok(!hrefs(['analytics.view', 'staff.manage']).includes('/ops/users'));
+  const work = opsMenuGroups(['search.view']).find(
+    (group) => group.label === 'Work',
+  );
+  assert.deepEqual(work?.links, [
+    { href: '/ops/search', label: 'Search' },
+    { href: '/ops/users', label: 'People' },
+  ]);
 });
