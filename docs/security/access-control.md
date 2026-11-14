@@ -331,6 +331,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/business-notes/{tipId}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/business-notes/{tipId}/review` | `issues.resolve` | yes | – | – |
+| GET | `/v1/ops/business-pro-price` | `pro.price` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/business-pro-price` | `pro.price` | yes | `ops_request` | – |
 | GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}/logo` | `search.view` | n/a (read) | – | – |

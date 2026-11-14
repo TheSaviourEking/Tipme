@@ -55,6 +55,7 @@ export class ReleaseInfoController {
         paymentProvider: this.config.PAYMENT_PROVIDER,
         business,
         display,
+        businessPro: business && this.config.BUSINESS_PRO_ENABLED,
       },
     };
   }

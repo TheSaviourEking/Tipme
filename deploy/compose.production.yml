@@ -76,6 +76,8 @@ x-api-env: &api-env
   ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
   ADULT_PLATFORM_LINKS: ${ADULT_PLATFORM_LINKS:-}
   SUPPORTER_RECOGNITION: ${SUPPORTER_RECOGNITION:-}
+  # Business Pro, on top of BUSINESS_ENABLED: off until the owner turns it on.
+  BUSINESS_PRO_ENABLED: ${BUSINESS_PRO_ENABLED:-false}
   LIVE_MAX_STREAMS: ${LIVE_MAX_STREAMS:-2000}
   # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
   R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}

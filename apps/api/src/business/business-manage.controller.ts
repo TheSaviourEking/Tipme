@@ -34,7 +34,9 @@ import {
   updateBusiness,
   updateLocation,
   type MailSealing,
+  withBusinessPlan,
 } from '@tipme/database';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
   CurrentUser,
@@ -61,11 +63,19 @@ export class BusinessManageController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
   ) {}
+
+  /** Business Pro: the plan, usage and lapse join the detail only with BUSINESS_PRO_ENABLED on. */
+  private withPlan(detail: BusinessDetail): Promise<BusinessDetail> {
+    return this.config.BUSINESS_PRO_ENABLED
+      ? withBusinessPlan(this.database.db, detail)
+      : Promise.resolve(detail);
+  }
 
   /** Anyone signed in with a proven email (owner's answer Q3). Pending until TipMe verifies it. */
   @Post()
@@ -77,7 +87,9 @@ export class BusinessManageController {
     body: BusinessApplication,
   ): Promise<ApiDataResponse<BusinessDetail>> {
     return {
-      data: await applyForBusiness(this.database.db, auth.userId, body),
+      data: await this.withPlan(
+        await applyForBusiness(this.database.db, auth.userId, body),
+      ),
     };
   }
 
@@ -87,7 +99,11 @@ export class BusinessManageController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return { data: await businessDetail(this.database.db, auth.userId, id) };
+    return {
+      data: await this.withPlan(
+        await businessDetail(this.database.db, auth.userId, id),
+      ),
+    };
   }
 
   /** Owners. The address (slug) changes only while the business waits to be verified. */
@@ -99,7 +115,7 @@ export class BusinessManageController {
   ): Promise<ApiDataResponse<BusinessDetail>> {
     const data = await updateBusiness(this.database.db, auth.userId, id, body);
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners. */
@@ -110,9 +126,16 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(locationInputSchema)) body: LocationInput,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    const data = await addLocation(this.database.db, auth.userId, id, body);
+    const data = await addLocation(
+      this.database.db,
+      auth.userId,
+      id,
+      body,
+      new Date(),
+      { enforceLimits: this.config.BUSINESS_PRO_ENABLED },
+    );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners, or that location's manager. */
@@ -131,7 +154,7 @@ export class BusinessManageController {
       body,
     );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners. The location page stops showing; the people there stay on the team. */
@@ -149,7 +172,7 @@ export class BusinessManageController {
       locationId,
     );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   @Get(':id/managers')

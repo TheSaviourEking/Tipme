@@ -19,6 +19,8 @@ export interface ReleaseInfo {
   business: boolean;
   /** The pilot notice and the launch time, set in admin (owner, 14 Nov 2026, #216). */
   display: PublicDisplaySettings;
+  /** Business Pro is switched on (BUSINESS_PRO_ENABLED, on top of `business`). */
+  businessPro: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

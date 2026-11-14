@@ -117,6 +117,9 @@ export type OperationErrorCode =
   // An owner tried to end another owner's seat: TipMe staff do that (interim lock, 14 Nov 2026).
   | 'OWNER_REMOVAL_NEEDS_TIPME'
   | 'BUSINESS_NOT_VERIFIED'
+  // Business Pro (plan Task A4).
+  | 'BUSINESS_STAFF_LIMIT'
+  | 'BUSINESS_LOCATION_LIMIT'
   // Business release 2 (R2-0).
   | 'SHARE_NOT_ALLOWED'
   | 'SHARE_CHANGE_TOO_SOON'

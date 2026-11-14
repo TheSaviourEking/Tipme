@@ -64,6 +64,8 @@ const messages: Record<ApiErrorCode, string> = {
   OWNER_REMOVAL_NEEDS_TIPME:
     'To remove an owner, contact TipMe support. We check it with both owners first.',
   BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  BUSINESS_STAFF_LIMIT: 'Your business is at its staff limit.',
+  BUSINESS_LOCATION_LIMIT: 'Your business is at its location limit.',
   SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
   SHARE_CHANGE_TOO_SOON:
     'A share can change at most once a month. Try a later start date.',
@@ -427,6 +429,9 @@ const operationErrors: Partial<
   OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
   BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
   OWNER_REMOVAL_NEEDS_TIPME: { status: 403, code: 'OWNER_REMOVAL_NEEDS_TIPME' },
+  // Business Pro (plan Task A4): a state to change (a plan, a seat), not bad input.
+  BUSINESS_STAFF_LIMIT: { status: 409, code: 'BUSINESS_STAFF_LIMIT' },
+  BUSINESS_LOCATION_LIMIT: { status: 409, code: 'BUSINESS_LOCATION_LIMIT' },
   // Business release 2 (R2-0).
   SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
   SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },

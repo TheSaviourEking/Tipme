@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed eighteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 18);
+test('the serious actions are the agreed nineteen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 19);
   // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['business.owner_remove'],
@@ -69,6 +69,11 @@ test('the serious actions are the agreed eighteen', () => {
   assert.equal(
     SERIOUS_ACTION_WORDS['business.owner_remove'],
     'Remove a business owner',
+  );
+  // Business Pro, plan Task A5: its own price, decided like the personal one.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['business_pro_price.change'],
+    'pro.price',
   );
   // Paid Pro, plan Task 9 (ruling 6): a card refund needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro.refund'], 'payments.repair');

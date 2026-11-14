@@ -25,6 +25,7 @@ import { OpsChangelogController } from './changelog.controller.js';
 import { OpsProPaymentsController } from './pro-payments.controller.js';
 import { OpsProPriceController } from './pro-price.controller.js';
 import { OpsSwitchesController } from './switches.controller.js';
+import { OpsBusinessProPriceController } from './business-pro-price.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { ProfilesModule } from '../profiles/profiles.module.js';
@@ -58,6 +59,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsBusinessNotesController,
     OpsChangelogController,
     OpsProPriceController,
+    OpsBusinessProPriceController,
     OpsProPaymentsController,
     OpsSwitchesController,
   ],

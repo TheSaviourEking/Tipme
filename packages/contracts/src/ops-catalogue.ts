@@ -261,6 +261,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Switch names, states, reasons and staff ids: nobody’s private details; changes nothing.',
   },
+  'OpsBusinessProPriceController.state': {
+    verb: 'GET',
+    permission: 'pro.price',
+    reason:
+      'The Business Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsPagesController.pro': {
     verb: 'GET',
     permission: 'pages.plan',
@@ -357,6 +363,8 @@ export const SERIOUS_ACTIONS = [
   'pro.refund',
   // Feature switches (owner, 14 Nov 2026): a money switch on or off.
   'feature_switch.set',
+  // Business Pro (plan Task A5): its own monthly price, changed like the personal one.
+  'business_pro_price.change',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -380,6 +388,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'pro_price.change': 'Change the Pro price',
   'pro.refund': 'Refund a Pro card payment',
   'feature_switch.set': 'Turn a money switch on or off',
+  'business_pro_price.change': 'Change the Business Pro price',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -403,4 +412,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'pro_price.change': 'pro.price',
     'pro.refund': 'payments.repair',
     'feature_switch.set': 'switches.manage',
+    'business_pro_price.change': 'pro.price',
   };

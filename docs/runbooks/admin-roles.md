@@ -72,6 +72,7 @@ These wait for a second person when one is available:
 | `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (business release 2, behind the shares flag) |
 | `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`  |
 | `pro_price.change`          | Change the Pro price                   | `pro.price`                                                    |
+| `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                    |
 | `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                              |
 | `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)    |
 
