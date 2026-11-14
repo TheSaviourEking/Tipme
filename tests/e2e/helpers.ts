@@ -22,15 +22,15 @@ export async function expectAccessible(page: Page) {
 export const fitsViewport = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
+type IdentityOwner = { project: { name: string }; workerIndex: number };
+// Worker and project last: the pretend inbox shows only the last four digits, and
+// tests running at the same moment must never share them.
+const identityTail = (testInfo: IdentityOwner) =>
+  `${testInfo.workerIndex % 10}${testInfo.project.name === 'mobile' ? 1 : 0}`;
+
 /** A unique Nigerian mobile number and handle per test, so parallel workers and projects never collide. */
-export function identity(testInfo: {
-  project: { name: string };
-  workerIndex: number;
-}) {
-  const project = testInfo.project.name === 'mobile' ? 1 : 0;
-  // Worker and project last: the pretend inbox shows only the last four digits, and
-  // tests running at the same moment must never share them.
-  const digits = `${String(Date.now()).slice(-5)}${testInfo.workerIndex % 10}${project}`;
+export function identity(testInfo: IdentityOwner) {
+  const digits = `${String(Date.now()).slice(-5)}${identityTail(testInfo)}`;
   return {
     phone: `+234803${digits}`,
     // The inbox shows only the first letter and the domain, so the domain keeps tests apart.
@@ -38,6 +38,10 @@ export function identity(testInfo: {
     handle: `e2e_${digits}`,
   };
 }
+
+/** SQL LIKE for every email `identity` gives this worker and project, at any moment. */
+export const identityEmailPattern = (testInfo: IdentityOwner) =>
+  `kemi@e2e-_____${identityTail(testInfo)}.example`;
 
 const hintOf = (email: string) => {
   const [local = '', domain = ''] = email.toLowerCase().split('@');

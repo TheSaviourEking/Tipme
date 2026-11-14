@@ -4,6 +4,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
+  identityEmailPattern,
   signInWithEmail,
   signUpRecipient,
 } from './helpers';
@@ -20,6 +21,23 @@ import {
 
 // Two or more staff exist here, so serious actions wait. ops-alone.spec.ts covers one person.
 const REASON = 'Checked with the person on a call today';
+
+// Each test brings its own owners, and every pending request mails everyone who could decide it.
+// Left in place, the owners of every earlier run get each new request's mail, and in the later
+// repeats the sign-in codes queue behind thousands of those. So a test's owners go when it ends:
+// the ones `identity` names for this worker and project, granted since the test began.
+let startedAt = new Date();
+test.beforeEach(() => {
+  startedAt = new Date(Date.now() - 1_000);
+});
+test.afterEach(async ({}, testInfo) => {
+  await sql(
+    `UPDATE staff s SET revoked_at = now() FROM users u
+      WHERE u.id = s.user_id AND s.revoked_at IS NULL AND s.granted_at >= $1
+        AND u.email LIKE $2`,
+    [startedAt, identityEmailPattern(testInfo)],
+  );
+});
 
 const waiting = (page: Page) =>
   page.getByText('Waiting for a second person', { exact: true });
