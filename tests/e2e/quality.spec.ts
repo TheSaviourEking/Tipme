@@ -219,14 +219,20 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
-test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
+test('the terms set out Free 7%, Pro 5% and the NGN 2,000 minimums', async ({
   page,
 }) => {
   await page.goto('/legal/terms');
   const fees = page.getByRole('region', { name: 'Fees' });
   await expect(fees).toContainText('you pay exactly the amount you choose');
-  await expect(fees).toContainText('TipMe keeps 10% of each tip');
-  await expect(fees).toContainText('you receive ₦4,500');
+  await expect(fees).toContainText(
+    'TipMe keeps 7% of each tip on the Free plan, or 5% on TipMe Pro',
+  );
+  await expect(fees).toContainText(
+    'From a ₦5,000 tip, you receive ₦4,650 on Free, or ₦4,750 on Pro.',
+  );
+  await expect(fees).not.toContainText('10%');
+  await expect(fees).not.toContainText('₦4,500');
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
 });

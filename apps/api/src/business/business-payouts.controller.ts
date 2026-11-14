@@ -256,6 +256,7 @@ export class BusinessPayoutsController {
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
               feeMinor: quote.feeMinor.toString(),
+              feePaidBy: quote.feePaidBy,
             }
           : { ...quote, inReview },
     };

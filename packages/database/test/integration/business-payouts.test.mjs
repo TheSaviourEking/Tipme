@@ -320,33 +320,37 @@ test('a business balance and its withdrawals', async (t) => {
         (await states(business.payoutId)).map((s) => s.to_status),
         ['REQUESTED', 'PROCESSING', 'PAID'],
       );
-      // Paid: the business's own line is debited, never Tobi's.
-      assert.deepEqual(
-        await q(
+      // Paid: the business's own line is debited, never Tobi's. The business pays the ₦50
+      // transfer fee from the amount (owner, 12 Nov 2026): ₦4,950 sent, ₦50 fee, both its own.
+      const lines = (key) =>
+        q(
           `SELECT a.code, e.side, e.amount_minor::text AS amount, e.business_id, e.profile_id
              FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
              JOIN ledger_transactions x ON x.id = e.transaction_id
-            WHERE x.payout_id = $1 AND x.operation_key = 'payout.' || $1::text
+            WHERE x.payout_id = $1 AND x.operation_key = $2 || $1::text
             ORDER BY a.code`,
-          [business.payoutId],
-        ),
-        [
+          [business.payoutId, key],
+        );
+      for (const [key, amount] of [
+        ['payout.', '495000'],
+        ['payout-user-fee.', '5000'],
+      ])
+        assert.deepEqual(await lines(key), [
           {
             code: 'business_payable',
             side: 'debit',
-            amount: '500000',
+            amount,
             business_id: shared.businessId,
             profile_id: null,
           },
           {
             code: 'provider_clearing',
             side: 'credit',
-            amount: '500000',
+            amount,
             business_id: null,
             profile_id: null,
           },
-        ],
-      );
+        ]);
       assert.equal(await businessBalance(shared.businessId), share - 500000n);
       assert.equal(await personBalance(), personBefore - 200000n);
       await assertBalanced();

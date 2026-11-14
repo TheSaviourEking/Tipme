@@ -24,7 +24,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
     message: 'Lovely braids, thank you',
   });
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('₦1,800');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,860');
   const row = page.getByRole('link', { name: /Tip from Ada M\./ });
   await expect(row).toContainText('Paid');
   await expect(page.getByText('Today')).toBeVisible();
@@ -33,7 +33,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
 
   await row.click();
   await expect(
-    page.getByRole('heading', { name: '₦1,800 from Ada M.' }),
+    page.getByRole('heading', { name: '₦1,860 from Ada M.' }),
   ).toBeVisible();
   await expect(page.getByText('Lovely braids, thank you')).toBeVisible();
   const receipt = page.locator('.receipt');
@@ -42,7 +42,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
   ).toContainText('₦2,000');
   await expect(
     receipt.locator('div', { hasText: 'You received' }),
-  ).toContainText('₦1,800');
+  ).toContainText('₦1,860');
   await expect(receipt.getByText('In your balance')).toBeVisible();
   await expect(
     receipt.getByText(/Confirmed by our payment partner/),
@@ -58,15 +58,15 @@ test('a recipient withdraws a tip and sees it sent, and the dashboard fits a nar
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('₦1,800', {
+  await expect(page.getByTestId('balance')).toHaveText('₦1,860', {
     timeout: 15_000,
   });
 
   // A withdrawal records the bank it went to, if one was saved.
   await saveBank(handle, 'GTBank', '6789');
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1800');
-  await page.getByRole('button', { name: 'Withdraw ₦1,800' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1860');
+  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await expectAccessible(page);
   await page.goto('/dashboard');
@@ -144,7 +144,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
         data: {
           ...body.data,
           availableMinor: '4860000',
-          confirmingMinor: '180000',
+          confirmingMinor: '186000',
         },
       },
     });
@@ -160,7 +160,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
             kind: 'tip',
             id: '11111111-1111-4111-8111-111111111111',
             at: new Date().toISOString(),
-            amountMinor: '180000',
+            amountMinor: '186000',
             state: 'confirming',
             supporterLabel: 'Amaka',
           },
@@ -181,7 +181,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
   // The quote allows nothing on a page with no tips behind it, so none of the balance is called
   // ready to withdraw (the ledger figure is not what can go).
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
-  await expect(main.getByText('₦1,800 still being confirmed')).toBeVisible();
+  await expect(main.getByText('₦1,860 still being confirmed')).toBeVisible();
   // Pending money is never counted as available.
   await expect(page.getByTestId('balance')).not.toContainText('50,400');
   await expectAccessible(page);
@@ -355,4 +355,49 @@ test('the recovery-email reminder shows on Home and Settings, not on Withdraw or
   await expect(
     page.getByRole('link', { name: 'Settings (needs your attention)' }),
   ).toBeVisible();
+});
+
+test('the dashboard has a slim footer with Privacy and Terms, and the home page keeps the full one', async ({
+  page,
+}, testInfo) => {
+  // X1 (ScreenAudit "Across the app": the full marketing footer inside the signed-in app).
+  await signUpRecipient(page, testInfo);
+  await page.goto('/dashboard');
+  const footer = page.locator('.site-footer');
+  await expect(footer).toBeVisible();
+  await expect(footer.locator('.footer-card')).toBeHidden();
+  const legal = footer.getByRole('navigation', { name: 'Legal' });
+  await expect(legal.getByRole('link')).toHaveText(['Privacy', 'Terms']);
+  await expect(legal.getByRole('link', { name: 'Privacy' })).toHaveAttribute(
+    'href',
+    '/legal/privacy',
+  );
+  await expectAccessible(page);
+  await page.goto('/');
+  await expect(page.locator('.site-footer .footer-card')).toBeVisible();
+  // The full footer already lists them, so the slim one's copy is not there twice.
+  await expect(page.getByRole('navigation', { name: 'Legal' })).toHaveCount(0);
+});
+
+test('the skip link is out of sight until focused, on a phone @mobile', async ({
+  page,
+}, testInfo) => {
+  // X1 (ScreenAudit: "Skip to content" visible mid-screen on Withdraw and Settings phone shots).
+  await signUpRecipient(page, testInfo);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ['/dashboard/withdraw', '/dashboard/settings']) {
+    await page.goto(path);
+    await expect(page.locator('main:visible').first()).toBeVisible();
+    const skip = page.locator('.skip-link');
+    const hidden = (await skip.boundingBox())!;
+    expect(hidden.y + hidden.height).toBeLessThanOrEqual(0);
+    await page.keyboard.press('Tab');
+    await expect(skip).toBeFocused();
+    await expect
+      .poll(async () => {
+        const box = (await skip.boundingBox())!;
+        return box.y >= 0 && box.y + box.height <= 844;
+      })
+      .toBe(true);
+  }
 });

@@ -1185,27 +1185,6 @@
           "DevJobs",
           "pretend only"
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "isoWeek": {
-                    "type": "string",
-                    "pattern": "^\\d{4}-W\\d{2}$"
-                  },
-                  "handle": {
-                    "type": "string",
-                    "pattern": "^[a-z0-9_]{3,30}$"
-                  }
-                },
-                "additionalProperties": false
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Success.",
@@ -7620,6 +7599,42 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/visits-today": {
+      "get": {
+        "operationId": "Dashboard.visits",
+        "tags": [
+          "Dashboard"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
         "security": [
           {
             "session": []
@@ -16988,6 +17003,7 @@
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
+                  "WITHDRAWAL_BELOW_FEE",
                   "WITHDRAWAL_UNAVAILABLE",
                   "WITHDRAWALS_PAUSED",
                   "WITHDRAWALS_SWITCHED_OFF",

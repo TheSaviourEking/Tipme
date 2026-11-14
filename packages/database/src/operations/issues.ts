@@ -147,7 +147,7 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
     case 'payout_unresolved':
       return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
     case 'payout_fee_short':
-      return `The provider charged more for a withdrawal for ${page} than TipMe covered, so their balance there is short by the difference. Top it up.`;
+      return `The provider charged more for a withdrawal for ${page} than the fee TipMe charged them or covered, so their balance there is short by the difference. TipMe absorbs it: top it up.`;
     case 'payout_held':
       return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
     case 'provider_in_debt':

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { MyTipDetail } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { PROCESSING_INCLUDED_FEE_VERSIONS } from '@tipme/domain';
 import { Notice, Skeleton, Surface } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -48,7 +48,7 @@ export default function TipDetailPage() {
     tip.platformFeeMinor,
     tip.providerFeeMinor,
     tip.grossMinor,
-    followsCurrentRule(tip.feePolicyVersion, FEE_POLICY_V1.version),
+    followsCurrentRule(tip.feePolicyVersion, PROCESSING_INCLUDED_FEE_VERSIONS),
   );
   return (
     <div className="dashboard-section tip-detail">
@@ -63,16 +63,6 @@ export default function TipDetailPage() {
         <p className="receipt__when">
           {lagos(tip.at, { dateStyle: 'medium', timeStyle: 'short' })}
         </p>
-        {tip.message && (
-          <blockquote className="receipt__note">{tip.message}</blockquote>
-        )}
-        {tip.messageHidden && (
-          <p className="receipt__hidden" role="status">
-            {tip.messageReported
-              ? 'You reported this note. It is hidden, and TipMe is reviewing it.'
-              : 'You hid this note.'}
-          </p>
-        )}
         <dl className="receipt__rows">
           <div className="rrow">
             <dt>{who} tipped</dt>
@@ -114,8 +104,26 @@ export default function TipDetailPage() {
           <p className="receipt__fine">Couldn’t refresh</p>
         )}
       </Surface>
-      {tip.message && (
-        <MessageControls tipId={tip.tipId} onChanged={() => void reload()} />
+      {/* D1: the note is its own slip beside the receipt on a desktop, after it on a phone. */}
+      {(tip.message || tip.messageHidden) && (
+        <div className="tip-detail__note">
+          {tip.message && (
+            <blockquote className="tip-detail__quote">{tip.message}</blockquote>
+          )}
+          {tip.messageHidden && (
+            <p className="receipt__hidden" role="status">
+              {tip.messageReported
+                ? 'You reported this note. It is hidden, and TipMe is reviewing it.'
+                : 'You hid this note.'}
+            </p>
+          )}
+          {tip.message && (
+            <MessageControls
+              tipId={tip.tipId}
+              onChanged={() => void reload()}
+            />
+          )}
+        </div>
       )}
     </div>
   );

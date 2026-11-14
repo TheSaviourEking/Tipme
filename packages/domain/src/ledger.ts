@@ -210,7 +210,10 @@ export function buildPayoutPosting({
   ];
 }
 
-/** The provider's fee on a payout is TipMe's cost, paid from its balance: never the recipient's. */
+/**
+ * The provider's fee on a payout as TipMe's cost, paid from its balance: payouts requested before
+ * 12 Nov 2026's rule, and any part of a fee above what the user was charged (TipMe absorbs it).
+ */
 export function buildPayoutFeePosting({
   feeMinor,
 }: {
@@ -219,6 +222,31 @@ export function buildPayoutFeePosting({
   if (feeMinor <= 0n) throw new RangeError('payout fee must be positive');
   return [
     line('provider_fee_expense', 'debit', feeMinor),
+    line('provider_clearing', 'credit', feeMinor),
+  ];
+}
+
+/**
+ * The partner's payout fee when the user pays it (owner, 12 Nov 2026): taken from what the person
+ * or business chose to withdraw, so it comes off their own payable, like the payout itself. Payouts
+ * requested before that rule keep TipMe paying (buildPayoutFeePosting).
+ */
+export function buildUserPayoutFeePosting({
+  feeMinor,
+  profileId,
+  businessId,
+}: {
+  feeMinor: bigint;
+  profileId?: string;
+  businessId?: string;
+}): LedgerLine[] {
+  if (feeMinor <= 0n) throw new RangeError('payout fee must be positive');
+  if (Boolean(profileId) === Boolean(businessId))
+    throw new RangeError('a payout belongs to exactly one person or business');
+  return [
+    businessId
+      ? line('business_payable', 'debit', feeMinor, undefined, businessId)
+      : line('recipient_payable', 'debit', feeMinor, profileId),
     line('provider_clearing', 'credit', feeMinor),
   ];
 }

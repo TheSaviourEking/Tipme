@@ -49,6 +49,12 @@ after(async () => {
 
 const ticket = () => `__Secure-tipme_preview=${issuePreviewTicket(PASSWORD)}`;
 const get = (api, path, headers = {}) => fetch(`${api}${path}`, { headers });
+const post = (api, path, body, headers = {}) =>
+  fetch(`${api}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
 
 test('without the preview cookie every app route is refused, including the pretend inbox (Review Focus 1)', async () => {
   for (const path of [
@@ -85,6 +91,64 @@ test('behind the preview password, the pretend inbox still needs the release tok
   assert.ok(Array.isArray((await allowed.json()).data));
   // Outside preview (local development and tests) it needs nothing.
   assert.equal((await get(open.api, '/v1/dev/inbox')).status, 200);
+});
+
+test('behind the preview password, the weekly-report job also needs the release token, before its input is read', async () => {
+  for (const authorization of [undefined, 'Bearer nope']) {
+    const headers = {
+      cookie: ticket(),
+      ...(authorization ? { authorization } : {}),
+    };
+    // A malformed week would be 400 if validation ran: refusal comes first, so the job never runs.
+    assert.equal(
+      (
+        await post(
+          gated.api,
+          '/v1/dev/jobs/weekly-report',
+          { isoWeek: 'not-a-week' },
+          headers,
+        )
+      ).status,
+      404,
+      String(authorization),
+    );
+  }
+  const allowed = {
+    cookie: ticket(),
+    authorization: `Bearer ${RELEASE_TOKEN}`,
+  };
+  assert.equal(
+    (
+      await post(
+        gated.api,
+        '/v1/dev/jobs/weekly-report',
+        { isoWeek: 'not-a-week' },
+        allowed,
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await post(
+        gated.api,
+        '/v1/dev/jobs/weekly-report',
+        { isoWeek: '2026-W41', handle: 'ada' },
+        allowed,
+      )
+    ).status,
+    200,
+  );
+  // Outside preview (local development and tests) it needs nothing.
+  assert.equal(
+    (
+      await post(open.api, '/v1/dev/jobs/weekly-report', {
+        isoWeek: '2026-W41',
+        handle: 'ada',
+      })
+    ).status,
+    200,
+  );
 });
 
 test('a valid ticket or the server key passes; a forged or expired ticket does not', async () => {

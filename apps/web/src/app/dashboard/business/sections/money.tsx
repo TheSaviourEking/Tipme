@@ -16,7 +16,7 @@ import {
 import { formatNaira } from '@/lib/demo-amount';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
-import { withdrawRefusal } from '@/lib/withdraw-state';
+import { withdrawRefusal, withdrawSummary } from '@/lib/withdraw-state';
 
 type Loaded =
   | { kind: 'loading' }
@@ -93,6 +93,9 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
   const minimum = BigInt(balance.minWithdrawalMinor);
   const sendable =
     chosen !== null && businessCanSend(chosen, withdrawable, minimum);
+  // The business pays the transfer fee from the amount, like a person (owner, 12 Nov 2026).
+  const summary =
+    sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const onTheWay = BigInt(balance.onTheWayMinor);
   const heldBack = BigInt(balance.heldBackMinor);
   const needsAccount =
@@ -140,7 +143,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     });
     setBusy(false);
     if (result.ok) {
-      setDone(formatNaira(amount));
+      setDone(formatNaira(summary ? Number(summary.receiveMinor) : amount));
       setRaw('');
       key.current = null;
       await load();
@@ -268,13 +271,18 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         <Button
           type="submit"
           variant="continue"
-          disabled={
-            busy || !state.canWithdraw || (amount !== null && !sendable)
-          }
+          disabled={busy || !state.canWithdraw || (amount !== null && !summary)}
           aria-busy={busy}
         >
           {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
         </Button>
+        {summary && (
+          <p className="tm-hint" data-testid="business-you-receive">
+            {summary.feePaidBy === 'tipme'
+              ? `TipMe pays the ${formatNaira(summary.feeMinor)} transfer fee this time: the business receives ${formatNaira(summary.receiveMinor)}.`
+              : `The ${formatNaira(summary.feeMinor)} transfer fee comes off it: the business receives ${formatNaira(summary.receiveMinor)}.`}
+          </p>
+        )}
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal
           for a business is {formatNaira(minimum)}: shares add up until then.

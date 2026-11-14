@@ -232,13 +232,16 @@ test('an owner withdraws: CSRF and a key are required, a retry replays, too much
   const again = await call('POST', path, { body, headers });
   assert.equal(again.body.data.payoutId, first.body.data.payoutId);
   const [row] = await q(
-    'SELECT business_id, profile_id, amount_minor::text AS amount FROM payouts WHERE id = $1',
+    `SELECT business_id, profile_id, amount_minor::text AS amount, user_fee_minor::text AS fee
+       FROM payouts WHERE id = $1`,
     [first.body.data.payoutId],
   );
+  // The business pays the ₦50 transfer fee from the amount (owner, 12 Nov 2026).
   assert.deepEqual(row, {
     business_id: shared.businessId,
     profile_id: null,
-    amount: '500000',
+    amount: '495000',
+    fee: '5000',
   });
   // A business batches its shares: under ₦5,000 is refused.
   const tooSmall = await call('POST', path, {

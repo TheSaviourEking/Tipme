@@ -27,6 +27,7 @@ import {
   type MyTipDetail,
   type MyTipRow,
   type TipTotals,
+  type VisitsToday,
   type WeeklyReportData,
   type WithdrawalQuoteLocalResponse,
   type WithdrawalQuoteResponse,
@@ -53,6 +54,7 @@ import {
   withdrawalInReview,
   withdrawalQuote,
   withdrawalsAvailable,
+  visitsToday,
   type PayoutReader,
 } from '@tipme/database';
 import { z } from 'zod';
@@ -121,6 +123,23 @@ export class DashboardController {
       }),
     ]);
     return { data: { ...summary, withdrawalsAvailable: available } };
+  }
+
+  /** For "your page was opened N times today" while supporters can't tip yet (PR #31). */
+  @Get('visits-today')
+  @Header('Cache-Control', 'private, no-store')
+  async visits(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<VisitsToday>> {
+    // Collection off: no number at all, rather than a misleading zero.
+    if (!this.events.enabled) return { data: { visits: null } };
+    return {
+      data: {
+        visits: await visitsToday(this.database.db, {
+          profileId: await this.profile(auth),
+        }),
+      },
+    };
   }
 
   @Get('tips')
@@ -310,6 +329,7 @@ export class DashboardController {
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
               feeMinor: quote.feeMinor.toString(),
+              feePaidBy: quote.feePaidBy,
             }
           : { ...quote, inReview },
     };

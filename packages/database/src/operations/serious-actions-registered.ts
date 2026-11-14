@@ -501,7 +501,7 @@ const feeChange = acting<{ profileId: string; feeBps: number | null }>({
   },
   describe: async (tx, { profileId, feeBps }) =>
     `Set @${await handleOf(tx, profileId)}'s fee to ${
-      feeBps === null ? 'the standard fee' : `${feeBps / 100}%`
+      feeBps === null ? 'the plan’s rate' : `${feeBps / 100}%`
     }`,
   act: (tx, { profileId, feeBps }, context) =>
     setAccountFee(tx, {

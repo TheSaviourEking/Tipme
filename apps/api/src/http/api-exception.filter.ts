@@ -173,6 +173,8 @@ const messages: Record<ApiErrorCode, string> = {
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
+  WITHDRAWAL_BELOW_FEE:
+    'The amount must be more than the NGN 50 transfer fee, which is taken from it.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:
@@ -284,6 +286,7 @@ const operationErrors: Partial<
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
+  WITHDRAWAL_BELOW_FEE: { status: 409, code: 'WITHDRAWAL_BELOW_FEE' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },

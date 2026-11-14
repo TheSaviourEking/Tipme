@@ -363,9 +363,11 @@ export default function DashboardHome() {
             href={`/dashboard/reports/${latestWeek.week}`}
           >
             <strong>Your week · {latestWeek.week}</strong>
+            <span className="week-teaser__figure">
+              {naira(latestWeek.data.totalNetMinor)}
+            </span>
             <span>
-              {naira(latestWeek.data.totalNetMinor)} from{' '}
-              {latestWeek.data.tipCount}{' '}
+              from {latestWeek.data.tipCount}{' '}
               {latestWeek.data.tipCount === 1 ? 'tip' : 'tips'}
               <b>See your week</b>
             </span>

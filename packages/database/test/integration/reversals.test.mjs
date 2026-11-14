@@ -33,9 +33,9 @@ const { Redis } = createRequire(
 )('ioredis');
 const [, TOBI] = DEMO_PROFILES;
 
-// A ₦4,000 tip: Tobi receives ₦3,600 after TipMe's 10% fee (ADR-0014).
+// A ₦4,000 tip: Tobi receives ₦3,720 after TipMe's 7% Free fee (owner, 12 Nov 2026).
 const GROSS = 400000n;
-const NET = 360000n;
+const NET = 372000n;
 
 test('reversals and the business share', async (t) => {
   const database = await useDatabase(t);
@@ -198,24 +198,24 @@ test('reversals and the business share', async (t) => {
         {
           code: 'business_payable',
           side: 'credit',
-          amount: '36000',
+          amount: '37200',
           profile_id: null,
           business_id: shared.businessId,
         },
         {
           code: 'recipient_payable',
           side: 'credit',
-          amount: '324000',
+          amount: '334800',
           profile_id: TOBI.id,
           business_id: null,
         },
       ]);
-      assert.equal(await person(), 324000n);
-      assert.equal(await business(shared.businessId), 36000n);
+      assert.equal(await person(), 334800n);
+      assert.equal(await business(shared.businessId), 37200n);
       // A tip through Tobi's own page, at the same time, has no business line at all.
       await paidTip();
-      assert.equal(await person(), 324000n + NET);
-      assert.equal(await business(shared.businessId), 36000n);
+      assert.equal(await person(), 334800n + NET);
+      assert.equal(await business(shared.businessId), 37200n);
       await assertBalanced();
       await assertShareLines();
     },
@@ -227,13 +227,13 @@ test('reversals and the business share', async (t) => {
       await database.fresh();
       const shared = await atBusiness(2000);
       const tipId = await paidTip(shared);
-      assert.equal(await person(), 288000n);
-      assert.equal(await business(shared.businessId), 72000n);
+      assert.equal(await person(), 297600n);
+      assert.equal(await business(shared.businessId), 74400n);
       // A refund of half: each line in proportion.
       const half = await reverse(tipId, GROSS / 2n);
       assert.equal(half.created, true);
-      assert.equal(await person(), 144000n);
-      assert.equal(await business(shared.businessId), 36000n);
+      assert.equal(await person(), 148800n);
+      assert.equal(await business(shared.businessId), 37200n);
       // The rest: everything is back to nothing, and every posting balanced.
       await reverse(tipId, GROSS / 2n);
       assert.equal(await person(), 0n);
@@ -274,8 +274,8 @@ test('reversals and the business share', async (t) => {
         await codeOf(reverse(tipId, GROSS, 'evt_chargeback')),
         'TIP_NOT_REVERSIBLE',
       );
-      assert.equal(await person(), 90000n);
-      assert.equal(await business(shared.businessId), 90000n);
+      assert.equal(await person(), 93000n);
+      assert.equal(await business(shared.businessId), 93000n);
       // What is left can be taken back, once.
       await reverse(tipId, GROSS / 2n, 'evt_chargeback');
       assert.equal(await person(), 0n);
@@ -316,8 +316,8 @@ test('reversals and the business share', async (t) => {
       );
       assert.deepEqual(holds, [{ profile_id: TOBI.id }]);
       // Nothing in the ledger changes until staff confirm the reversal (Q7).
-      assert.equal(await person(), 324000n);
-      assert.equal(await business(shared.businessId), 36000n);
+      assert.equal(await person(), 334800n);
+      assert.equal(await business(shared.businessId), 37200n);
     },
   );
 
@@ -538,7 +538,7 @@ test('reversals and the business share', async (t) => {
       // The partner's way: the whole refund out of the partner balance, the fee left alone.
       await post([
         ['recipient_payable', 'debit', String(NET), TOBI.id],
-        ['platform_fee_revenue', 'debit', '34000'],
+        ['platform_fee_revenue', 'debit', '22000'],
         ['provider_fee_recovered', 'debit', '6000'],
         ['provider_clearing', 'credit', String(GROSS)],
       ]);
@@ -664,7 +664,7 @@ test('reversals and the business share', async (t) => {
       [result.transactionId],
     );
     assert.deepEqual(lines, [
-      { code: 'recipient_payable', side: 'debit', amount: '360000' },
+      { code: 'recipient_payable', side: 'debit', amount: '372000' },
     ]);
     await assertBalanced();
   });
@@ -774,7 +774,7 @@ test('reversals and the business share', async (t) => {
         signatureVerified: true,
         payload: {},
       });
-      assert.equal(await person(), -180000n);
+      assert.equal(await person(), -186000n);
       assert.equal(
         await codeOf(
           requestWithdrawal(db, {
@@ -803,7 +803,7 @@ test('reversals and the business share', async (t) => {
         const provider = mock();
         const shared = await atBusiness(1000);
         const tipId = await paidTip(shared);
-        const mine = 324000n;
+        const mine = 334800n;
         assert.equal(await person(), mine);
         const [withdrawal, reversal] = await Promise.allSettled([
           requestWithdrawal(db, {

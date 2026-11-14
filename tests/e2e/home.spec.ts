@@ -60,7 +60,11 @@ test("the tipping steps' chosen amount reads as chosen on the grey well", async 
 
 test('home states the fee and the minimum plainly', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByText('TipMe keeps 10% of each tip')).toBeVisible();
+  await expect(
+    page.getByText('TipMe keeps 7% of each tip on Free, or 5% on Pro', {
+      exact: false,
+    }),
+  ).toBeVisible();
   await expect(page.getByText('The smallest tip is ₦2,000.')).toBeVisible();
   // Not the old ₦1,000 minimum; Zainab's ₦1,000,000 example is another amount.
   expect(await page.content()).not.toMatch(/₦1,000(?![,\d])/);

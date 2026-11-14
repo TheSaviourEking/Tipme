@@ -18,7 +18,7 @@ import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
 import { attemptKey, paymentKey, payoutIdKey, payoutKey } from './keys.js';
 import type { Scenario } from './scenario.js';
 
-/** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
+/** Same rounding as CURRENT_FEE_POLICY's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
   (amountMinor * 150n + 5000n) / 10000n;
 
