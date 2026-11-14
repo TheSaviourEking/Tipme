@@ -299,8 +299,14 @@ test('staging passes every setting the API and worker read (no silent defaults)'
     );
     assert.ok(read.length > 5, `${service}: no settings found`);
     const passed = passedTo(service);
+    // Limits and money tunables take the code's defaults (owner, 14 Nov 2026, #216).
     const missing = read.filter(
-      (key) => !passed.has(key) && !testOnly.has(key),
+      (key) =>
+        !passed.has(key) &&
+        !testOnly.has(key) &&
+        !key.startsWith('RATE_LIMIT_') &&
+        key !== 'PARTNER_QUOTE_CACHE_SECONDS' &&
+        key !== 'BACHS_RESERVE_ALERT_MINOR',
     );
     assert.deepEqual(missing, [], `${service} settings missing from compose`);
   }

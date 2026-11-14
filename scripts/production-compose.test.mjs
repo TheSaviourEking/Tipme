@@ -88,7 +88,7 @@ test(
       for (const name of names) {
         const passed = config.services[name].environment;
         const missing = read.filter(
-          (k) => !(k in passed) && !deliberate.has(k),
+          (k) => !(k in passed) && !deliberate.has(k) && !CODE_DEFAULT_ONLY(k),
         );
         assert.deepEqual(missing, [], `${name} settings missing from compose`);
         for (const key of deliberate)
@@ -396,5 +396,41 @@ test('compose forwards each moved switch for one release, with no default of its
           `${file}: ${name} must default to blank (seed only)`,
         );
     }
+  }
+});
+
+// Owner, 14 Nov 2026 (#216): limits and money tunables take the code's defaults on every copy. The
+// config keeps each as an optional override, for tests and emergencies; the deploy files name none.
+export const CODE_DEFAULT_ONLY = (name) =>
+  name.startsWith('RATE_LIMIT_') ||
+  name === 'PARTNER_QUOTE_CACHE_SECONDS' ||
+  name === 'BACHS_RESERVE_ALERT_MINOR';
+
+test('rate limits and money tunables are in no deploy file: the code defaults are the values', () => {
+  for (const file of [
+    'compose.production.yml',
+    'compose.staging.yml',
+    'production.env.example',
+    'staging.env.example',
+  ]) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    const named = [...text.matchAll(/\b([A-Z][A-Z0-9_]+)\b/g)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.deepEqual([...new Set(named)], [], `${file} still names them`);
+  }
+  // Still overridable: the schemas keep them.
+  for (const service of ['api', 'worker']) {
+    const source = readFileSync(
+      new URL(`../apps/${service}/src/config.ts`, import.meta.url),
+      'utf8',
+    );
+    const kept = [...source.matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.ok(kept.length > 0, `${service} lost its overrides`);
   }
 });
