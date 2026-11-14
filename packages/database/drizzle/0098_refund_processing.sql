@@ -1,1 +1,0 @@
-ALTER TYPE "public"."operation_type" ADD VALUE 'refund_processing';

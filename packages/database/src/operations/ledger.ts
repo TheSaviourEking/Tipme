@@ -71,13 +71,7 @@ export async function postLedgerTransaction(
   tx: Tx,
   input: {
     operationType:
-      | 'payment'
-      | 'payout'
-      | 'reward'
-      | 'reversal'
-      | 'pro_sale'
-      | 'pro_refund'
-      | 'refund_processing';
+      'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale' | 'pro_refund';
     operationKey: string;
     currency: string;
     tipId?: string;
