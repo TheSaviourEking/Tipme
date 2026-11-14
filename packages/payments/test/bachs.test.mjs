@@ -1753,3 +1753,22 @@ test('an own-account event about an account (account.updated) is not a platform 
   assert.equal(result.ok, true);
   assert.equal(result.event.kind, 'ignored');
 });
+
+test('account creation refuses a country outside the payout list before any request', async () => {
+  let requests = 0;
+  const provider = makeProvider(async () => {
+    requests += 1;
+    return jsonResponse({ id: 'acct_never' }, 201);
+  });
+  for (const country of ['ZZ', 'XX', 'gh']) {
+    await assert.rejects(
+      provider.createRecipientAccount({
+        contactEmail: 'recipient@example.com',
+        country,
+        entityType: 'individual',
+        idempotencyKey: 'tipme-account-country-check',
+      }),
+    );
+  }
+  assert.equal(requests, 0);
+});
