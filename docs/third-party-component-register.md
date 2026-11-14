@@ -76,3 +76,7 @@ Decision: ADOPTED (pinned exact).
 ## Photo storage (31 October 2026)
 
 `@aws-sdk/client-s3` 3.1152.0 (Apache-2.0, https://github.com/aws/aws-sdk-js-v3), a dependency of `@tipme/database`, server-side only. It stores page photos in a private Cloudflare R2 bucket through R2's S3-compatible API (`packages/database/src/photo-store.ts`). Same SDK family and version as `@aws-sdk/client-sesv2`. No browser code, no UI.
+
+## Page Studio (14 November 2026)
+
+`fast-check` 4.10.2 (MIT, https://github.com/dubzzz/fast-check), a **devDependency** of `@tipme/contracts` only, with one dependency (`pure-rand`, MIT). It runs the property-based tests for Page Studio (`packages/contracts/test/studio-*.test.mjs`): thousands of random brand colours, and later random page designs, checked against the rules instead of a fixed list of tested combinations. It ships nothing to browsers, the API or the worker. Seeds come from `GITHUB_SHA`, so a CI failure replays on that commit; counterexamples are kept in `packages/contracts/test/fixtures/studio-regressions.json`. Decision: ADOPTED (pinned exact, test-only).

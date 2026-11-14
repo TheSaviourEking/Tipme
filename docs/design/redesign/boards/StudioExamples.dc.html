@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Page Studio examples</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit}a:hover{opacity:.85}
+.board{width:1840px;min-height:3700px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1360px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
+.pr{background:#f1e9ff;color:#4d16a8}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
+.row{display:grid;grid-template-columns:1260px 390px;gap:48px;align-items:start;margin-top:20px}
+.rowhead{margin:44px 0 0;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.rowhead h2{margin:0;font:400 30px/1.1 'DM Serif Display',Georgia,serif}
+.rowhead p{margin:0;font-size:14px;color:#3b3934}
+.cap{margin:0 0 8px;font-size:13px;font-weight:800;color:#3b3934}
+.desk{border-radius:16px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.1),0 30px 50px -30px rgba(20,18,16,.5)}
+.phone{width:390px;min-height:844px;box-sizing:border-box;border-radius:28px;overflow:hidden;border:1px solid rgba(20,18,16,.14);box-shadow:0 1px 1px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.36)}
+.pill{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(rgba(255,255,255,.26),transparent 48%),linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 11px/1 Manrope,Arial,sans-serif;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.3)}
+.pill svg{width:.9em;height:.9em;fill:#e6d6ff}
+.av{display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:'DM Serif Display',Georgia,serif;flex:none}
+/* the locked tip block: identical on every page */
+.tb{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;padding:22px;box-shadow:0 2px 3px rgba(20,18,16,.1),0 24px 56px -12px rgba(20,18,16,.22);display:flex;flex-direction:column;gap:12px;color:#000;font-family:Manrope,Arial,sans-serif;text-align:left}
+.tb h3{margin:0;font-size:19px;font-weight:700}
+.amts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.amts button{height:50px;border-radius:12px;border:1px solid rgba(20,18,16,.08);background:#eeede8;font:700 15px Manrope,Arial,sans-serif;color:#000;cursor:pointer}
+.amts button[aria-pressed="true"]{background:#7a32f9;color:#fff;border-color:#5718cf}
+.tb label{display:flex;flex-direction:column;gap:6px;font-size:13px;font-weight:600}
+.tb input{height:44px;box-sizing:border-box;border-radius:12px;border:1px solid #77736b;background:#eeede8;padding:0 12px;font:500 15px Manrope,Arial,sans-serif;box-shadow:inset 0 1px 2px rgba(20,18,16,.11)}
+.tbgo{height:52px;border:0;border-radius:12px;background:#000;color:#fff;font:700 16px Manrope,Arial,sans-serif;cursor:pointer}
+.fee{margin:0;display:flex;gap:8px;font-size:12px;line-height:1.45;color:#5d5a54}
+.h{margin:0 0 10px;font-size:24px;line-height:1.1}
+.ph{border-radius:12px;display:flex;align-items:flex-end;padding:8px;box-sizing:border-box;font-size:11px;font-weight:700}
+.vid{position:relative;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;aspect-ratio:16/9}
+.vid .play{width:52px;height:52px;border-radius:50%;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;border:0;cursor:pointer}
+.vid small{position:absolute;left:8px;bottom:8px;font-size:11px;font-weight:700;background:rgba(0,0,0,.55);color:#fff;padding:3px 8px;border-radius:999px}
+.ev{display:flex;gap:12px;align-items:center;padding:10px 12px;border-radius:12px}
+.ev b{display:block;font-size:14.5px}.ev small{font-size:12.5px;opacity:.85}
+.date{width:46px;flex:none;text-align:center;font:800 11px/1.2 Manrope,Arial,sans-serif;text-transform:uppercase}
+.date em{display:block;font:400 22px/1 'DM Serif Display',Georgia,serif;font-style:normal}
+.svc{display:flex;justify-content:space-between;gap:12px;padding:12px 0;font-size:15px}
+.foot{display:flex;justify-content:space-between;padding:14px 28px;font-size:12.5px}
+.foot a{text-decoration:underline}
+.link{display:flex;align-items:center;gap:10px;min-height:52px;padding:0 16px;border-radius:14px;font-weight:700;font-size:15px;text-decoration:none}
+.badge{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex:none}
+.fan{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:13.5px;font-weight:700}
+.note{padding:14px 16px;border-radius:14px;font-size:14.5px;line-height:1.5}
+</style>
+</helmet>
+<div class="board">
+  <h1 class="bh1">Three pages built with Page Studio, all with the same tip block</h1>
+  <p class="lead">A singer, a barber and a streamer, each on a different layout and theme. Look at the tip block on all six screens: it is <b>the same TipMe block, in the same place</b> (right column on desktop, straight after the name on a phone), in TipMe’s own colours, with the same fee line and the Pro badge after the handle. Everything around it is theirs. Fictional people; sample content and prices. Photos are drawn as labelled blocks: real ones would come through today’s photo upload. <span class="tag pr">Proposed</span></p>
+
+  <!-- ===== 1. MUSICIAN ===== -->
+  <div class="rowhead"><h2>1 · Kemi, a singer</h2><p>Layout <b>Portfolio first</b> · Theme Ocean, Editorial fonts, Waveform cover · Sections: Gallery, Events, Videos, About</p></div>
+  <div class="row">
+    <div><p class="cap">Desktop</p>
+      <div class="desk" style="background:#10243f;color:#fff">
+        <div style="height:190px;background:#1d4e89;position:relative;overflow:hidden"><svg width="100%" height="190" viewBox="0 0 1260 190" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke-linecap="round"><path d="M0 140 Q 160 60 320 130 T 640 120 T 960 130 T 1260 100" stroke="#3a79c2" stroke-width="4"></path><path d="M0 165 Q 160 95 320 155 T 640 148 T 960 158 T 1260 130" stroke="#76a6dc" stroke-width="2"></path></g></svg></div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:48px;padding:0 40px 36px">
+          <div>
+            <div style="display:flex;align-items:flex-end;gap:20px;margin-top:-60px"><span class="av" aria-hidden="true" style="width:120px;height:120px;background:#e6d6ff;color:#4d16a8;font-size:46px;border:5px solid #10243f">KA</span>
+              <div style="padding-bottom:6px"><h1 class="serif" style="margin:0;font-size:52px;line-height:1">Kemi Adeyinka</h1><p style="margin:8px 0 0;font-size:14px;color:#c9daf0;display:flex;align-items:center;gap:8px">@kemisings <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p></div></div>
+            <p style="margin:14px 0 22px;font-size:16px;font-weight:700">Singer and songwriter, Lagos</p>
+            <section aria-label="Gallery"><h2 class="serif h">Gallery</h2>
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr;grid-template-rows:130px 130px;gap:10px"><span class="ph" style="grid-row:span 2;background:linear-gradient(160deg,#3a79c2,#1d4e89)">Photo: on stage</span><span class="ph" style="background:#2c5d97">Photo</span><span class="ph" style="background:#3a79c2">Photo</span><span class="ph" style="background:#264f80">Photo</span><span class="ph" style="background:#4b86c9">Photo</span></div>
+            </section>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px">
+              <section aria-label="Events"><h2 class="serif h">Events</h2>
+                <div style="display:flex;flex-direction:column;gap:8px"><div class="ev" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18)"><span class="date">Sat<em>15</em>Nov</span><span><b>Live set, Lekki</b><small>8 pm · tickets on the venue’s site</small></span></div><div class="ev" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18)"><span class="date">Fri<em>28</em>Nov</span><span><b>Acoustic night, Yaba</b><small>7 pm · free entry</small></span></div></div>
+              </section>
+              <section aria-label="Videos"><h2 class="serif h">Videos</h2>
+                <div style="display:grid;gap:10px"><div class="vid" style="background:#264f80"><button type="button" class="play" aria-label="Play “Ojo” on YouTube"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l8 5-8 5Z" fill="#fff"></path></svg></button><small>YouTube · loads when you tap</small></div></div>
+              </section>
+            </div>
+            <section aria-label="About" style="margin-top:26px"><h2 class="serif h">About</h2><p style="margin:0;font-size:15.5px;line-height:1.6;color:#dbe6f4;max-width:36em">I write songs about home and the people in it. Every tip goes into studio time for the next record.</p></section>
+          </div>
+          <div style="padding-top:26px">
+            <aside class="tb" aria-label="Tip Kemi"><h3>Tip Kemi</h3><div class="amts" role="group" aria-label="Choose an amount"><button type="button">₦2,000</button><button type="button" aria-pressed="true">₦5,000</button><button type="button">₦10,000</button></div><label>Another amount<input inputmode="numeric" placeholder="₦"></label><label>Say something (optional)<input></label><button type="button" class="tbgo">Tip ₦5,000</button><p class="fee"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5d5a54" stroke-width="1.8" aria-hidden="true" style="flex:none;margin-top:2px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+          </div>
+        </div>
+        <div class="foot" style="border-top:1px solid rgba(255,255,255,.14);color:#c9daf0"><span><a href="#">Report this page</a> · <a href="#">Privacy</a> · <a href="#">Terms</a></span></div>
+      </div>
+    </div>
+    <div><p class="cap">Phone</p>
+      <div class="phone" style="background:#10243f;color:#fff">
+        <div style="height:110px;background:#1d4e89"><svg width="100%" height="110" viewBox="0 0 390 110" preserveAspectRatio="none" aria-hidden="true"><path d="M0 80 Q 60 40 130 75 T 260 70 T 390 60" fill="none" stroke="#3a79c2" stroke-width="3"></path></svg></div>
+        <div style="padding:0 18px 18px">
+          <span class="av" aria-hidden="true" style="width:80px;height:80px;margin-top:-40px;background:#e6d6ff;color:#4d16a8;font-size:30px;border:4px solid #10243f">KA</span>
+          <h1 class="serif" style="margin:10px 0 0;font-size:34px;line-height:1">Kemi Adeyinka</h1>
+          <p style="margin:6px 0 0;font-size:13px;color:#c9daf0;display:flex;align-items:center;gap:6px">@kemisings <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+          <p style="margin:6px 0 16px;font-size:14px;font-weight:700">Singer and songwriter, Lagos</p>
+          <aside class="tb" aria-label="Tip Kemi" style="padding:16px"><h3 style="font-size:17px">Tip Kemi</h3><div class="amts"><button type="button">₦2,000</button><button type="button" aria-pressed="true">₦5,000</button><button type="button">₦10,000</button></div><button type="button" class="tbgo">Tip ₦5,000</button><p class="fee"><span>You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+          <h2 class="serif h" style="margin-top:22px;font-size:22px">Gallery</h2>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span class="ph" style="grid-column:span 2;height:110px;background:linear-gradient(160deg,#3a79c2,#1d4e89)">Photo: on stage</span><span class="ph" style="height:100px;background:#2c5d97">Photo</span><span class="ph" style="height:100px;background:#3a79c2">Photo</span></div>
+          <h2 class="serif h" style="margin-top:20px;font-size:22px">Events</h2>
+          <div class="ev" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18)"><span class="date">Sat<em>15</em>Nov</span><span><b>Live set, Lekki</b><small>8 pm</small></span></div>
+          <h2 class="serif h" style="margin-top:20px;font-size:22px">Videos</h2>
+          <div class="vid" style="background:#264f80"><button type="button" class="play" aria-label="Play “Ojo” on YouTube"><svg width="18" height="18" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l8 5-8 5Z" fill="#fff"></path></svg></button><small>YouTube</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 2. BARBER ===== -->
+  <div class="rowhead"><h2>2 · Sule, a barber</h2><p>Layout <b>Classic</b> · Theme Night, Modern fonts, his own cover photo · Sections: Services and prices, Gallery, Pinned note</p></div>
+  <div class="row">
+    <div><p class="cap">Desktop</p>
+      <div class="desk" style="background:#24221f;color:#f3f2ee">
+        <div style="height:190px;background:linear-gradient(120deg,#4a463f,#24221f);display:flex;align-items:flex-end;justify-content:flex-end;padding:12px;box-sizing:border-box"><span style="font-size:11px;font-weight:700;background:rgba(0,0,0,.4);padding:3px 8px;border-radius:999px">His cover photo (a strip, 2240 by 600)</span></div>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:48px;padding:0 40px 36px">
+          <div>
+            <span class="av" aria-hidden="true" style="width:120px;height:120px;margin-top:-60px;background:#d9d6ce;color:#24221f;font:800 40px Manrope,Arial,sans-serif;border:5px solid #24221f">SD</span>
+            <h1 style="margin:16px 0 0;font:800 48px/1 Manrope,Arial,sans-serif;letter-spacing:-.02em">Sule Danjuma</h1>
+            <p style="margin:8px 0 0;font-size:14px;color:#c9c6bd;display:flex;align-items:center;gap:8px">@fadesbysule <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+            <p style="margin:12px 0 0;font-size:16px;font-weight:700">Barber, Wuse 2, Abuja</p>
+            <div class="note" style="margin-top:20px;background:#34312c;border:1px solid #4a463f"><b>Pinned:</b> Walk-ins welcome Monday to Saturday, 9 am to 7 pm.</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:26px">
+              <section aria-label="Services and prices"><h2 class="h" style="font:800 22px Manrope,Arial,sans-serif">Services and prices</h2>
+                <div class="svc" style="border-bottom:1px solid #4a463f"><span>Skin fade</span><b>₦8,000</b></div>
+                <div class="svc" style="border-bottom:1px solid #4a463f"><span>Shape-up and beard</span><b>₦5,000</b></div>
+                <div class="svc" style="border-bottom:1px solid #4a463f"><span>Kids’ cut</span><b>from ₦4,000</b></div>
+                <p style="margin:10px 0 0;font-size:12.5px;color:#c9c6bd">Prices are for information. You pay for a cut in the shop; tips here are thanks.</p>
+              </section>
+              <section aria-label="Gallery"><h2 class="h" style="font:800 22px Manrope,Arial,sans-serif">Gallery</h2>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"><span class="ph" style="height:100px;background:#4a463f">Photo</span><span class="ph" style="height:100px;background:#57524a">Photo</span><span class="ph" style="height:100px;background:#3d3a34">Photo</span><span class="ph" style="height:100px;background:#57524a">Photo</span><span class="ph" style="height:100px;background:#3d3a34">Photo</span><span class="ph" style="height:100px;background:#4a463f">Photo</span></div>
+              </section>
+            </div>
+          </div>
+          <div style="padding-top:26px">
+            <aside class="tb" aria-label="Tip Sule"><h3>Tip Sule</h3><div class="amts" role="group" aria-label="Choose an amount"><button type="button" aria-pressed="true">₦2,000</button><button type="button">₦3,000</button><button type="button">₦5,000</button></div><label>Another amount<input inputmode="numeric" placeholder="₦"></label><label>Say something (optional)<input></label><button type="button" class="tbgo">Tip ₦2,000</button><p class="fee"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5d5a54" stroke-width="1.8" aria-hidden="true" style="flex:none;margin-top:2px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+            <p style="margin:12px 4px 0;font-size:12.5px;color:#c9c6bd">His own amounts (Pro, “Make it yours”), never below ₦2,000.</p>
+          </div>
+        </div>
+        <div class="foot" style="border-top:1px solid #4a463f;color:#c9c6bd"><span><a href="#">Report this page</a> · <a href="#">Privacy</a> · <a href="#">Terms</a></span></div>
+      </div>
+    </div>
+    <div><p class="cap">Phone</p>
+      <div class="phone" style="background:#24221f;color:#f3f2ee">
+        <div style="height:110px;background:linear-gradient(120deg,#4a463f,#24221f)"></div>
+        <div style="padding:0 18px 18px">
+          <span class="av" aria-hidden="true" style="width:80px;height:80px;margin-top:-40px;background:#d9d6ce;color:#24221f;font:800 28px Manrope,Arial,sans-serif;border:4px solid #24221f">SD</span>
+          <h1 style="margin:10px 0 0;font:800 32px/1 Manrope,Arial,sans-serif;letter-spacing:-.02em">Sule Danjuma</h1>
+          <p style="margin:6px 0 0;font-size:13px;color:#c9c6bd;display:flex;align-items:center;gap:6px">@fadesbysule <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+          <p style="margin:6px 0 16px;font-size:14px;font-weight:700">Barber, Wuse 2, Abuja</p>
+          <aside class="tb" aria-label="Tip Sule" style="padding:16px"><h3 style="font-size:17px">Tip Sule</h3><div class="amts"><button type="button" aria-pressed="true">₦2,000</button><button type="button">₦3,000</button><button type="button">₦5,000</button></div><button type="button" class="tbgo">Tip ₦2,000</button><p class="fee"><span>You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+          <div class="note" style="margin-top:18px;background:#34312c;border:1px solid #4a463f;font-size:14px"><b>Pinned:</b> Walk-ins welcome Monday to Saturday, 9 am to 7 pm.</div>
+          <h2 class="h" style="margin-top:20px;font:800 20px Manrope,Arial,sans-serif">Services and prices</h2>
+          <div class="svc" style="border-bottom:1px solid #4a463f"><span>Skin fade</span><b>₦8,000</b></div>
+          <div class="svc" style="border-bottom:1px solid #4a463f"><span>Shape-up and beard</span><b>₦5,000</b></div>
+          <p style="margin:8px 0 0;font-size:12px;color:#c9c6bd">Prices are for information. You pay for a cut in the shop.</p>
+          <h2 class="h" style="margin-top:20px;font:800 20px Manrope,Arial,sans-serif">Gallery</h2>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px"><span class="ph" style="height:100px;background:#4a463f">Photo</span><span class="ph" style="height:100px;background:#57524a">Photo</span><span class="ph" style="height:100px;background:#3d3a34">Photo</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 3. STREAMER ===== -->
+  <div class="rowhead"><h2>3 · Ify, a streamer</h2><p>Layout <b>Minimal</b> · Theme Violet, Soft fonts, Confetti Hearts cover · Sections: Featured links, Supporter wall, Pinned note</p></div>
+  <div class="row">
+    <div><p class="cap">Desktop</p>
+      <div class="desk" style="background:#2a0e63;color:#fff">
+        <div style="height:150px;background:#7a32f9;position:relative;overflow:hidden"><svg width="100%" height="150" viewBox="0 0 1260 150" aria-hidden="true"><g fill="#5415c9"><path d="M120 60c-8-10-24-4-22 8 2 10 22 22 22 22s20-12 22-22c2-12-14-18-22-8Z"></path><path d="M420 30c-6-8-18-3-17 6 2 8 17 17 17 17s15-9 17-17c1-9-11-14-17-6Z"></path><path d="M760 80c-8-10-24-4-22 8 2 10 22 22 22 22s20-12 22-22c2-12-14-18-22-8Z"></path><path d="M1080 40c-6-8-18-3-17 6 2 8 17 17 17 17s15-9 17-17c1-9-11-14-17-6Z"></path></g><g fill="#c9adff"><circle cx="260" cy="100" r="5"></circle><circle cx="600" cy="50" r="4"></circle><circle cx="940" cy="110" r="5"></circle></g></svg></div>
+        <div style="max-width:560px;margin:0 auto;padding:0 20px 36px;text-align:center">
+          <span class="av" aria-hidden="true" style="width:120px;height:120px;margin:-60px auto 0;background:#ffd8e6;color:#8f2746;font-size:46px;border:5px solid #2a0e63">IO</span>
+          <h1 class="serif" style="margin:14px 0 0;font-size:52px;line-height:1;font-style:italic">Ify Plays</h1>
+          <p style="margin:8px 0 0;font-size:14px;color:#d9c7ff;display:flex;align-items:center;justify-content:center;gap:8px">@ifyplays <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+          <p style="margin:10px 0 24px;font-size:16px;font-weight:700">Streams football games and horror, most nights</p>
+          <aside class="tb" aria-label="Tip Ify"><h3>Tip Ify</h3><div class="amts" role="group" aria-label="Choose an amount"><button type="button">₦2,000</button><button type="button" aria-pressed="true">₦5,000</button><button type="button">₦10,000</button></div><label>Another amount<input inputmode="numeric" placeholder="₦"></label><label>Say something (optional)<input></label><button type="button" class="tbgo">Tip ₦5,000</button><p class="fee"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5d5a54" stroke-width="1.8" aria-hidden="true" style="flex:none;margin-top:2px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><span>No account needed. You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+          <div class="note" style="margin-top:22px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);text-align:left"><b>Pinned:</b> Live tonight at 9 pm. Come say hi in chat.</div>
+          <section aria-label="Featured links" style="margin-top:24px;text-align:left"><h2 class="serif h" style="font-style:italic">Find me live</h2>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <a href="#" class="link" style="background:#fff;color:#2a0e63"><span class="badge" style="background:#7a32f9;color:#fff">Tw</span>Watch me live on Twitch<svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" style="margin-left:auto"><path d="M6 3l5 5-5 5" fill="none" stroke="#2a0e63" stroke-width="2" stroke-linecap="round"></path></svg></a>
+              <a href="#" class="link" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22)"><span class="badge" style="background:#fff;color:#000">TT</span>TikTok<span style="margin-left:auto;font-weight:500;font-size:13px;color:#d9c7ff">@ifyplays</span></a>
+              <a href="#" class="link" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22)"><span class="badge" style="background:#fff;color:#000">YT</span>YouTube<span style="margin-left:auto;font-weight:500;font-size:13px;color:#d9c7ff">@ifyplays</span></a>
+            </div>
+            <p style="margin:8px 0 0;font-size:12.5px;color:#d9c7ff">Today’s social links, with one featured (Pro). The featured words are fixed per site.</p>
+          </section>
+          <section aria-label="Supporter wall" style="margin-top:24px;text-align:left"><h2 class="serif h" style="font-style:italic">Thank you</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:8px"><span class="fan" style="background:rgba(255,255,255,.12)">Chidi</span><span class="fan" style="background:rgba(255,255,255,.12)">Amaka</span><span class="fan" style="background:rgba(255,255,255,.12)">Big Tunde</span><span class="fan" style="background:rgba(255,255,255,.12)">Zara</span><span class="fan" style="background:rgba(255,255,255,.12)">Nnamdi</span></div>
+            <p style="margin:8px 0 0;font-size:12.5px;color:#d9c7ff">Only supporters who chose to be shown here, by the name they typed. No amounts, no counts.</p>
+          </section>
+        </div>
+        <div class="foot" style="border-top:1px solid rgba(255,255,255,.14);color:#d9c7ff;justify-content:center"><span><a href="#">Report this page</a> · <a href="#">Privacy</a> · <a href="#">Terms</a></span></div>
+      </div>
+    </div>
+    <div><p class="cap">Phone</p>
+      <div class="phone" style="background:#2a0e63;color:#fff;text-align:center">
+        <div style="height:100px;background:#7a32f9"></div>
+        <div style="padding:0 18px 18px">
+          <span class="av" aria-hidden="true" style="width:80px;height:80px;margin:-40px auto 0;background:#ffd8e6;color:#8f2746;font-size:30px;border:4px solid #2a0e63">IO</span>
+          <h1 class="serif" style="margin:10px 0 0;font-size:34px;line-height:1;font-style:italic">Ify Plays</h1>
+          <p style="margin:6px 0 0;font-size:13px;color:#d9c7ff;display:flex;align-items:center;justify-content:center;gap:6px">@ifyplays <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+          <p style="margin:6px 0 16px;font-size:14px;font-weight:700">Streams football games and horror</p>
+          <aside class="tb" aria-label="Tip Ify" style="padding:16px"><h3 style="font-size:17px">Tip Ify</h3><div class="amts"><button type="button">₦2,000</button><button type="button" aria-pressed="true">₦5,000</button><button type="button">₦10,000</button></div><button type="button" class="tbgo">Tip ₦5,000</button><p class="fee"><span>You’ll see the full total before you pay, and our payment partner handles your card securely.</span></p></aside>
+          <div class="note" style="margin-top:16px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);text-align:left;font-size:14px"><b>Pinned:</b> Live tonight at 9 pm.</div>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px;text-align:left">
+            <a href="#" class="link" style="background:#fff;color:#2a0e63"><span class="badge" style="background:#7a32f9;color:#fff">Tw</span>Watch me live on Twitch</a>
+            <a href="#" class="link" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22)"><span class="badge" style="background:#fff;color:#000">TT</span>TikTok</a>
+          </div>
+          <h2 class="serif h" style="margin-top:20px;font-size:22px;font-style:italic">Thank you</h2>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center"><span class="fan" style="background:rgba(255,255,255,.12)">Chidi</span><span class="fan" style="background:rgba(255,255,255,.12)">Amaka</span><span class="fan" style="background:rgba(255,255,255,.12)">Big Tunde</span><span class="fan" style="background:rgba(255,255,255,.12)">Zara</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3700}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
