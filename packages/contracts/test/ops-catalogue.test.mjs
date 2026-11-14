@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed nineteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 19);
+test('the serious actions are the agreed twenty', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 20);
   // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['business.owner_remove'],
@@ -143,4 +143,16 @@ test('pro.price is sensitive and in money; pro_price.change maps to it', () => {
   assert.ok(SERIOUS_ACTIONS.includes('pro_price.change'));
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro_price.change'], 'pro.price');
   assert.match(SERIOUS_ACTION_WORDS['pro_price.change'], /Pro price/);
+});
+
+// Staff announcements (owner-approved, 14 Nov 2026): emailing many people needs a second person.
+test('announcements.send is sensitive; announcement.send maps to it', () => {
+  assert.equal(OPS_CATALOGUE['announcements.send'].sensitive, true);
+  assert.equal(OPS_CATALOGUE['announcements.send'].group, 'content');
+  assert.ok(SERIOUS_ACTIONS.includes('announcement.send'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['announcement.send'],
+    'announcements.send',
+  );
+  assert.match(SERIOUS_ACTION_WORDS['announcement.send'], /announcement/i);
 });

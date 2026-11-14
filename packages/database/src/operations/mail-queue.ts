@@ -33,8 +33,16 @@ export function addressHmac(sealing: MailSealing, address: string): string {
  * Lower goes first (`claimDueMail`). 0 is mail someone is waiting for on screen; other security mail
  * (staff alerts, notices) comes next, so a burst of alerts never holds back a sign-in code. The
  * number is only ever sorted on, so mail queued under the old numbers is still sent.
+ * Announcements (news and service notices, `bulk`) go after everything else: 9, so it stays last if
+ * the others are renumbered.
  */
-function priorityOf(type: { category: string; waiting: boolean }): number {
+const BULK_PRIORITY = 9;
+function priorityOf(type: {
+  category: string;
+  waiting: boolean;
+  bulk: boolean;
+}): number {
+  if (type.bulk) return BULK_PRIORITY;
   if (type.waiting) return 0;
   return { security: 1, account: 2 }[type.category] ?? 3;
 }

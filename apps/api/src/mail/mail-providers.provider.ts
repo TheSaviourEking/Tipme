@@ -1,6 +1,7 @@
 import type { Provider } from '@nestjs/common';
 import { mailSealing, type MailSealing } from '@tipme/database';
 import {
+  announcementMailProvider,
   configuredMailProviders,
   type MailProvider,
   type MailProviderName,
@@ -10,6 +11,8 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 /** Every configured mail provider (keys present), active or not: webhooks need them all. */
 export const MAIL_PROVIDERS = Symbol('MAIL_PROVIDERS');
 export const MAIL_SEALING = Symbol('MAIL_SEALING');
+/** The provider announcements go through (Brevo), or null when none is set up. Never in MAIL_PROVIDERS. */
+export const ANNOUNCEMENT_PROVIDER = Symbol('ANNOUNCEMENT_PROVIDER');
 /** Confirms an SNS subscription by visiting its (verified) SubscribeURL. */
 export const MAIL_SUBSCRIPTION_CONFIRM = Symbol('MAIL_SUBSCRIPTION_CONFIRM');
 
@@ -39,4 +42,12 @@ export const subscriptionConfirmProvider: Provider<ConfirmSubscription> = {
     if (!response.ok)
       throw new Error(`subscription confirm ${response.status}`);
   },
+};
+
+export const announcementProviderProvider: Provider<MailProvider | null> = {
+  provide: ANNOUNCEMENT_PROVIDER,
+  inject: [API_CONFIG],
+  // The API never sends; it needs the name (is sending set up?) and Brevo's webhooks.
+  useFactory: (config: ApiConfig): MailProvider | null =>
+    announcementMailProvider(config, async () => {}),
 };

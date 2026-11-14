@@ -118,6 +118,13 @@ const LINKS: {
     needs: ['changelog.edit', 'changelog.publish'],
   },
   {
+    // Staff announcements (14 Nov 2026): one email to many people, sent with a second person.
+    href: '/ops/announcements',
+    label: 'Announcements',
+    group: 'Email and records',
+    needs: ['announcements.send'],
+  },
+  {
     // "Staff members", so the menu has one "People": every account, under Work.
     href: '/ops/staff/people',
     label: 'Staff members',

@@ -47,6 +47,7 @@ export * from './operations/account.js';
 export * from './operations/username-reservations.js';
 export * from './operations/username-take-backs.js';
 export * from './operations/changelog-admin.js';
+export * from './operations/announcements.js';
 export * from './operations/balance.js';
 export * from './operations/reversals.js';
 export * from './operations/dashboard.js';

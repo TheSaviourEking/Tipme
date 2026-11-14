@@ -228,3 +228,34 @@ test('People sits in Work right after Search, for search.view only', () => {
     { href: '/ops/users', label: 'People' },
   ]);
 });
+// Staff announcements (14 Nov 2026): with the email records, only for announcements.send.
+test('Announcements sits in Email and records, after Changelog, only with announcements.send', () => {
+  assert.ok(!hrefs(['changelog.publish']).includes('/ops/announcements'));
+  assert.deepEqual(
+    opsMenuGroups(['announcements.send', 'changelog.edit'])
+      .find((group) => group.label === 'Email and records')
+      ?.links.map((link) => link.label),
+    ['Changelog', 'Announcements'],
+  );
+});
+
+// Merge train 2: the three settings and records pages from #212 (Prices, under Work), #213
+// (Announcements) and #216 (Switches), all at once for someone holding every permission.
+test('Prices, Announcements and Switches all show for someone with every permission', () => {
+  const groups = opsMenuGroups([
+    'pro.price',
+    'announcements.send',
+    'switches.manage',
+    'providers.manage',
+    'changelog.edit',
+  ]);
+  const labels = (name) =>
+    groups.find((group) => group.label === name)?.links.map((l) => l.label);
+  assert.deepEqual(labels('Work'), ['Prices']);
+  assert.deepEqual(labels('Email and records'), [
+    'Providers',
+    'Switches',
+    'Changelog',
+    'Announcements',
+  ]);
+});

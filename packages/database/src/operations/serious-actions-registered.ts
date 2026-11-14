@@ -55,6 +55,7 @@ import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
+import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
 import {
   checkedProPrice,
@@ -1210,6 +1211,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(proRefund);
   registerSeriousAction(featureSwitchSet);
   registerSeriousAction(businessProPriceChange);
+  registerSeriousAction(announcementSendAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

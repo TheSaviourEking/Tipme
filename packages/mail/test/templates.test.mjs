@@ -483,6 +483,9 @@ test('no sample value reaches a subject or preheader', () => {
     business_invitation: ['businessName'],
     // The business's public name (shown on its own TipMe pages), so the person knows who asks.
     share_proposed: ['businessName'],
+    // Staff write an announcement's subject and preview line for everyone; they hold nobody's data.
+    announcement: ['subject', 'preheader'],
+    service_notice: ['subject', 'preheader'],
   };
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, ctx);
@@ -731,6 +734,9 @@ const PREVIOUS_SAMPLES = {
   pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
   // Owner-change lock (14 Nov 2026): a new type.
   business_owner_change: MAIL_TYPES.business_owner_change.sample,
+  // Staff announcements: a new type.
+  announcement: MAIL_TYPES.announcement.sample,
+  service_notice: MAIL_TYPES.service_notice.sample,
 };
 
 const settingsCtx = {

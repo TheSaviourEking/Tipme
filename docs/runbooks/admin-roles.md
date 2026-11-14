@@ -18,33 +18,34 @@ The menu only offers what someone can use. The server checks every call whatever
 
 ## Every permission, in plain words
 
-| Permission          | Group    | Sensitive | What it allows                                                                                                              |
-| ------------------- | -------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `fees.manage`       | money    | yes       | Set a page’s fee and grant fee-free tips, with a reason                                                                     |
-| `pages.plan`        | money    | yes       | Move a page between Free and Pro, with a reason                                                                             |
-| `payments.recheck`  | money    | no        | Ask the provider about a payment or withdrawal                                                                              |
-| `payments.repair`   | money    | yes       | Repair a payment record from the provider dashboard: link a checkout, confirm who bears the fee, recover an account         |
-| `payouts.resolve`   | money    | yes       | Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have |
-| `pages.suspend`     | people   | no        | Pause and restore recipient pages, and review or remove their images                                                        |
-| `private.view`      | people   | yes       | Reveal private details, with a reason                                                                                       |
-| `recoveries.cancel` | people   | no        | Cancel a pending phone recovery                                                                                             |
-| `recoveries.manage` | people   | yes       | Start and manage account recoveries for a person                                                                            |
-| `usernames.manage`  | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
-| `businesses.manage` | people   | yes       | Verify, suspend and restore businesses, with a reason (TipMe for businesses, behind `BUSINESS_ENABLED`)                     |
-| `changelog.edit`    | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                 |
-| `changelog.publish` | content  | yes       | Approve what users read in What’s new                                                                                       |
-| `pro.price`         | money    | yes       | Change the Pro price for new months, with a reason                                                                          |
-| `email.export`      | content  | yes       | Download the email log as a spreadsheet                                                                                     |
-| `email.read`        | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
-| `issues.resolve`    | content  | no        | Resolve issues                                                                                                              |
-| `issues.view`       | content  | no        | See issues and their evidence, add notes                                                                                    |
-| `search.view`       | content  | no        | Search pages, tips, withdrawals and ledger entries                                                                          |
-| `analytics.view`    | numbers  | no        | See health, visibility and market numbers                                                                                   |
-| `audit.view`        | numbers  | yes       | Read the audit log                                                                                                          |
-| `market.edit`       | numbers  | no        | Add and change market observations                                                                                          |
-| `providers.manage`  | settings | yes       | Change payment and email provider settings                                                                                  |
-| `staff.manage`      | settings | yes       | Add staff, change their access and roles                                                                                    |
-| `switches.manage`   | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                |
+| Permission           | Group    | Sensitive | What it allows                                                                                                              |
+| -------------------- | -------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `fees.manage`        | money    | yes       | Set a page’s fee and grant fee-free tips, with a reason                                                                     |
+| `pages.plan`         | money    | yes       | Move a page between Free and Pro, with a reason                                                                             |
+| `payments.recheck`   | money    | no        | Ask the provider about a payment or withdrawal                                                                              |
+| `payments.repair`    | money    | yes       | Repair a payment record from the provider dashboard: link a checkout, confirm who bears the fee, recover an account         |
+| `payouts.resolve`    | money    | yes       | Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have |
+| `pages.suspend`      | people   | no        | Pause and restore recipient pages, and review or remove their images                                                        |
+| `private.view`       | people   | yes       | Reveal private details, with a reason                                                                                       |
+| `recoveries.cancel`  | people   | no        | Cancel a pending phone recovery                                                                                             |
+| `recoveries.manage`  | people   | yes       | Start and manage account recoveries for a person                                                                            |
+| `usernames.manage`   | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
+| `businesses.manage`  | people   | yes       | Verify, suspend and restore businesses, with a reason (TipMe for businesses, behind `BUSINESS_ENABLED`)                     |
+| `changelog.edit`     | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                 |
+| `changelog.publish`  | content  | yes       | Approve what users read in What’s new                                                                                       |
+| `pro.price`          | money    | yes       | Change the Pro price for new months, with a reason                                                                          |
+| `announcements.send` | content  | yes       | Write announcements by email, and send one to users with a second person                                                    |
+| `email.export`       | content  | yes       | Download the email log as a spreadsheet                                                                                     |
+| `email.read`         | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
+| `issues.resolve`     | content  | no        | Resolve issues                                                                                                              |
+| `issues.view`        | content  | no        | See issues and their evidence, add notes                                                                                    |
+| `search.view`        | content  | no        | Search pages, tips, withdrawals and ledger entries                                                                          |
+| `analytics.view`     | numbers  | no        | See health, visibility and market numbers                                                                                   |
+| `audit.view`         | numbers  | yes       | Read the audit log                                                                                                          |
+| `market.edit`        | numbers  | no        | Add and change market observations                                                                                          |
+| `providers.manage`   | settings | yes       | Change payment and email provider settings                                                                                  |
+| `staff.manage`       | settings | yes       | Add staff, change their access and roles                                                                                    |
+| `switches.manage`    | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                |
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
 
@@ -75,6 +76,7 @@ These wait for a second person when one is available:
 | `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                    |
 | `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                              |
 | `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)    |
+| `announcement.send`         | Send an announcement by email          | `announcements.send`                                           |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 
@@ -136,6 +138,40 @@ Use this only when TipMe needs a name a page holds: a brand, a public figure, on
 9. **A harmful page:** don't wait for the approval. Pause it with `pages.suspend` straight away; the take-back still runs, and the page stays paused under its new name.
 
 Links and printed QR codes with the taken name stop working. Nothing about the page's money changes.
+
+## Sending an announcement by email
+
+For news that concerns many people at once. It needs `announcements.send`; sending is the serious action `announcement.send` and waits for a second person who holds it too (or runs alone, with the alert, when nobody else does).
+
+**Two kinds (the owner's ruling, 14 Nov 2026):**
+
+- **Service notice:** a change to fees, terms or how TipMe works. It goes to everyone with a confirmed email on a live account, whatever their email settings, and has no unsubscribe link (account mail). Bounces, complaints and deleted accounts still stop it. Only for those changes: anything promotional is News. The screen shows this checklist, and the approver reads "Service notice: goes to everyone."
+- **News:** everything else. Only people who turned on **News and announcements** in Settings (off until they do) get it, within the chosen audience: everyone, Free pages, Pro pages or business owners. Each email has the email settings link and the one-click unsubscribe header; unsubscribing turns that switch off. Turning off "guides and suggestions" holds it back too.
+
+1. In **Announcements**, choose **New announcement** and the kind. Write the subject, the preview line (shown after the subject in most inboxes) and the text: plain paragraphs with a blank line between them, `**two stars**` around words for bold, and lines starting `- ` for bullets. One button is optional: a TipMe path such as `/pro`, or an `https` link. Never name the payment partner ("our payment partner"), never imply a regulator approved TipMe, and say "tips" for money. The screen refuses those words.
+2. **Save draft**, then **Preview**: the real email, light and dark side by side. **Send a test to me** emails it to your own staff address now.
+3. **Ask to send…** with a reason. The screen shows how many people it reaches now; the approver sees the kind, the subject and that number in Approvals. Editing the draft afterwards makes the request stale, so ask again.
+4. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: 60 a minute, 10 every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email.
+5. **Stop sending…** with a reason stops it at once: nothing more is queued. Emails already queued still go.
+
+The same person is never mailed twice for one announcement, even if the worker restarts. Every step is in the audit log (`announcement.created`, `edited`, `test_sent`, `send_started`, `cancelled`, `sent`, and the approval's own rows).
+
+**Which provider.** Announcements go through Brevo only, never ZeptoMail (which sends sign-in codes and forbids bulk mail), and never fall back to it: with no Brevo set up, the screen says "Announcement email isn't set up" and nothing can be tested or sent. Deploy settings (API and worker): `BREVO_API_KEY` and `ANNOUNCEMENT_FROM_ADDRESS` together, and `BREVO_WEBHOOK_TOKEN` for bounce reports. Off production, with no key, announcements go to the pretend inbox.
+
+**Code defaults, not deploy settings** (owner, 14 Nov 2026: deploy settings are secrets and addresses only). They are absent from the env examples and compose files, and stay overridable in the config schemas for tests and emergencies, by adding them to that copy's env file and its compose `environment` by hand:
+
+- `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker): 60; 1 to 600. Lower it if Brevo or a mailbox provider pushes back.
+- `BREVO_SANDBOX` (API and worker): off. `on` makes Brevo check each request and send nothing.
+- `BREVO_API_BASE` (API and worker): `https://api.brevo.com`.
+
+**Setting up Brevo (once):**
+
+1. Create a Brevo account (the free plan sends 300 emails a day; a paid plan lifts that).
+2. In Brevo, **Senders, domains and dedicated IPs → Domains**: add `usetipme.xyz` and add exactly the DNS records Brevo shows for it at the DNS host: a `brevo-code:` TXT record on the root, the DKIM records (usually two CNAMEs, `brevo1._domainkey` and `brevo2._domainkey`), and a DMARC record if the domain has none (it already has one: keep it). Add an SPF include only if Brevo's screen asks for one, and then in the domain's one SPF record next to the existing includes. Records can take up to 48 hours; then **Verify records** and **Authenticate domain**.
+3. Add the sender `news@usetipme.xyz` (name "TipMe News") under **Senders**.
+4. **SMTP & API → API keys**: create a key for the server.
+5. **Transactional → Settings → Webhook**: add `https://<api host>/v1/webhooks/mail/brevo` for hard bounces, soft bounces, spam, delivered, opened and clicked, with bearer-token authentication set to a long random token.
+6. On the server, set `BREVO_API_KEY`, `ANNOUNCEMENT_FROM_ADDRESS=news@usetipme.xyz` and `BREVO_WEBHOOK_TOKEN` (the same token) for the API and the worker, and restart them. Send a test from Announcements to check.
 
 ## Stopping, and starting again
 
