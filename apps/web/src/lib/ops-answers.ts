@@ -151,6 +151,8 @@ const REFUSALS: Record<string, string> = {
     'This announcement is no longer a draft. Nothing changed.',
   ANNOUNCEMENT_NO_RECIPIENTS:
     'Nobody in this audience can get announcements right now. Nothing was sent.',
+  ANNOUNCEMENT_EMAIL_NOT_SET_UP:
+    'Announcement email isn’t set up on this server. Nothing was sent.',
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Nothing changed; see the reasons by the field.',
   APPROVAL_NO_APPROVER:

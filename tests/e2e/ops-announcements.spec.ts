@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { expectAccessible, identity } from './helpers';
+import { expectAccessible, identity, signUpRecipient } from './helpers';
 import { codeFor, enrolOwner, secondOwner, sql } from './ops-helpers';
 
 // Staff announcements by email (owner-approved, 14 Nov 2026): a staff member writes one, previews it
@@ -25,6 +25,8 @@ test('staff write an announcement, preview and test it, and a second person appr
   page,
   browser,
 }, testInfo) => {
+  // Two staff enrol, the worker's 10-second batches, and a stop: more than the default 30 seconds.
+  test.setTimeout(90_000);
   const staff: string[] = [];
   try {
     // Someone who turned news and announcements on: the audience is never empty.
@@ -46,6 +48,14 @@ test('staff write an announcement, preview and test it, and a second person appr
       main.getByRole('heading', { name: 'Announcements', level: 1 }),
     ).toBeVisible();
 
+    // A change to fees is a service notice: it goes to everyone, with the checklist shown.
+    await main.getByRole('radio', { name: /^Service notice/ }).check();
+    await expect(
+      main.getByText(
+        'Only for changes to fees, terms or how TipMe works for the person reading it.',
+      ),
+    ).toBeVisible();
+    await expect(main.getByLabel('Who gets it')).toBeDisabled();
     await main.getByLabel('Subject').fill(subject);
     await main.getByLabel('Preview line').fill('TipMe’s fee is going down.');
     await main
@@ -89,7 +99,7 @@ test('staff write an announcement, preview and test it, and a second person appr
           (
             await sql<{ status: string }>(
               `SELECT m.status FROM mail_messages m
-                WHERE m.type = 'announcement' AND m.user_id IS NULL AND m.to_hint = $1
+                WHERE m.type = 'service_notice' AND m.user_id IS NULL AND m.to_hint = $1
                 ORDER BY m.created_at DESC LIMIT 1`,
               [`k•••@${first.email.split('@')[1]}`],
             )
@@ -103,7 +113,7 @@ test('staff write an announcement, preview and test it, and a second person appr
       has: page.getByRole('heading', { name: 'Send', exact: true }),
     });
     await expect(sendCard.getByTestId('announcement-audience')).toHaveText(
-      /Everyone with a confirmed email: \d[\d,]* (person|people) now\./,
+      /Service notice, everyone with a confirmed email: \d[\d,]* (person|people) now\./,
     );
     const second = await secondOwner(browser, testInfo);
     staff.push(second.email);
@@ -121,7 +131,7 @@ test('staff write an announcement, preview and test it, and a second person appr
     expect(
       await sql(
         `SELECT 1 FROM mail_messages m JOIN users u ON u.id = m.user_id
-          WHERE m.type = 'announcement' AND lower(u.email) = lower($1)`,
+          WHERE m.type = 'service_notice' AND lower(u.email) = lower($1)`,
         [readerEmail],
       ),
     ).toHaveLength(0);
@@ -129,35 +139,44 @@ test('staff write an announcement, preview and test it, and a second person appr
     // The second person approves in Approvals.
     await second.page.goto('/ops/approvals');
     const card = second.page.getByRole('article').filter({ hasText: subject });
+    await expect(
+      card.getByText(/^Service notice: goes to everyone\./),
+    ).toBeVisible();
     await card.getByRole('button', { name: 'Approve…' }).click();
     await card.getByLabel('Authenticator code').fill(await codeFor(second));
     await card.getByRole('button', { name: 'Approve and run' }).click();
     await expect(card).toHaveCount(0);
     await second.context.close();
 
-    // Progress: "Sending: x of N", then every email queued.
+    // Progress: "Sending: x of N" once the worker's first batch is queued. A service notice goes to
+    // every account in this shared database at the steady rate, so the test stops it from the
+    // screen rather than waiting for the last one (the integration tests cover finishing).
     await page.reload();
     await main.getByRole('button', { name: `Open ${subject}` }).click();
-    await expect(main.getByTestId('announcement-progress')).toHaveText(
-      /^(Sending: \d[\d,]* of \d[\d,]*|Sent: \d[\d,]* of \d[\d,]* queued)/,
+    const progress = main.getByTestId('announcement-progress');
+    await expect(progress).toHaveText(
+      /^(Sending: [1-9][\d,]* of \d[\d,]*|Sent: \d[\d,]* of \d[\d,]* queued)/,
+      { timeout: 30_000 },
     );
-    await expect(main.getByTestId('announcement-progress')).toHaveText(
-      /^Sent: \d[\d,]* of \d[\d,]* queued/,
-      { timeout: 60_000 },
+    if ((await progress.textContent())?.startsWith('Sending')) {
+      const stop = main.locator('.settings-section', {
+        has: page.getByRole('heading', { name: 'Stop sending' }),
+      });
+      await stop.getByRole('button', { name: 'Stop sending…' }).click();
+      await stop
+        .getByLabel('Why stop it?')
+        .fill('Enough for this test run, stopping here');
+      await stop.getByRole('button', { name: 'Stop sending' }).click();
+      await expect(progress).toHaveText(
+        /^(Cancelled after \d[\d,]* of \d[\d,]*|Sent: )/,
+      );
+    }
+    const queued = await sql<{ count: number }>(
+      `SELECT count(*)::int AS count FROM mail_messages
+        WHERE type = 'service_notice' AND category = 'account' AND user_id IS NOT NULL
+          AND created_at > now() - interval '5 minutes'`,
     );
-    await expect
-      .poll(
-        async () =>
-          (
-            await sql(
-              `SELECT 1 FROM mail_messages m JOIN users u ON u.id = m.user_id
-                WHERE m.type = 'announcement' AND m.category = 'marketing' AND lower(u.email) = lower($1)`,
-              [readerEmail],
-            )
-          ).length,
-        { timeout: 20_000 },
-      )
-      .toBe(1);
+    expect(queued[0]?.count).toBeGreaterThan(0);
     await expectAccessible(page);
 
     await page.setViewportSize({ width: 320, height: 720 });
@@ -168,4 +187,22 @@ test('staff write an announcement, preview and test it, and a second person appr
   } finally {
     await revoke(staff);
   }
+});
+
+test('“News and announcements” in Settings is off until the person turns it on', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings#emails');
+  const section = page.locator('#emails');
+  const news = section.getByLabel('News and announcements');
+  await expect(news).not.toBeChecked();
+  await news.check();
+  await section.getByRole('button', { name: 'Save notifications' }).click();
+  await expect(section.getByText('Saved.')).toBeVisible();
+  await page.reload();
+  await expect(
+    page.locator('#emails').getByLabel('News and announcements'),
+  ).toBeChecked();
+  await expectAccessible(page);
 });

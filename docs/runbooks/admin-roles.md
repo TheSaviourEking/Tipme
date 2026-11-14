@@ -135,18 +135,31 @@ Links and printed QR codes with the taken name stop working. Nothing about the p
 
 ## Sending an announcement by email
 
-For news that concerns many people at once, such as a change to fees. It needs `announcements.send`; sending is the serious action `announcement.send` and waits for a second person who holds it too (or runs alone, with the alert, when nobody else does).
+For news that concerns many people at once. It needs `announcements.send`; sending is the serious action `announcement.send` and waits for a second person who holds it too (or runs alone, with the alert, when nobody else does).
 
-1. In **Announcements**, choose **New announcement**. Write the subject, the preview line (shown after the subject in most inboxes) and the text: plain paragraphs with a blank line between them, `**two stars**` around words for bold, and lines starting `- ` for bullets. One button is optional: a TipMe path such as `/pro`, or an `https` link. Never name the payment partner ("our payment partner"), never imply a regulator approved TipMe, and say "tips" for money. The screen refuses those words.
-2. Choose who gets it: everyone with a confirmed email, Free pages, Pro pages, or business owners.
-3. **Save draft**, then **Preview**: the real email, light and dark side by side. **Send a test to me** emails it to your own staff address now; the test has no email settings link, because it is not tied to anyone's settings.
-4. **Ask to send…** with a reason. The screen shows how many people it reaches now; the approver sees that number and the subject in Approvals. Editing the draft afterwards makes the request stale, so ask again.
-5. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker, default 60, 1 to 600), a sixth of it every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email, so sign-in codes are never held up.
-6. **Stop sending…** with a reason stops it at once: nothing more is queued. Emails already queued still go.
+**Two kinds (the owner's ruling, 14 Nov 2026):**
 
-**Who gets it.** Only people whose email settings allow it: a confirmed email on a live account, the marketing switch on (it is opt-in: off unless the person turned it on), and the guides and news switch not off. Both are checked again when each email is sent, with the suppression list (bounces and complaints). Every announcement has the email settings link and the one-click unsubscribe header; unsubscribing turns that person's marketing switch off. The same person is never mailed twice for one announcement, even if the worker restarts. Every step is in the audit log (`announcement.created`, `edited`, `test_sent`, `send_started`, `cancelled`, `sent`, and the approval's own rows).
+- **Service notice:** a change to fees, terms or how TipMe works. It goes to everyone with a confirmed email on a live account, whatever their email settings, and has no unsubscribe link (account mail). Bounces, complaints and deleted accounts still stop it. Only for those changes: anything promotional is News. The screen shows this checklist, and the approver reads "Service notice: goes to everyone."
+- **News:** everything else. Only people who turned on **News and announcements** in Settings (off until they do) get it, within the chosen audience: everyone, Free pages, Pro pages or business owners. Each email has the email settings link and the one-click unsubscribe header; unsubscribing turns that switch off. Turning off "guides and suggestions" holds it back too.
 
-**The rate.** ZeptoMail publishes no per-minute limit, only a daily limit per Mail Agent that staff can set, and that limit is shared with sign-in codes. Before a large send, check the Mail Agent's daily blocking limit leaves room for the day's codes. ZeptoMail is for transactional email and its terms forbid bulk promotional mail, so keep announcements to service news (such as a fee change).
+1. In **Announcements**, choose **New announcement** and the kind. Write the subject, the preview line (shown after the subject in most inboxes) and the text: plain paragraphs with a blank line between them, `**two stars**` around words for bold, and lines starting `- ` for bullets. One button is optional: a TipMe path such as `/pro`, or an `https` link. Never name the payment partner ("our payment partner"), never imply a regulator approved TipMe, and say "tips" for money. The screen refuses those words.
+2. **Save draft**, then **Preview**: the real email, light and dark side by side. **Send a test to me** emails it to your own staff address now.
+3. **Ask to send…** with a reason. The screen shows how many people it reaches now; the approver sees the kind, the subject and that number in Approvals. Editing the draft afterwards makes the request stale, so ask again.
+4. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker, default 60, 1 to 600), a sixth of it every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email.
+5. **Stop sending…** with a reason stops it at once: nothing more is queued. Emails already queued still go.
+
+The same person is never mailed twice for one announcement, even if the worker restarts. Every step is in the audit log (`announcement.created`, `edited`, `test_sent`, `send_started`, `cancelled`, `sent`, and the approval's own rows).
+
+**Which provider.** Announcements go through Brevo only, never ZeptoMail (which sends sign-in codes and forbids bulk mail), and never fall back to it: with no Brevo set up, the screen says "Announcement email isn't set up" and nothing can be tested or sent. Settings (API and worker): `BREVO_API_KEY` and `ANNOUNCEMENT_FROM_ADDRESS` together, `BREVO_WEBHOOK_TOKEN` for bounce reports, and `BREVO_SANDBOX=on` to have Brevo check requests without sending (staging). Off production, with no key, announcements go to the pretend inbox.
+
+**Setting up Brevo (once):**
+
+1. Create a Brevo account (the free plan sends 300 emails a day; a paid plan lifts that).
+2. In Brevo, **Senders, domains and dedicated IPs → Domains**: add `usetipme.xyz` and add exactly the DNS records Brevo shows for it at the DNS host: a `brevo-code:` TXT record on the root, the DKIM records (usually two CNAMEs, `brevo1._domainkey` and `brevo2._domainkey`), and a DMARC record if the domain has none (it already has one: keep it). Add an SPF include only if Brevo's screen asks for one, and then in the domain's one SPF record next to the existing includes. Records can take up to 48 hours; then **Verify records** and **Authenticate domain**.
+3. Add the sender `news@usetipme.xyz` (name "TipMe News") under **Senders**.
+4. **SMTP & API → API keys**: create a key for the server.
+5. **Transactional → Settings → Webhook**: add `https://<api host>/v1/webhooks/mail/brevo` for hard bounces, soft bounces, spam, delivered, opened and clicked, with bearer-token authentication set to a long random token.
+6. On the server, set `BREVO_API_KEY`, `ANNOUNCEMENT_FROM_ADDRESS=news@usetipme.xyz` and `BREVO_WEBHOOK_TOKEN` (the same token) for the API and the worker, and restart them. Send a test from Announcements to check.
 
 ## Stopping, and starting again
 

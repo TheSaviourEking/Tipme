@@ -3,9 +3,11 @@ import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import {
   ANNOUNCEMENT_AUDIENCES,
   ANNOUNCEMENT_AUDIENCE_WORDS,
+  ANNOUNCEMENT_KIND_WORDS,
   ANNOUNCEMENT_LIMITS,
   announcementTextProblems,
   type AnnouncementAudience,
+  type AnnouncementKind,
   type OpsAnnouncement,
   type OpsAnnouncementDraft,
   type OpsAnnouncementList,
@@ -47,7 +49,22 @@ const EMPTY: OpsAnnouncementDraft = {
   buttonLabel: null,
   buttonUrl: null,
   audience: 'everyone',
+  kind: 'news',
 };
+
+/** The two kinds, as staff choose them (the owner's ruling, 14 Nov 2026). */
+const KINDS: { value: AnnouncementKind; label: string; hint: string }[] = [
+  {
+    value: 'news',
+    label: 'News',
+    hint: 'Only people who turned on “News and announcements” in their email settings. Each email has an unsubscribe link.',
+  },
+  {
+    value: 'service',
+    label: 'Service notice',
+    hint: 'Everyone with a confirmed email, whatever their email settings. It can’t be turned off, so use it only when the checklist below fits.',
+  },
+];
 
 const count = (n: number) =>
   `${n.toLocaleString('en-NG')} ${n === 1 ? 'person' : 'people'}`;
@@ -76,6 +93,7 @@ const draftOf = (a: OpsAnnouncement): OpsAnnouncementDraft => ({
   buttonLabel: a.buttonLabel,
   buttonUrl: a.buttonUrl,
   audience: a.audience,
+  kind: a.kind,
 });
 
 const same = (a: OpsAnnouncementDraft, b: OpsAnnouncementDraft) =>
@@ -107,6 +125,7 @@ function Preview({ preview }: { preview: OpsAnnouncementPreview }) {
 export default function AnnouncementsPage() {
   const id = useId();
   const [list, setList] = useState<OpsAnnouncement[] | null>(null);
+  const [setUp, setSetUp] = useState(true);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState<OpsAnnouncement | null>(null);
   const [draft, setDraft] = useState<OpsAnnouncementDraft>(EMPTY);
@@ -119,6 +138,7 @@ export default function AnnouncementsPage() {
   const apply = useCallback((result: SessionResult<OpsAnnouncementList>) => {
     if (!result.ok) return setFailed(true);
     setList(result.data.rows);
+    setSetUp(result.data.setUp);
     setOpen((current) =>
       current
         ? (result.data.rows.find((row) => row.id === current.id) ?? current)
@@ -229,7 +249,9 @@ export default function AnnouncementsPage() {
       return setError(
         answer.code === 'INVALID_INPUT'
           ? 'Your staff account has no email address to send a test to.'
-          : refusalWords(answer),
+          : answer.code === 'ANNOUNCEMENT_EMAIL_NOT_SET_UP'
+            ? 'Announcement email isn’t set up on this server, so no test can be sent.'
+            : refusalWords(answer),
       );
     if (answer.kind === 'done')
       setSaid(`Test sent to ${answer.data.toHint}. It can take a minute.`);
@@ -245,7 +267,9 @@ export default function AnnouncementsPage() {
     if (answer.kind === 'refused')
       return answer.code === 'ANNOUNCEMENT_NO_RECIPIENTS'
         ? 'Nobody in this audience can get announcements right now, so there is nothing to send.'
-        : refusalWords(answer);
+        : answer.code === 'ANNOUNCEMENT_EMAIL_NOT_SET_UP'
+          ? 'Announcement email isn’t set up on this server, so nothing can be sent.'
+          : refusalWords(answer);
     setOutcome(
       outcomeOf(
         answer,
@@ -297,6 +321,13 @@ export default function AnnouncementsPage() {
         and announcements, and each email has the unsubscribe link.
       </p>
 
+      {!setUp && (
+        <Notice tone="error" title="Announcement email isn’t set up">
+          This server has no announcement email provider, so nothing can be
+          tested or sent. You can still write and preview drafts.
+        </Notice>
+      )}
+
       <Card className="settings-section">
         <h2 id={`${id}-list`}>Announcements</h2>
         {list.length === 0 ? (
@@ -308,6 +339,7 @@ export default function AnnouncementsPage() {
             {list.map((row) => (
               <li key={row.id}>
                 <strong>{row.subject}</strong> ·{' '}
+                {ANNOUNCEMENT_KIND_WORDS[row.kind]} ·{' '}
                 <span data-testid="announcement-state">{stateWords(row)}</span>{' '}
                 · {when(row.createdAt)}{' '}
                 <Button
@@ -349,6 +381,45 @@ export default function AnnouncementsPage() {
           noValidate
         >
           <fieldset disabled={!editable} className="ops-announcement-fields">
+            <fieldset className="ops-announcement-kinds">
+              <legend>What kind of announcement?</legend>
+              {KINDS.map((kind) => (
+                <label key={kind.value} className="ops-announcement-kind">
+                  <input
+                    type="radio"
+                    name={`${id}-kind`}
+                    value={kind.value}
+                    checked={draft.kind === kind.value}
+                    onChange={() => {
+                      set('kind', kind.value);
+                      if (kind.value === 'service') set('audience', 'everyone');
+                    }}
+                  />
+                  <span>
+                    <strong>{kind.label}</strong>
+                    <span className="tm-hint">{kind.hint}</span>
+                  </span>
+                </label>
+              ))}
+            </fieldset>
+            {draft.kind === 'service' && (
+              <Notice tone="neutral" title="Is this a service notice?">
+                <ul className="ops-announcement-checklist">
+                  <li>
+                    Only for changes to fees, terms or how TipMe works for the
+                    person reading it.
+                  </li>
+                  <li>
+                    Anything promotional (a new feature to try, an offer, a
+                    story) is News.
+                  </li>
+                  <li>
+                    Plain facts and dates; say “tips” for money, and “our
+                    payment partner”, never its name.
+                  </li>
+                </ul>
+              </Notice>
+            )}
             <InputField
               id={`${id}-subject`}
               label="Subject"
@@ -393,6 +464,8 @@ export default function AnnouncementsPage() {
               <select
                 id={`${id}-audience`}
                 className="tm-input"
+                disabled={draft.kind === 'service'}
+                aria-describedby={`${id}-audience-hint`}
                 value={draft.audience}
                 onChange={(e) =>
                   set('audience', e.target.value as AnnouncementAudience)
@@ -404,6 +477,11 @@ export default function AnnouncementsPage() {
                   </option>
                 ))}
               </select>
+              <p id={`${id}-audience-hint`} className="tm-hint">
+                {draft.kind === 'service'
+                  ? 'A service notice goes to everyone.'
+                  : 'Within it, only people who turned on news and announcements.'}
+              </p>
             </div>
           </fieldset>
           {problems.length > 0 && (
@@ -441,13 +519,15 @@ export default function AnnouncementsPage() {
             >
               Preview
             </Button>
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void sendTest()}
-            >
-              Send a test to me
-            </Button>
+            {setUp && (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => void sendTest()}
+              >
+                Send a test to me
+              </Button>
+            )}
           </div>
         </form>
         {preview && <Preview preview={preview} />}
@@ -458,11 +538,14 @@ export default function AnnouncementsPage() {
           <h2>Send</h2>
           {outcome && <ActionOutcome outcome={outcome} />}
           <p data-testid="announcement-audience">
-            {ANNOUNCEMENT_AUDIENCE_WORDS[open.audience]}:{' '}
-            <strong>{count(open.audienceCount ?? 0)}</strong> now. It is counted
-            again when sending starts.
+            {ANNOUNCEMENT_KIND_WORDS[open.kind]},{' '}
+            {open.kind === 'service'
+              ? 'everyone with a confirmed email'
+              : ANNOUNCEMENT_AUDIENCE_WORDS[open.audience].toLowerCase()}
+            : <strong>{count(open.audienceCount ?? 0)}</strong> now. It is
+            counted again when sending starts.
           </p>
-          {open.audienceCount === 0 && (
+          {open.audienceCount === 0 && open.kind === 'news' && (
             <Notice tone="neutral" title="Nobody to send to yet">
               Nobody in this audience has turned on news and announcements in
               their email settings.
@@ -472,7 +555,7 @@ export default function AnnouncementsPage() {
             <Notice tone="neutral" title="Waiting for a second person">
               Sending is waiting in Approvals. Nothing has been sent.
             </Notice>
-          ) : open.state === 'draft' && !outcome ? (
+          ) : open.state === 'draft' && !outcome && setUp ? (
             <ReasonAction
               open="Ask to send…"
               field="Why send this now?"
