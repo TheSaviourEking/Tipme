@@ -687,8 +687,14 @@ export async function seriousPermissionHolders(
   tx: Database | Tx,
 ): Promise<Map<string, number>> {
   const holders = new Map<string, Set<string>[]>();
-  for (const person of await staffAbleToEnterCode(tx)) {
-    const access = await readStaffAccess(tx, person.userId);
+  const able = await staffAbleToEnterCode(tx);
+  // Read together: one at a time, this held the staff-admin lock for a round trip per person.
+  const everyone = await readStaffAccessOf(
+    tx,
+    able.map((person) => person.userId),
+  );
+  for (const person of able) {
+    const access = everyone.get(person.userId);
     const boxes = mailboxesOf(person);
     // Some actions only an owner may decide, so holding the permission doesn't make a second person.
     if (access?.roleId === 'owner')
