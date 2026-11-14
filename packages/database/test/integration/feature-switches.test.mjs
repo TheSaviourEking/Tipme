@@ -52,7 +52,8 @@ test('the first start writes every switch: from the old variable if set, else th
       await rows('SELECT key, enabled, source, reason FROM feature_switches')
     ).map((r) => [r.key, r]),
   );
-  assert.equal(Object.keys(stored).length, 12);
+  // 12 from #216 plus train 2's business_pro, business_signup, business_owners, campaign_pages.
+  assert.equal(Object.keys(stored).length, 16);
   assert.equal(stored.pro_billing.enabled, true);
   assert.equal(stored.pro_billing.source, 'env');
   assert.match(stored.pro_billing.reason, /PRO_BILLING_ENABLED/);
@@ -69,7 +70,7 @@ test('the first start writes every switch: from the old variable if set, else th
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 12);
+  assert.equal(n, 16);
 });
 
 test('after the first start the stored value wins; a variable still set is ignored and named', async (t) => {
@@ -90,7 +91,7 @@ test('after the first start the stored value wins; a variable still set is ignor
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 12, 'a later start writes no history');
+  assert.equal(n, 16, 'a later start writes no history');
 });
 
 test('a malformed old variable stops the first start, naming it', async (t) => {
@@ -111,7 +112,7 @@ test('two processes starting at once write each switch once', async (t) => {
   const [{ n }] = await rows(
     'SELECT count(*)::int AS n FROM feature_switch_changes',
   );
-  assert.equal(n, 12);
+  assert.equal(n, 16);
 });
 
 test('reads are cached for under 30 seconds, and a change clears the cache', async (t) => {
@@ -266,7 +267,7 @@ test('setting a switch stores it, keeps history and audits it, and refuses no ch
   assert.equal(billing.history.length, 2);
   assert.equal(billing.history[0].approvedBy, SECOND);
   assert.equal(billing.history[1].source, 'default');
-  assert.equal(overview.length, 12);
+  assert.equal(overview.length, 16);
 });
 
 test('history is append-only', async (t) => {

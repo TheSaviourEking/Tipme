@@ -59,7 +59,7 @@ test('the first start wrote every switch, the old variable included, and logged 
   const rows = await q(
     `SELECT key, enabled, source FROM feature_switches ORDER BY key`,
   );
-  assert.equal(rows.length, 12);
+  assert.equal(rows.length, 16);
   assert.deepEqual(
     rows.find((r) => r.key === 'business'),
     {
