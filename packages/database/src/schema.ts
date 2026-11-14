@@ -318,7 +318,7 @@ export const mailMessages = pgTable(
     dataSealed: text('data_sealed'),
     renderedSealed: text('rendered_sealed'),
     status: text('status').notNull().default('queued'),
-    // 0 security, 1 account, 2 everything else: codes never wait behind a broadcast.
+    // 0 a code or link someone is waiting for, 1 other security, 2 account, 3 everything else.
     priority: integer('priority').notNull(),
     pinnedProvider: text('pinned_provider'),
     provider: text('provider'),
