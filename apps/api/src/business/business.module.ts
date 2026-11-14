@@ -9,6 +9,7 @@ import { MailModule } from '../mail/mail.module.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { BusinessRolesController } from './business-roles.controller.js';
 import { BusinessManageController } from './business-manage.controller.js';
+import { BusinessLogoController } from './business-logo.controller.js';
 import { BusinessMembersController } from './business-members.controller.js';
 import { WorkController } from './work.controller.js';
 import { BusinessPublicController } from './business-public.controller.js';
@@ -36,6 +37,7 @@ import {
   controllers: [
     BusinessRolesController,
     BusinessManageController,
+    BusinessLogoController,
     BusinessMembersController,
     WorkController,
     BusinessPublicController,

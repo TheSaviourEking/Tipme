@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Patch,
   Post,
@@ -43,6 +44,8 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 /**
  * Lane B1 (PR B1): apply for a business, edit it, its locations and its managers. Signed in, under
@@ -55,6 +58,10 @@ import { BusinessEnabledGuard } from './business-enabled.guard.js';
 export class BusinessManageController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   /** Anyone signed in with a proven email (owner's answer Q3). Pending until TipMe verifies it. */
@@ -87,9 +94,9 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(businessUpdateSchema)) body: BusinessUpdate,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return {
-      data: await updateBusiness(this.database.db, auth.userId, id, body),
-    };
+    const data = await updateBusiness(this.database.db, auth.userId, id, body);
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
+    return { data };
   }
 
   /** Owners. */
@@ -100,7 +107,9 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(locationInputSchema)) body: LocationInput,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return { data: await addLocation(this.database.db, auth.userId, id, body) };
+    const data = await addLocation(this.database.db, auth.userId, id, body);
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
+    return { data };
   }
 
   /** Owners, or that location's manager. */
@@ -111,15 +120,15 @@ export class BusinessManageController {
     @Param('locationId') locationId: string,
     @Body(new ZodValidationPipe(locationUpdateSchema)) body: LocationUpdate,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return {
-      data: await updateLocation(
-        this.database.db,
-        auth.userId,
-        id,
-        locationId,
-        body,
-      ),
-    };
+    const data = await updateLocation(
+      this.database.db,
+      auth.userId,
+      id,
+      locationId,
+      body,
+    );
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
+    return { data };
   }
 
   /** Owners. The location page stops showing; the people there stay on the team. */
@@ -130,9 +139,14 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Param('locationId') locationId: string,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return {
-      data: await closeLocation(this.database.db, auth.userId, id, locationId),
-    };
+    const data = await closeLocation(
+      this.database.db,
+      auth.userId,
+      id,
+      locationId,
+    );
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
+    return { data };
   }
 
   @Get(':id/managers')
@@ -153,5 +167,6 @@ export class BusinessManageController {
     @Param('managerId') managerId: string,
   ): Promise<void> {
     await removeManager(this.database.db, auth.userId, id, managerId);
+    signalBusiness(this.database.db, this.publishLive, { businessId: id });
   }
 }

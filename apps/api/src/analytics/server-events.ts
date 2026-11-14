@@ -13,13 +13,14 @@ import { LOGGER } from '../tokens.js';
  */
 @Injectable()
 export class ServerEvents {
-  private readonly enabled: boolean;
+  /** Whether anonymous analytics are collected at all (ANALYTICS_ENABLED; on by default). */
+  readonly enabled: boolean;
   constructor(
     @Inject(API_CONFIG) config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(LOGGER) private readonly logger: Logger,
   ) {
-    this.enabled = config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+    this.enabled = config.ANALYTICS_ENABLED;
   }
 
   async record(

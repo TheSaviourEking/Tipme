@@ -596,6 +596,62 @@
       "when": 1793991767761,
       "tag": "0084_changelog",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1794003390227,
+      "tag": "0085_business_logo",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794256212640,
+      "tag": "0086_pro_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794256229651,
+      "tag": "0087_pro_prices_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1794257185467,
+      "tag": "0088_pro_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1794257186577,
+      "tag": "0089_pro_periods_staff_grants",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794258786885,
+      "tag": "0090_pro_purchases",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1794377305726,
+      "tag": "0091_pro_insights",
+      "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1794389732515,
+      "tag": "0092_pro_money",
+      "breakpoints": true
     }
   ]
 }

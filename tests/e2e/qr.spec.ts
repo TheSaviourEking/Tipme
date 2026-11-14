@@ -80,7 +80,7 @@ test('a recipient styles their QR code, then prints, shows and shares it', async
 
   await page.getByRole('link', { name: 'Print card' }).click();
   await page.waitForURL(/\/dashboard\/qr\/print$/);
-  await expect(page.getByText(`${WEB_HOST}/@${handle}`).first()).toBeVisible();
+  // The link is printed once, inside the card (QrPrint board), so it is named by the picture.
   await expect(
     page.getByRole('img', { name: `QR code for ${WEB_HOST}/@${handle}` }),
   ).toBeVisible();
@@ -106,12 +106,12 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   for (const name of ['Show full screen', 'Share image', 'Download image'])
     await expect(page.getByRole('button', { name })).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Print card' })).toHaveCount(0);
-  // Upgrade leads to the Pro explanation, with no price and no billing.
+  // Upgrade leads to the Pro explanation, with the price the server sends.
   await page.getByRole('link', { name: 'Upgrade to use this design' }).click();
   await page.waitForURL(/\/dashboard\/settings#pro$/);
   await expect(page.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
   await expect(page.getByText('Three changes to your handle')).toBeVisible();
-  await expect(page.locator('#pro')).not.toContainText(/₦|NGN|\$|per month/);
+  await expect(page.locator('#pro')).toContainText('₦2,500 a month');
   await page.goBack();
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   // A screenshot of it leads to the TipMe home page, never to the person's page.
@@ -347,4 +347,90 @@ test('the designs list as Patterns (17), Cards (12) and Photo (1); arrows move a
     page.getByRole('img', { name: /Preview of the Indigo Grid/ }),
   ).toBeVisible();
   await expectAccessible(page);
+});
+
+test('the Free card prints its link once, and paper hides the dashboard notices, not the card', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  // An offline page: "Your page is offline" shows on every dashboard page, this one included.
+  await page.goto('/dashboard/settings');
+  await page.getByRole('button', { name: 'Take my page offline' }).click();
+  await expect(page.getByText('Your page is not live')).toBeVisible();
+  await page.goto('/dashboard/qr/print');
+  const main = page.getByRole('main');
+  const card = main.getByRole('img', {
+    name: `QR code for ${WEB_HOST}/@${handle}`,
+  });
+  await expect(card).toBeVisible();
+  // The link is drawn inside the card; no second line under it.
+  await expect(main.locator('.print-card__label')).toHaveCount(0);
+  const attention = main.getByRole('region', { name: 'Needs your attention' });
+  await expect(attention.getByText('Your page is offline')).toBeVisible();
+  await page.emulateMedia({ media: 'print' });
+  await expect(attention).toBeHidden();
+  await expect(card).toBeVisible();
+  await page.emulateMedia({ media: 'screen' });
+  await expect(attention).toBeVisible();
+  await expectAccessible(page);
+});
+
+test('a Pro page chooses a format by its paper picture, and small formats print with a cut line', async ({
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const { handle } = await signUpRecipient(page, testInfo);
+  await makePagePro(browser, handle, testInfo);
+  await page.goto('/dashboard/qr');
+  await page.getByRole('radio', { name: /Heart modules/ }).check();
+  await expect(page.getByText('Style saved')).toBeVisible();
+  // Through the page's own link, as a person does (a direct goto can race the studio's refresh).
+  await page.getByRole('link', { name: 'Print card' }).click();
+  await page.waitForURL(/\/dashboard\/qr\/print$/);
+  const formats = page.getByRole('group', { name: 'Format' });
+  await expect(formats.getByRole('radio')).toHaveCount(8);
+  for (const [id, name, size] of [
+    ['counter', 'Counter card', 'Prints on A6'],
+    ['poster', 'Poster', 'Prints on A6'],
+    ['sticker', 'Round sticker', 'Prints 80 mm across'],
+    ['ticket', 'Ticket', 'Prints on A6'],
+    ['receipt', 'Receipt slip', 'Prints on A6'],
+    ['lock', 'Phone lock screen', 'Prints on A6'],
+    ['business', 'Business card', 'Prints 90 × 55 mm'],
+    ['hang', 'Hang tag', 'Prints on A6'],
+  ] as const) {
+    const label = formats.locator('label', { hasText: name });
+    await expect(label).toContainText(size);
+    const art = label.locator(`.qr-pick__art[data-format="${id}"]`);
+    await expect(art).toHaveAttribute('aria-hidden', 'true');
+    await expect(art).toBeVisible();
+  }
+  await page.getByLabel('Receipt slip').check();
+  await expect(
+    formats.getByRole('radio', { name: /Receipt slip/ }),
+  ).toBeChecked();
+  await expect(page.locator('.qr-format__code')).toBeVisible();
+  await expectAccessible(page);
+
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.qr-format--receipt')).toHaveCSS(
+    'outline-style',
+    'dashed',
+  );
+  await page.emulateMedia({ media: 'screen' });
+  await page.getByLabel('Phone lock screen').check();
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.qr-format--lock')).toHaveCSS(
+    'outline-style',
+    'dashed',
+  );
+  await page.emulateMedia({ media: 'screen' });
+  await page.getByLabel('Counter card').check();
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.locator('.qr-format--counter')).toHaveCSS(
+    'outline-style',
+    'none',
+  );
+  await context.close();
 });

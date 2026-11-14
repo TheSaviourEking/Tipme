@@ -19,6 +19,7 @@ import {
   weekText,
 } from '@/lib/business/insights-api';
 import { naira } from '@/lib/money';
+import { useBusinessRevision } from '@/lib/business/use-business-live';
 
 /** A person's tags with any mention, most first; under 3 reads "fewer than 3", never a number. */
 function topTags(person: MemberWeek): string {
@@ -66,6 +67,7 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
   }, [business.id, fallback, view?.businessId]);
 
   const key = view ? `${view.locationId}|${view.week}|${attempt}` : '';
+  const revision = useBusinessRevision();
   useEffect(() => {
     if (!view || view.businessId !== business.id) return;
     let live = true;
@@ -77,7 +79,7 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
     return () => {
       live = false;
     };
-  }, [business.id, key, view]);
+  }, [business.id, key, view, revision]);
 
   if (!fallback)
     return (

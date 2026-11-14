@@ -62,7 +62,9 @@ test('staff find a business with its contact hidden, reveal it with a reason, pa
   await expect(section(page, 'Locations')).toContainText(
     '27 Ademola Adetokunbo, Lagos',
   );
-  await expect(page.getByText(/approved/i)).toHaveCount(0);
+  // The business's own content never says "approved" (no regulatory claim); the admin menu and
+  // notices outside main can mention Approvals.
+  await expect(page.getByRole('main').getByText(/approved/i)).toHaveCount(0);
   await expectAccessible(page);
 
   const contact = section(page, 'Contact');

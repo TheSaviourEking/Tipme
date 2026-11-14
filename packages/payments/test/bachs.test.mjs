@@ -12,7 +12,7 @@ import {
 
 const API_KEY = 'sk_sandbox_test';
 const CURRENT_SECRET = 'current-secret-0123456789';
-const PREVIOUS_SECRET = 'previous-secret-0123456789';
+const PREVIOUS_SECRET = 'previous-secret-0123456789'; // gitleaks:allow (a made-up test secret)
 const NOW = new Date('2026-10-26T12:00:00.000Z');
 
 function makeProvider(fetchImpl, config = {}) {
@@ -1606,4 +1606,150 @@ test('a refund event carries the refund, its state and, once paid, the amount an
       .partnerReversalId,
     null,
   );
+});
+
+/*
+ * Paid Pro, plan Task 5: own-account events. The partner's webhooks overview and the sandbox
+ * evidence (9 Nov 2026): a connected account's event carries a top-level `account`; TipMe's own
+ * events carry none, only `organization_id`, which is TipMe's own org (acct_stWbI4933A4WVqkc in
+ * the sandbox). Shapes below are recorded from that evidence.
+ */
+const PLATFORM_ORG = 'acct_stWbI4933A4WVqkc';
+function signedEvent(provider, body) {
+  const rawBody = Buffer.from(JSON.stringify(body));
+  const timestamp = String(Math.floor(NOW.getTime() / 1000));
+  return provider.verifyWebhook(
+    rawBody,
+    {
+      'X-Bachs-Signature-V2': `t=${timestamp},v1=${sign(CURRENT_SECRET, timestamp, rawBody)}`,
+    },
+    NOW,
+  );
+}
+const noNetwork = async () => {
+  throw new Error('webhook verification must not call the network');
+};
+const ownCollection = {
+  id: 'evt_pro_collection',
+  type: 'collection.succeeded',
+  organization_id: PLATFORM_ORG,
+  data: {
+    checkout_id: 'cs_pro_123',
+    reference: '0193f7a2-0000-7000-8000-00000000c0de',
+    amount: '2500.00',
+    currency: 'NGN',
+    processing_fee: '50.00',
+    processing_fee_currency: 'NGN',
+    status: 'SUCCEEDED',
+  },
+};
+
+test('own-account event is platform scope', () => {
+  const provider = makeProvider(noNetwork, {
+    platformOrganizationId: PLATFORM_ORG,
+  });
+  const result = signedEvent(provider, ownCollection);
+  assert.equal(result.ok, true);
+  assert.equal(result.event.kind, 'payment');
+  assert.equal(result.event.scope, 'platform');
+  assert.equal(result.event.accountReference, null);
+  assert.equal(result.event.providerReference, 'platform:cs_pro_123');
+  assert.equal(
+    result.event.operationReference,
+    '0193f7a2-0000-7000-8000-00000000c0de',
+  );
+  assert.equal(result.event.amountMinor, 250000n);
+  const completed = signedEvent(provider, {
+    id: 'evt_pro_completed',
+    type: 'checkout.completed',
+    organization_id: PLATFORM_ORG,
+    data: {
+      checkout_id: 'cs_pro_123',
+      reference: '0193f7a2-0000-7000-8000-00000000c0de',
+      amount: '2500.00',
+      currency: 'NGN',
+      payment_status: 'paid',
+    },
+  });
+  assert.equal(completed.event.scope, 'platform');
+  assert.equal(completed.event.providerReference, 'platform:cs_pro_123');
+});
+
+test('legacy event without account stays connected', () => {
+  const provider = makeProvider(noNetwork, {
+    platformOrganizationId: PLATFORM_ORG,
+  });
+  const result = signedEvent(provider, {
+    id: 'evt_legacy',
+    type: 'collection.succeeded',
+    organization_id: 'acct_123abc',
+    data: {
+      checkout_id: 'chk_123abc',
+      reference: 'attempt-123',
+      amount: '1000.00',
+      currency: 'NGN',
+    },
+  });
+  assert.equal(result.event.scope, undefined);
+  assert.equal(result.event.accountReference, 'acct_123abc');
+  assert.equal(result.event.providerReference, 'acct_123abc:chk_123abc');
+});
+
+test('an event with account is connected even when organization_id is the platform’s', () => {
+  const provider = makeProvider(noNetwork, {
+    platformOrganizationId: PLATFORM_ORG,
+  });
+  const result = signedEvent(provider, {
+    ...ownCollection,
+    id: 'evt_connected',
+    account: 'acct_ZH5luf3xSXZkDevh',
+  });
+  assert.equal(result.event.scope, undefined);
+  assert.equal(result.event.accountReference, 'acct_ZH5luf3xSXZkDevh');
+  assert.equal(
+    result.event.providerReference,
+    'acct_ZH5luf3xSXZkDevh:cs_pro_123',
+  );
+});
+
+test('without the setting every event is connected, as before', () => {
+  const provider = makeProvider(noNetwork);
+  const result = signedEvent(provider, ownCollection);
+  assert.equal(result.event.scope, undefined);
+  assert.equal(result.event.accountReference, PLATFORM_ORG);
+});
+
+test('own-account refund.created is a platform reversal', () => {
+  const provider = makeProvider(noNetwork, {
+    platformOrganizationId: PLATFORM_ORG,
+  });
+  const result = signedEvent(provider, {
+    id: 'evt_pro_refund',
+    type: 'refund.created',
+    organization_id: PLATFORM_ORG,
+    data: {
+      refund_id: 'rf_123',
+      checkout_id: 'cs_pro_123',
+      reference: '0193f7a2-0000-7000-8000-00000000c0de',
+    },
+  });
+  assert.equal(result.event.kind, 'reversal');
+  assert.equal(result.event.scope, 'platform');
+  assert.equal(result.event.accountReference, null);
+  assert.equal(result.event.providerReference, 'platform:cs_pro_123');
+  assert.equal(result.event.partnerReversalId, 'refund.rf_123');
+});
+
+test('an own-account event about an account (account.updated) is not a platform payment', () => {
+  const provider = makeProvider(noNetwork, {
+    platformOrganizationId: PLATFORM_ORG,
+  });
+  const result = signedEvent(provider, {
+    id: 'evt_own_account',
+    type: 'account.updated',
+    organization_id: PLATFORM_ORG,
+    data: {},
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.event.kind, 'ignored');
 });

@@ -46,6 +46,7 @@ export const tipPurposes = [
 export type TipPurpose = (typeof tipPurposes)[number];
 
 // Hyphenated hex, any version: the same shape z.uuid() accepts in practice for our ids.
+const CAMPAIGN_ENDING = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const tipIntentRequestSchema = z
@@ -78,6 +79,20 @@ export const tipIntentRequestSchema = z
         typeof value === 'string' && UUID.test(value) ? value : undefined,
       )
       .meta({ type: 'string', format: 'uuid' }),
+    /**
+     * The campaign link ending the tip page was opened from (Campaign Studio). A label the server
+     * matches to that page's running campaign and otherwise ignores: never a refusal, so a
+     * malformed one is dropped here. Not part of the request fingerprint.
+     */
+    campaign: z
+      .unknown()
+      .optional()
+      .transform((value) =>
+        typeof value === 'string' && CAMPAIGN_ENDING.test(value)
+          ? value
+          : undefined,
+      )
+      .meta({ type: 'string' }),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;

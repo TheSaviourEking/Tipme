@@ -46,7 +46,12 @@ const SIGN_UP =
   'An email address and a handle is all it takes to start receiving thanks.';
 const CLARITY = 'You pay exactly the amount you choose.';
 const TRUST = 'No account needed. You pay exactly this amount.';
-const PARTNER = 'Our payment partner handles this. You’ll confirm on its page.';
+/**
+ * Live mode's one line beside the Tip key (TipForm board, public-boards PR 9). True because the
+ * form starts nothing unless the quote's tipMinor and payerTotalMinor equal the key's amount, and
+ * a provider event books nothing unless it matches payerTotalMinor exactly.
+ */
+const PARTNER = 'You pay exactly this. You’ll confirm on our partner’s page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
   'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
@@ -104,7 +109,8 @@ const LIVE: PaymentModeCopy = {
   closedBody: CLOSED_BODY,
   formBadge: null,
   formDisclaimer: null,
-  formTrust: TRUST,
+  // The one line under the Tip key says it (PARTNER).
+  formTrust: null,
   formPartner: PARTNER,
   profileMetaSuffix: '',
   homeRecipientNotice: null,

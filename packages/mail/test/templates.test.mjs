@@ -721,6 +721,14 @@ const PREVIOUS_SAMPLES = {
   // data they can meet is their own sample's shape.
   business_invitation: MAIL_TYPES.business_invitation.sample,
   share_proposed: MAIL_TYPES.share_proposed.sample,
+  // Paid Pro (ADR-0015): new types, so their own sample's shape.
+  pro_renewal_reminder: MAIL_TYPES.pro_renewal_reminder.sample,
+  pro_grace_started: MAIL_TYPES.pro_grace_started.sample,
+  pro_ended: MAIL_TYPES.pro_ended.sample,
+  pro_receipt: MAIL_TYPES.pro_receipt.sample,
+  // Pro insights: a new type.
+  monthly_recap: MAIL_TYPES.monthly_recap.sample,
+  pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
 };
 
 const settingsCtx = {
@@ -1221,4 +1229,16 @@ test("a business's bank change tells its owners which business, in the body only
   assert.match(own.text, /Your next withdrawal goes to the new account/);
   assert.doesNotMatch(own.text, /Business/);
   assert.equal(own.subject, 'Your TipMe bank account changed');
+});
+
+test('the monthly recap email names no amount in its subject, preview or body', () => {
+  const out = renderMail(
+    'monthly_recap',
+    { month: '2026-10', tipCount: 41 },
+    settingsCtx,
+  );
+  assert.equal(out.subject, 'Your monthly recap is ready');
+  assert.match(out.text, /October 2026: 41 tips\./);
+  assert.doesNotMatch(`${out.subject} ${out.text}`, /₦|NGN|\d,\d{3}/);
+  assert.match(out.html, /\/dashboard\/reports\/month\/2026-10/);
 });

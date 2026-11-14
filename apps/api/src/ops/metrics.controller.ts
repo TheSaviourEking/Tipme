@@ -21,8 +21,7 @@ export class OpsMetricsController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
   ) {
-    this.collecting =
-      config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+    this.collecting = config.ANALYTICS_ENABLED;
   }
 
   @Get('health')

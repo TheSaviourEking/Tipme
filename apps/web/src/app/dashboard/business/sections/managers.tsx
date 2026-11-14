@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { BusinessDetail, ManagerRow } from '@tipme/contracts';
 import { Button, Skeleton, StateLine } from '@tipme/ui';
 import { listManagers, removeManager } from '@/lib/business/setup-api';
+import { useBusinessLive } from '@/lib/business/use-business-live';
 
 const roleWords = (row: ManagerRow, business: BusinessDetail) => {
   if (row.role === 'owner') return 'Owner, all locations';
@@ -30,6 +31,7 @@ export function ManagersCard({ business }: { business: BusinessDetail }) {
     [business.id],
   );
   useEffect(load, [load]);
+  useBusinessLive(load);
 
   const remove = async (row: ManagerRow) => {
     const result = await removeManager(business.id, row.managerId);

@@ -14,6 +14,7 @@ import { useRecipient } from '@/components/account/recipient-context';
 import { ActivityList } from '@/components/dashboard/activity-list';
 import { Moments } from '@/components/dashboard/moments';
 import { PageCard } from '@/components/dashboard/page-card';
+import { RecapTeaser } from '@/components/dashboard/recap-teaser';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
@@ -324,6 +325,9 @@ export default function DashboardHome() {
                 />
               </div>
               <TrendChart days={summary.last7Days} />
+              <Link className="performance__more" href="/dashboard/earnings">
+                See your earnings
+              </Link>
             </section>
             <section
               aria-labelledby="recent-title"
@@ -359,15 +363,22 @@ export default function DashboardHome() {
             href={`/dashboard/reports/${latestWeek.week}`}
           >
             <strong>Your week · {latestWeek.week}</strong>
+            <span className="week-teaser__figure">
+              {naira(latestWeek.data.totalNetMinor)}
+            </span>
             <span>
-              {naira(latestWeek.data.totalNetMinor)} from{' '}
-              {latestWeek.data.tipCount}{' '}
+              from {latestWeek.data.tipCount}{' '}
               {latestWeek.data.tipCount === 1 ? 'tip' : 'tips'}
               <b>See your week</b>
             </span>
           </Link>
         )}
+        {profile.plan === 'pro' && <RecapTeaser />}
         <Moments />
+        <nav className="dashboard-more" aria-label="More">
+          <Link href="/dashboard/campaigns">Campaigns</Link>
+          <Link href="/dashboard/help">Get help</Link>
+        </nav>
         <AddBusinessLink />
       </aside>
     </div>

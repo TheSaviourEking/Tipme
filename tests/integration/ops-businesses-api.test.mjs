@@ -293,3 +293,27 @@ test('verify through the API: alone it runs and says so; a verified business is 
   assert.equal(again.status, 400);
   assert.equal(again.body.error.code, 'VALIDATION_FAILED');
 });
+
+test('staff with search.view see a business’s logo whatever its status, never cached; without one it is 404', async () => {
+  const [ADA] = ops.DEMO_PROFILES;
+  const { businessId } = await seedBusiness(database, { status: 'pending' });
+  const path = `/v1/ops/businesses/${businessId}/logo`;
+  assert.equal((await call('GET', path, searcher.cookie)).status, 404);
+  const before = await json(
+    await call('GET', `/v1/ops/businesses/${businessId}`, searcher.cookie),
+  );
+  assert.equal(before.body.data.hasLogo, false);
+
+  const bytes = Buffer.from('RIFF0000WEBPVP8 logo');
+  await ops.setBusinessLogo(database.db, ADA.userId, businessId, bytes);
+  const after = await json(
+    await call('GET', `/v1/ops/businesses/${businessId}`, searcher.cookie),
+  );
+  assert.equal(after.body.data.hasLogo, true);
+  const served = await call('GET', path, searcher.cookie);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get('content-type'), 'image/webp');
+  assert.equal(served.headers.get('cache-control'), 'private, no-store');
+  assert.deepEqual(Buffer.from(await served.arrayBuffer()), bytes);
+  assert.equal((await call('GET', path, plain.cookie)).status, 403);
+});

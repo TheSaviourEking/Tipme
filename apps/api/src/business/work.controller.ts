@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Patch,
   Post,
@@ -43,6 +44,8 @@ import {
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from './business-live.js';
 
 /**
  * Lane B3: the Work page. An invitation's code travels only in a request body (never a URL), and
@@ -53,6 +56,10 @@ import { BusinessEnabledGuard } from './business-enabled.guard.js';
 export class WorkController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get()
@@ -93,9 +100,19 @@ export class WorkController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(invitationAnswerSchema)) body: InvitationAnswer,
   ): Promise<ApiDataResponse<InvitationAccepted>> {
-    return {
-      data: await acceptBusinessInvitation(this.database.db, auth.userId, body),
-    };
+    const data = await acceptBusinessInvitation(
+      this.database.db,
+      auth.userId,
+      body,
+    );
+    signalBusiness(
+      this.database.db,
+      this.publishLive,
+      data.kind === 'staff'
+        ? { memberId: data.membership.memberId }
+        : { businessId: data.businessId },
+    );
+    return { data };
   }
 
   @Post('invitations/decline')
@@ -129,14 +146,14 @@ export class WorkController {
     @Param('memberId') memberId: string,
     @Body(new ZodValidationPipe(memberDisplaySchema)) body: MemberDisplay,
   ): Promise<ApiDataResponse<MyMembership>> {
-    return {
-      data: await updateMyMembership(
-        this.database.db,
-        auth.userId,
-        memberId,
-        body,
-      ),
-    };
+    const data = await updateMyMembership(
+      this.database.db,
+      auth.userId,
+      memberId,
+      body,
+    );
+    signalBusiness(this.database.db, this.publishLive, { memberId });
+    return { data };
   }
 
   @Post(':memberId/leave')
@@ -146,5 +163,6 @@ export class WorkController {
     @Param('memberId') memberId: string,
   ): Promise<void> {
     await leaveBusiness(this.database.db, auth.userId, memberId);
+    signalBusiness(this.database.db, this.publishLive, { memberId });
   }
 }

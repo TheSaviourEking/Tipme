@@ -529,6 +529,32 @@ body:has(.dashboard-page) .site-nav .nav-guest {
   line-height: 1.7;
 }
 
+.footer-legal {
+  display: none;
+}
+
+/* Inside the recipient dashboard (X1, ScreenAudit "Across the app"): a slim footer. The ©
+   line, the test-mode note, and Privacy and Terms; the marketing card stays on public pages. */
+body:has(main[data-area='recipient']) > .site-footer {
+  padding-top: var(--space-8);
+
+  .footer-card {
+    display: none;
+  }
+
+  .footer-legal {
+    display: flex;
+    gap: var(--space-4);
+  }
+
+  .footer-legal a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--text-secondary);
+  }
+}
+
 /* The pilot notice: one quiet line next to the money action; it takes no space when absent. */
 .pilot-notice {
   display: block;
@@ -2814,6 +2840,165 @@ body:has(.profile-page) .brand__mark {
   }
 }
 
+/* The public tip form in the Tipper's journey materials (TipForm board): a paper panel, raised
+   amount keys, recessed wells, ruled drawer and the black Tip key. Scoped to the public page; the
+   home demo form keeps its look. The selected key's fill and edge stay with AmountChoice (and
+   make-it-yours' accent): only its highlight and inner edge are set here
+   (test/tip-form-style.test.mjs). The padding is unchanged, so KEY_ROOM_PX holds. */
+.profile-composer .appreciation-card {
+  border-color: var(--edge-hairline);
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--shadow-instrument);
+}
+
+.profile-composer .appreciation-card h2 {
+  font-family: var(--font-editorial);
+  font-size: 2rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1.05;
+}
+
+.profile-composer .tm-amount-choice span {
+  min-height: 3.25rem;
+  border: 1px solid var(--border-material);
+  border-radius: 0.75rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.profile-composer .tm-amount-choice input:checked + span {
+  background-image: linear-gradient(rgb(255 255 255 / 22%), transparent 36%);
+  box-shadow: var(--shadow-raised-signature);
+  transform: none;
+}
+
+.profile-composer .tm-input {
+  min-height: 3.125rem;
+  border-color: var(--border-material);
+  border-radius: var(--radius-field);
+  background-color: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+}
+
+.profile-composer .tm-input:focus-visible {
+  background-color: var(--surface-base);
+}
+
+/* Checkboxes: a recessed box, a purple key with a white tick when checked. The native input stays,
+   so the keyboard and screen readers behave as before. */
+.profile-composer .tip-remember input {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid rgb(20 18 16 / 20%);
+  border-radius: 7px;
+  background: var(--surface-recessed);
+  box-shadow: inset 0 1px 2px rgb(20 18 16 / 14%);
+  cursor: pointer;
+}
+
+.profile-composer .tip-remember input::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.6875rem;
+  margin-top: -0.125rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+}
+
+.profile-composer .tip-remember input:checked {
+  border-color: #6423d8;
+  background:
+    linear-gradient(rgb(255 255 255 / 22%), transparent 40%),
+    var(--brand-primary);
+  box-shadow: var(--shadow-raised-signature);
+}
+
+.profile-composer .tip-remember input:checked::before {
+  transform: rotate(45deg) scale(1);
+}
+
+.profile-composer .tip-remember input:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+/* The drawer: a ruled row with a chevron after the words, turned when open. */
+.profile-composer .composer-extras summary {
+  justify-content: space-between;
+  padding-top: var(--space-2);
+  border-top: 1px solid rgb(20 18 16 / 10%);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+}
+
+.profile-composer .composer-extras summary::before {
+  content: none;
+}
+
+.profile-composer .composer-extras summary::after {
+  content: '';
+  flex: none;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin: 0 0.25rem 0.25rem 0;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  transition: transform var(--duration-tactile) var(--ease-physical);
+}
+
+.profile-composer .composer-extras[open] summary::after {
+  margin-bottom: -0.25rem;
+  transform: rotate(-135deg);
+}
+
+.profile-composer .composer-submit,
+.profile-composer .composer-submit:hover {
+  min-height: 3.5rem;
+  border-color: #000;
+  border-radius: var(--radius-field);
+  background: linear-gradient(rgb(255 255 255 / 16%), transparent 30%), #000;
+  box-shadow: var(--shadow-raised-continue);
+}
+
+.profile-composer .composer-trust {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 860px) {
+  .profile-composer .appreciation-card h2 {
+    font-size: 1.625rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .profile-composer .composer-extras summary::after {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .profile-composer .appreciation-card,
+  .profile-composer .tm-amount-choice span,
+  .profile-composer .tm-input,
+  .profile-composer .tip-remember input {
+    border-color: CanvasText;
+  }
+
+  .profile-composer .tip-remember input:checked {
+    background: Highlight;
+  }
+}
+
 /* The Tip bar. It is the form's own submit button, so there is one action and one accessible
    button at every width, with the confirmed total and any notice beside it. It steps aside while
    a typing field has focus (the keyboard needs the room; a select opens none). Scroll padding and
@@ -2879,7 +3064,7 @@ body:has(.profile-page) .brand__mark {
 
     .profile-composer .composer-submit,
     .profile-composer .composer-submit:hover {
-      min-height: 3.25rem;
+      min-height: 3.5rem;
     }
 
     .profile-page:has(
@@ -3548,6 +3733,108 @@ body:has(.profile-page) .brand__mark {
 
 .tip-status-card .tm-button--continue {
   min-width: min(100%, 16rem);
+}
+
+/* Before it's paid (R1, TipJourney): the amount and the next steps sit in their own column. On a
+   phone it follows the words; from 56rem it stands beside them, so the card is a composed stage
+   rather than a small card on an empty page. The live region keeps its place in the DOM. */
+.tip-status-side {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tip-status-card .tip-status-amount {
+  margin: 0;
+  color: var(--text-primary);
+  font: 400 2.5rem / 1 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.tip-status-card .tip-status-ref {
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+/* Didn't go through, and expired: the slip's paper and perforated edge (tm-slip). */
+.tip-status-card.tip-status-card--declined,
+.tip-status-card.tip-status-card--cancelled {
+  position: relative;
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+.tip-status-card--declined::before,
+.tip-status-card--cancelled::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  right: 10px;
+  left: 10px;
+  height: 10px;
+  background: radial-gradient(
+      circle at 5px 5px,
+      var(--canvas) 3.2px,
+      transparent 3.6px
+    )
+    0 0 / 12px 10px repeat-x;
+  pointer-events: none;
+}
+
+/* The stamp stands in the column, never over the words. */
+.tip-status-card .tip-status-stamp {
+  position: relative;
+  top: auto;
+  right: auto;
+}
+
+@media (min-width: 56rem) {
+  .tip-status-card:is(
+    .tip-status-card--waiting,
+    .tip-status-card--checking,
+    .tip-status-card--collected,
+    .tip-status-card--declined,
+    .tip-status-card--cancelled
+  ) {
+    width: 100%;
+    max-width: 56rem;
+    box-sizing: border-box;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    column-gap: var(--space-12);
+    align-items: center;
+    text-align: left;
+
+    > .tip-status-pretend {
+      grid-column: 1 / -1;
+    }
+
+    .tip-status-live h1 {
+      font-size: clamp(2.25rem, 4vw, 3rem);
+    }
+
+    .tm-pulse {
+      margin-left: 0;
+    }
+
+    .tip-status-side {
+      justify-items: start;
+      padding-left: var(--space-10);
+      border-left: 1px dashed var(--border-material);
+    }
+
+    .tip-status-actions {
+      justify-content: flex-start;
+    }
+  }
+}
+
+@media (forced-colors: active) {
+  .tip-status-card--declined::before,
+  .tip-status-card--cancelled::before {
+    content: none;
+  }
 }
 
 /* Confirmed: the thank-you is a purple slab, and it becomes the receipt. */
@@ -5356,6 +5643,11 @@ body:has(.profile-page) .brand__mark {
 .confirm-dialog {
   /* The site's reset removes the margin that centres a modal dialog. */
   margin: auto;
+  /* While open the page keeps its scrollbar's gutter (below), and a modal is centred in the
+     window minus that gutter: 7.5px left of the middle on a classic 15px scrollbar (#174). 100%
+     is that narrower box and 100vw the whole window, so this reaches over the gutter and the
+     dialog sits in the middle of what people see. 0 where scrollbars float over the page. */
+  right: calc(100% - 100vw);
   width: min(28rem, calc(100vw - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
   overflow-y: auto;
@@ -5417,6 +5709,7 @@ html:has(.confirm-dialog[open]) {
 @media (max-width: 30rem) {
   .confirm-dialog {
     margin: auto 0 0;
+    right: 0;
     width: 100%;
     max-width: 100%;
     border-width: 1px 0 0;
@@ -5782,7 +6075,8 @@ html:has(.confirm-dialog[open]) {
 
 .dashboard-home {
   display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 1fr);
+  /* D1 (ScreenDashboard): a side column with weight, never thinner than 18rem. */
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 1fr);
   gap: clamp(1.5rem, 4vw, 3rem);
   align-items: start;
 }
@@ -6232,11 +6526,11 @@ html:has(.confirm-dialog[open]) {
 .week-teaser {
   display: grid;
   gap: 0.2rem;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-5);
   border: 1px solid var(--edge-hairline);
-  border-radius: var(--radius-field);
+  border-radius: var(--radius-card);
   background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
+  box-shadow: var(--shadow-paper);
   color: inherit;
   text-decoration: none;
 }
@@ -6251,6 +6545,15 @@ html:has(.confirm-dialog[open]) {
 
 .week-teaser b {
   color: var(--text-primary);
+}
+
+/* The week's figure, set as the balance is: DM Serif numerals on paper. */
+.week-teaser .week-teaser__figure {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-primary);
+  font: 400 2rem / 1.05 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
 }
 
 .moments h2 {
@@ -6695,9 +6998,116 @@ html:has(.confirm-dialog[open]) {
   height: auto;
 }
 
-.print-card__label {
-  margin: 0;
-  overflow-wrap: anywhere;
+/* QrPrint board: formats are keys with a small paper picture of each one. */
+.qr-formats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: var(--space-2);
+  width: 100%;
+  border: 0;
+  padding: 0;
+}
+
+.qr-formats legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: 700;
+}
+
+.qr-pick__art {
+  position: relative;
+  flex: none;
+  width: 1.75rem;
+  height: 2.25rem;
+  box-sizing: border-box;
+  border: 1px solid rgb(20 18 16 / 18%);
+  border-radius: 0.1875rem;
+  background:
+    linear-gradient(var(--key-face-dark), var(--key-face-dark)) center / 0.75rem
+      0.75rem no-repeat,
+    var(--surface-raised);
+  box-shadow: 0 1px 1px rgb(20 18 16 / 10%);
+}
+
+.qr-pick__art[data-format='poster'] {
+  background-position:
+    right 0.1875rem bottom 0.1875rem,
+    0 0;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='sticker'] {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+}
+
+.qr-pick__art[data-format='ticket'],
+.qr-pick__art[data-format='business'] {
+  width: 2.5rem;
+  height: 1.5rem;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='ticket'] {
+  border-style: dashed;
+}
+
+.qr-pick__art[data-format='business'] {
+  background-position:
+    right 0.25rem center,
+    0 0;
+}
+
+.qr-pick__art[data-format='receipt'] {
+  width: 1.25rem;
+  height: 2.5rem;
+  border-radius: 0;
+  background-size:
+    0.625rem 0.625rem,
+    auto;
+}
+
+.qr-pick__art[data-format='lock'] {
+  width: 1.375rem;
+  height: 2.5rem;
+  border: 2px solid var(--key-face-dark);
+  border-radius: 0.375rem;
+  background:
+    linear-gradient(#fff, #fff) center / 0.625rem 0.625rem no-repeat,
+    #1f4d3a;
+}
+
+.qr-pick__art[data-format='hang'] {
+  border-radius: 0.5rem 0.5rem 0.1875rem 0.1875rem;
+  background:
+    radial-gradient(
+        circle at 50% 0.3125rem,
+        var(--surface-recessed) 0.125rem,
+        transparent 0.1875rem
+      )
+      0 0 / auto no-repeat,
+    linear-gradient(var(--key-face-dark), var(--key-face-dark)) center 65% /
+      0.625rem 0.625rem no-repeat,
+    var(--surface-raised);
+}
+
+/* Cut lines: the formats smaller than the page show where to cut, faintly on screen. */
+.qr-format--receipt,
+.qr-format--lock {
+  margin: 0.5rem;
+  outline: 1px dashed rgb(20 18 16 / 22%);
+  outline-offset: 0.5rem;
+}
+
+@media (forced-colors: active) {
+  .qr-pick__art {
+    border-color: CanvasText;
+  }
 }
 
 @media print {
@@ -6717,6 +7127,23 @@ html:has(.confirm-dialog[open]) {
   .print-card__canvas {
     max-width: none;
     width: 100%;
+  }
+
+  /* Only the card on paper: no pilot, paused-page or "Needs your attention" notices. Names the
+     states classes too, so it holds before and after they replace Notice. */
+  body:has(.print-card)
+    .dashboard-page
+    :is(.owner-attention, .pilot-notice, .tm-notice, .tm-slip, .tm-warning):not(
+      .print-card *
+    ) {
+    display: none !important;
+  }
+
+  .qr-format--receipt,
+  .qr-format--lock {
+    margin: 3mm;
+    outline: 0.3mm dashed #000;
+    outline-offset: 3mm;
   }
 
   /* The business card and the sticker print at their real sizes, on pages of that size. */
@@ -7456,10 +7883,12 @@ html:has(.confirm-dialog[open]) {
   margin-top: var(--space-2);
 }
 
-/* Production launch holding page: one editorial message, expressed as tactile instruments. */
+/* Production launch holding page (ComingSoon board): an editorial message over a recessed well
+   of pressed keys, Seconds the purple one, and a small paper card of what is coming. */
 body:has(.coming-soon-page) {
   background:
-    linear-gradient(135deg, rgba(122, 50, 249, 0.035), transparent 34%), #f8f5ef;
+    linear-gradient(135deg, rgb(122 50 249 / 3.5%), transparent 34%),
+    var(--canvas);
 }
 
 body:has(.coming-soon-page) > .site-header,
@@ -7473,106 +7902,151 @@ body > .coming-soon-page {
 }
 
 .coming-soon {
-  position: relative;
-  isolation: isolate;
   width: min(100%, 90rem);
   min-height: 100svh;
   margin-inline: auto;
-  padding: clamp(1.5rem, 5vw, 4.5rem);
+  padding: clamp(1.5rem, 4vw, 3.5rem);
   display: grid;
   grid-template-rows: auto 1fr auto auto;
-  gap: clamp(2.25rem, 5vh, 4.5rem);
-}
-
-.coming-soon::before,
-.coming-soon::after {
-  position: absolute;
-  z-index: -1;
-  content: '';
-  pointer-events: none;
-}
-
-.coming-soon::before {
-  top: clamp(6rem, 14vh, 10rem);
-  right: clamp(1.5rem, 6vw, 7rem);
-  width: clamp(3rem, 7vw, 6.5rem);
-  aspect-ratio: 1;
-  border: 1px solid rgba(10, 10, 11, 0.16);
-  border-radius: 50%;
-  box-shadow:
-    inset 0 0 0 0.55rem #f8f5ef,
-    inset 0 0 0 0.68rem rgba(10, 10, 11, 0.12);
-  transform: rotate(-12deg);
-}
-
-.coming-soon::after {
-  top: clamp(7.1rem, 16vh, 11.2rem);
-  right: clamp(2.65rem, 7.15vw, 8.15rem);
-  width: clamp(0.7rem, 1.4vw, 1.2rem);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: var(--brand-primary);
+  gap: clamp(1.5rem, 4vh, 2.5rem);
 }
 
 .coming-soon__wordmark {
   display: block;
   width: auto;
-  height: clamp(2.15rem, 3vw, 2.8rem);
+  height: clamp(2rem, 3vw, 2.5rem);
+}
+
+.coming-soon__stage {
+  align-self: end;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18.75rem);
+  gap: clamp(1.5rem, 4vw, 2.5rem);
+  align-items: end;
 }
 
 .coming-soon__intro {
-  width: min(48rem, 88%);
-  align-self: end;
+  min-width: 0;
 }
 
 .coming-soon__eyebrow {
-  margin-bottom: 1rem;
-  color: #6e6962;
-  font-size: 0.72rem;
+  margin: 0 0 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
   font-weight: 700;
-  letter-spacing: 0.16em;
   line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .coming-soon__intro h1 {
   max-width: 11ch;
   margin: 0;
   font-family: var(--font-editorial);
-  font-size: clamp(3.35rem, 7.5vw, 7.5rem);
+  font-size: clamp(3.25rem, 7vw, 5.25rem);
   font-weight: 400;
-  letter-spacing: -0.065em;
-  line-height: 0.88;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
   text-wrap: balance;
 }
 
 .coming-soon__lede {
-  margin: clamp(1.25rem, 3vh, 2rem) 0 0;
-  color: #5d5954;
-  font-size: clamp(1rem, 1.6vw, 1.3rem);
+  margin: 1rem 0 0;
+  color: #3d3a35;
+  font-size: clamp(1rem, 1.6vw, 1.1875rem);
   line-height: 1.5;
 }
 
+.coming-soon__card {
+  padding: 1.375rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--shadow-instrument);
+  transform: rotate(-2deg);
+}
+
+.coming-soon__card-cover {
+  height: 4.375rem;
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 80% 20%, var(--brand-mid) 0 10%, transparent 11%),
+    var(--brand-primary);
+}
+
+.coming-soon__card-avatar {
+  width: 3.25rem;
+  height: 3.25rem;
+  margin: -1.625rem 0 0 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid var(--surface-raised);
+  border-radius: 50%;
+  background: var(--brand-primary);
+}
+
+.coming-soon__card-avatar svg {
+  fill: #fff;
+}
+
+.coming-soon__card-title {
+  margin: 0.5rem 0 0;
+  font-family: var(--font-editorial);
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.coming-soon__card-link {
+  margin: 0.125rem 0 0.75rem;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.coming-soon__card-key {
+  min-height: 2.75rem;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  background: #000;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 16%),
+    0 3px 0 #2a2826;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
 .launch-countdown__grid {
+  padding: 1rem;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(0.65rem, 1.5vw, 1.25rem);
+  gap: 0.875rem;
+  border: 1px solid rgb(20 18 16 / 12%);
+  border-radius: 1.75rem;
+  background-color: var(--surface-recessed);
+  box-shadow: inset 0 2px 4px rgb(20 18 16 / 12%);
 }
 
 .launch-countdown__tile {
   min-width: 0;
-  min-height: clamp(7.5rem, 14vw, 12.5rem);
-  padding: clamp(1rem, 2.5vw, 2rem);
+  min-height: clamp(6.5rem, 12vw, 9.375rem);
+  padding: clamp(0.875rem, 1.8vw, 1.25rem);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border: 1px solid rgba(17, 17, 18, 0.11);
-  border-radius: clamp(1.2rem, 2vw, 2rem);
-  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgb(20 18 16 / 12%);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(rgb(255 255 255 / 95%), transparent 2px),
+    var(--surface-raised);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.95) inset,
-    0 0.55rem 0 rgba(17, 17, 18, 0.075),
-    0 1.4rem 3rem rgba(17, 17, 18, 0.06);
+    0 1px 1px rgb(20 18 16 / 8%),
+    0 6px 0 #d8d5cd,
+    0 18px 26px -18px rgb(20 18 16 / 45%);
   transition:
     transform 180ms ease,
     box-shadow 180ms ease;
@@ -7580,29 +8054,36 @@ body > .coming-soon-page {
 
 .launch-countdown__tile--seconds {
   border-color: #6420dc;
-  background: var(--brand-primary);
+  background: radial-gradient(
+    120% 90% at 30% 15%,
+    #9a63ff 0,
+    var(--brand-primary) 55%,
+    #5f1fd6 100%
+  );
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
-    0 0.55rem 0 #5017b2,
-    0 1.4rem 3rem rgba(84, 24, 184, 0.2);
+    inset 0 1px 0 rgb(255 255 255 / 30%),
+    0 6px 0 #4f16af,
+    0 18px 26px -16px rgb(77 22 168 / 70%);
   color: #fff;
 }
 
 .launch-countdown__value {
   overflow: hidden;
   font-family: var(--font-editorial);
-  font-size: clamp(3.1rem, 7vw, 6.6rem);
+  font-size: clamp(3rem, 7vw, 5.75rem);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.06em;
-  line-height: 0.84;
+  line-height: 0.85;
 }
 
 .launch-countdown__label {
-  font-size: clamp(0.65rem, 1vw, 0.78rem);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: 0.13em;
   line-height: 1.2;
-  text-transform: uppercase;
+}
+
+.launch-countdown__tile--seconds .launch-countdown__label {
+  color: #efe6ff;
 }
 
 .coming-soon__foot {
@@ -7611,9 +8092,9 @@ body > .coming-soon-page {
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  border-top: 1px solid rgba(17, 17, 18, 0.14);
-  color: #6e6962;
-  font-size: 0.78rem;
+  border-top: 1px solid rgb(20 18 16 / 14%);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
 }
 
 .coming-soon__foot time,
@@ -7623,7 +8104,7 @@ body > .coming-soon-page {
 }
 
 .coming-soon__foot time {
-  color: #171718;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
@@ -7635,59 +8116,61 @@ body > .coming-soon-page {
 
 @media (max-width: 42rem) {
   .coming-soon {
-    grid-template-rows: auto 1fr auto auto;
-    gap: 2.25rem;
+    gap: 1.375rem;
+    padding: 1.625rem 1.25rem;
   }
 
-  .coming-soon::before {
-    top: 5.5rem;
+  /* The phone board draws no card: words, then the clock. */
+  .coming-soon__stage {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .coming-soon::after {
-    top: 6.65rem;
-  }
-
-  .coming-soon__intro {
-    width: 92%;
+  .coming-soon__card {
+    display: none;
   }
 
   .coming-soon__intro h1 {
-    font-size: clamp(3.25rem, 17vw, 5.25rem);
+    font-size: clamp(2.75rem, 14vw, 3.375rem);
   }
 
   .launch-countdown__grid {
+    padding: 0.625rem;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.8rem;
+    gap: 0.625rem;
+    border-radius: 1.375rem;
   }
 
   .launch-countdown__tile {
-    min-height: 7.5rem;
-    padding: 1rem;
-    border-radius: 1.25rem;
+    min-height: 6.5rem;
+    padding: 0.875rem;
   }
 
   .launch-countdown__value {
-    font-size: clamp(3rem, 18vw, 4.4rem);
+    font-size: clamp(2.75rem, 15vw, 3.625rem);
   }
 
   .coming-soon__foot {
     align-items: flex-start;
     flex-direction: column;
-    gap: 0.35rem;
+    gap: 0.25rem;
   }
 }
 
 @media (max-width: 22rem) {
   .coming-soon {
-    padding: 1.25rem;
-  }
-
-  .coming-soon__intro h1 {
-    font-size: 3.1rem;
+    padding: 1.25rem 1rem;
   }
 
   .launch-countdown__value {
-    font-size: 2.85rem;
+    font-size: 2.6rem;
+  }
+}
+
+@media (forced-colors: active) {
+  .coming-soon__card,
+  .launch-countdown__grid,
+  .launch-countdown__tile {
+    border-color: CanvasText;
   }
 }
 
@@ -8939,319 +9422,308 @@ html:has(.ops-frame__sheet[open]) {
   }
 }
 
-/* Pro and pricing (PagePro). */
+/* Pro and pricing: the site nav's current page. */
 .site-nav > a[aria-current='page'] {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.35em;
 }
 
-.pro-page .pro-wrap {
-  max-width: 75rem;
-  margin: 0 auto;
-  padding-bottom: var(--space-8);
-}
-
-.pro-page .pro-head {
+/* The /pro page that sells Pro (ProPage board). */
+.pro-sell .pro-sell__hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 17.5rem;
-  gap: 2.5rem;
-  align-items: end;
-  padding: 1.75rem 0 2.25rem;
-}
-
-.pro-page .pro-title {
-  margin: 0;
-  font: 400 clamp(2.75rem, 2rem + 3.4vw, 4.75rem) / 1 var(--font-editorial);
-  letter-spacing: -0.01em;
-  text-wrap: balance;
-}
-
-.pro-page .pro-body {
-  display: grid;
-  grid-template-columns: minmax(0, 26.875rem) minmax(0, 1fr);
-  gap: clamp(2rem, 5vw, 3.5rem);
-  align-items: start;
-}
-
-.pro-page .pro-sample {
-  overflow: hidden;
-  padding: 0;
-}
-
-.pro-page .pro-cover {
-  position: relative;
-  height: 150px;
-  overflow: hidden;
-}
-
-/* The sample is the real cover (`ProfileCover`), held to the card's shorter frame. */
-.pro-page .pro-cover .profile-cover {
-  height: 100%;
-}
-
-.pro-page .pro-sample__body {
-  padding: 0 1.5rem 1.5rem;
-}
-
-.pro-page .pro-avatar {
-  display: block;
-  position: relative;
-  width: 88px;
-  height: 88px;
-  margin-top: -44px;
-  border: 4px solid var(--surface-raised);
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 12%;
-}
-
-.pro-page .pro-name {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 25rem);
+  gap: var(--space-12);
   align-items: center;
-  gap: 0.625rem;
-  margin: 0.625rem 0 0.125rem;
-  font: 400 2.125rem / 1 var(--font-editorial);
+  padding: var(--space-8) 0 var(--space-10);
 }
 
-.pro-page .pro-link {
-  margin: 0 0 1rem;
+.pro-sell__kicker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
   color: var(--brand-ink);
   font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.pro-sell__title {
+  margin: 0;
+  font: 400 clamp(2.875rem, 6.4vw, 5rem) / 0.98 var(--font-editorial);
+  font-variant-numeric: lining-nums;
+}
+
+.pro-sell__lead {
+  max-width: 35rem;
+  margin: var(--space-5) 0 0;
+  color: var(--text-secondary);
+  font-size: clamp(1rem, 1.6vw, 1.1875rem);
+  line-height: 1.5;
+}
+
+.pro-offer {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+.pro-offer__name {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.pro-offer__price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.pro-offer__amount {
+  font: 400 clamp(2.75rem, 5vw, 3.5rem) / 1 var(--font-editorial);
+  font-variant-numeric: lining-nums;
+}
+
+.pro-offer__amount--soon {
+  font-size: clamp(1.75rem, 3.4vw, 2.25rem);
+}
+
+.pro-offer__per {
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
-.pro-page .pro-keys {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.pro-page .pro-key {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 52px;
-  border: 1px solid var(--border-material);
-  border-radius: 12px;
-  background:
-    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
-  box-shadow:
-    0 1px 1px rgb(20 18 16 / 10%),
-    0 5px 14px rgb(20 18 16 / 7%);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  font-variant-numeric: var(--numeric-variant);
-}
-
-.pro-page .pro-key--on {
-  border-color: color-mix(in srgb, var(--brand-primary), #000 16%);
-  background:
-    linear-gradient(rgb(255 255 255 / 22%), transparent 36%),
-    var(--surface-signature);
-  color: var(--surface-base);
-}
-
-/* The selected amount also carries a dot, so it never relies on colour alone. */
-.pro-page .pro-key--on::after {
-  content: '';
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentcolor;
-}
-
-.pro-page .pro-tip {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 56px;
-  border: 1px solid #000;
-  border-radius: 14px;
-  background: linear-gradient(rgb(255 255 255 / 16%), transparent 30%), #000;
-  color: #fff;
-  font-size: var(--text-base);
-  font-weight: 700;
-  font-variant-numeric: var(--numeric-variant);
-}
-
-.pro-page .pro-plan__line {
-  max-width: 35rem;
-  margin: 0 0 1.125rem;
-  color: var(--text-secondary);
-  font-size: 1.1875rem;
+.pro-offer__line,
+.pro-offer__small,
+.pro-offer__on,
+.pro-offer__problem {
+  margin: 0;
   line-height: 1.5;
 }
 
-.pro-page .pro-plan__price {
+.pro-offer__small {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.pro-offer__on {
+  font-weight: 700;
+}
+
+.pro-offer__problem {
+  color: var(--state-danger);
+  font-weight: 600;
+}
+
+.pro-offer__soon {
+  margin: var(--space-1) 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: var(--surface-recessed);
+  line-height: 1.45;
+}
+
+.pro-sell__adds {
+  border-block: 1px solid var(--edge-hairline);
+  background: var(--surface-raised);
+}
+
+.pro-sell__h2 {
+  margin: 0 0 var(--space-6);
+  font: 400 clamp(1.75rem, 3.6vw, 2.5rem) / 1.05 var(--font-editorial);
+}
+
+.pro-sell__adds > * {
+  padding-block: var(--space-10);
+}
+
+.pro-sell__groups {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr 1fr;
+  gap: var(--space-8);
+  align-items: start;
+}
+
+.pro-sell__group h3 {
+  margin: 0 0 var(--space-1);
+  font: 400 1.625rem / 1.1 var(--font-editorial);
+}
+
+.pro-sell__group-line {
+  margin: 0 0 var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.pro-sell__group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pro-sell__group li {
+  display: grid;
+  gap: 0.125rem;
+  padding: 0.6875rem 0;
+  border-top: 1px solid var(--edge-hairline);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.pro-sell__group li strong {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  margin: 0 0 1.125rem;
-  font: 400 2.75rem / 1 var(--font-editorial);
+  gap: var(--space-2);
+  font-size: 0.90625rem;
 }
 
-.pro-page .pro-plan__price .tm-pro-badge {
-  font-size: var(--text-base);
+.pro-sell__soon {
+  display: inline-block;
+  padding: 0.125rem var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--stamp-ink);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
-.pro-page .pro-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 1rem 0;
-  border-top: 1px solid rgb(20 18 16 / 12%);
-  line-height: 1.4;
+.pro-sell__free {
+  padding: var(--space-10) 0 var(--space-2);
 }
 
-.pro-page .pro-row--last {
-  border-bottom: 1px solid rgb(20 18 16 / 12%);
+.pro-sell__free .pro-sell__h2 {
+  margin-bottom: var(--space-2);
 }
 
-.pro-page .pro-row__controls {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.pro-page .pro-mini {
-  min-height: 44px;
-  padding: 0 0.875rem;
-  border: 1px solid var(--border-material);
-  border-radius: var(--radius-control);
-  background:
-    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
-  box-shadow:
-    0 1px 1px rgb(20 18 16 / 10%),
-    0 5px 14px rgb(20 18 16 / 7%);
-  color: var(--text-primary);
-  font: 700 var(--text-sm) / 1.2 var(--font-interface);
-  cursor: pointer;
-  transition:
-    transform var(--duration-tactile) var(--ease-physical),
-    box-shadow var(--duration-tactile) var(--ease-physical);
-}
-
-.pro-page .pro-mini:active:not([aria-disabled='true']) {
-  transform: translateY(2px);
-  box-shadow: 0 1px 1px rgb(20 18 16 / 12%);
-}
-
-.pro-page .pro-mini[aria-pressed='true'] {
-  position: relative;
-  border-color: color-mix(in srgb, var(--brand-primary), #000 16%);
-  background:
-    linear-gradient(rgb(255 255 255 / 22%), transparent 36%),
-    var(--surface-signature);
-  color: var(--surface-base);
-}
-
-.pro-page .pro-mini[aria-pressed='true']::after {
-  content: '';
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentcolor;
-}
-
-/* Not available on Free: still shown, plainly dimmed, and it does nothing. */
-.pro-page .pro-mini[aria-disabled='true'] {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-.pro-page .pro-mini:focus-visible {
-  outline: 3px solid var(--brand-primary);
-  outline-offset: 3px;
-}
-
-.pro-page .pro-qr {
-  display: block;
-  width: 72px;
-  height: 72px;
-  border-radius: 8px;
-  background: #fff;
-}
-
-.pro-page .pro-cta {
-  display: flex;
-  align-items: center;
-  gap: 1.125rem;
-  margin-top: 1.375rem;
-}
-
-.pro-page .pro-cta .tm-button {
-  flex: none;
-  width: 15rem;
-}
-
-.pro-page .pro-cta p {
-  margin: 0;
+.pro-sell__free-line {
+  margin: 0 0 var(--space-5);
   color: var(--text-secondary);
-  font-size: 0.9375rem;
+}
+
+.pro-sell__keep {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3) var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pro-sell__keep li {
+  display: flex;
+  gap: var(--space-3);
+  line-height: 1.45;
+}
+
+.pro-sell__keep svg {
+  flex: none;
+  margin-top: 0.1875rem;
+}
+
+.pro-sell__faq {
+  display: grid;
+  grid-template-columns: minmax(0, 18.75rem) minmax(0, 1fr);
+  gap: var(--space-12);
+  padding: var(--space-10) 0 var(--space-16);
+}
+
+.pro-sell__q {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.pro-sell__q:last-child {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pro-sell__q summary {
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pro-sell__q summary:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+.pro-sell__q p {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
-@media (max-width: 860px) {
-  .pro-page .pro-head,
-  .pro-page .pro-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1.5rem;
-  }
-
-  .pro-page .pro-head {
-    align-items: start;
-  }
+/* The phone's foot key: only at phone width, and only once the price block is out of view. */
+.pro-foot {
+  display: none;
 }
 
-@media (max-width: 30rem) {
-  .pro-page .pro-row {
+@media (max-width: 47.99rem) {
+  .pro-sell .pro-sell__hero,
+  .pro-sell__groups,
+  .pro-sell__keep,
+  .pro-sell__faq {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .pro-page .pro-cta {
-    flex-direction: column;
-    align-items: stretch;
+  .pro-sell .pro-sell__hero {
+    gap: var(--space-6);
+    padding-top: var(--space-3);
   }
 
-  .pro-page .pro-cta .tm-button {
+  .pro-sell__groups,
+  .pro-sell__faq {
+    gap: var(--space-5);
+  }
+
+  .pro-sell__faq {
+    padding-bottom: 6rem;
+  }
+
+  .pro-foot:not([hidden]) {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 20;
+    display: block;
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    border-top: 1px solid var(--border-material);
+    background: var(--canvas);
+  }
+
+  .pro-foot__key {
     width: 100%;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .pro-page .pro-mini {
-    transition: none;
+  .pro-foot__key--off {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3.5rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-field);
+    background: var(--surface-recessed);
+    color: var(--stamp-ink);
+    font-weight: 700;
   }
 }
 
 @media (forced-colors: active) {
-  .pro-page .pro-mini,
-  .pro-page .pro-key {
-    border: 1px solid ButtonText;
-  }
-
-  .pro-page .pro-mini[aria-pressed='true'],
-  .pro-page .pro-key--on {
-    border-width: 3px;
-    background: Highlight;
-    color: HighlightText;
-  }
-
-  .pro-page .pro-mini[aria-disabled='true'] {
-    border-style: dashed;
-    color: GrayText;
-    opacity: 1;
+  .pro-sell__soon,
+  .pro-offer__soon,
+  .pro-foot__key--off {
+    border: 1px solid CanvasText;
   }
 }
 
@@ -9268,6 +9740,66 @@ html:has(.ops-frame__sheet[open]) {
   gap: var(--space-3);
 }
 
+/* The totals, the CSV and the controls (D1). The figure is set as on Home: DM Serif numerals. */
+.tips-aside,
+.tips-main {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.tips-aside {
+  justify-items: start;
+}
+
+.tips-aside > .tips-controls {
+  justify-self: stretch;
+}
+
+.tips-total {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.tips-total strong {
+  display: block;
+  color: var(--text-primary);
+  font: 400 2.5rem / 1.05 var(--font-editorial);
+  font-variant-numeric: var(--numeric-variant);
+}
+
+@media (min-width: 64rem) {
+  .tips-page {
+    max-width: 72rem;
+    grid-template-columns: minmax(0, 1fr) 20rem;
+    grid-template-areas:
+      'head head'
+      'main aside';
+    column-gap: var(--space-10);
+    align-items: start;
+  }
+
+  .tips-head {
+    grid-area: head;
+  }
+
+  .tips-main {
+    grid-area: main;
+  }
+
+  .tips-aside {
+    grid-area: aside;
+    position: sticky;
+    top: var(--space-6);
+  }
+
+  /* The column is narrow: search above the filters, never side by side. */
+  .tips-aside .tips-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .tips-page .tips-status:empty {
   display: none;
 }
@@ -9282,7 +9814,7 @@ html:has(.ops-frame__sheet[open]) {
   gap: var(--space-3);
 }
 
-@media (min-width: 52rem) {
+@media (min-width: 52rem) and (max-width: 63.99rem) {
   .tips-controls {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
@@ -9300,12 +9832,21 @@ html:has(.ops-frame__sheet[open]) {
   font: 700 var(--text-sm) / 1.3 var(--font-interface);
 }
 
+/* One paper card per day, the rows between hairlines (D1, ScreenTips): a ledger, not a pile. */
 .tips-list {
   display: grid;
-  gap: var(--space-2);
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.25rem;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
   list-style: none;
+}
+
+.tips-list > li + li {
+  border-top: 1px solid var(--edge-hairline);
 }
 
 .tip-row {
@@ -9314,11 +9855,7 @@ html:has(.ops-frame__sheet[open]) {
   justify-content: space-between;
   gap: var(--space-4);
   min-height: 3.5rem;
-  padding: var(--space-3) var(--space-5);
-  border: 1px solid var(--edge-hairline);
-  border-radius: 1.25rem;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-card-subtle);
+  padding: var(--space-4) var(--space-5);
   color: inherit;
   text-decoration: none;
 }
@@ -9336,6 +9873,7 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-row__who strong {
+  font-weight: 700;
   overflow-wrap: anywhere;
 }
 
@@ -9345,18 +9883,12 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-row__money strong {
-  font-size: var(--text-lg);
+  font: 400 1.375rem / 1.1 var(--font-editorial);
   font-variant-numeric: var(--numeric-variant);
 }
 
 .tip-row__state {
-  color: var(--state-warning);
-  font-weight: 600;
-}
-
-.tip-row[data-state='failed'] .tip-row__state,
-.tip-row[data-state='cancelled'] .tip-row__state {
-  color: var(--state-danger);
+  margin-top: var(--space-2);
 }
 
 .tip-row:not([data-state='paid']) .tip-row__money strong {
@@ -9390,17 +9922,71 @@ html:has(.ops-frame__sheet[open]) {
   font-size: var(--text-sm);
 }
 
-.receipt__note {
-  margin: 0 0 var(--space-5);
-  font: 400 clamp(1.5rem, 5vw, 1.7rem) / 1.2 var(--font-editorial);
+/* The note as a quoted slip (D1, ScreenTipReport): paper, a decorative quote mark screen readers
+   skip, then its hide and report controls. */
+.tip-detail__note {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.tip-detail__quote {
+  position: relative;
+  margin: 0;
+  padding: var(--space-5) var(--space-6) var(--space-6);
+  border: 1px solid var(--edge-hairline);
+  border-radius: 4px 4px 16px 16px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+  font: 400 clamp(1.5rem, 3vw, 1.875rem) / 1.2 var(--font-editorial);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
+.tip-detail__quote::before {
+  content: '“' / '';
+  display: block;
+  height: 1.5rem;
+  color: var(--brand-primary);
+  font-size: 3rem;
+  line-height: 1;
+}
+
 .receipt__hidden {
-  margin: 0 0 var(--space-5);
+  margin: 0;
   color: var(--text-secondary);
   line-height: 1.45;
+}
+
+@media (min-width: 64rem) {
+  .tip-detail {
+    grid-template-columns: minmax(0, 35rem) minmax(0, 1fr);
+    column-gap: var(--space-10);
+    align-items: start;
+  }
+
+  .tip-detail > * {
+    grid-column: 1 / -1;
+  }
+
+  .tip-detail > .receipt {
+    grid-column: 1;
+  }
+
+  .tip-detail > .tip-detail__note {
+    grid-column: 2;
+  }
+
+  /* No note: the receipt alone, centred at its measure. */
+  .tip-detail:not(:has(.tip-detail__note)) {
+    grid-template-columns: minmax(0, 35rem);
+    justify-content: center;
+  }
+
+  .tip-detail .receipt h1 {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+  }
 }
 
 .receipt__rows {
@@ -9436,7 +10022,7 @@ html:has(.ops-frame__sheet[open]) {
 }
 
 .tip-detail .note-actions {
-  margin-top: var(--space-2);
+  margin-top: 0;
 }
 
 .note-actions {
@@ -9615,7 +10201,7 @@ html:has(.ops-frame__sheet[open]) {
 
 @media (forced-colors: active) {
   .stack__card,
-  .tip-row,
+  .tips-list,
   .receipt.tm-surface--paper {
     border: 1px solid CanvasText;
   }
@@ -10083,7 +10669,7 @@ html:has(.ops-frame__sheet[open]) {
 
 .settings-chapter .settings-section h3 {
   margin: 0;
-  font-size: 1.125rem;
+  font-size: 1.25rem;
   font-weight: 700;
   line-height: 1.3;
   letter-spacing: -0.01em;
@@ -10092,7 +10678,7 @@ html:has(.ops-frame__sheet[open]) {
 /* Forms keep the editor's measure: a bank form 1,000px wide reads as nothing but fields. */
 .settings-chapter > .settings-section,
 .settings-chapter > .tm-notice {
-  max-width: 34rem;
+  max-width: 32.5rem;
 }
 
 /* My page: the editor, and beside it on a wide screen the preview, which stays in view. */
@@ -10325,20 +10911,88 @@ html:has(.ops-frame__sheet[open]) {
   gap: var(--space-3);
 }
 
+.settings-plan__status {
+  margin: 0;
+  font-weight: 700;
+}
+
+.settings-plan__renew {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.settings-plan__buy {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.settings-plan__price {
+  margin: 0;
+  font: 400 2rem / 1 var(--font-editorial);
+  font-variant-numeric: lining-nums;
+}
+
+.settings-plan__buy .tm-hint {
+  margin: 0;
+}
+
+.settings-plan__confirm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-plan__confirm p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.settings-plan__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.settings-plan__problem {
+  margin: 0;
+  color: var(--state-danger);
+  font-weight: 600;
+}
+
+.page-card__plan {
+  margin: var(--space-2) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.page-card__plan a {
+  margin-left: var(--space-2);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 .settings-plan__ask {
   justify-self: start;
 }
 
-/* A desktop: the links are a column of their own, kept in view beside the sections. */
+/* A desktop: the links are a column of their own (the board's 232px), kept in view, and the
+   hairline sits on the content's edge, so the list and the sections touch (S1, ScreenSettings). */
 @media (min-width: 64rem) {
   .settings-grid {
-    grid-template-columns: 13rem minmax(0, 1fr);
-    column-gap: var(--space-10);
+    grid-template-columns: 14.5rem minmax(0, 1fr);
+    column-gap: 0;
     align-items: start;
   }
 
   .settings-grid > * {
     grid-column: 2;
+    padding-left: var(--space-8);
+  }
+
+  .settings-grid > .settings-chapters {
+    border-left: 1px solid var(--edge-hairline);
   }
 
   .settings-grid > .settings-nav {
@@ -10347,15 +11001,25 @@ html:has(.ops-frame__sheet[open]) {
     position: sticky;
     top: var(--space-6);
     grid-template-columns: minmax(0, 1fr);
-    padding-right: var(--space-5);
-    border-right: 1px solid var(--edge-hairline);
+    padding-right: var(--space-4);
+    padding-left: 0;
+  }
+
+  .settings-nav a {
+    font-size: var(--text-base);
+  }
+
+  /* The cover grid stays three across in the editor's column. */
+  .settings-editor .cover-choices__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
-/* Wide enough for both: the editor, and the preview beside it at the board's proportions. */
-@media (min-width: 75rem) {
+/* The editor, and the preview beside it, from 64rem (it waited for 75rem and drifted to the
+   bottom). The editor may give up width to keep the preview's 16rem; the phone frame scales. */
+@media (min-width: 64rem) {
   .settings-chapter--editor {
-    grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 32.5rem) minmax(16rem, 1fr);
     column-gap: var(--space-8);
     align-items: start;
   }
@@ -10943,6 +11607,59 @@ body:has(.business-public) > .site-footer {
   background: var(--key-face-dark);
   color: var(--surface-base);
   font: 400 1.25rem/1 var(--font-editorial);
+}
+
+/* An uploaded logo fills the tile; the business's own colours replace the dark face. */
+.business-header__logo--image,
+.business-page__logo--image {
+  overflow: hidden;
+  background: var(--surface-base);
+  box-shadow: inset 0 0 0 1px var(--edge-hairline);
+}
+
+.business-header__logo img,
+.business-page__logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.business-page__brand {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.business-page__brand h1 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.business-page__logo {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-control);
+  background: var(--key-face-dark);
+  color: var(--surface-base);
+  font: 400 1.375rem/1 var(--font-editorial);
+}
+
+.business-details__logo {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.business-details__logo .business-page__logo {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.75rem;
 }
 
 .business-header__names {
@@ -11886,4 +12603,466 @@ body:has(.business-public) > .site-footer {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+/* The Pro price stepper (board OpsProPrice): −, the price, +. */
+.ops-stepper {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  gap: var(--space-2);
+  align-items: stretch;
+}
+
+.ops-stepper > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-weight: 700;
+}
+
+.ops-stepper > output {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* ---- Pro insights: earnings, Campaign Studio, monthly recap, Get help (11 Nov 2026) ---- */
+
+.earnings,
+.campaigns,
+.campaign-detail,
+.campaign-new,
+.help {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.earnings-header,
+.campaigns-head,
+.campaign-detail__head,
+.earnings-head,
+.campaign-results__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.earnings-header h1,
+.campaigns-head h1,
+.campaign-detail__head h1 {
+  margin: 0;
+}
+
+.earnings-head h2,
+.campaign-results__head h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.earnings-totals,
+.earnings-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.earnings-total,
+.earnings-tiles > div {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  min-width: 0;
+}
+
+.earnings-total > span:first-child,
+.earnings-tiles dt {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.earnings-total strong,
+.earnings-tiles dd:first-of-type {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: var(--numeric-variant);
+  overflow-wrap: anywhere;
+}
+
+.earnings-tiles dd {
+  margin: 0;
+}
+
+.earnings-trend,
+.earnings-period {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.earnings-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.earnings-switch button,
+.earnings-step button,
+.bar-chart__toggle,
+.campaigns-show {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-field);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.earnings-switch button[aria-pressed='true'] {
+  border-color: var(--brand-primary);
+  box-shadow: inset 0 0 0 1px var(--brand-primary);
+}
+
+.earnings-step {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.earnings-step button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.earnings-sub {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+}
+
+.earnings-notes ul {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.earnings-notes h3,
+.earnings-notes p {
+  margin: 0;
+}
+
+.earnings-preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-5);
+  align-items: center;
+}
+
+.earnings-preview h2 {
+  margin: 0 0 var(--space-2);
+}
+
+.earnings-preview__art {
+  position: relative;
+  padding: var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+}
+
+.earnings-preview__tag {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.earnings-preview__bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 7rem;
+}
+
+.earnings-preview__bars span {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  background: color-mix(in srgb, var(--brand-primary) 55%, transparent);
+}
+
+/* The dashboard bar chart: purple bars, HTML labels, a table for every value. */
+.bar-chart {
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.bar-chart__plot {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 9rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bar-chart__bar {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 0 0 1.4rem;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.bar-chart__fill {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: var(--brand-primary);
+}
+
+.bar-chart__bar--quiet .bar-chart__fill {
+  background: color-mix(in srgb, var(--brand-primary) 35%, transparent);
+}
+
+.bar-chart__bar--open .bar-chart__fill {
+  background: transparent;
+  border: 2px dashed var(--brand-primary);
+  border-bottom: 0;
+}
+
+.bar-chart__bar--picked .bar-chart__fill {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+.bar-chart__label {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.bar-chart__readout {
+  margin: 0;
+  min-height: 1.4em;
+}
+
+.bar-chart__toggle {
+  justify-self: start;
+}
+
+.bar-chart__table table,
+.campaigns-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.bar-chart__table th,
+.bar-chart__table td,
+.campaigns-table th,
+.campaigns-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.campaigns-table caption {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  color: var(--text-secondary);
+}
+
+.campaigns-table .n {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.campaigns-table tbody th {
+  font-weight: 400;
+}
+
+.campaigns-table small {
+  display: block;
+  color: var(--text-secondary);
+}
+
+.campaigns-table-wrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.campaigns-link {
+  overflow-wrap: anywhere;
+}
+
+.campaign-crumb {
+  margin: 0;
+  font-weight: 600;
+}
+
+.campaign-detail__link {
+  margin: var(--space-1) 0 0;
+  color: var(--brand-primary-text, var(--brand-primary));
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.campaign-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.campaign-detail__grid {
+  display: grid;
+  gap: var(--space-5);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 64rem) {
+  .campaign-detail__grid {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+}
+
+.campaign-results {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.campaign-qr {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.campaign-qr__card {
+  width: 100%;
+  max-width: 22rem;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-field);
+}
+
+.campaign-qr__looks {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.campaign-qr__looks legend {
+  margin-bottom: var(--space-2);
+  font-weight: 700;
+}
+
+.campaign-qr__look {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.campaign-form,
+.help-form,
+.campaign-rename {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.campaign-slug {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.campaign-slug span {
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.campaign-slug input {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+.campaign-about ul,
+.help-mine ul {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.help-pro {
+  margin: 0;
+  font-weight: 700;
+}
+
+.recap-card {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.recap-card__preview {
+  width: 100%;
+  max-width: 22rem;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--radius-field);
+}
+
+.recap-card__switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+
+.performance__more,
+.dashboard-more a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.dashboard-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.ops-priority {
+  font-weight: 700;
 }

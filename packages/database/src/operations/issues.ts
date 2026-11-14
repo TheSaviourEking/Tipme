@@ -56,6 +56,13 @@ const EVENT_KINDS: Record<string, IssueKind> = {
   'ops.acted_alone': 'staff_acted_alone',
   'ops.approval_pending': 'staff_approval_pending',
   'ops.last_approver_removed': 'staff_last_approver_removed',
+  // Paid Pro (ADR-0015).
+  'pro.amount_mismatch': 'pro_amount_mismatch',
+  'pro.late_payment': 'pro_late_payment',
+  'pro.conflict': 'pro_conflict',
+  'pro.reversed': 'pro_reversed',
+  'pro.collect_unknown': 'pro_collect_unknown',
+  'pro.refund_failed': 'pro_refund_failed',
 };
 export const ISSUE_EVENT_NAMES: ReadonlySet<string> = new Set(
   Object.keys(EVENT_KINDS),
@@ -101,6 +108,13 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   business_note_reported: 'account',
   share_report: 'account',
   balance_below_zero: 'money',
+  pro_amount_mismatch: 'money',
+  pro_late_payment: 'info',
+  pro_conflict: 'money',
+  pro_reversed: 'money',
+  support_request: 'account',
+  pro_collect_unknown: 'money',
+  pro_refund_failed: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -173,6 +187,20 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A reversed tip left a balance below zero (${page} or a business). Withdrawals for it stop until it is back above zero. Nothing is collected automatically.`;
     case 'pending_recovery':
       return `Someone asked to move ${handle ? `@${handle}’s` : 'an'} account to a new number by email recovery. It waits 24 hours.`;
+    case 'pro_amount_mismatch':
+      return `A Pro payment for ${page} came back from the partner with a different amount or currency than its purchase. Nothing was booked and no Pro month started. Check it in the partner dashboard.`;
+    case 'pro_late_payment':
+      return `A Pro payment for ${page} was confirmed after its checkout had ended (a late bank transfer). It was credited: their Pro month starts from the confirmation.`;
+    case 'pro_conflict':
+      return `The partner reported a Pro payment for ${page} as failed after TipMe had confirmed it paid, or a paid one that couldn't start a month. Check it in the partner dashboard.`;
+    case 'pro_collect_unknown':
+      return `A Pro payment from ${page}'s TipMe balance got no clear answer from the partner and none was found when read back. Its amount stays reserved; nothing was booked. Check the partner dashboard for a transfer from their account before releasing it.`;
+    case 'pro_refund_failed':
+      return `The partner could not refund a Pro card payment for ${page}. Their Pro month is unchanged and nothing was booked. A failed refund doesn't count, so it can be asked again.`;
+    case 'pro_reversed':
+      return `The partner reported a refund or dispute on a Pro payment for ${page}. A paid refund or a lost dispute ends that Pro month; nothing else was changed.`;
+    case 'support_request':
+      return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }
 }
 
@@ -246,6 +274,8 @@ export async function openIssue(
     now: Date;
     /** Ids and plain words only: what is known about this case, after the kind's summary. */
     note?: string;
+    /** A Pro member's support request: sorted first among open issues. */
+    priority?: boolean;
   },
 ): Promise<{ id: string; opened: boolean }> {
   const { subject, handle, rehearsal } = await completeSubject(
@@ -265,6 +295,7 @@ export async function openIssue(
         : summaryOf(input.kind, handle),
       openedAt: input.now,
       rehearsal,
+      priority: input.priority === true,
     })
     .onConflictDoNothing({ target: issues.dedupeKey })
     .returning({ id: issues.id });
@@ -807,6 +838,7 @@ const view = (row: typeof issues.$inferSelect): IssueView => ({
   resolvedAt: row.resolvedAt?.toISOString() ?? null,
   resolvedBy: row.resolvedBy,
   resolutionOutcome: (row.resolutionOutcome as OpsIssueOutcome | null) ?? null,
+  priority: row.priority,
 });
 
 /** Newest first; `cursor` is the id of the last issue already shown. */
@@ -822,6 +854,7 @@ export function listIssues(
     includeRehearsal?: boolean;
   },
 ): Promise<IssueView[]> {
+  const priorityFirst = input.status === 'open';
   return guarded(async () => {
     const rows = await db
       .select()
@@ -833,11 +866,19 @@ export function listIssues(
           input.kind ? eq(issues.kind, input.kind) : undefined,
           input.severity ? eq(issues.severity, input.severity) : undefined,
           input.cursor && UUID.test(input.cursor)
-            ? lt(issues.id, input.cursor)
+            ? priorityFirst
+              ? // Keyset over (priority, id), both descending.
+                sql`(${issues.priority}, ${issues.id}) < (SELECT c.priority, c.id FROM issues c WHERE c.id = ${input.cursor})`
+              : lt(issues.id, input.cursor)
             : undefined,
         ),
       )
-      .orderBy(desc(issues.id))
+      .orderBy(
+        // The open queue puts Pro members' support requests first (priority support); the rest
+        // stay newest first.
+        ...(priorityFirst ? [desc(issues.priority)] : []),
+        desc(issues.id),
+      )
       .limit(Math.min(Math.max(input.limit, 1), 100));
     return rows.map(view);
   });

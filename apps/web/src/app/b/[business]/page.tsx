@@ -77,6 +77,7 @@ export default async function BusinessPage({ params, searchParams }: Props) {
           name={name}
           where={`${count} ${count === 1 ? 'place' : 'places'}`}
           titleLevel="h1"
+          logoPath={page.business.logoPath}
         />
         <p className="business-public__ask">
           Where are you? Pick the place to see who’s working there and tip them.

@@ -16,6 +16,8 @@ export const LIVE_RECIPIENT_TYPES = [
   'profile.changed',
   'reports.changed',
   'account.changed',
+  // TipMe for businesses (plan B9 Task 23): the Business and Work pages re-read.
+  'business.changed',
 ] as const;
 
 /** Signals a staff stream may receive. */

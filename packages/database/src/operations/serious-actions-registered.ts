@@ -49,6 +49,13 @@ import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
+import { askProRefund, proRefundFacts } from './pro-refunds.js';
+import {
+  checkedProPrice,
+  currentProPrice,
+  nairaOf,
+  setProPrice,
+} from './pro-price.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -518,6 +525,73 @@ const feeFree = acting<{ profileId: string; count: number }>({
       profileId,
       count,
       reason: context.reason,
+    }),
+});
+
+/*
+ * Paid Pro (ADR-0015): the monthly price. Pinned on the current price, so a change made while this
+ * waited makes it stale. Nobody is its subject: it applies to every new month.
+ */
+const proPriceChange = acting<{ amountMinor: string }>({
+  name: 'pro_price.change',
+  permission: 'pro.price',
+  target: () => 'pro_price',
+  current: async (tx) => {
+    const price = await currentProPrice(tx);
+    return price
+      ? { id: price.id, amountMinor: String(price.amountMinor) }
+      : null;
+  },
+  describe: async (tx, { amountMinor }) => {
+    const to = checkedProPrice(amountMinor);
+    const from = await currentProPrice(tx);
+    return `Change the Pro price ${from ? `from ${nairaOf(from.amountMinor)} ` : ''}to ${nairaOf(to)} a month, for new months only`;
+  },
+  act: (tx, { amountMinor }, context) =>
+    setProPrice(tx, {
+      amountMinor: checkedProPrice(amountMinor),
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      amountMinor: String(set.amountMinor),
+    })),
+});
+
+/**
+ * Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month, on the member's request, within
+ * 14 days. A second person decides; neither the page's owner nor anyone behind its mailbox can.
+ * Pinned on the payment's refund state, so a refund already asked or paid makes it stale. The run
+ * only records the refund: the worker sends it, and only the partner's refund.paid ends Pro.
+ */
+const proRefund = acting<{ purchaseId: string }>({
+  name: 'pro.refund',
+  permission: 'payments.repair',
+  subjects: async ({ purchaseId }, db) => {
+    const facts = await proRefundFacts(db, purchaseId, new Date());
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ purchaseId }) => purchaseId,
+  current: async (tx, { purchaseId }) => {
+    const facts = await proRefundFacts(tx, purchaseId, new Date());
+    return { refund: facts.refund?.status ?? null };
+  },
+  describe: async (tx, { purchaseId }) => {
+    const facts = await proRefundFacts(tx, purchaseId, new Date());
+    const paidOn = facts.paidAt
+      ? facts.paidAt.toISOString().slice(0, 10)
+      : 'an unknown day';
+    return `Refund ${naira(facts.amountMinor ?? 0n)} of the Pro card payment ending ${purchaseId.slice(-6)} (paid ${paidOn}) on the member's request. Their Pro month ends when the payment partner confirms the refund; the card fee isn't returned.`;
+  },
+  act: (tx, { purchaseId }, context) =>
+    askProRefund(tx, {
+      purchaseId,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
     }),
 });
 
@@ -1016,6 +1090,8 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(businessVerify);
   registerSeriousAction(tipReverse);
   registerSeriousAction(changelogPublishAction);
+  registerSeriousAction(proPriceChange);
+  registerSeriousAction(proRefund);
 }
 
 /* Routes whose seriousness depends on what is being done */

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>TipMe Pro page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}a:hover{color:#4d16a8}
+.board{width:1840px;min-height:3300px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1240px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
+.ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}
+.note{font-size:12.5px;line-height:1.5;color:#3b3934}
+.anno{display:inline-block;margin-left:8px;padding:2px 8px;border-radius:6px;background:#fde9c8;color:#6b3d00;font:800 11px Manrope,Arial,sans-serif;vertical-align:middle}
+.frame{background:#f3f2ee;border-radius:18px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.1),0 30px 50px -30px rgba(20,18,16,.5)}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.paper{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -24px rgba(20,18,16,.4)}
+.go{display:flex;align-items:center;justify-content:center;min-height:56px;border:1px solid #000;border-radius:14px;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;font:700 16px Manrope,Arial,sans-serif;text-decoration:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24)}
+.go:hover{color:#fff}
+.go.off{background:#d9d6ce;border-color:#c9c5bb;color:#3b3934;box-shadow:none;cursor:not-allowed}
+.soft{display:flex;align-items:center;justify-content:center;min-height:52px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font:700 15px Manrope,Arial,sans-serif;color:#000;text-decoration:none}
+.pro{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(rgba(255,255,255,.26),transparent 48%),linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 12px/1 Manrope,Arial,sans-serif;vertical-align:middle}
+.pro svg{width:.9em;height:.9em;fill:#e6d6ff}
+.soon{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #77736b;color:#3b3934;font-size:11px;font-weight:800;letter-spacing:.02em;vertical-align:middle;background:#fffefa}
+.grp h3{margin:0 0 4px;font:400 26px/1.1 'DM Serif Display',Georgia,serif}
+.grp .g{margin:0 0 12px;font-size:14px;color:#5d5a54}
+.grp ul{list-style:none;margin:0;padding:0}
+.grp li{padding:11px 0;border-top:1px solid rgba(20,18,16,.1);font-size:14px;line-height:1.45}
+.grp li b{display:block;font-size:14.5px}
+.keep{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 28px;margin:0;padding:0;list-style:none}
+.keep li{display:flex;gap:10px;font-size:15px;line-height:1.45}
+.keep svg{flex:none;margin-top:3px}
+.faq{border-top:1px solid rgba(20,18,16,.12);padding:16px 0}
+.faq h4{margin:0 0 6px;font-size:16px}
+.faq p{margin:0;font-size:15px;line-height:1.5;color:#3b3934}
+.nav a{text-decoration:none;min-height:44px;display:inline-flex;align-items:center}
+</style>
+</helmet>
+<div class="board">
+  <h1 class="bh1">The /pro page that sells Pro</h1>
+  <p class="lead">Your direction of 9 November 2026: “TipMe — Receive appreciation.” / “TipMe Pro — Grow your appreciation.” This replaces the PagePro board’s copy (“Ask for Pro”, no price) once billing ships. Everything Pro adds is grouped as <b>Personalise</b>, <b>Understand</b>, <b>Grow</b> and <b>Support</b>. Anything not built is marked <span class="soon">Coming</span> on the page itself. <span class="tag ex">Exists</span> items are checked against <b>origin/dev</b>: packages/contracts/src covers.ts, qr.ts, social-links.ts, profiles.ts, and apps/web/src/app/dashboard/settings/sections/plan.tsx. Sample person and numbers. Nothing here implies a regulatory or payment-partner approval.</p>
+
+  <div style="display:grid;grid-template-columns:1240px 390px;gap:56px;align-items:start">
+    <!-- DESKTOP -->
+    <div>
+      <p style="margin:0 0 10px;font-size:13px;font-weight:800;color:#3b3934">Desktop, 1240 wide · Pro on sale (after billing ships)</p>
+      <div class="frame">
+        <header style="width:1100px;margin:0 auto;height:76px;display:flex;align-items:center;justify-content:space-between"><img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height:30px;width:auto"><nav aria-label="Main" class="nav" style="display:flex;gap:24px;font-size:15px;font-weight:600"><a href="#">How it works</a><a href="#">Who it's for</a><a href="#" aria-current="page" style="text-decoration:underline;text-underline-offset:4px">Pro</a><a href="#">Sign in</a></nav></header>
+
+        <section style="width:1100px;margin:0 auto;padding:36px 0 40px;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:56px;align-items:center">
+          <div>
+            <p style="margin:0 0 14px;font-size:14px;font-weight:800;color:#4d16a8;display:flex;align-items:center;gap:10px">TipMe Pro <span class="pro"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></p>
+            <h2 class="serif" style="margin:0;font-size:80px;line-height:.98">Grow your appreciation.</h2>
+            <p style="margin:20px 0 0;font-size:19px;line-height:1.5;color:#3b3934;max-width:560px">TipMe helps you receive appreciation. Pro helps it grow: a page that looks like you, numbers that make sense, and links that show where your tips come from.</p>
+          </div>
+          <!-- price block -->
+          <div class="paper" style="padding:26px 26px 22px">
+            <p style="margin:0;font-size:14px;font-weight:700;color:#5d5a54">TipMe Pro</p>
+            <p style="margin:6px 0 0;display:flex;align-items:baseline;gap:8px"><span class="serif" style="font-size:56px;line-height:1">₦2,500</span><span style="font-size:16px;font-weight:600;color:#5d5a54">a month</span><span class="anno">price from the server</span></p>
+            <p style="margin:10px 0 18px;font-size:14.5px;line-height:1.5;color:#3b3934">One plan, everything below. Cancel any time. TipMe keeps 10% of each tip on both plans.</p>
+            <a href="#" class="go">Get Pro</a>
+            <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5d5a54">Pay from your TipMe balance or by card, through our payment partner.</p>
+          </div>
+        </section>
+
+        <!-- Benefits -->
+        <section aria-label="What Pro adds" style="background:#fffefa;border-top:1px solid rgba(20,18,16,.08);border-bottom:1px solid rgba(20,18,16,.08)">
+          <div style="width:1100px;margin:0 auto;padding:40px 0 44px">
+            <h2 class="serif" style="margin:0 0 24px;font-size:40px;line-height:1">What Pro adds</h2>
+            <div style="display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:32px;align-items:start">
+              <div class="grp"><h3>Personalise</h3><p class="g">Make your page and QR unmistakably yours.</p><ul>
+                <li><b>Every animated cover, in any colour</b>Choose Slow loop or Plays once.</li>
+                <li><b>QR studio</b>30 Pro QR designs, and print formats like a counter card, poster or sticker.</li>
+                <li><b>Up to 8 links, one featured</b>In your order, with more sites such as your website, Telegram and LinkedIn.</li>
+                <li><b>Three username changes</b>Your old username keeps leading to your page.</li>
+                <li><b>Your own tip amounts</b>1 to 4 amounts, your minimum (from ₦2,000) and the one your page starts on.</li>
+                <li><b>Your thank-you</b>Card styles and your signature, and no TipMe invitation at the foot of your page.</li>
+              </ul></div>
+              <div class="grp"><h3>Understand</h3><p class="g">See how your appreciation is growing.</p><ul>
+                <li><b>Earnings analytics <span class="soon">Coming</span></b>Week, month and year, your average tip, your best day.</li>
+                <li><b>Monthly recap <span class="soon">Coming</span></b>Your month in one card, ready to share. The naira total is off unless you switch it on.</li>
+                <li><b>Repeat supporters <span class="soon">Coming</span></b>See who comes back, only if they chose to be recognised.</li>
+              </ul></div>
+              <div class="grp"><h3>Grow</h3><p class="g">Find out what brings tips.</p><ul>
+                <li><b>Campaign links <span class="soon">Coming</span></b>A named link for each place you share, like “New single” or “Saturday gig”, with its own QR code.</li>
+                <li><b>Results per link <span class="soon">Coming</span></b>Visits, tips and total for each link. Counts only, never who.</li>
+              </ul></div>
+              <div class="grp"><h3>Support</h3><p class="g">Help first, and new things first.</p><ul>
+                <li><b>Priority support <span class="soon">Coming</span></b>Your requests are answered first.</li>
+                <li><b>Early access <span class="soon">Coming</span></b>Try new features before everyone else. Switch it off any time.</li>
+              </ul></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Free keeps -->
+        <section style="width:1100px;margin:0 auto;padding:40px 0 8px">
+          <h2 class="serif" style="margin:0 0 6px;font-size:40px;line-height:1">Free stays genuinely useful</h2>
+          <p style="margin:0 0 20px;font-size:16px;color:#3b3934">TipMe — Receive appreciation. These are never behind Pro.</p>
+          <ul class="keep">
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Receiving tips, with no monthly fee</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Your page, username, photo and cover</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Your QR code in three looks, ready to print</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Withdrawals to your bank</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Your full tip history, and a CSV download</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Sign-in codes, recovery and security alerts</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Up to 3 social links</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Three animated covers that play once</li>
+            <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>Your weekly report, and this week’s totals</li>
+          </ul>
+        </section>
+
+        <!-- FAQ -->
+        <section style="width:1100px;margin:0 auto;padding:36px 0 56px;display:grid;grid-template-columns:300px minmax(0,1fr);gap:56px">
+          <h2 class="serif" style="margin:0;font-size:40px;line-height:1">Questions</h2>
+          <div>
+            <div class="faq"><h4>Can I cancel any time?</h4><p>Yes. Pro stays on until the end of the month you paid for, then your page goes back to Free. No charge after that.</p></div>
+            <div class="faq"><h4>What happens if Pro ends or a payment doesn’t go through?</h4><p>You get 3 days to pay. After that your page goes back to Free: Pro extras hide, and nothing is deleted. Your designs, links, amounts and settings are kept, and come back if you return to Pro.</p></div>
+            <div class="faq"><h4>Does Pro change what TipMe keeps?</h4><p>No. TipMe keeps 10% of each tip on both plans, and withdrawals work the same.</p></div>
+            <div class="faq"><h4>Does the Pro badge mean TipMe checked me?</h4><p>No. Pro is a paid plan. It shows a page is on Pro, not that TipMe checked who runs it.</p></div>
+            <div class="faq" style="border-bottom:1px solid rgba(20,18,16,.12)"><h4>What does “Coming” mean?</h4><p>We’re still building it. Pro members get each one when it’s ready, at no extra cost.</p></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- PHONE -->
+    <div>
+      <p style="margin:0 0 10px;font-size:13px;font-weight:800;color:#3b3934">Phone, 390 wide · the same page</p>
+      <div class="frame" style="width:390px">
+        <header style="padding:0 16px;height:64px;display:flex;align-items:center;justify-content:space-between"><img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height:26px;width:auto"><button type="button" aria-label="Menu" style="width:44px;height:44px;border:0;background:none;display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="#000" stroke-width="2" stroke-linecap="round"></path></svg></button></header>
+        <div style="padding:12px 16px 24px">
+          <p style="margin:0 0 10px;font-size:13px;font-weight:800;color:#4d16a8">TipMe Pro</p>
+          <h2 class="serif" style="margin:0;font-size:46px;line-height:1">Grow your appreciation.</h2>
+          <p style="margin:12px 0 18px;font-size:16px;line-height:1.5;color:#3b3934">A page that looks like you, numbers that make sense, and links that show where your tips come from.</p>
+          <div class="paper" style="padding:20px">
+            <p style="margin:0;display:flex;align-items:baseline;gap:6px;flex-wrap:wrap"><span class="serif" style="font-size:44px;line-height:1">₦2,500</span><span style="font-size:15px;font-weight:600;color:#5d5a54">a month</span></p>
+            <p style="margin:4px 0 0"><span class="anno" style="margin:0">price from the server</span></p>
+            <p style="margin:10px 0 14px;font-size:14px;line-height:1.5;color:#3b3934">Cancel any time. TipMe keeps 10% of each tip on both plans.</p>
+            <a href="#" class="go">Get Pro</a>
+          </div>
+        </div>
+        <div style="background:#fffefa;padding:24px 16px">
+          <div class="grp"><h3>Personalise</h3><ul><li><b>Every animated cover, any colour</b></li><li><b>QR studio: 30 designs, print formats</b></li><li><b>Up to 8 links, one featured</b></li><li><b>Three username changes</b></li><li><b>Your own tip amounts</b></li><li><b>Your thank-you card and signature</b></li></ul></div>
+          <div class="grp" style="margin-top:22px"><h3>Understand</h3><ul><li><b>Earnings analytics <span class="soon">Coming</span></b></li><li><b>Monthly recap <span class="soon">Coming</span></b></li><li><b>Repeat supporters <span class="soon">Coming</span></b></li></ul></div>
+          <div class="grp" style="margin-top:22px"><h3>Grow</h3><ul><li><b>Campaign links and results <span class="soon">Coming</span></b></li></ul></div>
+          <div class="grp" style="margin-top:22px"><h3>Support</h3><ul><li><b>Priority support <span class="soon">Coming</span></b></li><li><b>Early access <span class="soon">Coming</span></b></li></ul></div>
+        </div>
+        <div style="padding:24px 16px">
+          <h3 class="serif" style="margin:0 0 12px;font-size:28px;line-height:1.05">Free stays genuinely useful</h3>
+          <ul class="keep" style="grid-template-columns:1fr;gap:8px"><li>Receiving tips, no monthly fee</li><li>Your page, username, photo and cover</li><li>Your QR code, ready to print</li><li>Withdrawals to your bank</li><li>Full tip history and CSV</li><li>Sign-in codes, recovery, alerts</li></ul>
+          <h3 class="serif" style="margin:24px 0 4px;font-size:28px">Questions</h3>
+          <div class="faq"><h4>Can I cancel any time?</h4></div>
+          <div class="faq"><h4>What happens if Pro ends?</h4><p>Pro extras hide. Nothing is deleted.</p></div>
+          <div class="faq" style="border-bottom:1px solid rgba(20,18,16,.12)"><h4>Does the Pro badge mean TipMe checked me?</h4></div>
+        </div>
+        <div style="position:sticky;bottom:0;padding:12px 16px 16px;background:#f3f2ee;border-top:1px solid rgba(20,18,16,.1)"><a href="#" class="go">Get Pro · ₦2,500 a month</a></div>
+      </div>
+      <p class="note" style="margin-top:14px">On a phone the buy key stays at the foot of the screen once the price block scrolls away, like the claim key in NavHeader. FAQ answers open in place.</p>
+    </div>
+  </div>
+
+  <!-- COMING SOON TO BUY -->
+  <h2 class="serif" style="margin:56px 0 4px;font-size:30px">Until billing ships: “Pro is coming soon to buy”</h2>
+  <p class="note" style="margin:0 0 18px;font-size:14px;max-width:1240px">Billing is built first, so the page can go live before anyone can pay. Only the price block and phone foot key change; the benefits, Free list and FAQ stay. The price still comes from the server, so the page shows what Pro will cost. Today’s “Ask for Pro” (staff turn Pro on, plan.tsx) stays as the way in. If the server has no price, the line reads “Price coming soon” and no number is shown.</p>
+  <div style="display:grid;grid-template-columns:460px 390px minmax(0,1fr);gap:40px;align-items:start">
+    <div class="paper" style="padding:26px 26px 22px">
+      <p style="margin:0;font-size:14px;font-weight:700;color:#5d5a54">TipMe Pro</p>
+      <p style="margin:6px 0 0;display:flex;align-items:baseline;gap:8px"><span class="serif" style="font-size:56px;line-height:1">₦2,500</span><span style="font-size:16px;font-weight:600;color:#5d5a54">a month</span><span class="anno">price from the server</span></p>
+      <p role="status" style="margin:14px 0 16px;padding:12px 14px;border-radius:12px;background:#eeede8;font-size:15px;line-height:1.45"><b>Pro is coming soon to buy.</b> We’ll show how to pay here when it’s ready.</p>
+      <a href="#" class="soft">Ask for Pro</a>
+      <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#5d5a54">Until then, the TipMe team can turn Pro on for your page.</p>
+    </div>
+    <div class="frame" style="width:390px;padding:20px 16px;box-sizing:border-box">
+      <p style="margin:0;display:flex;align-items:baseline;gap:6px"><span class="serif" style="font-size:44px;line-height:1">₦2,500</span><span style="font-size:15px;font-weight:600;color:#5d5a54">a month</span></p>
+      <p role="status" style="margin:12px 0 14px;padding:12px 14px;border-radius:12px;background:#eeede8;font-size:15px;line-height:1.45"><b>Pro is coming soon to buy.</b></p>
+      <a href="#" class="soft">Ask for Pro</a>
+      <p style="margin:16px 0 8px;font-size:12px;font-weight:800;color:#5d5a54">Foot key on a phone</p>
+      <span class="go off" aria-disabled="true">Coming soon to buy</span>
+    </div>
+    <div class="paper" style="padding:20px 22px">
+      <span class="tag pr">Proposed</span>
+      <h3 class="serif" style="margin:0 0 8px;font-size:22px">Rules for the page</h3>
+      <ul class="note" style="margin:0;padding-left:18px;font-size:13.5px">
+        <li>The price is never written in the page’s code: the /pro page and Settings Plan read the one staff set (OpsProPrice board). That board’s sample still starts at ₦5,000; the launch price is ₦2,500.</li>
+        <li>“Get Pro” shows only when billing is switched on <i>and</i> a price is set. Otherwise the coming-soon block shows.</li>
+        <li>A <span class="soon">Coming</span> label comes off only when that feature ships to everyone on Pro.</li>
+        <li>The payment partner is never named. Pronouns are “they”.</li>
+        <li>On a Pro page the block reads “You’re on Pro · paid until 9 Dec” with “Manage” in place of the buy key.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":3300}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -225,3 +225,25 @@ test('a note that cannot be read leaves the rest of the stack', async ({
   await expect(page.getByTestId('note-text')).toBeVisible();
   await expect(page.getByText('1 of 1')).toBeVisible();
 });
+
+test('home on a desktop: the side column is at least 18rem and the week’s figure is set in the editorial face', async ({
+  page,
+  browser,
+  request,
+}, testInfo) => {
+  // D1 (ScreenAudit: "Right column thin").
+  const { handle } = await signUpRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle, { name: 'Ada' });
+  await runWeeklyReport(page, request, handle);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/dashboard');
+  const side = page.locator('.dashboard-home__side');
+  const figure = side.locator('.week-teaser__figure');
+  await expect(figure).toHaveText(/^₦[\d,]+$/);
+  expect((await side.boundingBox())!.width).toBeGreaterThanOrEqual(288);
+  expect(
+    await figure.evaluate((element) => getComputedStyle(element).fontFamily),
+  ).toMatch(/dm ?serif/i);
+  await expect(page.getByRole('link', { name: /Your week/ })).toBeVisible();
+  await expectAccessible(page);
+});

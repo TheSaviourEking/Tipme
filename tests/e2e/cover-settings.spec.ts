@@ -274,7 +274,7 @@ test('a saved design can be given up for the automatic cover', async ({
   const automatic = page.getByRole('radio', { name: 'Let TipMe pick' });
   await expect(automatic).toBeChecked();
   await expect(
-    page.getByText('The TipMe team turns Pro on for your page'),
+    page.locator('#pro').getByText('Your page is on the Free plan.'),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Save cover' })).toBeDisabled();
   await page.getByRole('radio', { name: 'Rippling heart' }).check();

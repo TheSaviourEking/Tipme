@@ -15,6 +15,7 @@ import { photoStoreProvider } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
 import { PayoutDestinationController } from './payout-destination.controller.js';
+import { ProPriceController } from './pro-price.controller.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
 import { MailModule } from '../mail/mail.module.js';
 
@@ -29,6 +30,7 @@ import { MailModule } from '../mail/mail.module.js';
     QrArtPreviewController,
     PaymentAccountsController,
     PayoutDestinationController,
+    ProPriceController,
   ],
   providers: [
     ProfileRevalidator,

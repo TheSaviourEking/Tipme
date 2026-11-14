@@ -6,6 +6,7 @@ import type {
   BachsPaymentAccountStatus,
   MyProfile,
   RecoveryEmailStatus,
+  VisitsToday,
 } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
@@ -47,6 +48,9 @@ const links = (
   [
     { href: '/dashboard', label: 'Home', phone: true },
     { href: '/dashboard/tips', label: 'Tips', phone: true },
+    // Pro insights: earnings for everyone (the basics on Free), and campaign links.
+    { href: '/dashboard/earnings', label: 'Earnings', phone: false },
+    { href: '/dashboard/campaigns', label: 'Campaigns', phone: false },
     ...(handle ? [{ href: `/@${handle}`, label: 'My page', phone: true }] : []),
     { href: '/dashboard/qr', label: 'My QR', phone: false },
     // TipMe for businesses: only for someone who manages one, or works at or is invited to one.
@@ -59,6 +63,7 @@ const links = (
       : []),
     { href: WHATS_NEW, label: 'What’s new', phone: false },
     { href: '/dashboard/settings', label: 'Settings', phone: true },
+    { href: '/dashboard/help', label: 'Get help', phone: false },
   ] as const;
 
 /** The dot after an update goes live, with words for screen readers. */
@@ -128,10 +133,22 @@ export function DashboardShell({
   const [payments, setPayments] = useState<
     BachsPaymentAccountStatus | null | undefined
   >(undefined);
+  const [visitsToday, setVisitsToday] = useState<number | null>(null);
   const readPayments = useCallback(
     () =>
       apiFetch<BachsPaymentAccountStatus>('/v1/me/payment-account').then(
-        (result) => setPayments(result.ok ? result.data : null),
+        (result) => {
+          const account = result.ok ? result.data : null;
+          setPayments(account);
+          // Only worth asking while tips are blocked: the number is shown in that notice alone.
+          if (
+            account?.enabled &&
+            !(account.status === 'ACTIVE' && account.chargesEnabled)
+          )
+            void apiFetch<VisitsToday>('/v1/me/visits-today').then((visits) =>
+              setVisitsToday(visits.ok ? visits.data.visits : null),
+            );
+        },
       ),
     [],
   );
@@ -158,7 +175,7 @@ export function DashboardShell({
   }, []);
   const attention =
     profile && payments !== undefined
-      ? ownerAttention({ profile, payments, needsRecoveryEmail })
+      ? ownerAttention({ profile, payments, needsRecoveryEmail, visitsToday })
       : null;
   // The nav dots keep the full list; the reminders shown are this page's own.
   const needsFix = new Set(attention?.map((item) => item.navHref));
@@ -179,7 +196,12 @@ export function DashboardShell({
   );
 
   return (
-    <main id="main" tabIndex={-1} className="dashboard-page">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="dashboard-page"
+      data-area="recipient"
+    >
       {/* Around the bar too: the bell is live. It connects once the profile has loaded. */}
       <LiveProvider
         stream="me"

@@ -34,6 +34,13 @@ export const paymentSettingsShape = {
     .string()
     .regex(/^sk_live_.+$/)
     .optional(),
+  // Paid Pro (ADR-0015): TipMe's own organization at the partner. Events without a top-level
+  // `account` from this organization are TipMe's own (Pro purchases). Unset: every event is a
+  // connected account's, as before, so nothing changes until it is set.
+  BACHS_PLATFORM_ORGANIZATION_ID: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{1,200}$/)
+    .optional(),
 };
 
 /** Webhook secrets: the API authenticates Bachs callbacks; the worker never holds them. */

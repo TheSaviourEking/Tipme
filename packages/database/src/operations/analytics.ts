@@ -11,6 +11,7 @@ import type { Database } from '../client.js';
 import { analyticsEvents, profiles, webVitals } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
+import { runningCampaignId } from './campaigns.js';
 
 const ZONE = 'Africa/Lagos';
 const minuteOf = (now: Date) =>
@@ -33,6 +34,18 @@ async function knownHandle(
     : { handle: null, rehearsal: false };
 }
 
+async function campaignOfHandle(
+  db: Database,
+  handleLower: string,
+  slug: string,
+): Promise<string | null> {
+  const [page] = await db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.handleLower, handleLower));
+  return page ? runningCampaignId(db, page.id, slug) : null;
+}
+
 /** Stores one validated browser event (already checked against the contract's allow-list). */
 export function recordClientEvent(
   db: Database,
@@ -41,6 +54,11 @@ export function recordClientEvent(
   return guarded(async () => {
     const { event } = input;
     const page = await knownHandle(db, event.handle);
+    // Campaign Studio: only a running campaign of that very page; anything else is dropped.
+    const campaignId =
+      page.handle && event.campaign
+        ? await campaignOfHandle(db, page.handle, event.campaign)
+        : null;
     await db.insert(analyticsEvents).values({
       id: newId(),
       atMinute: minuteOf(input.now ?? new Date()),
@@ -52,6 +70,7 @@ export function recordClientEvent(
       rehearsal: page.rehearsal,
       returning: event.returning ?? null,
       device: input.device,
+      campaignId,
     });
   });
 }
@@ -190,6 +209,9 @@ export function rollupAnalytics(
           UNION ALL SELECT 'returning_visits', '', count(*) FROM visits WHERE is_returning
           UNION ALL SELECT 'visits_by_channel', channel, count(*) FROM visits GROUP BY 2
           UNION ALL SELECT 'visits_by_handle', handle, count(*) FROM visits WHERE handle <> '' GROUP BY 2
+          -- Campaign Studio: opens from a campaign link, one per tab.
+          UNION ALL SELECT 'campaign_visits', campaign_id::text, count(DISTINCT flow_id) FROM day
+           WHERE name = 'profile_viewed' AND campaign_id IS NOT NULL AND flow_id IS NOT NULL GROUP BY 2
         )
         INSERT INTO analytics_daily (date, metric, dimension, value)
         SELECT ${input.date}::date, metric, dimension, value FROM totals WHERE value > 0`);
@@ -227,4 +249,27 @@ export function lagosDaysBefore(now: Date, days: number): string[] {
   for (let back = days; back >= 1; back--)
     out.push(format.format(new Date(now.getTime() - back * 86_400_000)));
   return out;
+}
+
+/**
+ * How many browsing sessions opened the owner's page today (Lagos day), counted as the daily totals
+ * count visits (one per anonymous tab flow). Only events the browser allowed are stored (GPC and
+ * DNT are honoured at collection), and no person is identified. Shown to the owner while
+ * supporters can't tip them yet ("missed visits", PR #31).
+ */
+export function visitsToday(
+  db: Database,
+  input: { profileId: string; now?: Date },
+): Promise<number> {
+  return guarded(async () => {
+    const result = await db.execute<{ visits: number }>(sql`
+      SELECT count(DISTINCT e.flow_id)::int AS visits
+        FROM analytics_events e
+        JOIN profiles p ON p.handle_lower = e.handle
+       WHERE p.id = ${input.profileId}
+         AND e.name = 'profile_viewed' AND e.flow_id IS NOT NULL AND NOT e.rehearsal
+         AND (e.at_minute AT TIME ZONE ${ZONE})::date
+           = (${(input.now ?? new Date()).toISOString()}::timestamptz AT TIME ZONE ${ZONE})::date`);
+    return result.rows[0]?.visits ?? 0;
+  });
 }
