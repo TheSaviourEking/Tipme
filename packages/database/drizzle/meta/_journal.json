@@ -764,6 +764,13 @@
       "when": 1794691812455,
       "tag": "0108_campaign_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1794696515140,
+      "tag": "0109_owner_announcements_permission",
+      "breakpoints": true
     }
   ]
 }
