@@ -23,7 +23,7 @@ export default defineConfig({
   webServer: [
     {
       // The web asks /health/release for the launch time first (owner, 14 Nov 2026, #216).
-      command: `node tests/e2e/countdown-api-stub.mjs ${LANE.apiPort}`,
+      command: `node countdown-api-stub.mjs ${LANE.apiPort}`,
       port: LANE.apiPort,
       reuseExistingServer: false,
     },
