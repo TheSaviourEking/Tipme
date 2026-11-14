@@ -266,6 +266,23 @@ async function unresolvedPayoutIssue() {
 }
 
 /** Every serious action: what to ask, and whether it has happened. */
+/** A price change for one plan: the next price up, and whether it is now that plan's latest. */
+async function priceFixture(plan) {
+  const latest = async () =>
+    (
+      await q(
+        `SELECT amount_minor::text AS amount FROM pro_prices WHERE plan = $1
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+        [plan],
+      )
+    )[0].amount;
+  const next = String(BigInt(await latest()) + 10000n);
+  return {
+    payload: { amountMinor: next },
+    happened: async () => (await latest()) === next,
+  };
+}
+
 const wired = {
   'email_recovery.start': async () => {
     const userId = await ownerOf();
@@ -320,21 +337,9 @@ const wired = {
     happened: async () => (await feeOf()) === 250,
   }),
   // Paid Pro (ADR-0015): a price one naira-step away from whatever is current, each time.
-  'pro_price.change': async () => {
-    const [{ amount }] = await q(
-      `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
-    );
-    const next = String(BigInt(amount) + 10000n);
-    return {
-      payload: { amountMinor: next },
-      happened: async () =>
-        (
-          await q(
-            `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
-          )
-        )[0].amount === next,
-    };
-  },
+  'pro_price.change': async () => priceFixture('personal'),
+  // Business Pro (plan Task A5): its own price, changed the same way.
+  'business_pro_price.change': async () => priceFixture('business'),
   // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
   'pro.refund': async () => {
     const [{ id: userId }] = await q(

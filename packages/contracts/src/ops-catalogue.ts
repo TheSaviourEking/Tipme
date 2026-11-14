@@ -241,6 +241,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
   },
+  'OpsBusinessProPriceController.state': {
+    verb: 'GET',
+    permission: 'pro.price',
+    reason:
+      'The Business Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsPagesController.pro': {
     verb: 'GET',
     permission: 'pages.plan',
