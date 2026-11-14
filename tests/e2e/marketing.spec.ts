@@ -80,6 +80,11 @@ test('the businesses page is centred: the text and the card sit as one block in 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/for-businesses');
   const hero = page.locator('.business-hero');
+  // The coming-soon fallback also has two parts; measure only once the flags have streamed in and
+  // replaced it, or a part can be swapped out between the count and its box (null).
+  await expect(
+    hero.getByRole('link', { name: 'Create your business' }),
+  ).toBeVisible();
   const parts = hero.locator('> *').filter({ visible: true });
   const text = parts.first();
   const card = parts.last();
