@@ -60,7 +60,7 @@ const buy = (api, cookie, body) =>
   fetch(`${api}/v1/me/pro/purchases`, {
     method: 'POST',
     headers: browserHeaders(cookie, { 'idempotency-key': randomUUID() }),
-    body: JSON.stringify({ expectedAmountMinor: '250000', ...body }),
+    body: JSON.stringify({ expectedAmountMinor: '500000', ...body }),
   });
 const reset = async () => {
   await q(`DELETE FROM pro_periods`);

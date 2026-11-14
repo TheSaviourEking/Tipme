@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   createMockMailProvider,
+  MAIL_TYPES,
   MailRejectedError,
   MailTemporaryError,
 } from '@tipme/mail';
@@ -147,6 +148,92 @@ test('security mail is claimed before older engagement mail', async (t) => {
   });
   assert.equal(first.type, 'email_verification_link');
   assert.equal(first.to, 'tobi@example.com');
+});
+
+// Seen in e2e: 3,000+ staff alerts queued ahead of 190 sign-in codes. Both are security mail, so
+// the codes waited their turn behind every older alert.
+test('a sign-in code goes out before a burst of older staff alerts', async (t) => {
+  const { db, rows } = await fresh(t);
+  const earlier = new Date(Date.now() - 60_000);
+  for (let i = 0; i < 200; i++)
+    await enqueueMail(db, sealing, {
+      type: 'staff_approval_pending',
+      to: `owner${i}@example.com`,
+      data: MAIL_TYPES.staff_approval_pending.sample,
+      dedupeKey: `staff_approval_pending.${i}`,
+      now: earlier,
+    });
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'sign_in_code',
+    to: 'ada@example.com',
+    data: { code: '482915' },
+    dedupeKey: 'sign_in_code.waiting',
+  });
+  // One pass of the worker (20 at a time, as it runs): the code is in it.
+  const sent = [];
+  const provider = createMockMailProvider(async (mail) => {
+    sent.push(mail.subject);
+    return writePretendMessage(db, {
+      channel: 'email',
+      recipientHint: 'pretend',
+      subject: mail.subject,
+      body: mail.text,
+    });
+  });
+  await deliverDueMail(deps(db, provider), { now: new Date(), limit: 20 });
+  assert.equal(sent[0], 'Your TipMe sign-in code');
+  const [code] = await rows(`SELECT status FROM mail_messages WHERE id = $1`, [
+    id,
+  ]);
+  assert.equal(code.status, 'sent');
+  assert.equal(
+    (
+      await rows(
+        `SELECT count(*)::int AS n FROM mail_messages WHERE type = 'staff_approval_pending' AND status = 'queued'`,
+      )
+    )[0].n,
+    181,
+  );
+});
+
+test('mail someone is waiting for on screen outranks other security mail', async (t) => {
+  const { db, rows } = await fresh(t);
+  const waiting = [
+    'sign_in_code',
+    'email_change_code',
+    'payout_destination_code',
+    'recovery_change_code',
+    'recovery_code',
+    'recovery_email_code',
+    'recovery_new_email_code',
+    'email_verification_link',
+    'recovery_link',
+  ];
+  const others = {
+    staff_approval_pending: 1,
+    staff_invitation: 1,
+    new_sign_in_notice: 1,
+    welcome: 2,
+    tip_received: 3,
+    weekly_report: 3,
+  };
+  for (const type of [...waiting, ...Object.keys(others)])
+    await enqueueMail(db, sealing, {
+      type,
+      to: 'ada@example.com',
+      data: MAIL_TYPES[type].sample,
+      dedupeKey: `${type}.rank`,
+    });
+  const ranks = Object.fromEntries(
+    (await rows(`SELECT type, priority FROM mail_messages`)).map((row) => [
+      row.type,
+      row.priority,
+    ]),
+  );
+  assert.deepEqual(ranks, {
+    ...Object.fromEntries(waiting.map((type) => [type, 0])),
+    ...others,
+  });
 });
 
 test('a temporary failure is retried on the backoff schedule', async (t) => {

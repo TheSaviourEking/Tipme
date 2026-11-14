@@ -65,7 +65,7 @@ export default async function ComingSoonOpenGraphImage() {
             letterSpacing: -4,
           }}
         >
-          <span>A little thanks</span>
+          <span>A little tip</span>
           <span>is almost here.</span>
         </div>
         <div

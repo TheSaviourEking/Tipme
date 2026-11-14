@@ -8,6 +8,7 @@ import {
   closeLocation,
   DEMO_PROFILES,
   listManagers,
+  mailSealing,
   removeManager,
   tippableMember,
   updateBusiness,
@@ -15,11 +16,13 @@ import {
 } from '../../dist/index.js';
 import { seedBusiness, seedManager, seedMember } from './business-fixtures.mjs';
 import { useDatabase } from './helpers.mjs';
+import { queuedMail } from '../../dist/test-support.js';
 
 // TipMe for businesses, PR B1 Task 6: applying for a business, its locations and its managers.
 // Every refusal to a stranger reads like an unknown business (access-control rule 2).
 
 const [ADA, TOBI] = DEMO_PROFILES;
+const sealing = mailSealing(Buffer.alloc(32, 7));
 
 const application = (overrides = {}) => ({
   name: 'The Yellow Chilli',
@@ -504,7 +507,13 @@ test('business setup', async (t) => {
       );
       assert.equal(
         await codeOf(
-          removeManager(database.db, ADA.userId, businessId, onlyOwner.id),
+          removeManager(
+            database.db,
+            sealing,
+            ADA.userId,
+            businessId,
+            onlyOwner.id,
+          ),
         ),
         'BUSINESS_LAST_OWNER',
       );
@@ -539,7 +548,13 @@ test('business setup', async (t) => {
       // Only an owner removes; a location manager is refused.
       assert.equal(
         await codeOf(
-          removeManager(database.db, TOBI.userId, businessId, onlyOwner.id),
+          removeManager(
+            database.db,
+            sealing,
+            TOBI.userId,
+            businessId,
+            onlyOwner.id,
+          ),
         ),
         'OWNER_REQUIRED',
       );
@@ -551,11 +566,23 @@ test('business setup', async (t) => {
       );
       assert.equal(
         await codeOf(
-          removeManager(database.db, ADA.userId, businessId, otherOwner.id),
+          removeManager(
+            database.db,
+            sealing,
+            ADA.userId,
+            businessId,
+            otherOwner.id,
+          ),
         ),
         'NOT_A_MANAGER',
       );
-      await removeManager(database.db, ADA.userId, businessId, lm.managerId);
+      await removeManager(
+        database.db,
+        sealing,
+        ADA.userId,
+        businessId,
+        lm.managerId,
+      );
       assert.equal(
         await codeOf(businessDetail(database.db, TOBI.userId, businessId)),
         'NOT_A_MANAGER',
@@ -569,22 +596,70 @@ test('business setup', async (t) => {
         businessId,
         userId: TOBI.userId,
       });
-      await removeManager(database.db, ADA.userId, businessId, onlyOwner.id);
+      await removeManager(
+        database.db,
+        sealing,
+        ADA.userId,
+        businessId,
+        onlyOwner.id,
+      );
       assert.equal(
         await codeOf(
-          removeManager(database.db, TOBI.userId, businessId, second.managerId),
+          removeManager(
+            database.db,
+            sealing,
+            TOBI.userId,
+            businessId,
+            second.managerId,
+          ),
         ),
         'BUSINESS_LAST_OWNER',
       );
     },
   );
 
+  await t.test('two owners stepping down at once leave one owner', async () => {
+    await setUp();
+    const { businessId } = await seedBusiness(database, {
+      status: 'pending',
+    });
+    const [first] = await q(
+      `SELECT id FROM business_managers WHERE business_id = $1`,
+      [businessId],
+    );
+    const second = await seedManager(database, {
+      businessId,
+      userId: TOBI.userId,
+    });
+    const outcomes = await Promise.allSettled([
+      removeManager(database.db, sealing, ADA.userId, businessId, first.id),
+      removeManager(
+        database.db,
+        sealing,
+        TOBI.userId,
+        businessId,
+        second.managerId,
+      ),
+    ]);
+    const owners = await q(
+      `SELECT id FROM business_managers WHERE business_id = $1 AND removed_at IS NULL`,
+      [businessId],
+    );
+    assert.equal(owners.length, 1);
+    assert.equal(
+      outcomes.filter((o) => o.status === 'fulfilled').length,
+      1,
+      'one stepping down wins',
+    );
+  });
+
+  // The owner's ruling (14 Nov 2026): an owner never ends another owner's seat; TipMe does it.
   await t.test(
-    'two owners removing each other at once leave one owner',
+    'an owner removing another owner is refused, audited, and nothing changes',
     async () => {
       await setUp();
       const { businessId } = await seedBusiness(database, {
-        status: 'pending',
+        status: 'verified',
       });
       const [first] = await q(
         `SELECT id FROM business_managers WHERE business_id = $1`,
@@ -594,20 +669,142 @@ test('business setup', async (t) => {
         businessId,
         userId: TOBI.userId,
       });
-      const outcomes = await Promise.allSettled([
-        removeManager(database.db, ADA.userId, businessId, second.managerId),
-        removeManager(database.db, TOBI.userId, businessId, first.id),
-      ]);
-      const owners = await q(
+      assert.equal(
+        await codeOf(
+          removeManager(
+            database.db,
+            sealing,
+            ADA.userId,
+            businessId,
+            second.managerId,
+          ),
+        ),
+        'OWNER_REMOVAL_NEEDS_TIPME',
+      );
+      assert.equal(
+        await codeOf(
+          removeManager(
+            database.db,
+            sealing,
+            TOBI.userId,
+            businessId,
+            first.id,
+          ),
+        ),
+        'OWNER_REMOVAL_NEEDS_TIPME',
+      );
+      const seats = await q(
         `SELECT id FROM business_managers WHERE business_id = $1 AND removed_at IS NULL`,
         [businessId],
       );
-      assert.equal(owners.length, 1);
-      assert.equal(
-        outcomes.filter((o) => o.status === 'fulfilled').length,
-        1,
-        'one removal wins',
+      assert.equal(seats.length, 2);
+      assert.deepEqual(
+        await q(
+          `SELECT action, staff_user_id, subject_type, subject_id FROM audit_events
+            WHERE action = 'business.owner_removal_blocked' ORDER BY created_at, id`,
+        ),
+        [
+          {
+            action: 'business.owner_removal_blocked',
+            staff_user_id: ADA.userId,
+            subject_type: 'business',
+            subject_id: businessId,
+          },
+          {
+            action: 'business.owner_removal_blocked',
+            staff_user_id: TOBI.userId,
+            subject_type: 'business',
+            subject_id: businessId,
+          },
+        ],
       );
+    },
+  );
+  // Owner-change emails (owner, 14 Nov 2026): every owner hears, the one asking or leaving included.
+  await t.test(
+    'a refused owner removal and an owner stepping down email every owner',
+    async () => {
+      await setUp();
+      const { businessId } = await seedBusiness(database, {
+        status: 'verified',
+        name: 'The Yellow Chilli',
+      });
+      const [first] = await q(
+        `SELECT id FROM business_managers WHERE business_id = $1`,
+        [businessId],
+      );
+      const second = await seedManager(database, {
+        businessId,
+        userId: TOBI.userId,
+      });
+      const ownerMail = async () =>
+        (await queuedMail(database.db, sealing, { limit: 50 }))
+          .filter((mail) => mail.type === 'business_owner_change')
+          .map(({ userId, data }) => ({ userId, ...data }))
+          .sort((a, b) =>
+            `${a.change}${a.userId}`.localeCompare(`${b.change}${b.userId}`),
+          );
+      const byUser = (rows) =>
+        rows.sort((a, b) => a.userId.localeCompare(b.userId));
+
+      assert.equal(
+        await codeOf(
+          removeManager(
+            database.db,
+            sealing,
+            ADA.userId,
+            businessId,
+            second.managerId,
+          ),
+        ),
+        'OWNER_REMOVAL_NEEDS_TIPME',
+      );
+      const blocked = {
+        change: 'removal_blocked',
+        businessName: 'The Yellow Chilli',
+        ownerName: 'Tobi Adeyemi',
+        actorName: 'Ada Okafor',
+      };
+      assert.deepEqual(
+        await ownerMail(),
+        byUser([
+          { userId: ADA.userId, ...blocked, you: 'actor' },
+          { userId: TOBI.userId, ...blocked, you: 'owner' },
+        ]),
+      );
+
+      // Tobi steps down: both hear, Tobi included.
+      await removeManager(
+        database.db,
+        sealing,
+        TOBI.userId,
+        businessId,
+        second.managerId,
+      );
+      const stepped = (await ownerMail()).filter(
+        (mail) => mail.change === 'stepped_down',
+      );
+      const left = {
+        change: 'stepped_down',
+        businessName: 'The Yellow Chilli',
+        ownerName: 'Tobi Adeyemi',
+      };
+      assert.deepEqual(
+        stepped,
+        byUser([
+          { userId: ADA.userId, ...left, you: 'other' },
+          { userId: TOBI.userId, ...left, you: 'owner' },
+        ]),
+      );
+      // The last owner can't step down, and nobody is emailed about it.
+      const before = (await ownerMail()).length;
+      assert.equal(
+        await codeOf(
+          removeManager(database.db, sealing, ADA.userId, businessId, first.id),
+        ),
+        'BUSINESS_LAST_OWNER',
+      );
+      assert.equal((await ownerMail()).length, before);
     },
   );
 });

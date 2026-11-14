@@ -11,6 +11,10 @@ import { runMigrations } from './migrations.js';
 import type { MailSealing } from './operations/mail-queue.js';
 import { openSecret } from './operations/secret-box.js';
 import { mailMessages } from './schema.js';
+import { sqlStateOf } from './operations/errors.js';
+
+// A deadlock with the test's own worker is retried this many times in all.
+const RESET_ATTEMPTS = 5;
 
 const TEST_DATABASE = 'tipme_test';
 const DEFAULT_URL =
@@ -175,29 +179,17 @@ export async function openTestDatabase(): Promise<TestDatabase> {
         `SELECT tablename FROM pg_tables WHERE schemaname = 'public'`,
       );
       if (rows.length === 0) return;
-      const client = await handle.pool.connect();
-      try {
-        // History tables refuse TRUNCATE unless this transaction opts in (test resets only).
-        await client.query('BEGIN');
-        await client.query(`SET LOCAL tipme.allow_truncate = 'on'`);
-        await client.query(
-          `TRUNCATE ${rows.map((row) => `"${row.tablename}"`).join(', ')} CASCADE`,
-        );
-        // Migrations seed this row, and no row reads as withdrawals off.
-        await client.query(
-          `INSERT INTO withdrawals_switch (id, paused) VALUES ('global', false)`,
-        );
-        // And the launch Pro price (0087), so every test starts at ₦2,500 a month.
-        await client.query(
-          `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, reason, created_at)
-           VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now(), 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now())`,
-        );
-        await client.query('COMMIT');
-      } catch (error) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        throw error;
-      } finally {
-        client.release();
+      // The file's own worker keeps sweeping while it resets, and a sweep that reads two tables in
+      // one statement can meet the TRUNCATE locking them in the other order. Postgres then cancels
+      // one side (40P01). When it is this side, everything here rolled back, so it tries again.
+      for (let attempt = 1; ; attempt += 1) {
+        try {
+          await truncateAll(rows);
+          return;
+        } catch (error) {
+          if (attempt >= RESET_ATTEMPTS || sqlStateOf(error) !== '40P01')
+            throw error;
+        }
       }
     },
     async close() {
@@ -205,6 +197,35 @@ export async function openTestDatabase(): Promise<TestDatabase> {
       checkNesting();
     },
   };
+
+  async function truncateAll(rows: { tablename: string }[]): Promise<void> {
+    const client = await handle.pool.connect();
+    try {
+      // History tables refuse TRUNCATE unless this transaction opts in (test resets only).
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL tipme.allow_truncate = 'on'`);
+      await client.query(
+        `TRUNCATE ${rows.map((row) => `"${row.tablename}"`).join(', ')} CASCADE`,
+      );
+      // Migrations seed this row, and no row reads as withdrawals off.
+      await client.query(
+        `INSERT INTO withdrawals_switch (id, paused) VALUES ('global', false)`,
+      );
+      // And the Pro prices the migrations leave: the launch ₦2,500 (0087) as history, then
+      // ₦5,000 (0093, owner 12 Nov 2026), so every test starts at ₦5,000 a month.
+      await client.query(
+        `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, reason, created_at)
+           VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now() - interval '1 second', 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now() - interval '1 second'),
+                  ('00000000-0000-4000-8000-000000500000', 500000, 'NGN', now(), 'Owner''s pricing decision, 12 Nov 2026: Pro is ₦5,000 a month', now())`,
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 /**

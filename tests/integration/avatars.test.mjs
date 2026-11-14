@@ -103,6 +103,42 @@ test('an uploaded photo becomes a 512×512 WebP with no metadata, shown on the p
   assert.equal(page.avatarPath, mine.avatarPath);
 });
 
+test('the same photo as a small PNG, for share cards (next/og cannot draw WebP), under the same rules', async () => {
+  const cookie = await livePage('+2348031280005', 'photo_card');
+  const mine = (await (await upload(cookie, await photo())).json()).data;
+  const pngPath = mine.avatarPath.replace(/\.webp$/, '.png');
+  const served = await fetch(`${stack.api}${pngPath}`);
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get('content-type'), 'image/png');
+  assert.equal(served.headers.get('x-content-type-options'), 'nosniff');
+  assert.match(served.headers.get('cache-control'), /max-age=3600\b/);
+  const bytes = Buffer.from(await served.arrayBuffer());
+  const meta = await sharp(bytes).metadata();
+  assert.equal(meta.format, 'png');
+  assert.equal(meta.width, 304);
+  assert.equal(meta.height, 304);
+  for (const leak of ['SecretCam', 'Ada Home Address'])
+    assert.equal(bytes.includes(Buffer.from(leak)), false, leak);
+  // Not live: no PNG either, as with the WebP.
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'not_live' }),
+  });
+  assert.equal((await fetch(`${stack.api}${pngPath}`)).status, 404);
+  // Only these two names: anything else is not found.
+  for (const file of ['1.jpg', '1.png.webp', 'x.png'])
+    assert.equal(
+      (
+        await fetch(
+          `${stack.api}/v1/avatars/${mine.avatarPath.split('/')[3]}/${file}`,
+        )
+      ).status,
+      404,
+      file,
+    );
+});
+
 test('anything that is not a real image is refused: SVG, HTML, random bytes, a pixel bomb, an oversized file', async () => {
   const cookie = await livePage('+2348031280002', 'photo_bad');
   const svg = Buffer.from(

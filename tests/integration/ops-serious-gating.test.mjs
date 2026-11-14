@@ -10,7 +10,10 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
-import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
+import {
+  seedBusiness,
+  seedManager,
+} from '../../packages/database/test/integration/business-fixtures.mjs';
 import { GROSS, reportedReversal } from './reversal-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
@@ -481,6 +484,23 @@ const wired = {
         (
           await q(`SELECT status FROM businesses WHERE id = $1`, [businessId])
         )[0].status === 'verified',
+    };
+  },
+  'business.owner_remove': async () => {
+    const { businessId } = await seedBusiness(database);
+    const second = await seedManager(database, {
+      businessId,
+      userId: await ownerOf(),
+    });
+    return {
+      payload: { businessId, managerId: second.managerId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM business_managers WHERE id = $1 AND removed_at IS NOT NULL`,
+            [second.managerId],
+          )
+        ).length > 0,
     };
   },
   'tip.reverse': async () => {

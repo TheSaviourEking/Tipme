@@ -63,8 +63,14 @@ test('staff find a business with its contact hidden, reveal it with a reason, pa
     '27 Ademola Adetokunbo, Lagos',
   );
   // The business's own content never says "approved" (no regulatory claim); the admin menu and
-  // notices outside main can mention Approvals.
-  await expect(page.getByRole('main').getByText(/approved/i)).toHaveCount(0);
+  // notices outside main can mention Approvals. Only what is shown counts: the Overview stays
+  // mounted, hidden, after the client navigation, and its staff timeline can say "approved".
+  await expect(
+    page
+      .getByRole('main')
+      .getByText(/approved/i)
+      .filter({ visible: true }),
+  ).toHaveCount(0);
   await expectAccessible(page);
 
   const contact = section(page, 'Contact');
@@ -161,4 +167,67 @@ test('staff who own the business can’t verify it, even alone; it stays waiting
   await expectAccessible(page);
   await page.reload();
   await expect(shown(page, 'Waiting to be verified')).toBeVisible();
+});
+
+// Owner-change lock (owner, 14 Nov 2026): owners can't remove each other; TipMe removes one with a
+// reason and a second person, and never the last owner.
+test('staff remove a business owner with a second person; the last owner has no Remove', async ({
+  page,
+  browser,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  const other = await secondOwner(browser, testInfo);
+  const name = `Grill ${randomUUID().slice(0, 6)}`;
+  const { businessId } = await seedBusiness({
+    owner: await ownerAccount(),
+    status: 'verified',
+    name,
+  });
+  const [second] = await sql<{ id: string }>(
+    `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+    [`second.${randomUUID().slice(0, 8)}@example.com`],
+  );
+  await sql(
+    `INSERT INTO business_managers (id, business_id, user_id, role) VALUES ($1, $2, $3, 'owner')`,
+    [randomUUID(), businessId, second!.id],
+  );
+
+  await page.goto(`/ops/businesses/${businessId}`);
+  const managers = section(page, 'Managers');
+  await expect(managers).toContainText('Owners can’t remove each other.');
+  const row = managers.getByRole('listitem').filter({ hasText: 's•••@' });
+  await row.getByRole('button', { name: 'Remove as owner…' }).click();
+  await row
+    .getByLabel('What did you check with both owners?')
+    .fill('Both owners confirmed by email on ticket 4411');
+  await row.getByRole('button', { name: 'Remove this owner' }).click();
+  // Asking takes the staff-admin lock and a dry run: allow for a busy machine.
+  await expect(
+    page.getByText('Waiting for a second person', { exact: true }),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('They stay an owner until then.')).toBeVisible();
+  await expectAccessible(page);
+
+  await other.page.goto('/ops/approvals');
+  const card = other.page
+    .getByRole('article')
+    .filter({ hasText: `as an owner of ${name}` });
+  await expect(card.getByText('Remove a business owner')).toBeVisible();
+  await card.getByRole('button', { name: 'Approve…' }).click();
+  await card.getByLabel('Authenticator code').fill(await codeFor(other));
+  await card.getByRole('button', { name: 'Approve and run' }).click();
+  await expect(card).toHaveCount(0);
+  await other.context.close();
+
+  await page.reload();
+  await expect(
+    managers.getByRole('listitem').filter({ hasText: 's•••@' }),
+  ).toHaveCount(0);
+  // One owner left: no Remove, and it says why.
+  await expect(
+    managers.getByRole('button', { name: 'Remove as owner…' }),
+  ).toHaveCount(0);
+  await expect(managers).toContainText(
+    'Its only owner can’t be removed: a business always keeps one.',
+  );
 });

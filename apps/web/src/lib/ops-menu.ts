@@ -44,6 +44,13 @@ const LINKS: {
     group: 'Work',
     needs: ['search.view'],
   },
+  {
+    // Every account, as a list or a grid (owner's ask, 14 Nov 2026).
+    href: '/ops/users',
+    label: 'People',
+    group: 'Work',
+    needs: ['search.view'],
+  },
   { href: '/ops/pages', label: 'Pages', group: 'Work', needs: [...PAGE_CARDS] },
   {
     href: '/ops/usernames',
@@ -103,8 +110,9 @@ const LINKS: {
     needs: ['changelog.edit', 'changelog.publish'],
   },
   {
+    // "Staff members", so the menu has one "People": every account, under Work.
     href: '/ops/staff/people',
-    label: 'People',
+    label: 'Staff members',
     group: 'Staff',
     needs: ['staff.manage'],
   },

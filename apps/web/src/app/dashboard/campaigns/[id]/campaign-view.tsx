@@ -217,7 +217,7 @@ export default function CampaignPage() {
                   ? 'Hidden'
                   : naira(detail.receivedNetMinor)}
               </dd>
-              <dd className="tm-hint">After TipMe’s 10%</dd>
+              <dd className="tm-hint">After TipMe’s fee</dd>
             </div>
           </dl>
           <Card>

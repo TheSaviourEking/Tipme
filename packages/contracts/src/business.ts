@@ -553,7 +553,11 @@ export interface OpsBusinessNote {
  * sign and badge show, so the print view needs nothing else.
  */
 export interface BusinessCodes {
-  business: { name: string; slug: string };
+  /**
+   * `logoPath`: the uploaded logo (`/v1/business-logos/…`), drawn in the sign's tile; without one,
+   * the tile shows the initial. Optional: older APIs send none.
+   */
+  business: { name: string; slug: string; logoPath?: string };
   /** Open locations in the manager's scope, by name. */
   location: { locationId: string; slug: string; name: string; path: string }[];
   /** Active members at those locations whose page is live, by location then shown name. */
@@ -580,7 +584,8 @@ export interface OpsBusinessRow {
 export interface OpsBusinessDetail extends OpsBusinessRow {
   // `locations` is the row's count; the list has its own name.
   locationList: BusinessLocationView[];
-  managers: { userHint: string; role: ManagerRole }[];
+  /** `managerId` names a seat for `business.owner_remove`; never a contact detail. */
+  managers: { managerId: string; userHint: string; role: ManagerRole }[];
   verifiedAt?: string;
   suspendedReason?: string;
   /** Whether the owners uploaded a logo; staff read it through their own route, whatever the status. */

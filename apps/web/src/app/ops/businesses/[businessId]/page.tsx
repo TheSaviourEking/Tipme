@@ -19,6 +19,7 @@ import {
   changeBusiness,
   loadBusiness,
   OPS_BUSINESS_STATUS_WORDS,
+  removeBusinessOwner,
   revealContact,
 } from '@/lib/business/ops-api';
 import { usePrivateLogo } from '@/lib/business/logo';
@@ -62,14 +63,19 @@ function Facts({ rows }: { rows: [string, React.ReactNode][] }) {
 }
 
 /** Why a change didn't go through, in staff words. */
-const refusal = (answer: { status: number; code: string; message?: string }) =>
+const refusal = (
+  answer: { status: number; code: string; message?: string },
+  verb = 'verify it',
+) =>
   answer.code === 'VALIDATION_FAILED'
     ? 'Nothing changed. It may have changed since you opened it: reload and check its status.'
     : answer.code === 'BUSINESS_NOT_VERIFIED'
       ? 'Nothing changed. This business isn’t verified yet, so it has no pages to pause.'
       : answer.code === 'APPROVAL_SUBJECT'
-        ? 'Nothing changed. You, or an account sharing your email, manage this business, so you can’t verify it. Another staff member must.'
-        : refusalWords(answer);
+        ? `Nothing changed. You, or an account sharing your email, manage this business, so you can’t ${verb}. Another staff member must.`
+        : answer.code === 'BUSINESS_LAST_OWNER'
+          ? 'Nothing changed. This is the business’s only owner, and a business always keeps one.'
+          : refusalWords(answer);
 
 /**
  * One business for staff (PR B2): masked facts, a reveal with a reason, its locations and managers,
@@ -151,6 +157,23 @@ export default function OpsBusinessPage() {
   if (!business) return <Skeleton label="Loading the business" />;
 
   const manage = can(access, 'businesses.manage');
+  const owners = business.managers.filter((m) => m.role === 'owner').length;
+  const removeOwner = async (managerId: string, reason: string) => {
+    const answer = await removeBusinessOwner(businessId, managerId, reason);
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) await load();
+      return refusal(answer, 'remove its owners');
+    }
+    if (answer.kind === 'done') setBusiness(answer.data);
+    setOutcome(
+      outcomeOf(
+        answer,
+        'The owner was removed. Every owner was emailed.',
+        'They stay an owner until then.',
+      ),
+    );
+    return null;
+  };
   return (
     <section className="dashboard-section" aria-labelledby="business-title">
       <p>
@@ -273,13 +296,30 @@ export default function OpsBusinessPage() {
 
       <Section title="Managers">
         <ul className="ops-list" aria-label="Managers">
-          {business.managers.map((manager, index) => (
-            <li key={index} className="ops-row">
+          {business.managers.map((manager) => (
+            <li key={manager.managerId} className="ops-row">
               <strong>{ROLE_WORDS[manager.role]}</strong>
               <span>{manager.userHint}</span>
+              {/* Owner-change lock (14 Nov 2026): owners can't remove each other; TipMe does,
+                  with a reason and a second person, and never the last owner. */}
+              {manage && manager.role === 'owner' && owners > 1 && (
+                <ReasonAction
+                  open="Remove as owner…"
+                  field="What did you check with both owners?"
+                  submit="Remove this owner"
+                  onSubmit={(reason) => removeOwner(manager.managerId, reason)}
+                />
+              )}
             </li>
           ))}
         </ul>
+        {manage && (
+          <p className="tm-hint">
+            {owners > 1
+              ? 'Owners can’t remove each other. Remove one only on a support request, after checking it with both owners. A second staff member approves it, and every owner is emailed.'
+              : 'Its only owner can’t be removed: a business always keeps one.'}
+          </p>
+        )}
       </Section>
 
       {manage && business.status === 'pending' && (

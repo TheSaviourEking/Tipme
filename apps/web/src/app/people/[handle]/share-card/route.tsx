@@ -1,6 +1,8 @@
 import { ImageResponse } from 'next/og';
 import { shareCard, siteOrigin } from '@/lib/metadata';
-import { getPublicProfile } from '@/lib/profiles-api';
+import { previewServerKey } from '@tipme/domain';
+import { API_ORIGIN, getPublicProfile } from '@/lib/profiles-api';
+import { shareCardPhoto } from '@/lib/share-card-photo';
 import {
   GeneralCard,
   ogFonts,
@@ -11,7 +13,8 @@ import {
 } from '@/lib/share-card';
 
 // A person's link preview, at a fixed URL that only their live page's metadata names. It draws
-// `personCardInput` and nothing else. Anything that is not a live, unmoved page (unknown, not live
+// `personCardInput` and nothing else, with the photo that names fetched here (initials when there
+// is none or it does not arrive in time). Anything that is not a live, unmoved page (unknown, not live
 // yet, offline, paused, moved, an invalid handle, or a failed lookup) answers the general card
 // with 200, so this route says nothing the page itself does not.
 
@@ -43,8 +46,21 @@ async function lookup(handle: string): Promise<PersonCardInput | null> {
   }
 }
 
+/** The page's photo as data for next/og, or null (the card then shows the initials). */
+function photoOf(person: PersonCardInput, request: Request) {
+  const password = process.env.PREVIEW_PASSWORD;
+  return shareCardPhoto(person.avatarPath, {
+    apiOrigin: API_ORIGIN,
+    siteOrigin: new URL(request.url).origin,
+    // Staging/preview: the web server proves itself to the API's gate, as the profile lookup does.
+    ...(password
+      ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
+      : {}),
+  });
+}
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ handle: string }> },
 ) {
   const person = await lookup((await params).handle);
@@ -57,6 +73,7 @@ export async function GET(
       {...person}
       host={siteOrigin.host}
       serif={await serifCharacters()}
+      photo={await photoOf(person, request)}
     />,
     {
       ...size,

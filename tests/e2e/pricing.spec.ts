@@ -19,9 +19,10 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   await staff.getByLabel('Handle').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await expect(staff.getByRole('heading', { name: 'Pricing' })).toBeVisible();
-  await expect(staff.getByText('(standard)')).toBeVisible();
+  await expect(staff.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
 
-  await staff.getByLabel('New TipMe fee (%)').fill('8');
+  // A deal only counts below the plan's rate (Free 7%, owner 12 Nov 2026).
+  await staff.getByLabel('New TipMe fee (%)').fill('6');
   // Other cards on the page have reason fields too, so each is found by its own form.
   const formOf = (label: string) =>
     staff.locator('form').filter({ has: staff.getByLabel(label) });
@@ -30,7 +31,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
     .fill('Launch partner with a reduced fee');
   await staff.getByRole('button', { name: 'Set this page’s fee' }).click();
   await expect(
-    staff.getByText('The fee is now 8% for new tips.'),
+    staff.getByText('The fee is now 6% for new tips.'),
   ).toBeVisible();
   await expectAccessible(staff);
 
@@ -64,12 +65,12 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
         feeFree,
       });
     }).toPass({ timeout: 15_000 });
-  // 8% of ₦2,000 is TipMe's ₦160 share, processing included: ₦130 fee plus the ₦30
-  // processing estimate (1.5%). The recipient receives ₦1,840.
+  // 6% of ₦2,000 is TipMe's ₦120 share, processing included: ₦90 fee plus the ₦30
+  // processing estimate (1.5%). The recipient receives ₦1,880.
   await quoteFor({
-    platformFeeMinor: '13000',
+    platformFeeMinor: '9000',
     providerFeeMinor: '3000',
-    recipientNetMinor: '184000',
+    recipientNetMinor: '188000',
     feeFree: false,
   });
 
@@ -88,7 +89,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
 });
 
 // Settings explains Free and Pro in one place (#pro): what Pro includes, and the price the server
-// sends (₦2,500 a month at launch, the owner's decision of 9 Nov 2026; the e2e API has billing on).
+// sends (₦5,000 a month, the owner's pricing of 12 Nov 2026; the e2e API has billing on).
 test('the Pro explanation lists QR designs, three handle changes and no footer link, with the server’s price', async ({
   page,
   browser,
@@ -104,9 +105,9 @@ test('the Pro explanation lists QR designs, three handle changes and no footer l
     'No “Get your own TipMe page” link at the foot of your page',
   );
   await expect(pro).toContainText('Photos and designs are free on every plan');
-  await expect(pro).toContainText('₦2,500 a month');
+  await expect(pro).toContainText('₦5,000 a month');
   await expect(
-    pro.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }),
+    pro.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }),
   ).toBeVisible();
   await expect(pro).not.toContainText(/NGN|\$|£|€|upgrade/i);
 

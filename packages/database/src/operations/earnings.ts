@@ -16,7 +16,7 @@ import type { Database } from '../client.js';
 import { guarded } from './errors.js';
 
 // Earnings analytics (Pro, ProEarnings board). Only confirmed tips, at each tip's net (after
-// TipMe's 10%), on the Lagos day it was confirmed. Every amount is a bigint sum in kobo.
+// the TipMe fee each tip recorded), on the Lagos day it was confirmed. Every amount is a bigint sum in kobo.
 
 const ZONE = 'Africa/Lagos';
 

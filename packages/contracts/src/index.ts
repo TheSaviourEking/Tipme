@@ -7,6 +7,7 @@ export * from './provider-names.js';
 export * from './webhooks.js';
 export * from './checkout.js';
 export * from './payment-accounts.js';
+export * from './payment-countries.js';
 export * from './auth.js';
 export * from './covers.js';
 export * from './profiles.js';

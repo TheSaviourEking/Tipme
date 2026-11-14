@@ -49,7 +49,7 @@ const q = (text, values = []) =>
 const buy = async (
   api,
   cookie,
-  body = { expectedAmountMinor: '250000' },
+  body = { expectedAmountMinor: '500000' },
   key = randomUUID(),
 ) =>
   fetch(`${api}/v1/me/pro/purchases`, {
@@ -70,7 +70,7 @@ test('buying needs a session, the CSRF header and an Idempotency-Key', async () 
   const anonymous = await fetch(`${stack.api}/v1/me/pro/purchases`, {
     method: 'POST',
     headers: browserHeaders(undefined, { 'idempotency-key': randomUUID() }),
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(anonymous.status, 401);
   const noCsrf = await fetch(`${stack.api}/v1/me/pro/purchases`, {
@@ -81,18 +81,18 @@ test('buying needs a session, the CSRF header and an Idempotency-Key', async () 
       cookie,
       'idempotency-key': randomUUID(),
     },
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(noCsrf.status, 403);
   const noKey = await fetch(`${stack.api}/v1/me/pro/purchases`, {
     method: 'POST',
     headers: browserHeaders(cookie),
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(noKey.status, 400);
   // The client can't name a price of its own: only an expected amount, checked against the server.
   const extra = await buy(stack.api, cookie, {
-    expectedAmountMinor: '250000',
+    expectedAmountMinor: '500000',
     amountMinor: '100',
   });
   assert.equal(extra.status, 400);
@@ -126,7 +126,7 @@ test('GET /v1/pro/price tells a signed-out visitor whether buying is open on thi
       null,
     );
     const { data } = await json(response);
-    assert.equal(data.amountMinor, '250000');
+    assert.equal(data.amountMinor, '500000');
     assert.equal(data.billingOn, open);
   }
 });
@@ -140,7 +140,7 @@ test('GET /v1/me/pro shows the server’s price, card only while paying from the
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   const { data } = await json(response);
   assert.deepEqual(data.price, {
-    amountMinor: '250000',
+    amountMinor: '500000',
     currency: 'NGN',
     interval: 'month',
   });
@@ -166,7 +166,7 @@ test('pretend money end to end: open, a redirect changes nothing, pay on the pre
   assert.equal(opened.status, 201);
   const { data: purchase } = await json(opened);
   assert.equal(purchase.status, 'PENDING');
-  assert.equal(purchase.amountMinor, '250000');
+  assert.equal(purchase.amountMinor, '500000');
   assert.match(
     purchase.checkoutUrl,
     /^http:\/\/localhost:3000\/mock-checkout\/mock_pro_/,
@@ -196,7 +196,7 @@ test('pretend money end to end: open, a redirect changes nothing, pay on the pre
   const summary = await json(
     await fetch(`${stack.api}/v1/mock-provider/checkout/${reference}`),
   );
-  assert.equal(summary.data.amountMinor, '250000');
+  assert.equal(summary.data.amountMinor, '500000');
   const paid = await fetch(
     `${stack.api}/v1/mock-provider/checkout/${reference}`,
     {

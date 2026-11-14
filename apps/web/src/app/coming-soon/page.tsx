@@ -7,7 +7,7 @@ import { parseProductionLaunchAt } from '@/lib/production-launch';
 import { Countdown } from './countdown';
 
 export const metadata: Metadata = {
-  title: 'A little thanks is almost here',
+  title: 'A little tip is almost here',
   description: 'TipMe opens at midnight in Lagos.',
   robots: { index: false, follow: false, nocache: true },
 };
@@ -28,7 +28,7 @@ export default async function ComingSoonPage() {
         <div className="coming-soon__stage">
           <div className="coming-soon__intro">
             <p className="coming-soon__eyebrow">Coming soon</p>
-            <h1 id="coming-soon-title">A little thanks is almost here.</h1>
+            <h1 id="coming-soon-title">A little tip is almost here.</h1>
             <p className="coming-soon__lede">
               TipMe opens at midnight in Lagos.
             </p>

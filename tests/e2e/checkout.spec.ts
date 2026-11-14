@@ -55,7 +55,7 @@ async function tip(
   return new URL(page.url()).pathname.split('/')[2] ?? '';
 }
 const paidHeading = (page: Page) =>
-  page.getByRole('heading', { name: /^.+ got your thanks\.$/ });
+  page.getByRole('heading', { name: /^.+ got your tip\.$/ });
 
 test('a supporter can attach a structured purpose to a tip', async ({
   page,
@@ -229,7 +229,7 @@ test('while checking, one quiet pulse and no celebration', async ({ page }) => {
 test('once confirmed, one moment and then the receipt', async ({ page }) => {
   await tip(page, { handle: 'ada' });
   const live = page.getByRole('status').filter({
-    has: page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    has: page.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   });
   await expect(live).toBeVisible();
   await expect(page.locator('.tm-celebration')).toHaveCount(1);
@@ -262,7 +262,7 @@ test('the whole page name leads the thank-you and the failure, not its first wor
   });
   await tip(page, { handle: 'ada' });
   await expect(
-    page.getByRole('heading', { name: 'Lagos Bakery got your thanks.' }),
+    page.getByRole('heading', { name: 'Lagos Bakery got your tip.' }),
   ).toBeVisible();
   await page.unroute('**/v1/tips/*/status');
   await page.route('**/v1/tips/*/status', async (route) => {
@@ -323,7 +323,7 @@ test('one status region stays mounted from checking to confirmed, so the change 
         (window as unknown as { __live: Element }).__live,
     ),
   ).toBe(true);
-  await expect(live).toContainText('got your thanks.');
+  await expect(live).toContainText('got your tip.');
 });
 
 test('in forced colours the thank-you slab and receipt keep an edge', async ({
@@ -405,7 +405,7 @@ test('the thank-you and receipt fit a phone @mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await tip(page, { handle: 'ada' });
   await expect(
-    page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    page.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Your receipt' }),

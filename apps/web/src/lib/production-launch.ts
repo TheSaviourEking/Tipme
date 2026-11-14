@@ -94,6 +94,8 @@ export function launchDecision({
     path === '/icons/192.png' ||
     path === '/icons/512-maskable.png' ||
     path === '/opengraph-image' ||
+    // The logo every email loads (packages/mail layout.ts), exact names only.
+    /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/.test(path) ||
     path.startsWith('/coming-soon/opengraph-image')
   )
     return 'exempt';

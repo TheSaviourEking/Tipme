@@ -8,7 +8,10 @@ import {
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { ADA } from '../../packages/database/test/integration/helpers.mjs';
+import {
+  ADA,
+  atLaunchProPrice,
+} from '../../packages/database/test/integration/helpers.mjs';
 
 // Paid Pro, plan Task 5/6 (ADR-0015): an event from TipMe's own account (scope platform) goes to Pro
 // billing and nowhere else; the read-back decides. Events are shaped as the adapter normalises
@@ -19,6 +22,8 @@ async function openPurchase(t) {
   const database = await openTestDatabase();
   t.after(() => database.close());
   await database.reset();
+  // How a Pro payment is confirmed, at the ₦2,500 these figures were written for.
+  await atLaunchProPrice(database);
   await seedDemoProfiles(database.db);
   const { db } = database;
   const fake = {

@@ -1,8 +1,8 @@
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Container, ProBadge } from '@tipme/ui';
 import { ProOffer } from '@/components/marketing/pro-offer';
 import { formatNaira } from '@/lib/demo-amount';
-import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
+import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
@@ -15,7 +15,7 @@ type Item = { name: string; detail: string; coming?: true };
 
 // The ProPage board (approved 11 Nov 2026). "Coming" comes off an item only when it ships to
 // everyone on Pro: earnings, the recap, Campaigns and priority support shipped with #188.
-const MIN_TIP = formatNaira(FEE_POLICY_V1.minTipMinor);
+const MIN_TIP = formatNaira(CURRENT_FEE_POLICY.minTipMinor);
 const GROUPS: { title: string; line: string; items: Item[] }[] = [
   {
     title: 'Personalise',
@@ -104,7 +104,7 @@ const GROUPS: { title: string; line: string; items: Item[] }[] = [
 ];
 
 const FREE_KEEPS = [
-  'Receiving tips, with no monthly fee',
+  `Receiving tips, with no monthly fee: TipMe keeps ${FREE_SHARE_PERCENT}% of each tip`,
   'Your page, username, photo and cover',
   'Your QR code in three looks, ready to print',
   'Withdrawals to your bank',
@@ -126,7 +126,7 @@ const FAQ = [
   },
   {
     q: 'Does Pro change what TipMe keeps?',
-    a: `No. TipMe keeps ${TIPME_SHARE_PERCENT}% of each tip on both plans, and withdrawals work the same.`,
+    a: `Yes. On Pro, TipMe keeps ${PRO_SHARE_PERCENT}% of each tip instead of ${FREE_SHARE_PERCENT}%, processing included. The rate is set when a supporter sees the amount, so a tip already on its way keeps its rate. Withdrawals work the same on both plans.`,
   },
   {
     q: 'Does the Pro badge mean TipMe checked me?',
@@ -173,7 +173,10 @@ export default function ProPage() {
               where your tips come from.
             </p>
           </div>
-          <ProOffer sharePercent={TIPME_SHARE_PERCENT} />
+          <ProOffer
+            freePercent={FREE_SHARE_PERCENT}
+            proPercent={PRO_SHARE_PERCENT}
+          />
         </section>
       </Container>
 

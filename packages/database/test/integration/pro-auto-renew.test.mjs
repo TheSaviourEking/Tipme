@@ -15,7 +15,7 @@ import {
   turnOffProAutoRenew,
 } from '../../dist/index.js';
 import { UncertainProviderOutcomeError } from '../../../payments/dist/index.js';
-import { ADA, useDatabase } from './helpers.mjs';
+import { ADA, atLaunchProPrice, useDatabase } from './helpers.mjs';
 
 /*
  * Paid Pro, plan Task 10 (ruling 9, behind PRO_AUTO_RENEW): opted into on a card checkout, the
@@ -31,6 +31,7 @@ const DAY = 24 * HOUR;
 async function setup(t) {
   const db = await useDatabase(t);
   await db.fresh();
+  await atLaunchProPrice(db);
   await db.pool.query(
     `UPDATE users SET email = 'ada@example.com', email_verified_at = now()
        WHERE id = (SELECT user_id FROM profiles WHERE id = $1)`,
