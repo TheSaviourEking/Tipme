@@ -97,3 +97,12 @@ test('no shipped family carries a Reserved Font Name it would need permission to
       );
   }
 });
+
+test('each font lists exactly the required characters it cannot draw', () => {
+  for (const f of STUDIO_FONTS) {
+    const map = woff2CharacterMap(bytesOf(f.files[0].path));
+    const missing = STUDIO_REQUIRED_CODEPOINTS.filter((c) => !map.has(c));
+    assert.deepEqual([...f.missing], missing, f.id);
+    assert.equal(f.wordFallback, missing.length > 0, f.id);
+  }
+});
