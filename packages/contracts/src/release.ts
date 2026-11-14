@@ -16,6 +16,13 @@ export interface ReleaseInfo {
    * create a business on /for-businesses and in the header; off, they see the coming-soon form.
    */
   business: boolean;
+  /**
+   * Business sign-up (BUSINESS_SIGNUP_ENABLED, on top of `business`): the "Get tipped" / "For
+   * businesses" fork, a business with no personal page, and the account-menu switcher.
+   */
+  businessSignup: boolean;
+  /** Co-owners and handover (BUSINESS_OWNERS_ENABLED, Phase E; not built yet). */
+  businessOwners: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

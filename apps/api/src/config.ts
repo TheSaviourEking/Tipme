@@ -247,6 +247,12 @@ export const apiConfigSchema = z
     // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
     BUSINESS_SHARES_ENABLED: flag,
     TEAM_TIPS_ENABLED: flag,
+    // Business sign-up (plan 2026-11-14, Phase D), on top of BUSINESS_ENABLED and off by default:
+    // the sign-up fork, a business with no personal page, and the account-menu switcher. Off: sign-in
+    // never reports managesBusiness, so every login without a page goes to /sign-up as today.
+    BUSINESS_SIGNUP_ENABLED: flag,
+    // Co-owners and handover (Phase E). Only reported by /health/release until Phase E is built.
+    BUSINESS_OWNERS_ENABLED: flag,
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
