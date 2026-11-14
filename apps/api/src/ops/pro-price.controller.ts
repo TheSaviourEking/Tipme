@@ -35,7 +35,8 @@ import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 
-const wire = (row: ProPriceRow): OpsProPriceRow => ({
+/** One price row as staff see it (shared with the Business Pro price screen). */
+export const wireProPrice = (row: ProPriceRow): OpsProPriceRow => ({
   id: row.id,
   amountMinor: String(row.amountMinor),
   currency: row.currency,
@@ -44,6 +45,7 @@ const wire = (row: ProPriceRow): OpsProPriceRow => ({
   approvedBy: row.approvedBy,
   reason: row.reason,
   createdAt: row.createdAt.toISOString(),
+  plan: row.plan,
 });
 
 /**
@@ -65,8 +67,8 @@ export class OpsProPriceController {
       waitingProPriceRequest(this.database.db),
     ]);
     return {
-      current: current ? wire(current) : null,
-      history: history.map(wire),
+      current: current ? wireProPrice(current) : null,
+      history: history.map(wireProPrice),
       limits: {
         minMinor: String(PRO_PRICE_MIN_MINOR),
         maxMinor: String(PRO_PRICE_MAX_MINOR),

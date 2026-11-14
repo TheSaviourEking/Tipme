@@ -52,9 +52,10 @@ const LINKS: {
     needs: ['usernames.manage'],
   },
   {
-    // Paid Pro (ADR-0015): the monthly price, for new months only.
+    // Paid Pro (ADR-0015): the monthly prices, personal and (with BUSINESS_PRO_ENABLED) Business
+    // Pro, for new months only.
     href: '/ops/pro-price',
-    label: 'Pro price',
+    label: 'Prices',
     group: 'Work',
     needs: ['pro.price'],
   },

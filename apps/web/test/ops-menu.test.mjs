@@ -192,12 +192,12 @@ test('Changelog sits in Email and records, after Audit log, for either changelog
   );
 });
 
-test('Pro price sits in Work, after Usernames, only with pro.price', () => {
+test('Prices (personal and Business Pro) sits in Work, after Usernames, only with pro.price', () => {
   assert.ok(!hrefs(['fees.manage']).includes('/ops/pro-price'));
   assert.deepEqual(
     opsMenuGroups(['pro.price', 'usernames.manage'])
       .find((group) => group.label === 'Work')
       ?.links.map((link) => link.label),
-    ['Pages', 'Usernames', 'Pro price'],
+    ['Pages', 'Usernames', 'Prices'],
   );
 });

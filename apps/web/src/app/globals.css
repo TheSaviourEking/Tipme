@@ -12630,6 +12630,15 @@ body:has(.business-public) > .site-footer {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
+/* Prices (board BusinessPro section 4): Personal Pro and Business Pro side by side, stacked on a
+   phone. Each card keeps its own stepper and reason. */
+.ops-prices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
 /* ---- Pro insights: earnings, Campaign Studio, monthly recap, Get help (11 Nov 2026) ---- */
 
 .earnings,

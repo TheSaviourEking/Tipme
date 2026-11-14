@@ -575,6 +575,40 @@ const proPriceChange = acting<{ amountMinor: string }>({
     })),
 });
 
+/*
+ * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
+ * plan 'business'. Pinned on the current business price only, so a personal change never makes it
+ * stale (and the other way round).
+ */
+const businessProPriceChange = acting<{ amountMinor: string }>({
+  name: 'business_pro_price.change',
+  permission: 'pro.price',
+  target: () => 'business_pro_price',
+  current: async (tx) => {
+    const price = await currentProPrice(tx, new Date(), 'business');
+    return price
+      ? { id: price.id, amountMinor: String(price.amountMinor) }
+      : null;
+  },
+  describe: async (tx, { amountMinor }) => {
+    const to = checkedProPrice(amountMinor);
+    const from = await currentProPrice(tx, new Date(), 'business');
+    return `Change the Business Pro price ${from ? `from ${nairaOf(from.amountMinor)} ` : ''}to ${nairaOf(to)} a month, for new months only`;
+  },
+  act: (tx, { amountMinor }, context) =>
+    setProPrice(tx, {
+      amountMinor: checkedProPrice(amountMinor),
+      plan: 'business',
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      amountMinor: String(set.amountMinor),
+    })),
+});
+
 /**
  * Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month, on the member's request, within
  * 14 days. A second person decides; neither the page's owner nor anyone behind its mailbox can.
@@ -1108,6 +1142,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);
   registerSeriousAction(proRefund);
+  registerSeriousAction(businessProPriceChange);
 }
 
 /* Routes whose seriousness depends on what is being done */

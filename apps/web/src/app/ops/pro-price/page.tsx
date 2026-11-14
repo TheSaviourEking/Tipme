@@ -36,54 +36,53 @@ function who(row: OpsProPriceRow): string {
     : `${asked}, alone (no second person)`;
 }
 
+/** Each price this screen sets: personal Pro always; Business Pro once its route answers. */
+const PLANS = {
+  personal: {
+    title: 'Personal Pro',
+    path: '/v1/ops/pro-price',
+    testId: 'pro-price',
+    shownOn: 'the Pro page',
+  },
+  business: {
+    title: 'Business Pro',
+    path: '/v1/ops/business-pro-price',
+    testId: 'business-pro-price',
+    shownOn: 'Business → Plan',
+  },
+} as const;
+type Plan = keyof typeof PLANS;
+
+const PLAN_WORD: Record<OpsProPriceRow['plan'], string> = {
+  personal: 'Personal Pro',
+  business: 'Business Pro',
+};
+
 /**
- * The Pro price (board OpsProPrice; ADR-0015). One month of Pro costs what this says, for new
- * months only. A change needs a second person; a lone admin's change runs with an alert.
+ * One price's card: what it is now, and a change with a reason. A change needs a second person; a
+ * lone admin's change runs with an alert. Each card asks on its own, so a change waiting for one
+ * never touches the other.
  */
-export default function ProPricePage() {
+function PriceCard({
+  plan,
+  state,
+  onChanged,
+}: {
+  plan: Plan;
+  state: OpsProPrice;
+  onChanged: () => Promise<void>;
+}) {
   const id = useId();
-  const [state, setState] = useState<OpsProPrice | null>(null);
-  const [failed, setFailed] = useState(false);
-  const [price, setPrice] = useState<bigint | null>(null);
+  const words = PLANS[plan];
+  const live = state.current ? BigInt(state.current.amountMinor) : null;
+  const [price, setPrice] = useState<bigint | null>(live);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
 
-  const apply = useCallback((result: SessionResult<OpsProPrice>) => {
-    if (!result.ok) return setFailed(true);
-    setState(result.data);
-    setPrice(
-      (current) =>
-        current ??
-        (result.data.current ? BigInt(result.data.current.amountMinor) : null),
-    );
-  }, []);
-
-  useEffect(() => {
-    void opsFetch<OpsProPrice>('/v1/ops/pro-price').then(apply);
-  }, [apply]);
-
-  if (failed)
-    return (
-      <section className="dashboard-section">
-        <h1>Pro price</h1>
-        <Notice tone="error" title="Couldn’t load the Pro price">
-          Your role may not include it, or the connection failed.
-        </Notice>
-      </section>
-    );
-  if (!state)
-    return (
-      <section className="dashboard-section">
-        <h1>Pro price</h1>
-        <Skeleton label="Loading the Pro price" />
-      </section>
-    );
-
   const min = BigInt(state.limits.minMinor);
   const max = BigInt(state.limits.maxMinor);
-  const shown = price ?? min;
-  const live = state.current ? BigInt(state.current.amountMinor) : null;
+  const shown = price ?? live ?? min;
   const clamp = (value: bigint) =>
     value < min ? min : value > max ? max : value;
 
@@ -97,7 +96,7 @@ export default function ProPricePage() {
       return setError('Please write a reason of at least 10 characters.');
     setBusy(true);
     setError('');
-    const answer = await opsAct<OpsProPrice>('/v1/ops/pro-price', {
+    const answer = await opsAct<OpsProPrice>(words.path, {
       method: 'POST',
       body: { amountMinor: String(shown), reason },
     });
@@ -112,35 +111,27 @@ export default function ProPricePage() {
     setOutcome(
       outcomeOf(
         answer,
-        `The Pro price is now ${naira(shown)} a month for new months.`,
-        'The price on the Pro page stays the same until then.',
+        `The ${words.title} price is now ${naira(shown)} a month for new months.`,
+        `The price in ${words.shownOn} stays the same until then.`,
       ),
     );
-    apply(await opsFetch<OpsProPrice>('/v1/ops/pro-price'));
+    await onChanged();
   };
 
   return (
-    <section className="dashboard-section">
-      <h1>Pro price</h1>
-      <p className="tm-hint">
-        This is the price of a month of Pro. A change applies to new months
-        only: months already paid or being paid aren’t changed.
-      </p>
-
+    <section aria-label={`${words.title} price`}>
       <Card className="settings-section">
-        <h2>On the Pro page now</h2>
-        <p data-testid="pro-price-live">
+        <h2>{words.title}</h2>
+        <p data-testid={`${words.testId}-live`}>
           <strong>
             {live === null ? 'Not set' : `${naira(live)} a month`}
           </strong>
         </p>
         {state.current && (
-          <p className="tm-hint">Since {when(state.current.effectiveFrom)}</p>
+          <p className="tm-hint">
+            In {words.shownOn} since {when(state.current.effectiveFrom)}
+          </p>
         )}
-      </Card>
-
-      <Card className="settings-section">
-        <h2>Change the price</h2>
         {outcome && <ActionOutcome outcome={outcome} />}
         {state.waitingRequestId && !outcome && (
           <Notice tone="neutral" title="Waiting for a second person">
@@ -163,7 +154,7 @@ export default function ProPricePage() {
             >
               −
             </Button>
-            <output aria-live="polite" data-testid="pro-price-new">
+            <output aria-live="polite" data-testid={`${words.testId}-new`}>
               {naira(shown)}
             </output>
             <Button
@@ -191,25 +182,128 @@ export default function ProPricePage() {
           <Button type="submit" disabled={busy} aria-busy={busy}>
             Ask for approval
           </Button>
-          <p className="tm-hint">
-            Another qualified person approves. A lone admin saves it alone, with
-            an alert.
-          </p>
         </form>
       </Card>
+    </section>
+  );
+}
+
+/** Both histories as one list, newest first, each row with its plan and the price it replaced. */
+function mergedHistory(states: OpsProPrice[]) {
+  const rows = states.flatMap((state) => state.history);
+  const newestFirst = [...rows].sort(
+    (a, b) =>
+      b.effectiveFrom.localeCompare(a.effectiveFrom) ||
+      b.createdAt.localeCompare(a.createdAt),
+  );
+  return newestFirst.map((row) => {
+    const before = newestFirst.find(
+      (other) =>
+        other.plan === row.plan &&
+        other !== row &&
+        (other.effectiveFrom < row.effectiveFrom ||
+          (other.effectiveFrom === row.effectiveFrom &&
+            other.createdAt < row.createdAt)),
+    );
+    return { row, was: before ? BigInt(before.amountMinor) : null };
+  });
+}
+
+/** Both prices at once; Business Pro's is 404 while BUSINESS_PRO_ENABLED is off. */
+const readBoth = () =>
+  Promise.all([
+    opsFetch<OpsProPrice>(PLANS.personal.path),
+    opsFetch<OpsProPrice>(PLANS.business.path),
+  ]);
+
+/**
+ * Prices (board BusinessPro section 4; board OpsProPrice; ADR-0015): what one month of Pro costs,
+ * personal and, with BUSINESS_PRO_ENABLED on, Business Pro. A change applies to new months only.
+ * The Business Pro card shows only when its route answers (it is 404 with the flag off).
+ */
+export default function PricesPage() {
+  const id = useId();
+  const [states, setStates] = useState<Partial<Record<Plan, OpsProPrice>>>({});
+  const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const apply = useCallback(
+    ([personal, business]: SessionResult<OpsProPrice>[]) => {
+      if (!personal?.ok) return setFailed(true);
+      setStates({
+        personal: personal.data,
+        business: business?.ok ? business.data : undefined,
+      });
+      setLoaded(true);
+    },
+    [],
+  );
+  const load = useCallback(async () => apply(await readBoth()), [apply]);
+
+  useEffect(() => {
+    void readBoth().then(apply);
+  }, [apply]);
+
+  if (failed)
+    return (
+      <section className="dashboard-section">
+        <h1>Prices</h1>
+        <Notice tone="error" title="Couldn’t load the prices">
+          Your role may not include them, or the connection failed.
+        </Notice>
+      </section>
+    );
+  if (!loaded || !states.personal)
+    return (
+      <section className="dashboard-section">
+        <h1>Prices</h1>
+        <Skeleton label="Loading the prices" />
+      </section>
+    );
+
+  const shownStates = [states.personal, states.business].filter(
+    (state): state is OpsProPrice => state !== undefined,
+  );
+  const history = mergedHistory(shownStates);
+
+  return (
+    <section className="dashboard-section">
+      <h1>Prices</h1>
+      <p className="tm-hint">
+        What one month costs, shown on the Pro page
+        {states.business ? ' and in Business → Plan' : ''}. A change applies to
+        new months only: months already paid or being paid aren’t changed.
+      </p>
+
+      <div className="ops-prices">
+        <PriceCard plan="personal" state={states.personal} onChanged={load} />
+        {states.business && (
+          <PriceCard plan="business" state={states.business} onChanged={load} />
+        )}
+      </div>
+
+      <Notice
+        tone="neutral"
+        title="New price applies to the next renewal; the shown price is honoured."
+      >
+        Someone mid-purchase pays what they saw, or is asked to confirm the new
+        price. Another qualified person approves each change; a lone admin saves
+        it alone, with an alert.
+      </Notice>
 
       <Card className="settings-section">
         <h2 id={`${id}-history`}>History</h2>
-        {state.history.length === 0 ? (
+        {history.length === 0 ? (
           <EmptyState title="No changes yet">
             Prices appear here once set.
           </EmptyState>
         ) : (
           <ol aria-labelledby={`${id}-history`} className="ops-list">
-            {state.history.map((row) => (
+            {history.map(({ row, was }) => (
               <li key={row.id}>
                 <strong>{naira(BigInt(row.amountMinor))} a month</strong> ·{' '}
-                {when(row.effectiveFrom)} · {who(row)}
+                {PLAN_WORD[row.plan]} · {when(row.effectiveFrom)} · {who(row)}
+                {was !== null && <> · was {naira(was)}</>}
                 <br />
                 <span className="tm-hint">{row.reason}</span>
               </li>

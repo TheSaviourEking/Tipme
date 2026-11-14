@@ -25,6 +25,9 @@ const services = () => ({
 
 let database;
 let stack;
+// Business Pro (plan Task A5): a second API with BUSINESS_ENABLED and BUSINESS_PRO_ENABLED on,
+// started by the last test only, so no reset ever races its start.
+let proStack;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
@@ -36,7 +39,8 @@ before(async () => {
   });
 });
 after(async () => {
-  await stack.stop();
+  await stack?.stop();
+  await proStack?.stop();
   await database.close();
 });
 
@@ -87,9 +91,9 @@ async function person({ roleId = 'owner' } = {}) {
   return id;
 }
 
-const ask = (actorId, amountMinor) =>
+const ask = (actorId, amountMinor, name = 'pro_price.change') =>
   ops.requestSeriousAction(database.db, {
-    name: 'pro_price.change',
+    name,
     payload: { amountMinor },
     actorId,
     grantId: people.get(actorId).grantId,
@@ -109,6 +113,10 @@ const approve = (requestId, actorId) =>
   });
 const price = async () =>
   (await ops.currentProPrice(database.db))?.amountMinor ?? null;
+const businessPrice = async () =>
+  (await ops.currentProPrice(database.db, new Date(), 'business'))
+    ?.amountMinor ?? null;
+const BUSINESS = 'business_pro_price.change';
 
 test('GET /v1/pro/price returns 250000 NGN a month, cached publicly for 60 seconds', async () => {
   const response = await fetch(`${stack.api}/v1/pro/price`);
@@ -125,7 +133,7 @@ test('GET /v1/pro/price returns 250000 NGN a month, cached publicly for 60 secon
 
 test('the launch price is seeded with the owner’s reason', async () => {
   const rows = await q(
-    `SELECT amount_minor, currency, set_by, reason FROM pro_prices`,
+    `SELECT amount_minor, currency, set_by, reason FROM pro_prices WHERE plan = 'personal'`,
   );
   assert.equal(rows.length, 1);
   assert.equal(rows[0].amount_minor, '250000');
@@ -289,4 +297,134 @@ test('a price set for later is not the current price until then', async () => {
     ).amountMinor,
     400000n,
   );
+});
+
+// ---- Business Pro (plan Task A5): its own price, changed the same way ----
+
+test('a Business Pro price change waits for a second person', async () => {
+  const asker = await person();
+  const approver = await person();
+  const outcome = await ask(asker, '750000', BUSINESS);
+  assert.equal(outcome.state, 'pending');
+  const [row] = await q(`SELECT * FROM approval_requests WHERE id = $1`, [
+    outcome.requestId,
+  ]);
+  assert.equal(row.permission, 'pro.price');
+  assert.equal(
+    row.summary,
+    'Change the Business Pro price from ₦7,000 to ₦7,500 a month, for new months only',
+  );
+  assert.equal(await businessPrice(), 700000n);
+  assert.equal(await price(), 250000n);
+  const approved = await approve(outcome.requestId, approver);
+  assert.equal(approved.status, 'approved', JSON.stringify(approved));
+  assert.equal(await businessPrice(), 750000n);
+  assert.equal(await price(), 250000n);
+  const [audit] = await q(
+    `SELECT staff_user_id, reason FROM audit_events WHERE action = 'business_pro.price_changed'`,
+  );
+  assert.equal(audit.staff_user_id, asker);
+  assert.match(audit.reason, /"from":"700000"/);
+  assert.match(audit.reason, /"to":"750000"/);
+});
+
+test('a lone admin changes the Business Pro price alone, with the alert', async () => {
+  const lone = await person();
+  const outcome = await ask(lone, '750000', BUSINESS);
+  assert.equal(outcome.state, 'ran');
+  assert.equal(outcome.aloneReason, 'no_second_person');
+  assert.equal(await businessPrice(), 750000n);
+  assert.equal(await price(), 250000n);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'ops.acted_alone'`,
+      )
+    ).length,
+    1,
+  );
+});
+
+test('a business price change never touches a waiting personal request', async () => {
+  const asker = await person();
+  const approver = await person();
+  // A code is accepted once: the second approval is someone else's.
+  const another = await person();
+  const personal = await ask(asker, '300000');
+  const business = await ask(asker, '750000', BUSINESS);
+  assert.equal(
+    await ops.waitingProPriceRequest(database.db),
+    personal.requestId,
+  );
+  assert.equal(
+    await ops.waitingProPriceRequest(database.db, BUSINESS),
+    business.requestId,
+  );
+  assert.equal(
+    (await approve(business.requestId, approver)).status,
+    'approved',
+  );
+  // The personal request is still waiting, and not stale: its price didn't move.
+  assert.equal(
+    await ops.waitingProPriceRequest(database.db),
+    personal.requestId,
+  );
+  assert.equal((await approve(personal.requestId, another)).status, 'approved');
+  assert.equal(await price(), 300000n);
+  assert.equal(await businessPrice(), 750000n);
+});
+
+test('/v1/ops/business-pro-price is 404 with BUSINESS_PRO_ENABLED off', async () => {
+  const session = await opsSignIn(
+    stack.api,
+    database.db,
+    `+23482${String(Date.now()).slice(-8)}`,
+  );
+  const read = await fetch(`${stack.api}/v1/ops/business-pro-price`, {
+    headers: browserHeaders(session.cookie),
+  });
+  assert.equal(read.status, 404);
+});
+
+test('with it on, an owner reads and changes the Business Pro price through the API', async () => {
+  proStack = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      BUSINESS_ENABLED: 'true',
+      BUSINESS_PRO_ENABLED: 'true',
+    },
+  });
+  const session = await opsSignIn(
+    proStack.api,
+    database.db,
+    `+23483${String(Date.now()).slice(-8)}`,
+  );
+  const read = await fetch(`${proStack.api}/v1/ops/business-pro-price`, {
+    headers: browserHeaders(session.cookie),
+  });
+  assert.equal(read.status, 200);
+  const { data } = await read.json();
+  assert.equal(data.current.amountMinor, '700000');
+  assert.equal(data.current.plan, 'business');
+  assert.ok(data.history.every((row) => row.plan === 'business'));
+  assert.equal(data.waitingRequestId, null);
+  // The personal screen's rows say which plan they are.
+  const personal = await fetch(`${proStack.api}/v1/ops/pro-price`, {
+    headers: browserHeaders(session.cookie),
+  });
+  const personalData = (await personal.json()).data;
+  assert.ok(personalData.history.every((row) => row.plan === 'personal'));
+  // Alone (the only staff member), so it runs with the alert.
+  const change = await fetch(`${proStack.api}/v1/ops/business-pro-price`, {
+    method: 'POST',
+    headers: browserHeaders(session.cookie),
+    body: JSON.stringify({ amountMinor: '750000', reason: REASON }),
+  });
+  assert.equal(change.status, 200, await change.clone().text());
+  const changed = (await change.json()).data;
+  assert.equal(changed.current.amountMinor, '750000');
+  assert.equal(changed.actedAlone, true);
+  assert.equal(await price(), 250000n);
 });
