@@ -144,6 +144,13 @@ const REFUSALS: Record<string, string> = {
   CHANGELOG_EDITED_ELSEWHERE:
     'Someone else changed this entry while you were working. Nothing changed; the page now shows their version.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  ANNOUNCEMENT_NOT_FOUND: 'There is no announcement with that id.',
+  ANNOUNCEMENT_EDITED_ELSEWHERE:
+    'Someone else changed this announcement while you were working. Nothing changed; open it again to see their version.',
+  ANNOUNCEMENT_NOT_DRAFT:
+    'This announcement is no longer a draft. Nothing changed.',
+  ANNOUNCEMENT_NO_RECIPIENTS:
+    'Nobody in this audience can get announcements right now. Nothing was sent.',
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Nothing changed; see the reasons by the field.',
   APPROVAL_NO_APPROVER:

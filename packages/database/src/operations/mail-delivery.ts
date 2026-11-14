@@ -172,7 +172,8 @@ export async function mailGate(
       .where(eq(profiles.userId, mail.userId));
     if (profile && !profile.wants) return 'skipped_preference';
   }
-  // The guides switch covers engagement mail with no switch of its own.
+  // The guides switch covers engagement mail with no switch of its own. Marketing needs its own
+  // opt-in, and is held back too by the guides and news switch being off (announcements, 14 Nov 2026).
   if (
     (mail.category === 'engagement' && !type?.preference) ||
     mail.category === 'marketing'
@@ -183,7 +184,10 @@ export async function mailGate(
       .where(eq(mailPreferences.userId, mail.userId));
     if (mail.category === 'engagement' && prefs && !prefs.engagement)
       return 'skipped_preference';
-    if (mail.category === 'marketing' && !prefs?.marketing)
+    if (
+      mail.category === 'marketing' &&
+      (!prefs?.marketing || prefs.engagement === false)
+    )
       return 'skipped_preference';
   }
   return 'send';

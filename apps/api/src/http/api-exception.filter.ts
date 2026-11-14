@@ -105,6 +105,13 @@ const messages: Record<ApiErrorCode, string> = {
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Change it and try again.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  ANNOUNCEMENT_NOT_FOUND: 'There is no announcement with that id.',
+  ANNOUNCEMENT_EDITED_ELSEWHERE:
+    'Someone else changed this announcement while you were working. Nothing changed.',
+  ANNOUNCEMENT_NOT_DRAFT:
+    'This announcement is no longer a draft, so it can’t be changed or sent again.',
+  ANNOUNCEMENT_NO_RECIPIENTS:
+    'Nobody in this audience can get announcements right now. Nothing was sent.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -359,6 +366,17 @@ const operationErrors: Partial<
     code: 'CHANGELOG_EDITED_ELSEWHERE',
   },
   CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  // Staff announcements (14 Nov 2026).
+  ANNOUNCEMENT_NOT_FOUND: { status: 404, code: 'ANNOUNCEMENT_NOT_FOUND' },
+  ANNOUNCEMENT_EDITED_ELSEWHERE: {
+    status: 409,
+    code: 'ANNOUNCEMENT_EDITED_ELSEWHERE',
+  },
+  ANNOUNCEMENT_NOT_DRAFT: { status: 409, code: 'ANNOUNCEMENT_NOT_DRAFT' },
+  ANNOUNCEMENT_NO_RECIPIENTS: {
+    status: 409,
+    code: 'ANNOUNCEMENT_NO_RECIPIENTS',
+  },
   // Pro insights (11 Nov 2026).
   CAMPAIGN_LIMIT: { status: 409, code: 'CAMPAIGN_LIMIT' },
   CAMPAIGN_SLUG_TAKEN: { status: 409, code: 'CAMPAIGN_SLUG_TAKEN' },

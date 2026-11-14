@@ -103,6 +103,13 @@ const LINKS: {
     needs: ['changelog.edit', 'changelog.publish'],
   },
   {
+    // Staff announcements (14 Nov 2026): one email to many people, sent with a second person.
+    href: '/ops/announcements',
+    label: 'Announcements',
+    group: 'Email and records',
+    needs: ['announcements.send'],
+  },
+  {
     href: '/ops/staff/people',
     label: 'People',
     group: 'Staff',

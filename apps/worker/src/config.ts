@@ -70,6 +70,15 @@ export const workerConfigSchema = z
           .map((d) => d.trim().toLowerCase())
           .filter(Boolean),
       ),
+    // Staff announcements (14 Nov 2026): emails queued per minute, at most. ZeptoMail publishes no
+    // per-minute limit, only a daily limit per Mail Agent (shared with sign-in codes) and a ban on
+    // bulk sending; 60 a minute keeps an announcement a slow trickle behind every other email.
+    ANNOUNCEMENT_SENDS_PER_MINUTE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(600)
+      .default(60),
     // Links in emails point here.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })

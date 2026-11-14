@@ -49,6 +49,7 @@ import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
+import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
 import {
   checkedProPrice,
@@ -1092,6 +1093,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);
   registerSeriousAction(proRefund);
+  registerSeriousAction(announcementSendAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

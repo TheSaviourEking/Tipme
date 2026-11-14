@@ -58,6 +58,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | Permission | Routes it unlocks |
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
+| `announcements.send` | GET `/v1/ops/announcements`<br>POST `/v1/ops/announcements`<br>GET `/v1/ops/announcements/{id}`<br>PUT `/v1/ops/announcements/{id}`<br>POST `/v1/ops/announcements/{id}/cancel`<br>POST `/v1/ops/announcements/{id}/send`<br>POST `/v1/ops/announcements/{id}/test`<br>POST `/v1/ops/announcements/preview` |
 | `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
 | `businesses.manage` | POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
 | `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
@@ -324,6 +325,14 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | --- | --- | --- | --- | --- | --- |
 | POST | `/v1/ops/accounts/{userId}/email-recovery` | `recoveries.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/accounts/{userId}/end-sessions` | `recoveries.manage` | yes | – | – |
+| GET | `/v1/ops/announcements` | `announcements.send` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/announcements` | `announcements.send` | yes | `ops_request` | – |
+| GET | `/v1/ops/announcements/{id}` | `announcements.send` | n/a (read) | `ops_read` | – |
+| PUT | `/v1/ops/announcements/{id}` | `announcements.send` | yes | `ops_request` | – |
+| POST | `/v1/ops/announcements/{id}/cancel` | `announcements.send` | yes | `ops_request` | – |
+| POST | `/v1/ops/announcements/{id}/send` | `announcements.send` | yes | `ops_request` | – |
+| POST | `/v1/ops/announcements/{id}/test` | `announcements.send` | yes | `ops_request` | – |
+| POST | `/v1/ops/announcements/preview` | `announcements.send` | yes | `ops_read` | – |
 | GET | `/v1/ops/audit` | `audit.view` | n/a (read) | – | – |
 | POST | `/v1/ops/bachs/account-recovery` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/bachs/checkout-recovery` | `payments.repair` | yes | – | – |
