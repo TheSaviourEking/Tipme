@@ -22,6 +22,11 @@ export const FEATURE_SWITCHES = [
   'page_studio',
   // Returning TipMe's fee on a refunded tip, PR #193 (feat/business-r2-b): registered likewise.
   'refund_fee_return',
+  // Merge train 2 (owner, 14 Nov 2026: fewer variables): each PR's flag became a switch.
+  'business_pro',
+  'business_signup',
+  'business_owners',
+  'campaign_pages',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -138,6 +143,38 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: truthy('REFUND_FEE_RETURN'),
+  },
+  business_pro: {
+    label: 'Business Pro',
+    description:
+      'Business plans: Business Free has 3 staff and 1 location, Business Pro 25 of each, and staff see the Business Pro price. Buying Business Pro is not part of this. Needs TipMe for businesses on.',
+    money: false,
+    default: false,
+    env: truthy('BUSINESS_PRO_ENABLED'),
+  },
+  business_signup: {
+    label: 'Business sign-up',
+    description:
+      'People can sign up as a business with no personal page, see “verified” once, and switch between their page and their business in the account menu. Needs TipMe for businesses on.',
+    money: false,
+    default: false,
+    env: truthy('BUSINESS_SIGNUP_ENABLED'),
+  },
+  business_owners: {
+    label: 'Business co-owners',
+    description:
+      'Co-owners and handing a business over (Phase E, not built yet): for now it only tells the web app. Moves no money. Needs TipMe for businesses on.',
+    money: false,
+    default: false,
+    env: truthy('BUSINESS_OWNERS_ENABLED'),
+  },
+  campaign_pages: {
+    label: 'Campaign pages',
+    description:
+      'Pro pages can give a campaign link its own page: a headline, a short description and a cover above the same tip area. Off, campaign links open the main page as before.',
+    money: false,
+    default: false,
+    env: truthy('CAMPAIGN_PAGES_ENABLED'),
   },
 };
 

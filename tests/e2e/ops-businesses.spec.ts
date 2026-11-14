@@ -64,7 +64,8 @@ test('staff find a business with its contact hidden, reveal it with a reason, pa
   );
   // The business's own content never says "approved" (no regulatory claim); the admin menu and
   // notices outside main can mention Approvals. Only what is shown counts: the Overview stays
-  // mounted, hidden, after the client navigation, and its staff timeline can say "approved".
+  // mounted, hidden, after the client navigation, and its staff activity lists any serious action a
+  // second person approved in this shared database (an announcement's send, say).
   await expect(
     page
       .getByRole('main')

@@ -25,6 +25,8 @@ export const MAIL_PROVIDER_LABELS: Record<MailProviderName, string> = {
   mock: 'Pretend provider',
   zeptomail: 'ZeptoMail',
   ses: 'Amazon SES',
+  // Announcements only; never offered as the active provider.
+  brevo: 'Brevo (announcements)',
 };
 
 const sha256 = (value: string) =>

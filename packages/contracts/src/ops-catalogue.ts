@@ -29,6 +29,7 @@ export const OPS_PERMISSIONS = [
   'changelog.publish',
   'pro.price',
   'switches.manage',
+  'announcements.send',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -59,6 +60,14 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     description: 'See health, visibility and market numbers',
     group: 'numbers',
     sensitive: false,
+  },
+  // Staff announcements (owner-approved, 14 Nov 2026): one email to many people. Sensitive, because
+  // sending is a serious action that needs a second person.
+  'announcements.send': {
+    description:
+      'Write announcements by email, and send one to users with a second person',
+    group: 'content',
+    sensitive: true,
   },
   'audit.view': {
     description: 'Read the audit log',
@@ -261,6 +270,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Switch names, states, reasons and staff ids: nobody’s private details; changes nothing.',
   },
+  'OpsBusinessProPriceController.state': {
+    verb: 'GET',
+    permission: 'pro.price',
+    reason:
+      'The Business Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsPagesController.pro': {
     verb: 'GET',
     permission: 'pages.plan',
@@ -277,6 +292,31 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     permission: 'staff.manage',
     reason:
       'A dry run of a role edit, a POST only to carry its body. Writes nothing.',
+  },
+  'OpsAnnouncementsController.list': {
+    verb: 'GET',
+    permission: 'announcements.send',
+    reason:
+      'Announcements staff wrote and how far each has gone: their words and counts, nobody’s details.',
+  },
+  'OpsAnnouncementsController.read': {
+    verb: 'GET',
+    permission: 'announcements.send',
+    reason:
+      'One announcement, its audience count and progress: staff words and numbers only.',
+  },
+  'OpsAnnouncementsController.preview': {
+    verb: 'POST',
+    permission: 'announcements.send',
+    reason:
+      'Renders the email from the text in the body, a POST only to carry it. Writes and sends nothing.',
+  },
+  // Stopping a send in progress has to work first time. Permission, reason and audit still apply.
+  'OpsAnnouncementsController.cancel': {
+    verb: 'POST',
+    permission: 'announcements.send',
+    reason:
+      'Stopping an announcement must work at once; it only stops mail not yet queued.',
   },
   'OpsStaffController.access': {
     verb: 'GET',
@@ -357,6 +397,10 @@ export const SERIOUS_ACTIONS = [
   'pro.refund',
   // Feature switches (owner, 14 Nov 2026): a money switch on or off.
   'feature_switch.set',
+  // Business Pro (plan Task A5): its own monthly price, changed like the personal one.
+  'business_pro_price.change',
+  // Staff announcements (14 Nov 2026): email one announcement to an audience.
+  'announcement.send',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -380,6 +424,8 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'pro_price.change': 'Change the Pro price',
   'pro.refund': 'Refund a Pro card payment',
   'feature_switch.set': 'Turn a money switch on or off',
+  'business_pro_price.change': 'Change the Business Pro price',
+  'announcement.send': 'Send an announcement by email',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -403,4 +449,6 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'pro_price.change': 'pro.price',
     'pro.refund': 'payments.repair',
     'feature_switch.set': 'switches.manage',
+    'business_pro_price.change': 'pro.price',
+    'announcement.send': 'announcements.send',
   };

@@ -216,6 +216,9 @@ test('mail someone is waiting for on screen outranks other security mail', async
     welcome: 2,
     tip_received: 3,
     weekly_report: 3,
+    // Announcements (#213, bulk): after everything else, beside #206's 0 to 3 (merge train 2).
+    announcement: 9,
+    service_notice: 9,
   };
   for (const type of [...waiting, ...Object.keys(others)])
     await enqueueMail(db, sealing, {

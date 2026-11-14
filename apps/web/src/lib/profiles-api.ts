@@ -1,5 +1,5 @@
 import { cacheLife, cacheTag } from 'next/cache';
-import type { PublicProfile } from '@tipme/contracts';
+import type { PublicCampaignPage, PublicProfile } from '@tipme/contracts';
 import { previewServerKey } from '@tipme/domain';
 
 /** The API as reached from the web server (may differ from the browser's address). */
@@ -64,5 +64,51 @@ export async function loadPublicProfile(
   } catch (error) {
     console.error('profile lookup failed', error);
     return 'unreachable';
+  }
+}
+
+const CAMPAIGN_ENDING = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
+
+async function fetchPublicCampaignPage(
+  handle: string,
+  slug: string,
+): Promise<PublicCampaignPage | null> {
+  'use cache';
+  // The main page's cache rules and tag: a save in Campaign Studio revalidates the profile.
+  cacheLife({ stale: 30, revalidate: 30, expire: 300 });
+  cacheTag(profileTag(handle));
+  const password = process.env.PREVIEW_PASSWORD;
+  const response = await fetch(
+    `${API_ORIGIN}/v1/profiles/${encodeURIComponent(handle)}/campaigns/${encodeURIComponent(slug)}`,
+    {
+      redirect: 'manual',
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+      ...(password
+        ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
+        : {}),
+    },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok)
+    throw new Error(`campaign page lookup failed: ${response.status}`);
+  return ((await response.json()) as { data: PublicCampaignPage }).data;
+}
+
+/**
+ * A campaign's own page (Pro), or null: no page, a stopped or unknown campaign, campaign pages
+ * switched off, or any failure. Null always means "show the main page as it is", so a campaign
+ * link never breaks because of this lookup. Failures are not cached.
+ */
+export async function getPublicCampaignPage(
+  handle: string,
+  slug: string,
+): Promise<PublicCampaignPage | null> {
+  if (!/^[A-Za-z0-9_]{3,30}$/.test(handle) || !CAMPAIGN_ENDING.test(slug))
+    return null;
+  try {
+    return await fetchPublicCampaignPage(handle, slug);
+  } catch (error) {
+    console.error('campaign page lookup failed', error);
+    return null;
   }
 }

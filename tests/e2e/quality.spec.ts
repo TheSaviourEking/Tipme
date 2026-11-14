@@ -71,7 +71,8 @@ test('homepage makes creating a recipient page a clear next step', async ({
     page.getByRole('form', { name: 'Claim your link' }),
   ).toHaveAttribute('action', '/sign-up');
   await expect(
-    page.getByRole('main').getByRole('link', { name: 'Claim your username' }),
+    // Business sign-up is on in the e2e stack: "Get tipped".
+    page.getByRole('main').getByRole('link', { name: 'Get tipped' }),
   ).toHaveAttribute('href', '/sign-up');
   await expect(
     page.getByText(/Payments are in test mode/).last(),

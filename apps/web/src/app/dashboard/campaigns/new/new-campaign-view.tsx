@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import {
   CAMPAIGN_NAME_MAX,
   CAMPAIGN_SLUG_PATTERN,
+  type CampaignList,
   type CampaignRow,
 } from '@tipme/contracts';
 import { Button, Card, InputField } from '@tipme/ui';
@@ -27,6 +28,17 @@ export default function NewCampaignPage() {
     text: string;
   } | null>(null);
   const [busy, setBusy] = useState(false);
+  // Pro, with campaign pages switched on: a new campaign starts with a page of its own.
+  const [pages, setPages] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void apiFetch<CampaignList>('/v1/me/campaigns').then((result) => {
+      if (live && result.ok) setPages(result.data.pagesAvailable === true);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
   const ending = ownSlug ? slug : slugFromName(name);
   const prefix = `${origin.replace(/^https?:\/\//, '') || 'usetipme.xyz'}/@${profile.handle}/`;
 
@@ -147,11 +159,20 @@ export default function NewCampaignPage() {
       <Card className="campaign-about">
         <h2>What a campaign is, and isn’t</h2>
         <ul>
-          <li>
-            It is a link to your normal tip page. Supporters see your page
-            exactly as always, with no campaign name.
-          </li>
-          <li>No goal, no target amount, no end date, no stated cause.</li>
+          {pages ? (
+            <li>
+              Its own page, if you want one. A goal is tips toward something,
+              never a promise; there’s no end date and nothing is refunded.
+            </li>
+          ) : (
+            <>
+              <li>
+                It is a link to your normal tip page. Supporters see your page
+                exactly as always, with no campaign name.
+              </li>
+              <li>No goal, no target amount, no end date, no stated cause.</li>
+            </>
+          )}
           <li>
             Stopping a campaign keeps its results; its link then opens your page
             like your usual link, so printed QR codes never break.

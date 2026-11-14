@@ -500,6 +500,10 @@ const MOVED = [
   'ANALYTICS_ENABLED',
   'ADULT_PLATFORM_LINKS',
   'SUPPORTER_RECOGNITION',
+  // Merge train 2: these never shipped as settings; each is a switch from the start.
+  'BUSINESS_PRO_ENABLED',
+  'BUSINESS_SIGNUP_ENABLED',
+  'BUSINESS_OWNERS_ENABLED',
 ];
 
 test('the moved switches are not settings any more: none is required or parsed', async () => {

@@ -52,6 +52,18 @@ Registered for open pull requests, so they can read the switch instead of adding
 | `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (declares the variable; nothing reads it yet)                                                                           |
 | `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`. Its variable defaults on with the pretend provider; the switch defaults off everywhere, as no money switch defaults on |
 
+Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of
+these variables was ever in a deploy file, so nothing needs deleting from the servers; each still seeds its
+switch on a database with no row yet (local runs and the e2e stack, `playwright.config.ts`). Buying Business
+Pro (Phase B) is not here.
+
+| Variable                  | Switch key        | Money | Default | What it does                                                                                     | Pull request |
+| ------------------------- | ----------------- | ----- | ------- | ------------------------------------------------------------------------------------------------ | ------------ |
+| `BUSINESS_PRO_ENABLED`    | `business_pro`    | no    | off     | Business plans: staff and location limits, and the Business Pro price in admin. Needs `business` | #212         |
+| `BUSINESS_SIGNUP_ENABLED` | `business_signup` | no    | off     | Signing up as a business with no personal page, the "verified" moment, the account switcher      | #211         |
+| `BUSINESS_OWNERS_ENABLED` | `business_owners` | no    | off     | Co-owners and handover (Phase E, not built): only reported on `/health/release`; moves no money  | #211         |
+| `CAMPAIGN_PAGES_ENABLED`  | `campaign_pages`  | no    | off     | A campaign link's own page (headline, description, cover) above the same tip area                | #220         |
+
 ### Release day and after
 
 1. **Nothing changes on deploy.** At start, each API and worker process writes any switch that has no row yet:

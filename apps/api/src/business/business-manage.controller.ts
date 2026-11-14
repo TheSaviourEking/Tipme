@@ -30,10 +30,13 @@ import {
   businessDetail,
   closeLocation,
   listManagers,
+  markVerifiedSeen,
   removeManager,
   updateBusiness,
   updateLocation,
+  featureOn,
   type MailSealing,
+  withBusinessPlan,
 } from '@tipme/database';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
@@ -45,6 +48,7 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { BusinessSignupEnabledGuard } from './business-signup.guard.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { signalBusiness } from './business-live.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
@@ -67,6 +71,17 @@ export class BusinessManageController {
     private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
+  /** Business Pro: the plan, usage and lapse join the detail only with the business_pro switch on. */
+  private async withPlan(detail: BusinessDetail): Promise<BusinessDetail> {
+    return (await this.businessPro())
+      ? withBusinessPlan(this.database.db, detail)
+      : detail;
+  }
+
+  private businessPro(): Promise<boolean> {
+    return featureOn(this.database.db, 'business_pro');
+  }
+
   /** Anyone signed in with a proven email (owner's answer Q3). Pending until TipMe verifies it. */
   @Post()
   @HttpCode(201)
@@ -77,7 +92,9 @@ export class BusinessManageController {
     body: BusinessApplication,
   ): Promise<ApiDataResponse<BusinessDetail>> {
     return {
-      data: await applyForBusiness(this.database.db, auth.userId, body),
+      data: await this.withPlan(
+        await applyForBusiness(this.database.db, auth.userId, body),
+      ),
     };
   }
 
@@ -87,7 +104,24 @@ export class BusinessManageController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return { data: await businessDetail(this.database.db, auth.userId, id) };
+    return {
+      data: await this.withPlan(
+        await businessDetail(this.database.db, auth.userId, id, {
+          celebrate: await featureOn(this.database.db, 'business_signup'),
+        }),
+      ),
+    };
+  }
+
+  /** Business sign-up (R19): the "verified" moment was seen. Idempotent. */
+  @Post(':id/verified-seen')
+  @HttpCode(204)
+  @UseGuards(BusinessSignupEnabledGuard)
+  async verifiedSeen(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await markVerifiedSeen(this.database.db, auth.userId, id);
   }
 
   /** Owners. The address (slug) changes only while the business waits to be verified. */
@@ -99,7 +133,7 @@ export class BusinessManageController {
   ): Promise<ApiDataResponse<BusinessDetail>> {
     const data = await updateBusiness(this.database.db, auth.userId, id, body);
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners. */
@@ -110,9 +144,16 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Body(new ZodValidationPipe(locationInputSchema)) body: LocationInput,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    const data = await addLocation(this.database.db, auth.userId, id, body);
+    const data = await addLocation(
+      this.database.db,
+      auth.userId,
+      id,
+      body,
+      new Date(),
+      { enforceLimits: await this.businessPro() },
+    );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners, or that location's manager. */
@@ -131,7 +172,7 @@ export class BusinessManageController {
       body,
     );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   /** Owners. The location page stops showing; the people there stay on the team. */
@@ -149,7 +190,7 @@ export class BusinessManageController {
       locationId,
     );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
-    return { data };
+    return { data: await this.withPlan(data) };
   }
 
   @Get(':id/managers')

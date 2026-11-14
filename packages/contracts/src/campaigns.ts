@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import type { CampaignPageSettings } from './campaign-pages.js';
 
 // Campaign Studio (the ProCampaigns board, approved 11 Nov 2026; owner default ruling 2): a named
-// link and QR for each place the person shares. Only a tracked link: no goal, target, end date or
-// stated purpose. Counts only, never who. The link is `/@handle/<ending>`, which opens the normal
-// tip page with no campaign name on it.
+// link and QR for each place the person shares. Counts only, never who. The link is
+// `/@handle/<ending>`. Pro: its own page if wanted (ProCampaignPages, 14 Nov 2026); never a
+// different person or tip area. Otherwise it opens the normal tip page with no campaign name on it.
 
 export const CAMPAIGN_NAME_MAX = 40;
 /** Lower-case letters, digits and dashes, 1–30, not starting or ending with a dash. */
@@ -57,6 +58,8 @@ export interface CampaignList {
   campaigns: CampaignRow[];
   /** The plain page link, not from a campaign, over the same days. */
   pageLink: CampaignResults;
+  /** Whether new campaigns get their own page (Pro); only while campaign pages are switched on. */
+  pagesAvailable?: boolean;
 }
 
 export interface CampaignWeek extends Omit<CampaignResults, 'visits'> {
@@ -67,6 +70,10 @@ export interface CampaignWeek extends Omit<CampaignResults, 'visits'> {
 export interface CampaignDetail extends CampaignRow {
   handle: string;
   displayName: string;
+  /** The campaign's own page; only while campaign pages are switched on. */
+  page?: CampaignPageSettings;
+  /** Whether this page may use campaign pages now (Pro); only while they are switched on. */
+  pagesAvailable?: boolean;
   /** Since it was made. */
   weeks: CampaignWeek[];
 }

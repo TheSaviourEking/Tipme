@@ -46,10 +46,19 @@ test('the individuals page names creators and streamers and keeps one call to cl
   await expect(
     page.getByText(/Barbers, drivers, streamers, creators/),
   ).toBeVisible();
+  // The header's call to action comes from a server slot and can arrive after the page: wait for
+  // it to settle ("Get tipped" with business sign-up on in this stack) before listing the page's
+  // own claim links, or a link can be swapped out between listing and checking it.
+  await expect(
+    page.getByRole('banner').getByRole('link', { name: 'Get tipped' }),
+  ).toBeVisible();
   const claim = page.getByRole('link', { name: 'Claim your username' });
   await expect(claim.first()).toHaveAttribute('href', '/sign-up');
-  for (const link of await claim.all())
-    await expect(link).toHaveAttribute('href', '/sign-up');
+  const hrefs = await claim.evaluateAll((links) =>
+    links.map((link) => link.getAttribute('href')),
+  );
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) expect(href).toBe('/sign-up');
   const content = await page.content();
   expect(content).not.toContain('₦1,000');
 });
@@ -65,7 +74,8 @@ test('with businesses on, the businesses page invites people to create one', asy
   );
   await expect(
     page.getByRole('link', { name: 'Create your business' }),
-  ).toHaveAttribute('href', '/dashboard/business/apply');
+    // Business sign-up is on in the e2e stack: the business path of sign-up.
+  ).toHaveAttribute('href', '/sign-up?for=business');
   await expect(page.getByLabel('Work email')).toHaveCount(0);
   const main = page.getByRole('main');
   await expect(main).not.toContainText(/₦|\bNGN\b|launch date|\bper month\b/i);
@@ -79,6 +89,11 @@ test('the businesses page is centred: the text and the card sit as one block in 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/for-businesses');
   const hero = page.locator('.business-hero');
+  // The coming-soon fallback also has two parts; measure only once the flags have streamed in and
+  // replaced it, or a part can be swapped out between the count and its box (null).
+  await expect(
+    hero.getByRole('link', { name: 'Create your business' }),
+  ).toBeVisible();
   const parts = hero.locator('> *').filter({ visible: true });
   const text = parts.first();
   const card = parts.last();

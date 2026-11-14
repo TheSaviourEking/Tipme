@@ -15,12 +15,16 @@ import {
 
 // Owner, 14 Nov 2026: switches move from the environment to admin (docs/runbooks/settings-and-switches.md).
 
-test('the registered switches, page_studio and refund_fee_return included for their open PRs', () => {
+test('the registered switches, page_studio and refund_fee_return included for their open PRs, and the train’s', () => {
   assert.deepEqual([...FEATURE_SWITCHES].sort(), [
     'adult_platform_links',
     'analytics',
     'business',
+    'business_owners',
+    'business_pro',
     'business_shares',
+    'business_signup',
+    'campaign_pages',
     'page_studio',
     'pro_auto_renew',
     'pro_billing',
@@ -217,4 +221,35 @@ test('the launch parser moved here and refuses anything but an exact instant, na
     () => parseProductionLaunchAt('2026-10-27T00:00:00'),
     /PRODUCTION_LAUNCH_AT/,
   );
+});
+
+// Train 2 (owner, 14 Nov 2026: fewer environment variables): Business Pro's variable became a switch.
+test('business_pro is a non-money switch, off by default, seeded from BUSINESS_PRO_ENABLED', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.business_pro;
+  assert.equal(entry.money, false);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'BUSINESS_PRO_ENABLED');
+  assert.equal(
+    featureSwitchFromEnv('business_pro', { BUSINESS_PRO_ENABLED: 'true' }),
+    true,
+  );
+});
+
+test('business_signup and business_owners are non-money switches, off by default, seeded from their variables', () => {
+  for (const [key, name] of [
+    ['business_signup', 'BUSINESS_SIGNUP_ENABLED'],
+    ['business_owners', 'BUSINESS_OWNERS_ENABLED'],
+  ]) {
+    const entry = FEATURE_SWITCH_CATALOGUE[key];
+    assert.equal(entry.money, false, key);
+    assert.equal(entry.default, false, key);
+    assert.equal(entry.env.name, name);
+  }
+});
+
+test('campaign_pages is a non-money switch, off by default, seeded from CAMPAIGN_PAGES_ENABLED (#220)', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.campaign_pages;
+  assert.equal(entry.money, false);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'CAMPAIGN_PAGES_ENABLED');
 });

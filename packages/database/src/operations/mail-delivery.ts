@@ -2,6 +2,7 @@ import {
   MAIL_TYPES,
   MailRejectedError,
   MailTemporaryError,
+  isPretendRecipient,
   renderMail,
   resolveMailProvider,
   type MailCategory,
@@ -172,7 +173,8 @@ export async function mailGate(
       .where(eq(profiles.userId, mail.userId));
     if (profile && !profile.wants) return 'skipped_preference';
   }
-  // The guides switch covers engagement mail with no switch of its own.
+  // The guides switch covers engagement mail with no switch of its own. Marketing needs its own
+  // opt-in, and is held back too by the guides and news switch being off (announcements, 14 Nov 2026).
   if (
     (mail.category === 'engagement' && !type?.preference) ||
     mail.category === 'marketing'
@@ -183,7 +185,10 @@ export async function mailGate(
       .where(eq(mailPreferences.userId, mail.userId));
     if (mail.category === 'engagement' && prefs && !prefs.engagement)
       return 'skipped_preference';
-    if (mail.category === 'marketing' && !prefs?.marketing)
+    if (
+      mail.category === 'marketing' &&
+      (!prefs?.marketing || prefs.engagement === false)
+    )
       return 'skipped_preference';
   }
   return 'send';
@@ -359,6 +364,11 @@ export interface MailDeliveryDeps {
   db: Database;
   sealing: MailSealing;
   providers: ReadonlyMap<MailProviderName, MailProvider>;
+  /**
+   * The only provider announcements (bulk types) go through (announcementMailProvider). Null or
+   * left out: none is set up, and announcements fail rather than fall back to `providers`.
+   */
+  announcementProvider?: MailProvider | null;
   activeProvider(): Promise<MailProviderName>;
   overrideFor(userId: string): Promise<MailProviderName | null>;
   /** The mail domain and brand name; each type's sender is an address on it. */
@@ -424,15 +434,48 @@ export async function deliverDueMail(
       });
       continue;
     }
-    const providerName = resolveMailProvider({
-      pinned: mail.pinnedProvider,
-      override: mail.userId ? await deps.overrideFor(mail.userId) : null,
-      active,
-      configured,
-      to: mail.to,
-      pretendDomains: deps.pretendDomains ?? [],
-    });
-    const provider = deps.providers.get(providerName);
+    // Announcements never fall back to the provider that sends sign-in codes (owner, 14 Nov 2026).
+    const bulk = MAIL_TYPES[mail.type]?.bulk === true;
+    const pretend =
+      configured.has('mock') &&
+      isPretendRecipient(mail.to, deps.pretendDomains ?? []);
+    const providerName: MailProviderName | null = bulk
+      ? pretend
+        ? 'mock'
+        : (deps.announcementProvider?.name ?? null)
+      : resolveMailProvider({
+          pinned: mail.pinnedProvider,
+          override: mail.userId ? await deps.overrideFor(mail.userId) : null,
+          active,
+          configured,
+          to: mail.to,
+          pretendDomains: deps.pretendDomains ?? [],
+        });
+    if (providerName === null) {
+      const outcome = await recordMailFailure(deps.db, {
+        id: mail.id,
+        type: mail.type,
+        category: mail.category,
+        provider: null,
+        code: 'announcement_provider_missing',
+        permanent: true,
+        attempts: mail.attempts,
+        claimedAt: mail.claimedAt,
+        now: input.now,
+      });
+      if (outcome === 'failed') result.failed += 1;
+      log({
+        event: 'mail.failed',
+        message_id: mail.id,
+        type: mail.type,
+        code: 'announcement_provider_missing',
+      });
+      continue;
+    }
+    const provider =
+      bulk && !pretend
+        ? (deps.announcementProvider ?? undefined)
+        : deps.providers.get(providerName);
     const fail = async (code: string, permanent: boolean) => {
       const outcome = await recordMailFailure(deps.db, {
         id: mail.id,

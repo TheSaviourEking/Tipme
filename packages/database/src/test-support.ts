@@ -218,6 +218,11 @@ export async function openTestDatabase(): Promise<TestDatabase> {
            VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now() - interval '1 second', 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now() - interval '1 second'),
                   ('00000000-0000-4000-8000-000000500000', 500000, 'NGN', now(), 'Owner''s pricing decision, 12 Nov 2026: Pro is ₦5,000 a month', now())`,
       );
+      // And the launch Business Pro price (Business Pro A1), ₦7,000 a month.
+      await client.query(
+        `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, plan, reason, created_at)
+           VALUES ('00000000-0000-4000-8000-000000700000', 700000, 'NGN', now(), 'business', 'Launch price (owner’s decision, 14 Nov 2026)', now())`,
+      );
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);

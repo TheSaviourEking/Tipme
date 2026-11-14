@@ -3,6 +3,9 @@ import {
   BUSINESS_NOTIFICATION_KINDS,
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
+  ANNOUNCEMENT_AUDIENCES,
+  ANNOUNCEMENT_KINDS,
+  ANNOUNCEMENT_STATUSES,
   OPS_PERMISSIONS,
   type OpsPermission,
   type OpsIssueKind as IssueKind,
@@ -2391,6 +2394,10 @@ const quotedList = (values: readonly string[]) =>
   sql.raw(values.map((value) => `'${value}'`).join(', '));
 
 /** A business account: verified by TipMe staff before its codes go live. */
+/** Business Pro (plan Task A1): a business's plan, and which Pro a price is for. */
+export const BUSINESS_PLANS = ['free', 'pro'] as const;
+export const PRO_PRICE_PLANS = ['personal', 'business'] as const;
+
 export const businesses = pgTable(
   'businesses',
   {
@@ -2413,9 +2420,15 @@ export const businesses = pgTable(
     // `logoVersion` only ever goes up, like a page's `avatarVersion`: a new logo is a new URL.
     logoPath: text('logo_path'),
     logoVersion: integer('logo_version').notNull().default(0),
+    // Business Pro (plan Task A1): a cache of the paid months, like `profiles.plan`; every limit
+    // and Pro-feature check reads it. Only recomputeBusinessPlan writes it.
+    plan: text('plan').notNull().default('free'),
+    // Set when Business Pro ends, cleared when it starts again: drives the lapse banner.
+    proLapsedAt: timestamp('pro_lapsed_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [
+    check('businesses_plan', sql`plan IN ('free', 'pro')`),
     check('businesses_slug', sql`slug ~ ${sql.raw(BUSINESS_SLUG_RE(40))}`),
     check('businesses_name', sql`char_length(name) BETWEEN 1 AND 80`),
     check(
@@ -2506,9 +2519,18 @@ export const businessManagers = pgTable(
     addedBy: uuid('added_by').references(() => users.id),
     createdAt: createdAt(),
     removedAt: timestamp('removed_at', { withTimezone: true }),
+    // Business sign-up (Phase D, R13): a manager with no page is named by this, set from the
+    // sign-up contact name. A page's own name still wins wherever managers are listed.
+    shownName: text('shown_name'),
+    // R19: when this manager saw the once-only "verified" moment.
+    verifiedSeenAt: timestamp('verified_seen_at', { withTimezone: true }),
   },
   (table) => [
     check('business_managers_role', sql`role IN ('owner', 'location_manager')`),
+    check(
+      'business_managers_shown_name',
+      sql`shown_name IS NULL OR char_length(shown_name) BETWEEN 1 AND 60`,
+    ),
     check(
       'business_managers_location',
       sql`(role = 'owner') = (location_id IS NULL)`,
@@ -2947,6 +2969,70 @@ export const tableAssignments = pgTable(
 );
 
 /**
+ * A staff announcement by email (owner-approved, 14 Nov 2026). Staff edit a draft (each edit bumps
+ * `revision`); a second person approves sending the revision asked about. The worker then queues
+ * one `announcement` email per person in batches, walking users by id from `cursor_user_id`, and
+ * only users created by `cutoff` (the approval). Each email's dedupe key is the announcement and
+ * the user, so a batch repeated after a restart queues nobody twice. "Waiting for approval" is a
+ * draft with a pending request, never stored.
+ */
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey(),
+    subject: text('subject').notNull(),
+    preheader: text('preheader').notNull(),
+    text: text('text').notNull(),
+    buttonLabel: text('button_label'),
+    buttonUrl: text('button_url'),
+    audience: text('audience').notNull(),
+    // News (marketing, opt-in) or a service notice (fees, terms: everyone), the owner's ruling.
+    kind: text('kind').notNull().default('news'),
+    status: text('status').notNull().default('draft'),
+    revision: integer('revision').notNull().default(1),
+    // The count when the send was approved: the N in "x of N".
+    recipientCount: integer('recipient_count'),
+    // Emails handed to the mail queue so far: the x.
+    queuedCount: integer('queued_count').notNull().default(0),
+    cursorUserId: uuid('cursor_user_id'),
+    cutoff: timestamp('cutoff', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    requestedBy: uuid('requested_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    sendStartedAt: timestamp('send_started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check('announcements_audience', inList('audience', ANNOUNCEMENT_AUDIENCES)),
+    check('announcements_status', inList('status', ANNOUNCEMENT_STATUSES)),
+    check('announcements_kind', inList('kind', ANNOUNCEMENT_KINDS)),
+    // A service notice concerns every account (contracts: serviceGoesToEveryone).
+    check(
+      'announcements_service_everyone',
+      sql`kind <> 'service' OR audience = 'everyone'`,
+    ),
+    check(
+      'announcements_button',
+      sql`(button_label IS NULL) = (button_url IS NULL)`,
+    ),
+    check(
+      'announcements_counts',
+      sql`queued_count >= 0 AND (recipient_count IS NULL OR recipient_count >= 0)`,
+    ),
+    // The worker's question each tick: what is sending, oldest first.
+    index('announcements_status_created').on(table.status, table.createdAt),
+  ],
+);
+
+/**
  * One entry per pull request merged into dev (changelog plan, 5 Nov 2026). Staff edit the working
  * copy (`user_text`, `audience`, each change bumping `revision`); users only ever read the
  * published copy, which an approval writes. The state (draft, approved, live, recorded, withdrawn)
@@ -3080,10 +3166,14 @@ export const proPrices = pgTable(
     setBy: uuid('set_by').references(() => users.id),
     approvedBy: uuid('approved_by').references(() => users.id),
     reason: text('reason').notNull(),
+    // Which Pro this price is for: a person's page or a business (Business Pro, plan Task A1).
+    plan: text('plan').notNull().default('personal'),
     createdAt: createdAt(),
   },
   (table) => [
     index('pro_prices_effective_from').on(table.effectiveFrom),
+    index('pro_prices_plan_effective_from').on(table.plan, table.effectiveFrom),
+    check('pro_prices_plan', sql`${table.plan} IN ('personal', 'business')`),
     check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
     check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
     check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
@@ -3112,9 +3202,9 @@ export const proPeriods = pgTable(
   'pro_periods',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's month or a business's month (Business Pro): exactly one (`pro_periods_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
     // Null only for periods made in tests; every paid month has its purchase.
     purchaseId: uuid('purchase_id').unique(),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
@@ -3131,6 +3221,14 @@ export const proPeriods = pgTable(
     uniqueIndex('pro_periods_one_scheduled')
       .on(table.profileId)
       .where(sql`${table.status} = 'SCHEDULED'`),
+    unique('pro_periods_business_start').on(table.businessId, table.startsAt),
+    uniqueIndex('pro_periods_business_one_scheduled')
+      .on(table.businessId)
+      .where(sql`${table.status} = 'SCHEDULED'`),
+    check(
+      'pro_periods_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
     index('pro_periods_due').on(table.status, table.endsAt),
     check(
       'pro_periods_status',
@@ -3159,9 +3257,11 @@ export const proPurchases = pgTable(
   'pro_purchases',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's purchase or a business's (Business Pro): exactly one (`pro_purchases_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    // A business purchase: the owner who paid (receipts go to them). Null for a page's own.
+    boughtBy: uuid('bought_by').references(() => users.id),
     method: text('method').notNull(),
     priceId: uuid('price_id')
       .notNull()
@@ -3203,6 +3303,21 @@ export const proPurchases = pgTable(
     uniqueIndex('pro_purchases_one_open')
       .on(table.profileId)
       .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    unique('pro_purchases_business_idempotency').on(
+      table.businessId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('pro_purchases_business_one_open')
+      .on(table.businessId)
+      .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    check(
+      'pro_purchases_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
+    check(
+      'pro_purchases_bought_by',
+      sql`(${table.businessId} IS NULL) = (${table.boughtBy} IS NULL)`,
+    ),
     uniqueIndex('pro_purchases_provider_reference')
       .on(table.provider, table.providerReference)
       .where(sql`${table.providerReference} IS NOT NULL`),
@@ -3227,9 +3342,10 @@ export const proPurchases = pgTable(
 // ---- Pro insights: Campaign Studio, monthly recap, priority support (11 Nov 2026) ----
 
 /**
- * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>` to the
- * normal tip page. Only a tracked link: no goal, target, end date or purpose. Stopping keeps its
- * results; its link keeps opening the page. Never deleted while the page exists.
+ * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>`. On Pro it
+ * may have its own page (headline, description, cover) above the same person's same tip area;
+ * otherwise the link opens the normal tip page. Stopping keeps its results; its link keeps opening
+ * the main page. Never deleted while the page exists.
  */
 export const campaigns = pgTable(
   'campaigns',
@@ -3242,10 +3358,30 @@ export const campaigns = pgTable(
     slug: text('slug').notNull(),
     createdAt: createdAt(),
     stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    // Its own page (Pro; ProCampaignPages, 14 Nov 2026). Shown only while the page is Pro, the
+    // campaign runs, `page_on` is set and there is a headline. Campaigns made before the release
+    // keep `page_on` false, so their links open the normal page as before (ruling G1).
+    pageOn: boolean('page_on').notNull().default(false),
+    headline: text('headline'),
+    description: text('description'),
+    // The page's cover choices (design, colour, animation, motion); all null: "Same as page".
+    coverDesign: text('cover_design'),
+    coverColour: text('cover_colour'),
+    coverAnimation: text('cover_animation'),
+    coverMotion: text('cover_motion'),
   },
   (table) => [
     unique('campaigns_profile_slug').on(table.profileId, table.slug),
     check('campaigns_name_length', sql`char_length(name) BETWEEN 1 AND 40`),
+    check(
+      'campaigns_headline_length',
+      sql`char_length(headline) BETWEEN 1 AND 60`,
+    ),
+    check(
+      'campaigns_description_length',
+      sql`char_length(description) BETWEEN 1 AND 200`,
+    ),
+    check('campaigns_cover_motion', sql`cover_motion IN ('once', 'loop')`),
     check(
       'campaigns_slug_format',
       sql`slug ~ '^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$'`,
@@ -3268,6 +3404,27 @@ export const tipCampaigns = pgTable(
       .references(() => campaigns.id),
   },
   (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
+);
+
+/**
+ * When a page's plan changed (plan 2026-11-14 Task 2). Written only by `recomputePlan`, the one place
+ * `profiles.plan` changes, so statements know which days were Pro and a goal pauses while Pro has
+ * lapsed. Pages that were Pro at the release got one backfilled `pro` row (ruling G6).
+ */
+export const planChanges = pgTable(
+  'plan_changes',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    plan: text('plan').notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('plan_changes_profile_at').on(table.profileId, table.changedAt),
+    check('plan_changes_plan', sql`${table.plan} IN ('free', 'pro')`),
+  ],
 );
 
 /** One recap per Pro page and Lagos month, however often the monthly job runs. */
@@ -3397,3 +3554,35 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Business Pro auto-renew (plan Task A1; rulings R10): from the business balance (a TipMe-scheduled
+ * collection, under PRO_PAY_FROM_BALANCE) or a saved naira card (under PRO_AUTO_RENEW), as an owner
+ * set it. The partner's ids only, never card details. Built by Phase B; Phase A only adds the table.
+ */
+export const businessProAutoRenew = pgTable(
+  'business_pro_auto_renew',
+  {
+    businessId: uuid('business_id')
+      .primaryKey()
+      .references(() => businesses.id),
+    source: text('source').notNull(),
+    enabled: boolean('enabled').notNull(),
+    provider: text('provider'),
+    customerReference: text('customer_reference'),
+    paymentMethodReference: text('payment_method_reference'),
+    failedPeriodId: uuid('failed_period_id'),
+    setBy: uuid('set_by')
+      .notNull()
+      .references(() => users.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  () => [
+    check(
+      'business_pro_auto_renew_source',
+      sql`source IN ('balance', 'saved_card')`,
+    ),
+  ],
+);

@@ -4,12 +4,19 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type {
   BachsPaymentAccountStatus,
+  MyAccount,
+  MyBusinessRoles,
   MyProfile,
   RecoveryEmailStatus,
   VisitsToday,
 } from '@tipme/contracts';
 import { Button, Container, Notice, Skeleton } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
+import { AccountContext } from '@/components/account/account-context';
+import { HatSwitcher } from '@/components/dashboard/hat-switcher';
+import { accountOnlyRoute } from '@/lib/account-only';
+import { loadAccountOnly } from '@/lib/account-only-api';
+import { useReleaseFlags } from '@/components/release-flags-context';
 import { NotificationBell } from '@/components/dashboard/notification-bell';
 import { TestModePill } from '@/components/dashboard/test-mode-pill';
 import {
@@ -29,6 +36,7 @@ import { apiFetch } from '@/lib/session-client';
 import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
 import { BUSINESS_ROLES_CHANGED } from '@/lib/business/setup-api';
 import { keepJoinLink, takeJoinCode } from '@/lib/business/join-link';
+import { WORK_CHANGED } from '@/lib/business/members-api';
 import { hasNewUpdates } from '@/lib/whats-new';
 
 const WHATS_NEW = '/dashboard/whats-new';
@@ -60,6 +68,23 @@ const links = (
       : []),
     ...(business.work
       ? [{ href: '/dashboard/work', label: 'Work', phone: false }]
+      : []),
+    { href: WHATS_NEW, label: 'What’s new', phone: false },
+    { href: '/dashboard/settings', label: 'Settings', phone: true },
+    { href: '/dashboard/help', label: 'Get help', phone: false },
+  ] as const;
+
+/**
+ * Business sign-up, Task D4: the nav for a login with a business and no page. The personal links
+ * are hidden, not greyed; Business takes a place in the phone's bar.
+ */
+const accountOnlyLinks = (business: { business: boolean; work: boolean }) =>
+  [
+    ...(business.business
+      ? [{ href: '/dashboard/business', label: 'Business', phone: true }]
+      : []),
+    ...(business.work
+      ? [{ href: '/dashboard/work', label: 'Work', phone: true }]
       : []),
     { href: WHATS_NEW, label: 'What’s new', phone: false },
     { href: '/dashboard/settings', label: 'Settings', phone: true },
@@ -98,36 +123,79 @@ export function DashboardShell({
   // From the first profile read only (later writes return a profile without it): with live updates
   // off, no stream is opened and the page makes exactly the requests it made before the feature.
   const [liveUpdates, setLiveUpdates] = useState(false);
+  // Business sign-up (Task D4): a login with a business and no page uses the dashboard as itself.
+  const [accountOnly, setAccountOnly] = useState<MyAccount | null>(null);
+  const [accountRead, setAccountRead] = useState(0);
+  const flags = useReleaseFlags();
 
   useEffect(() => {
-    void apiFetch<MyProfile>('/v1/me/profile').then((result) => {
+    let live = true;
+    void apiFetch<MyProfile>('/v1/me/profile').then(async (result) => {
+      if (!live) return;
       if (result.ok) {
         setProfile(result.data);
         setLiveUpdates(result.data.liveUpdates === true);
-      } else {
-        // A business invitation's link (`#join=`) is a fragment: it survives sign-in only in
-        // this tab's storage, and never in `next`.
-        keepJoinLink();
-        if (result.status === 404) router.replace('/sign-up');
-        else router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+        setAccountOnly(null);
+        return;
       }
+      // A business invitation's link (`#join=`) is a fragment: it survives sign-in only in
+      // this tab's storage, and never in `next`.
+      keepJoinLink();
+      if (result.status !== 404) {
+        router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
+        return;
+      }
+      // No page: with business sign-up on, someone who runs a business stays (never /sign-up);
+      // everyone else chooses a handle, as today.
+      const found = await loadAccountOnly(flags);
+      if (!live) return;
+      if (!found) {
+        router.replace('/sign-up');
+        return;
+      }
+      setAccountOnly(found.account);
+      const elsewhere = accountOnlyRoute(pathname, {
+        manages: found.roles.manages.length > 0,
+      });
+      if (elsewhere) router.replace(elsewhere);
     });
-  }, [router, pathname]);
+    return () => {
+      live = false;
+    };
+  }, [router, pathname, accountRead, flags]);
 
   // Once per dashboard load: while BUSINESS_ENABLED is off the API answers 404 and no link shows.
   const [business, setBusiness] = useState({ business: false, work: false });
+  const [roles, setRoles] = useState<MyBusinessRoles | null>(null);
   useEffect(() => {
     const refresh = () =>
       void loadBusinessRoles().then((roles) => {
+        setRoles(roles);
         const links = businessLinks(roles);
         // An invitation link kept through sign-in (or sign-up) leads to Work, where it is answered.
         setBusiness(roles && takeJoinCode() ? { ...links, work: true } : links);
       });
     refresh();
-    // Again after creating a business (PR B1), so its Business link shows without a reload.
+    // Again after creating a business (PR B1), so its Business link shows without a reload; and
+    // after accepting an invitation on Work (business sign-up: a manager with no page).
     window.addEventListener(BUSINESS_ROLES_CHANGED, refresh);
-    return () => window.removeEventListener(BUSINESS_ROLES_CHANGED, refresh);
+    window.addEventListener(WORK_CHANGED, refresh);
+    return () => {
+      window.removeEventListener(BUSINESS_ROLES_CHANGED, refresh);
+      window.removeEventListener(WORK_CHANGED, refresh);
+    };
   }, []);
+  // With a page, the login is drawn from the page's own read: no extra request.
+  const account: MyAccount | null = profile
+    ? {
+        userId: '',
+        email: profile.email ?? null,
+        emailVerified: profile.emailVerified,
+        hasProfile: true,
+        handle: profile.handle,
+      }
+    : accountOnly;
+  const signedIn = Boolean(profile || accountOnly);
 
   // Read on every page change too, so a finished setup clears its notice on the next click.
   const [payments, setPayments] = useState<
@@ -181,7 +249,10 @@ export function DashboardShell({
   const needsFix = new Set(attention?.map((item) => item.navHref));
   const shown = attentionHere(attention, pathname);
   // Read once the profile has loaded (the person is known), and again after a seen call.
-  const whatsNew = useWhatsNewLoader(profile?.handle ?? null);
+  // Read once the login is known: its page, or (business sign-up) the login with no page.
+  const whatsNew = useWhatsNewLoader(
+    profile?.handle ?? accountOnly?.userId ?? null,
+  );
   const newUpdates = hasNewUpdates(whatsNew.status);
 
   const signOut = async () => {
@@ -218,7 +289,10 @@ export function DashboardShell({
           {pathname !== '/dashboard/welcome' && (
             <div className="dashboard-bar">
               <nav aria-label="Dashboard" className="dashboard-nav">
-                {links(profile?.handle ?? null, business).map((link) => (
+                {(accountOnly && !profile
+                  ? accountOnlyLinks(business)
+                  : links(profile?.handle ?? null, business)
+                ).map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
@@ -245,7 +319,7 @@ export function DashboardShell({
                 />
               )}
               {/* Phones only: the tab bar stays four items, so What's new sits beside the bell. */}
-              {profile && (
+              {signedIn && (
                 <Link
                   href={WHATS_NEW}
                   className="dashboard-bar__whats-new"
@@ -258,10 +332,20 @@ export function DashboardShell({
                 </Link>
               )}
               {profile && <NotificationBell />}
-              {profile && (
-                <Button variant="quiet" onClick={() => void signOut()}>
-                  Sign out
-                </Button>
+              {/* Business sign-up (Task D6): the account menu takes Sign out's place. */}
+              {signedIn && account && flags?.businessSignup ? (
+                <HatSwitcher
+                  account={account}
+                  roles={roles}
+                  personName={profile?.displayName ?? null}
+                  onSignOut={() => void signOut()}
+                />
+              ) : (
+                profile && (
+                  <Button variant="quiet" onClick={() => void signOut()}>
+                    Sign out
+                  </Button>
+                )
               )}
             </div>
           )}
@@ -307,21 +391,42 @@ export function DashboardShell({
               ))}
             </section>
           )}
-          {profile ? (
-            <WhatsNewContext.Provider value={whatsNew}>
-              <RecipientContext.Provider
-                value={{
-                  profile,
-                  setProfile,
-                  attention,
-                  refreshAttention,
-                  paymentsNeedSetup:
-                    payments === undefined ? null : Boolean(payments?.enabled),
-                }}
-              >
-                {children}
-              </RecipientContext.Provider>
-            </WhatsNewContext.Provider>
+          {signedIn ? (
+            <AccountContext.Provider
+              value={{
+                account,
+                roles,
+                flags,
+                accountOnly: !profile && Boolean(accountOnly),
+                refreshAccount: () => setAccountRead((n) => n + 1),
+              }}
+            >
+              <WhatsNewContext.Provider value={whatsNew}>
+                {profile ? (
+                  <RecipientContext.Provider
+                    value={{
+                      profile,
+                      setProfile,
+                      attention,
+                      refreshAttention,
+                      paymentsNeedSetup:
+                        payments === undefined
+                          ? null
+                          : Boolean(payments?.enabled),
+                    }}
+                  >
+                    {children}
+                  </RecipientContext.Provider>
+                ) : accountOnlyRoute(pathname, {
+                    manages: (roles?.manages.length ?? 1) > 0,
+                  }) ? (
+                  // On its way to the business: never draw a page that needs a page.
+                  <Skeleton label="Loading your dashboard" />
+                ) : (
+                  children
+                )}
+              </WhatsNewContext.Provider>
+            </AccountContext.Provider>
           ) : (
             <Skeleton label="Loading your dashboard" />
           )}

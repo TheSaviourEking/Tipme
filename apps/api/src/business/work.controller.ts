@@ -34,6 +34,7 @@ import {
   previewBusinessInvitation,
   setInvitationBlock,
   updateMyMembership,
+  featureOn,
 } from '@tipme/database';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
@@ -104,6 +105,8 @@ export class WorkController {
       this.database.db,
       auth.userId,
       body,
+      new Date(),
+      { enforceLimits: await featureOn(this.database.db, 'business_pro') },
     );
     signalBusiness(
       this.database.db,

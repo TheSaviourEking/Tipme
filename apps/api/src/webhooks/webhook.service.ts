@@ -72,10 +72,11 @@ export class WebhookService {
   /** After a Pro payment changed a page's plan: its public page and open tabs re-read. */
   private signalPlan(result: {
     planChanged: boolean;
-    profileId: string;
+    /** Null for a business's purchase (Business Pro): no page changed. */
+    profileId: string | null;
     handleLower: string | null;
   }): void {
-    if (!result.planChanged) return;
+    if (!result.planChanged || result.profileId === null) return;
     if (result.handleLower) this.revalidator?.revalidate(result.handleLower);
     void this.publishLive({
       to: { profile: result.profileId },
