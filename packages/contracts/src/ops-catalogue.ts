@@ -235,6 +235,13 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'A page’s Pro payments for deciding a refund: amounts, dates and how paid, no card or bank details.',
   },
+  // People (14 Nov 2026): a search.view list that adds tip totals for private.view holders.
+  'OpsPeopleController.list': {
+    verb: 'GET',
+    permission: 'search.view',
+    reason:
+      'Every account with masked emails; private.view adds tip totals only: amounts, no contact, card or bank details. The full email is a reveal that asks for a code.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',
