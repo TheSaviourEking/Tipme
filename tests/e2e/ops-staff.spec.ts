@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   expectAccessible,
   fitsViewport,
-  identity,
   identityEmailPattern,
   signInWithEmail,
   signUpRecipient,
@@ -25,7 +24,8 @@ const REASON = 'Checked with the person on a call today';
 // Each test brings its own owners, and every pending request mails everyone who could decide it.
 // Left in place, the owners of every earlier run get each new request's mail, and in the later
 // repeats the sign-in codes queue behind thousands of those. So a test's owners go when it ends:
-// the ones `identity` names for this worker and project, granted since the test began.
+// the ones `identity` names for this worker and project, granted since the test began. Worker
+// numbers are real (each repeat gets new workers), so no test here borrows one for someone else.
 let startedAt = new Date();
 test.beforeEach(() => {
   startedAt = new Date(Date.now() - 1_000);
@@ -76,7 +76,9 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await expect(page.getByRole('heading', { name: roleName })).toBeVisible();
   await expectAccessible(page);
 
-  const { email } = identity({ ...testInfo, workerIndex: 7 });
+  // Not `identity` with another worker's number: each repeat runs in new workers, so worker 7 is
+  // real in the fourth repeat, and its tests' clean-up would remove this person mid-test.
+  const email = `invitee@e2e-${randomUUID().slice(0, 8)}.example`;
   await page.goto('/ops/staff/people');
   await page.getByRole('button', { name: 'Add a person…' }).click();
   await page.getByLabel('Their email').fill(email);
