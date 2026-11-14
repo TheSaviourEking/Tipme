@@ -1,4 +1,6 @@
 import {
+  FEATURE_SWITCH_CATALOGUE,
+  isFeatureSwitch,
   OPS_CATALOGUE,
   OPS_ISSUE_OUTCOME_WORDS,
   type OpsIssueOutcome,
@@ -46,6 +48,7 @@ import {
   type PreparedPayoutRead,
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
+import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
@@ -730,7 +733,10 @@ const tipReverse = acting<TipReversePayload>({
     )
       throw new OperationError('INVALID_INPUT');
     // Approval may come after the flags were turned off: then nothing posts (review finding 3).
-    if (!context.services?.businessSharesEnabled)
+    if (
+      !(await readFeatureSwitch(tx, 'business')) ||
+      !(await readFeatureSwitch(tx, 'business_shares'))
+    )
       throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
     // Each partner refund or dispute is reversed once; a second request for it is refused.
     if (await alreadyReversed(tx, payload.partnerReversalId))
@@ -1070,6 +1076,34 @@ const mailProviderSwitch = acting<{ provider: MailProviderName }>({
   },
 });
 
+/* Feature switches (owner, 14 Nov 2026) */
+
+/**
+ * A money switch on or off (docs/runbooks/settings-and-switches.md). Other switches go through the
+ * route alone, with a reason and a fresh code. Pinned on the switch's value when asked, so a request
+ * the switch has since moved past goes stale.
+ */
+const featureSwitchSet = acting<{ key: string; on: boolean }>({
+  name: 'feature_switch.set',
+  permission: 'switches.manage',
+  target: ({ key }) => key,
+  current: async (tx, { key }) =>
+    isFeatureSwitch(key) ? readFeatureSwitch(tx, key) : null,
+  describe: async (_tx, { key, on }) => {
+    if (!isFeatureSwitch(key)) throw new OperationError('INVALID_INPUT');
+    return `Turn ${FEATURE_SWITCH_CATALOGUE[key].label} ${on ? 'on' : 'off'}`;
+  },
+  act: (tx, { key, on }, context) =>
+    setFeatureSwitch(tx, {
+      key,
+      on,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({ ...set, featureSwitchChanged: true as const })),
+});
+
 let registered = false;
 
 /** Safe to call more than once; registering is what the API and the worker do at start. */
@@ -1092,6 +1126,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);
   registerSeriousAction(proRefund);
+  registerSeriousAction(featureSwitchSet);
 }
 
 /* Routes whose seriousness depends on what is being done */

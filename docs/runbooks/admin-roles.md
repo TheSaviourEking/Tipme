@@ -44,6 +44,7 @@ The menu only offers what someone can use. The server checks every call whatever
 | `market.edit`       | numbers  | no        | Add and change market observations                                                                                          |
 | `providers.manage`  | settings | yes       | Change payment and email provider settings                                                                                  |
 | `staff.manage`      | settings | yes       | Add staff, change their access and roles                                                                                    |
+| `switches.manage`   | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                |
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
 
@@ -71,6 +72,7 @@ These wait for a second person when one is available:
 | `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`  |
 | `pro_price.change`          | Change the Pro price                   | `pro.price`                                                    |
 | `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                              |
+| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)    |
 
 Reversing a refunded or charged-back tip (`tip.reverse`, business release 2) starts from the partner's `payment_reversed` issue, after checking the refund or dispute in the partner's dashboard. A refund follows the partner's refund guide: `refund.created` only notes it as pending; it can be reversed once `refund.paid` arrives, for exactly the `refunded_amount` the partner reports (enter that amount; a different one is refused); `refund.failed` means nothing moved, so close the issue. A dispute (the partner documents no dispute events) is reversed for the amount you enter. The partner keeps the fees it already charged ("Fees already charged are not returned"): the reversal takes back the person's part, any business's part and TipMe's fee in proportion, the provider fee stays TipMe's cost, and a fee on the refund itself is TipMe's cost too. Each partner refund or dispute is reversed once: several webhook events about one refund join one issue, a second request for it is refused, and the approval text shows what earlier reversals already took back. A won dispute opens no issue. An issue whose events named no refund or dispute id can't be reversed here; settle it at the partner and close it by hand. Reversing does not close the issue: a `payment_reversed` issue stays open, and keeps that person's withdrawals on hold, until staff resolve it. A reversal can take a balance below zero; withdrawals then stop until it is back, and a `balance_below_zero` money issue opens. It only runs while business shares are on, including when it is approved later.
 

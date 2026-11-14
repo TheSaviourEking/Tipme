@@ -468,24 +468,6 @@ test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS
   );
 });
 
-test('BUSINESS_SHARES_ENABLED and TEAM_TIPS_ENABLED default to false; true turns each on alone', () => {
-  const off = loadApiConfig({ ...valid, NODE_ENV: 'development' });
-  assert.equal(off.BUSINESS_SHARES_ENABLED, false);
-  assert.equal(off.TEAM_TIPS_ENABLED, false);
-  const shares = loadApiConfig({
-    ...valid,
-    NODE_ENV: 'development',
-    BUSINESS_SHARES_ENABLED: 'true',
-  });
-  assert.equal(shares.BUSINESS_SHARES_ENABLED, true);
-  assert.equal(shares.TEAM_TIPS_ENABLED, false);
-  for (const name of ['BUSINESS_SHARES_ENABLED', 'TEAM_TIPS_ENABLED'])
-    assert.throws(
-      () => loadApiConfig({ ...valid, NODE_ENV: 'development', [name]: 'yes' }),
-      new RegExp(name),
-    );
-});
-
 test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
   const dev = { ...valid, NODE_ENV: 'development' };
   assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
@@ -505,22 +487,54 @@ test('the changelog signing secret is optional, at least 32 characters, and blan
   );
 });
 
-test('anonymous analytics is on in production unless set to false (owner, 9 Nov 2026; D-07 open)', () => {
-  const production = {
-    ...valid,
-    NODE_ENV: 'production',
-    DEPLOYMENT_MODE: 'preview',
-    PREVIEW_PASSWORD: 'p'.repeat(32),
-    WEB_ORIGIN: 'https://tipme-demo.onrender.com',
-  };
-  assert.equal(loadApiConfig(production).ANALYTICS_ENABLED, true);
-  assert.equal(
-    loadApiConfig({ ...production, ANALYTICS_ENABLED: 'false' })
-      .ANALYTICS_ENABLED,
-    false,
+// Feature switches (owner, 14 Nov 2026): set in admin. The old variables only seed the switch on the
+// first start (docs/runbooks/settings-and-switches.md), so the schema neither requires nor holds them.
+const MOVED = [
+  'PRO_BILLING_ENABLED',
+  'PRO_PAY_FROM_BALANCE',
+  'PRO_REFUNDS',
+  'PRO_AUTO_RENEW',
+  'BUSINESS_ENABLED',
+  'BUSINESS_SHARES_ENABLED',
+  'TEAM_TIPS_ENABLED',
+  'ANALYTICS_ENABLED',
+  'ADULT_PLATFORM_LINKS',
+  'SUPPORTER_RECOGNITION',
+];
+
+test('the moved switches are not settings any more: none is required or parsed', async () => {
+  const { apiConfigSchema } = await import('../dist/config.js');
+  const config = loadApiConfig({ ...valid, NODE_ENV: 'development' });
+  for (const name of MOVED) {
+    assert.ok(
+      !(name in apiConfigSchema.shape),
+      `${name} is still in the schema`,
+    );
+    assert.ok(!(name in config), `${name} is still parsed`);
+  }
+  assert.deepEqual(config.switchSeeds, {});
+});
+
+test('an old switch variable is kept only to seed the switch, in its own words; a bad one is refused by name', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  const config = loadApiConfig({
+    ...dev,
+    PRO_BILLING_ENABLED: 'true',
+    SUPPORTER_RECOGNITION: 'off',
+    BUSINESS_ENABLED: '',
+    PAGE_STUDIO_ENABLED: 'true',
+  });
+  assert.deepEqual(config.switchSeeds, {
+    PRO_BILLING_ENABLED: 'true',
+    SUPPORTER_RECOGNITION: 'off',
+    PAGE_STUDIO_ENABLED: 'true',
+  });
+  assert.throws(
+    () => loadApiConfig({ ...dev, BUSINESS_SHARES_ENABLED: 'yes' }),
+    /BUSINESS_SHARES_ENABLED/,
   );
-  assert.equal(
-    loadApiConfig({ ...valid, NODE_ENV: 'test' }).ANALYTICS_ENABLED,
-    true,
+  assert.throws(
+    () => loadApiConfig({ ...dev, PRO_REFUNDS: 'true' }),
+    /PRO_REFUNDS/,
   );
 });

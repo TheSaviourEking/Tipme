@@ -21,6 +21,7 @@ import {
   opsProPayments,
   requestSeriousAction,
   type SeriousActionServices,
+  featureOn,
 } from '@tipme/database';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -47,8 +48,8 @@ export class OpsProPaymentsController {
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
   ) {}
 
-  private on(): void {
-    if (!this.config.PRO_REFUNDS)
+  private async on(): Promise<void> {
+    if (!(await featureOn(this.database.db, 'pro_refunds')))
       throw new CodedHttpException(404, 'PRO_REFUNDS_OFF');
   }
 
@@ -58,7 +59,7 @@ export class OpsProPaymentsController {
   async list(
     @Param('profileId') profileId: string,
   ): Promise<ApiDataResponse<OpsProPayment[]>> {
-    this.on();
+    await this.on();
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const rows = await opsProPayments(this.database.db, profileId, new Date());
     return {
@@ -91,7 +92,7 @@ export class OpsProPaymentsController {
       | OpsSeriousPending
     >
   > {
-    this.on();
+    await this.on();
     if (!UUID.test(purchaseId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const answer = pendingOr<{ refundId: string; amountMinor: string }>(
       await requestSeriousAction(this.database.db, {

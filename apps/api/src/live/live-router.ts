@@ -40,6 +40,8 @@ export interface LiveRouterOptions {
   setTimer: (fn: () => void, ms: number) => unknown;
   clearTimer: (timer: unknown) => void;
   onDelivered?: (type: string) => void;
+  /** A staff member changed a feature switch: this process forgets its switches (never forwarded). */
+  onSwitchesChanged?: () => void;
 }
 
 export interface LiveRouter {
@@ -194,6 +196,10 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
       }
       if (message.type === 'staff.changed') {
         recheckAll(ops);
+        return;
+      }
+      if (message.type === 'switches.changed') {
+        o.onSwitchesChanged?.();
         return;
       }
       for (const s of targets(message)) send(s, message.type);

@@ -46,6 +46,7 @@ import {
   setPageState,
   setThanks,
   updateMyProfile,
+  featureOn,
 } from '@tipme/database';
 import type { Response } from 'express';
 import type { z } from 'zod';
@@ -97,8 +98,11 @@ export class MeProfileController {
   }
 
   /** The editor needs to know whether OnlyFans and Fansly links can be added on this copy. */
-  private mine(profile: MyProfile): MyProfile {
-    return { ...profile, adultLinks: this.config.ADULT_PLATFORM_LINKS };
+  private async mine(profile: MyProfile): Promise<MyProfile> {
+    return {
+      ...profile,
+      adultLinks: await featureOn(this.database.db, 'adult_platform_links'),
+    };
   }
 
   @Post('page')
@@ -122,7 +126,7 @@ export class MeProfileController {
       profileId,
     );
     return {
-      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+      data: await this.mine(await getMyProfile(this.database.db, auth.userId)),
     };
   }
 
@@ -132,7 +136,7 @@ export class MeProfileController {
   ): Promise<ApiDataResponse<MyProfile>> {
     return {
       data: {
-        ...this.mine(await getMyProfile(this.database.db, auth.userId)),
+        ...(await this.mine(await getMyProfile(this.database.db, auth.userId))),
         liveUpdates: this.config.LIVE_UPDATES_ENABLED,
       },
     };
@@ -146,7 +150,7 @@ export class MeProfileController {
     const updated = await updateMyProfile(this.database.db, auth.userId, body);
     this.revalidator.revalidate(updated.handle);
     this.profileChanged(auth);
-    return { data: this.mine(updated) };
+    return { data: await this.mine(updated) };
   }
 
   /**
@@ -159,11 +163,11 @@ export class MeProfileController {
     @Body(new ZodValidationPipe(myLinksSchema)) body: MyLinksRequest,
   ): Promise<ApiDataResponse<MyProfile>> {
     const updated = await setMyLinks(this.database.db, auth.userId, body, {
-      adultLinks: this.config.ADULT_PLATFORM_LINKS,
+      adultLinks: await featureOn(this.database.db, 'adult_platform_links'),
     });
     this.revalidator.revalidate(updated.handle);
     this.profileChanged(auth);
-    return { data: this.mine(updated) };
+    return { data: await this.mine(updated) };
   }
 
   /** Changes the handle; the old one keeps leading here (PR-011). Both cached pages refresh. */
@@ -184,7 +188,7 @@ export class MeProfileController {
       this.profileChanged(auth);
     }
     return {
-      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+      data: await this.mine(await getMyProfile(this.database.db, auth.userId)),
     };
   }
 
@@ -203,7 +207,7 @@ export class MeProfileController {
       takeBackId: id,
     });
     return {
-      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+      data: await this.mine(await getMyProfile(this.database.db, auth.userId)),
     };
   }
 
@@ -227,7 +231,7 @@ export class MeProfileController {
     });
     this.revalidator.revalidate(updated.handle);
     this.profileChanged(auth);
-    return { data: this.mine(updated) };
+    return { data: await this.mine(updated) };
   }
 
   /**
@@ -293,7 +297,7 @@ export class MeProfileController {
         profileId,
       );
     return {
-      data: this.mine(await getMyProfile(this.database.db, auth.userId)),
+      data: await this.mine(await getMyProfile(this.database.db, auth.userId)),
     };
   }
 

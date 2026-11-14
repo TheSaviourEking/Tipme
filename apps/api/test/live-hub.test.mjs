@@ -392,3 +392,18 @@ test('onDelivered counts each written signal', () => {
   hub.dispatch({ to: { user: A_USER }, type: 'account.changed' });
   assert.deepEqual(delivered, ['account.changed', 'account.changed']);
 });
+
+// Feature switches (owner, 14 Nov 2026): a change in admin clears every API copy's switches at once.
+test('switches.changed clears this copy’s switches and reaches no browser', () => {
+  let cleared = 0;
+  const { hub, clock } = router({ onSwitchesChanged: () => (cleared += 1) });
+  const me = sink();
+  const ops = sink({ kind: 'ops', permissions: ['issues.view'] });
+  hub.register(me);
+  hub.register(ops);
+  const before = me.writes.length + ops.writes.length;
+  hub.dispatch({ to: { all: true }, type: 'switches.changed' });
+  clock.advance(1000);
+  assert.equal(cleared, 1);
+  assert.equal(me.writes.length + ops.writes.length, before);
+});

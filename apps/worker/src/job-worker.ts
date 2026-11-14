@@ -49,6 +49,9 @@ import {
   rollupAnalytics,
   registerRealSeriousActions,
   businessLiveAudience,
+  featureOn,
+  onFeatureSwitchReadError,
+  seedFeatureSwitches,
 } from '@tipme/database';
 import {
   createBachsProvider,
@@ -100,7 +103,8 @@ const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
 // Paid Pro (ADR-0015): months move on every minute; reminders every 15 minutes.
 const PRO_EXPIRE_JOB = 'pro.expire';
 const PRO_REMINDERS_JOB = 'pro.reminders';
-// Auto-renew (plan Task 10): a day before a month ends, every 15 minutes, only with PRO_AUTO_RENEW.
+// Auto-renew (plan Task 10): a day before a month ends, every 15 minutes; it charges only while the
+// `pro_auto_renew` switch is on.
 const PRO_RENEW_JOB = 'pro.renew';
 const PAYOUT_SETUP_JOB = PAYOUT_SETUP_JOB_NAME;
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
@@ -261,7 +265,20 @@ export async function startJobWorker(
       (config.DEPLOYMENT_MODE === 'preview' ? 'staging' : config.NODE_ENV),
     release: config.GIT_SHA,
   });
-  const analyticsEnabled = config.ANALYTICS_ENABLED;
+  // Feature switches (owner, 14 Nov 2026): set in admin. Any switch without a row is written from
+  // the old variable, as the API does, so nothing changes on release day; a variable still set after
+  // that is ignored and named.
+  const stopSwitchErrors = onFeatureSwitchReadError((error) =>
+    logger.warn({
+      event: 'feature_switch.read_failed',
+      error: error instanceof Error ? error.name : 'unknown',
+    }),
+  );
+  const seeded = await seedFeatureSwitches(database.db, config.switchSeeds);
+  for (const { key, source } of seeded.written)
+    logger.info({ event: 'feature_switch.seeded', key, source });
+  for (const name of seeded.ignored)
+    logger.warn({ event: 'feature_switch.env_ignored', setting: name });
   // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
   // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
   const mockProvider = createMockProvider({
@@ -387,9 +404,13 @@ export async function startJobWorker(
     every: 15 * 60_000,
     logger,
   });
-  const proRenewSchedule = config.PRO_AUTO_RENEW
-    ? ensureSchedule({ queue, id: PRO_RENEW_JOB, every: 15 * 60_000, logger })
-    : null;
+  // Always scheduled: the switch can change while the worker runs, and the job checks it each time.
+  const proRenewSchedule = ensureSchedule({
+    queue,
+    id: PRO_RENEW_JOB,
+    every: 15 * 60_000,
+    logger,
+  });
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
   const rehearsalSchedule =
     config.RELEASE_KIND === 'test'
@@ -610,8 +631,9 @@ export async function startJobWorker(
             return outcome;
           }
           if (job.name === PRO_RENEW_JOB) {
-            // Queued before the switch went off: nothing is charged.
-            if (!config.PRO_AUTO_RENEW) return 'skipped';
+            // Switched off (or queued before it went off): nothing is charged.
+            if (!(await featureOn(database.db, 'pro_auto_renew')))
+              return 'skipped';
             const totals = { charged: 0, retried: 0 };
             for (const [providerName, provider] of [
               ['mock', mockProvider],
@@ -635,7 +657,7 @@ export async function startJobWorker(
             const outcome = await handleProReminders({
               db: database.db,
               sealing,
-              autoRenewOn: config.PRO_AUTO_RENEW,
+              autoRenewOn: await featureOn(database.db, 'pro_auto_renew'),
               now: () => new Date(),
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
@@ -780,7 +802,7 @@ export async function startJobWorker(
               rewardBudgetPerMonthMinor:
                 config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
               dedupeKey: job.id,
-              analyticsEnabled,
+              analyticsEnabled: await featureOn(database.db, 'analytics'),
               sealing,
               pretendPayment: config.PAYMENT_PROVIDER === 'mock',
               postStaffAlert: staffAlertPoster({
@@ -932,7 +954,8 @@ export async function startJobWorker(
       await takeBacksSchedule.stop();
       await proExpireSchedule.stop();
       await proRemindersSchedule.stop();
-      await proRenewSchedule?.stop();
+      await proRenewSchedule.stop();
+      stopSwitchErrors();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

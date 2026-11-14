@@ -28,6 +28,7 @@ export const OPS_PERMISSIONS = [
   'changelog.edit',
   'changelog.publish',
   'pro.price',
+  'switches.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -165,6 +166,12 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     group: 'content',
     sensitive: false,
   },
+  // Feature switches (owner, 14 Nov 2026): sensitive, as a money switch's serious action needs it.
+  'switches.manage': {
+    description: 'Turn feature switches on and off, with a reason',
+    group: 'settings',
+    sensitive: true,
+  },
   'staff.manage': {
     description: 'Add staff, change their access and roles',
     group: 'settings',
@@ -240,6 +247,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     permission: 'pro.price',
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
+  'OpsSwitchesController.list': {
+    verb: 'GET',
+    permission: 'switches.manage',
+    reason:
+      'Switch names, states, reasons and staff ids: nobody’s private details; changes nothing.',
   },
   'OpsPagesController.pro': {
     verb: 'GET',
@@ -333,6 +346,8 @@ export const SERIOUS_ACTIONS = [
   'pro_price.change',
   // Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month.
   'pro.refund',
+  // Feature switches (owner, 14 Nov 2026): a money switch on or off.
+  'feature_switch.set',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -354,6 +369,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'changelog.publish': 'Show users a What’s new entry',
   'pro_price.change': 'Change the Pro price',
   'pro.refund': 'Refund a Pro card payment',
+  'feature_switch.set': 'Turn a money switch on or off',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -375,4 +391,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'changelog.publish': 'changelog.publish',
     'pro_price.change': 'pro.price',
     'pro.refund': 'payments.repair',
+    'feature_switch.set': 'switches.manage',
   };
