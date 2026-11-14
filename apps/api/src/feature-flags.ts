@@ -1,29 +1,50 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { API_CONFIG, type ApiConfig } from './config.js';
+import { z } from 'zod';
 
 /**
- * Pro page features behind a flag (plan 2026-11-14-pro-campaign-pages-goals-thankyous-statements).
+ * Pro page features behind a switch (plan 2026-11-14-pro-campaign-pages-goals-thankyous-statements).
  * The owner wants these as admin switches (PR #216, `featureOn(db, key)`), which isn't on dev yet.
- * Until it is, each key reads its environment setting here, and nothing else reads that setting.
- * When #216 lands: register the key in FEATURE_SWITCHES with `env: truthy('<VARIABLE>')` (the
- * variable then only seeds the switch) and make `isOn` return `featureOn(db, key)`. The call sites
- * already await it, so they don't change.
+ * Until it is, this is a stand-in that no deployed copy can turn on: it is not an `ApiConfig`
+ * setting and no Compose file or `.env` passes it, so production and staging are always off.
+ * Only local runs and the e2e stack set `CAMPAIGN_PAGES_ENABLED=true`; integration tests pass
+ * `features` to `createApp`.
+ *
+ * When #216 lands: register `campaign_pages` in FEATURE_SWITCHES (`env: truthy('CAMPAIGN_PAGES_ENABLED')`
+ * seeds it once), make `isOn` return `featureOn(db, key)` and delete `proPageFeaturesFromEnv`. Call
+ * sites already await `isOn`, so they don't change.
  */
-export type ProPageFeature = 'campaign_pages';
+export const PRO_PAGE_FEATURES = ['campaign_pages'] as const;
+export type ProPageFeature = (typeof PRO_PAGE_FEATURES)[number];
+export type ProPageFeatures = Record<ProPageFeature, boolean>;
 
-const VARIABLE = {
-  campaign_pages: 'CAMPAIGN_PAGES_ENABLED',
-} as const satisfies Record<ProPageFeature, keyof ApiConfig>;
+export const PRO_PAGE_FEATURES_TOKEN = Symbol('PRO_PAGE_FEATURES');
+
+export const NO_PRO_PAGE_FEATURES: ProPageFeatures = { campaign_pages: false };
+
+const onOff = z
+  .enum(['true', 'false'])
+  .default('false')
+  .transform((value) => value === 'true');
+
+/** Reads the stand-in from the process environment; anything but `true`/`false` is refused. */
+export function proPageFeaturesFromEnv(
+  env: Record<string, string | undefined>,
+): ProPageFeatures {
+  const parsed = onOff.safeParse(env['CAMPAIGN_PAGES_ENABLED'] || undefined);
+  if (!parsed.success)
+    throw new Error('Invalid configuration: CAMPAIGN_PAGES_ENABLED');
+  return { campaign_pages: parsed.data };
+}
 
 @Injectable()
 export class FeatureFlags {
   constructor(
-    @Inject(API_CONFIG)
-    private readonly config: Pick<ApiConfig, (typeof VARIABLE)[ProPageFeature]>,
+    @Inject(PRO_PAGE_FEATURES_TOKEN)
+    private readonly features: ProPageFeatures,
   ) {}
 
   /** Whether the feature is on for this copy now. Never throws. */
   isOn(key: ProPageFeature): Promise<boolean> {
-    return Promise.resolve(this.config[VARIABLE[key]] === true);
+    return Promise.resolve(this.features[key] === true);
   }
 }

@@ -524,17 +524,3 @@ test('anonymous analytics is on in production unless set to false (owner, 9 Nov 
     true,
   );
 });
-
-test('CAMPAIGN_PAGES_ENABLED defaults to false; true turns it on (switch campaign_pages once #216 lands)', () => {
-  const dev = { ...valid, NODE_ENV: 'development' };
-  assert.equal(loadApiConfig(dev).CAMPAIGN_PAGES_ENABLED, false);
-  assert.equal(
-    loadApiConfig({ ...dev, CAMPAIGN_PAGES_ENABLED: 'true' })
-      .CAMPAIGN_PAGES_ENABLED,
-    true,
-  );
-  assert.throws(
-    () => loadApiConfig({ ...dev, CAMPAIGN_PAGES_ENABLED: 'yes' }),
-    /CAMPAIGN_PAGES_ENABLED/,
-  );
-});

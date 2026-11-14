@@ -1,7 +1,12 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from './config.js';
-import { FeatureFlags } from './feature-flags.js';
+import {
+  FeatureFlags,
+  NO_PRO_PAGE_FEATURES,
+  PRO_PAGE_FEATURES_TOKEN,
+  type ProPageFeatures,
+} from './feature-flags.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { ProModule } from './pro/pro.module.js';
@@ -36,7 +41,11 @@ export { LOGGER };
 
 @Module({})
 export class AppModule {
-  static forRoot(config: ApiConfig, logger: Logger): DynamicModule {
+  static forRoot(
+    config: ApiConfig,
+    logger: Logger,
+    features: ProPageFeatures = NO_PRO_PAGE_FEATURES,
+  ): DynamicModule {
     return {
       module: AppModule,
       // Diagnostics routes only exist when explicitly enabled (never in production).
@@ -74,6 +83,7 @@ export class AppModule {
         LiveSwitchRecorder,
         { provide: API_CONFIG, useValue: config },
         { provide: LOGGER, useValue: logger },
+        { provide: PRO_PAGE_FEATURES_TOKEN, useValue: features },
         FeatureFlags,
       ],
       exports: [API_CONFIG, LOGGER, ReadinessService, FeatureFlags],

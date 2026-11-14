@@ -24,7 +24,8 @@ before(async () => {
   const apiEnv = { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' };
   on = await startStack({
     databaseUrl: database.url,
-    apiEnv: { ...apiEnv, CAMPAIGN_PAGES_ENABLED: 'true' },
+    apiEnv,
+    apiFeatures: { campaign_pages: true },
   });
   off = await startStack({ databaseUrl: database.url, apiEnv });
 });

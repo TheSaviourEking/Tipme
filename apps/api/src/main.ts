@@ -2,12 +2,15 @@ import 'reflect-metadata';
 import { ConfigError } from '@tipme/observability';
 import { createApp } from './app.factory.js';
 import { loadApiConfig } from './config.js';
+import { proPageFeaturesFromEnv } from './feature-flags.js';
 import { ReadinessService } from './health/readiness.service.js';
 import { createShutdown } from './shutdown.js';
 
 try {
   const config = loadApiConfig(process.env);
-  const app = await createApp(config);
+  const app = await createApp(config, {
+    features: proPageFeaturesFromEnv(process.env),
+  });
   await app.listen(config.PORT, config.HOST);
   // Handled here rather than by Nest's shutdown hooks: drain first, flush telemetry after close.
   const stop = createShutdown(
