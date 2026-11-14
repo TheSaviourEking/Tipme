@@ -155,6 +155,13 @@ export const apiConfigSchema = z
       .enum(['on', 'off'])
       .default('off')
       .transform((value) => value === 'on'),
+    // Staff "Refund tip" (owner, 14 Nov 2026): the tip minus TipMe's fee, refunded through our
+    // payment partner as the recipient's account. Off by default; it moves to the admin switches
+    // when they land.
+    TIP_REFUNDS: z
+      .enum(['on', 'off'])
+      .default('off')
+      .transform((value) => value === 'on'),
     // Auto-renew on a saved naira card (plan Task 10; ruling 9). Off by default, and the worker's
     // own switch must be on too: only after the sandbox proof (evidence E8 to E10).
     PRO_AUTO_RENEW: z

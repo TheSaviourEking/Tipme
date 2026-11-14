@@ -119,6 +119,7 @@ const messages: Record<ApiErrorCode, string> = {
   PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
   TIP_REFUND_REFUSED: 'This tip can’t be refunded.',
   PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
+  TIP_REFUNDS_OFF: 'Tip refunds aren’t switched on.',
   PRO_AUTO_RENEW_OFF: 'Auto-renew isn’t available.',
   PRO_AUTO_RENEW_NEEDS_EMAIL:
     'Add an email address to your account to turn on auto-renew. Nothing was charged.',

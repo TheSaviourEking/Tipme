@@ -520,3 +520,17 @@ export async function tipRefundPage(
     .where(eq(tips.id, tipId));
   return row?.profileId ?? null;
 }
+
+/** Whether TipMe asked for this tip refund (a partner event may repeat a reference of another copy). */
+export async function findTipRefund(
+  db: Database | Tx,
+  tipRefundId: string,
+): Promise<{ id: string } | null> {
+  const [row] = await guarded(() =>
+    db
+      .select({ id: tipRefunds.id })
+      .from(tipRefunds)
+      .where(eq(tipRefunds.id, tipRefundId)),
+  );
+  return row ?? null;
+}

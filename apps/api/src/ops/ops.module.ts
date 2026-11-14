@@ -22,6 +22,7 @@ import { OpsBusinessNotesController } from './business-notes.controller.js';
 import { BusinessEnabledGuard } from '../business/business-enabled.guard.js';
 import { OpsChangelogController } from './changelog.controller.js';
 import { OpsProPaymentsController } from './pro-payments.controller.js';
+import { OpsTipRefundsController } from './tip-refunds.controller.js';
 import { OpsProPriceController } from './pro-price.controller.js';
 import { MailModule } from '../mail/mail.module.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
@@ -56,6 +57,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsChangelogController,
     OpsProPriceController,
     OpsProPaymentsController,
+    OpsTipRefundsController,
   ],
   providers: [
     CsrfGuard,

@@ -152,3 +152,33 @@ export interface OpsProPayment {
 /** `POST /v1/ops/pro/purchases/:purchaseId/refund`: the member's request, in staff's words. */
 export const opsProRefundSchema = opsReasonSchema.strict();
 export type OpsProRefundRequest = z.infer<typeof opsProRefundSchema>;
+
+/**
+ * Staff "Refund tip" (owner, 14 Nov 2026), `GET /v1/ops/tips/:tipId/refund`: what the supporter gets
+ * back (the tip minus TipMe's fee), who gives back what, and whether it can be refunded now.
+ */
+export interface OpsTipRefund {
+  tipId: string;
+  refundable: boolean;
+  refusal:
+    'not_paid' | 'team' | 'already' | 'bank_transfer' | 'no_charge' | null;
+  /** Why not, or that it can be, in plain words. */
+  words: string;
+  handle: string | null;
+  businessName: string | null;
+  currency: 'NGN';
+  grossMinor: string;
+  /** TipMe's fee on the tip's quote: kept. */
+  feeMinor: string;
+  /** What the supporter gets back. */
+  refundMinor: string;
+  personMinor: string;
+  businessMinor: string;
+  refund: {
+    status: 'REQUESTED' | 'PROCESSING' | 'UNKNOWN' | 'PAID' | 'FAILED';
+  } | null;
+}
+
+/** `POST /v1/ops/tips/:tipId/refund`: why, in staff's words (a second person approves). */
+export const opsTipRefundSchema = opsReasonSchema.strict();
+export type OpsTipRefundRequest = z.infer<typeof opsTipRefundSchema>;
