@@ -130,6 +130,8 @@ export const apiErrorCodes = [
   'MEMBER_NOT_TIPPABLE',
   'NOTE_NOT_OPEN',
   'BUSINESS_LAST_OWNER',
+  // Only TipMe staff end another owner's seat, until the removal procedure ships (plan #204, E).
+  'OWNER_REMOVAL_NEEDS_TIPME',
   'BUSINESS_NOT_VERIFIED',
   // Business release 2 (R2-0).
   'SHARE_NOT_ALLOWED',

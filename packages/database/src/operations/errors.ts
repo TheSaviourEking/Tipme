@@ -113,6 +113,8 @@ export type OperationErrorCode =
   | 'NOTE_NOT_OPEN'
   | 'NOTE_TEXT_REFUSED'
   | 'BUSINESS_LAST_OWNER'
+  // An owner tried to end another owner's seat: TipMe staff do that (interim lock, 14 Nov 2026).
+  | 'OWNER_REMOVAL_NEEDS_TIPME'
   | 'BUSINESS_NOT_VERIFIED'
   // Business release 2 (R2-0).
   | 'SHARE_NOT_ALLOWED'
