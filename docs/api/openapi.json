@@ -5557,7 +5557,36 @@
                 "properties": {
                   "country": {
                     "type": "string",
-                    "pattern": "^[A-Z]{2}$"
+                    "enum": [
+                      "NG",
+                      "AT",
+                      "BE",
+                      "CA",
+                      "HR",
+                      "CY",
+                      "EE",
+                      "FI",
+                      "FR",
+                      "DE",
+                      "GH",
+                      "GR",
+                      "IE",
+                      "IT",
+                      "KE",
+                      "LV",
+                      "LT",
+                      "LU",
+                      "MT",
+                      "NL",
+                      "PT",
+                      "SK",
+                      "SI",
+                      "ES",
+                      "TZ",
+                      "UG",
+                      "GB",
+                      "US"
+                    ]
                   },
                   "entityType": {
                     "type": "string",
@@ -5568,7 +5597,6 @@
                   }
                 },
                 "required": [
-                  "country",
                   "entityType"
                 ],
                 "additionalProperties": false
@@ -16950,6 +16978,7 @@
                   "EMAIL_VERIFICATION_REQUIRED",
                   "PAYMENT_ACCOUNT_REQUIRED",
                   "PROVIDER_OUTCOME_UNKNOWN",
+                  "COUNTRY_NOT_SUPPORTED",
                   "PAYMENT_START_REJECTED",
                   "TIPPING_NOT_OPEN",
                   "NO_CONFIRMED_TEST",
