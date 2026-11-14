@@ -245,6 +245,8 @@ const messages: Record<ApiErrorCode, string> = {
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
+  COUNTRY_NOT_SUPPORTED:
+    'Payment accounts can’t be set up in that country. Choose one from the list.',
   INTERNAL_ERROR: 'Something went wrong.',
 };
 
