@@ -1,0 +1,739 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pro Campaign Pages</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}a:hover{color:#4d16a8}
+.board{width:1840px;min-height:0;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 8px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1300px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle;white-space:nowrap}
+.ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}.oa{background:#000;color:#fff}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.sec{margin:44px 0 6px;font:400 30px/1.1 'DM Serif Display',Georgia,serif}
+.sub{margin:0 0 16px;font-size:14px;line-height:1.5;color:#3b3934;max-width:1250px}
+.paper{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -24px rgba(20,18,16,.4);padding:22px 24px;box-sizing:border-box}
+.paper h3{margin:0 0 6px;font:400 24px/1.1 'DM Serif Display',Georgia,serif}
+.paper p,.paper li{font-size:13.5px;line-height:1.5;color:#2c2a26}
+.paper ul{margin:8px 0 0;padding-left:18px}
+.lbl{margin:16px 0 8px;font-size:12px;font-weight:800;color:#5d5a54;letter-spacing:.02em}
+.src{font-size:12px;color:#5d5a54;line-height:1.5}
+.hint{margin:0;font-size:13px;line-height:1.5;color:#5d5a54}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:start}
+.lamp{display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;box-shadow:inset 0 1px 1px rgba(0,0,0,.3)}
+.l-r{background:#c2382c}.l-a{background:#d08a16}.l-g{background:#3f9d5c}.l-p{background:#7a32f9}
+
+/* materials */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;box-sizing:border-box;border-radius:10px;font:700 14px/1.25 Manrope,Arial,sans-serif;letter-spacing:-.012em;border:1px solid rgba(20,18,16,.14);white-space:nowrap}
+.b-pri{border-color:#6a2ad6;background:linear-gradient(rgba(255,255,255,.2),transparent 34%),#7a32f9;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(58,17,131,.28),0 4px 10px -6px rgba(58,17,131,.3)}
+.b-sec{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;color:#000;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07)}
+.b-quiet{border-color:transparent;background:transparent;text-decoration:underline;text-underline-offset:.3em;padding:0 6px}
+.b-off{background:#d9d6ce;border-color:#d9d6ce;color:#77736b;box-shadow:none}
+.b-blk{border-color:#000;background:linear-gradient(rgba(255,255,255,.16),transparent 30%),#000;color:#fff;box-shadow:inset 0 1px 0 rgba(255,255,255,.2),0 2px 3px rgba(20,18,16,.24)}
+.well{display:flex;align-items:center;min-height:46px;padding:0 14px;box-sizing:border-box;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.11),inset 0 -1px 0 rgba(255,255,255,.8);font-size:14px;color:#5d5a54}
+.box{width:20px;height:20px;flex:none;border-radius:6px;background:#eeede8;border:1px solid rgba(20,18,16,.2);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);display:inline-flex;align-items:center;justify-content:center;color:#fff}
+.box.on{background:linear-gradient(rgba(255,255,255,.22),transparent 40%),#7a32f9;border-color:#6423d8}
+.radio{width:20px;height:20px;flex:none;border-radius:50%;background:#eeede8;border:1px solid rgba(20,18,16,.25);box-shadow:inset 0 1px 2px rgba(20,18,16,.14);box-sizing:border-box}
+.radio.on{background:#fffefa;border:6px solid #7a32f9;box-shadow:none}
+.opt{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid rgba(20,18,16,.12);border-radius:14px;background:#fffefa}
+.opt.on{border:2px solid #7a32f9;padding:11px 13px}
+.opt b{display:block;font-size:14px}
+.opt span.s{display:block;font-size:12.5px;color:#5d5a54;line-height:1.4;margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(rgba(255,255,255,.26),transparent 48%),linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 12px/1 Manrope,Arial,sans-serif;vertical-align:middle;white-space:nowrap}
+.pill svg{width:.9em;height:.9em;fill:#e6d6ff}
+.pill.blk{border-color:#000;background:linear-gradient(rgba(255,255,255,.18),transparent 48%),#141210}
+.pill.blk svg{fill:#c8a6ff}
+.note{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#f1e9ff;font-size:13.5px;line-height:1.5;color:#2a1260}
+.note.calm{background:#eeede8;color:#2c2a26}
+.note svg{flex:none;margin-top:3px}
+.ok{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:700;color:#23623b}
+
+/* table */
+.cmp{width:100%;border-collapse:collapse;font-size:14px}
+.cmp th,.cmp td{padding:11px 14px;text-align:left;vertical-align:top;border-top:1px solid rgba(20,18,16,.1);line-height:1.45}
+.cmp thead th{border-top:0;padding-top:4px;font-size:12px;font-weight:800;color:#5d5a54;letter-spacing:.02em}
+.cmp thead th.pro{color:#4d16a8}
+.cmp td.f{font-weight:700;width:300px}
+.cmp td.fr{width:330px;color:#3b3934}
+.cmp td.pr2{background:rgba(241,233,255,.5)}
+.cmp td.t{width:120px}
+.cmp tr.grp td{padding:20px 14px 8px;border-top:0;font:400 20px/1.1 'DM Serif Display',Georgia,serif}
+.cmp .no{color:#77736b}
+.cmp b.n{font-size:16px}
+
+/* dashboard frames */
+.frame{background:#f3f2ee;border-radius:18px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.1),0 30px 50px -30px rgba(20,18,16,.5)}
+.cap{margin:0 0 10px;font-size:13px;font-weight:800;color:#3b3934}
+.side{padding:26px 16px;display:flex;flex-direction:column;gap:4px;border-right:1px solid rgba(20,18,16,.09)}
+.side a{height:42px;padding:0 12px;display:flex;align-items:center;font-weight:600;font-size:15px;color:#5d5a54;text-decoration:none;border-radius:10px}
+.side a.on{background:#fffefa;color:#000;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07)}
+.mark{font:800 21px Manrope,Arial,sans-serif;letter-spacing:-.02em;margin:0 0 20px 10px}.mark b{color:#7a32f9}
+.secnav{display:flex;gap:6px;flex-wrap:wrap}
+.secnav span{padding:7px 12px;border-radius:999px;font-size:13px;font-weight:700;color:#5d5a54;background:#eeede8}
+.secnav span.on{background:#000;color:#fff}
+.card{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;padding:22px 24px;box-shadow:0 1px 1px rgba(20,18,16,.08)}
+.card h3{margin:0 0 4px;font:400 26px/1.1 'DM Serif Display',Georgia,serif}
+.tile{background:#eeede8;border-radius:16px;padding:14px 16px;box-shadow:inset 0 1px 2px rgba(20,18,16,.08)}
+.tile .k{margin:0;font-size:13px;color:#5d5a54;font-weight:600}
+.tile .v{margin:6px 0 2px;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}
+.tile .d{margin:0;font-size:12.5px;color:#3b3934}
+.up{color:#23623b;font-weight:700}
+.meter{height:10px;border-radius:999px;background:#eeede8;box-shadow:inset 0 1px 2px rgba(20,18,16,.15);overflow:hidden}
+.meter i{display:block;height:100%;border-radius:999px;background:#7a32f9}
+.meter i.full{background:#000}
+.seg{display:inline-flex;padding:4px;background:#eeede8;border-radius:12px}
+.seg span{height:36px;padding:0 14px;display:inline-flex;align-items:center;border-radius:9px;font:600 13.5px Manrope,Arial,sans-serif;color:#5d5a54}
+.seg span.on{background:#fffefa;color:#000;font-weight:700;box-shadow:0 1px 2px rgba(20,18,16,.14)}
+.sel{display:inline-flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:1px solid rgba(20,18,16,.14);border-radius:10px;background:#fffefa;font-size:13.5px;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.08)}
+.sel::after{content:"";width:7px;height:7px;border-right:2px solid #000;border-bottom:2px solid #000;transform:rotate(45deg) translateY(-3px)}
+.price{font:400 46px/1 'DM Serif Display',Georgia,serif;font-variant-numeric:lining-nums}
+.inc{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+.inc li{display:flex;gap:10px;align-items:flex-start;font-size:14px;line-height:1.4}
+.inc li svg{flex:none;margin-top:2px}
+.ini{display:inline-flex;align-items:center;justify-content:center;flex:none;width:30px;height:30px;border-radius:50%;background:#f1e9ff;color:#4d16a8;font:400 13px/1 'DM Serif Display',Georgia,serif}
+.logo{display:inline-flex;align-items:center;justify-content:center;flex:none;background:#141210;color:#fff;font:400 26px/1 'DM Serif Display',Georgia,serif;border-radius:12px}
+.row{display:flex;align-items:center;gap:10px}
+.dt{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.dt th,.dt td{padding:9px 8px;text-align:left;border-top:1px solid rgba(20,18,16,.1)}
+.dt th{border-top:0;font-size:12px;color:#5d5a54;font-weight:700}
+.dt td.r,.dt th.r{text-align:right}
+.hb{display:grid;grid-template-columns:120px minmax(0,1fr) 92px;gap:10px;align-items:center;font-size:13.5px;padding:6px 0}
+.hb .b{height:16px;border-radius:5px;background:#7a32f9}
+.hb .v{text-align:right;font-weight:700;font-variant-numeric:tabular-nums}
+.ins{display:flex;gap:10px;padding:10px 0;border-top:1px solid rgba(20,18,16,.1);font-size:14px;line-height:1.45}
+.ins svg{flex:none;margin-top:4px}
+.key2{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:#3b3934;margin-right:14px}
+.key2 i{width:12px;height:12px;border-radius:3px;display:inline-block}
+
+/* ops */
+.inst{background:linear-gradient(rgba(255,255,255,.92),transparent 2px),#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:26px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 8px 16px -6px rgba(20,18,16,.1),0 40px 72px -28px rgba(20,18,16,.32);padding:24px}
+.stepper{display:grid;grid-template-columns:56px minmax(0,1fr) 56px;gap:8px}
+.key{display:flex;align-items:center;justify-content:center;min-height:56px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font-size:24px;font-weight:700}
+.readout{display:flex;align-items:center;justify-content:center;border:1px solid rgba(20,18,16,.14);border-radius:14px;background:#eeede8;box-shadow:inset 0 1px 3px rgba(20,18,16,.16),inset 0 -1px 0 rgba(255,255,255,.8);font:400 30px 'DM Serif Display',Georgia,serif;min-height:56px}
+.hist{display:grid;grid-template-columns:150px 130px 110px 110px minmax(0,1fr);gap:16px;padding:12px 0;border-top:1px solid rgba(20,18,16,.12);font-size:14px;line-height:1.4}
+.hist.h{font-size:12px;font-weight:800;color:#5d5a54;border-top:0}
+
+/* phone */
+.phone{width:390px;border-radius:44px;border:10px solid #141210;background:#f3f2ee;overflow:hidden;box-sizing:border-box;position:relative;box-shadow:0 1px 1px rgba(20,18,16,.08),0 24px 48px -28px rgba(20,18,16,.4)}
+.sbar{display:flex;justify-content:space-between;padding:12px 24px 4px;font:700 13px Manrope,Arial,sans-serif}
+.pnav{display:flex;align-items:center;justify-content:space-between;padding:8px 18px}
+.pnav .mark{margin:0}
+
+/* statement */
+.sheet{width:794px;min-height:1050px;background:#fff;box-shadow:0 1px 2px rgba(20,18,16,.15),0 30px 60px -30px rgba(20,18,16,.55);padding:56px 60px;box-sizing:border-box;font-family:Manrope,Arial,sans-serif;color:#000;position:relative}
+.sheet .st{width:100%;border-collapse:collapse;font-size:11.5px;font-variant-numeric:tabular-nums}
+.sheet .st th,.sheet .st td{padding:7px 6px;text-align:left;border-bottom:1px solid #e3e1db}
+.sheet .st th{font-size:10px;font-weight:800;color:#5d5a54;letter-spacing:.03em;border-bottom:1.5px solid #000}
+.sheet .st .r{text-align:right}
+.sheet .st tr.tot td{font-weight:800;border-bottom:1.5px solid #000;border-top:1.5px solid #000}
+.sheet .kv{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid #e3e1db;border-radius:8px;overflow:hidden;margin:18px 0 22px}
+.sheet .kv div{padding:10px 12px;border-right:1px solid #e3e1db}
+.sheet .kv div:last-child{border-right:0}
+.sheet .kv small{display:block;font-size:10px;color:#5d5a54;font-weight:700}
+.sheet .kv b{display:block;margin-top:3px;font-size:16px}
+.sheet h5{margin:20px 0 6px;font-size:11px;font-weight:800;letter-spacing:.04em}
+
+/* notes */
+.panel{background:#fffefa;border-radius:20px;border:1px solid rgba(20,18,16,.1);padding:20px 24px}
+.panel h3{margin:0 0 10px;font:400 24px 'DM Serif Display',Georgia,serif}
+.panel ul,.panel ol{margin:0;padding-left:20px;font-size:14px;line-height:1.6}
+.panel li+li{margin-top:6px}
+.orange{background:#fde9c8;border-color:rgba(160,90,0,.3)}
+.orange h3{color:#6b3d00}
+.orange li{color:#3b2a10}
+.ans{display:inline-block;margin-left:4px;padding:1px 7px;border-radius:999px;background:#000;color:#fff;font-size:11px;font-weight:800;vertical-align:1px}
+
+/* this board */
+.pub{background:#f3f2ee}
+.cv{display:block;width:100%}
+.av{display:flex;align-items:center;justify-content:center;flex:none;border-radius:50%;background:linear-gradient(135deg,#7a32f9,#2a0d63);color:#fff;font:400 30px/1 'DM Serif Display',Georgia,serif;border:4px solid #f3f2ee;box-sizing:border-box}
+.av.t{background:linear-gradient(135deg,#1f6b5c,#0d2b26)}
+.av.a{background:linear-gradient(135deg,#d08a16,#7a3d00)}
+.chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.chip{display:flex;align-items:center;justify-content:center;height:48px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:#fffefa;font:700 15px Manrope,Arial,sans-serif;box-shadow:0 1px 1px rgba(20,18,16,.1)}
+.chip.on{border:2px solid #7a32f9;background:#f1e9ff;color:#2a0d63}
+.goal{background:#fffefa;border:1px solid rgba(20,18,16,.1);border-radius:16px;padding:14px 16px}
+.goal .gt{margin:0;font-size:14px;line-height:1.4}
+.goal .gt b{font-variant-numeric:tabular-nums}
+.goal .meter{margin:10px 0 6px;height:12px}
+.goal .gs{margin:0;font-size:12px;color:#5d5a54;display:flex;justify-content:space-between}
+.goal.done{border:2px solid #000;padding:13px 15px}
+.slip{margin:0;border-radius:16px;padding:18px 20px;background:#fffefa;border:1px solid rgba(20,18,16,.12);box-shadow:0 1px 1px rgba(20,18,16,.08),0 14px 24px -18px rgba(20,18,16,.4)}
+.slip p{margin:0;font:400 20px/1.3 'DM Serif Display',Georgia,serif}
+.slip p::before{content:"\201C"}.slip p::after{content:"\201D"}
+.slip small{display:block;margin-top:8px;font-size:12.5px;font-weight:700;color:#5d5a54}
+.slip.violet{background:linear-gradient(rgba(255,255,255,.14),transparent 40%),linear-gradient(135deg,#7a32f9,#4d16a8);border-color:#5d1fd0;color:#fff}
+.slip.violet small{color:#e6d6ff}
+.slip.night{background:#141210;border-color:#000;color:#fff}
+.slip.night small{color:#c8a6ff}
+.mail{background:#fff;border-radius:14px;box-shadow:0 1px 2px rgba(20,18,16,.15),0 24px 44px -28px rgba(20,18,16,.5);overflow:hidden}
+.mailmeta{padding:14px 20px;border-bottom:1px solid #e3e1db;font-size:13px;line-height:1.6;background:#faf9f6}
+.mailmeta b{display:inline-block;width:62px;color:#5d5a54;font-weight:700}
+.ta{min-height:92px;align-items:flex-start;padding-top:12px;line-height:1.45;color:#000}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld label,.fld .fl{font-size:13.5px;font-weight:800}
+.fld .hint{font-size:12.5px}
+.well.fill{color:#000}
+.covpick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.covpick span{display:block;height:46px;border-radius:10px;border:1px solid rgba(20,18,16,.14);overflow:hidden}
+.covpick span.on{outline:3px solid #7a32f9;outline-offset:2px}
+.tog{display:inline-block;flex:none;width:40px;height:24px;border-radius:999px;background:#d9d6ce;position:relative;box-shadow:inset 0 1px 2px rgba(20,18,16,.2)}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+.tog.on{background:#7a32f9}.tog.on::after{left:19px}
+.grp2{border-top:1px solid rgba(20,18,16,.1);padding-top:16px;display:flex;flex-direction:column;gap:12px}
+.grp2 h4{margin:0;font:400 20px/1.1 'DM Serif Display',Georgia,serif;display:flex;align-items:center;gap:8px}
+.minip{width:300px;border-radius:34px;border:8px solid #141210;background:#f3f2ee;overflow:hidden;box-sizing:border-box;box-shadow:0 20px 40px -26px rgba(20,18,16,.5)}
+.stm{display:grid;grid-template-columns:minmax(0,1fr) 120px 150px;gap:12px;align-items:center;padding:12px 0;border-top:1px solid rgba(20,18,16,.1);font-size:14px}
+.lockrow{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:14px;background:#eeede8;font-size:13.5px;line-height:1.45;color:#3b3934}
+.lap{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px;align-items:start}
+.was{font-size:12px;font-weight:800;color:#5d5a54;letter-spacing:.02em;margin:0 0 6px}
+.pp{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:3px 0;font-variant-numeric:tabular-nums}
+</style>
+</helmet>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="spark" viewBox="0 0 16 16"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></symbol>
+<symbol id="tick" viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></symbol>
+<symbol id="dot" viewBox="0 0 16 16"><circle cx="8" cy="8" r="4"></circle></symbol>
+<symbol id="hrt" viewBox="668 -13 120 120"><path d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z" transform="translate(728 47) scale(0.78) translate(-732.13 -45.83)"></path></symbol>
+<symbol id="cov" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice"><rect width="300" height="100" fill="#141210"></rect><use href="#hrt" x="18" y="10" width="40" height="40" fill="#7a32f9"></use><use href="#hrt" x="70" y="52" width="26" height="26" fill="#4d16a8"></use><use href="#hrt" x="118" y="6" width="22" height="22" fill="#d9c3ff" opacity=".7"></use><use href="#hrt" x="150" y="40" width="54" height="54" fill="#7a32f9"></use><use href="#hrt" x="214" y="8" width="30" height="30" fill="#4d16a8"></use><use href="#hrt" x="250" y="50" width="38" height="38" fill="#7a32f9" opacity=".85"></use><use href="#hrt" x="40" y="66" width="18" height="18" fill="#d9c3ff" opacity=".6"></use></symbol>
+</defs></svg>
+<div class="board">
+  <h1 class="bh1">Campaign pages, tip goals, thank-yous and statements (Pro)</h1>
+  <p class="lead">The owner decided on 13–14 Nov 2026 to build four Pro features. TipMe Pro is ₦5,000 a month plus a 5% tip fee; Free pays 7%. <b>Campaign pages</b> are Pro’s “multiple tipping pages”: each campaign in Campaign Studio can have its own headline, description, cover, tip goal and thank-you, and its link and QR open a page made for it. <b>Tip goals</b> are a simple target with a bar, worded “tips toward…”, never fundraising. <b>Custom thank-yous</b> show on the receipt and go by email to supporters who left one. <b>Monthly statements</b> are a PDF each month, plus CSV or Excel for any range. It is always the same person: one handle, one balance, one set of withdrawals, the same locked tip area.</p>
+  <span class="tag ex">Exists</span><span class="tag oa">Owner asked</span><span class="tag pr">Proposed</span><span class="tag ow">Question for the owner</span>
+
+  <!-- 1 WHAT CHANGES -->
+  <h2 class="sec">1. What changes, Free and Pro</h2>
+  <p class="sub">Read from the code on origin/dev: Campaign Studio gives named links <code>/@handle/&lt;ending&gt;</code> (Pro 20, Free 1), each with its own QR and results, and today every link opens the normal page with no campaign name on it. The receipt already shows the person’s thank-you line (140 characters, no links; Pro adds a card style and a signature). Earnings has one “Download as CSV”. Numbers in brackets are defaults until the owner confirms them.</p>
+  <div class="paper" style="padding:18px 22px">
+    <table class="cmp">
+      <thead><tr><th>FEATURE</th><th>FREE</th><th class="pro">PRO</th><th>STATUS</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="4">Campaign pages</td></tr>
+        <tr><td class="f">Campaign links and QR codes</td><td class="fr"><b class="n">1</b> campaign, opening your normal page</td><td class="pr2"><b class="n">20</b> campaigns, each with its own results (visits, tips, received) <span class="tag ex">Exists</span></td><td class="t"><span class="tag ex">Exists</span></td></tr>
+        <tr><td class="f">A page for each campaign</td><td class="fr no">The link opens your normal page</td><td class="pr2">Its own headline (60), short description (200), optional cover from the cover choices, optional tip goal and optional thank-you. Supporters who open the link or scan its QR see that page.</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr><td class="f">Still you</td><td class="fr" colspan="2">Same handle, same balance, same withdrawals, same tip area (amounts, message, pay button). A campaign page never takes tips for anyone else and never shows a different name.</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr class="grp"><td colspan="4">Tip goals</td></tr>
+        <tr><td class="f">A goal with a bar</td><td class="fr no">Not included</td><td class="pr2">“Tips toward…” a thing you name, with a target. On your main page <b class="n">[1]</b> and on each campaign page <b class="n">[1]</b>. Supporters see a percentage <b>[default]</b> or amounts, your choice.</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr><td class="f">When it’s reached</td><td class="fr no">–</td><td class="pr2">“Goal reached, thank you”. Tips keep coming in as normal. You can set a new goal. No deadline, no refunds, no all-or-nothing.</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr class="grp"><td colspan="4">Thank-yous</td></tr>
+        <tr><td class="f">On the receipt</td><td class="fr">Your one thank-you line, on paper, unsigned <span class="tag ex">Exists</span>, or TipMe’s default</td><td class="pr2">Your line, card style and signature <span class="tag ex">Exists</span>, plus a different thank-you for each campaign</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr><td class="f">By email</td><td class="fr">TipMe’s default thank-you</td><td class="pr2">Your thank-you, emailed once per tip to supporters who chose to leave their email, from TipMe with your name</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr class="grp"><td colspan="4">Reports</td></tr>
+        <tr><td class="f">Exports</td><td class="fr">Today’s CSV of your tips <span class="tag ex">Exists</span></td><td class="pr2">CSV or Excel for any date range: tips, fees, withdrawals and the ₦50 fees, by campaign</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+        <tr><td class="f">Monthly statement</td><td class="fr no">Not included</td><td class="pr2">A PDF for each month: opening and closing balance, tips, the 5% fee, withdrawals and their ₦50 fees, and a breakdown by campaign</td><td class="t"><span class="tag oa">Owner asked</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2 EDITOR -->
+  <h2 class="sec">2. The campaign editor, with a live preview</h2>
+  <p class="sub">Campaigns → a campaign → a new “Page” tab, next to today’s Results and QR code. The name and link work as they do now. “Its own page” is on for new Pro campaigns; with it off, the link opens your normal page exactly as today. Drawn for DJ Kemi (@djkemi), on Pro, editing “Lagos Live, Nov”.</p>
+  <div style="display:grid;grid-template-columns:1210px 390px;gap:40px;align-items:start">
+    <div>
+      <p class="cap">A. DESKTOP · /dashboard/campaigns/lagos-live</p>
+      <div class="frame" style="display:grid;grid-template-columns:190px minmax(0,1fr)">
+        <nav class="side" aria-label="Dashboard"><span class="mark">tipme<b>♥</b></span><a href="#">Home</a><a href="#">Tips</a><a href="#">Earnings</a><a href="#" class="on">Campaigns</a><a href="#">My page</a><a href="#">My QR</a><a href="#">Settings</a></nav>
+        <main style="padding:26px 28px 30px">
+          <p class="hint"><u>Campaigns</u> / Lagos Live, Nov</p>
+          <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:4px 0 16px">
+            <div><h2 class="serif" style="margin:0;font-size:40px;line-height:1">Lagos Live, Nov</h2><p class="hint" style="margin-top:6px">usetipme.xyz/@djkemi/lagoslive · Made 2 Nov · <span class="pill"><svg aria-hidden="true"><use href="#spark"></use></svg>Pro</span></p></div>
+            <div class="seg"><span class="on">Page</span><span>Results</span><span>QR code</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:28px;align-items:start">
+            <div class="card" style="display:flex;flex-direction:column;gap:16px">
+              <div class="row" style="justify-content:space-between"><div><b style="font-size:15px">Its own page</b><p class="hint">People who open this link or scan its QR see this page. Off: they see your normal page.</p></div><span class="tog on" aria-label="On"></span></div>
+              <div class="fld"><label>Headline</label><div class="well fill">Thank you for dancing with me at Lagos Live</div><span class="hint">43 of 60. The big line at the top of the page.</span></div>
+              <div class="fld"><label>Short description <span class="hint" style="font-weight:600">(optional)</span></label><div class="well fill ta">Saturday 15 Nov at Muri Okunola Park. Put a song request in your message and I’ll try to fit it into the set.</div><span class="hint">108 of 200. No links.</span></div>
+              <div class="grp2">
+                <h4>Cover <span class="tag ex" style="margin:0">Cover choices exist</span></h4>
+                <div class="covpick">
+                  <span><svg class="cv" height="46" aria-hidden="true"><rect width="100%" height="100%" fill="#eeede8"></rect><text x="50%" y="58%" text-anchor="middle" font-size="11" font-weight="700" font-family="Manrope,Arial" fill="#5d5a54">Same as page</text></svg></span>
+                  <span class="on"><svg class="cv" height="46" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cov" width="300" height="100"></use></svg></span>
+                  <span><svg class="cv" height="46" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="300" height="100" fill="#7a32f9"></rect><use href="#hrt" x="160" y="-20" width="150" height="150" fill="#4d16a8"></use></svg></span>
+                  <span><svg class="cv" height="46" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd7a8"></stop><stop offset="1" stop-color="#7a32f9"></stop></linearGradient></defs><rect width="300" height="100" fill="url(#g1)"></rect><use href="#hrt" x="200" y="30" width="60" height="60" fill="#fff" opacity=".5"></use></svg></span>
+                </div>
+                <p class="hint">Optional. From the same covers as your page. “Same as page” uses yours.</p>
+              </div>
+              <div class="grp2">
+                <div class="row" style="justify-content:space-between"><h4>Tip goal</h4><span class="tog on" aria-label="On"></span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) 170px;gap:12px">
+                  <div class="fld"><label>Tips toward</label><div class="well fill">a new DJ controller</div></div>
+                  <div class="fld"><label>Target</label><div class="well fill">₦500,000</div></div>
+                </div>
+                <div class="fld"><span class="fl">Supporters see</span>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                    <div class="opt"><span class="radio"></span><div><b>A percentage</b><span class="s">“36% of the way toward a new DJ controller”</span></div></div>
+                    <div class="opt on"><span class="radio on"></span><div><b>Amounts</b><span class="s">“₦180,000 of ₦500,000 toward a new DJ controller”</span></div></div>
+                  </div>
+                </div>
+                <p class="hint">Counts tips given through this link from today. No deadline and nothing is ever refunded: each tip reaches your balance as it comes in. When it’s reached, the page says “Goal reached, thank you” and you can set a new one.</p>
+              </div>
+              <div class="grp2">
+                <div class="row" style="justify-content:space-between"><h4>Thank-you</h4><span class="tog on" aria-label="On"></span></div>
+                <div class="fld"><div class="well fill ta" style="min-height:64px">You made my night. Thank you for the tip, and see you at the next one!</div><span class="hint">70 of 140. No links. On their receipt, and emailed once to supporters who left their email. Off: your page’s thank-you.</span></div>
+                <div class="row" style="gap:8px"><span class="hint" style="font-weight:700;color:#000;margin-right:4px">Card</span><span class="chip" style="height:36px;padding:0 14px;font-size:13px">Paper</span><span class="chip on" style="height:36px;padding:0 14px;font-size:13px">Violet</span><span class="chip" style="height:36px;padding:0 14px;font-size:13px">Night</span><span class="box on" style="margin-left:14px"><svg width="12" height="12"><use href="#tick"></use></svg></span><span style="font-size:13.5px">Sign it “DJ Kemi”</span></div>
+              </div>
+              <div class="row" style="gap:10px;border-top:1px solid rgba(20,18,16,.1);padding-top:16px"><span class="btn b-pri">Save page</span><span class="btn b-sec">Open the link</span><span class="btn b-quiet" style="margin-left:auto">Stop campaign</span></div>
+            </div>
+            <div style="position:sticky;top:0">
+              <p class="cap" style="text-align:center">LIVE PREVIEW</p>
+              <div class="minip pub">
+                <svg class="cv" height="92" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cov" width="300" height="100"></use></svg>
+                <div style="padding:0 16px 18px;margin-top:-28px">
+                  <span class="av" style="width:58px;height:58px;font-size:22px">K</span>
+                  <p style="margin:6px 0 0;font-size:12px;font-weight:700">DJ Kemi <span class="hint" style="font-size:11px">@djkemi</span></p>
+                  <p class="serif" style="margin:6px 0 4px;font-size:22px;line-height:1.08">Thank you for dancing with me at Lagos Live</p>
+                  <p style="margin:0 0 10px;font-size:11.5px;line-height:1.45;color:#3b3934">Saturday 15 Nov at Muri Okunola Park. Put a song request in your message and I’ll try to fit it into the set.</p>
+                  <div class="goal" style="padding:10px 12px"><p class="gt" style="font-size:12px"><b>₦180,000</b> of ₦500,000 toward a new DJ controller</p><div class="meter" style="height:8px;margin:8px 0 0"><i style="width:36%"></i></div></div>
+                  <div class="chips" style="margin-top:10px;gap:6px"><span class="chip" style="height:36px;font-size:12px">₦500</span><span class="chip" style="height:36px;font-size:12px">₦1,000</span><span class="chip on" style="height:36px;font-size:12px">₦2,000</span><span class="chip" style="height:36px;font-size:12px">₦5,000</span></div>
+                  <span class="btn b-pri" style="width:100%;margin-top:10px;min-height:38px;font-size:12.5px">Tip ₦2,000</span>
+                </div>
+              </div>
+              <p class="src" style="text-align:center;margin-top:8px">Updates as you type. Switch to the receipt to see the thank-you.</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <div>
+      <p class="cap">B. PHONE · THE SAME EDITOR, SECTIONS FOLD</p>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pnav"><span class="mark">tipme<b>♥</b></span><span style="font-size:13px;font-weight:700">Menu</span></div>
+        <div style="padding:6px 16px 0;display:flex;flex-direction:column;gap:12px">
+          <p class="hint"><u>Campaigns</u> / Lagos Live, Nov</p>
+          <h2 class="serif" style="margin:0;font-size:32px;line-height:1">Lagos Live, Nov</h2>
+          <div class="seg" style="align-self:flex-start"><span class="on">Page</span><span>Results</span><span>QR code</span></div>
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+            <div class="row" style="justify-content:space-between"><b style="font-size:14px">Its own page</b><span class="tog on"></span></div>
+            <div class="fld"><label>Headline</label><div class="well fill" style="font-size:13.5px">Thank you for dancing with me at Lagos Live</div></div>
+            <div class="fld"><label>Short description</label><div class="well fill ta" style="font-size:13.5px;min-height:76px">Saturday 15 Nov at Muri Okunola Park. Put a song request in your message and I’ll try to…</div></div>
+          </div>
+          <div class="card" style="padding:14px 16px"><div class="row" style="justify-content:space-between"><b>Cover</b><span class="hint">Scattered hearts, dark ›</span></div></div>
+          <div class="card" style="padding:14px 16px"><div class="row" style="justify-content:space-between"><b>Tip goal</b><span class="hint">₦500,000, amounts ›</span></div></div>
+          <div class="card" style="padding:14px 16px"><div class="row" style="justify-content:space-between"><b>Thank-you</b><span class="hint">Violet, signed ›</span></div></div>
+        </div>
+        <div style="margin-top:14px;padding:12px 16px 18px;border-top:1px solid rgba(20,18,16,.12);background:#fffefa;display:grid;grid-template-columns:1fr 1fr;gap:10px"><span class="btn b-sec">Preview</span><span class="btn b-pri">Save page</span></div>
+      </div>
+      <p class="src" style="margin-top:10px">“Preview” opens the page full screen with a “Back to editing” bar. Save stays at the bottom, within thumb reach.</p>
+    </div>
+  </div>
+  <div class="g3" style="margin-top:24px">
+    <div class="note calm"><svg width="16" height="16" aria-hidden="true" style="fill:#5d5a54"><use href="#dot"></use></svg><span><b>Copy that changes.</b> “What a campaign is, and isn’t” today says “No goal, no target amount, no end date, no stated cause” and “Supporters see your page exactly as always”. On Pro it becomes: “Its own page, if you want one. A goal is tips toward something, never a promise; there’s no end date and nothing is refunded.”</span></div>
+    <div class="note calm"><svg width="16" height="16" aria-hidden="true" style="fill:#5d5a54"><use href="#dot"></use></svg><span><b>Checks before saving.</b> Headline and description use the thank-you rules: no links, invisible characters stripped. No one else’s name or handle as the headline. The goal target is ₦[5,000] to ₦[10,000,000].</span></div>
+    <div class="note"><svg width="16" height="16" aria-hidden="true" style="fill:#7a32f9"><use href="#spark"></use></svg><span><b>On Free</b> the Page tab shows the preview with the editor locked: “Give each campaign its own page, goal and thank-you with TipMe Pro, ₦5,000 a month.” The Free campaign keeps opening the normal page.</span></div>
+  </div>
+
+  <!-- 3 CAMPAIGN PAGE -->
+  <h2 class="sec">3. A campaign page, as supporters see it</h2>
+  <p class="sub">Opened from <code>usetipme.xyz/@djkemi/lagoslive</code> or its QR. Ada Okafor is about to tip. The person’s name, photo initials, handle and the tip area are the same as on the main page; only the top changes. A quiet link goes to the main page. The canonical address stays <code>/@djkemi</code>, and the page asks search engines not to index the campaign copy [default].</p>
+  <div style="display:grid;grid-template-columns:390px minmax(0,1fr);gap:40px;align-items:start">
+    <div>
+      <p class="cap">A. PHONE</p>
+      <div class="phone pub">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <svg class="cv" height="132" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cov" width="300" height="100"></use></svg>
+        <div style="padding:0 18px 22px;margin-top:-38px;display:flex;flex-direction:column;gap:12px">
+          <span class="av" style="width:78px;height:78px">K</span>
+          <div><p style="margin:0;font-size:15px;font-weight:800">DJ Kemi</p><p class="hint" style="font-size:12.5px">@djkemi · DJ in Lagos</p></div>
+          <h3 class="serif" style="margin:2px 0 0;font-size:30px;line-height:1.05">Thank you for dancing with me at Lagos Live</h3>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#3b3934">Saturday 15 Nov at Muri Okunola Park. Put a song request in your message and I’ll try to fit it into the set.</p>
+          <div class="goal"><p class="gt"><b>₦180,000</b> of ₦500,000 toward a new DJ controller</p><div class="meter"><i style="width:36%"></i></div><p class="gs"><span>Tips from this page</span><span>36%</span></p></div>
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <b style="font-size:14px">Choose an amount</b>
+            <div class="chips"><span class="chip">₦500</span><span class="chip">₦1,000</span><span class="chip on">₦2,000</span><span class="chip">₦5,000</span></div>
+            <div class="well">Another amount</div>
+            <div class="well fill" style="font-size:13.5px">Ada · “Please play Ojuelegba!”</div>
+            <div class="row" style="gap:10px;font-size:13px"><span class="box on"><svg width="12" height="12"><use href="#tick"></use></svg></span>Email me DJ Kemi’s thank-you</div>
+            <div class="well fill" style="font-size:13.5px">ada.okafor@gmail.com</div>
+            <span class="btn b-pri" style="min-height:52px;font-size:16px">Tip ₦2,000</span>
+          </div>
+          <p class="hint" style="text-align:center;font-size:12.5px">Tips go to DJ Kemi. <u>See DJ Kemi’s main page</u></p>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="cap">B. DESKTOP · usetipme.xyz/@djkemi/lagoslive</p>
+      <div class="frame pub">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 28px;background:#fffefa;border-bottom:1px solid rgba(20,18,16,.08)"><span class="mark" style="margin:0">tipme<b>♥</b></span><span class="btn b-sec" style="min-height:38px">Get your own page</span></div>
+        <svg class="cv" height="230" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cov" width="300" height="100"></use></svg>
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) 430px;gap:48px;padding:0 56px 48px;align-items:start">
+          <div style="margin-top:-56px;display:flex;flex-direction:column;gap:14px">
+            <span class="av" style="width:112px;height:112px;font-size:42px;border-width:6px">K</span>
+            <div><p style="margin:0;font-size:17px;font-weight:800">DJ Kemi</p><p class="hint">@djkemi · DJ in Lagos</p></div>
+            <h3 class="serif" style="margin:4px 0 0;font-size:52px;line-height:1.02;max-width:620px">Thank you for dancing with me at Lagos Live</h3>
+            <p style="margin:0;font-size:16px;line-height:1.55;color:#3b3934;max-width:560px">Saturday 15 Nov at Muri Okunola Park. Put a song request in your message and I’ll try to fit it into the set.</p>
+            <div class="goal" style="max-width:560px;padding:18px 20px"><p class="gt" style="font-size:16px"><b>₦180,000</b> of ₦500,000 toward a new DJ controller</p><div class="meter" style="height:14px"><i style="width:36%"></i></div><p class="gs"><span>Tips from this page · no deadline</span><span>36%</span></p></div>
+            <p class="hint"><u>See DJ Kemi’s main page</u></p>
+          </div>
+          <div class="inst" style="margin-top:28px;display:flex;flex-direction:column;gap:12px">
+            <h4 class="serif" style="margin:0;font-size:26px">Tip DJ Kemi</h4>
+            <div class="chips"><span class="chip">₦500</span><span class="chip">₦1,000</span><span class="chip on">₦2,000</span><span class="chip">₦5,000</span></div>
+            <div class="well">Another amount</div>
+            <div class="well fill">Ada</div>
+            <div class="well fill ta" style="min-height:64px">Please play Ojuelegba!</div>
+            <div class="row" style="gap:10px;font-size:13.5px"><span class="box on"><svg width="12" height="12"><use href="#tick"></use></svg></span>Email me DJ Kemi’s thank-you</div>
+            <div class="well fill">ada.okafor@gmail.com</div>
+            <span class="btn b-pri" style="min-height:54px;font-size:16px">Tip ₦2,000</span>
+            <p class="hint" style="font-size:12px;text-align:center">Your email is only used to send this thank-you and your receipt. DJ Kemi doesn’t see it.</p>
+          </div>
+        </div>
+      </div>
+      <div class="g2" style="margin-top:20px">
+        <div class="note calm" style="display:block"><b>Same tip area, every time.</b> Amounts, “Another amount”, name, message and the pay button are the main page’s, in the same place and order. A campaign can’t change the amounts or hide the person’s name. <span class="tag ex">Exists</span></div>
+        <div class="note calm" style="display:block"><b>Stopped or unknown campaign:</b> the link opens the main page, as today, so printed QR codes never break. A stopped campaign’s goal stops counting and is kept in its results. <span class="tag ex">Exists</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4 GOALS -->
+  <h2 class="sec">4. A tip goal on the main page, and when it’s reached</h2>
+  <p class="sub">Tunde Lens (@tundelens), a photographer on Pro, set one goal on his main page, shown as a percentage (the default). The goal sits under his bio and above the tip area. The bar counts tips given on his main page and all his campaigns that have no goal of their own [default], before fees.</p>
+  <div style="display:grid;grid-template-columns:390px 390px minmax(0,1fr);gap:32px;align-items:start">
+    <div>
+      <p class="cap">A. IN PROGRESS · PERCENTAGE</p>
+      <div class="phone pub">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <svg class="cv" height="120" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><defs><linearGradient id="g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1f6b5c"></stop><stop offset="1" stop-color="#0d2b26"></stop></linearGradient></defs><rect width="300" height="100" fill="url(#g2)"></rect><use href="#hrt" x="190" y="10" width="80" height="80" fill="#7a32f9" opacity=".8"></use><use href="#hrt" x="40" y="46" width="28" height="28" fill="#d9c3ff" opacity=".6"></use></svg>
+        <div style="padding:0 18px 22px;margin-top:-38px;display:flex;flex-direction:column;gap:12px">
+          <span class="av t" style="width:78px;height:78px">T</span>
+          <div><h3 class="serif" style="margin:0;font-size:30px;line-height:1.05">Tunde Lens</h3><p class="hint" style="font-size:12.5px">@tundelens · Wedding and street photographer, Ibadan</p></div>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#3b3934">If my photos made your day, a tip keeps me shooting.</p>
+          <div class="goal"><p class="gt"><b>71%</b> of the way toward a new 85mm lens</p><div class="meter"><i style="width:71%"></i></div><p class="gs"><span>Tips toward a goal Tunde set</span><span>No deadline</span></p></div>
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div class="chips"><span class="chip">₦500</span><span class="chip on">₦1,000</span><span class="chip">₦2,000</span><span class="chip">₦5,000</span></div>
+            <div class="well">Another amount</div>
+            <span class="btn b-pri" style="min-height:50px">Tip ₦1,000</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <p class="cap">B. GOAL REACHED</p>
+      <div class="phone pub">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <svg class="cv" height="120" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><rect width="300" height="100" fill="url(#g2)"></rect><use href="#hrt" x="190" y="10" width="80" height="80" fill="#7a32f9" opacity=".8"></use><use href="#hrt" x="40" y="46" width="28" height="28" fill="#d9c3ff" opacity=".6"></use></svg>
+        <div style="padding:0 18px 22px;margin-top:-38px;display:flex;flex-direction:column;gap:12px">
+          <span class="av t" style="width:78px;height:78px">T</span>
+          <div><h3 class="serif" style="margin:0;font-size:30px;line-height:1.05">Tunde Lens</h3><p class="hint" style="font-size:12.5px">@tundelens · Wedding and street photographer, Ibadan</p></div>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#3b3934">If my photos made your day, a tip keeps me shooting.</p>
+          <div class="goal done"><p class="gt" style="display:flex;gap:8px;align-items:center"><svg width="18" height="18" aria-hidden="true" style="color:#000"><use href="#tick"></use></svg><b>Goal reached, thank you</b></p><div class="meter"><i class="full" style="width:100%"></i></div><p class="gs"><span>Tips toward a new 85mm lens</span><span>100%</span></p></div>
+          <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <div class="chips"><span class="chip">₦500</span><span class="chip on">₦1,000</span><span class="chip">₦2,000</span><span class="chip">₦5,000</span></div>
+            <div class="well">Another amount</div>
+            <span class="btn b-pri" style="min-height:50px">Tip ₦1,000</span>
+          </div>
+        </div>
+      </div>
+      <p class="src" style="margin-top:10px">Tipping stays open and works as always. The bar never goes past 100%; the black fill marks “done”, not a success effect. It shows for [14 days] or until a new goal is set.</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:24px">
+      <div>
+        <p class="cap">C. SETTING IT · MY PAGE → TIP GOAL</p>
+        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+          <div class="row" style="justify-content:space-between"><h3 style="margin:0">Tip goal <span class="pill"><svg aria-hidden="true"><use href="#spark"></use></svg>Pro</span></h3><span class="tog on"></span></div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 160px;gap:12px">
+            <div class="fld"><label>Tips toward</label><div class="well fill">a new 85mm lens</div></div>
+            <div class="fld"><label>Target</label><div class="well fill">₦450,000</div></div>
+          </div>
+          <div class="fld"><span class="fl">Supporters see</span>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div class="opt on"><span class="radio on"></span><div><b>A percentage</b><span class="s">71% of the way</span></div></div>
+              <div class="opt"><span class="radio"></span><div><b>Amounts</b><span class="s">₦319,500 of ₦450,000</span></div></div>
+            </div>
+          </div>
+          <div><div class="pp"><span>So far, since 1 Nov</span><b>₦319,500 · 71%</b></div><div class="meter" style="margin-top:6px"><i style="width:71%"></i></div></div>
+          <p class="hint">Only words like “toward”: a lens, a studio day, a trip. TipMe never calls it fundraising or a donation, and you never promise anything in return.</p>
+          <div class="row" style="gap:10px"><span class="btn b-pri">Save</span><span class="btn b-quiet">Remove the goal</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="cap">D. WHEN IT’S REACHED · DASHBOARD HOME AND AN EMAIL</p>
+        <div class="card" style="display:flex;flex-direction:column;gap:10px;border:2px solid #000">
+          <div class="row" style="gap:10px"><svg width="20" height="20" aria-hidden="true"><use href="#tick"></use></svg><h3 style="margin:0">Your goal is reached</h3></div>
+          <p style="margin:0;font-size:14px;line-height:1.5">₦452,500 in tips toward a new 85mm lens, from 96 tips since 1 Nov. Your page now says “Goal reached, thank you”. Tips keep coming in as normal.</p>
+          <div class="row" style="gap:10px"><span class="btn b-pri">Set a new goal</span><span class="btn b-sec">Keep it up for now</span><span class="btn b-quiet">Remove it</span></div>
+        </div>
+        <p class="src" style="margin-top:10px">Shows only after the tip that crosses the target is confirmed. The money was already in the balance; reaching a goal moves nothing.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 THANK-YOUS -->
+  <h2 class="sec">5. The thank-you: on the receipt, and by email</h2>
+  <p class="sub">After Ada’s ₦2,000 tip through the Lagos Live link is confirmed, her receipt shows the campaign’s thank-you, and she gets one email with it because she ticked “Email me DJ Kemi’s thank-you”. Which thank-you shows: the campaign’s, else the page’s, else TipMe’s default.</p>
+  <div style="display:grid;grid-template-columns:390px minmax(0,1fr) 420px;gap:32px;align-items:start">
+    <div>
+      <p class="cap">A. THE RECEIPT · /tip/…</p>
+      <div class="phone">
+        <div class="sbar"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="pnav"><span class="mark">tipme<b>♥</b></span></div>
+        <div style="padding:12px 18px 24px;display:flex;flex-direction:column;gap:16px">
+          <div class="row" style="gap:12px"><span class="av" style="width:52px;height:52px;font-size:20px;border:0">K</span><div><h3 class="serif" style="margin:0;font-size:28px;line-height:1.05">DJ Kemi got your tip.</h3><p class="hint">₦2,000, confirmed.</p></div></div>
+          <figure class="slip violet"><p>You made my night. Thank you for the tip, and see you at the next one!</p><small>DJ Kemi</small></figure>
+          <div class="paper" style="padding:16px 18px">
+            <h4 class="serif" style="margin:0 0 8px;font-size:20px">Your receipt</h4>
+            <div class="pp"><span class="hint">Your tip</span><b>₦2,000</b></div>
+            <div class="pp"><span class="hint">To</span><b>DJ Kemi · Lagos Live</b></div>
+            <div class="pp"><span class="hint">When</span><b>15 Nov 2026, 10:42 pm</b></div>
+            <div class="pp"><span class="hint">Reference</span><b>TM-7Q4F2K</b></div>
+            <p class="hint" style="font-size:12px;margin-top:8px">We’ve emailed DJ Kemi’s thank-you to ada.okafor@gmail.com.</p>
+          </div>
+          <span class="btn b-sec">Copy receipt link</span>
+        </div>
+      </div>
+      <p class="src" style="margin-top:10px">The heading and amount are today’s. Proposed wording: “got your tip” instead of today’s “got your thanks”, since the words mean money. The campaign name shows only on that campaign’s receipts.</p>
+    </div>
+    <div>
+      <p class="cap">B. THE EMAIL · SENT ONCE PER TIP</p>
+      <div class="mail">
+        <div class="mailmeta"><div><b>From</b>DJ Kemi via TipMe &lt;hello@usetipme.xyz&gt;</div><div><b>To</b>ada.okafor@gmail.com</div><div><b>Subject</b>A thank-you from DJ Kemi</div></div>
+        <svg class="cv" height="110" viewBox="0 0 300 100" preserveAspectRatio="xMidYMid slice" aria-hidden="true"><use href="#cov" width="300" height="100"></use></svg>
+        <div style="padding:0 40px 32px;margin-top:-34px">
+          <span class="av" style="width:68px;height:68px;font-size:26px;border-color:#fff">K</span>
+          <p style="margin:16px 0 4px;font-size:15px">Hi Ada,</p>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.55">DJ Kemi got your ₦2,000 tip from Lagos Live, and wrote you this:</p>
+          <figure class="slip violet" style="max-width:520px"><p style="font-size:24px">You made my night. Thank you for the tip, and see you at the next one!</p><small>DJ Kemi</small></figure>
+          <div style="margin:22px 0;padding:14px 16px;border:1px solid #e3e1db;border-radius:10px;font-size:13.5px;line-height:1.7;max-width:520px">
+            <div class="pp" style="font-size:13.5px"><span style="color:#5d5a54">Your tip</span><b>₦2,000</b></div>
+            <div class="pp" style="font-size:13.5px"><span style="color:#5d5a54">When</span><b>15 Nov 2026, 10:42 pm</b></div>
+            <div class="pp" style="font-size:13.5px"><span style="color:#5d5a54">Reference</span><b>TM-7Q4F2K</b></div>
+          </div>
+          <span class="btn b-blk">View your receipt</span>
+          <p style="margin:24px 0 0;font-size:12px;line-height:1.55;color:#5d5a54;max-width:520px">You’re getting this because you asked for DJ Kemi’s thank-you when you tipped. We send it once and won’t email you again about this tip. DJ Kemi doesn’t see your email address. TipMe, Lagos.</p>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <p class="cap">C. WHAT EACH PLAN SHOWS</p>
+        <div class="card" style="display:flex;flex-direction:column;gap:14px">
+          <div><p class="was">PRO, CAMPAIGN THANK-YOU</p><figure class="slip violet"><p style="font-size:17px">You made my night. Thank you for the tip, and see you at the next one!</p><small>DJ Kemi</small></figure></div>
+          <div><p class="was">PRO, PAGE THANK-YOU (NO CAMPAIGN ONE)</p><figure class="slip night"><p style="font-size:17px">Every tip goes into the next mix. Thank you, truly.</p><small>DJ Kemi</small></figure></div>
+          <div><p class="was">FREE, THEIR OWN LINE <span class="tag ex" style="margin:0 0 0 4px">Exists</span></p><figure class="slip"><p style="font-size:17px">Thank you so much. It means the world.</p></figure></div>
+          <div><p class="was">TIPME’S DEFAULT (NO LINE SET)</p><figure class="slip"><p style="font-size:17px">Thank you for your tip. It really does make a difference.</p><small>from TipMe, for DJ Kemi</small></figure></div>
+        </div>
+      </div>
+      <div class="note calm" style="display:block"><b>The email uses the same rules as the line:</b> 140 characters, no links, plain text only. It goes from TipMe’s address with the person’s name in the “From” line; replies go to a no-reply inbox [default]. A refunded or failed tip never sends one.</div>
+    </div>
+  </div>
+
+  <!-- 6 REPORTS -->
+  <h2 class="sec">6. Reports: statements and exports</h2>
+  <p class="sub">A new “Reports” tab in Earnings, next to the overview. Pro gets a statement for each month and CSV or Excel for any range; Free keeps today’s CSV of tips, with a quiet line about Pro. Figures are DJ Kemi’s October and add up to the statement below.</p>
+  <div style="display:grid;grid-template-columns:1130px minmax(0,1fr);gap:32px;align-items:start">
+    <div>
+      <p class="cap">A. PRO · /dashboard/earnings/reports</p>
+      <div class="frame" style="display:grid;grid-template-columns:190px minmax(0,1fr)">
+        <nav class="side" aria-label="Dashboard"><span class="mark">tipme<b>♥</b></span><a href="#">Home</a><a href="#">Tips</a><a href="#" class="on">Earnings</a><a href="#">Campaigns</a><a href="#">My page</a><a href="#">My QR</a><a href="#">Settings</a></nav>
+        <main style="padding:26px 28px 30px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-end"><h2 class="serif" style="margin:0;font-size:40px;line-height:1">Earnings</h2><div class="secnav"><span>Overview</span><span class="on">Reports</span></div></div>
+          <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px">
+            <div class="tile"><p class="k">Tips in October</p><p class="v">₦612,000</p><p class="d">148 tips given</p></div>
+            <div class="tile"><p class="k">TipMe fee, 5%</p><p class="v">₦30,600</p><p class="d">You received ₦581,400</p></div>
+            <div class="tile"><p class="k">Withdrawn</p><p class="v">₦550,000</p><p class="d">3 withdrawals, ₦150 in fees</p></div>
+            <div class="tile"><p class="k">Balance, 31 Oct</p><p class="v">₦88,700</p><p class="d">From ₦62,300 on 1 Oct</p></div>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start">
+            <div class="card">
+              <h3>Monthly statements</h3>
+              <p class="hint">A PDF for each month, made on the 1st. We email you a link when it’s ready.</p>
+              <div style="margin-top:10px">
+                <div class="stm"><div><b>October 2026</b><p class="hint" style="font-size:12.5px">148 tips · balance ₦62,300 → ₦88,700</p></div><span class="hint">Made 1 Nov</span><span class="btn b-sec" style="min-height:38px">Download PDF</span></div>
+                <div class="stm"><div><b>September 2026</b><p class="hint" style="font-size:12.5px">121 tips · balance ₦18,900 → ₦62,300</p></div><span class="hint">Made 1 Oct</span><span class="btn b-sec" style="min-height:38px">Download PDF</span></div>
+                <div class="stm"><div><b>August 2026</b><p class="hint" style="font-size:12.5px">The month you joined Pro, from 12 Aug</p></div><span class="hint">Made 1 Sep</span><span class="btn b-sec" style="min-height:38px">Download PDF</span></div>
+                <div class="stm" style="color:#5d5a54"><div><b>November 2026</b><p class="hint" style="font-size:12.5px">So far: 61 tips, ₦254,000</p></div><span class="hint">Ready 1 Dec</span><span class="btn b-off" style="min-height:38px">Not ready yet</span></div>
+              </div>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column;gap:12px">
+              <h3>Export any range</h3>
+              <div class="fld"><span class="fl">From and to</span><div class="row" style="gap:8px"><span class="sel" style="flex:1">1 Oct 2026</span><span class="sel" style="flex:1">31 Oct 2026</span></div></div>
+              <div class="fld"><span class="fl">Include</span>
+                <div class="row" style="gap:10px;font-size:13.5px"><span class="box on"><svg width="12" height="12"><use href="#tick"></use></svg></span>Tips, with fee and campaign</div>
+                <div class="row" style="gap:10px;font-size:13.5px"><span class="box on"><svg width="12" height="12"><use href="#tick"></use></svg></span>Withdrawals and ₦50 fees</div>
+                <div class="row" style="gap:10px;font-size:13.5px"><span class="box on"><svg width="12" height="12"><use href="#tick"></use></svg></span>Pro payments from your balance</div>
+              </div>
+              <div class="fld"><span class="fl">Campaign</span><span class="sel">All campaigns and your page link</span></div>
+              <div class="row" style="justify-content:space-between"><div class="seg"><span>CSV</span><span class="on">Excel</span></div><span class="btn b-pri">Download</span></div>
+              <p class="hint" style="font-size:12px">Supporter messages and emails are never in the file. References show their last 6 characters, as today.</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <div>
+      <p class="cap">B. FREE · THE SAME TAB</p>
+      <div class="frame" style="padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-end"><div><p class="hint" style="font-weight:700;color:#000">Ada Okafor · Free</p><h2 class="serif" style="margin:2px 0 0;font-size:34px;line-height:1">Earnings</h2></div><div class="secnav"><span>Overview</span><span class="on">Reports</span></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="tile"><p class="k">Tips in October</p><p class="v" style="font-size:20px">₦46,000</p><p class="d">23 tips given</p></div>
+          <div class="tile"><p class="k">TipMe fee, 7%</p><p class="v" style="font-size:20px">₦3,220</p><p class="d">You received ₦42,780</p></div>
+        </div>
+        <div class="card" style="padding:18px 20px">
+          <h3 style="font-size:22px">Your tips as a file <span class="tag ex">Exists</span></h3>
+          <p class="hint">Every tip: date, supporter name, amounts, status and the last 6 characters of the reference. Messages stay private.</p>
+          <span class="btn b-sec" style="margin-top:12px">Download as CSV</span>
+        </div>
+        <div class="lockrow"><svg width="16" height="16" aria-hidden="true" style="fill:#7a32f9;flex:none;margin-top:3px"><use href="#spark"></use></svg><span><b style="color:#000">Monthly statements and Excel are part of TipMe Pro.</b> A PDF each month with your balance, fees and withdrawals, ready for your records or your accountant. ₦5,000 a month. <u>See Pro</u></span></div>
+      </div>
+      <p class="src" style="margin-top:10px">One line, no locked rows or blurred tables. On a phone, the tiles go two by two and the statements list stacks with full-width buttons.</p>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:794px minmax(0,1fr);gap:40px;align-items:start;margin-top:36px">
+    <div>
+      <p class="cap">C. THE MONTHLY STATEMENT · PDF, A4, PAGE 1 OF 1</p>
+      <div class="sheet" style="min-height:1123px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div class="row" style="gap:12px"><span class="av" style="width:46px;height:46px;font-size:20px;border:0">K</span><div><p style="margin:0;font:400 24px/1 'DM Serif Display',Georgia,serif">DJ Kemi</p><p style="margin:4px 0 0;font-size:11px;color:#5d5a54">usetipme.xyz/@djkemi · TipMe Pro</p></div></div>
+          <div style="text-align:right"><p style="margin:0;font:800 16px Manrope,Arial,sans-serif;letter-spacing:-.02em">tipme<span style="color:#7a32f9">♥</span></p><p style="margin:4px 0 0;font-size:11px;color:#5d5a54">Statement TM-S-2026-10-0193</p></div>
+        </div>
+        <h4 style="margin:26px 0 0;font:400 30px/1 'DM Serif Display',Georgia,serif">Tips statement, October 2026</h4>
+        <p style="margin:6px 0 0;font-size:11.5px;color:#5d5a54">1 to 31 October 2026, Lagos time · made 1 Nov 2026, 6:00 am · amounts in naira</p>
+        <div class="kv"><div><small>OPENING BALANCE</small><b>₦62,300</b></div><div><small>TIPS RECEIVED, AFTER 5%</small><b>₦581,400</b></div><div><small>PAID OUT</small><b>₦555,000</b></div><div><small>CLOSING BALANCE</small><b>₦88,700</b></div></div>
+        <h5>HOW YOUR BALANCE MOVED</h5>
+        <table class="st">
+          <thead><tr><th>DATE</th><th>WHAT</th><th class="r">AMOUNT</th><th class="r">BALANCE</th></tr></thead>
+          <tbody>
+            <tr><td>1 Oct</td><td>Opening balance</td><td class="r"></td><td class="r">₦62,300</td></tr>
+            <tr><td>1 Oct</td><td>TipMe Pro, October, paid from your balance</td><td class="r">−₦5,000</td><td class="r">₦57,300</td></tr>
+            <tr><td>1–31 Oct</td><td>Tips given by supporters, 148 tips</td><td class="r">+₦612,000</td><td class="r"></td></tr>
+            <tr><td>1–31 Oct</td><td>TipMe fee on tips, 5%</td><td class="r">−₦30,600</td><td class="r"></td></tr>
+            <tr><td>6 Oct</td><td>Withdrawal to GTBank ••4821 (₦199,950 + ₦50 fee)</td><td class="r">−₦200,000</td><td class="r"></td></tr>
+            <tr><td>17 Oct</td><td>Withdrawal to GTBank ••4821 (₦249,950 + ₦50 fee)</td><td class="r">−₦250,000</td><td class="r"></td></tr>
+            <tr><td>28 Oct</td><td>Withdrawal to GTBank ••4821 (₦99,950 + ₦50 fee)</td><td class="r">−₦100,000</td><td class="r"></td></tr>
+            <tr class="tot"><td>31 Oct</td><td>Closing balance</td><td class="r"></td><td class="r">₦88,700</td></tr>
+          </tbody>
+        </table>
+        <h5>TIPS BY CAMPAIGN</h5>
+        <table class="st">
+          <thead><tr><th>CAMPAIGN</th><th>LINK</th><th class="r">TIPS</th><th class="r">GIVEN</th><th class="r">FEE, 5%</th><th class="r">RECEIVED</th></tr></thead>
+          <tbody>
+            <tr><td>Eko Hotel residency</td><td>/@djkemi/eko</td><td class="r">64</td><td class="r">₦288,000</td><td class="r">₦14,400</td><td class="r">₦273,600</td></tr>
+            <tr><td>Owambe Saturdays</td><td>/@djkemi/owambe</td><td class="r">41</td><td class="r">₦156,500</td><td class="r">₦7,825</td><td class="r">₦148,675</td></tr>
+            <tr><td>Radio mix</td><td>/@djkemi/mix</td><td class="r">18</td><td class="r">₦52,000</td><td class="r">₦2,600</td><td class="r">₦49,400</td></tr>
+            <tr><td>Your page link</td><td>/@djkemi</td><td class="r">25</td><td class="r">₦115,500</td><td class="r">₦5,775</td><td class="r">₦109,725</td></tr>
+            <tr class="tot"><td>Total</td><td></td><td class="r">148</td><td class="r">₦612,000</td><td class="r">₦30,600</td><td class="r">₦581,400</td></tr>
+          </tbody>
+        </table>
+        <h5>WITHDRAWALS</h5>
+        <table class="st">
+          <thead><tr><th>DATE</th><th>TO</th><th class="r">WITHDRAWN</th><th class="r">FEE</th><th class="r">TO YOUR BANK</th></tr></thead>
+          <tbody>
+            <tr><td>6 Oct</td><td>GTBank ••4821</td><td class="r">₦200,000</td><td class="r">₦50</td><td class="r">₦199,950</td></tr>
+            <tr><td>17 Oct</td><td>GTBank ••4821</td><td class="r">₦250,000</td><td class="r">₦50</td><td class="r">₦249,950</td></tr>
+            <tr><td>28 Oct</td><td>GTBank ••4821</td><td class="r">₦100,000</td><td class="r">₦50</td><td class="r">₦99,950</td></tr>
+            <tr class="tot"><td>Total</td><td>3 withdrawals</td><td class="r">₦550,000</td><td class="r">₦150</td><td class="r">₦549,850</td></tr>
+          </tbody>
+        </table>
+        <p style="position:absolute;left:60px;right:60px;bottom:40px;margin:0;font-size:9.5px;line-height:1.55;color:#5d5a54;border-top:1px solid #e3e1db;padding-top:10px">“Given” is what supporters paid. TipMe’s fee is 5% on Pro (7% on Free) and comes off each tip. Each withdrawal has a ₦50 fee, taken from the amount withdrawn. Paid out = withdrawals ₦550,000 + Pro ₦5,000. This statement is a record of your TipMe balance, not a tax document. Questions: help.usetipme.xyz. Page 1 of 1.</p>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="paper">
+        <h3>The sums, checked</h3>
+        <div class="pp"><span>Opening balance</span><b>₦62,300</b></div>
+        <div class="pp"><span>+ Tips given (148)</span><b>₦612,000</b></div>
+        <div class="pp"><span>− TipMe fee, 5% of ₦612,000</span><b>₦30,600</b></div>
+        <div class="pp"><span>− TipMe Pro for October</span><b>₦5,000</b></div>
+        <div class="pp"><span>− Withdrawals, fees included</span><b>₦550,000</b></div>
+        <div class="pp" style="border-top:1.5px solid #000;margin-top:4px;padding-top:6px"><span><b>Closing balance</b></span><b>₦88,700</b></div>
+        <p class="hint" style="margin-top:12px">Campaign rows: 64 + 41 + 18 + 25 = 148 tips; ₦288,000 + ₦156,500 + ₦52,000 + ₦115,500 = ₦612,000; each fee is 5% of its row. Bank: ₦550,000 − 3 × ₦50 = ₦549,850.</p>
+      </div>
+      <div class="paper">
+        <h3>What the statement is</h3>
+        <ul>
+          <li>Made on the 1st, for the month before, in Lagos time. We email a link to download it; the PDF itself is never attached [default].</li>
+          <li>Rows come from the ledger, so the statement always agrees with the balance on screen. A refund or reversal shows as its own line in the month it happens.</li>
+          <li>One page for most people; long months add pages, with totals on page 1.</li>
+          <li>A month where the plan changed shows both rates: “7% to 11 Aug, 5% from 12 Aug”.</li>
+          <li>Never names the payment partner. Shows only the last 4 digits of the bank account.</li>
+        </ul>
+      </div>
+      <div class="paper">
+        <h3>Excel and CSV columns</h3>
+        <p class="src" style="font-size:12.5px">date · type (tip, fee, withdrawal, withdrawal fee, Pro) · campaign · link · supporter name · given · fee · received · balance after · reference (last 6) · status</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7 LAPSE -->
+  <h2 class="sec">7. When Pro ends</h2>
+  <p class="sub">Nothing a supporter holds ever breaks, and nothing is deleted. Everything set on Pro is saved and comes back on renewal, like today’s Make it yours and Campaign Studio. Drawn for DJ Kemi if Pro ended on 14 Dec.</p>
+  <div class="note calm" style="display:block;margin-bottom:20px;max-width:1100px"><b>Dashboard banner: “TipMe Pro ended on 14 Dec.”</b> Your 6 campaign links and QR codes keep working and now open your main page. Your campaign pages, goals and thank-yous are saved and come back when you renew. Statements up to 14 Dec stay in Reports. <u>Renew for ₦5,000</u></div>
+  <div class="lap">
+    <div class="paper">
+      <p class="was">CAMPAIGN PAGES</p>
+      <h3>The link opens the main page</h3>
+      <p><code>/@djkemi/lagoslive</code> and its QR open DJ Kemi’s normal page, as on Free today. Visits and tips still count toward each campaign’s results. No campaign headline, cover or goal shows.</p>
+      <p class="src">Campaigns above Free’s 1 can’t be edited or made, only stopped. <span class="tag ex">Exists</span></p>
+    </div>
+    <div class="paper">
+      <p class="was">TIP GOALS</p>
+      <h3>Goals are hidden</h3>
+      <p>Goal bars disappear from the main page and campaign pages. The goal, its target and progress are saved. On renewal it comes back with its count paused for the gap [default], so nothing looks inflated.</p>
+      <p class="src">A goal reached before the lapse stays in the dashboard history.</p>
+    </div>
+    <div class="paper">
+      <p class="was">THANK-YOUS</p>
+      <h3>Back to the default</h3>
+      <p>Receipts show the page’s own line on paper, unsigned, or TipMe’s default if there is none. Campaign thank-yous and card styles are saved, not shown. Emails to supporters who asked use the same Free version.</p>
+      <figure class="slip" style="margin-top:10px;padding:12px 14px"><p style="font-size:15px">Every tip goes into the next mix. Thank you, truly.</p></figure>
+    </div>
+    <div class="paper">
+      <p class="was">STATEMENTS</p>
+      <h3>Kept, up to the lapse</h3>
+      <p>Every statement made on Pro stays downloadable. December’s is made on 1 Jan for 1–14 Dec, the Pro days. Excel and range exports switch back to today’s CSV of tips.</p>
+      <div class="stm" style="grid-template-columns:minmax(0,1fr) auto;font-size:13px"><b>1–14 Dec 2026</b><span class="btn b-sec" style="min-height:34px;font-size:12.5px">Download PDF</span></div>
+    </div>
+  </div>
+
+  <!-- 8 RULES + QUESTIONS -->
+  <h2 class="sec">8. Rules, and what the owner still needs to answer</h2>
+  <div class="g2" style="margin-top:16px">
+    <div class="panel">
+      <span class="tag pr">Proposed</span>
+      <h3>Rules for building</h3>
+      <ul>
+        <li>A campaign page is the same person: one handle, balance and set of withdrawals. The tip area is never changed by a campaign.</li>
+        <li>Goals say “tips toward”. Never fundraising, donations, a cause, a promise, a deadline, refunds or all-or-nothing.</li>
+        <li>A goal’s progress counts confirmed tips only, before fees. “Goal reached” shows only after the server confirms the tip that crosses the target.</li>
+        <li>Thank-yous: 140 characters, no links, cleaned like today’s line. One email per tip, only to supporters who asked, never to a refunded or failed tip.</li>
+        <li>Statements come from the ledger and must add up: opening + tips − fees − Pro − withdrawals = closing.</li>
+        <li>The payment partner is never named on a page, a receipt, an email or a statement.</li>
+        <li>Pro is checked on the server for every Pro part; a lapse hides and keeps, never deletes.</li>
+      </ul>
+    </div>
+    <div class="panel orange">
+      <span class="tag ow">Question for the owner</span>
+      <h3>Open questions, with defaults in brackets</h3>
+      <ol>
+        <li><b>How many goals can be active at once?</b> <span class="ans">[1 on the main page + 1 per campaign]</span></li>
+        <li><b>Do supporters see amounts or a percentage?</b> <span class="ans">[the creator chooses; default percentage]</span></li>
+        <li><b>Is the thank-you email sent once per tip, from TipMe’s address with the creator’s name?</b> <span class="ans">[yes, once per tip]</span> <span class="ans">[yes, “DJ Kemi via TipMe”]</span></li>
+        <li><b>When is the statement made?</b> <span class="ans">[on the 1st, for the month before, emailed as a link]</span></li>
+        <li><b>Do custom covers on campaigns count toward Page Studio later?</b> <span class="ans">[yes]</span></li>
+        <li><b>The thank-you line is free today.</b> Free pages can already write one line for the receipt. Keep that, and make campaign thank-yous, card styles and the email version Pro? <span class="ans">[yes, Free keeps its one line]</span></li>
+      </ol>
+      <p class="src" style="margin-top:12px;color:#5a4520">Also needed before building: does a page goal also count tips from campaigns with no goal of their own [yes]; does the creator see a supporter’s email [no]; how long “Goal reached” shows [14 days or until a new goal]; goal target limits [₦5,000 to ₦10,000,000].</p>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":8880}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
