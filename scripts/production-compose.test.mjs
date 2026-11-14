@@ -402,6 +402,23 @@ test('compose forwards each moved switch for one release, with no default of its
   }
 });
 
+// Page Studio is the `page_studio` switch alone (owner, 14 Nov 2026: as few variables as possible). It
+// never shipped as a setting, so no deploy file forwards, defaults or documents a variable for it.
+test('no deploy file names PAGE_STUDIO_ENABLED: Page Studio is set in admin only', () => {
+  for (const file of [
+    'compose.production.yml',
+    'compose.staging.yml',
+    'production.env.example',
+    'staging.env.example',
+  ]) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.doesNotMatch(text, /PAGE_STUDIO_ENABLED/, `${file} names it`);
+  }
+});
+
 // Owner, 14 Nov 2026 (#216): limits and money tunables take the code's defaults on every copy. The
 // config keeps each as an optional override, for tests and emergencies; the deploy files name none.
 export const CODE_DEFAULT_ONLY = (name) =>

@@ -504,6 +504,8 @@ const MOVED = [
   'BUSINESS_PRO_ENABLED',
   'BUSINESS_SIGNUP_ENABLED',
   'BUSINESS_OWNERS_ENABLED',
+  // Page Studio (owner, 14 Nov 2026): the `page_studio` switch only, never a setting.
+  'PAGE_STUDIO_ENABLED',
 ];
 
 test('the moved switches are not settings any more: none is required or parsed', async () => {

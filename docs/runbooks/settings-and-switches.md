@@ -49,7 +49,7 @@ Registered for open pull requests, so they can read the switch instead of adding
 
 | Variable              | Switch key          | Money | Default | Pull request                                                                                                                                      |
 | --------------------- | ------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (declares the variable; nothing reads it yet)                                                                           |
+| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it                                                       |
 | `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`. Its variable defaults on with the pretend provider; the switch defaults off everywhere, as no money switch defaults on |
 
 Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of

@@ -33,3 +33,5 @@ export * from './support.js';
 export * from './switches.js';
 export * from './launch.js';
 export * from './announcements.js';
+export * from './studio-colour.js';
+export * from './studio-type.js';
