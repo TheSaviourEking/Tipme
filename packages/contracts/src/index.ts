@@ -26,4 +26,5 @@ export * from './changelog.js';
 export * from './pro.js';
 export * from './earnings.js';
 export * from './campaigns.js';
+export * from './campaign-pages.js';
 export * from './support.js';
