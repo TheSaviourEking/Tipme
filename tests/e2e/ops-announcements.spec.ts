@@ -128,11 +128,18 @@ test('staff write an announcement, preview and test it, and a second person appr
     await expect(main.getByTestId('announcement-progress')).toHaveText(
       'Waiting for approval',
     );
+    // This announcement's emails only: under burn-in, another run's service notice (to everyone in
+    // this shared database) can already have reached this reader.
+    const [ours] = await sql<{ id: string }>(
+      `SELECT id FROM announcements WHERE subject = $1`,
+      [subject],
+    );
+    expect(ours?.id).toBeTruthy();
     expect(
       await sql(
         `SELECT 1 FROM mail_messages m JOIN users u ON u.id = m.user_id
-          WHERE m.type = 'service_notice' AND lower(u.email) = lower($1)`,
-        [readerEmail],
+          WHERE m.dedupe_key LIKE $2 AND lower(u.email) = lower($1)`,
+        [readerEmail, `announcement:${ours!.id}:%`],
       ),
     ).toHaveLength(0);
 
