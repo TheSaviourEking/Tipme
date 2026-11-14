@@ -148,7 +148,7 @@ export function GeneralCard() {
             letterSpacing: -1.5,
           }}
         >
-          <span>A little thanks</span>
+          <span>A little tip</span>
           <span style={{ color: BRAND }}>goes a long way.</span>
         </div>
         <span

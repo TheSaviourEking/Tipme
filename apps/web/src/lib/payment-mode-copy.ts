@@ -60,7 +60,7 @@ const EXAMPLE_BODY =
 export const SITE_DESCRIPTION =
   'An appreciation-first way to recognize the people who make a difference.';
 /** The share card is prerendered once and shown on every page of every copy. */
-export const SHARE_CARD_ALT = 'TipMe. A little thanks goes a long way.';
+export const SHARE_CARD_ALT = 'TipMe. A little tip goes a long way.';
 export const HOME_DESCRIPTION =
   'For the people who make your day, your work, your world a little better.';
 

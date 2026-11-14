@@ -15,7 +15,7 @@ import { HOME_DESCRIPTION } from '@/lib/payment-mode-copy';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
-  'TipMe — A little thanks goes a long way',
+  'TipMe — A little tip goes a long way',
   HOME_DESCRIPTION,
   '/',
 );

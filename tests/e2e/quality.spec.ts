@@ -170,7 +170,7 @@ test('share cards: profiles advertise their own card, other pages the general on
 }) => {
   for (const [path, image, alt] of [
     ['/@ada', '/people/ada/share-card', 'Ada Okafor on TipMe'],
-    ['/', '/opengraph-image', 'TipMe. A little thanks goes a long way.'],
+    ['/', '/opengraph-image', 'TipMe. A little tip goes a long way.'],
   ] as const) {
     await page.goto(path);
     const ogImage = await page
