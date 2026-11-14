@@ -59,8 +59,10 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed sixteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 16);
+test('the serious actions are the agreed seventeen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 17);
+  // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) needs a second person.
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['tip.refund'], 'payments.repair');
   // Paid Pro, plan Task 9 (ruling 6): a card refund needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro.refund'], 'payments.repair');
   assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
