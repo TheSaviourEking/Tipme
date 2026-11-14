@@ -11,6 +11,7 @@ import { campaignSlugProblem, mondayOfDate } from '@tipme/domain';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { campaigns, profiles, tipCampaigns } from '../schema.js';
+import { campaignPageSettings } from './campaign-pages.js';
 import { lagosDay } from './earnings.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -81,7 +82,16 @@ export async function attributeTip(
 export function createCampaign(
   db: Database,
   profileId: string,
-  input: { name: string; slug: string; now?: Date },
+  input: {
+    name: string;
+    slug: string;
+    now?: Date;
+    /**
+     * Campaign pages are switched on: a Pro campaign starts with its own page, its name as the
+     * headline (ruling G1). Off, or on Free, it starts with none, as before.
+     */
+    page?: boolean;
+  },
 ): Promise<CampaignRow> {
   const problem = campaignSlugProblem(input.slug);
   if (problem)
@@ -117,6 +127,9 @@ export function createCampaign(
           name: input.name,
           slug: input.slug,
           createdAt: now,
+          ...(input.page === true && page.plan === 'pro'
+            ? { pageOn: true, headline: input.name }
+            : {}),
         })
         .onConflictDoNothing()
         .returning();
@@ -349,6 +362,8 @@ export function campaignDetail(
       ...results(visits.get(id) ?? 0, total?.tips ?? 0, total?.net ?? '0'),
       // At most the last 26 weeks on screen.
       weeks: weeks.slice(-26),
+      // The API drops it while campaign pages are switched off.
+      page: campaignPageSettings(row.campaign),
     };
   });
 }

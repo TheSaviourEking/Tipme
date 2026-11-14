@@ -2146,6 +2146,32 @@ body:has(.profile-page) .brand__mark {
   overflow-wrap: anywhere;
 }
 
+/* A campaign's own page (ProCampaignPages board, section 3): its headline and description under
+   the person's name. Editorial type, no card: the person stays the page's subject. */
+.campaign-top {
+  margin: var(--space-6) 0 0;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  max-width: 34em;
+}
+
+.campaign-top__headline {
+  margin: 0;
+  font-size: clamp(1.375rem, 1.1rem + 1.2vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.campaign-top__description {
+  margin: 0.625rem 0 0;
+  color: var(--text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 /* A row of plain links with icons, optically flush with the text above. */
 .profile-contact {
   display: flex;
@@ -2706,6 +2732,18 @@ body:has(.profile-page) .brand__mark {
 .profile-foot__own {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.profile-foot__campaign {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.profile-foot__campaign a {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .profile-foot .report-page {
@@ -14516,4 +14554,217 @@ a.ops-people__card:hover {
 }
 .site-nav .nav-business-start:hover {
   text-decoration: underline;
+}
+
+/* ---- Campaign pages (ProCampaignPages board, section 2): Page / Results / QR code ---- */
+.campaign-tabs__list {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  overflow-x: auto;
+}
+
+.campaign-tabs__tab {
+  min-height: 44px;
+  margin-bottom: -1px;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.campaign-tabs__tab[aria-selected='true'] {
+  border-bottom-color: var(--brand-primary);
+  color: var(--text-primary);
+}
+
+.campaign-tabs__tab:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: -2px;
+}
+
+.campaign-page-editor {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.campaign-page-editor__form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.campaign-page-editor__locked {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--brand-primary);
+  background: var(--brand-soft);
+  font-weight: 600;
+}
+
+.campaign-page-editor__fold > summary {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.campaign-page-editor__summary {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.campaign-page-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.campaign-page-editor__open {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 600;
+}
+
+.campaign-page-editor__preview-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.campaign-page-editor__back {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-2) 0;
+  background: var(--surface-base);
+}
+
+.campaign-preview {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 1rem;
+  background: var(--surface-base);
+}
+
+.campaign-preview__cover {
+  position: relative;
+  height: 6rem;
+  overflow: hidden;
+}
+
+.campaign-preview__body {
+  padding: var(--space-4);
+}
+
+.campaign-preview__who {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.campaign-preview__photo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.campaign-preview__name {
+  margin: 0;
+  font-weight: 700;
+}
+
+.campaign-preview__handle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.campaign-preview .campaign-top {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+}
+
+.campaign-preview .campaign-top__headline {
+  font-size: 1.25rem;
+}
+
+.campaign-preview__amounts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.campaign-preview__amounts span {
+  padding: var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.625rem;
+  text-align: center;
+  font-weight: 600;
+}
+
+.campaign-preview__pay {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3);
+  border-radius: 0.75rem;
+  background: var(--text-primary);
+  color: var(--surface-base);
+  text-align: center;
+  font-weight: 700;
+}
+
+/* Phone: the preview opens full screen from "Preview"; Save stays within thumb reach. */
+@media (max-width: 860px) {
+  .campaign-page-editor__preview {
+    display: none;
+  }
+
+  .campaign-page-editor__preview.is-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    padding: 0 var(--space-4) var(--space-6);
+    overflow-y: auto;
+    background: var(--surface-base);
+  }
+
+  .campaign-page-editor__actions {
+    position: sticky;
+    bottom: 0;
+    padding: var(--space-3) 0;
+    background: var(--surface-base);
+  }
+}
+
+@media (min-width: 861px) {
+  .campaign-page-editor {
+    grid-template-columns: minmax(0, 1fr) 22rem;
+  }
+
+  .campaign-page-editor__preview {
+    position: sticky;
+    top: var(--space-6);
+  }
+
+  .campaign-page-editor__preview-button {
+    display: none;
+  }
 }

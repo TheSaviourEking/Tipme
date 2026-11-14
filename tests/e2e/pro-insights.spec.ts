@@ -111,6 +111,8 @@ test('Campaign Studio: make a campaign, a visitor tips through its link, and the
     main.getByRole('heading', { name: 'Saturday gig', level: 1 }),
   ).toBeVisible();
   await expect(main.getByText(`/@${handle}/saturday-gig`)).toBeVisible();
+  // Campaign pages (on in e2e) put Page, Results and QR code in tabs; Free's Page tab is locked.
+  await main.getByRole('tab', { name: 'QR code' }).click();
   await expect(main.getByRole('img', { name: /QR code for/ })).toBeVisible();
   const detailUrl = page.url();
 
@@ -147,6 +149,7 @@ test('Campaign Studio: make a campaign, a visitor tips through its link, and the
   );
   expect(rows[0]?.n).toBe(1);
   await page.goto(detailUrl);
+  await main.getByRole('tab', { name: 'Results' }).click();
   const results = main.getByRole('region', { name: 'Results' });
   await expect(results.getByText('Fewer than 3').first()).toBeVisible();
   await expect(results.getByText('Hidden')).toBeVisible();

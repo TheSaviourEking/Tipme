@@ -3342,9 +3342,10 @@ export const proPurchases = pgTable(
 // ---- Pro insights: Campaign Studio, monthly recap, priority support (11 Nov 2026) ----
 
 /**
- * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>` to the
- * normal tip page. Only a tracked link: no goal, target, end date or purpose. Stopping keeps its
- * results; its link keeps opening the page. Never deleted while the page exists.
+ * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>`. On Pro it
+ * may have its own page (headline, description, cover) above the same person's same tip area;
+ * otherwise the link opens the normal tip page. Stopping keeps its results; its link keeps opening
+ * the main page. Never deleted while the page exists.
  */
 export const campaigns = pgTable(
   'campaigns',
@@ -3357,10 +3358,30 @@ export const campaigns = pgTable(
     slug: text('slug').notNull(),
     createdAt: createdAt(),
     stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    // Its own page (Pro; ProCampaignPages, 14 Nov 2026). Shown only while the page is Pro, the
+    // campaign runs, `page_on` is set and there is a headline. Campaigns made before the release
+    // keep `page_on` false, so their links open the normal page as before (ruling G1).
+    pageOn: boolean('page_on').notNull().default(false),
+    headline: text('headline'),
+    description: text('description'),
+    // The page's cover choices (design, colour, animation, motion); all null: "Same as page".
+    coverDesign: text('cover_design'),
+    coverColour: text('cover_colour'),
+    coverAnimation: text('cover_animation'),
+    coverMotion: text('cover_motion'),
   },
   (table) => [
     unique('campaigns_profile_slug').on(table.profileId, table.slug),
     check('campaigns_name_length', sql`char_length(name) BETWEEN 1 AND 40`),
+    check(
+      'campaigns_headline_length',
+      sql`char_length(headline) BETWEEN 1 AND 60`,
+    ),
+    check(
+      'campaigns_description_length',
+      sql`char_length(description) BETWEEN 1 AND 200`,
+    ),
+    check('campaigns_cover_motion', sql`cover_motion IN ('once', 'loop')`),
     check(
       'campaigns_slug_format',
       sql`slug ~ '^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$'`,
@@ -3383,6 +3404,27 @@ export const tipCampaigns = pgTable(
       .references(() => campaigns.id),
   },
   (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
+);
+
+/**
+ * When a page's plan changed (plan 2026-11-14 Task 2). Written only by `recomputePlan`, the one place
+ * `profiles.plan` changes, so statements know which days were Pro and a goal pauses while Pro has
+ * lapsed. Pages that were Pro at the release got one backfilled `pro` row (ruling G6).
+ */
+export const planChanges = pgTable(
+  'plan_changes',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    plan: text('plan').notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('plan_changes_profile_at').on(table.profileId, table.changedAt),
+    check('plan_changes_plan', sql`${table.plan} IN ('free', 'pro')`),
+  ],
 );
 
 /** One recap per Pro page and Lagos month, however often the monthly job runs. */

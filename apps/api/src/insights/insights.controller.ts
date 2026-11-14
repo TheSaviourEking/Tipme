@@ -9,11 +9,13 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   campaignCreateSchema,
+  campaignPageSchema,
   campaignRenameSchema,
   earningsPeriodQuerySchema,
   earningsTrendQuerySchema,
@@ -23,6 +25,8 @@ import {
   type CampaignCreateRequest,
   type CampaignDetail,
   type CampaignList,
+  type CampaignPageRequest,
+  type CampaignPageSettings,
   type CampaignRenameRequest,
   type CampaignRow,
   type EarningsPeriodQuery,
@@ -47,6 +51,7 @@ import {
   listMySupportRequests,
   myPagePlan,
   renameCampaign,
+  saveCampaignPage,
   sendSupportRequest,
   stopCampaign,
 } from '@tipme/database';
@@ -58,7 +63,10 @@ import {
 } from '../auth/session.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import { FeatureFlags } from '../feature-flags.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { ProfilesModule } from '../profiles/profiles.module.js';
+import { ProfileRevalidator } from '../profiles/revalidate.js';
 
 /**
  * Pro insights (11 Nov 2026): earnings analytics, Campaign Studio, the monthly recap and support.
@@ -70,6 +78,9 @@ import { DatabaseProvider } from '../infra/database.js';
 export class InsightsController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(FeatureFlags) private readonly flags: FeatureFlags,
+    @Inject(ProfileRevalidator)
+    private readonly revalidator: ProfileRevalidator,
   ) {}
 
   private async page(auth: AuthContext) {
@@ -133,8 +144,13 @@ export class InsightsController {
   async campaigns(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<CampaignList>> {
-    const { profileId } = await this.page(auth);
-    return { data: await listCampaigns(this.database.db, profileId) };
+    const { profileId, pro } = await this.page(auth);
+    const list = await listCampaigns(this.database.db, profileId);
+    return {
+      data: (await this.flags.isOn('campaign_pages'))
+        ? { ...list, pagesAvailable: pro }
+        : list,
+    };
   }
 
   @Post('campaigns')
@@ -146,7 +162,10 @@ export class InsightsController {
   ): Promise<ApiDataResponse<CampaignRow>> {
     const { profileId } = await this.page(auth);
     return {
-      data: await createCampaign(this.database.db, profileId, body),
+      data: await createCampaign(this.database.db, profileId, {
+        ...body,
+        page: await this.flags.isOn('campaign_pages'),
+      }),
     };
   }
 
@@ -156,10 +175,33 @@ export class InsightsController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<CampaignDetail>> {
-    const { profileId } = await this.page(auth);
+    const { profileId, pro } = await this.page(auth);
     const detail = await campaignDetail(this.database.db, profileId, id);
     if (!detail) throw new CodedHttpException(404, 'NOT_FOUND');
-    return { data: detail };
+    if (await this.flags.isOn('campaign_pages'))
+      return { data: { ...detail, pagesAvailable: pro } };
+    // Switched off: exactly the answer from before campaign pages.
+    const today: CampaignDetail = { ...detail };
+    delete today.page;
+    return { data: today };
+  }
+
+  /** A campaign's own page (Pro). 404 while campaign pages are switched off. */
+  @Put('campaigns/:id/page')
+  @HttpCode(200)
+  async savePage(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(campaignPageSchema))
+    body: CampaignPageRequest,
+  ): Promise<ApiDataResponse<CampaignPageSettings>> {
+    if (!(await this.flags.isOn('campaign_pages')))
+      throw new CodedHttpException(404, 'NOT_FOUND');
+    const { profileId, handleLower } = await this.page(auth);
+    const saved = await saveCampaignPage(this.database.db, profileId, id, body);
+    // The campaign page is cached under the profile's tag, as the main page is.
+    this.revalidator.revalidate(handleLower);
+    return { data: saved };
   }
 
   @Patch('campaigns/:id')
@@ -182,8 +224,11 @@ export class InsightsController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<{ stopped: true }>> {
-    const { profileId } = await this.page(auth);
+    const { profileId, handleLower } = await this.page(auth);
     await stopCampaign(this.database.db, profileId, id);
+    // A campaign page is cached under the profile's tag: a stopped one must go at once.
+    if (await this.flags.isOn('campaign_pages'))
+      this.revalidator.revalidate(handleLower);
     return { data: { stopped: true } };
   }
 
@@ -249,6 +294,7 @@ export class InsightsController {
 }
 
 @Module({
+  imports: [ProfilesModule],
   controllers: [InsightsController],
   providers: [SessionGuard, CsrfGuard],
 })

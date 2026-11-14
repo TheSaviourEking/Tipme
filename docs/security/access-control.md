@@ -130,6 +130,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
 | GET | `/v1/pro/price` | n/a (read) | – | – |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
+| GET | `/v1/profiles/{handle}/campaigns/{slug}` | n/a (read) | – | – |
 | POST | `/v1/profiles/{handle}/report` | – | `reports` | – |
 | GET | `/v1/qr-art/previews/{file}` | n/a (read) | – | – |
 | POST | `/v1/tip-intents` | – | `intents` | – |
@@ -217,6 +218,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/campaigns` | yes | – | – |
 | GET | `/v1/me/campaigns/{id}` | n/a (read) | – | – |
 | PATCH | `/v1/me/campaigns/{id}` | yes | – | – |
+| PUT | `/v1/me/campaigns/{id}/page` | yes | – | – |
 | POST | `/v1/me/campaigns/{id}/stop` | yes | – | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
