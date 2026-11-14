@@ -13,14 +13,14 @@ test('home switches between getting tipped and tipping with one lever', async ({
   const tipping = lever.getByRole('radio', { name: 'If you’re tipping' });
   await expect(tipped).toBeChecked();
   const steps = page.locator('main');
-  for (const step of ['Make it yours', 'Share it anywhere', 'Get your thanks'])
+  for (const step of ['Make it yours', 'Share it anywhere', 'Get your tips'])
     await expect(steps.getByText(step, { exact: true })).toBeVisible();
   await expect(steps.getByText('Scan or tap')).toBeHidden();
-  await expect(steps.getByText('Say your thanks')).toBeHidden();
+  await expect(steps.getByText('Send your tip')).toBeHidden();
 
   await tipping.click();
   await expect(tipping).toBeChecked();
-  for (const step of ['Scan or tap', 'Choose an amount', 'Say your thanks'])
+  for (const step of ['Scan or tap', 'Choose an amount', 'Send your tip'])
     await expect(steps.getByText(step, { exact: true })).toBeVisible();
   await expect(steps.getByText('Make it yours')).toBeHidden();
   await expect(

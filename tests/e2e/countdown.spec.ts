@@ -18,7 +18,7 @@ test.describe('production countdown', () => {
     await expect(
       page.getByRole('heading', {
         level: 1,
-        name: 'A little thanks is almost here.',
+        name: 'A little tip is almost here.',
       }),
     ).toBeVisible();
     await expect(
@@ -144,11 +144,11 @@ test.describe('production countdown', () => {
     expect(held.headers()['cache-control']).toContain('no-store');
     expect(held.headers()['cdn-cache-control']).toBe('no-store');
     expect(held.headers()['vercel-cdn-cache-control']).toBe('no-store');
-    expect(await held.text()).toContain('A little thanks is almost here.');
+    expect(await held.text()).toContain('A little tip is almost here.');
 
     const direct = await request.get('/coming-soon');
     const html = await direct.text();
-    expect(html).toContain('A little thanks is almost here.');
+    expect(html).toContain('A little tip is almost here.');
     expect(html).toContain('/coming-soon/opengraph-image');
 
     for (const path of [
@@ -159,7 +159,7 @@ test.describe('production countdown', () => {
     ]) {
       const response = await request.get(path);
       expect(await response.text(), path).not.toContain(
-        'A little thanks is almost here.',
+        'A little tip is almost here.',
       );
       if (path === '/opengraph-image') {
         expect(response.status()).toBe(200);

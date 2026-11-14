@@ -115,7 +115,7 @@ function frame(ctx: Ctx, style: QrStyle, width: number, height: number) {
 
 /**
  * The location sign (board section 1): the dark card, the business's initial, its name, the
- * location, the code, "Scan to thank our team", and the link in text under it. Portrait A5/A6
+ * location, the code, "Scan to tip our team", and the link in text under it. Portrait A5/A6
  * proportions; `width` in pixels.
  */
 export function drawLocationSign(
@@ -178,7 +178,7 @@ export function drawLocationSign(
     box,
   });
   ctx.fillStyle = style.frameText;
-  fitText(ctx, 'Scan to thank our team', {
+  fitText(ctx, 'Scan to tip our team', {
     x: centre,
     y: codeTop + drawn + height * 0.08,
     maxWidth,
@@ -244,7 +244,7 @@ export function drawStaffBadge(
     weight: 600,
     family: SANS,
   });
-  fitText(ctx, 'Scan to thank me', {
+  fitText(ctx, 'Scan to tip me', {
     x: column,
     y: height * 0.78,
     maxWidth: textWidth,

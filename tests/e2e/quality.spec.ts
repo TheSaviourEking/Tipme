@@ -87,7 +87,7 @@ test('business page invites people to create a business when businesses are on',
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'Let your customers thank your team.' }),
+    page.getByRole('heading', { name: 'Let your customers tip your team.' }),
   ).toBeVisible();
   await expect(page.getByRole('main')).toContainText(
     'TipMe staff check your business’s name, address and contact',
@@ -170,7 +170,7 @@ test('share cards: profiles advertise their own card, other pages the general on
 }) => {
   for (const [path, image, alt] of [
     ['/@ada', '/people/ada/share-card', 'Ada Okafor on TipMe'],
-    ['/', '/opengraph-image', 'TipMe. A little thanks goes a long way.'],
+    ['/', '/opengraph-image', 'TipMe. A little tip goes a long way.'],
   ] as const) {
     await page.goto(path);
     const ogImage = await page
@@ -330,7 +330,7 @@ test('the creator page exists as a PRD marketing route', async ({ page }) => {
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'People already want to thank you.',
+    'People already want to tip you.',
   );
 });
 

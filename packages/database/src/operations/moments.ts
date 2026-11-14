@@ -240,7 +240,7 @@ const milestoneCopy =
       return `${count} tips! A thank-you from TipMe: ${ngn(cash)} added to your balance.`;
     if (feeFree > 0)
       return `${count} tips! Your next ${feeFree} tips are fee-free.`;
-    return `${count} tips! People keep coming back to thank you.`;
+    return `${count} tips! People keep coming back to tip you.`;
   };
 
 /**

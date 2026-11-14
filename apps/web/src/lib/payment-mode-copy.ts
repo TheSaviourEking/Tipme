@@ -43,7 +43,7 @@ const CLOSED_TITLE = 'Tipping opens soon';
 const CLOSED_BODY =
   'Claim your own page while you wait. No bank details needed yet.';
 const SIGN_UP =
-  'An email address and a handle is all it takes to start receiving thanks.';
+  'An email address and a handle is all it takes to start receiving tips.';
 const CLARITY = 'You pay exactly the amount you choose.';
 const TRUST = 'No account needed. You pay exactly this amount.';
 /**
@@ -54,13 +54,13 @@ const TRUST = 'No account needed. You pay exactly this amount.';
 const PARTNER = 'You pay exactly this. You’ll confirm on our partner’s page.';
 const EXAMPLE_TITLE = 'Tip the people you know';
 const EXAMPLE_BODY =
-  'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to thank.';
+  'Ada is a fictional example. To send a tip, open the TipMe page of the person you want to tip.';
 
 /** Page descriptions prerendered for every mode, so they hold in all three. */
 export const SITE_DESCRIPTION =
   'An appreciation-first way to recognize the people who make a difference.';
 /** The share card is prerendered once and shown on every page of every copy. */
-export const SHARE_CARD_ALT = 'TipMe. A little thanks goes a long way.';
+export const SHARE_CARD_ALT = 'TipMe. A little tip goes a long way.';
 export const HOME_DESCRIPTION =
   'For the people who make your day, your work, your world a little better.';
 
