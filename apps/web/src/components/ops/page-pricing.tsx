@@ -12,8 +12,6 @@ import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
-const STANDARD_BPS = 1000;
-
 const problem = (answer: { status: number; code: string; message?: string }) =>
   answer.code === 'VALIDATION_FAILED'
     ? 'Check the values: a reason of at least 10 characters is needed.'
@@ -75,8 +73,9 @@ export function ValueWithReason({
 }
 
 /**
- * One page's pricing (ADR-0014): TipMe keeps 10% unless staff set another share for this page,
- * and fee-free tips exist only when staff grant them. Nothing here is automatic.
+ * One page's pricing (ADR-0014): TipMe keeps the page's plan rate (Free 7%, Pro 5%, owner 12 Nov
+ * 2026) unless staff set a lower share for this page; a deal at or above the plan rate is capped
+ * there. Fee-free tips exist only when staff grant them. Nothing here is automatic.
  */
 export function PagePricing({ profileId }: { profileId: string }) {
   const [pricing, setPricing] = useState<OpsPagePricing | null>(null);
@@ -111,17 +110,22 @@ export function PagePricing({ profileId }: { profileId: string }) {
   };
 
   if (!pricing) return null;
-  const fee = pricing.customFeeBps ?? STANDARD_BPS;
+  const planName = pricing.plan === 'pro' ? 'Pro' : 'Free';
+  const standard = `${planName}’s ${bpsToPercent(pricing.planFeeBps)}`;
+  const capped =
+    pricing.customFeeBps !== null && pricing.customFeeBps >= pricing.planFeeBps;
   return (
     <Card className="settings-section">
       <h2>Pricing</h2>
       <p>
-        TipMe fee: <strong>{bpsToPercent(fee)}</strong>
-        {pricing.customFeeBps === null
-          ? ' (standard)'
+        TipMe fee: <strong>{bpsToPercent(pricing.feeBps)}</strong>
+        {pricing.customFeeBps === null || capped
+          ? ` (${standard}, the plan’s rate)`
           : ' (set by staff for this page)'}
-        , processing included. Fee-free tips left:{' '}
-        <strong>{pricing.feeFreeRemaining}</strong>
+        , processing included.
+        {capped &&
+          ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
+        Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>
       </p>
       <p className="tm-hint">
         Changes apply to new tips only; a price already shown to a supporter is
@@ -130,7 +134,7 @@ export function PagePricing({ profileId }: { profileId: string }) {
       {outcome && <ActionOutcome outcome={outcome} />}
       <ValueWithReason
         label="New TipMe fee (%)"
-        hint="For example 8 or 7.5. Use 10 for the standard fee."
+        hint={`For example 4 or 2.5. Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
         submit="Set this page’s fee"
         parse={percentToBps}
         onSubmit={(bps, reason) =>
@@ -143,14 +147,14 @@ export function PagePricing({ profileId }: { profileId: string }) {
       />
       {pricing.customFeeBps !== null && (
         <ReasonAction
-          open="Return to the standard 10%"
-          field="Why return to the standard fee?"
-          submit="Use the standard fee"
+          open="Return to the plan’s rate"
+          field="Why return to the plan’s rate?"
+          submit="Use the plan’s rate"
           onSubmit={(reason) =>
             act(
               'fee',
               { feeBps: null, reason },
-              'The standard 10% applies to new tips.',
+              `The plan’s rate (${standard}) applies to new tips.`,
             )
           }
         />

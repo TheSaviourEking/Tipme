@@ -1,5 +1,5 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import type { LampTone } from '@tipme/ui';
 import { formatNaira } from './demo-amount.ts';
 
@@ -246,7 +246,7 @@ export function withdrawRefusal(code: string | undefined): {
     };
   if (code === 'WITHDRAWAL_TOO_SMALL')
     return {
-      message: `The smallest withdrawal is ${formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}.`,
+      message: `The smallest withdrawal is ${formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}.`,
       reload: true,
     };
   if (code === 'IDEMPOTENCY_CONFLICT')
@@ -310,11 +310,11 @@ export function withdrawableNow(input: {
 }
 
 /** What the field says for an amount below the smallest withdrawal (WithdrawRedesign §2). */
-export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}, or your whole balance if it’s less.`;
+export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or your whole balance if it’s less.`;
 
 /**
  * The amount is below the smallest withdrawal and isn't the whole of what can go now
- * (FEE_POLICY_V1): the server would refuse it, so the field says so before anything is sent.
+ * (CURRENT_FEE_POLICY): the server would refuse it, so the field says so before anything is sent.
  */
 export function belowMinimum(
   chosen: bigint | null,
@@ -323,7 +323,7 @@ export function belowMinimum(
   return (
     chosen !== null &&
     chosen > BigInt(0) &&
-    chosen < FEE_POLICY_V1.minWithdrawalMinor &&
+    chosen < CURRENT_FEE_POLICY.minWithdrawalMinor &&
     chosen !== withdrawable
   );
 }

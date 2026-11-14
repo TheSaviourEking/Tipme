@@ -113,7 +113,7 @@ export const myTipsNoteSchema = z.enum(['with']);
 /** Every tip ever paid to the recipient. Tips still being confirmed are not counted. */
 export interface TipTotals {
   currency: string;
-  /** Sum of what the recipient received (net of TipMe's 10%) from paid tips. */
+  /** Sum of what the recipient received (net of the TipMe fee each tip recorded) from paid tips. */
   receivedNetMinor: string;
   /** Number of paid tips. TipMe keeps no supporter identity, so this is not a count of people. */
   paidTipCount: number;

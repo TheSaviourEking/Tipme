@@ -7,7 +7,7 @@ import type {
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import {
   Button,
   InputField,
@@ -339,13 +339,14 @@ export default function WithdrawPage({
         next: result.data.nextCursor,
       });
   };
-  const smallest = formatNaira(FEE_POLICY_V1.minWithdrawalMinor);
+  const smallest = formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor);
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
   const sendable =
     chosen !== null &&
     chosen <= withdrawable &&
-    (chosen >= FEE_POLICY_V1.minWithdrawalMinor || chosen === withdrawable);
+    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
+      chosen === withdrawable);
   // Withdrawing is free: TipMe pays the payout's transfer fee (the terms; buildPayoutFeePosting
   // books it as TipMe's expense). The quote's feeMinor is that TipMe-paid cost, never taken from
   // the recipient, so what arrives is the amount asked for.

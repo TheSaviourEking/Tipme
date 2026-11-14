@@ -6,7 +6,7 @@ import type {
   BusinessDetail,
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
 import { businessMoneyState } from '@/lib/business/money-state';
@@ -89,7 +89,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     chosen !== null &&
     chosen > BigInt(0) &&
     chosen <= withdrawable &&
-    (chosen >= FEE_POLICY_V1.minWithdrawalMinor || chosen === withdrawable);
+    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
+      chosen === withdrawable);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -202,8 +203,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         </Button>
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal is{' '}
-          {formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}, or the whole balance
-          if it’s less.
+          {formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or the whole
+          balance if it’s less.
         </p>
       </form>
       <GetPaidCard

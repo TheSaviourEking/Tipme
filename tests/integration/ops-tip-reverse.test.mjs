@@ -86,7 +86,7 @@ const business = async (businessId) =>
 test('staff reverse a shared tip: both parts come back, audited, alone with the alert', async () => {
   const before = await reportedReversal(database, { bps: 1000 });
   const personBefore = await person(before.profileId);
-  assert.equal(await business(before.businessId), 36000n);
+  assert.equal(await business(before.businessId), 37200n);
   const response = await reverse(before.issueId, full);
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual((await response.json()).data, {
@@ -95,7 +95,7 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
     belowZero: false,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 36000n));
+  assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
   const audits = await q(
