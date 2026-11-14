@@ -237,14 +237,43 @@ export async function reverseTip(
       now,
     });
     const shared = lines.some((l) => l.account === 'business_payable');
-    if (input.feeReturnOn || shared)
-      await scheduleFeeReturn(tx, {
+    if (input.feeReturnOn || shared) {
+      const moves = refundMoves(lines, { businessId: '' });
+      const returning = await scheduleFeeReturn(tx, {
         tipId: tip.id,
         partnerReversalId: input.partnerReversalId,
         refundedMinor: input.refundedMinor,
-        // The reversal's own figure for TipMe's fee, so the partner balance meets the ledger.
-        amountMinor: refundMoves(lines, { businessId: '' }).feeReturnMinor,
+        // The reversal's own figure for TipMe's own fee, so the partner balance meets the ledger.
+        amountMinor: moves.feeReturnMinor,
       });
+      // Owner, 14 Nov 2026: the processing TipMe recovered from the tip is not returned. The
+      // partner took the whole refund from the person's account, so they bear it: their payable
+      // is debited and TipMe keeps the recovery, keyed on this reversal (once).
+      const person = lines.find(
+        (l) => l.account === 'recipient_payable' && l.profileId,
+      )?.profileId;
+      if (returning && person && moves.processingKeptMinor > 0n)
+        await postLedgerTransaction(tx, {
+          operationType: 'refund_processing',
+          operationKey: `refund-processing.${operationKey}`,
+          currency: tip.currency,
+          tipId: tip.id,
+          lines: [
+            {
+              account: 'recipient_payable',
+              side: 'debit',
+              amountMinor: moves.processingKeptMinor,
+              profileId: person,
+            },
+            {
+              account: 'provider_fee_recovered',
+              side: 'credit',
+              amountMinor: moves.processingKeptMinor,
+            },
+          ],
+          traceId: input.traceId ?? activeTraceId(),
+        });
+    }
   }
   const belowZero: BelowZero[] = [];
   const touched = new Set(lines.map(ownerKey));

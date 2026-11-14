@@ -80,6 +80,7 @@ test('a full refund: TipMe returns its whole ₦1,000 fee and the business owes 
   assert.deepEqual(refundMoves(reversal, { businessId: FIRM }), {
     feeReturnMinor: 100000n,
     businessBackMinor: 180000n,
+    processingKeptMinor: 0n,
   });
 });
 
@@ -89,6 +90,7 @@ test('a partial refund returns each part in the same proportion as the ledger ta
   assert.deepEqual(moves, {
     feeReturnMinor: 25000n,
     businessBackMinor: 45000n,
+    processingKeptMinor: 0n,
   });
   // What the partner takes from the staff member (the refund) is exactly their own part, plus
   // what TipMe and the business give back.
@@ -109,5 +111,44 @@ test('a refund with a fee of its own: that fee is TipMe’s cost, never sent to 
   assert.deepEqual(refundMoves(reversal, { businessId: FIRM }), {
     feeReturnMinor: 100000n,
     businessBackMinor: 180000n,
+    processingKeptMinor: 0n,
   });
+});
+
+// Owner, 14 Nov 2026: the fee TipMe returns on a refund is its own fee only (the quote's platform
+// fee), never the partner's processing fee TipMe recovered from the tip. The staff member's account
+// paid the whole refund, so they bear that processing part: TipMe keeps it.
+test('a refund returns TipMe’s own fee only; the processing fee it recovered is kept, and the person bears it', () => {
+  // Free 7% of ₦10,000 = ₦700: ₦550 TipMe's fee, ₦150 processing it recovers from the tip.
+  const withProcessing = buildPaymentPosting({
+    grossMinor: 1000000n,
+    platformFeeMinor: 55000n,
+    quotedProviderFeeMinor: 15000n,
+    actualProviderFeeMinor: 15000n,
+    recipientNetMinor: 930000n,
+    profileId: PERSON,
+  });
+  const full = buildReversalPosting(withProcessing, {
+    refundedMinor: 1000000n,
+  });
+  assert.deepEqual(refundMoves(full, { businessId: FIRM }), {
+    feeReturnMinor: 55000n,
+    businessBackMinor: 0n,
+    processingKeptMinor: 15000n,
+  });
+  const half = buildReversalPosting(withProcessing, { refundedMinor: 500000n });
+  const moves = refundMoves(half, { businessId: FIRM });
+  assert.deepEqual(moves, {
+    feeReturnMinor: 27500n,
+    businessBackMinor: 0n,
+    processingKeptMinor: 7500n,
+  });
+  const personPart = half
+    .filter((l) => l.account === 'recipient_payable')
+    .reduce((sum, l) => sum + l.amountMinor, 0n);
+  // The refund is the person's part, the processing they now bear, and TipMe's own fee back.
+  assert.equal(
+    personPart + moves.processingKeptMinor + moves.feeReturnMinor,
+    500000n,
+  );
 });

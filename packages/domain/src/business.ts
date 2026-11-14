@@ -187,11 +187,12 @@ export function allocateHoldbacks(
 }
 
 /**
- * What must move after a refund of a shared tip, from the reversal's own lines. Our partner takes
- * the whole refund from the staff member's account, and keeps TipMe's fee with TipMe: so TipMe
- * sends back what the ledger took from its fee (and any provider fee it had recovered from the
- * tip), and the business gives back what the ledger took from its share. A refund's own fee is
- * TipMe's expense (provider_fee_expense) and is never sent to anyone.
+ * What must move after a refund, from the reversal's own lines. Our partner takes the whole refund
+ * from the staff member's account, and keeps TipMe's share with TipMe. TipMe sends back only what
+ * the ledger took from its own fee (`platform_fee_revenue`), never the processing fee it recovered
+ * from the tip (owner, 14 Nov 2026): that part (`processingKeptMinor`) stays with TipMe, and the
+ * person bears it. The business gives back what the ledger took from its share. A refund's own fee
+ * is TipMe's expense (provider_fee_expense) and is never sent to anyone.
  */
 export function refundMoves(
   reversal: readonly {
@@ -201,21 +202,25 @@ export function refundMoves(
     businessId?: string;
   }[],
   input: { businessId: string },
-): { feeReturnMinor: bigint; businessBackMinor: bigint } {
+): {
+  feeReturnMinor: bigint;
+  businessBackMinor: bigint;
+  processingKeptMinor: bigint;
+} {
   let feeReturnMinor = 0n;
   let businessBackMinor = 0n;
+  let processingKeptMinor = 0n;
   for (const line of reversal) {
     if (line.side !== 'debit') continue;
-    if (
-      line.account === 'platform_fee_revenue' ||
-      line.account === 'provider_fee_recovered'
-    )
+    if (line.account === 'platform_fee_revenue')
       feeReturnMinor += line.amountMinor;
+    if (line.account === 'provider_fee_recovered')
+      processingKeptMinor += line.amountMinor;
     if (
       line.account === 'business_payable' &&
       line.businessId === input.businessId
     )
       businessBackMinor += line.amountMinor;
   }
-  return { feeReturnMinor, businessBackMinor };
+  return { feeReturnMinor, businessBackMinor, processingKeptMinor };
 }

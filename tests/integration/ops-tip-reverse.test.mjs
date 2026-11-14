@@ -92,10 +92,15 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
   assert.deepEqual((await response.json()).data, {
     reversed: true,
     posted: true,
-    belowZero: false,
+    // The fee goes back without its ₦60 processing part, which the person bears (owner, 14 Nov
+    // 2026), so their balance ends that much below zero, and it says so.
+    belowZero: true,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
+  assert.equal(
+    await person(before.profileId),
+    personBefore - (NET - 37200n) - 6000n,
+  );
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
   const audits = await q(

@@ -239,17 +239,18 @@ export async function planRefundTransfers(
 }
 
 /**
- * TipMe returns its platform fee on a refunded tip (owner, 12 Nov 2026; for a shared tip already on
- * 11 Nov): our partner takes the whole refund from the person's account and keeps TipMe's fee with
- * TipMe, so TipMe sends it back, TipMe -> the person's account, and absorbs the partner's own
- * processing fee. Called when a refund is final (`refund.paid`) and when staff reverse a lost
+ * TipMe returns its own fee on a refunded tip (owner, 12 Nov 2026; for a shared tip already on
+ * 11 Nov): our partner takes the whole refund from the person's account and keeps TipMe's share with
+ * TipMe, so TipMe sends its own fee back, TipMe -> the person's account. The processing TipMe
+ * recovered from the tip is not returned (owner, 14 Nov 2026): the person bears it, and
+ * `reverseTip` books that on their payable (`refund_processing`). Called when a refund is final (`refund.paid`) and when staff reverse a lost
  * dispute. Exactly once per partner refund or dispute (the `share_transfers_fee_once` index), and
  * never more than the tip's fee in all. `amountMinor` is the reversal's own figure when there is
  * one; otherwise the fee in proportion to what was refunded, rounded down.
  *
- * The ledger needs nothing more: the reversal already takes TipMe's fee back from its revenue
- * (`buildReversalPosting`), and both balances this moves between are the partner balance
- * (`provider_clearing`). This makes the person's partner balance match what the ledger says.
+ * The reversal already takes TipMe's fee back from its revenue (`buildReversalPosting`), and both
+ * balances this moves between are the partner balance (`provider_clearing`). With `reverseTip`'s
+ * `refund_processing` posting, the person's partner balance matches what the ledger says.
  */
 export async function scheduleFeeReturn(
   tx: Tx,
@@ -270,9 +271,9 @@ export async function scheduleFeeReturn(
     returned: string;
   }>(sql`
     SELECT t.profile_id, t.currency, q.tip_minor::text AS gross,
-           -- What our partner kept for TipMe: its platform fee is TipMe's fee plus the provider
-           -- fee TipMe took from the tip (the checkout's tipmeShareMinor), both returned.
-           (q.platform_fee_minor + q.provider_fee_minor)::text AS fee,
+           -- TipMe's own fee on the quote: never the processing part (provider_fee_minor) TipMe
+           -- recovered from the tip, which it keeps (owner, 14 Nov 2026).
+           q.platform_fee_minor::text AS fee,
            (SELECT a.provider FROM payment_attempts a
              WHERE a.intent_id = t.intent_id AND a.status = 'VERIFIED_SUCCEEDED' LIMIT 1) AS provider,
            (SELECT s.business_id FROM tip_business_shares s WHERE s.tip_id = t.id) AS business_id,

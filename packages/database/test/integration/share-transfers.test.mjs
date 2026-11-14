@@ -39,7 +39,9 @@ import { useDatabase } from './helpers.mjs';
 
 const [ADA, TOBI] = DEMO_PROFILES;
 const OWNER = ADA.userId;
-const GROSS = 1000000n; // ₦10,000, the sandbox tip: Tobi is on Free, so TipMe's fee is 7% (₦700)
+const GROSS = 1000000n; // ₦10,000, the sandbox tip: Tobi is on Free, so TipMe's share is 7% (₦700)
+// Of that ₦700, ₦150 is the processing TipMe recovers from the tip and ₦550 is TipMe's own fee: a
+// refund returns only the ₦550, and Tobi bears the ₦150 (owner, 14 Nov 2026).
 const BPS = 2000; // 80/20
 const MINUTE = 60_000;
 const SETTLE = 24 * 60 * MINUTE;
@@ -558,8 +560,8 @@ test('option B: shares and their money', async (t) => {
         {
           kind: 'fee_return',
           status: 'out_paid',
-          amount: '70000',
-          deliver: '70000',
+          amount: '55000',
+          deliver: '55000',
         },
       ]);
       await run(partner, later(SETTLE + MINUTE));
@@ -570,11 +572,11 @@ test('option B: shares and their money', async (t) => {
           to,
           amountMinor,
         })),
-        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n }],
+        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 55000n }],
       );
-      // Tobi ends even, on the partner and in the ledger.
-      assert.equal(partner.available.get(TOBI.id), 0n);
-      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
+      // Tobi bears the ₦150 processing, the same on the partner and in the ledger.
+      assert.equal(partner.available.get(TOBI.id), -15000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, -15000n);
       assert.equal(
         (await businessBalanceOf(db, shared.businessId)).availableMinor,
         0n,
@@ -613,12 +615,13 @@ test('option B: shares and their money', async (t) => {
           amountMinor: 186000n,
         },
         { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 186000n },
-        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n },
+        { call: 'send', from: 'platform', to: TOBI.id, amountMinor: 55000n },
       ]);
-      assert.equal(partner.available.get(TOBI.id), 0n);
+      // Tobi bears the ₦150 processing; TipMe gave back its own ₦550 fee only.
+      assert.equal(partner.available.get(TOBI.id), -15000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, -15000n);
       assert.equal(partner.available.get(shared.businessId), 0n);
-      // TipMe gave its fee back and absorbs the partner's processing fee.
-      assert.equal(partner.available.get('platform'), 100000000n - 70000n);
+      assert.equal(partner.available.get('platform'), 100000000n - 55000n);
       const kinds = Object.fromEntries(
         (await transfersOf(tipId)).map((r) => [r.kind, r.status]),
       );
@@ -700,10 +703,10 @@ test('option B: shares and their money', async (t) => {
         profile_id: TOBI.id,
       });
       // Tobi's account matches the ledger again: the first tip came to nothing (₦9,300 in, ₦10,000
-      // refunded, ₦700 fee back; ₦1,860 out to the business, ₦1,860 back from the second tip's
-      // share), and the second tip leaves them their ₦7,440.
-      assert.equal(partner.available.get(TOBI.id), 744000n);
-      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 744000n);
+      // refunded, ₦550 fee back, ₦150 processing borne; ₦1,860 out to the business, ₦1,860 back
+      // from the second tip's share), and the second tip leaves them their ₦7,440 less that ₦150.
+      assert.equal(partner.available.get(TOBI.id), 729000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 729000n);
       // The business's account got nothing from the second tip: its share paid the gap.
       assert.equal(partner.available.get(shared.businessId), 0n);
     },
@@ -762,8 +765,16 @@ test('option B: shares and their money', async (t) => {
         { operation_key: `reversal.refund.${refundId}` },
       ]);
       assert.deepEqual(await feeReturns(tip.tipId), [
-        { status: 'out_paid', amount: '70000', refund: `refund.${refundId}` },
+        { status: 'out_paid', amount: '55000', refund: `refund.${refundId}` },
       ]);
+      // Owner, 14 Nov 2026: what goes back is the quote's own TipMe fee, never its processing part.
+      const [quoted] = await q(
+        `SELECT q.platform_fee_minor::text AS own, q.provider_fee_minor::text AS processing
+           FROM tips t JOIN payment_intents i ON i.id = t.intent_id
+           JOIN tip_quotes q ON q.id = i.quote_id WHERE t.id = $1`,
+        [tip.tipId],
+      );
+      assert.deepEqual(quoted, { own: '55000', processing: '15000' });
       await run(partner, later(MINUTE));
       await run(partner, later(2 * MINUTE));
       assert.deepEqual(
@@ -773,7 +784,7 @@ test('option B: shares and their money', async (t) => {
           to,
           amountMinor,
         })),
-        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 70000n }],
+        [{ call: 'send', from: 'platform', to: TOBI.id, amountMinor: 55000n }],
       );
       // Staff confirming it afterwards posts nothing more, and nothing more moves.
       const again = await db.transaction((tx) =>
@@ -789,18 +800,23 @@ test('option B: shares and their money', async (t) => {
       assert.equal(partner.calls.length, 1);
       assert.equal((await feeReturns(tip.tipId))[0].status, 'done');
       assert.equal((await reversals()).length, 1);
-      // The ledger matches the partner: Tobi's balance is what their account holds (₦0), and TipMe's
-      // books show its fee gone (revenue back to zero for this tip), every transaction balanced.
-      assert.equal(partner.available.get(TOBI.id), 0n);
-      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
-      const [revenue] = await q(
-        `SELECT COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+      // The ledger matches the partner: Tobi's balance is what their account holds (-₦150, the
+      // processing they bear), TipMe's own fee is gone from its books and it keeps the ₦150
+      // processing it recovered, every transaction balanced.
+      assert.equal(partner.available.get(TOBI.id), -15000n);
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, -15000n);
+      const revenue = await q(
+        `SELECT a.code, COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
            FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
            JOIN ledger_transactions x ON x.id = e.transaction_id
-          WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')`,
+          WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')
+          GROUP BY a.code ORDER BY a.code`,
         [tip.tipId],
       );
-      assert.equal(revenue.net, '0');
+      assert.deepEqual(revenue, [
+        { code: 'platform_fee_revenue', net: '0' },
+        { code: 'provider_fee_recovered', net: '15000' },
+      ]);
       assert.deepEqual(
         await q(
           `SELECT transaction_id FROM ledger_entries GROUP BY transaction_id, currency
@@ -848,10 +864,10 @@ test('option B: shares and their money', async (t) => {
         ['sweep', 'done'],
       ]);
       const fees = partner.calls.filter(
-        (c) => c.call === 'send' && c.amountMinor === 70000n,
+        (c) => c.call === 'send' && c.amountMinor === 55000n,
       );
       assert.equal(fees.length, 1);
-      assert.equal(partner.available.get(TOBI.id), 0n);
+      assert.equal(partner.available.get(TOBI.id), -15000n);
     },
   );
 
@@ -884,19 +900,20 @@ test('option B: shares and their money', async (t) => {
       await reverse();
       await reverse(); // a repeat of the same dispute is a no-op
       assert.deepEqual(await feeReturns(tip.tipId), [
-        { status: 'out_paid', amount: '70000', refund: dispute },
+        { status: 'out_paid', amount: '55000', refund: dispute },
       ]);
       partner.available.set(TOBI.id, 0n);
       await run(partner, later(MINUTE));
-      assert.equal(partner.available.get(TOBI.id), 70000n);
+      assert.equal(partner.available.get(TOBI.id), 55000n);
     },
   );
 
   await t.test(
-    'a business tip takes the staff member’s plan rate, and a refund returns the fee its own quote took',
+    'a business tip takes the staff member’s plan rate, and a refund returns TipMe’s own fee its quote took, never the processing',
     async () => {
       // Owner, 12 Nov 2026: Free 7%, Pro 5%. The fee's return reads each tip's quote, so a plan
-      // change between the tip and its refund never changes what goes back.
+      // change between the tip and its refund never changes what goes back. Owner, 14 Nov 2026:
+      // only TipMe's own fee goes back (Free ₦550, Pro ₦350), never the ₦150 processing.
       await database.fresh();
       const shared = await atBusiness();
       const partner = pretendPartner();
@@ -923,17 +940,17 @@ test('option B: shares and their money', async (t) => {
       await refund(partner, free, { feeReturnOn: true });
       assert.deepEqual(
         (await feeReturns(pro.tipId)).map((r) => r.amount),
-        ['50000'],
+        ['35000'],
       );
       assert.deepEqual(
         (await feeReturns(free.tipId)).map((r) => r.amount),
-        ['70000'],
+        ['55000'],
       );
       await run(partner, later(SETTLE + 2 * MINUTE));
       const fees = partner.calls
         .filter((c) => c.call === 'send' && c.to === TOBI.id)
         .map((c) => c.amountMinor);
-      assert.ok(fees.includes(50000n) && fees.includes(70000n));
+      assert.ok(fees.includes(35000n) && fees.includes(55000n));
       assert.deepEqual(
         await q(
           `SELECT transaction_id FROM ledger_entries GROUP BY transaction_id, currency

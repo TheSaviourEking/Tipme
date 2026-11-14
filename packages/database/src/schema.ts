@@ -101,6 +101,9 @@ export const operationType = pgEnum('operation_type', [
   'pro_sale',
   // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
   'pro_refund',
+  // A refund whose fee TipMe returns keeps the processing TipMe recovered from the tip (owner,
+  // 14 Nov 2026): the person bears it, so their payable is debited and TipMe keeps the recovery.
+  'refund_processing',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
