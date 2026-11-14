@@ -15,6 +15,13 @@ async function expectAccessible(page: Page) {
     ),
   ).toEqual([]);
 }
+// The receipt polls its status until it settles, and several tests here answer that poll with
+// route.fetch(). A poll still in a handler when the page closes reads a disposed response and fails
+// the test after its last check (burn-in, 14 Nov 2026). So the handlers go before the page does.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const fitsViewport = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
