@@ -215,7 +215,7 @@ SELECT 'alias', handle_lower, NULL FROM handle_aliases
 
 ## 11. TipMe for businesses: turning it on and verifying the first business (owner)
 
-Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until `BUSINESS_ENABLED=true` on the API. While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own flags (`BUSINESS_SHARES_ENABLED`, `TEAM_TIPS_ENABLED`) stay off; this section does not turn them on.
+Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until staff turn on the **TipMe for businesses** switch at `/ops/switches` (it replaced `BUSINESS_ENABLED`, 14 Nov 2026; `settings-and-switches.md`). While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own switches (**Business shares**, **Team tips**) stay off; this section does not turn them on.
 
 **Before turning it on:**
 
@@ -224,9 +224,9 @@ Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are
 
 **Turning it on:**
 
-3. **Staging first.** Set `BUSINESS_ENABLED=true` in `/srv/tipme/staging.env` and recreate the API. Check `curl -s https://$STAGING_API_HOST/health/release` shows `"business":true`. The web reads that answer; no web deploy is needed.
+3. **Staging first.** Turn on **TipMe for businesses** at staging's `/ops/switches`, with a reason and a fresh code; no restart. Check `curl -s https://$STAGING_API_HOST/health/release` shows `"business":true`. The web reads that answer; no web deploy is needed.
 4. Walk the journey on staging: create a business from the navbar's "Businesses", verify it from `/ops/businesses` as a second staff member, invite someone by link, check them in, print the location sign, tip through it with the pretend partner, and see the count and note on the Business page.
-5. Then set `BUSINESS_ENABLED=true` in `production.env` and recreate the API colour, and check `/health/release` on production the same way.
+5. Then turn it on at production's `/ops/switches`, and check `/health/release` on production the same way (within 15 seconds).
 
 **Verifying the first business (staff, not one of its managers):**
 
@@ -234,7 +234,7 @@ Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are
 7. **Verify this business** with a reason and a fresh code. With a second qualified person it waits for their approval; it runs alone only when nobody else qualifies, which the log and the alert record. If you manage this business, it is refused.
 8. After verification the location page shows the verified line and the people on shift, and the owners can print their codes.
 
-**To turn it off:** set `BUSINESS_ENABLED=false` and recreate the API colour. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
+**To turn it off:** turn the switch off at `/ops/switches`. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
 
 ## Staff access
 

@@ -14,7 +14,8 @@ review, is still open, and **whether recognition should wait for it is the owner
 - Any receipt of a recognised tip has "Stop {name} recognising me" (`POST /v1/tips/{tipId}/recognition/stop`, with
   the receipt's status token). It deletes that supporter row; their past tips stop being grouped. The tips stay.
 
-`SUPPORTER_RECOGNITION` is the lever.
+The `supporter_recognition` switch in admin (`/ops/switches`, **Repeat supporters**) is the lever. It replaced the
+`SUPPORTER_RECOGNITION` setting (owner, 14 Nov 2026).
 
 | Setting            | What it does                                                                                                                                                         |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -26,11 +27,10 @@ keeps working while it is `off`: stopping is always the supporter's to do.
 
 ## Switching it
 
-1. **Set the value:** in the API's settings, set `SUPPORTER_RECOGNITION=off` (or `on`). In production that is
-   `/srv/tipme-production/production.env`. In staging it is the staging env file. Check it by name only:
-   `grep -c '^SUPPORTER_RECOGNITION=off$' production.env`.
-2. **Restart the API:** the API reads the setting when it starts, so it takes effect with the next ship
-   (`docs/runbooks/production.md`).
+1. **Set it in admin:** at `/ops/switches`, find **Repeat supporters** (it replaced `SUPPORTER_RECOGNITION`), choose on or off, give a
+   reason and enter a fresh code. It is audited and shows in the switch's history (`settings-and-switches.md`).
+2. **No restart:** the API copy that took the change uses it at once; the others within 15 seconds (at once while
+   live updates are on).
 3. **Wait for the pages:** cached public pages catch up within the web cache's backstop, about 30 seconds after their
    next visit (`apps/web/src/lib/profiles-api.ts`). Until then a form may still show the tick box; the API ignores
    the key anyway.

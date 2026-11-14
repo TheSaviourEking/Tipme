@@ -251,7 +251,10 @@ test('production.env.example names every ${VAR} the compose file reads, with no 
   const values = new Map(
     lines.map((l) => [l.split('=')[0], l.slice(l.indexOf('=') + 1)]),
   );
-  const missing = [...new Set(readVars)].filter((v) => !values.has(v));
+  // The moved switches are forwarded for one release only, as seeds (SEED_ONLY below).
+  const missing = [...new Set(readVars)].filter(
+    (v) => !values.has(v) && !SEED_ONLY.includes(v),
+  );
   assert.deepEqual(
     missing,
     [],
@@ -337,4 +340,61 @@ test('every app service notices a dead connection soon', { skip }, () => {
       '8',
       name,
     );
+});
+
+// Feature switches (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md): set in admin now. The
+// compose files forward the old variables for one release, so the first start seeds each switch from
+// the server's current value; nothing defaults them here. The examples no longer name them.
+export const SEED_ONLY = [
+  'PRO_BILLING_ENABLED',
+  'PRO_PAY_FROM_BALANCE',
+  'PRO_REFUNDS',
+  'PRO_AUTO_RENEW',
+  'BUSINESS_ENABLED',
+  'BUSINESS_SHARES_ENABLED',
+  'TEAM_TIPS_ENABLED',
+  'ANALYTICS_ENABLED',
+  'ADULT_PLATFORM_LINKS',
+  'SUPPORTER_RECOGNITION',
+];
+
+test('the env examples no longer name the switches that moved to admin', () => {
+  for (const file of ['production.env.example', 'staging.env.example']) {
+    const example = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY)
+      assert.doesNotMatch(
+        example,
+        new RegExp(`^${name}=`, 'm'),
+        `${file} still sets ${name}`,
+      );
+    assert.match(
+      example,
+      /settings-and-switches\.md/,
+      `${file} says where they went`,
+    );
+  }
+});
+
+test('compose forwards each moved switch for one release, with no default of its own', () => {
+  for (const file of ['compose.production.yml', 'compose.staging.yml']) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY) {
+      const uses = [
+        ...text.matchAll(new RegExp(`\\$\\{${name}([^}]*)\\}`, 'g')),
+      ];
+      assert.ok(uses.length > 0, `${file} no longer forwards ${name}`);
+      for (const use of uses)
+        assert.equal(
+          use[1],
+          ':-',
+          `${file}: ${name} must default to blank (seed only)`,
+        );
+    }
+  }
 });

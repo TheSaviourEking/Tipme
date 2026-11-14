@@ -47,11 +47,19 @@ services:
       DIAGNOSTICS_ENABLED: ${DIAGNOSTICS_ENABLED:-false}
       # Live updates over text/event-stream. Off: the stream routes answer 204 (production runbook).
       LIVE_UPDATES_ENABLED: ${LIVE_UPDATES_ENABLED:-false}
-      # TipMe for businesses: off until the owner turns it on (plan 2026-11-06-business, B9).
-      BUSINESS_ENABLED: ${BUSINESS_ENABLED:-false}
-      # Business release 2, each on top of BUSINESS_ENABLED: off until the owner turns it on.
-      BUSINESS_SHARES_ENABLED: ${BUSINESS_SHARES_ENABLED:-false}
-      TEAM_TIPS_ENABLED: ${TEAM_TIPS_ENABLED:-false}
+      # Deprecated, for one release: feature switches are set in admin (/ops/switches). These only seed
+      # each switch on the first start after release; then the stored value wins and these are ignored
+      # (docs/runbooks/settings-and-switches.md). No defaults here. Remove in the next release.
+      BUSINESS_ENABLED: ${BUSINESS_ENABLED:-}
+      BUSINESS_SHARES_ENABLED: ${BUSINESS_SHARES_ENABLED:-}
+      TEAM_TIPS_ENABLED: ${TEAM_TIPS_ENABLED:-}
+      PRO_BILLING_ENABLED: ${PRO_BILLING_ENABLED:-}
+      PRO_PAY_FROM_BALANCE: ${PRO_PAY_FROM_BALANCE:-}
+      PRO_REFUNDS: ${PRO_REFUNDS:-}
+      PRO_AUTO_RENEW: ${PRO_AUTO_RENEW:-}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
+      ADULT_PLATFORM_LINKS: ${ADULT_PLATFORM_LINKS:-}
+      SUPPORTER_RECOGNITION: ${SUPPORTER_RECOGNITION:-}
       LIVE_MAX_STREAMS: ${LIVE_MAX_STREAMS:-2000}
       # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
@@ -68,10 +76,6 @@ services:
       BACHS_WEBHOOK_SECRET: ${BACHS_WEBHOOK_SECRET:-}
       BACHS_PREVIOUS_WEBHOOK_SECRET: ${BACHS_PREVIOUS_WEBHOOK_SECRET:-}
       BACHS_PLATFORM_ORGANIZATION_ID: ${BACHS_PLATFORM_ORGANIZATION_ID:-}
-      PRO_BILLING_ENABLED: ${PRO_BILLING_ENABLED:-false}
-      PRO_PAY_FROM_BALANCE: ${PRO_PAY_FROM_BALANCE:-off}
-      PRO_REFUNDS: ${PRO_REFUNDS:-off}
-      PRO_AUTO_RENEW: ${PRO_AUTO_RENEW:-off}
       WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN}
       STATUS_TOKEN_SECRET: ${STATUS_TOKEN_SECRET:?}
       RATE_LIMIT_QUOTES_PER_MIN: ${RATE_LIMIT_QUOTES_PER_MIN:-30}
@@ -93,9 +97,6 @@ services:
       RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: ${RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN:-120}
       RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: ${RATE_LIMIT_BUSINESS_NOTE_PER_HOUR:-30}
       PARTNER_QUOTE_CACHE_SECONDS: ${PARTNER_QUOTE_CACHE_SECONDS:-30}
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
-      ADULT_PLATFORM_LINKS: ${ADULT_PLATFORM_LINKS:-on}
-      SUPPORTER_RECOGNITION: ${SUPPORTER_RECOGNITION:-on}
       RATE_LIMIT_AUTH_PER_HOUR: ${RATE_LIMIT_AUTH_PER_HOUR:-10}
       RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR: ${RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR:-3}
       # The release check's staff address: lifted code limit on this test copy (as .example).
@@ -174,7 +175,11 @@ services:
       PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:-mock}
       PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
       BACHS_SANDBOX_API_KEY: ${BACHS_SANDBOX_API_KEY:-}
-      PRO_AUTO_RENEW: ${PRO_AUTO_RENEW:-off}
+      # Deprecated, for one release: feature switches are set in admin (/ops/switches). These only seed
+      # each switch on the first start after release; then the stored value wins and these are ignored
+      # (docs/runbooks/settings-and-switches.md). No defaults here. Remove in the next release.
+      PRO_AUTO_RENEW: ${PRO_AUTO_RENEW:-}
+      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       MAIL_SEAL_KEY: ${MAIL_SEAL_KEY:?}
       MAIL_DEFAULT_PROVIDER: ${MAIL_DEFAULT_PROVIDER:-mock}
       ZEPTOMAIL_API_KEY: ${ZEPTOMAIL_API_KEY:-}
@@ -198,7 +203,6 @@ services:
       # The take-back sweep tells the web app when a page changes username.
       WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
       WEB_REVALIDATE_URL: ${WEB_REVALIDATE_URL:-}
-      ANALYTICS_ENABLED: ${ANALYTICS_ENABLED:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
       GIT_SHA: ${TIPME_VERSION}
