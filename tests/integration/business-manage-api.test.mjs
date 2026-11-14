@@ -348,3 +348,39 @@ test('API: applying is rate limited per person', async () => {
     201,
   );
 });
+
+// Business sign-up, Task D2: with BUSINESS_SIGNUP_ENABLED off (this stack), nothing of it shows.
+test('API: with business sign-up off, verified-seen is 404 and a verified owner gets no celebrate', async () => {
+  const applied = await call('POST', '/v1/me/businesses', {
+    cookie: ada.cookie,
+    body: application(),
+  });
+  assert.equal(applied.status, 201);
+  const id = applied.body.data.id;
+  await database.pool.query(
+    `UPDATE businesses SET status = 'verified', verified_at = now() WHERE id = $1`,
+    [id],
+  );
+  const read = await call('GET', `/v1/me/businesses/${id}`, {
+    cookie: ada.cookie,
+  });
+  assert.deepEqual(read.body.data.you, { role: 'owner' });
+  const seen = await call('POST', `/v1/me/businesses/${id}/verified-seen`, {
+    cookie: ada.cookie,
+  });
+  assert.equal(seen.status, 404);
+  assert.equal(seen.body.error.code, 'NOT_FOUND');
+});
+
+test('API: ownerName is optional and at most 60 characters', async () => {
+  const long = await call('POST', '/v1/me/businesses', {
+    cookie: ada.cookie,
+    body: { ...application(), ownerName: 'x'.repeat(61) },
+  });
+  assert.equal(long.status, 400);
+  const fine = await call('POST', '/v1/me/businesses', {
+    cookie: ada.cookie,
+    body: { ...application(), ownerName: 'Ada' },
+  });
+  assert.equal(fine.status, 201);
+});

@@ -2406,9 +2406,18 @@ export const businessManagers = pgTable(
     addedBy: uuid('added_by').references(() => users.id),
     createdAt: createdAt(),
     removedAt: timestamp('removed_at', { withTimezone: true }),
+    // Business sign-up (Phase D, R13): a manager with no page is named by this, set from the
+    // sign-up contact name. A page's own name still wins wherever managers are listed.
+    shownName: text('shown_name'),
+    // R19: when this manager saw the once-only "verified" moment.
+    verifiedSeenAt: timestamp('verified_seen_at', { withTimezone: true }),
   },
   (table) => [
     check('business_managers_role', sql`role IN ('owner', 'location_manager')`),
+    check(
+      'business_managers_shown_name',
+      sql`shown_name IS NULL OR char_length(shown_name) BETWEEN 1 AND 60`,
+    ),
     check(
       'business_managers_location',
       sql`(role = 'owner') = (location_id IS NULL)`,

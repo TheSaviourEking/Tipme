@@ -150,3 +150,41 @@ test('/health/release carries businessSignup and businessOwners', async () => {
   assert.equal(no.businessSignup, false);
   assert.equal(no.businessOwners, false);
 });
+
+// Business sign-up, Task D2: the whole business path through the API, with no page.
+test('a login with no page applies, and sees celebrate once after verification', async () => {
+  const email = unique();
+  const { cookie } = await signIn(on.api, email);
+  const applied = await post(
+    on.api,
+    '/v1/me/businesses',
+    { ...application(email), ownerName: 'Ngozi' },
+    cookie,
+  );
+  assert.equal(applied.status, 201);
+  const { id } = (await applied.json()).data;
+  const detail = async () =>
+    (
+      await (
+        await fetch(`${on.api}/v1/me/businesses/${id}`, { headers: { cookie } })
+      ).json()
+    ).data;
+  assert.deepEqual((await detail()).you, { role: 'owner' });
+  await database.pool.query(
+    `UPDATE businesses SET status = 'verified', verified_at = now() WHERE id = $1`,
+    [id],
+  );
+  assert.deepEqual((await detail()).you, { role: 'owner', celebrate: true });
+  for (let i = 0; i < 2; i++) {
+    const seen = await post(on.api, `/v1/me/businesses/${id}/verified-seen`, {}, cookie);
+    assert.equal(seen.status, 204);
+  }
+  assert.deepEqual((await detail()).you, { role: 'owner' });
+  const managers = await (
+    await fetch(`${on.api}/v1/me/businesses/${id}/managers`, { headers: { cookie } })
+  ).json();
+  assert.deepEqual(
+    managers.data.map((m) => m.name),
+    ['Ngozi'],
+  );
+});
