@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-  BUSINESS_MIN_WITHDRAWAL_MINOR,
+  businessMinWithdrawalMinor,
   CURRENT_FEE_POLICY,
   buildPayoutFeePosting,
   buildPayoutPosting,
@@ -1799,12 +1799,11 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // A business batches its shares (option B), so its minimum is higher (a ruling the owner
-      // can change: BUSINESS_MIN_WITHDRAWAL_MINOR); like a person's, it may take everything it
-      // can, since it pays the transfer fee from the amount (owner, 12 Nov 2026).
+      // A business's minimum is the fee policy's minimum tip (owner, 14 Nov 2026); like a
+      // person's, it may take everything it can, since it pays the transfer fee from the amount.
       if (
         'businessId' in owner &&
-        input.amountMinor < BUSINESS_MIN_WITHDRAWAL_MINOR &&
+        input.amountMinor < businessMinWithdrawalMinor() &&
         input.amountMinor !== withdrawable
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');

@@ -402,20 +402,23 @@ test('a business balance and its withdrawals', async (t) => {
       await database.fresh();
       const shared = await atBusiness();
       const { share } = await paidTip(shared);
-      await withdraw(shared.businessId, share - 300000n);
-      assert.equal(await businessBalance(shared.businessId), 300000n);
+      // Owner, 14 Nov 2026: the minimum is the fee policy's minimum tip (₦2,000), not ₦5,000.
+      const smallest = await withdraw(shared.businessId, 200000n);
+      assert.equal(smallest.status, 'REQUESTED');
+      await withdraw(shared.businessId, share - 200000n - 150000n);
+      assert.equal(await businessBalance(shared.businessId), 150000n);
       assert.equal(
-        await codeOf(withdraw(shared.businessId, 299999n)),
+        await codeOf(withdraw(shared.businessId, 149999n)),
         'WITHDRAWAL_TOO_SMALL',
       );
-      const all = await withdraw(shared.businessId, 300000n);
+      const all = await withdraw(shared.businessId, 150000n);
       assert.deepEqual(
         await q(
           `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee, fee_payer
              FROM payouts WHERE id = $1`,
           [all.payoutId],
         ),
-        [{ sent: '295000', fee: '5000', fee_payer: 'user' }],
+        [{ sent: '145000', fee: '5000', fee_payer: 'user' }],
       );
       assert.equal(await businessBalance(shared.businessId), 0n);
 

@@ -160,10 +160,10 @@ test('an owner reads the business balance from its share lines', async () => {
     balanceMinor: share.toString(),
     canWithdraw: true,
     // Option B: the paid share waits to move to the business's own account (the pretend partner
-    // needs no account of its own), and a business withdraws at least ₦5,000.
+    // needs no account of its own), and a business withdraws at least the minimum tip (₦2,000).
     onTheWayMinor: share.toString(),
     heldBackMinor: '0',
-    minWithdrawalMinor: '500000',
+    minWithdrawalMinor: '200000',
     payoutAccount: 'not_needed',
   });
   const quote = await call('GET', `${base()}/withdrawal-quote`, {
@@ -243,12 +243,17 @@ test('an owner withdraws: CSRF and a key are required, a retry replays, too much
     amount: '495000',
     fee: '5000',
   });
-  // A business batches its shares: under ₦5,000 is refused.
+  // Owner, 14 Nov 2026: a business withdraws at least the minimum tip (₦2,000), or everything.
   const tooSmall = await call('POST', path, {
-    body: { amountMinor: '499999' },
+    body: { amountMinor: '199999' },
     headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },
   });
   assert.equal(tooSmall.body.error.code, 'WITHDRAWAL_TOO_SMALL');
+  const smallest = await call('POST', path, {
+    body: { amountMinor: '200000' },
+    headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },
+  });
+  assert.equal(smallest.status, 201);
   const tooMuch = await call('POST', path, {
     body: { amountMinor: share.toString() },
     headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },

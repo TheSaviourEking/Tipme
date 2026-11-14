@@ -96,7 +96,7 @@ export function businessMoneyState(
 }
 
 /**
- * Option B: a business withdraws in batches of at least its minimum, or everything it can withdraw
+ * A business withdraws at least its minimum (the minimum tip, from the API), or everything it can withdraw
  * now (owner, 12 Nov 2026: the business pays the transfer fee from the amount, so "everything" costs
  * TipMe nothing), never more, and always more than the fee it pays (`feeMinor`; zero when TipMe's
  * unused top-up pays it), so something arrives.

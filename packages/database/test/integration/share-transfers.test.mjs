@@ -507,17 +507,17 @@ test('option B: shares and their money', async (t) => {
   );
 
   await t.test(
-    'a business withdraws at least ₦5,000, or everything it has, less the ₦50 fee',
+    'a business withdraws at least the minimum tip (₦2,000), or everything it has, less the ₦50 fee',
     async () => {
-      // Owner, 12 Nov 2026: the business pays the transfer fee from the amount, so taking all of a
-      // balance under the minimum is allowed again (it costs TipMe nothing); part of it is not.
+      // Owner, 14 Nov 2026: the business minimum is the fee policy's minimum tip. The business pays
+      // the transfer fee from the amount, so taking all of a balance under it is allowed; part is not.
       await database.fresh();
       const shared = await atBusiness();
       const partner = pretendPartner();
-      partner.available.set(TOBI.id, 930000n * 2n);
-      for (let i = 0; i < 2; i += 1) await paidTip({ shared });
+      partner.available.set(TOBI.id, 930000n);
+      await paidTip({ shared });
       await run(partner, later(SETTLE + MINUTE));
-      // ₦3,720 in the business's balance and on its account: everything, but under the minimum.
+      // ₦1,860 in the business's balance and on its account: everything, but under the minimum.
       const withdraw = (amountMinor) =>
         requestBusinessWithdrawal(db, {
           businessId: shared.businessId,
@@ -526,15 +526,15 @@ test('option B: shares and their money', async (t) => {
           idempotencyKey: randomUUID(),
           provider: partner.provider,
         });
-      assert.equal(await codeOf(withdraw(371999n)), 'WITHDRAWAL_TOO_SMALL');
-      const all = await withdraw(372000n);
+      assert.equal(await codeOf(withdraw(185999n)), 'WITHDRAWAL_TOO_SMALL');
+      const all = await withdraw(186000n);
       assert.equal(all.status, 'REQUESTED');
       assert.deepEqual(
         await q(
           `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee FROM payouts WHERE id = $1`,
           [all.payoutId],
         ),
-        [{ sent: '367000', fee: '5000' }],
+        [{ sent: '181000', fee: '5000' }],
       );
       assert.equal(
         (await businessBalanceOf(db, shared.businessId)).availableMinor,

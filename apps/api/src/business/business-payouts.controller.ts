@@ -51,7 +51,7 @@ import {
   type PayoutReader,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
-import { BUSINESS_MIN_WITHDRAWAL_MINOR } from '@tipme/domain';
+import { businessMinWithdrawalMinor } from '@tipme/domain';
 import {
   BachsApiError,
   type BachsProvider,
@@ -143,7 +143,7 @@ export class BusinessPayoutsController {
         canWithdraw: availableMinor > 0n,
         onTheWayMinor: money.onTheWayMinor.toString(),
         heldBackMinor: money.heldBackMinor.toString(),
-        minWithdrawalMinor: BUSINESS_MIN_WITHDRAWAL_MINOR.toString(),
+        minWithdrawalMinor: businessMinWithdrawalMinor().toString(),
         payoutAccount,
       },
     };

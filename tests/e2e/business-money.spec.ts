@@ -117,7 +117,7 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
     `On its way: ${shareText}`,
   );
   await expect(
-    money.getByText(/The smallest withdrawal for a business is ₦5,000/),
+    money.getByText(/The smallest withdrawal for a business is ₦2,000/),
   ).toBeVisible();
   // As for a person, the pretend partner pays without a bank on file ("Pretend bank").
   await expect(money.getByText('Ready to withdraw')).toBeVisible();
@@ -183,16 +183,17 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
   expect(await fitsViewport(page)).toBe(true);
 });
 
-// Owner, 12 Nov 2026: the business pays the ₦50 transfer fee from the amount, so it may take
-// everything it has under ₦5,000 (not part of it), and nothing when that is ₦50 or less.
-test('under ₦5,000 a business may take everything, less the ₦50 fee; ₦50 or less, it is told why', async ({
+// Owner, 12 and 14 Nov 2026: the business pays the ₦50 transfer fee from the amount, and its
+// minimum is the minimum tip (₦2,000): it may take everything it has under that (not part of it),
+// and nothing when that is ₦50 or less.
+test('under ₦2,000 a business may take everything, less the ₦50 fee; ₦50 or less, it is told why', async ({
   page,
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo);
   const { userId } = await accountOf(who.email);
   const business = await seedBusiness({ owner: userId });
-  // Hold the balance at ₦3,600, the sandbox share of two ₦10,000 tips at 80/20; later at ₦50.
-  let held = '360000';
+  // Hold the balance at ₦1,800, the sandbox share of a ₦10,000 tip at 80/20; later at ₦50.
+  let held = '180000';
   await page.route(
     `**/v1/me/businesses/${business.businessId}/balance`,
     (route) =>
@@ -205,7 +206,7 @@ test('under ₦5,000 a business may take everything, less the ₦50 fee; ₦50 o
             canWithdraw: true,
             onTheWayMinor: '0',
             heldBackMinor: '180000',
-            minWithdrawalMinor: '500000',
+            minWithdrawalMinor: '200000',
             payoutAccount: 'not_needed',
           },
         },
@@ -249,7 +250,7 @@ test('under ₦5,000 a business may take everything, less the ₦50 fee; ₦50 o
   );
   await page.goto('/dashboard/business');
   const money = page.locator('#money');
-  await expect(money.getByTestId('business-balance')).toHaveText('₦3,600');
+  await expect(money.getByTestId('business-balance')).toHaveText('₦1,800');
   await expect(
     money.getByText('Held back from the next shares', { exact: true }),
   ).toBeVisible();
@@ -257,20 +258,20 @@ test('under ₦5,000 a business may take everything, less the ₦50 fee; ₦50 o
     '₦1,800 will be taken from the business’s next shares',
   );
   await expect(money).toContainText(
-    'The smallest withdrawal for a business is ₦5,000, or everything it has.',
+    'The smallest withdrawal for a business is ₦2,000, or everything it has.',
   );
   // Part of it, under the minimum: the button can't send it.
-  await money.getByLabel('Amount (NGN)').fill('3000');
+  await money.getByLabel('Amount (NGN)').fill('1000');
   await expect(
-    money.getByRole('button', { name: 'Withdraw ₦3,000' }),
+    money.getByRole('button', { name: 'Withdraw ₦1,000' }),
   ).toBeDisabled();
   await expect(money.getByTestId('business-you-receive')).toHaveCount(0);
   // Everything: allowed, and the page says what the business receives.
   await money.getByRole('button', { name: 'Everything' }).click();
   await expect(money.getByTestId('business-you-receive')).toHaveText(
-    'The ₦50 transfer fee comes off it: the business receives ₦3,550.',
+    'The ₦50 transfer fee comes off it: the business receives ₦1,750.',
   );
-  const send = money.getByRole('button', { name: 'Withdraw ₦3,600' });
+  const send = money.getByRole('button', { name: 'Withdraw ₦1,800' });
   await expect(send).toBeEnabled();
   await send.click();
   await expect(
