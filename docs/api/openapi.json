@@ -4134,6 +4134,153 @@
         ]
       }
     },
+    "/v1/me/campaigns/{id}/page": {
+      "put": {
+        "operationId": "Insights.savePage",
+        "tags": [
+          "Insights"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  },
+                  "headline": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 480
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1600
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cover": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "design": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "colour": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "animation": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "motion": {
+                            "type": "string",
+                            "enum": [
+                              "once",
+                              "loop"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "design"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "on",
+                  "headline",
+                  "description",
+                  "cover"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/campaigns/{id}/stop": {
       "post": {
         "operationId": "Insights.stop",
@@ -16124,6 +16271,55 @@
         "x-tipme-access": "public"
       }
     },
+    "/v1/profiles/{handle}/campaigns/{slug}": {
+      "get": {
+        "operationId": "PublicProfile.campaignPage",
+        "tags": [
+          "PublicProfile"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/profiles/{handle}/report": {
       "post": {
         "operationId": "PublicProfile.report",
@@ -17035,6 +17231,9 @@
                   "CAMPAIGN_LIMIT",
                   "CAMPAIGN_SLUG_TAKEN",
                   "CAMPAIGN_SLUG_UNAVAILABLE",
+                  "CAMPAIGN_PRO_REQUIRED",
+                  "CAMPAIGN_STOPPED",
+                  "CAMPAIGN_HEADLINE_NAME",
                   "SUPPORT_TOO_MANY_OPEN",
                   "INTERNAL_ERROR"
                 ]

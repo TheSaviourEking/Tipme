@@ -16,12 +16,14 @@ import {
   type ApiDataResponse,
   type HandleStatus,
   type ProfileReportReason,
+  type PublicCampaignPage,
   type PublicProfile,
 } from '@tipme/contracts';
 import {
   checkHandle,
   handleAliasTarget,
   normaliseHandle,
+  publicCampaignPage,
   publicProfile,
   reportProfile,
 } from '@tipme/database';
@@ -29,6 +31,7 @@ import { bachsEnvironment, liveCheckoutOpenFor } from '@tipme/payments';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { FeatureFlags } from '../feature-flags.js';
 import { DatabaseProvider } from '../infra/database.js';
 
 @Controller('v1')
@@ -36,6 +39,7 @@ export class PublicProfileController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(API_CONFIG) private readonly config: ApiConfig,
+    @Inject(FeatureFlags) private readonly flags: FeatureFlags,
   ) {}
 
   /**
@@ -72,6 +76,25 @@ export class PublicProfileController {
     if (!movedTo) throw new NotFoundException();
     response.status(308).setHeader('Location', `/v1/profiles/${movedTo}`);
     return { data: { movedTo } };
+  }
+
+  /**
+   * A campaign's own page (Pro): headline, description and cover, never the campaign's id, name or
+   * results. 404 while campaign pages are switched off, and for a stopped, unknown or page-less
+   * campaign, so the web shows the main page as before. The handle must be current: an old one
+   * answers 404 too, and the web follows the main page's redirect first.
+   */
+  @Get('profiles/:handle/campaigns/:slug')
+  @Header('Cache-Control', 'no-store')
+  async campaignPage(
+    @Param('handle') handle: string,
+    @Param('slug') slug: string,
+  ): Promise<ApiDataResponse<PublicCampaignPage>> {
+    if (!(await this.flags.isOn('campaign_pages')))
+      throw new NotFoundException();
+    const page = await publicCampaignPage(this.database.db, handle, slug);
+    if (!page) throw new NotFoundException();
+    return { data: page };
   }
 
   /**
