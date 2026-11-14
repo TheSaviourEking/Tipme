@@ -232,7 +232,10 @@ export function featureSwitchSeedsFrom(
  * until staff first set it; until then the web keeps reading its own old setting, so release day
  * changes nothing and the Vercel lines can be deleted once staff have set these here.
  */
-export const DISPLAY_SETTINGS = ['pilot_notice', 'production_launch_at'] as const;
+export const DISPLAY_SETTINGS = [
+  'pilot_notice',
+  'production_launch_at',
+] as const;
 export type DisplaySetting = (typeof DISPLAY_SETTINGS)[number];
 
 export interface DisplaySettingEntry {

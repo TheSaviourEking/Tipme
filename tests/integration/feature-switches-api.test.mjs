@@ -323,7 +323,9 @@ test('an owner sets the pilot notice and the launch time; /health/release serves
     pilotNotice: { set: false, on: false },
     launch: { set: false, at: null },
   });
-  const listed = (await (await opsCall(session, 'GET', '/v1/ops/switches')).json()).data;
+  const listed = (
+    await (await opsCall(session, 'GET', '/v1/ops/switches')).json()
+  ).data;
   assert.deepEqual(
     listed.display.map((d) => [d.key, d.set, d.envName]),
     [
@@ -332,7 +334,10 @@ test('an owner sets the pilot notice and the launch time; /health/release serves
     ],
   );
   const set = (key, value) =>
-    opsCall(session, 'POST', `/v1/ops/switches/display/${key}`, { value, reason: REASON });
+    opsCall(session, 'POST', `/v1/ops/switches/display/${key}`, {
+      value,
+      reason: REASON,
+    });
   const on = await set('pilot_notice', 'on');
   assert.equal(on.status, 200);
   assert.equal(
@@ -340,8 +345,14 @@ test('an owner sets the pilot notice and the launch time; /health/release serves
     'on',
   );
   assert.deepEqual((await release()).pilotNotice, { set: true, on: true });
-  assert.equal((await set('production_launch_at', '2027-01-01T00:00:00+01:00')).status, 200);
-  assert.deepEqual((await release()).launch, { set: true, at: '2026-12-31T23:00:00.000Z' });
+  assert.equal(
+    (await set('production_launch_at', '2027-01-01T00:00:00+01:00')).status,
+    200,
+  );
+  assert.deepEqual((await release()).launch, {
+    set: true,
+    at: '2026-12-31T23:00:00.000Z',
+  });
   assert.equal((await set('production_launch_at', null)).status, 200);
   assert.deepEqual((await release()).launch, { set: true, at: null });
   assert.equal((await set('production_launch_at', 'tomorrow')).status, 400);

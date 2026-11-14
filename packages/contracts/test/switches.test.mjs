@@ -158,10 +158,12 @@ test('a change says on or off, with a reason of at least 10 characters', () => {
 // Display settings (owner, 14 Nov 2026, #216): the pilot notice and the launch time, set in admin
 // instead of the web app's Vercel settings. Non-money: a reason and a fresh code.
 test('the display settings are the pilot notice and the launch time, each naming its old setting', async () => {
-  const { DISPLAY_SETTINGS, DISPLAY_SETTING_CATALOGUE } = await import(
-    '../dist/index.js'
+  const { DISPLAY_SETTINGS, DISPLAY_SETTING_CATALOGUE } =
+    await import('../dist/index.js');
+  assert.deepEqual(
+    [...DISPLAY_SETTINGS],
+    ['pilot_notice', 'production_launch_at'],
   );
-  assert.deepEqual([...DISPLAY_SETTINGS], ['pilot_notice', 'production_launch_at']);
   assert.equal(DISPLAY_SETTING_CATALOGUE.pilot_notice.envName, 'PILOT_NOTICE');
   assert.equal(
     DISPLAY_SETTING_CATALOGUE.production_launch_at.envName,
@@ -170,9 +172,8 @@ test('the display settings are the pilot notice and the launch time, each naming
 });
 
 test('a display value is checked: on or off for the notice; an exact instant, or none, for the launch', async () => {
-  const { checkedDisplayValue, opsDisplaySettingSetSchema } = await import(
-    '../dist/index.js'
-  );
+  const { checkedDisplayValue, opsDisplaySettingSetSchema } =
+    await import('../dist/index.js');
   assert.equal(checkedDisplayValue('pilot_notice', 'on'), 'on');
   assert.equal(checkedDisplayValue('pilot_notice', 'off'), 'off');
   assert.throws(() => checkedDisplayValue('pilot_notice', null));
@@ -183,15 +184,24 @@ test('a display value is checked: on or off for the notice; an exact instant, or
     '2026-10-26T23:00:00.000Z',
   );
   assert.equal(checkedDisplayValue('production_launch_at', null), null);
-  for (const bad of ['', '2026-10-27T00:00:00', 'tomorrow', '2026-02-30T00:00:00Z'])
+  for (const bad of [
+    '',
+    '2026-10-27T00:00:00',
+    'tomorrow',
+    '2026-02-30T00:00:00Z',
+  ])
     assert.throws(() => checkedDisplayValue('production_launch_at', bad));
   assert.throws(() => checkedDisplayValue('nope', 'on'));
   assert.equal(
-    opsDisplaySettingSetSchema.safeParse({ value: null, reason: 'Opening the site now' }).success,
+    opsDisplaySettingSetSchema.safeParse({
+      value: null,
+      reason: 'Opening the site now',
+    }).success,
     true,
   );
   assert.equal(
-    opsDisplaySettingSetSchema.safeParse({ value: 'on', reason: 'short' }).success,
+    opsDisplaySettingSetSchema.safeParse({ value: 'on', reason: 'short' })
+      .success,
     false,
   );
 });
@@ -203,5 +213,8 @@ test('the launch parser moved here and refuses anything but an exact instant, na
     parseProductionLaunchAt('2026-10-26T23:00:00Z'),
     Date.parse('2026-10-26T23:00:00Z'),
   );
-  assert.throws(() => parseProductionLaunchAt('2026-10-27T00:00:00'), /PRODUCTION_LAUNCH_AT/);
+  assert.throws(
+    () => parseProductionLaunchAt('2026-10-27T00:00:00'),
+    /PRODUCTION_LAUNCH_AT/,
+  );
 });

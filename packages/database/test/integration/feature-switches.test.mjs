@@ -294,7 +294,13 @@ test('staff set the pilot notice and the launch time; checked, stored as UTC, au
     await import('../../dist/index.js');
   const set = (key, value, reason = 'Agreed with the owner today') =>
     db.transaction((tx) =>
-      setDisplaySetting(tx, { key, value, staffUserId: STAFF, reason, now: new Date() }),
+      setDisplaySetting(tx, {
+        key,
+        value,
+        staffUserId: STAFF,
+        reason,
+        now: new Date(),
+      }),
     );
   assert.deepEqual(await set('pilot_notice', 'on'), {
     key: 'pilot_notice',
@@ -308,14 +314,21 @@ test('staff set the pilot notice and the launch time; checked, stored as UTC, au
   });
   // No launch time: open now. Still "set", so the web stops reading its old setting.
   await set('production_launch_at', null);
-  assert.deepEqual((await readDisplaySettings(db)).launch, { set: true, at: null });
+  assert.deepEqual((await readDisplaySettings(db)).launch, {
+    set: true,
+    at: null,
+  });
   for (const [key, value] of [
     ['pilot_notice', 'on'],
     ['pilot_notice', 'yes'],
     ['production_launch_at', 'tomorrow'],
     ['nope', 'on'],
   ])
-    await assert.rejects(set(key, value), (error) => error.code === 'INVALID_INPUT', `${key}=${value}`);
+    await assert.rejects(
+      set(key, value),
+      (error) => error.code === 'INVALID_INPUT',
+      `${key}=${value}`,
+    );
   const audits = await rows(
     `SELECT subject_id, permission FROM audit_events WHERE action = 'display_setting.set' ORDER BY created_at`,
   );
@@ -332,7 +345,8 @@ test('staff set the pilot notice and the launch time; checked, stored as UTC, au
 
 test('display settings are cached like switches, and a failed read keeps the last known, else unset', async (t) => {
   const { db, pool } = await fresh(t);
-  const { displaySettingsNow, setDisplaySetting } = await import('../../dist/index.js');
+  const { displaySettingsNow, setDisplaySetting } =
+    await import('../../dist/index.js');
   await db.transaction((tx) =>
     setDisplaySetting(tx, {
       key: 'pilot_notice',
@@ -344,11 +358,21 @@ test('display settings are cached like switches, and a failed read keeps the las
   );
   invalidateFeatureSwitches();
   const start = Date.now();
-  assert.equal((await displaySettingsNow(db, { now: start })).pilotNotice.on, true);
+  assert.equal(
+    (await displaySettingsNow(db, { now: start })).pilotNotice.on,
+    true,
+  );
   await pool.query(`UPDATE display_settings SET value = 'off'`);
-  assert.equal((await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on, true, 'cached');
+  assert.equal(
+    (await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on,
+    true,
+    'cached',
+  );
   invalidateFeatureSwitches();
-  assert.equal((await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on, false);
+  assert.equal(
+    (await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on,
+    false,
+  );
   let fail = false;
   const flaky = {
     select: (...args) => {
@@ -360,8 +384,16 @@ test('display settings are cached like switches, and a failed read keeps the las
   assert.equal((await displaySettingsNow(flaky)).pilotNotice.set, true);
   fail = true;
   invalidateFeatureSwitches();
-  assert.equal((await displaySettingsNow(flaky)).pilotNotice.set, true, 'last known');
-  const never = { select() { throw new Error('connection refused'); } };
+  assert.equal(
+    (await displaySettingsNow(flaky)).pilotNotice.set,
+    true,
+    'last known',
+  );
+  const never = {
+    select() {
+      throw new Error('connection refused');
+    },
+  };
   assert.deepEqual(await displaySettingsNow(never), {
     pilotNotice: { set: false, on: false },
     launch: { set: false, at: null },
