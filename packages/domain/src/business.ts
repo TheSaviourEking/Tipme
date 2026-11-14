@@ -1,5 +1,4 @@
 /** TipMe for businesses: the rules every lane shares (plan 2026-11-06-business, B0 Task 1). */
-import { CURRENT_FEE_POLICY, type FeePolicy } from './fees.js';
 
 /** A shift ends by itself after this long, so a forgotten check-out never lasts for days (M4). */
 export const SHIFT_MAX_HOURS = 14;
@@ -163,17 +162,6 @@ export function lagosMonthOf(at: Date): string {
 }
 
 // ---- Release 2 on option B (owner, 11 Nov 2026): moving a share between partner accounts ----
-
-/**
- * The smallest withdrawal a business can make (owner, 14 Nov 2026): the system's minimum tip, read
- * from the fee policy (₦2,000 today), the same value a person's withdrawals use. Like a person's,
- * it may also take everything it can withdraw, if that is more than the transfer fee it pays.
- */
-export function businessMinWithdrawalMinor(
-  policy: FeePolicy = CURRENT_FEE_POLICY,
-): bigint {
-  return policy.minTipMinor;
-}
 
 /**
  * What a sweep sends on to the business once its share has reached TipMe: the share less what is

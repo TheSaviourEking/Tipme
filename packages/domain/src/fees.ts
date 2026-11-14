@@ -5,8 +5,8 @@ export interface FeePolicy {
   readonly tipmeShareBps: bigint;
   /** The estimated processing fee, paid out of TipMe's share. */
   readonly providerFeeBps: bigint;
+  /** The smallest tip, and since 14 Nov 2026 the smallest withdrawal too (withdrawalMinimumMinor). */
   readonly minTipMinor: bigint;
-  readonly minWithdrawalMinor: bigint;
 }
 
 /**
@@ -23,7 +23,6 @@ export const FEE_POLICY_V1: FeePolicy = {
   tipmeShareBps: 1000n,
   providerFeeBps: 150n,
   minTipMinor: 200_000n,
-  minWithdrawalMinor: 200_000n,
 };
 
 /**
@@ -39,7 +38,6 @@ export const FEE_POLICY_V2_FREE: FeePolicy = {
   tipmeShareBps: 700n,
   providerFeeBps: 150n,
   minTipMinor: 200_000n,
-  minWithdrawalMinor: 200_000n,
 };
 
 export const FEE_POLICY_V2_PRO: FeePolicy = {
@@ -47,7 +45,6 @@ export const FEE_POLICY_V2_PRO: FeePolicy = {
   tipmeShareBps: 500n,
   providerFeeBps: 150n,
   minTipMinor: 200_000n,
-  minWithdrawalMinor: 200_000n,
 };
 
 /** The plan a page is on (`profiles.plan`, derived from staff grants and paid Pro months). */
@@ -211,4 +208,30 @@ export function userPaidWithdrawal(input: {
     feeMinor: input.feeMinor,
     leavesBalanceMinor: input.chosenMinor,
   };
+}
+
+/**
+ * The smallest withdrawal (owner, 14 Nov 2026): the system's smallest tip, read from the policy so
+ * the two can never drift. The partner's ₦50 fee still comes off the amount (userPaidWithdrawal).
+ */
+export function withdrawalMinimumMinor(
+  policy: FeePolicy = CURRENT_FEE_POLICY,
+): bigint {
+  return policy.minTipMinor;
+}
+
+/**
+ * Whether an amount is under the smallest withdrawal and is not everything that can go now: the
+ * whole of it is always allowed, so nobody is left with money they can't take out (a balance of ₦50
+ * or less is refused by the fee rule instead). The server and the screens share this rule.
+ */
+export function belowWithdrawalMinimum(
+  chosenMinor: bigint,
+  withdrawableMinor: bigint,
+  policy: FeePolicy = CURRENT_FEE_POLICY,
+): boolean {
+  return (
+    chosenMinor < withdrawalMinimumMinor(policy) &&
+    chosenMinor !== withdrawableMinor
+  );
 }

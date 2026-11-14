@@ -92,23 +92,17 @@ test('setup needed asks the owner to set up the business’s payout account', ()
 });
 
 test('a business may send from its minimum up to what it can withdraw, or everything it has', () => {
-  const min = BigInt(200000); // the minimum tip (owner, 14 Nov 2026)
+  // The minimum is the minimum tip, ₦2,000 (owner, 14 Nov 2026), from the shared rule.
   const fee = BigInt(5000);
-  assert.equal(
-    businessCanSend(BigInt(199999), BigInt(600000), min, fee),
-    false,
-  );
-  assert.equal(businessCanSend(BigInt(200000), BigInt(600000), min, fee), true);
-  assert.equal(
-    businessCanSend(BigInt(600001), BigInt(600000), min, fee),
-    false,
-  );
-  assert.equal(businessCanSend(BigInt(0), BigInt(600000), min, fee), false);
+  assert.equal(businessCanSend(BigInt(199999), BigInt(600000), fee), false);
+  assert.equal(businessCanSend(BigInt(200000), BigInt(600000), fee), true);
+  assert.equal(businessCanSend(BigInt(600001), BigInt(600000), fee), false);
+  assert.equal(businessCanSend(BigInt(0), BigInt(600000), fee), false);
   // Everything, though under the minimum: allowed again now the business pays the fee.
-  assert.equal(businessCanSend(BigInt(199999), BigInt(199999), min, fee), true);
-  assert.equal(businessCanSend(BigInt(5001), BigInt(5001), min, fee), true);
+  assert.equal(businessCanSend(BigInt(199999), BigInt(199999), fee), true);
+  assert.equal(businessCanSend(BigInt(5001), BigInt(5001), fee), true);
   // Not more than the fee: nothing would arrive.
-  assert.equal(businessCanSend(BigInt(5000), BigInt(5000), min, fee), false);
+  assert.equal(businessCanSend(BigInt(5000), BigInt(5000), fee), false);
 });
 
 test('a balance not more than the ₦50 fee can’t be withdrawn, and it says why in plain words', () => {

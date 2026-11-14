@@ -147,7 +147,7 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
 
   await money.getByRole('button', { name: 'Everything' }).click();
   await expect(money.getByTestId('business-you-receive')).toHaveText(
-    `The ₦50 transfer fee comes off it: the business receives ${receiveText}.`,
+    `Transfer fee: ₦50, charged by our payment partner. It comes off the amount: the business receives ${receiveText}. If the fee is different, the difference is settled on the business’s balance.`,
   );
   await money.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect(money.getByText('Withdrawal requested')).toBeVisible();
@@ -269,7 +269,7 @@ test('under ₦2,000 a business may take everything, less the ₦50 fee; ₦50 o
   // Everything: allowed, and the page says what the business receives.
   await money.getByRole('button', { name: 'Everything' }).click();
   await expect(money.getByTestId('business-you-receive')).toHaveText(
-    'The ₦50 transfer fee comes off it: the business receives ₦1,750.',
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount: the business receives ₦1,750. If the fee is different, the difference is settled on the business’s balance.',
   );
   const send = money.getByRole('button', { name: 'Withdraw ₦1,800' });
   await expect(send).toBeEnabled();

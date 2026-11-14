@@ -251,6 +251,30 @@ export function buildUserPayoutFeePosting({
   ];
 }
 
+/**
+ * The part of a user-paid payout fee the partner did not charge (owner, 14 Nov 2026): taken from the
+ * amount but still in the account, so it is credited back to the same payable.
+ */
+export function buildUserPayoutFeeRefundPosting({
+  feeMinor,
+  profileId,
+  businessId,
+}: {
+  feeMinor: bigint;
+  profileId?: string;
+  businessId?: string;
+}): LedgerLine[] {
+  if (feeMinor <= 0n) throw new RangeError('payout fee must be positive');
+  if (Boolean(profileId) === Boolean(businessId))
+    throw new RangeError('a payout belongs to exactly one person or business');
+  return [
+    businessId
+      ? line('business_payable', 'credit', feeMinor, undefined, businessId)
+      : line('recipient_payable', 'credit', feeMinor, profileId),
+    line('provider_clearing', 'debit', feeMinor),
+  ];
+}
+
 /** A cash reward from TipMe: its own promotional cost, owed to the recipient like a tip. */
 export function buildRewardPosting({
   amountMinor,

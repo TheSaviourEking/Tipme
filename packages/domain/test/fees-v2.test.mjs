@@ -26,7 +26,7 @@ test('Free is 7% and Pro is 5%, processing still paid from TipMe’s share', () 
   assert.equal(CURRENT_FEE_POLICY, FEE_POLICY_V2_FREE);
   for (const policy of [FEE_POLICY_V2_FREE, FEE_POLICY_V2_PRO]) {
     assert.equal(policy.minTipMinor, 200_000n);
-    assert.equal(policy.minWithdrawalMinor, 200_000n);
+    assert.equal(policy.minTipMinor, 200_000n);
   }
 });
 

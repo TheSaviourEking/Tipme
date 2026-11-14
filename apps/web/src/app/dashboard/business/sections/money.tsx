@@ -7,6 +7,7 @@ import type {
   BusinessPayoutAccountStart,
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
+import { withdrawalMinimumMinor } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
 import {
@@ -90,14 +91,13 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
   const chosen = amount === null ? null : BigInt(amount);
   const withdrawable = state.withdrawableMinor;
-  const minimum = BigInt(balance.minWithdrawalMinor);
   // The business pays the transfer fee from the amount, like a person (owner, 12 Nov 2026).
   const userFee =
     quote?.state === 'ready' && quote.feePaidBy === 'user'
       ? BigInt(quote.feeMinor)
       : BigInt(0);
   const sendable =
-    chosen !== null && businessCanSend(chosen, withdrawable, minimum, userFee);
+    chosen !== null && businessCanSend(chosen, withdrawable, userFee);
   const summary =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const onTheWay = BigInt(balance.onTheWayMinor);
@@ -166,7 +166,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         result.code === 'INSUFFICIENT_BALANCE'
           ? 'That is more than the business’s available balance.'
           : result.code === 'WITHDRAWAL_TOO_SMALL'
-            ? `The smallest withdrawal for a business is ${formatNaira(balance.minWithdrawalMinor)}, or everything it has.`
+            ? `The smallest withdrawal for a business is ${formatNaira(withdrawalMinimumMinor())}, or everything it has.`
             : refusal.message,
       );
   };
@@ -283,13 +283,14 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         {summary && (
           <p className="tm-hint" data-testid="business-you-receive">
             {summary.feePaidBy === 'user' && summary.feeMinor > BigInt(0)
-              ? `The ${formatNaira(summary.feeMinor)} transfer fee comes off it: the business receives ${formatNaira(summary.receiveMinor)}.`
+              ? `Transfer fee: ${formatNaira(summary.feeMinor)}, charged by our payment partner. It comes off the amount: the business receives ${formatNaira(summary.receiveMinor)}. If the fee is different, the difference is settled on the business’s balance.`
               : `No transfer fee comes off it this time: the business receives ${formatNaira(summary.receiveMinor)}.`}
           </p>
         )}
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal
-          for a business is {formatNaira(minimum)}, or everything it has.
+          for a business is {formatNaira(withdrawalMinimumMinor())}, or
+          everything it has.
         </p>
       </form>
       <GetPaidCard

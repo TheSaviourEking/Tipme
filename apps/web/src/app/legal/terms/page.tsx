@@ -50,7 +50,9 @@ export default function TermsPlaceholder() {
           unless you are withdrawing your whole balance. Each withdrawal has our
           payment partner’s ₦50 transfer fee, taken from the amount: if you
           withdraw ₦10,000, you receive ₦9,950. A balance of ₦50 or less can’t
-          be withdrawn.
+          be withdrawn. If our payment partner charges a different fee for a
+          withdrawal, the difference is taken from or added back to your
+          balance.
         </p>
       </section>
       {/* The owner's decision, 3 Nov 2026: a username can be taken back, with 7 days of notice. */}

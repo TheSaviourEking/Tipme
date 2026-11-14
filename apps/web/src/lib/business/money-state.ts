@@ -1,4 +1,5 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
+import { belowWithdrawalMinimum } from '@tipme/domain';
 import { formatNaira } from '../demo-amount.ts';
 
 export interface BusinessMoneyState {
@@ -96,21 +97,20 @@ export function businessMoneyState(
 }
 
 /**
- * A business withdraws at least its minimum (the minimum tip, from the API), or everything it can withdraw
- * now (owner, 12 Nov 2026: the business pays the transfer fee from the amount, so "everything" costs
- * TipMe nothing), never more, and always more than the fee it pays (`feeMinor`; zero when TipMe's
- * unused top-up pays it), so something arrives.
+ * What a business may send (owner, 12 and 14 Nov 2026): the shared withdrawal rule (at least the
+ * minimum tip, or everything it can withdraw now; `belowWithdrawalMinimum`), never more, and always
+ * more than the fee it pays from the amount (`feeMinor`; zero when TipMe's unused top-up pays it),
+ * so something arrives.
  */
 export function businessCanSend(
   amountMinor: bigint,
   withdrawableMinor: bigint,
-  minimumMinor: bigint,
   feeMinor: bigint,
 ): boolean {
   return (
     amountMinor > BigInt(0) &&
     amountMinor > feeMinor &&
     amountMinor <= withdrawableMinor &&
-    (amountMinor >= minimumMinor || amountMinor === withdrawableMinor)
+    !belowWithdrawalMinimum(amountMinor, withdrawableMinor)
   );
 }

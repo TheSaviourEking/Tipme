@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CURRENT_FEE_POLICY,
-  businessMinWithdrawalMinor,
+  withdrawalMinimumMinor,
   allocateHoldbacks,
   buildPaymentPosting,
   buildReversalPosting,
@@ -28,15 +28,11 @@ test('the sandbox tip: ₦10,000 with TipMe’s 10% leaves ₦9,000; 80/20 gives
   });
 });
 
-// Owner, 14 Nov 2026: a business's smallest withdrawal is the system's minimum tip, read from the
-// fee policy (₦2,000 today), the same value a person's withdrawals use.
+// Owner, 14 Nov 2026: a business's smallest withdrawal is the system's minimum tip, the shared rule
+// a person's withdrawals use (withdrawalMinimumMinor / belowWithdrawalMinimum, tested there).
 test('a business withdraws at least the fee policy’s minimum tip', () => {
-  assert.equal(businessMinWithdrawalMinor(), CURRENT_FEE_POLICY.minTipMinor);
-  assert.equal(businessMinWithdrawalMinor(), 200000n);
-  assert.equal(
-    businessMinWithdrawalMinor({ ...CURRENT_FEE_POLICY, minTipMinor: 300000n }),
-    300000n,
-  );
+  assert.equal(withdrawalMinimumMinor(), CURRENT_FEE_POLICY.minTipMinor);
+  assert.equal(withdrawalMinimumMinor(), 200000n);
 });
 
 test('a sweep with nothing held back delivers the whole share', () => {

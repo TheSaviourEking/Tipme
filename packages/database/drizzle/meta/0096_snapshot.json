@@ -1,5 +1,5 @@
 {
-  "id": "5713683e-e90f-4ab4-b861-72cbf7ea70ea",
+  "id": "995f9a96-b73f-4510-8422-d2f169b18b57",
   "prevId": "5c9226f6-1b26-4ac0-a04e-e7d6227d374a",
   "version": "7",
   "dialect": "postgresql",
@@ -3296,7 +3296,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed', 'username_take_back_unnoticed', 'username_take_back_overdue', 'business_waiting', 'business_note_reported', 'share_report', 'balance_below_zero', 'pro_amount_mismatch', 'pro_late_payment', 'pro_conflict', 'pro_reversed', 'support_request', 'pro_collect_unknown', 'pro_refund_failed', 'share_transfer_stuck')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_fee_adjusted', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed', 'username_take_back_unnoticed', 'username_take_back_overdue', 'business_waiting', 'business_note_reported', 'share_report', 'balance_below_zero', 'pro_amount_mismatch', 'pro_late_payment', 'pro_conflict', 'pro_reversed', 'support_request', 'pro_collect_unknown', 'pro_refund_failed')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -4905,7 +4905,7 @@
       "checkConstraints": {
         "notifications_kind": {
           "name": "notifications_kind",
-          "value": "kind IN ('tip', 'weekly_report', 'moment', 'business_invitation', 'business_verified', 'business_share_held_back')"
+          "value": "kind IN ('tip', 'weekly_report', 'moment', 'business_invitation', 'business_verified')"
         }
       },
       "isRLSEnabled": false
@@ -5272,13 +5272,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "receive_only": {
-          "name": "receive_only",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -5349,11 +5342,7 @@
         },
         "payment_accounts_active_can_charge": {
           "name": "payment_accounts_active_can_charge",
-          "value": "status <> 'ACTIVE' OR charges_enabled OR receive_only"
-        },
-        "payment_accounts_receive_only_business": {
-          "name": "payment_accounts_receive_only_business",
-          "value": "NOT receive_only OR business_id IS NOT NULL"
+          "value": "status <> 'ACTIVE' OR charges_enabled"
         }
       },
       "isRLSEnabled": false
@@ -8982,159 +8971,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.share_holdbacks": {
-      "name": "share_holdbacks",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "tip_id": {
-          "name": "tip_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "recover_id": {
-          "name": "recover_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "currency": {
-          "name": "currency",
-          "type": "char(3)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_minor": {
-          "name": "amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "remaining_minor": {
-          "name": "remaining_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "settled_at": {
-          "name": "settled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "share_holdbacks_open": {
-          "name": "share_holdbacks_open",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "remaining_minor > 0",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "share_holdbacks_business_id_businesses_id_fk": {
-          "name": "share_holdbacks_business_id_businesses_id_fk",
-          "tableFrom": "share_holdbacks",
-          "tableTo": "businesses",
-          "columnsFrom": ["business_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_holdbacks_profile_id_profiles_id_fk": {
-          "name": "share_holdbacks_profile_id_profiles_id_fk",
-          "tableFrom": "share_holdbacks",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_holdbacks_tip_id_tips_id_fk": {
-          "name": "share_holdbacks_tip_id_tips_id_fk",
-          "tableFrom": "share_holdbacks",
-          "tableTo": "tips",
-          "columnsFrom": ["tip_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_holdbacks_recover_id_share_transfers_id_fk": {
-          "name": "share_holdbacks_recover_id_share_transfers_id_fk",
-          "tableFrom": "share_holdbacks",
-          "tableTo": "share_transfers",
-          "columnsFrom": ["recover_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "share_holdbacks_recover_id_unique": {
-          "name": "share_holdbacks_recover_id_unique",
-          "nullsNotDistinct": false,
-          "columns": ["recover_id"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "share_holdbacks_currency_iso": {
-          "name": "share_holdbacks_currency_iso",
-          "value": "currency ~ '^[A-Z]{3}$'"
-        },
-        "share_holdbacks_amounts": {
-          "name": "share_holdbacks_amounts",
-          "value": "amount_minor > 0 AND remaining_minor >= 0 AND remaining_minor <= amount_minor"
-        },
-        "share_holdbacks_settled": {
-          "name": "share_holdbacks_settled",
-          "value": "(remaining_minor = 0) = (settled_at IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.share_reports": {
       "name": "share_reports",
       "schema": "",
@@ -9246,350 +9082,6 @@
         "share_reports_body": {
           "name": "share_reports_body",
           "value": "body IS NULL OR char_length(body) BETWEEN 1 AND 280"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.share_transfers": {
-      "name": "share_transfers",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "tip_id": {
-          "name": "tip_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "kind": {
-          "name": "kind",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "business_id": {
-          "name": "business_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "profile_id": {
-          "name": "profile_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "currency": {
-          "name": "currency",
-          "type": "char(3)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "amount_minor": {
-          "name": "amount_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "deliver_minor": {
-          "name": "deliver_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "provider": {
-          "name": "provider",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "out_reference": {
-          "name": "out_reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "in_reference": {
-          "name": "in_reference",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reversal_transaction_id": {
-          "name": "reversal_transaction_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "partner_reversal_id": {
-          "name": "partner_reversal_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "parent_id": {
-          "name": "parent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "holdback_id": {
-          "name": "holdback_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "next_attempt_at": {
-          "name": "next_attempt_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "share_transfers_one_sweep": {
-          "name": "share_transfers_one_sweep",
-          "columns": [
-            {
-              "expression": "tip_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'sweep'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_once_per_reversal": {
-          "name": "share_transfers_once_per_reversal",
-          "columns": [
-            {
-              "expression": "reversal_transaction_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'recover'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_fee_once": {
-          "name": "share_transfers_fee_once",
-          "columns": [
-            {
-              "expression": "partner_reversal_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'fee_return'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_once_per_holdback": {
-          "name": "share_transfers_once_per_holdback",
-          "columns": [
-            {
-              "expression": "parent_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "holdback_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "parent_id IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_due": {
-          "name": "share_transfers_due",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "next_attempt_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_business": {
-          "name": "share_transfers_business",
-          "columns": [
-            {
-              "expression": "business_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "share_transfers_tip_id_tips_id_fk": {
-          "name": "share_transfers_tip_id_tips_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "tips",
-          "columnsFrom": ["tip_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_transfers_business_id_businesses_id_fk": {
-          "name": "share_transfers_business_id_businesses_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "businesses",
-          "columnsFrom": ["business_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_transfers_profile_id_profiles_id_fk": {
-          "name": "share_transfers_profile_id_profiles_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "profiles",
-          "columnsFrom": ["profile_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_transfers_reversal_transaction_id_ledger_transactions_id_fk": {
-          "name": "share_transfers_reversal_transaction_id_ledger_transactions_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "ledger_transactions",
-          "columnsFrom": ["reversal_transaction_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_transfers_parent_id_share_transfers_id_fk": {
-          "name": "share_transfers_parent_id_share_transfers_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "share_transfers",
-          "columnsFrom": ["parent_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "share_transfers_holdback_id_share_holdbacks_id_fk": {
-          "name": "share_transfers_holdback_id_share_holdbacks_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "share_holdbacks",
-          "columnsFrom": ["holdback_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "share_transfers_currency_iso": {
-          "name": "share_transfers_currency_iso",
-          "value": "currency ~ '^[A-Z]{3}$'"
-        },
-        "share_transfers_kind": {
-          "name": "share_transfers_kind",
-          "value": "kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay')"
-        },
-        "share_transfers_status": {
-          "name": "share_transfers_status",
-          "value": "status IN ('waiting', 'out_sent', 'out_paid', 'in_sent', 'done', 'cancelled', 'gap', 'review')"
-        },
-        "share_transfers_amount": {
-          "name": "share_transfers_amount",
-          "value": "amount_minor > 0"
-        },
-        "share_transfers_deliver": {
-          "name": "share_transfers_deliver",
-          "value": "deliver_minor IS NULL OR (deliver_minor >= 0 AND deliver_minor <= amount_minor)"
-        },
-        "share_transfers_one_leg": {
-          "name": "share_transfers_one_leg",
-          "value": "kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')"
-        },
-        "share_transfers_links": {
-          "name": "share_transfers_links",
-          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)"
-        },
-        "share_transfers_business": {
-          "name": "share_transfers_business",
-          "value": "kind = 'fee_return' OR business_id IS NOT NULL"
         }
       },
       "isRLSEnabled": false
@@ -10903,12 +10395,6 @@
           "notNull": true,
           "default": "0"
         },
-        "share_agreement_id": {
-          "name": "share_agreement_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp with time zone",
@@ -10939,15 +10425,6 @@
           "tableFrom": "tip_quotes",
           "tableTo": "business_locations",
           "columnsFrom": ["team_location_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "tip_quotes_share_agreement_id_share_agreements_id_fk": {
-          "name": "tip_quotes_share_agreement_id_share_agreements_id_fk",
-          "tableFrom": "tip_quotes",
-          "tableTo": "share_agreements",
-          "columnsFrom": ["share_agreement_id"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"

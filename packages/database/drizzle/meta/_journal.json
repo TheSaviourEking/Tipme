@@ -677,8 +677,15 @@
     {
       "idx": 96,
       "version": "7",
-      "when": 1794638271546,
-      "tag": "0096_business_option_b",
+      "when": 1794648765988,
+      "tag": "0096_payout_fee_adjusted_issue",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1794651579885,
+      "tag": "0097_business_option_b",
       "breakpoints": true
     }
   ]

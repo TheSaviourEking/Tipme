@@ -31,7 +31,7 @@ test('ready says where the money goes and that the fee comes off the amount', ()
   assert.equal(view.canWithdraw, true);
   assert.equal(
     view.notice.body,
-    'You can withdraw ₦1,800 to GTBank ••1234. The ₦50 transfer fee comes off the amount you withdraw.',
+    'You can withdraw ₦1,800 to GTBank ••1234. Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
 });
 
@@ -365,7 +365,7 @@ test('the fee line says who pays the transfer fee, and nothing when there is non
   // Owner, 12 Nov 2026: users pay it, from the amount.
   assert.equal(
     withdrawFee(ready()),
-    'The ₦50 transfer fee comes off the amount you withdraw.',
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
   // While an unused top-up TipMe already sent can pay it.
   assert.equal(
@@ -431,4 +431,16 @@ test('a balance of ₦50 or less says plainly why it can’t be withdrawn', () =
     withdrawRefusal('WITHDRAWAL_BELOW_FEE').message,
     /more than the ₦50 transfer fee/,
   );
+});
+
+test('the fee line names its source plainly, never the partner, and a different fee is explained', async () => {
+  const { FEE_DIFFERENCE_NOTE } = await import('../src/lib/withdraw-state.ts');
+  assert.equal(
+    withdrawFee(ready({ feeMinor: '10000' })),
+    'Transfer fee: ₦100, charged by our payment partner. It comes off the amount you withdraw.',
+  );
+  assert.match(FEE_DIFFERENCE_NOTE, /charges a different fee/);
+  assert.match(FEE_DIFFERENCE_NOTE, /your balance/);
+  for (const text of [withdrawFee(ready()), FEE_DIFFERENCE_NOTE])
+    assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
 });

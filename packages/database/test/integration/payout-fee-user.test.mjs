@@ -17,7 +17,8 @@ import { useDatabase } from './helpers.mjs';
 
 // Users pay their own withdrawal fee, taken from the amount (owner, 12 Nov 2026): withdraw ₦X and
 // ₦X − ₦50 arrives. Payouts requested before the rule finish with TipMe paying; an unused top-up
-// TipMe already sent is spent, never stranded or counted twice; a partner fee above ₦50 is TipMe's.
+// TipMe already sent is spent, never stranded or counted twice. The user pays the partner's full fee
+// (owner, 14 Nov 2026): more than was taken comes off their balance, less is credited back.
 
 const TOBI = DEMO_PROFILES[1];
 const ACCOUNT = 'acct_tobi_fee';
@@ -244,28 +245,91 @@ test('a balance of ₦50 or less can’t be withdrawn: refused with its own reas
   assert.equal(await s.available(), 5_000n);
 });
 
-test('a partner fee above ₦50: Tobi pays ₦50, TipMe absorbs the rest, and staff are alerted', async (t) => {
+const feeIssues = (s, payoutId) =>
+  s.q(
+    `SELECT kind, severity FROM issues WHERE subject->>'payoutId' = $1 ORDER BY opened_at`,
+    [payoutId],
+  );
+
+test('the partner charges ₦70: Tobi pays the ₦20 more from his balance, as a fee line; staff are told, TipMe pays nothing', async (t) => {
   const s = await setup(t);
   await s.tip();
   const provider = partner();
   const { payoutId } = await s.withdraw(provider, 500_000n);
   await startPayout(s.database.db, { payoutId, provider });
   await s.paid(payoutId, { actualFeeMinor: 7_000n });
-  assert.equal(await s.available(), 430_000n);
+  assert.equal(await s.available(), 428_000n);
   assert.deepEqual(await s.postings(payoutId), [
     { code: 'provider_clearing', side: 'credit', amount: '2000' },
     { code: 'provider_clearing', side: 'credit', amount: '5000' },
     { code: 'provider_clearing', side: 'credit', amount: '495000' },
-    { code: 'provider_fee_expense', side: 'debit', amount: '2000' },
+    { code: 'recipient_payable', side: 'debit', amount: '2000' },
     { code: 'recipient_payable', side: 'debit', amount: '5000' },
     { code: 'recipient_payable', side: 'debit', amount: '495000' },
   ]);
-  const issues = await s.q(`SELECT kind FROM issues WHERE dedupe_key = $1`, [
-    `payout_fee_short.${payoutId}`,
+  // Information only: never a TipMe cost.
+  assert.deepEqual(await feeIssues(s, payoutId), [
+    { kind: 'payout_fee_adjusted', severity: 'info' },
   ]);
-  assert.deepEqual(issues, [{ kind: 'payout_fee_short' }]);
-  // What Tobi was charged never changes, whatever the partner reports.
-  assert.equal((await s.payout(payoutId)).user_fee_minor, '5000');
+  // What was taken from the amount never changes; what the partner charged is recorded.
+  const row = await s.payout(payoutId);
+  assert.equal(row.user_fee_minor, '5000');
+  assert.equal(row.fee_minor, '7000');
+});
+
+test('more than the balance can cover: it is recorded as owed (below zero), withdrawals wait, and the next tip pays it', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  // Everything: ₦9,250 sent, ₦50 taken, nothing left.
+  const { payoutId } = await s.withdraw(provider, 930_000n);
+  await startPayout(s.database.db, { payoutId, provider });
+  await s.paid(payoutId, { actualFeeMinor: 7_000n });
+  // The ₦20 more is a ledger line on Tobi's payable: his balance reads −₦20, never silently.
+  assert.equal(await s.available(), -2_000n);
+  assert.equal(
+    await s.codeOf(s.withdraw(provider, 200_000n)),
+    'BALANCE_BELOW_ZERO',
+  );
+  await s.tip();
+  assert.equal(await s.available(), 928_000n);
+  const [{ n }] = await s.q(
+    `SELECT count(*)::int AS n FROM ledger_transactions WHERE operation_key = $1`,
+    [`payout-fee-extra.${payoutId}`],
+  );
+  assert.equal(n, 1);
+});
+
+test('the partner charges ₦30: the ₦20 not used is credited back to Tobi', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  const { payoutId } = await s.withdraw(provider, 500_000n);
+  await startPayout(s.database.db, { payoutId, provider });
+  await s.paid(payoutId, { actualFeeMinor: 3_000n });
+  assert.equal(await s.available(), 432_000n);
+  assert.deepEqual(await s.postings(payoutId), [
+    { code: 'provider_clearing', side: 'debit', amount: '2000' },
+    { code: 'provider_clearing', side: 'credit', amount: '5000' },
+    { code: 'provider_clearing', side: 'credit', amount: '495000' },
+    { code: 'recipient_payable', side: 'debit', amount: '5000' },
+    { code: 'recipient_payable', side: 'debit', amount: '495000' },
+    { code: 'recipient_payable', side: 'credit', amount: '2000' },
+  ]);
+  assert.deepEqual(await feeIssues(s, payoutId), [
+    { kind: 'payout_fee_adjusted', severity: 'info' },
+  ]);
+});
+
+test('exactly ₦50: no adjustment and no issue', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  const { payoutId } = await s.withdraw(provider, 500_000n);
+  await startPayout(s.database.db, { payoutId, provider });
+  await s.paid(payoutId, { actualFeeMinor: 5_000n });
+  assert.equal(await s.available(), 430_000n);
+  assert.deepEqual(await feeIssues(s, payoutId), []);
 });
 
 test('an unused top-up TipMe already sent pays the next withdrawal’s fee, once', async (t) => {
