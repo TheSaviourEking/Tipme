@@ -9781,6 +9781,107 @@
         "x-tipme-permission": "issues.resolve"
       }
     },
+    "/v1/ops/business-pro-price": {
+      "get": {
+        "operationId": "OpsBusinessProPrice.state",
+        "tags": [
+          "OpsBusinessProPrice"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
+      },
+      "post": {
+        "operationId": "OpsBusinessProPrice.change",
+        "tags": [
+          "OpsBusinessProPrice"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "amountMinor": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,11}$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
+      }
+    },
     "/v1/ops/businesses": {
       "get": {
         "operationId": "OpsBusinesses.list",
@@ -17023,6 +17124,8 @@
                   "NOTE_NOT_OPEN",
                   "BUSINESS_LAST_OWNER",
                   "BUSINESS_NOT_VERIFIED",
+                  "BUSINESS_STAFF_LIMIT",
+                  "BUSINESS_LOCATION_LIMIT",
                   "SHARE_NOT_ALLOWED",
                   "SHARE_CHANGE_TOO_SOON",
                   "SHARE_NOT_OPEN",
