@@ -524,3 +524,16 @@ test('anonymous analytics is on in production unless set to false (owner, 9 Nov 
     true,
   );
 });
+
+test('PAGE_STUDIO_ENABLED (Page Studio) defaults to false; only "true" turns it on', () => {
+  const env = { ...valid, NODE_ENV: 'development' };
+  assert.equal(loadApiConfig(env).PAGE_STUDIO_ENABLED, false);
+  assert.equal(
+    loadApiConfig({ ...env, PAGE_STUDIO_ENABLED: 'true' }).PAGE_STUDIO_ENABLED,
+    true,
+  );
+  assert.throws(
+    () => loadApiConfig({ ...env, PAGE_STUDIO_ENABLED: 'on' }),
+    /PAGE_STUDIO_ENABLED/,
+  );
+});
