@@ -26,12 +26,12 @@ test('staff see exactly what goes back and who gives it, and ask with a reason',
   const row = tips.getByRole('listitem').filter({ hasText: tipId });
   await row.getByRole('button', { name: 'Refund tip…' }).click();
   const panel = row.getByTestId('tip-refund');
-  // A Free ₦10,000 tip: the supporter gets ₦9,300 back, TipMe keeps its ₦700.
+  // A Free ₦10,000 tip: the supporter gets ₦9,300 back, TipMe keeps its ₦700 (admin writes NGN).
   await expect(panel).toContainText(
-    'The supporter gets back ₦9,300: the ₦10,000 tip minus TipMe’s ₦700 fee, which TipMe keeps.',
+    'The supporter gets back NGN 9,300.00: the NGN 10,000.00 tip minus TipMe’s NGN 700.00 fee, which TipMe keeps.',
   );
   await expect(panel).toContainText(
-    `@${who.handle} gives back ₦9,300: what they received.`,
+    `@${who.handle} gives back NGN 9,300.00: what they received.`,
   );
   await expect(panel).not.toContainText(/bachs/i);
   await expectAccessible(page);
@@ -48,7 +48,7 @@ test('staff see exactly what goes back and who gives it, and ask with a reason',
   ).toBeVisible();
   const asked = await sql<{ n: number }>(
     `SELECT (SELECT count(*) FROM approval_requests WHERE action = 'tip.refund' AND payload->>'tipId' = $1)::int
-          + (SELECT count(*) FROM tip_refunds WHERE tip_id = $1)::int AS n`,
+          + (SELECT count(*) FROM tip_refunds WHERE tip_id = $1::uuid)::int AS n`,
     [tipId],
   );
   expect(asked[0]!.n).toBeGreaterThan(0);
