@@ -162,6 +162,21 @@ const payoutOwners = async (
   return managers.map(({ userId }) => userId);
 };
 
+/** A business's open owners (Business Pro, ruling R22: a refund's subjects). */
+const openBusinessOwners = async (db: Database | Tx, businessId: string) => {
+  const owners = await db
+    .select({ userId: businessManagers.userId })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.businessId, businessId),
+        eq(businessManagers.role, 'owner'),
+        isNull(businessManagers.removedAt),
+      ),
+    );
+  return owners.map(({ userId }) => userId);
+};
+
 const handleOf = async (db: Database | Tx, profileId: string) => {
   const [page] = await db
     .select({ handle: profiles.handle })
@@ -571,6 +586,7 @@ const proRefund = acting<{ purchaseId: string }>({
   permission: 'payments.repair',
   subjects: async ({ purchaseId }, db) => {
     const facts = await proRefundFacts(db, purchaseId, new Date());
+    if (facts.businessId) return openBusinessOwners(db, facts.businessId);
     return facts.profileId ? pageOwner(db, facts.profileId) : [];
   },
   target: ({ purchaseId }) => purchaseId,

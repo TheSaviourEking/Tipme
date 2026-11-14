@@ -62,6 +62,8 @@ export interface ProRefundFacts {
   paidAt: Date | null;
   paidBy: string | null;
   profileId: string | null;
+  /** A Business Pro month's business (then `profileId` is null). */
+  businessId: string | null;
   refund: { id: string; status: ProRefundStatus } | null;
 }
 
@@ -117,6 +119,7 @@ export async function proRefundFacts(
     paidAt: purchase?.paidAt ?? null,
     paidBy,
     profileId: purchase?.profileId ?? null,
+    businessId: purchase?.businessId ?? null,
     refund: refund
       ? { id: refund.id, status: refund.status as ProRefundStatus }
       : null,

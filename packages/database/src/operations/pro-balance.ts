@@ -310,7 +310,7 @@ export async function buyProFromBalance(
   );
   if (earlier) {
     const { purchase } = await requestProPurchase(db, {
-      profileId: input.profileId,
+      subject: { profileId: input.profileId },
       method: 'balance',
       expectedAmountMinor: input.expectedAmountMinor,
       idempotencyKey: input.idempotencyKey,
@@ -336,7 +336,7 @@ export async function buyProFromBalance(
     throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
   }
   const { purchase, replayed } = await requestProPurchase(db, {
-    profileId: input.profileId,
+    subject: { profileId: input.profileId },
     method: 'balance',
     expectedAmountMinor: input.expectedAmountMinor,
     idempotencyKey: input.idempotencyKey,

@@ -367,7 +367,7 @@ export async function renewProAutomatically(
     let purchase: PurchaseRow;
     try {
       ({ purchase } = await requestProPurchase(db, {
-        profileId: personOf(row.profileId),
+        subject: { profileId: personOf(row.profileId) },
         method: 'saved_card',
         expectedAmountMinor: price.amountMinor,
         // One per month: a second run finds the purchase and stops (renews_period_id is unique).
