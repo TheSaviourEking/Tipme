@@ -59,8 +59,13 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed sixteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 16);
+test('the serious actions are the agreed seventeen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 17);
+  // Business Pro, plan Task A5: its own price, decided like the personal one.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['business_pro_price.change'],
+    'pro.price',
+  );
   // Paid Pro, plan Task 9 (ruling 6): a card refund needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro.refund'], 'payments.repair');
   assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
