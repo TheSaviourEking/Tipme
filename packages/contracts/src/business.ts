@@ -584,7 +584,8 @@ export interface OpsBusinessRow {
 export interface OpsBusinessDetail extends OpsBusinessRow {
   // `locations` is the row's count; the list has its own name.
   locationList: BusinessLocationView[];
-  managers: { userHint: string; role: ManagerRole }[];
+  /** `managerId` names a seat for `business.owner_remove`; never a contact detail. */
+  managers: { managerId: string; userHint: string; role: ManagerRole }[];
   verifiedAt?: string;
   suspendedReason?: string;
   /** Whether the owners uploaded a logo; staff read it through their own route, whatever the status. */

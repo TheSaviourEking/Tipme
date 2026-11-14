@@ -11804,6 +11804,19 @@ p.tip-choice:focus-visible {
   margin: 0;
 }
 
+/* Another owner's row: how TipMe support removes an owner (interim lock, 14 Nov 2026). */
+.business-manager__support {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.business-manager__support a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .add-business-link {
   margin: 0;
 }

@@ -260,6 +260,48 @@ test('a location manager sees only their location and no Add location', async ({
   await expectAccessible(page);
 });
 
+// Interim lock (owner, 14 Nov 2026): an owner never removes another owner from the dashboard. That
+// row says how TipMe support does it, in neutral words, until plan #204 Phase E.
+test('an owner sees the support line, not Remove, on another owner', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const { userId } = await accountOf(who.email);
+  const [ada] = await sql<{ user_id: string }>(
+    `SELECT user_id FROM profiles WHERE handle = 'ada'`,
+  );
+  const business = await seedBusiness({
+    owner: userId,
+    name: 'Kemi’s Kitchen',
+  });
+  await sql(
+    `INSERT INTO business_managers (id, business_id, user_id, role, added_by)
+     VALUES ($1, $2, $3, 'owner', $4)`,
+    [randomUUID(), business.businessId, ada!.user_id, userId],
+  );
+  await page.goto('/dashboard/business');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Kemi’s Kitchen' }),
+  ).toBeVisible();
+  const managers = page.locator('#managers');
+  const other = managers.getByRole('listitem').filter({ hasText: 'Ada' });
+  await expect(other).toContainText('Owner, all locations');
+  await expect(other).toContainText(
+    'To remove an owner, contact TipMe support. We check it with both owners first.',
+  );
+  await expect(other.getByRole('link', { name: 'Get help' })).toHaveAttribute(
+    'href',
+    '/dashboard/help',
+  );
+  await expect(other.getByRole('button', { name: /^Remove/ })).toHaveCount(0);
+  // Nothing hints at a dispute.
+  await expect(managers).not.toContainText(/dispute|takeover|conflict/i);
+  // Their own row still lets them step down.
+  const mine = managers.getByRole('listitem').filter({ hasText: '(you)' });
+  await expect(mine.getByRole('button', { name: /^Remove/ })).toBeVisible();
+  await expectAccessible(page);
+});
+
 test.describe('with TipMe for businesses off', () => {
   let stack: Stack | undefined;
   test.setTimeout(120_000);

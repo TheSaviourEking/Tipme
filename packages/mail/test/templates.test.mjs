@@ -729,6 +729,8 @@ const PREVIOUS_SAMPLES = {
   // Pro insights: a new type.
   monthly_recap: MAIL_TYPES.monthly_recap.sample,
   pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
+  // Owner-change lock (14 Nov 2026): a new type.
+  business_owner_change: MAIL_TYPES.business_owner_change.sample,
 };
 
 const settingsCtx = {
@@ -1241,4 +1243,109 @@ test('the monthly recap email names no amount in its subject, preview or body', 
   assert.match(out.text, /October 2026: 41 tips\./);
   assert.doesNotMatch(`${out.subject} ${out.text}`, /₦|NGN|\d,\d{3}/);
   assert.match(out.html, /\/dashboard\/reports\/month\/2026-10/);
+});
+
+test('the owner-change email tells every owner what happened, in plain words, from security@', () => {
+  const type = MAIL_TYPES.business_owner_change;
+  assert.ok(type, 'business_owner_change is registered');
+  assert.equal(type.category, 'security');
+  assert.equal(type.sender, 'security');
+  assert.equal(type.preference, null);
+  assert.equal(type.tracking, false);
+  const render = (data) => {
+    const out = renderMail('business_owner_change', data, ctx);
+    return {
+      ...out,
+      words: `${out.subject}\n${out.text}\n${visible(out.html)}`,
+    };
+  };
+  const base = { businessName: 'The Yellow Chilli', ownerName: 'Tobi Adeyemi' };
+
+  const blocked = render({
+    ...base,
+    change: 'removal_blocked',
+    actorName: 'Ada Okafor',
+    you: 'other',
+  });
+  assert.ok(
+    blocked.text.includes(
+      'Ada Okafor asked to remove Tobi Adeyemi as an owner of The Yellow Chilli. Nothing changed. TipMe checks any owner removal with both owners first.',
+    ),
+    blocked.text,
+  );
+  assert.equal(
+    render({
+      ...base,
+      change: 'removal_blocked',
+      actorName: 'Ada Okafor',
+      you: 'owner',
+    }).text.includes(
+      'Ada Okafor asked to remove you as an owner of The Yellow Chilli.',
+    ),
+    true,
+  );
+  assert.equal(
+    render({
+      ...base,
+      change: 'removal_blocked',
+      actorName: 'Ada Okafor',
+      you: 'actor',
+    }).text.includes(
+      'You asked to remove Tobi Adeyemi as an owner of The Yellow Chilli.',
+    ),
+    true,
+  );
+
+  const removed = render({ ...base, change: 'removed_by_tipme', you: 'other' });
+  assert.ok(
+    removed.text.includes(
+      'TipMe removed Tobi Adeyemi as an owner of The Yellow Chilli.',
+    ),
+    removed.text,
+  );
+  const removedYou = render({
+    ...base,
+    change: 'removed_by_tipme',
+    you: 'owner',
+  });
+  assert.ok(
+    removedYou.text.includes(
+      'TipMe removed you as an owner of The Yellow Chilli.',
+    ),
+    removedYou.text,
+  );
+
+  const stepped = render({ ...base, change: 'stepped_down', you: 'other' });
+  assert.ok(
+    stepped.text.includes(
+      'Tobi Adeyemi stepped down as an owner of The Yellow Chilli.',
+    ),
+    stepped.text,
+  );
+  assert.ok(
+    render({ ...base, change: 'stepped_down', you: 'owner' }).text.includes(
+      'You stepped down as an owner of The Yellow Chilli.',
+    ),
+  );
+
+  for (const out of [blocked, removed, removedYou, stepped]) {
+    // A support contact, the safety line, and never a name or the business in the subject.
+    assert.match(out.text, /support@usetipme\.xyz/);
+    assert.ok(out.text.startsWith('Your account’s safety\n\n'), out.text);
+    for (const name of ['Ada', 'Tobi', 'Yellow Chilli'])
+      assert.ok(!out.subject.includes(name), out.subject);
+    // Neutral: nothing hints at a dispute, and no payment partner.
+    assert.doesNotMatch(
+      out.words,
+      /dispute|takeover|conflict|paystack|flutterwave/i,
+    );
+  }
+  // A blocked attempt needs who asked.
+  assert.throws(() =>
+    renderMail(
+      'business_owner_change',
+      { ...base, change: 'removal_blocked', you: 'other' },
+      ctx,
+    ),
+  );
 });

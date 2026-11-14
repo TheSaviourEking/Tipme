@@ -59,7 +59,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | --- | --- |
 | `analytics.view` | GET `/v1/ops/market`<br>GET `/v1/ops/market/series`<br>GET `/v1/ops/metrics/health`<br>GET `/v1/ops/metrics/visibility` |
 | `audit.view` | GET `/v1/ops/audit`<br>GET `/v1/ops/staff-activity` |
-| `businesses.manage` | POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
+| `businesses.manage` | POST `/v1/ops/businesses/{id}/owners/{managerId}/remove`<br>POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
 | `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `changelog.publish` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/approve`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
@@ -333,6 +333,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}/logo` | `search.view` | n/a (read) | – | – |
+| POST | `/v1/ops/businesses/{id}/owners/{managerId}/remove` | `businesses.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/businesses/{id}/restore` | `businesses.manage` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/suspend` | `businesses.manage` | yes | – | – |
@@ -460,24 +461,28 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                                   | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07                                                                                                      |
 | `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session                | Per-address and per-number limits; lockouts; codes expire                                                                                                                                                               |
 
+10. **A business owner never ends another owner's seat** (interim lock, 14 Nov 2026). `POST /v1/me/businesses/{id}/managers/{managerId}/remove` on another owner answers `403 OWNER_REMOVAL_NEEDS_TIPME`, changes nothing and writes a `business.owner_removal_blocked` audit row. An owner may still step down (never the last one: `409 BUSINESS_LAST_OWNER`) and still removes location managers. Only TipMe staff remove an owner, through the serious action `business.owner_remove` (`businesses.manage`, a written reason, a fresh code and a second person; nobody who runs the business can ask or decide it). It never removes the last owner, the founding owner included. Every owner is emailed (security mail) about a refused attempt, an owner stepping down and a removal by TipMe, the person it concerns included. The full removal procedure, with notice to both owners and a chance to object, is plan #204 Phase E.
+
 ## Where it is tested
 
-| Rule                                                          | Test                                                                                                                                |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| A recipient cannot read or change another recipient's data    | `tests/integration/profiles-api.test.mjs`, `tests/integration/dashboard-api.test.mjs`, `tests/integration/message-reports.test.mjs` |
-| The admin area is invisible to everyone else                  | `tests/integration/ops-access.test.mjs`                                                                                             |
-| A role without a permission gets 403                          | `tests/integration/ops-access.test.mjs`, `tests/integration/pro-tipping.test.mjs`                                                   |
-| State-changing routes need the CSRF check                     | `tests/integration/ops-access.test.mjs`, `scripts/generate-docs.test.mjs` (every route)                                             |
-| The public routes are the reviewed ones                       | `scripts/generate-docs.test.mjs`                                                                                                    |
-| Rate limits                                                   | `tests/integration/auth-api.test.mjs`, `tests/integration/profile-reports.test.mjs`, `tests/integration/avatars-limit.test.mjs`     |
-| Webhooks: forged, replayed, duplicate and out-of-order events | `tests/integration/webhooks.test.mjs`, `packages/payments/test/`                                                                    |
-| The private-preview gate                                      | `tests/integration/preview-gate.test.mjs`, `apps/web/test/preview-gate.test.mjs`                                                    |
-| Searches and reveals are audited                              | `tests/integration/ops-search.test.mjs`, `tests/integration/ops-issues.test.mjs`                                                    |
-| Staff authentication and lockout                              | `tests/integration/ops-access.test.mjs`, `packages/database/test/integration/staff.test.mjs`                                        |
+| Rule                                                          | Test                                                                                                                                                                    |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A recipient cannot read or change another recipient's data    | `tests/integration/profiles-api.test.mjs`, `tests/integration/dashboard-api.test.mjs`, `tests/integration/message-reports.test.mjs`                                     |
+| The admin area is invisible to everyone else                  | `tests/integration/ops-access.test.mjs`                                                                                                                                 |
+| A role without a permission gets 403                          | `tests/integration/ops-access.test.mjs`, `tests/integration/pro-tipping.test.mjs`                                                                                       |
+| State-changing routes need the CSRF check                     | `tests/integration/ops-access.test.mjs`, `scripts/generate-docs.test.mjs` (every route)                                                                                 |
+| The public routes are the reviewed ones                       | `scripts/generate-docs.test.mjs`                                                                                                                                        |
+| Rate limits                                                   | `tests/integration/auth-api.test.mjs`, `tests/integration/profile-reports.test.mjs`, `tests/integration/avatars-limit.test.mjs`                                         |
+| Webhooks: forged, replayed, duplicate and out-of-order events | `tests/integration/webhooks.test.mjs`, `packages/payments/test/`                                                                                                        |
+| The private-preview gate                                      | `tests/integration/preview-gate.test.mjs`, `apps/web/test/preview-gate.test.mjs`                                                                                        |
+| Searches and reveals are audited                              | `tests/integration/ops-search.test.mjs`, `tests/integration/ops-issues.test.mjs`                                                                                        |
+| Staff authentication and lockout                              | `tests/integration/ops-access.test.mjs`, `packages/database/test/integration/staff.test.mjs`                                                                            |
+| An owner can't remove another business owner                  | `tests/integration/business-manage-api.test.mjs`, `tests/integration/ops-business-owner-remove.test.mjs`, `packages/database/test/integration/business-manage.test.mjs` |
 
 ## Not done yet (needs a provider or a decision)
 
 - Two-person approval for refunds and manual adjustments: needs two staff and a real provider (D-03 to D-06).
 - Per-recipient payout holds and limits: needs the provider's verification model (D-06).
 - Bot protection beyond rate limits: needs a captcha service.
+- Removing a business owner: until plan #204 Phase E, only through TipMe support and `business.owner_remove`, with no notice period or objection step yet.
 - A separate read-only support role: a database row away, but its permissions are not decided.
