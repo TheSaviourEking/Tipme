@@ -197,6 +197,8 @@ test('health, release info and signed webhooks need no cookie', async () => {
     analytics: true,
     paymentProvider: 'mock',
     business: false,
+    businessSignup: false,
+    businessOwners: false,
   });
   // Unsigned, so refused by the webhook itself (400/401), not by the gate.
   const hook = await fetch(`${gated.api}/v1/webhooks/mock`, {
