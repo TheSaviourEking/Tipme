@@ -85,6 +85,10 @@ import {
 } from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { handleUsernameTakeBacks } from './handlers/username-take-backs.js';
+import {
+  ANNOUNCEMENTS_TICK_MS,
+  handleAnnouncements,
+} from './handlers/announcements.js';
 import { handleProExpire, handleProReminders } from './handlers/pro.js';
 import { workerRevalidator } from './revalidate.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
@@ -97,6 +101,8 @@ const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const APPROVALS_EXPIRE_JOB = 'approvals.expire';
 const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
+// Staff announcements (14 Nov 2026): the next batch, at the configured rate.
+const ANNOUNCEMENTS_JOB = 'announcements.send';
 // Paid Pro (ADR-0015): months move on every minute; reminders every 15 minutes.
 const PRO_EXPIRE_JOB = 'pro.expire';
 const PRO_REMINDERS_JOB = 'pro.reminders';
@@ -375,6 +381,12 @@ export async function startJobWorker(
     every: 60_000,
     logger,
   });
+  const announcementsSchedule = ensureSchedule({
+    queue,
+    id: ANNOUNCEMENTS_JOB,
+    every: ANNOUNCEMENTS_TICK_MS,
+    logger,
+  });
   const proExpireSchedule = ensureSchedule({
     queue,
     id: PRO_EXPIRE_JOB,
@@ -592,6 +604,17 @@ export async function startJobWorker(
               sealing,
               now: () => new Date(),
               revalidate: takeBackRevalidate,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === ANNOUNCEMENTS_JOB) {
+            const outcome = await handleAnnouncements({
+              db: database.db,
+              sealing,
+              sendsPerMinute: config.ANNOUNCEMENT_SENDS_PER_MINUTE,
+              now: () => new Date(),
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
             processed.add(1, { outcome });
@@ -930,6 +953,7 @@ export async function startJobWorker(
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();
+      await announcementsSchedule.stop();
       await proExpireSchedule.stop();
       await proRemindersSchedule.stop();
       await proRenewSchedule?.stop();
