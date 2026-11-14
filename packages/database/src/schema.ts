@@ -3,6 +3,8 @@ import {
   BUSINESS_NOTIFICATION_KINDS,
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
+  ANNOUNCEMENT_AUDIENCES,
+  ANNOUNCEMENT_STATUSES,
   OPS_PERMISSIONS,
   type OpsPermission,
   type OpsIssueKind as IssueKind,
@@ -2843,6 +2845,62 @@ export const tableAssignments = pgTable(
       .where(sql`ended_at IS NULL`),
     index('table_assignments_member').on(table.memberId),
     index('table_assignments_shift').on(table.shiftId),
+  ],
+);
+
+/**
+ * A staff announcement by email (owner-approved, 14 Nov 2026). Staff edit a draft (each edit bumps
+ * `revision`); a second person approves sending the revision asked about. The worker then queues
+ * one `announcement` email per person in batches, walking users by id from `cursor_user_id`, and
+ * only users created by `cutoff` (the approval). Each email's dedupe key is the announcement and
+ * the user, so a batch repeated after a restart queues nobody twice. "Waiting for approval" is a
+ * draft with a pending request, never stored.
+ */
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey(),
+    subject: text('subject').notNull(),
+    preheader: text('preheader').notNull(),
+    text: text('text').notNull(),
+    buttonLabel: text('button_label'),
+    buttonUrl: text('button_url'),
+    audience: text('audience').notNull(),
+    status: text('status').notNull().default('draft'),
+    revision: integer('revision').notNull().default(1),
+    // The count when the send was approved: the N in "x of N".
+    recipientCount: integer('recipient_count'),
+    // Emails handed to the mail queue so far: the x.
+    queuedCount: integer('queued_count').notNull().default(0),
+    cursorUserId: uuid('cursor_user_id'),
+    cutoff: timestamp('cutoff', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    requestedBy: uuid('requested_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    sendStartedAt: timestamp('send_started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check('announcements_audience', inList('audience', ANNOUNCEMENT_AUDIENCES)),
+    check('announcements_status', inList('status', ANNOUNCEMENT_STATUSES)),
+    check(
+      'announcements_button',
+      sql`(button_label IS NULL) = (button_url IS NULL)`,
+    ),
+    check(
+      'announcements_counts',
+      sql`queued_count >= 0 AND (recipient_count IS NULL OR recipient_count >= 0)`,
+    ),
+    // The worker's question each tick: what is sending, oldest first.
+    index('announcements_status_created').on(table.status, table.createdAt),
   ],
 );
 

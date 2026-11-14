@@ -29,7 +29,9 @@ export function addressHmac(sealing: MailSealing, address: string): string {
   return createHmac('sha256', sealing.hmacKey).update(normalised).digest('hex');
 }
 
-const PRIORITY = { security: 0, account: 1 } as const;
+// Marketing (announcements) goes after everything else, whatever numbers the rest use: it is only
+// ever sorted on, so 9 stays last if the others are renumbered.
+const PRIORITY = { security: 0, account: 1, marketing: 9 } as const;
 
 /**
  * Queues one email in the caller's transaction, so it exists exactly when the change that caused

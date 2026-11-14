@@ -399,6 +399,32 @@ const wired = {
         ).length > 0,
     };
   },
+  // Staff announcements (14 Nov 2026): one person who takes news, and a draft to send them.
+  'announcement.send': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+      [`news.${randomUUID().slice(0, 8)}@example.com`],
+    );
+    await q(
+      `INSERT INTO mail_preferences (user_id, marketing) VALUES ($1, true)`,
+      [userId],
+    );
+    const [{ id }] = await q(
+      `INSERT INTO announcements (id, subject, preheader, text, audience, created_by)
+       VALUES (gen_random_uuid(), 'Lower fees', '', 'Fees are going down.', 'everyone', $1) RETURNING id`,
+      [userId],
+    );
+    return {
+      payload: { id, revision: 1, countWhenAsked: 1 },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM announcements WHERE id = $1 AND status = 'sending'`,
+            [id],
+          )
+        ).length > 0,
+    };
+  },
   'changelog.publish': async () => {
     const number = 1_000_000 + Math.floor(Math.random() * 1_000_000_000);
     await q(
