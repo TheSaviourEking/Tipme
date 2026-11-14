@@ -8,7 +8,7 @@ export function balanceQuery(profileId: string) {
       (SELECT COALESCE(SUM(CASE WHEN e.side = 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
         WHERE a.code = 'recipient_payable' AND a.profile_id = ${profileId}) AS payable,
-      (SELECT COALESCE(SUM(p.amount_minor), 0) FROM payouts p
+      (SELECT COALESCE(SUM(p.amount_minor + p.user_fee_minor), 0) FROM payouts p
         WHERE p.profile_id = ${profileId} AND p.status IN ('REQUESTED', 'PROCESSING'))
       -- Paid Pro from the balance (plan Task 8): reserved from the moment it opens until it is
       -- booked (then the ledger has it) or fails.
@@ -34,7 +34,8 @@ export function balanceQuery(profileId: string) {
  * refund or chargeback is booked even when the money was already withdrawn.
  *
  * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
- * payouts still in flight (REQUESTED / PROCESSING) and Pro paid from the balance still being moved
+ * payouts still in flight (REQUESTED / PROCESSING; what is sent plus the fee a user pays from it,
+ * owner 12 Nov 2026) and Pro paid from the balance still being moved
  * (COLLECTING / UNKNOWN), which are reserved. Money still being
  * confirmed by the provider is reported separately and is never part of the balance.
  */
@@ -79,7 +80,7 @@ export async function businessBalanceIn(
       (SELECT COALESCE(SUM(CASE WHEN e.side = 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
         WHERE a.code = 'business_payable' AND a.business_id = ${businessId}) AS payable,
-      (SELECT COALESCE(SUM(p.amount_minor), 0) FROM payouts p
+      (SELECT COALESCE(SUM(p.amount_minor + p.user_fee_minor), 0) FROM payouts p
         WHERE p.business_id = ${businessId} AND p.status IN ('REQUESTED', 'PROCESSING')) AS reserved
   `);
   const row = result.rows[0];

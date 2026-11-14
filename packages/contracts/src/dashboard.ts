@@ -130,7 +130,13 @@ export type WithdrawalQuote =
       withdrawableMinor: string;
       ledgerMinor: string;
       providerMinor: string;
+      /** The partner's transfer fee on a withdrawal. */
       feeMinor: string;
+      /**
+       * Who pays it (owner, 12 Nov 2026): 'user' takes it from the amount chosen (withdraw ₦10,000,
+       * receive ₦9,950); 'tipme' while an unused top-up TipMe already sent can pay it.
+       */
+      feePaidBy: 'user' | 'tipme';
       destination: { bankName: string; last4: string };
     }
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
