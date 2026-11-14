@@ -15,6 +15,8 @@ function codeMail(input: {
   return defineMailType({
     id: input.id,
     category: 'security',
+    // Every code here is one the person just asked for and is about to type.
+    waiting: true,
     sender: 'security',
     preference: null,
     schema: z.object({ code }).strict(),

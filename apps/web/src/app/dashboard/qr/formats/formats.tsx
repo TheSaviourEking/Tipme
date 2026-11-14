@@ -88,7 +88,7 @@ const LAYOUTS: Record<QrFormatId, (input: FormatInput) => ReactNode> = {
   ),
   ticket: ({ src, label }) => (
     <>
-      <p className="qr-format__title">A ticket to say thanks</p>
+      <p className="qr-format__title">A ticket to leave a tip</p>
       <div className="qr-format__perforated">
         <Code src={src} label={label} />
       </div>

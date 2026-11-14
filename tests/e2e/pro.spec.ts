@@ -412,7 +412,7 @@ test('the Plan section lists card styles and a signature among Pro features', as
   await expect(pro).not.toContainText(/Repeat supporters|Early access/i);
   await expect(pro).not.toContainText(/Coming(?! soon to buy)/);
   // The only amount is the server's price (paid Pro, ADR-0015), never a number of the page's own.
-  await expect(pro).toContainText('₦2,500 a month');
+  await expect(pro).toContainText('₦5,000 a month');
 });
 
 // Live updates, PR 2 (plan Task 13): an open dashboard follows a change made elsewhere. 5 s is

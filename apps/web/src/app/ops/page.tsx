@@ -159,7 +159,7 @@ function Numbers() {
           />
           <Tile label="Amount tipped" {...amount(money.grossMinor)} />
           <Tile
-            // Since PR-012, what TipMe keeps after paying processing out of its 10%.
+            // Since PR-012, what TipMe keeps after paying processing out of its share (10% before 12 Nov 2026; Free 7%, Pro 5% after).
             label="TipMe keeps (after processing)"
             {...amount(money.platformFeeMinor)}
           />

@@ -16,6 +16,7 @@ import {
   businessShifts,
   issues,
   notifications,
+  profiles,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
@@ -23,6 +24,8 @@ import { maskEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { resolveIssue } from './issues.js';
+import { mailOwnerChange } from './business-owner-mail.js';
+import type { MailSealing } from './mail-queue.js';
 
 // TipMe for businesses, PR B2: what TipMe staff see of a business, and the changes they make to one.
 // Contacts are masked (access-control rule 6); the full contact needs `private.view` and a reason.
@@ -147,6 +150,7 @@ export function opsBusinessDetail(
         closed: closedAt !== null,
       })),
       managers: managers.map((manager) => ({
+        managerId: manager.managerId,
         userHint: userHintOf(manager.email, manager.phone),
         role: manager.role,
       })),
@@ -162,6 +166,7 @@ export function opsBusinessDetail(
 async function openManagers(db: Database | Tx, businessId: string) {
   const rows = await db
     .select({
+      managerId: businessManagers.id,
       role: businessManagers.role,
       email: users.email,
       phone: users.phoneE164,
@@ -430,4 +435,129 @@ export async function verifyBusiness(
     now: input.now,
   });
   return { slug: business.slug, name: business.name };
+}
+
+/* Owner-change lock (owner, 14 Nov 2026): only TipMe removes a business owner. */
+
+/** The seat `business.owner_remove` names: open or not, and its role. Moving makes it stale. */
+export async function businessOwnerSeatFacts(
+  db: Database | Tx,
+  businessId: string,
+  managerId: string,
+): Promise<{ role: string; open: boolean } | null> {
+  if (!UUID.test(businessId) || !UUID.test(managerId)) return null;
+  const [row] = await db
+    .select({
+      role: businessManagers.role,
+      removedAt: businessManagers.removedAt,
+    })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.id, managerId),
+        eq(businessManagers.businessId, businessId),
+      ),
+    );
+  return row ? { role: row.role, open: row.removedAt === null } : null;
+}
+
+const openOwnerCount = async (db: Database | Tx, businessId: string) => {
+  const [row] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.businessId, businessId),
+        eq(businessManagers.role, 'owner'),
+        isNull(businessManagers.removedAt),
+      ),
+    );
+  return row?.n ?? 0;
+};
+
+/** What the approver reads: who, which business, and how many owners stay. No contact details. */
+export async function describeOwnerRemoval(
+  db: Database | Tx,
+  businessId: string,
+  managerId: string,
+): Promise<string> {
+  if (!UUID.test(businessId) || !UUID.test(managerId))
+    throw new OperationError('INVALID_INPUT');
+  const [row] = await db
+    .select({
+      business: businesses.name,
+      displayName: profiles.displayName,
+      handle: profiles.handle,
+    })
+    .from(businessManagers)
+    .innerJoin(businesses, eq(businesses.id, businessManagers.businessId))
+    .leftJoin(profiles, eq(profiles.userId, businessManagers.userId))
+    .where(
+      and(
+        eq(businessManagers.id, managerId),
+        eq(businessManagers.businessId, businessId),
+      ),
+    );
+  if (!row) throw new OperationError('INVALID_INPUT');
+  const name =
+    row.displayName || (row.handle ? `@${row.handle}` : 'A TipMe user');
+  const stay = (await openOwnerCount(db, businessId)) - 1;
+  return `Remove ${name} as an owner of ${row.business}. ${stay} owner${stay === 1 ? '' : 's'} ${stay === 1 ? 'stays' : 'stay'}.`;
+}
+
+/**
+ * The serious action's work (`business.owner_remove`), in the caller's transaction: an open owner's
+ * seat ends, never the last one (BUSINESS_LAST_OWNER), the founding owner's included. Audited with
+ * the reason, and every owner is emailed, the removed one included. Anything that isn't an open
+ * owner of this business is INVALID_INPUT, so a dry run at asking refuses it.
+ */
+export async function removeBusinessOwner(
+  tx: Tx,
+  input: {
+    businessId: string;
+    managerId: string;
+    staffUserId: string;
+    reason: string;
+    now: Date;
+    sealing: MailSealing;
+  },
+): Promise<{ slug: string }> {
+  if (!UUID.test(input.businessId) || !UUID.test(input.managerId))
+    throw new OperationError('INVALID_INPUT');
+  const business = await lockBusiness(tx, input.businessId);
+  const [seat] = await tx
+    .select({ userId: businessManagers.userId })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.id, input.managerId),
+        eq(businessManagers.businessId, input.businessId),
+        eq(businessManagers.role, 'owner'),
+        isNull(businessManagers.removedAt),
+      ),
+    );
+  if (!seat) throw new OperationError('INVALID_INPUT');
+  if ((await openOwnerCount(tx, input.businessId)) <= 1)
+    throw new OperationError('BUSINESS_LAST_OWNER');
+  await tx
+    .update(businessManagers)
+    .set({ removedAt: input.now })
+    .where(eq(businessManagers.id, input.managerId));
+  await recordAudit(tx, {
+    staffUserId: input.staffUserId,
+    action: 'business.owner_removed',
+    permission: 'businesses.manage',
+    subjectType: 'business',
+    subjectId: input.businessId,
+    reason: input.reason,
+    now: input.now,
+  });
+  await mailOwnerChange(tx, input.sealing, {
+    businessId: input.businessId,
+    change: 'removed_by_tipme',
+    ownerUserId: seat.userId,
+    eventId: input.managerId,
+    now: input.now,
+  });
+  return { slug: business.slug };
 }

@@ -23,7 +23,9 @@ import {
 } from '@tipme/contracts';
 import {
   createSession,
+  featureOn,
   hasProfile,
+  managesBusiness,
   listSessions,
   activeMailProvider,
   mailSealing,
@@ -172,6 +174,12 @@ export class AuthController {
         userId: result.userId,
         isNew: result.created,
         hasProfile: await hasProfile(db, result.userId),
+        // Only with business sign-up on: off, every login without a page goes to /sign-up.
+        managesBusiness:
+          (await featureOn(db, 'business')) &&
+          (await featureOn(db, 'business_signup'))
+            ? await managesBusiness(db, result.userId)
+            : false,
       },
     };
   }

@@ -7,6 +7,7 @@ import {
 import { and, asc, desc, eq, inArray, isNull, lte, ne, or } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { proPeriods, proPurchases, proRefunds } from '../schema.js';
+import { personOf } from './owner.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
@@ -61,6 +62,8 @@ export interface ProRefundFacts {
   paidAt: Date | null;
   paidBy: string | null;
   profileId: string | null;
+  /** A Business Pro month's business (then `profileId` is null). */
+  businessId: string | null;
   refund: { id: string; status: ProRefundStatus } | null;
 }
 
@@ -116,6 +119,7 @@ export async function proRefundFacts(
     paidAt: purchase?.paidAt ?? null,
     paidBy,
     profileId: purchase?.profileId ?? null,
+    businessId: purchase?.businessId ?? null,
     refund: refund
       ? { id: refund.id, status: refund.status as ProRefundStatus }
       : null,
@@ -322,7 +326,13 @@ export async function sendProRefunds(
           outcome.kind === 'refused' ||
           (outcome.kind === 'answered' && outcome.status === 'failed')
         ) {
-          await failRefund(tx, locked, purchase.profileId, now, 'system');
+          await failRefund(
+            tx,
+            locked,
+            personOf(purchase.profileId),
+            now,
+            'system',
+          );
           failed += 1;
           return;
         }
@@ -382,7 +392,7 @@ export async function applyProRefundEvent(
         handleLower: string | null = null,
       ) => ({
         outcome,
-        profileId: purchase.profileId,
+        profileId: personOf(purchase.profileId),
         handleLower,
         planChanged,
       });
@@ -428,7 +438,13 @@ export async function applyProRefundEvent(
       if (input.refundState === 'failed') {
         if (!row || row.status === 'PAID' || row.status === 'FAILED')
           return result('already');
-        await failRefund(tx, row, purchase.profileId, now, 'provider_event');
+        await failRefund(
+          tx,
+          row,
+          personOf(purchase.profileId),
+          now,
+          'provider_event',
+        );
         return result('failed');
       }
       // Paid: final. Booked once per payment (the partner allows one refund per payment).

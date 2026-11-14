@@ -14,7 +14,7 @@ import {
   PlatformCheckoutUnavailableError,
   UncertainProviderOutcomeError,
 } from '../../../payments/dist/index.js';
-import { ADA, useDatabase } from './helpers.mjs';
+import { ADA, atLaunchProPrice, useDatabase } from './helpers.mjs';
 
 // Paid Pro, plan Task 6 (ADR-0015): a Pro month bought by checkout on TipMe's own account, card or
 // bank transfer. A pretend partner stands in: nothing here reaches the network.
@@ -27,6 +27,7 @@ const MIN = 60_000;
 async function setup(t) {
   const db = await useDatabase(t);
   await db.fresh();
+  await atLaunchProPrice(db);
   await db.pool.query(
     `UPDATE users SET email = 'ada@example.com', email_verified_at = now()
        WHERE id = (SELECT user_id FROM profiles WHERE id = $1)`,

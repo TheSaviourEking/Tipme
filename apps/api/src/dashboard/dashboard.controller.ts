@@ -132,7 +132,7 @@ export class DashboardController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<VisitsToday>> {
     // Collection off: no number at all, rather than a misleading zero.
-    if (!this.events.enabled) return { data: { visits: null } };
+    if (!(await this.events.enabled())) return { data: { visits: null } };
     return {
       data: {
         visits: await visitsToday(this.database.db, {
@@ -329,6 +329,7 @@ export class DashboardController {
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
               feeMinor: quote.feeMinor.toString(),
+              feePaidBy: quote.feePaidBy,
             }
           : { ...quote, inReview },
     };
