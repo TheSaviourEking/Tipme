@@ -52,7 +52,27 @@ export type Block =
   /** A purple panel; its title is a link when `href` is set. */
   | { kind: 'signature'; title: string; text: string; href?: string }
   /** A black bar: what happens, and the date it happens. */
-  | { kind: 'deadline'; label: string; date: string };
+  | { kind: 'deadline'; label: string; date: string }
+  /** A paragraph whose spans may be bold (staff announcements). */
+  | { kind: 'rich'; spans: Span[] }
+  /** A bulleted list; each item is spans (staff announcements). */
+  | { kind: 'bullets'; items: Span[][] };
+
+/** A run of plain text, bold or not. */
+export interface Span {
+  text: string;
+  bold: boolean;
+}
+
+const spansHtml = (spans: Span[]) =>
+  spans
+    .map((span) =>
+      span.bold
+        ? `<strong style="font-weight:700;">${e(span.text)}</strong>`
+        : e(span.text),
+    )
+    .join('');
+const spansText = (spans: Span[]) => spans.map((span) => span.text).join('');
 // The boards' paper slip with a supporter's quote is not a block: tip notes are never copied into
 // mail (docs/design/DECISION-LOG.md, 5 Nov 2026).
 
@@ -195,6 +215,21 @@ function blockHtml(block: Block): [string, number] {
         16,
       ];
     }
+    case 'rich':
+      return [
+        `<p class="tm-ink" style="margin:0;font-size:16px;line-height:1.55;color:${INK};">${spansHtml(block.spans)}</p>`,
+        14,
+      ];
+    case 'bullets':
+      return [
+        `<ul class="tm-ink" style="margin:0;padding:0 0 0 22px;font-size:16px;line-height:1.55;color:${INK};">${block.items
+          .map(
+            (item, i) =>
+              `<li style="margin:${i === 0 ? 0 : 6}px 0 0;">${spansHtml(item)}</li>`,
+          )
+          .join('')}</ul>`,
+        14,
+      ];
     case 'deadline':
       return [
         panel(
@@ -242,6 +277,10 @@ function blockText(block: Block): string {
       ].join('\n');
     case 'deadline':
       return `${block.label} ${block.date}`;
+    case 'rich':
+      return spansText(block.spans);
+    case 'bullets':
+      return block.items.map((item) => `- ${spansText(item)}`).join('\n');
   }
 }
 

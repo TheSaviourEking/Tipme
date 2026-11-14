@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed sixteen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 16);
+test('the serious actions are the agreed seventeen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 17);
   // Paid Pro, plan Task 9 (ruling 6): a card refund needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro.refund'], 'payments.repair');
   assert.ok(SERIOUS_ACTIONS.includes('business.verify'));
@@ -110,7 +110,7 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  assert.equal(OPS_PERMISSIONS.length, 24);
+  assert.equal(OPS_PERMISSIONS.length, 25);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],
@@ -129,4 +129,16 @@ test('pro.price is sensitive and in money; pro_price.change maps to it', () => {
   assert.ok(SERIOUS_ACTIONS.includes('pro_price.change'));
   assert.equal(SERIOUS_ACTION_PERMISSIONS['pro_price.change'], 'pro.price');
   assert.match(SERIOUS_ACTION_WORDS['pro_price.change'], /Pro price/);
+});
+
+// Staff announcements (owner-approved, 14 Nov 2026): emailing many people needs a second person.
+test('announcements.send is sensitive; announcement.send maps to it', () => {
+  assert.equal(OPS_CATALOGUE['announcements.send'].sensitive, true);
+  assert.equal(OPS_CATALOGUE['announcements.send'].group, 'content');
+  assert.ok(SERIOUS_ACTIONS.includes('announcement.send'));
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['announcement.send'],
+    'announcements.send',
+  );
+  assert.match(SERIOUS_ACTION_WORDS['announcement.send'], /announcement/i);
 });

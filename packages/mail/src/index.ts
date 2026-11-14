@@ -12,7 +12,13 @@ export {
   type RenderedMail,
 } from './templates/define.js';
 export { escapeHtml } from './templates/escape.js';
-export type { Block, Letter } from './templates/layout.js';
+export type { Block, Letter, Span } from './templates/layout.js';
+export {
+  ANNOUNCEMENT_LIMITS,
+  announcementBlocks,
+  announcementSchema,
+  type AnnouncementData,
+} from './templates/types/announcement.js';
 export { MAIL_TYPES, renderMail } from './templates/registry.js';
 export {
   MAIL_SENDERS,

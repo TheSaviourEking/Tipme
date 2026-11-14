@@ -31,7 +31,7 @@ export type ChangelogState =
  * same word, so the source check and the stored-text check never disagree.
  */
 export const PROVIDER_WORD = /\bbachs\b/i;
-const REGULATORY_CLAIM =
+export const REGULATORY_CLAIM =
   /\b(licen[cs]ed|regulated|approved by|authori[sz]ed by|CBN|central bank|insured|guaranteed)\b/i;
 const HEADING = /^#{1,6}(\s|$)/;
 const FOR_USERS_HEADING = /^#{1,6}\s*for users\s*$/i;
