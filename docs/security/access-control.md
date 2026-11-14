@@ -458,6 +458,8 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `POST /v1/events`, `POST /v1/vitals`                                                   | Anonymous analytics and page speed                                                   | A fixed list of names; honours Global Privacy Control and Do Not Track; rate-limited; off in production until D-07                                                                                                      |
 | `POST /v1/auth/code`, `/v1/auth/verify`, `/v1/auth/recover*`, `/v1/auth/email/confirm` | Signing in and recovering an account happen before there is a session                | Per-address and per-number limits; lockouts; codes expire                                                                                                                                                               |
 
+10. **A business owner never ends another owner's seat** (interim lock, 14 Nov 2026). `POST /v1/me/businesses/{id}/managers/{managerId}/remove` on another owner answers `403 OWNER_REMOVAL_NEEDS_TIPME`, changes nothing and writes a `business.owner_removal_blocked` audit row. An owner may still step down (never the last one: `409 BUSINESS_LAST_OWNER`) and still removes location managers. The full removal procedure, with notice to both owners and a TipMe decision, is plan #204 Phase E; until then no in-app staff tool changes owners.
+
 ## Where it is tested
 
 | Rule                                                          | Test                                                                                                                                |
@@ -472,10 +474,12 @@ Reviewed one by one; the test lists them and fails when one is added.
 | The private-preview gate                                      | `tests/integration/preview-gate.test.mjs`, `apps/web/test/preview-gate.test.mjs`                                                    |
 | Searches and reveals are audited                              | `tests/integration/ops-search.test.mjs`, `tests/integration/ops-issues.test.mjs`                                                    |
 | Staff authentication and lockout                              | `tests/integration/ops-access.test.mjs`, `packages/database/test/integration/staff.test.mjs`                                        |
+| An owner can't remove another business owner                  | `tests/integration/business-manage-api.test.mjs`, `packages/database/test/integration/business-manage.test.mjs`                     |
 
 ## Not done yet (needs a provider or a decision)
 
 - Two-person approval for refunds and manual adjustments: needs two staff and a real provider (D-03 to D-06).
 - Per-recipient payout holds and limits: needs the provider's verification model (D-06).
 - Bot protection beyond rate limits: needs a captcha service.
+- Removing a business owner: until plan #204 Phase E, only through TipMe support; there is no staff tool for it yet.
 - A separate read-only support role: a database row away, but its permissions are not decided.

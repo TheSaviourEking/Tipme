@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import type { BusinessDetail, ManagerRow } from '@tipme/contracts';
 import { Button, Skeleton, StateLine } from '@tipme/ui';
@@ -14,7 +15,13 @@ const roleWords = (row: ManagerRow, business: BusinessDetail) => {
 /**
  * Section "Managers" (PR B1). Every manager sees the list; owners remove (never the last owner).
  * Adding one is an invitation (PR B3), so until that ships the card says how it will work.
+ *
+ * An owner never removes another owner here (interim lock, 14 Nov 2026): that row says how TipMe
+ * support does it instead, in neutral words, until the removal procedure (plan #204, Phase E).
  */
+const OWNER_REMOVAL_LINE =
+  'To remove an owner, contact TipMe support. We check it with both owners first.';
+
 export function ManagersCard({ business }: { business: BusinessDetail }) {
   const owner = business.you.role === 'owner';
   const [rows, setRows] = useState<ManagerRow[] | null | undefined>(undefined);
@@ -49,7 +56,9 @@ export function ManagersCard({ business }: { business: BusinessDetail }) {
       text:
         result.code === 'BUSINESS_LAST_OWNER'
           ? `Make someone else an owner of ${business.name} first, or close it.`
-          : `${row.name} wasn’t removed. Try again in a moment.`,
+          : result.code === 'OWNER_REMOVAL_NEEDS_TIPME'
+            ? OWNER_REMOVAL_LINE
+            : `${row.name} wasn’t removed. Try again in a moment.`,
     });
   };
 
@@ -72,7 +81,13 @@ export function ManagersCard({ business }: { business: BusinessDetail }) {
               </strong>
               <span>{roleWords(row, business)}</span>
             </div>
-            {owner &&
+            {owner && row.role === 'owner' && !row.you ? (
+              <p className="business-manager__support">
+                {OWNER_REMOVAL_LINE}{' '}
+                <Link href="/dashboard/help">Get help</Link>
+              </p>
+            ) : (
+              owner &&
               (removing === row.managerId ? (
                 <div
                   className="business-manager__confirm"
@@ -107,7 +122,8 @@ export function ManagersCard({ business }: { business: BusinessDetail }) {
                 >
                   Remove
                 </Button>
-              ))}
+              ))
+            )}
           </li>
         ))}
       </ul>

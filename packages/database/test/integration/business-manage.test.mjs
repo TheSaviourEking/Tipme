@@ -579,12 +579,42 @@ test('business setup', async (t) => {
     },
   );
 
+  await t.test('two owners stepping down at once leave one owner', async () => {
+    await setUp();
+    const { businessId } = await seedBusiness(database, {
+      status: 'pending',
+    });
+    const [first] = await q(
+      `SELECT id FROM business_managers WHERE business_id = $1`,
+      [businessId],
+    );
+    const second = await seedManager(database, {
+      businessId,
+      userId: TOBI.userId,
+    });
+    const outcomes = await Promise.allSettled([
+      removeManager(database.db, ADA.userId, businessId, first.id),
+      removeManager(database.db, TOBI.userId, businessId, second.managerId),
+    ]);
+    const owners = await q(
+      `SELECT id FROM business_managers WHERE business_id = $1 AND removed_at IS NULL`,
+      [businessId],
+    );
+    assert.equal(owners.length, 1);
+    assert.equal(
+      outcomes.filter((o) => o.status === 'fulfilled').length,
+      1,
+      'one stepping down wins',
+    );
+  });
+
+  // The owner's ruling (14 Nov 2026): an owner never ends another owner's seat; TipMe does it.
   await t.test(
-    'two owners removing each other at once leave one owner',
+    'an owner removing another owner is refused, audited, and nothing changes',
     async () => {
       await setUp();
       const { businessId } = await seedBusiness(database, {
-        status: 'pending',
+        status: 'verified',
       });
       const [first] = await q(
         `SELECT id FROM business_managers WHERE business_id = $1`,
@@ -594,19 +624,42 @@ test('business setup', async (t) => {
         businessId,
         userId: TOBI.userId,
       });
-      const outcomes = await Promise.allSettled([
-        removeManager(database.db, ADA.userId, businessId, second.managerId),
-        removeManager(database.db, TOBI.userId, businessId, first.id),
-      ]);
-      const owners = await q(
+      assert.equal(
+        await codeOf(
+          removeManager(database.db, ADA.userId, businessId, second.managerId),
+        ),
+        'OWNER_REMOVAL_NEEDS_TIPME',
+      );
+      assert.equal(
+        await codeOf(
+          removeManager(database.db, TOBI.userId, businessId, first.id),
+        ),
+        'OWNER_REMOVAL_NEEDS_TIPME',
+      );
+      const seats = await q(
         `SELECT id FROM business_managers WHERE business_id = $1 AND removed_at IS NULL`,
         [businessId],
       );
-      assert.equal(owners.length, 1);
-      assert.equal(
-        outcomes.filter((o) => o.status === 'fulfilled').length,
-        1,
-        'one removal wins',
+      assert.equal(seats.length, 2);
+      assert.deepEqual(
+        await q(
+          `SELECT action, staff_user_id, subject_type, subject_id FROM audit_events
+            WHERE action = 'business.owner_removal_blocked' ORDER BY created_at, id`,
+        ),
+        [
+          {
+            action: 'business.owner_removal_blocked',
+            staff_user_id: ADA.userId,
+            subject_type: 'business',
+            subject_id: businessId,
+          },
+          {
+            action: 'business.owner_removal_blocked',
+            staff_user_id: TOBI.userId,
+            subject_type: 'business',
+            subject_id: businessId,
+          },
+        ],
       );
     },
   );

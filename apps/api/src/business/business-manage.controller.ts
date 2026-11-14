@@ -158,7 +158,10 @@ export class BusinessManageController {
     return { data: await listManagers(this.database.db, auth.userId, id) };
   }
 
-  /** Owners. Never the last owner (BUSINESS_LAST_OWNER). */
+  /**
+   * Owners. Never the last owner (BUSINESS_LAST_OWNER), and never another owner
+   * (OWNER_REMOVAL_NEEDS_TIPME, 403, audited): an owner only steps down themselves.
+   */
   @Post(':id/managers/:managerId/remove')
   @HttpCode(204)
   async removeManager(

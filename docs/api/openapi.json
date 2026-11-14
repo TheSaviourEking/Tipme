@@ -17022,6 +17022,7 @@
                   "MEMBER_NOT_TIPPABLE",
                   "NOTE_NOT_OPEN",
                   "BUSINESS_LAST_OWNER",
+                  "OWNER_REMOVAL_NEEDS_TIPME",
                   "BUSINESS_NOT_VERIFIED",
                   "SHARE_NOT_ALLOWED",
                   "SHARE_CHANGE_TOO_SOON",
