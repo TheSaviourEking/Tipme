@@ -41,8 +41,7 @@ const messages: Record<ApiErrorCode, string> = {
   CAMPAIGN_SLUG_TAKEN:
     'You already have a campaign with that link. Try another.',
   CAMPAIGN_SLUG_UNAVAILABLE: 'That link ending can’t be used. Try another one.',
-  CAMPAIGN_PRO_REQUIRED:
-    'A page for each campaign is part of TipMe Pro.',
+  CAMPAIGN_PRO_REQUIRED: 'A page for each campaign is part of TipMe Pro.',
   CAMPAIGN_STOPPED: 'This campaign has stopped, so its page can’t change.',
   CAMPAIGN_HEADLINE_NAME:
     'Use your own name in the headline, not someone else’s name or handle.',
