@@ -51,7 +51,7 @@ export interface ClaimedMail {
 }
 
 /**
- * Claims due mail (security first, then oldest), marking it `sending` so concurrent workers
+ * Claims due mail (codes someone is waiting for, then security, then oldest), marking it `sending` so concurrent workers
  * split the work. The claim commits before anything is sent.
  */
 export async function claimDueMail(
