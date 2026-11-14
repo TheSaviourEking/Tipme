@@ -146,16 +146,94 @@ test('a code in cells copies as one string', () => {
   assert.doesNotMatch(well, /<span/, 'anything else is one well');
 });
 
-test('an email loads nothing from anywhere', () => {
+// The one thing an email loads: the TipMe logo, as PNGs from the web origin (SVG is stripped by
+// Gmail and others). No stylesheets, fonts or any other image.
+const LOGO = (origin, scheme) => `${origin}/email/tipme-logo-${scheme}-2x.png`;
+const loadsOnlyTheLogo = (html, origin, label) => {
+  for (const banned of ['<link', '@import', 'url(', 'srcset'])
+    assert.ok(!html.includes(banned), `${label} has no ${banned}`);
+  const srcs = [...html.matchAll(/src="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(
+    srcs,
+    [LOGO(origin, 'light'), LOGO(origin, 'dark')],
+    `${label} loads only the two logos`,
+  );
+  assert.equal((html.match(/<img\b/g) ?? []).length, 2, `${label}: two imgs`);
+};
+
+test('an email loads only the logo from the web origin', () => {
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, withSettings);
     for (const html of [out.html, out.snapshot?.html].filter(Boolean))
-      for (const banned of ['<img', '<link', '@import', 'url(', 'src='])
-        assert.ok(!html.includes(banned), `${id} has no ${banned}`);
+      loadsOnlyTheLogo(html, 'https://usetipme.xyz', id);
   }
   const all = letter({ ...everyKind('x'), tag: 'safety' }, ctx).html;
-  for (const banned of ['<img', '<link', '@import', 'url(', 'src='])
-    assert.ok(!all.includes(banned), `every kind: no ${banned}`);
+  loadsOnlyTheLogo(all, 'https://usetipme.xyz', 'every kind');
+  // Staging mail points at staging; a trailing slash on the origin makes no double slash.
+  const staging = letter(everyKind('x'), {
+    ...ctx,
+    webOrigin: 'https://staging.usetipme.xyz/',
+  }).html;
+  loadsOnlyTheLogo(staging, 'https://staging.usetipme.xyz', 'staging');
+});
+
+test('the header is the TipMe logo: light by default, dark swapped in by dark mode', () => {
+  const html = letter(everyKind('x'), ctx).html;
+  const imgs = [...html.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]);
+  const [light, dark] = imgs;
+  assert.ok(light && dark);
+  for (const img of [light, dark]) {
+    assert.match(img, /alt="TipMe"/);
+    assert.match(img, /width="120"/);
+    assert.match(img, /height="45"/);
+    assert.match(img, /border="0"/);
+    assert.match(img, /style="display:block;/);
+  }
+  assert.match(light, /class="tm-logo-light"/);
+  assert.match(dark, /class="tm-logo-dark"/);
+  // The dark logo is hidden wherever media queries are not read (the Gmail app, old Outlook).
+  const wrap = html.match(/<div class="tm-logo-dark-wrap"[^>]*>/)?.[0] ?? '';
+  for (const rule of [
+    'display:none',
+    'max-height:0',
+    'overflow:hidden',
+    'mso-hide:all',
+  ])
+    assert.ok(wrap.includes(rule), `dark wrapper has ${rule}`);
+  assert.ok(
+    html.indexOf('<div class="tm-logo-dark-wrap"') >
+      html.indexOf(LOGO('https://usetipme.xyz', 'light')),
+    'light first',
+  );
+  // The swap: dark mode, Outlook.com/app dark mode ([data-ogsc]/[data-ogsb]).
+  const style = [...html.matchAll(/<style>[\s\S]*?<\/style>/g)]
+    .map((m) => m[0])
+    .join('');
+  const darkMedia =
+    style.match(/@media \(prefers-color-scheme: dark\)\{(.*)\}\n/)?.[1] ?? '';
+  assert.match(darkMedia, /\.tm-logo-light\{display:none!important/);
+  assert.match(
+    darkMedia,
+    /\.tm-logo-dark-wrap\{display:block!important;max-height:none!important/,
+  );
+  assert.match(style, /\[data-ogsc\] \.tm-logo-light\{display:none!important/);
+  assert.match(style, /\[data-ogsb\] \.tm-logo-light\{display:none!important/);
+  assert.match(
+    style,
+    /\[data-ogsc\] \.tm-logo-dark-wrap\{display:block!important/,
+  );
+  // Gmail's forced dark inverts backgrounds but not images: the logo sits on its own paper chip,
+  // so black "tip" keeps a light ground under it.
+  const cell = html.match(/<td class="tm-logo"[^>]*>/)?.[0] ?? '';
+  assert.match(cell, /bgcolor="#F3F2EE"/);
+  assert.match(cell, /background-image:linear-gradient\(#F3F2EE,#F3F2EE\)/);
+  // No SVG in the header (Gmail strips it), and the old text wordmark is gone.
+  const header =
+    html.match(/<td data-header[\s\S]*?<\/table><\/td><\/tr>/)?.[0] ?? '';
+  assert.ok(header.includes('tm-logo-light'), 'header found');
+  assert.ok(!header.includes('<svg'));
+  assert.ok(!html.includes('&#9829;'));
+  assert.ok(!/>tipme </.test(html));
 });
 
 test('every link in the html is in the text', () => {
@@ -272,8 +350,7 @@ test('the frame wears the paper, the wordmark, a black key and a dark mode', () 
   const out = letter(everyKind('x'), withSettings);
   assert.match(out.html, /background:#F3F2EE/);
   assert.match(out.html, /background:#FFFEFA/);
-  assert.ok(visible(out.html).includes('tipme'));
-  assert.match(out.html, /color:#7A32F9[^>]*>&#9829;&#xFE0E;</);
+  assert.match(out.html, /alt="TipMe"/);
   assert.match(out.html, /bgcolor="#000000"/);
   assert.match(out.html, /Georgia/);
   assert.match(out.html, /@media \(prefers-color-scheme: dark\)/);
