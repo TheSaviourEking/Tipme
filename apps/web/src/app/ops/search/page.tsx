@@ -7,6 +7,7 @@ import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { nairaCode as naira } from '@/lib/money';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
+import { TipRefund } from '@/components/ops/tip-refund';
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-GB', {
@@ -128,6 +129,10 @@ export default function OpsSearchPage() {
                         {naira(t.grossMinor)} to{' '}
                         {t.handle ? `@${t.handle}` : 'a deleted page'} ·{' '}
                         {t.status} · {when(t.at)} · <code>{t.tipId}</code>
+                        {t.status === 'SUCCEEDED' &&
+                          can(access, 'payments.repair') && (
+                            <TipRefund tipId={t.tipId} />
+                          )}
                       </li>
                     ))}
                   </ul>

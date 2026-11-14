@@ -14,6 +14,7 @@ import {
   reverseTip,
   sendTipRefunds,
   tipRefundFacts,
+  tipStatusView,
 } from '../../dist/index.js';
 import {
   seedAgreement,
@@ -215,6 +216,11 @@ test('staff tip refunds', async (t) => {
           idempotencyKey: `tipme-tip-refund-${refundId}`,
         },
       ]);
+      // The receipt says nothing until the partner confirms it.
+      assert.equal(
+        (await tipStatusView(db, tip.tipId, new Date())).refund,
+        undefined,
+      );
       assert.deepEqual(await refundRow(refundId), {
         status: 'PROCESSING',
         amount: NET.toString(),
@@ -231,6 +237,13 @@ test('staff tip refunds', async (t) => {
           now: new Date(),
         });
       assert.equal((await refundRow(refundId)).status, 'PAID');
+      // The supporter's receipt: what they got back (TipMe's fee is kept).
+      assert.deepEqual(
+        (await tipStatusView(db, tip.tipId, new Date())).refund,
+        {
+          refundedMinor: NET.toString(),
+        },
+      );
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 0n);
       assert.equal(await kept(tip.tipId), '70000');
       const reversals = await q(

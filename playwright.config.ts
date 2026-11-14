@@ -116,6 +116,8 @@ export default defineConfig({
         // Paid Pro (ADR-0015): buying a month on pretend money, off by default everywhere else.
         // tests/e2e/pro-buy.spec.ts answers the price read itself to show the "off" state.
         PRO_BILLING_ENABLED: 'true',
+        // Staff "Refund tip" (owner, 14 Nov 2026), off by default everywhere else.
+        TIP_REFUNDS: 'on',
         RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: '10000',
         RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: '10000',
         // Every page opens a stream from 127.0.0.1.

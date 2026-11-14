@@ -11,6 +11,7 @@ import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
 import { noteWindowStart } from './business-notes.js';
 import { guarded } from './errors.js';
 import { tipIsRecognised } from './supporters.js';
+import { paidTipRefund } from './tip-refunds.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
 export const CHECKING_AFTER_MS = 2 * 60 * 1000;
@@ -137,6 +138,8 @@ export function tipStatusView(
             tip.completedAt.getTime() >= noteWindowStart(now).getTime(),
         };
     }
+    // A refund TipMe made (owner, 14 Nov 2026), once the partner confirmed it.
+    const refund = state === 'paid' ? await paidTipRefund(db, tipId) : null;
     return {
       state,
       recipient: { handle: tip.handle, displayName: tip.displayName },
@@ -148,6 +151,9 @@ export function tipStatusView(
       ...(thanks ? { thanks } : {}),
       ...(recognised ? { recognised: true as const } : {}),
       ...(businessNote ? { businessNote } : {}),
+      ...(refund
+        ? { refund: { refundedMinor: refund.refundedMinor.toString() } }
+        : {}),
     };
   });
 }

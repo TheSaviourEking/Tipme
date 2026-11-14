@@ -165,4 +165,9 @@ export interface TipStatusView {
   team?: { location: string; people: number };
   /** Business release 2: the share the business received of this tip, in percentages only. */
   share?: ShareDisclosure;
+  /**
+   * Owner, 14 Nov 2026: a paid tip TipMe refunded. What the supporter got back, the tip minus
+   * TipMe's fee (which TipMe keeps). Only once our payment partner has confirmed the refund.
+   */
+  refund?: { refundedMinor: string };
 }
