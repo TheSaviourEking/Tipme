@@ -71,12 +71,24 @@ export function businessMoneyState(
               ? 'The business has nothing to withdraw yet.'
               : 'The business’s share is still on its way to our payment partner. You can withdraw it once it arrives.',
         });
+      // The business pays the transfer fee from the amount (owner, 12 Nov 2026): a balance not
+      // more than the fee would send nothing, so it can't be withdrawn, and the page says why.
+      const userPays = quote.feePaidBy === 'user' && quote.feeMinor !== '0';
+      if (userPays && withdrawable <= BigInt(quote.feeMinor))
+        return no({
+          title: 'Nothing to withdraw right now',
+          body: `The business’s ${formatNaira(quote.withdrawableMinor)} isn’t more than the ${formatNaira(quote.feeMinor)} transfer fee, so it can’t be withdrawn yet. It stays in the business’s balance.`,
+        });
       return {
         canWithdraw: true,
         withdrawableMinor: withdrawable,
         notice: {
           title: 'Ready to withdraw',
-          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.`,
+          body:
+            `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.` +
+            (userPays
+              ? ` The ${formatNaira(quote.feeMinor)} transfer fee comes off the amount you withdraw.`
+              : ''),
         },
       };
     }
@@ -84,17 +96,21 @@ export function businessMoneyState(
 }
 
 /**
- * Option B: a business withdraws in batches, at least its minimum (our payment partner charges a
- * fee on every payout), and never more than it can withdraw now. No "everything" exception.
+ * Option B: a business withdraws in batches of at least its minimum, or everything it can withdraw
+ * now (owner, 12 Nov 2026: the business pays the transfer fee from the amount, so "everything" costs
+ * TipMe nothing), never more, and always more than the fee it pays (`feeMinor`; zero when TipMe's
+ * unused top-up pays it), so something arrives.
  */
 export function businessCanSend(
   amountMinor: bigint,
   withdrawableMinor: bigint,
   minimumMinor: bigint,
+  feeMinor: bigint,
 ): boolean {
   return (
     amountMinor > BigInt(0) &&
-    amountMinor >= minimumMinor &&
-    amountMinor <= withdrawableMinor
+    amountMinor > feeMinor &&
+    amountMinor <= withdrawableMinor &&
+    (amountMinor >= minimumMinor || amountMinor === withdrawableMinor)
   );
 }

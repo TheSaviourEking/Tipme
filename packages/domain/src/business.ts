@@ -164,9 +164,10 @@ export function lagosMonthOf(at: Date): string {
 // ---- Release 2 on option B (owner, 11 Nov 2026): moving a share between partner accounts ----
 
 /**
- * The smallest withdrawal a business can make (a ruling the owner can change). Our payment partner
- * charges ₦50 on top of every payout, which TipMe covers, so a business batches its shares: at
- * ₦5,000 the fee is at most 1%. Unlike a person's, there is no "take everything" exception.
+ * The smallest withdrawal a business can make (a ruling the owner can change), so a business
+ * batches its shares: at ₦5,000 the ₦50 transfer fee it pays from the amount (owner, 12 Nov 2026)
+ * is at most 1%. Like a person's, it may also take everything it can withdraw, if that is more
+ * than the fee.
  */
 export const BUSINESS_MIN_WITHDRAWAL_MINOR = 500_000n;
 

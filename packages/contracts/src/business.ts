@@ -756,7 +756,7 @@ export interface BusinessBalance {
   onTheWayMinor: string;
   /** Refunded tips' shares the business had already withdrawn, taken from its next shares. */
   heldBackMinor: string;
-  /** The smallest withdrawal a business can make (no "everything" exception). */
+  /** The smallest withdrawal a business can make, unless it takes everything it can. */
   minWithdrawalMinor: string;
   /** Whether the business's own payout account with our payment partner is set up. */
   payoutAccount: BusinessPayoutAccountState;

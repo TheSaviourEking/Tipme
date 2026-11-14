@@ -395,6 +395,45 @@ test('a business balance and its withdrawals', async (t) => {
   );
 
   await t.test(
+    'a business may take everything it has under its minimum, and nothing that is not more than the fee',
+    async () => {
+      // Owner, 12 Nov 2026: the business pays the ₦50 transfer fee from the amount, so taking all
+      // of a small balance costs TipMe nothing; a balance of ₦50 or less would send nothing.
+      await database.fresh();
+      const shared = await atBusiness();
+      const { share } = await paidTip(shared);
+      await withdraw(shared.businessId, share - 300000n);
+      assert.equal(await businessBalance(shared.businessId), 300000n);
+      assert.equal(
+        await codeOf(withdraw(shared.businessId, 299999n)),
+        'WITHDRAWAL_TOO_SMALL',
+      );
+      const all = await withdraw(shared.businessId, 300000n);
+      assert.deepEqual(
+        await q(
+          `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee, fee_payer
+             FROM payouts WHERE id = $1`,
+          [all.payoutId],
+        ),
+        [{ sent: '295000', fee: '5000', fee_payer: 'user' }],
+      );
+      assert.equal(await businessBalance(shared.businessId), 0n);
+
+      await database.fresh();
+      const small = await atBusiness();
+      const paid = await paidTip(small);
+      await withdraw(small.businessId, paid.share - 5000n);
+      assert.equal(await businessBalance(small.businessId), 5000n);
+      assert.equal(
+        await codeOf(withdraw(small.businessId, 5000n)),
+        'WITHDRAWAL_BELOW_FEE',
+      );
+      assert.equal(await businessBalance(small.businessId), 5000n);
+      await assertBalanced();
+    },
+  );
+
+  await t.test(
     'a retry with the same key replays; another amount on it, or a person’s key, conflicts',
     async () => {
       await database.fresh();

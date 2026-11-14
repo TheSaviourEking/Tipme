@@ -96,8 +96,13 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
     data: { outcome: 'succeed' },
   });
   // As the web's formatNaira writes it: kobo only when there are some.
-  const kobo = share % 100n;
-  const shareText = `₦${new Intl.NumberFormat('en').format(share / 100n)}${kobo ? `.${String(kobo).padStart(2, '0')}` : ''}`;
+  const naira = (minor: bigint) => {
+    const kobo = minor % 100n;
+    return `₦${new Intl.NumberFormat('en').format(minor / 100n)}${kobo ? `.${String(kobo).padStart(2, '0')}` : ''}`;
+  };
+  const shareText = naira(share);
+  // The business pays the ₦50 transfer fee from the amount (owner, 12 Nov 2026).
+  const receiveText = naira(share - 5000n);
 
   // Every read is the real API (B1's business detail included); all money calls are real.
   const money = page.locator('#money');
@@ -135,23 +140,37 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
   await expect(
     money.getByText(/Pretend Guaranty Bank ••6789/).first(),
   ).toBeVisible();
+  await expect(money).toContainText(
+    'The ₦50 transfer fee comes off the amount you withdraw.',
+  );
   await expectAccessible(page);
 
   await money.getByRole('button', { name: 'Everything' }).click();
+  await expect(money.getByTestId('business-you-receive')).toHaveText(
+    `The ₦50 transfer fee comes off it: the business receives ${receiveText}.`,
+  );
   await money.getByRole('button', { name: /^Withdraw ₦/ }).click();
   await expect(money.getByText('Withdrawal requested')).toBeVisible();
+  await expect(money).toContainText(
+    `${receiveText} is on its way to the business’s bank.`,
+  );
   await expect(money.getByTestId('business-balance')).toHaveText('₦0');
   const [payout] = await sql<{
     business_id: string;
     profile_id: string | null;
-  }>('SELECT business_id, profile_id FROM payouts WHERE business_id = $1', [
-    business.businessId,
-  ]);
+    sent: string;
+    fee: string;
+  }>(
+    'SELECT business_id, profile_id, amount_minor::text AS sent, user_fee_minor::text AS fee FROM payouts WHERE business_id = $1',
+    [business.businessId],
+  );
   expect(payout).toEqual({
     business_id: business.businessId,
     profile_id: null,
+    sent: (share - 5000n).toString(),
+    fee: '5000',
   });
-  await expect(page.locator('body')).not.toContainText(/bachs/i);
+  await expect(page.locator('body')).not.toContainText(/bachs|TipMe pays/i);
   expect(await fitsViewport(page)).toBe(true);
 
   // The staff member (the owner works there too) sees what they shared, on their Work page.
@@ -164,13 +183,16 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
   expect(await fitsViewport(page)).toBe(true);
 });
 
-test('a business withdrawal under ₦5,000 is refused, in plain words', async ({
+// Owner, 12 Nov 2026: the business pays the ₦50 transfer fee from the amount, so it may take
+// everything it has under ₦5,000 (not part of it), and nothing when that is ₦50 or less.
+test('under ₦5,000 a business may take everything, less the ₦50 fee; ₦50 or less, it is told why', async ({
   page,
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo);
   const { userId } = await accountOf(who.email);
   const business = await seedBusiness({ owner: userId });
-  // Hold the balance at ₦3,600, the sandbox share of two ₦10,000 tips at 80/20.
+  // Hold the balance at ₦3,600, the sandbox share of two ₦10,000 tips at 80/20; later at ₦50.
+  let held = '360000';
   await page.route(
     `**/v1/me/businesses/${business.businessId}/balance`,
     (route) =>
@@ -179,7 +201,7 @@ test('a business withdrawal under ₦5,000 is refused, in plain words', async ({
           data: {
             businessId: business.businessId,
             currency: 'NGN',
-            balanceMinor: '360000',
+            balanceMinor: held,
             canWithdraw: true,
             onTheWayMinor: '0',
             heldBackMinor: '180000',
@@ -196,12 +218,28 @@ test('a business withdrawal under ₦5,000 is refused, in plain words', async ({
         json: {
           data: {
             state: 'ready',
-            withdrawableMinor: '360000',
-            ledgerMinor: '360000',
-            providerMinor: '360000',
+            withdrawableMinor: held,
+            ledgerMinor: held,
+            providerMinor: held,
             feeMinor: '5000',
+            feePaidBy: 'user',
             destination: { bankName: 'Pretend bank', last4: '0000' },
             inReview: false,
+          },
+        },
+      }),
+  );
+  // The fee went up meanwhile: the API refuses, and the page says why in plain words.
+  await page.route(
+    `**/v1/me/businesses/${business.businessId}/withdrawals`,
+    (route) =>
+      route.fulfill({
+        status: 409,
+        json: {
+          error: {
+            code: 'WITHDRAWAL_BELOW_FEE',
+            message: 'refused',
+            requestId: 'test',
           },
         },
       }),
@@ -218,13 +256,45 @@ test('a business withdrawal under ₦5,000 is refused, in plain words', async ({
   await expect(money).toContainText(
     '₦1,800 will be taken from the business’s next shares',
   );
-  await money.getByRole('button', { name: 'Everything' }).click();
-  // Everything is under the minimum: the button can't send it.
+  await expect(money).toContainText(
+    'The smallest withdrawal for a business is ₦5,000, or everything it has.',
+  );
+  // Part of it, under the minimum: the button can't send it.
+  await money.getByLabel('Amount (NGN)').fill('3000');
   await expect(
-    money.getByRole('button', { name: 'Withdraw ₦3,600' }),
+    money.getByRole('button', { name: 'Withdraw ₦3,000' }),
   ).toBeDisabled();
+  await expect(money.getByTestId('business-you-receive')).toHaveCount(0);
+  // Everything: allowed, and the page says what the business receives.
+  await money.getByRole('button', { name: 'Everything' }).click();
+  await expect(money.getByTestId('business-you-receive')).toHaveText(
+    'The ₦50 transfer fee comes off it: the business receives ₦3,550.',
+  );
+  const send = money.getByRole('button', { name: 'Withdraw ₦3,600' });
+  await expect(send).toBeEnabled();
+  await send.click();
+  await expect(
+    money.getByRole('alert').filter({
+      hasText:
+        'The amount must be more than the ₦50 transfer fee, which comes off it.',
+    }),
+  ).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);
+
+  // ₦50 left: not more than the fee, so it can't be withdrawn, and the page says why.
+  held = '5000';
+  await page.reload();
+  await expect(money.getByTestId('business-balance')).toHaveText('₦50');
+  await expect(money).toContainText(
+    'The business’s ₦50 isn’t more than the ₦50 transfer fee, so it can’t be withdrawn yet. It stays in the business’s balance.',
+  );
+  await expect(money.getByRole('button', { name: 'Everything' })).toHaveCount(
+    0,
+  );
+  await expect(money.getByLabel('Amount (NGN)')).toBeDisabled();
+  await expect(page.locator('body')).not.toContainText(/bachs|TipMe pays/i);
+  await expectAccessible(page);
 });
 
 test('a supporter is told the split before paying, at 360px, and the share is fixed on the tip', async ({

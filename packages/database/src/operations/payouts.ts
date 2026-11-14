@@ -1799,12 +1799,13 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // A business batches its shares (option B): our partner charges ₦50 on top of every
-      // payout, so its minimum is higher and has no "everything" exception (a ruling the owner
-      // can change: BUSINESS_MIN_WITHDRAWAL_MINOR).
+      // A business batches its shares (option B), so its minimum is higher (a ruling the owner
+      // can change: BUSINESS_MIN_WITHDRAWAL_MINOR); like a person's, it may take everything it
+      // can, since it pays the transfer fee from the amount (owner, 12 Nov 2026).
       if (
         'businessId' in owner &&
-        input.amountMinor < BUSINESS_MIN_WITHDRAWAL_MINOR
+        input.amountMinor < BUSINESS_MIN_WITHDRAWAL_MINOR &&
+        input.amountMinor !== withdrawable
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
       // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
