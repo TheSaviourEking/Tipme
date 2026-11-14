@@ -11,7 +11,13 @@ import {
   seedBusiness,
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 
 // Business release 2, PR R2-C1: the share agreement through the API, with both flags on.
 startTelemetry({
@@ -319,7 +325,7 @@ test('a write without the browser headers is refused', async () => {
   assert.equal(response.status, 403);
 });
 
-test('with BUSINESS_SHARES_ENABLED off, every share route is 404', async () => {
+test('with the business_shares switch off, every share route is 404', async () => {
   const off = await startStack({
     databaseUrl: database.url,
     apiEnv: {
@@ -328,6 +334,8 @@ test('with BUSINESS_SHARES_ENABLED off, every share route is 404', async () => {
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
     },
   });
+  // The switch is stored, set in admin: this copy differs only in name.
+  await setSwitch(database.pool, 'business_shares', false);
   try {
     const { businessId, memberId } = await team();
     for (const [method, path] of [
@@ -346,6 +354,7 @@ test('with BUSINESS_SHARES_ENABLED off, every share route is 404', async () => {
       assert.equal(response.status, 404, `${method} ${path}`);
     }
   } finally {
+    await setSwitch(database.pool, 'business_shares', true);
     await off.stop();
   }
 });

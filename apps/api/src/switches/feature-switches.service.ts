@@ -43,10 +43,22 @@ export class FeatureSwitches implements OnModuleInit, OnApplicationShutdown {
         error: error instanceof Error ? error.name : 'unknown',
       }),
     );
-    const { written, ignored } = await seedFeatureSwitches(
-      this.database.db,
-      this.config.switchSeeds,
-    );
+    // A copy starts even while the database is away (readiness says so). Without its rows, each
+    // switch reads this copy's old variable, else the default: as before; the next start writes them.
+    let seeded: Awaited<ReturnType<typeof seedFeatureSwitches>>;
+    try {
+      seeded = await seedFeatureSwitches(
+        this.database.db,
+        this.config.switchSeeds,
+      );
+    } catch (error) {
+      this.logger.warn({
+        event: 'feature_switch.seed_failed',
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+      return;
+    }
+    const { written, ignored } = seeded;
     for (const { key, source } of written)
       this.logger.info({ event: 'feature_switch.seeded', key, source });
     // Deprecated: the stored value wins. Named, never shown: delete the line from the env file.

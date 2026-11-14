@@ -274,11 +274,19 @@ export async function startJobWorker(
       error: error instanceof Error ? error.name : 'unknown',
     }),
   );
-  const seeded = await seedFeatureSwitches(database.db, config.switchSeeds);
-  for (const { key, source } of seeded.written)
-    logger.info({ event: 'feature_switch.seeded', key, source });
-  for (const name of seeded.ignored)
-    logger.warn({ event: 'feature_switch.env_ignored', setting: name });
+  // As in the API: a failed write (the database away) never stops the start; reads fall back.
+  try {
+    const seeded = await seedFeatureSwitches(database.db, config.switchSeeds);
+    for (const { key, source } of seeded.written)
+      logger.info({ event: 'feature_switch.seeded', key, source });
+    for (const name of seeded.ignored)
+      logger.warn({ event: 'feature_switch.env_ignored', setting: name });
+  } catch (error) {
+    logger.warn({
+      event: 'feature_switch.seed_failed',
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+  }
   // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
   // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
   const mockProvider = createMockProvider({

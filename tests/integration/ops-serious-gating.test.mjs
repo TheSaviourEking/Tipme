@@ -20,6 +20,7 @@ import {
   WEBHOOK_SECRET,
   browserHeaders,
   opsSignIn,
+  setSwitch,
   startStack,
 } from './helpers.mjs';
 
@@ -58,8 +59,6 @@ const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
-  // tip.reverse runs only while business shares are on (R2-A review finding 3).
-  businessSharesEnabled: true,
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -78,6 +77,9 @@ before(async () => {
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();
   ops.registerRealSeriousActions();
+  // tip.reverse runs only while business shares are on (R2-A review finding 3): stored switches now.
+  await setSwitch(database.pool, 'business', true);
+  await setSwitch(database.pool, 'business_shares', true);
   ops.registerSeriousAction({
     name: 'test.overstays',
     permission: SENSITIVE,
@@ -495,6 +497,20 @@ const wired = {
         refundedMinor: GROSS.toString(),
       },
       happened: async () => (await reversals()) === 1,
+    };
+  },
+  // Feature switches (owner, 14 Nov 2026): a money switch, turned the other way each time.
+  'feature_switch.set': async () => {
+    const now = async () =>
+      (
+        await q(
+          `SELECT enabled FROM feature_switches WHERE key = 'pro_refunds'`,
+        )
+      )[0]?.enabled ?? false;
+    const to = !(await now());
+    return {
+      payload: { key: 'pro_refunds', on: to },
+      happened: async () => (await now()) === to,
     };
   },
   'mail_provider.switch': async () => {
