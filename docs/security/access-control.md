@@ -80,6 +80,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
 | `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
+| `switches.manage` | GET `/v1/ops/switches`<br>POST `/v1/ops/switches/{key}` |
 | `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
 <!-- /generated:permissions -->
@@ -408,6 +409,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PATCH | `/v1/ops/staff/roles/{roleId}` | `staff.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/staff/roles/{roleId}/delete` | `staff.manage` | yes | – | – |
 | POST | `/v1/ops/staff/roles/{roleId}/impact` | `staff.manage` | yes | – | – |
+| GET | `/v1/ops/switches` | `switches.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/switches/{key}` | `switches.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/usernames/{name}/release` | `usernames.manage` | yes | `ops_request` | – |

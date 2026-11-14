@@ -8,7 +8,7 @@ import {
   DEMO_PROFILES,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
-import { WEB, startStack } from './helpers.mjs';
+import { WEB, startStack, setSwitch } from './helpers.mjs';
 
 // Repeat supporters, the supporter's choice (pretend payments only): the opt-in key on the tip
 // request, the receipt's "recognised", the stop, and the SUPPORTER_RECOGNITION switch.
@@ -215,11 +215,13 @@ test('no log line from the tip request contains the key or its hash', async () =
   assert.ok(!output.includes(hex), 'a log line holds the hash');
 });
 
-test('SUPPORTER_RECOGNITION=off: the public page has no recognition flag and the key is ignored', async () => {
+test('the supporter_recognition switch off: the public page has no recognition flag and the key is ignored', async () => {
   const off = await startStack({
     databaseUrl: database.url,
-    apiEnv: { ...env, SUPPORTER_RECOGNITION: 'off' },
+    apiEnv: env,
   });
+  // The switch is stored, set in admin: this copy differs only in name.
+  await setSwitch(database.pool, 'supporter_recognition', false);
   try {
     const page = await (await fetch(`${off.api}/v1/profiles/ada`)).json();
     assert.equal(page.data.plan, 'pro');
@@ -236,6 +238,7 @@ test('SUPPORTER_RECOGNITION=off: the public page has no recognition flag and the
     // Nothing is deleted while it is off: earlier supporters are all still there.
     assert.ok(supportersBefore > 0);
   } finally {
+    await setSwitch(database.pool, 'supporter_recognition', true);
     await off.stop();
   }
 });

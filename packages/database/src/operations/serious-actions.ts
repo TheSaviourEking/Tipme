@@ -69,11 +69,6 @@ export interface SeriousActionServices {
   /** Used only by `prepare`, outside the transaction. */
   payoutReader?: (name: string) => StaffPayoutReader;
   payoutLog?: PayoutStartLog;
-  /**
-   * Business release 2: whether `BUSINESS_ENABLED` and `BUSINESS_SHARES_ENABLED` are both on.
-   * `tip.reverse` runs only then, also when it is approved later.
-   */
-  businessSharesEnabled?: boolean;
   mail?: {
     production: boolean;
     configured: ReadonlySet<MailProviderName>;

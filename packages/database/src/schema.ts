@@ -453,6 +453,54 @@ export const providerSettings = pgTable(
   () => [check('provider_settings_kind', sql`kind IN ('mail', 'payment')`)],
 );
 
+/**
+ * Feature switches staff set in admin (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md). One
+ * row per switch: `source` says whether the first start wrote it from the old variable (`env`) or the
+ * code default (`default`), or staff set it since (`staff`). Keys are checked in code, not here, so a
+ * new switch needs no migration.
+ */
+export const featureSwitches = pgTable(
+  'feature_switches',
+  {
+    key: text('key').primaryKey(),
+    enabled: boolean('enabled').notNull(),
+    source: text('source').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+  },
+  (table) => [
+    check(
+      'feature_switches_source',
+      sql`${table.source} IN ('default', 'env', 'staff')`,
+    ),
+    check('feature_switches_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+/** Every value a switch has had, seeded or set, for its history on the admin screen. */
+export const featureSwitchChanges = pgTable(
+  'feature_switch_changes',
+  {
+    id: uuid('id').primaryKey(),
+    key: text('key').notNull(),
+    enabled: boolean('enabled').notNull(),
+    source: text('source').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id),
+    /** The second person, or null when it ran alone or needed none. */
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('feature_switch_changes_key').on(table.key, table.createdAt),
+    check(
+      'feature_switch_changes_source',
+      sql`${table.source} IN ('default', 'env', 'staff')`,
+    ),
+  ],
+);
+
 /** A staff test of a provider. Only a hash of the confirmation token is kept. */
 export const providerTests = pgTable(
   'provider_tests',

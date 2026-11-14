@@ -7,7 +7,8 @@ product decision. It is not legal advice, and it is not a regulatory or payment-
 - **The payment partner's written position** on pages that link to adult platforms.
 - **The acceptable-use section of the Terms**, which is still only a heading.
 
-`ADULT_PLATFORM_LINKS` is the lever for when the partner answers.
+The `adult_platform_links` switch in admin (`/ops/switches`, **OnlyFans and Fansly links**) is the lever for
+when the partner answers. It replaced the `ADULT_PLATFORM_LINKS` setting (owner, 14 Nov 2026).
 
 | Setting            | What it does                                                                                                                                                       |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -18,18 +19,16 @@ product decision. It is not legal advice, and it is not a regulatory or payment-
 
 ## Switching it
 
-1. **Set the value:** in the API's settings, set `ADULT_PLATFORM_LINKS=off` (or `on`). In production that is
-   `/srv/tipme-production/production.env`. In staging it is the staging env file. Check it by name only:
-   `grep -c '^ADULT_PLATFORM_LINKS=off$' production.env`.
-2. **Restart the API:** the API reads the setting when it starts, so it takes effect with the next ship
-   (`docs/runbooks/production.md`).
+1. **Set it in admin:** at `/ops/switches`, find **OnlyFans and Fansly links** (it replaced `ADULT_PLATFORM_LINKS`), choose on or off, give a
+   reason and enter a fresh code. It is audited and shows in the switch's history (`settings-and-switches.md`).
+2. **No restart:** the API copy that took the change uses it at once; the others within 15 seconds (at once while
+   live updates are on).
 3. **Wait for the pages:** cached public pages catch up within the web cache's backstop, about 30 seconds after
    their next visit (`apps/web/src/lib/profiles-api.ts`). A page also refreshes at once when its owner saves.
 4. **Check:** open a Pro page known to have such a link, and confirm it no longer shows.
 
 ## Notes
 
-- **Not a no-deploy switch:** it needs the API to restart. If one is needed, a staff-side switch like the
-  withdrawals switch would be a separate piece of work.
+- **A no-deploy switch** since 14 Nov 2026: staff with `switches.manage` set it; no restart.
 - **What it covers:** only the two listed sites. A Pro page's own website can still point anywhere, so
   acceptable use and the page's Report button still matter.

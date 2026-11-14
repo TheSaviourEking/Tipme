@@ -84,6 +84,13 @@ const LINKS: {
     needs: ['issues.view', 'providers.manage'],
   },
   {
+    // Feature switches (owner, 14 Nov 2026): on and off for features, set here, not in settings files.
+    href: '/ops/switches',
+    label: 'Switches',
+    group: 'Email and records',
+    needs: ['switches.manage'],
+  },
+  {
     href: '/ops/email',
     label: 'Email',
     group: 'Email and records',

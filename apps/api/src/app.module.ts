@@ -26,6 +26,7 @@ import { MailModule } from './mail/mail.module.js';
 import { ChangelogModule } from './changelog/changelog.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { LiveModule } from './live/live.module.js';
+import { FeatureSwitchesModule } from './switches/feature-switches.service.js';
 import { BusinessModule } from './business/business.module.js';
 import { InsightsModule } from './insights/insights.controller.js';
 
@@ -42,6 +43,7 @@ export class AppModule {
       imports: [
         InfraModule,
         LiveModule,
+        FeatureSwitchesModule,
         CheckoutModule,
         AuthModule,
         ProfilesModule,

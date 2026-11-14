@@ -15,6 +15,7 @@ import type {
 } from '@tipme/contracts';
 import {
   backupStatus,
+  featureOn,
   retentionBlockCode,
   finishReleaseRun,
   openReleaseRun,
@@ -35,7 +36,11 @@ export class ReleaseInfoController {
 
   @Get('health/release')
   @Header('Cache-Control', 'no-store')
-  info(): ApiDataResponse<ReleaseInfo> {
+  async info(): Promise<ApiDataResponse<ReleaseInfo>> {
+    const [analytics, business] = await Promise.all([
+      featureOn(this.database.db, 'analytics'),
+      featureOn(this.database.db, 'business'),
+    ]);
     return {
       data: {
         kind: this.config.RELEASE_KIND,
@@ -43,9 +48,9 @@ export class ReleaseInfoController {
         deploymentMode: this.config.DEPLOYMENT_MODE,
         // True only on a production copy with bachs-live: the release check compares it to what it was told to expect.
         paymentsLive: this.config.PAYMENTS_LIVE_ENABLED,
-        analytics: this.config.ANALYTICS_ENABLED,
+        analytics,
         paymentProvider: this.config.PAYMENT_PROVIDER,
-        business: this.config.BUSINESS_ENABLED,
+        business,
       },
     };
   }

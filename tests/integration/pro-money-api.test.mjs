@@ -9,7 +9,13 @@ import {
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 
 // Paid Pro, plan Tasks 8 and 10 through the API, on pretend money: paying from the TipMe balance
 // (PRO_PAY_FROM_BALANCE) and auto-renew (PRO_AUTO_RENEW), both off by default.
@@ -22,6 +28,7 @@ startTelemetry({
 
 let database;
 let on;
+// One copy: "by default" turns the two switches off in the database for its test, then on again.
 let plain;
 before(async () => {
   database = await openTestDatabase();
@@ -36,10 +43,9 @@ before(async () => {
     databaseUrl: database.url,
     apiEnv: { ...apiEnv, PRO_PAY_FROM_BALANCE: 'on', PRO_AUTO_RENEW: 'on' },
   });
-  plain = await startStack({ databaseUrl: database.url, apiEnv });
+  plain = on;
 });
 after(async () => {
-  await plain.stop();
   await on.stop();
   await database.close();
 });
@@ -70,18 +76,28 @@ const reset = async () => {
 };
 
 test('by default: card only, no auto-renew, and asking for either is refused', async () => {
-  const { cookie } = await ada();
-  const mine = await json(
-    await fetch(`${plain.api}/v1/me/pro`, { headers: { cookie } }),
-  );
-  assert.deepEqual(mine.data.methods, ['card']);
-  assert.deepEqual(mine.data.autoRenew, { available: false, on: false });
-  assert.equal(
-    (await buy(plain.api, cookie, { method: 'balance' })).status,
-    400,
-  );
-  assert.equal((await buy(plain.api, cookie, { autoRenew: true })).status, 400);
-  assert.equal((await q(`SELECT 1 FROM pro_purchases`)).length, 0);
+  await setSwitch(database.pool, 'pro_pay_from_balance', false);
+  await setSwitch(database.pool, 'pro_auto_renew', false);
+  try {
+    const { cookie } = await ada();
+    const mine = await json(
+      await fetch(`${plain.api}/v1/me/pro`, { headers: { cookie } }),
+    );
+    assert.deepEqual(mine.data.methods, ['card']);
+    assert.deepEqual(mine.data.autoRenew, { available: false, on: false });
+    assert.equal(
+      (await buy(plain.api, cookie, { method: 'balance' })).status,
+      400,
+    );
+    assert.equal(
+      (await buy(plain.api, cookie, { autoRenew: true })).status,
+      400,
+    );
+    assert.equal((await q(`SELECT 1 FROM pro_purchases`)).length, 0);
+  } finally {
+    await setSwitch(database.pool, 'pro_pay_from_balance', true);
+    await setSwitch(database.pool, 'pro_auto_renew', true);
+  }
 });
 
 test('switched on: the balance is offered, and a balance payment makes the page Pro at once', async () => {

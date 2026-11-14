@@ -93,6 +93,7 @@ export * from './operations/rehearsal-sweep.js';
 export * from './operations/supporters.js';
 export * from './operations/business-shifts.js';
 export * from './operations/pro-price.js';
+export * from './operations/feature-switches.js';
 export * from './operations/pro-periods.js';
 export * from './operations/pro-purchases.js';
 export * from './operations/earnings.js';

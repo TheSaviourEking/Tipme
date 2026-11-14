@@ -19,7 +19,7 @@ test('/health/release reports bachs-live and paymentsLive false', async () => {
     await import('../dist/release/release.controller.js');
   // A production copy that boots on bachs-live with live payments switched off: the web reads
   // these two fields to keep checkout closed.
-  const { data } = new ReleaseInfoController(
+  const { data } = await new ReleaseInfoController(
     {
       RELEASE_KIND: 'live',
       DEPLOYMENT_MODE: 'production',
@@ -27,7 +27,14 @@ test('/health/release reports bachs-live and paymentsLive false', async () => {
       PAYMENT_PROVIDER: 'bachs-live',
       PAYMENTS_LIVE_ENABLED: false,
     },
-    {},
+    // No database here: the switches it also reports fall back to their defaults.
+    {
+      db: {
+        select() {
+          throw new Error('no database in a unit test');
+        },
+      },
+    },
   ).info();
   assert.equal(data.paymentProvider, 'bachs-live');
   assert.equal(data.paymentsLive, false);

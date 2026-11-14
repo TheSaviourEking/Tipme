@@ -5,7 +5,13 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { seedDemoProfiles } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 
 // Paid Pro, plan Task 6 (ADR-0015): buying a month on pretend money through the API. The price is
 // the server's; Pro comes only from the partner's confirmation, never from a redirect.
@@ -18,7 +24,6 @@ startTelemetry({
 
 let database;
 let stack;
-let off;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
@@ -28,10 +33,8 @@ before(async () => {
     databaseUrl: database.url,
     apiEnv: { ...apiEnv, PRO_BILLING_ENABLED: 'true' },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv });
 });
 after(async () => {
-  await off.stop();
   await stack.stop();
   await database.close();
 });
@@ -98,25 +101,27 @@ test('buying needs a session, the CSRF header and an Idempotency-Key', async () 
   assert.equal(extra.status, 400);
 });
 
-test('with PRO_BILLING_ENABLED off, buying is 404 PRO_BILLING_OFF and GET says billing is off', async () => {
-  // Sessions live in the shared database: the same cookie signs in to both copies.
+test('with the pro_billing switch off, buying is 404 PRO_BILLING_OFF and GET says billing is off', async () => {
   const { cookie } = await session(TOBI_PHONE);
-  const response = await buy(off.api, cookie);
-  assert.equal(response.status, 404);
-  assert.equal((await json(response)).error.code, 'PRO_BILLING_OFF');
-  const mine = await json(
-    await fetch(`${off.api}/v1/me/pro`, { headers: { cookie } }),
-  );
-  assert.equal(mine.data.billingOn, false);
+  await setSwitch(database.pool, 'pro_billing', false);
+  try {
+    const response = await buy(stack.api, cookie);
+    assert.equal(response.status, 404);
+    assert.equal((await json(response)).error.code, 'PRO_BILLING_OFF');
+    const mine = await json(
+      await fetch(`${stack.api}/v1/me/pro`, { headers: { cookie } }),
+    );
+    assert.equal(mine.data.billingOn, false);
+  } finally {
+    await setSwitch(database.pool, 'pro_billing', true);
+  }
 });
 
 test('GET /v1/pro/price tells a signed-out visitor whether buying is open on this copy', async () => {
   // The /pro page shows "Get Pro" or "coming soon to buy" before anyone signs in.
-  for (const [api, open] of [
-    [stack.api, true],
-    [off.api, false],
-  ]) {
-    const response = await fetch(`${api}/v1/pro/price`, {
+  for (const open of [true, false]) {
+    await setSwitch(database.pool, 'pro_billing', open);
+    const response = await fetch(`${stack.api}/v1/pro/price`, {
       headers: { origin: WEB },
     });
     // The page reads it from the browser: the web app may, with no cookie.
@@ -129,6 +134,7 @@ test('GET /v1/pro/price tells a signed-out visitor whether buying is open on thi
     assert.equal(data.amountMinor, '250000');
     assert.equal(data.billingOn, open);
   }
+  await setSwitch(database.pool, 'pro_billing', true);
 });
 
 test('GET /v1/me/pro shows the server’s price, card only while paying from the balance is off', async () => {

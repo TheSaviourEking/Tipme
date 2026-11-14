@@ -14628,7 +14628,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 24,
+                    "maxItems": 25,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14656,7 +14656,8 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage"
                       ]
                     }
                   }
@@ -14740,7 +14741,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 24,
+                    "maxItems": 25,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14768,7 +14769,8 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage"
                       ]
                     }
                   }
@@ -14907,7 +14909,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 24,
+                    "maxItems": 25,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14935,7 +14937,8 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage"
                       ]
                     }
                   }
@@ -15054,7 +15057,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 24,
+                    "maxItems": 25,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15082,12 +15085,13 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 24,
+                    "maxItems": 25,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15115,7 +15119,8 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage"
                       ]
                     }
                   }
@@ -15445,6 +15450,118 @@
           }
         ],
         "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/switches": {
+      "get": {
+        "operationId": "OpsSwitches.list",
+        "tags": [
+          "OpsSwitches"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "switches.manage"
+      }
+    },
+    "/v1/ops/switches/{key}": {
+      "post": {
+        "operationId": "OpsSwitches.set",
+        "tags": [
+          "OpsSwitches"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "on"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "switches.manage"
       }
     },
     "/v1/ops/usernames": {
