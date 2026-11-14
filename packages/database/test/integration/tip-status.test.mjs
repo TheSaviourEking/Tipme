@@ -6,7 +6,8 @@ import {
   createQuote,
   tipStatusView,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { seedBusiness, seedMember } from './business-fixtures.mjs';
+import { ADA, useDatabase } from './helpers.mjs';
 
 test('tip status view', async (t) => {
   const database = await useDatabase(t);
@@ -49,6 +50,7 @@ test('tip status view', async (t) => {
       assert.deepEqual(view.recipient, {
         handle: 'ada',
         displayName: view.recipient.displayName,
+        avatarPath: '/portraits/ada.webp',
       });
       assert.ok(view.recipient.displayName.length > 0);
       assert.equal(view.amountMinor, '200000');
@@ -278,6 +280,68 @@ test('tip status view', async (t) => {
         { line: 'Thank you.', style: 'paper' },
       );
       await setPage(`thanks_line = NULL`);
+    },
+  );
+  await t.test(
+    "the receipt carries the recipient's photo only while it is public",
+    async () => {
+      const { tipId } = await paidTip();
+      const photoOf = async () =>
+        (await tipStatusView(database.db, tipId, new Date())).recipient;
+      // A page with a photo: the same path its public page shows.
+      assert.equal((await photoOf()).avatarPath, '/portraits/ada.webp');
+      // A page TipMe paused, or one its owner took down: its photo is not served, so none.
+      await setPage(`status = 'suspended'`);
+      try {
+        assert.equal('avatarPath' in (await photoOf()), false);
+      } finally {
+        await setPage(`status = 'active'`);
+      }
+      await setPage(`page_state = 'not_live'`);
+      try {
+        assert.equal('avatarPath' in (await photoOf()), false);
+      } finally {
+        await setPage(`page_state = 'live'`);
+      }
+      // No photo (never uploaded, or removed by staff): none, and the receipt shows initials.
+      await setPage(`avatar_path = NULL`);
+      try {
+        assert.deepEqual(Object.keys(await photoOf()), [
+          'handle',
+          'displayName',
+        ]);
+      } finally {
+        await setPage(`avatar_path = '/portraits/ada.webp'`);
+      }
+    },
+  );
+
+  await t.test(
+    'a business tip hides the photo when the person hid it at that business',
+    async () => {
+      const { locations } = await seedBusiness(database);
+      const { memberId } = await seedMember(database, {
+        locationId: locations[0].id,
+        profileId: ADA,
+      });
+      const { quoteId } = await createQuote(database.db, {
+        handle: 'ada',
+        tipMinor: 200000n,
+        currency: 'NGN',
+      });
+      const { tipId } = await createPaymentIntent(database.db, {
+        quoteId,
+        idempotencyKey: randomUUID(),
+        businessMemberId: memberId,
+      });
+      const recipient = async () =>
+        (await tipStatusView(database.db, tipId, new Date())).recipient;
+      assert.equal((await recipient()).avatarPath, '/portraits/ada.webp');
+      await database.pool.query(
+        'UPDATE business_members SET show_photo = false WHERE id = $1',
+        [memberId],
+      );
+      assert.equal('avatarPath' in (await recipient()), false);
     },
   );
 });

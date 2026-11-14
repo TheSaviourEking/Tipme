@@ -130,7 +130,16 @@ export type TipStatusState = (typeof tipStatusStates)[number];
 /** What the status screen may show. Never includes the supporter's message. */
 export interface TipStatusView {
   state: TipStatusState;
-  recipient: { handle: string; displayName: string };
+  recipient: {
+    handle: string;
+    displayName: string;
+    /**
+     * The recipient's photo, as their public page shows it (an API path or a demo picture). Absent
+     * when they have none, or while it is not public: the page is not live, TipMe paused it, or, for
+     * a tip made at a business, they hid their photo there. Older APIs send none.
+     */
+    avatarPath?: string;
+  };
   amountMinor: string;
   currency: string;
   completedAt: string | null;

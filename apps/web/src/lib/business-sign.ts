@@ -113,10 +113,54 @@ function frame(ctx: Ctx, style: QrStyle, width: number, height: number) {
   ctx.fillRect(0, 0, width, height);
 }
 
+/** What `drawImage` needs of a logo: a loaded picture with its own size. */
+export type SignLogo = CanvasImageSource & { width: number; height: number };
+
 /**
- * The location sign (board section 1): the dark card, the business's initial, its name, the
- * location, the code, "Scan to tip our team", and the link in text under it. Portrait A5/A6
- * proportions; `width` in pixels.
+ * Loads a business's logo for a sign, or null when it has none or it fails to load (the tile then
+ * shows the initial). `crossOrigin` makes the browser ask the API with CORS, which allows the web
+ * app's origin for `/v1/business-logos/`, so drawing it does not taint the canvas and the download
+ * (`toBlob`) still works.
+ */
+export function loadSignLogo(src: string | null): Promise<SignLogo | null> {
+  if (!src || typeof Image === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.decoding = 'async';
+    image.onload = () => resolve(image.naturalWidth > 0 ? image : null);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+/** The logo covering the tile (cropped, never squashed), clipped to its rounded corners. */
+function drawLogoTile(
+  ctx: Ctx,
+  logo: SignLogo,
+  {
+    x,
+    y,
+    size,
+    radius,
+  }: { x: number; y: number; size: number; radius: number },
+): void {
+  const scale = Math.max(size / logo.width, size / logo.height);
+  const w = logo.width * scale;
+  const h = logo.height * scale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(x, y, size, size, radius);
+  ctx.clip();
+  ctx.drawImage(logo, x + (size - w) / 2, y + (size - h) / 2, w, h);
+  ctx.restore();
+}
+
+/**
+ * The location sign (board section 1): the dark card, the business's logo (or its initial when it
+ * has none), its name, the location, the code, "Scan to tip our team", and the link in text
+ * under it. Portrait A5/A6 proportions; `width` in pixels. The logo changes only the tile: the code
+ * is the same either way.
  */
 export function drawLocationSign(
   canvas: HTMLCanvasElement,
@@ -126,6 +170,8 @@ export function drawLocationSign(
     location: string;
     style: QrStyle;
     width: number;
+    /** The business's logo, already loaded (`loadSignLogo`); without it, the initial. */
+    logo?: SignLogo | null;
   },
 ): void {
   const { style, width } = input;
@@ -140,17 +186,26 @@ export function drawLocationSign(
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
-  // The initial on a tile in the text colour, like the logo on the board.
+  // The logo on its tile, like the board; without one, the initial on a tile in the text colour.
   const tile = Math.round(width * 0.13);
   const tileTop = Math.round(height * 0.08);
-  ctx.fillStyle = style.frameText;
-  ctx.beginPath();
-  ctx.roundRect(centre - tile / 2, tileTop, tile, tile, tile * 0.27);
-  ctx.fill();
-  ctx.fillStyle = style.frame.color;
-  ctx.font = `400 ${Math.round(tile * 0.55)}px ${SERIF}`;
-  const initial = Array.from(input.business.trim())[0]?.toUpperCase() ?? '';
-  ctx.fillText(initial, centre, tileTop + tile * 0.7);
+  if (input.logo)
+    drawLogoTile(ctx, input.logo, {
+      x: centre - tile / 2,
+      y: tileTop,
+      size: tile,
+      radius: tile * 0.27,
+    });
+  else {
+    ctx.fillStyle = style.frameText;
+    ctx.beginPath();
+    ctx.roundRect(centre - tile / 2, tileTop, tile, tile, tile * 0.27);
+    ctx.fill();
+    ctx.fillStyle = style.frame.color;
+    ctx.font = `400 ${Math.round(tile * 0.55)}px ${SERIF}`;
+    const initial = Array.from(input.business.trim())[0]?.toUpperCase() ?? '';
+    ctx.fillText(initial, centre, tileTop + tile * 0.7);
+  }
 
   ctx.fillStyle = style.frameText;
   fitText(ctx, input.business, {
