@@ -52,6 +52,8 @@ services:
       # Business release 2, each on top of BUSINESS_ENABLED: off until the owner turns it on.
       BUSINESS_SHARES_ENABLED: ${BUSINESS_SHARES_ENABLED:-false}
       TEAM_TIPS_ENABLED: ${TEAM_TIPS_ENABLED:-false}
+      BUSINESS_SIGNUP_ENABLED: ${BUSINESS_SIGNUP_ENABLED:-false}
+      BUSINESS_OWNERS_ENABLED: ${BUSINESS_OWNERS_ENABLED:-false}
       LIVE_MAX_STREAMS: ${LIVE_MAX_STREAMS:-2000}
       # Page photos in a private R2 bucket: all four, or none (photos stay in Postgres).
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:-}
