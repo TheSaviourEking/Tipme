@@ -5,10 +5,11 @@ import {
   proGraceEnd,
   proPeriodEnd,
 } from '@tipme/domain';
-import { and, asc, desc, eq, gt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { proPeriods, profiles, PRO_PAID_BY } from '../schema.js';
 import { mailOwner } from './account-mail.js';
+import { personOf } from './owner.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { legacySocials } from './legacy-socials.js';
@@ -248,14 +249,15 @@ export async function expireDuePeriods(
     .selectDistinct({ profileId: proPeriods.profileId })
     .from(proPeriods)
     .where(
-      sql`(${proPeriods.status} = 'SCHEDULED' AND ${proPeriods.startsAt} <= ${now})
+      sql`${proPeriods.profileId} IS NOT NULL AND ((${proPeriods.status} = 'SCHEDULED' AND ${proPeriods.startsAt} <= ${now})
         OR (${proPeriods.status} = 'ACTIVE' AND ${proPeriods.endsAt} <= ${now})
-        OR (${proPeriods.status} = 'GRACE' AND ${proPeriods.graceEndsAt} <= ${now})`,
+        OR (${proPeriods.status} = 'GRACE' AND ${proPeriods.graceEndsAt} <= ${now}))`,
     )
     .limit(input.limit ?? 200);
   const changed: ProPlanChange[] = [];
   let moved = 0;
-  for (const { profileId } of due) {
+  for (const { profileId: pageId } of due) {
+    const profileId = personOf(pageId);
     const result = await guarded(() =>
       db.transaction(async (tx) => {
         const before = await lockProfile(tx, profileId);
@@ -355,6 +357,8 @@ export async function sendProReminders(
     .from(proPeriods)
     .where(
       and(
+        // A business's months have their own reminders (Business Pro, Phase B).
+        isNotNull(proPeriods.profileId),
         eq(proPeriods.status, 'ACTIVE'),
         gt(proPeriods.endsAt, now),
         lte(proPeriods.endsAt, horizon),
@@ -375,7 +379,7 @@ export async function sendProReminders(
     const left = row.endsAt.getTime() - now.getTime();
     const which = left <= DAY_MS ? '1d' : '7d';
     const sent = await mailOwner(db, input.sealing, {
-      profileId: row.profileId,
+      profileId: personOf(row.profileId),
       type: 'pro_renewal_reminder',
       data: {
         daysLeft: which === '1d' ? 1 : 7,

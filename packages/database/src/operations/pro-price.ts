@@ -33,7 +33,9 @@ export async function currentProPrice(
   const [row] = await db
     .select()
     .from(proPrices)
-    .where(and(lte(proPrices.effectiveFrom, now)))
+    .where(
+      and(lte(proPrices.effectiveFrom, now), eq(proPrices.plan, 'personal')),
+    )
     .orderBy(desc(proPrices.effectiveFrom), desc(proPrices.createdAt))
     .limit(1);
   return row ? asRow(row) : null;
@@ -47,6 +49,7 @@ export async function proPriceHistory(
   const rows = await db
     .select()
     .from(proPrices)
+    .where(eq(proPrices.plan, 'personal'))
     .orderBy(desc(proPrices.effectiveFrom), desc(proPrices.createdAt))
     .limit(limit);
   return rows.map(asRow);

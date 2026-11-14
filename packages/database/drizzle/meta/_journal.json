@@ -652,6 +652,20 @@
       "when": 1794389732515,
       "tag": "0092_pro_money",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794651634806,
+      "tag": "0093_business_pro",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1794651642841,
+      "tag": "0094_business_pro_price_seed",
+      "breakpoints": true
     }
   ]
 }

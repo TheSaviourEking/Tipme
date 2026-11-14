@@ -18,6 +18,7 @@ import { mailOwner } from './account-mail.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
+import { personOf } from './owner.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
 import { recomputePlan, startPaidPeriod } from './pro-periods.js';
@@ -583,7 +584,7 @@ export async function confirmProCheckout(
       ) => ({
         outcome,
         planChanged,
-        profileId: row.profileId,
+        profileId: personOf(row.profileId),
         handleLower,
       });
       const cause = input.providerEventRowId ? 'provider_event' : 'system';
@@ -655,7 +656,7 @@ export async function confirmProCheckout(
       try {
         period = await tx.transaction((savepoint) =>
           startPaidPeriod(savepoint, {
-            profileId: row.profileId,
+            profileId: personOf(row.profileId),
             purchaseId: row.id,
             paidBy,
             amountMinor: row.amountMinor,
@@ -718,7 +719,7 @@ export async function confirmProCheckout(
           payload: { purchaseId: row.id, profileId: row.profileId },
         });
       await mailOwner(tx, input.sealing, {
-        profileId: row.profileId,
+        profileId: personOf(row.profileId),
         type: 'pro_receipt',
         data: {
           amountMinor: String(row.amountMinor),
@@ -864,7 +865,7 @@ export async function endProForReversal(
       });
       if (!input.endPro || row.status !== 'PAID')
         return {
-          profileId: row.profileId,
+          profileId: personOf(row.profileId),
           handleLower: null,
           planChanged: false,
         };
@@ -880,17 +881,18 @@ export async function endProForReversal(
  */
 export async function endPaidMonth(
   tx: Tx,
-  row: { id: string; profileId: string },
+  row: { id: string; profileId: string | null },
   at: Date,
 ): Promise<{
   profileId: string;
   handleLower: string | null;
   planChanged: boolean;
 }> {
+  const profileId = personOf(row.profileId);
   const [page] = await tx
     .select({ handleLower: profiles.handleLower })
     .from(profiles)
-    .where(eq(profiles.id, row.profileId))
+    .where(eq(profiles.id, profileId))
     .for('update');
   await tx.execute(sql`
     UPDATE pro_periods
@@ -901,9 +903,9 @@ export async function endPaidMonth(
                               LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds'))
                            + interval '1 millisecond'
      WHERE purchase_id = ${row.id} AND status <> 'ENDED'`);
-  const plan = await recomputePlan(tx, row.profileId, at);
+  const plan = await recomputePlan(tx, profileId, at);
   return {
-    profileId: row.profileId,
+    profileId,
     handleLower: page?.handleLower ?? null,
     planChanged: plan.changed,
   };

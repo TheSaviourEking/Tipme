@@ -10,6 +10,7 @@ import {
 } from '../schema.js';
 import { mailOwner } from './account-mail.js';
 import { balanceIn } from './balance.js';
+import { personOf } from './owner.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
@@ -139,7 +140,12 @@ async function settleCollection(
         outcome: 'paid' | 'already' | 'review',
         planChanged = false,
         handleLower: string | null = null,
-      ) => ({ outcome, profileId: row.profileId, handleLower, planChanged });
+      ) => ({
+        outcome,
+        profileId: personOf(row.profileId),
+        handleLower,
+        planChanged,
+      });
       if (row.status !== 'COLLECTING' && row.status !== 'UNKNOWN')
         return done('already');
       if (
@@ -162,7 +168,7 @@ async function settleCollection(
       try {
         period = await tx.transaction((savepoint) =>
           startPaidPeriod(savepoint, {
-            profileId: row.profileId,
+            profileId: personOf(row.profileId),
             purchaseId: row.id,
             paidBy: 'balance',
             amountMinor: row.amountMinor,
@@ -201,12 +207,12 @@ async function settleCollection(
         proPurchaseId: row.id,
         lines: buildProBalancePosting({
           amountMinor: row.amountMinor,
-          profileId: row.profileId,
+          profileId: personOf(row.profileId),
         }),
         traceId: activeTraceId(),
       });
       await mailOwner(tx, input.sealing, {
-        profileId: row.profileId,
+        profileId: personOf(row.profileId),
         type: 'pro_receipt',
         data: {
           amountMinor: String(row.amountMinor),
