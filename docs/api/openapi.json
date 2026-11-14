@@ -15848,6 +15848,221 @@
         "x-tipme-permission": "usernames.manage"
       }
     },
+    "/v1/ops/users": {
+      "get": {
+        "operationId": "OpsPeople.list",
+        "tags": [
+          "OpsPeople"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "25",
+              "type": "string",
+              "enum": [
+                "25",
+                "50",
+                "100"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "free",
+                "pro"
+              ]
+            }
+          },
+          {
+            "name": "pageStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "offline",
+                "suspended",
+                "none"
+              ]
+            }
+          },
+          {
+            "name": "payouts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "set_up",
+                "not_set_up"
+              ]
+            }
+          },
+          {
+            "name": "joinedFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "joinedTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "newest",
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "name",
+                "most_tips"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "search.view"
+      }
+    },
+    "/v1/ops/users/{id}/reveal": {
+      "post": {
+        "operationId": "OpsPeople.reveal",
+        "tags": [
+          "OpsPeople"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "private.view"
+      }
+    },
     "/v1/ops/users/{userId}/cancel-recovery": {
       "post": {
         "operationId": "OpsActions.cancelRecovery",
