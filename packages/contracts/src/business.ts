@@ -413,6 +413,23 @@ export interface BusinessDetail {
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
   you: { role: ManagerRole; locationId?: string };
+  /** Business Pro (plan Task A4): present only with BUSINESS_PRO_ENABLED on. */
+  plan?: BusinessPlanName;
+  usage?: BusinessUsage;
+  /** When Business Pro last ended; absent while it runs or never ran. */
+  proLapsedAt?: string;
+}
+/** Business Free or Business Pro. */
+export type BusinessPlanName = 'free' | 'pro';
+/**
+ * What a business uses of its plan's limits (Business Pro, owner 14 Nov 2026). Staff are distinct
+ * people at any of its locations plus open staff invitations, never its open owners. `used` may be
+ * above `limit`: a business over a limit keeps everyone and only stops adding.
+ */
+export interface BusinessUsage {
+  plan: BusinessPlanName;
+  staff: { used: number; limit: number };
+  locations: { used: number; limit: number };
 }
 export interface MemberRow {
   memberId: string;

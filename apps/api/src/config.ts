@@ -247,6 +247,10 @@ export const apiConfigSchema = z
     // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
     BUSINESS_SHARES_ENABLED: flag,
     TEAM_TIPS_ENABLED: flag,
+    // Business Pro (plan 2026-11-14-business-pro-and-signup, Phases A to C), on top of
+    // BUSINESS_ENABLED and off by default. Off: no plan, no limits, no new routes (404), exactly
+    // today's behaviour. On: Business Free 3 staff and 1 location, Business Pro 25 of each.
+    BUSINESS_PRO_ENABLED: flag,
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.

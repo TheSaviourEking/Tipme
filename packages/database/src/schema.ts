@@ -2291,6 +2291,10 @@ const quotedList = (values: readonly string[]) =>
   sql.raw(values.map((value) => `'${value}'`).join(', '));
 
 /** A business account: verified by TipMe staff before its codes go live. */
+/** Business Pro (plan Task A1): a business's plan, and which Pro a price is for. */
+export const BUSINESS_PLANS = ['free', 'pro'] as const;
+export const PRO_PRICE_PLANS = ['personal', 'business'] as const;
+
 export const businesses = pgTable(
   'businesses',
   {
@@ -2313,9 +2317,15 @@ export const businesses = pgTable(
     // `logoVersion` only ever goes up, like a page's `avatarVersion`: a new logo is a new URL.
     logoPath: text('logo_path'),
     logoVersion: integer('logo_version').notNull().default(0),
+    // Business Pro (plan Task A1): a cache of the paid months, like `profiles.plan`; every limit
+    // and Pro-feature check reads it. Only recomputeBusinessPlan writes it.
+    plan: text('plan').notNull().default('free'),
+    // Set when Business Pro ends, cleared when it starts again: drives the lapse banner.
+    proLapsedAt: timestamp('pro_lapsed_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [
+    check('businesses_plan', sql`plan IN ('free', 'pro')`),
     check('businesses_slug', sql`slug ~ ${sql.raw(BUSINESS_SLUG_RE(40))}`),
     check('businesses_name', sql`char_length(name) BETWEEN 1 AND 80`),
     check(
@@ -2980,10 +2990,14 @@ export const proPrices = pgTable(
     setBy: uuid('set_by').references(() => users.id),
     approvedBy: uuid('approved_by').references(() => users.id),
     reason: text('reason').notNull(),
+    // Which Pro this price is for: a person's page or a business (Business Pro, plan Task A1).
+    plan: text('plan').notNull().default('personal'),
     createdAt: createdAt(),
   },
   (table) => [
     index('pro_prices_effective_from').on(table.effectiveFrom),
+    index('pro_prices_plan_effective_from').on(table.plan, table.effectiveFrom),
+    check('pro_prices_plan', sql`${table.plan} IN ('personal', 'business')`),
     check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
     check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
     check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
@@ -3012,9 +3026,9 @@ export const proPeriods = pgTable(
   'pro_periods',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's month or a business's month (Business Pro): exactly one (`pro_periods_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
     // Null only for periods made in tests; every paid month has its purchase.
     purchaseId: uuid('purchase_id').unique(),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
@@ -3031,6 +3045,14 @@ export const proPeriods = pgTable(
     uniqueIndex('pro_periods_one_scheduled')
       .on(table.profileId)
       .where(sql`${table.status} = 'SCHEDULED'`),
+    unique('pro_periods_business_start').on(table.businessId, table.startsAt),
+    uniqueIndex('pro_periods_business_one_scheduled')
+      .on(table.businessId)
+      .where(sql`${table.status} = 'SCHEDULED'`),
+    check(
+      'pro_periods_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
     index('pro_periods_due').on(table.status, table.endsAt),
     check(
       'pro_periods_status',
@@ -3059,9 +3081,11 @@ export const proPurchases = pgTable(
   'pro_purchases',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's purchase or a business's (Business Pro): exactly one (`pro_purchases_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    // A business purchase: the owner who paid (receipts go to them). Null for a page's own.
+    boughtBy: uuid('bought_by').references(() => users.id),
     method: text('method').notNull(),
     priceId: uuid('price_id')
       .notNull()
@@ -3103,6 +3127,21 @@ export const proPurchases = pgTable(
     uniqueIndex('pro_purchases_one_open')
       .on(table.profileId)
       .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    unique('pro_purchases_business_idempotency').on(
+      table.businessId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('pro_purchases_business_one_open')
+      .on(table.businessId)
+      .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    check(
+      'pro_purchases_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
+    check(
+      'pro_purchases_bought_by',
+      sql`(${table.businessId} IS NULL) = (${table.boughtBy} IS NULL)`,
+    ),
     uniqueIndex('pro_purchases_provider_reference')
       .on(table.provider, table.providerReference)
       .where(sql`${table.providerReference} IS NOT NULL`),
@@ -3297,3 +3336,35 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Business Pro auto-renew (plan Task A1; rulings R10): from the business balance (a TipMe-scheduled
+ * collection, under PRO_PAY_FROM_BALANCE) or a saved naira card (under PRO_AUTO_RENEW), as an owner
+ * set it. The partner's ids only, never card details. Built by Phase B; Phase A only adds the table.
+ */
+export const businessProAutoRenew = pgTable(
+  'business_pro_auto_renew',
+  {
+    businessId: uuid('business_id')
+      .primaryKey()
+      .references(() => businesses.id),
+    source: text('source').notNull(),
+    enabled: boolean('enabled').notNull(),
+    provider: text('provider'),
+    customerReference: text('customer_reference'),
+    paymentMethodReference: text('payment_method_reference'),
+    failedPeriodId: uuid('failed_period_id'),
+    setBy: uuid('set_by')
+      .notNull()
+      .references(() => users.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  () => [
+    check(
+      'business_pro_auto_renew_source',
+      sql`source IN ('balance', 'saved_card')`,
+    ),
+  ],
+);

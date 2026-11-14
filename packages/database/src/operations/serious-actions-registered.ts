@@ -162,6 +162,21 @@ const payoutOwners = async (
   return managers.map(({ userId }) => userId);
 };
 
+/** A business's open owners (Business Pro, ruling R22: a refund's subjects). */
+const openBusinessOwners = async (db: Database | Tx, businessId: string) => {
+  const owners = await db
+    .select({ userId: businessManagers.userId })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.businessId, businessId),
+        eq(businessManagers.role, 'owner'),
+        isNull(businessManagers.removedAt),
+      ),
+    );
+  return owners.map(({ userId }) => userId);
+};
+
 const handleOf = async (db: Database | Tx, profileId: string) => {
   const [page] = await db
     .select({ handle: profiles.handle })
@@ -560,6 +575,40 @@ const proPriceChange = acting<{ amountMinor: string }>({
     })),
 });
 
+/*
+ * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
+ * plan 'business'. Pinned on the current business price only, so a personal change never makes it
+ * stale (and the other way round).
+ */
+const businessProPriceChange = acting<{ amountMinor: string }>({
+  name: 'business_pro_price.change',
+  permission: 'pro.price',
+  target: () => 'business_pro_price',
+  current: async (tx) => {
+    const price = await currentProPrice(tx, new Date(), 'business');
+    return price
+      ? { id: price.id, amountMinor: String(price.amountMinor) }
+      : null;
+  },
+  describe: async (tx, { amountMinor }) => {
+    const to = checkedProPrice(amountMinor);
+    const from = await currentProPrice(tx, new Date(), 'business');
+    return `Change the Business Pro price ${from ? `from ${nairaOf(from.amountMinor)} ` : ''}to ${nairaOf(to)} a month, for new months only`;
+  },
+  act: (tx, { amountMinor }, context) =>
+    setProPrice(tx, {
+      amountMinor: checkedProPrice(amountMinor),
+      plan: 'business',
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      amountMinor: String(set.amountMinor),
+    })),
+});
+
 /**
  * Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month, on the member's request, within
  * 14 days. A second person decides; neither the page's owner nor anyone behind its mailbox can.
@@ -571,6 +620,7 @@ const proRefund = acting<{ purchaseId: string }>({
   permission: 'payments.repair',
   subjects: async ({ purchaseId }, db) => {
     const facts = await proRefundFacts(db, purchaseId, new Date());
+    if (facts.businessId) return openBusinessOwners(db, facts.businessId);
     return facts.profileId ? pageOwner(db, facts.profileId) : [];
   },
   target: ({ purchaseId }) => purchaseId,
@@ -1092,6 +1142,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);
   registerSeriousAction(proRefund);
+  registerSeriousAction(businessProPriceChange);
 }
 
 /* Routes whose seriousness depends on what is being done */

@@ -325,6 +325,8 @@ export async function startJobWorker(
       for (const page of [...result.paid, ...collected.paid].filter(
         (p) => p.planChanged,
       )) {
+        // A business's month (Business Pro) changes no page; its signals come with Phase B.
+        if (page.profileId === null) continue;
         void publishLive([
           { to: { profile: page.profileId }, type: 'profile.changed' },
         ]);

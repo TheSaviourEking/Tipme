@@ -1,14 +1,16 @@
 import { visibleLinks, type PagePlan } from '@tipme/contracts';
 import {
+  type BusinessPlan,
   lagosDateWords,
   nextPeriodStart,
   proGraceEnd,
   proPeriodEnd,
 } from '@tipme/domain';
-import { and, asc, desc, eq, gt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNotNull, lte, ne, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { proPeriods, profiles, PRO_PAID_BY } from '../schema.js';
+import { businesses, proPeriods, profiles, PRO_PAID_BY } from '../schema.js';
 import { mailOwner } from './account-mail.js';
+import { type MoneyOwner, ownerColumns, personOf } from './owner.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { legacySocials } from './legacy-socials.js';
@@ -114,6 +116,71 @@ const asStarted = (row: PeriodRow) => ({
   status: row.status as 'ACTIVE' | 'SCHEDULED',
 });
 
+/** Whose months these are: a page's or a business's (Business Pro). */
+type PeriodSubject = MoneyOwner;
+const subjectColumn = (subject: PeriodSubject) =>
+  'businessId' in subject
+    ? eq(proPeriods.businessId, subject.businessId)
+    : eq(proPeriods.profileId, subject.profileId);
+
+/**
+ * The shared half of starting a paid month, for a page or a business, under the caller's lock on
+ * that subject. The same `purchaseId` again returns the month it started (`already`).
+ */
+async function startPeriodFor(
+  tx: Tx,
+  subject: PeriodSubject,
+  input: {
+    purchaseId: string;
+    paidBy: ProPaidBy;
+    amountMinor: bigint;
+    currency: 'NGN';
+    now: Date;
+  },
+): Promise<ReturnType<typeof asStarted> & { already: boolean }> {
+  const [already] = await tx
+    .select()
+    .from(proPeriods)
+    .where(eq(proPeriods.purchaseId, input.purchaseId));
+  if (already) return { ...asStarted(already), already: true };
+  const [queued] = await tx
+    .select({ id: proPeriods.id })
+    .from(proPeriods)
+    .where(and(subjectColumn(subject), eq(proPeriods.status, 'SCHEDULED')));
+  if (queued) throw new OperationError('PRO_ALREADY_RENEWED');
+  const [latest] = await tx
+    .select()
+    .from(proPeriods)
+    .where(subjectColumn(subject))
+    .orderBy(desc(proPeriods.endsAt))
+    .limit(1);
+  const startsAt = nextPeriodStart(input.now, latest ?? null);
+  const endsAt = proPeriodEnd(startsAt);
+  const status =
+    startsAt.getTime() > input.now.getTime() ? 'SCHEDULED' : 'ACTIVE';
+  // Paid during grace: the old month is over, this one takes over from its end.
+  if (status === 'ACTIVE' && latest && latest.status !== 'ENDED')
+    await tx
+      .update(proPeriods)
+      .set({ status: 'ENDED' })
+      .where(eq(proPeriods.id, latest.id));
+  const id = newId();
+  await tx.insert(proPeriods).values({
+    id,
+    ...ownerColumns(subject),
+    purchaseId: input.purchaseId,
+    startsAt,
+    endsAt,
+    graceEndsAt: proGraceEnd(endsAt),
+    status,
+    paidBy: input.paidBy,
+    amountMinor: input.amountMinor,
+    currency: input.currency,
+    createdAt: input.now,
+  });
+  return { periodId: id, startsAt, endsAt, status, already: false };
+}
+
 /**
  * Starts the month one confirmed payment bought, exactly once: the same `purchaseId` again returns
  * the month it started. While a month runs or is in grace, the new one starts at its end (queued
@@ -139,65 +206,147 @@ export async function startPaidPeriod(
   handleLower: string;
 }> {
   const page = await lockProfile(tx, input.profileId);
-  const [already] = await tx
-    .select()
-    .from(proPeriods)
-    .where(eq(proPeriods.purchaseId, input.purchaseId));
+  const { already, ...started } = await startPeriodFor(
+    tx,
+    { profileId: input.profileId },
+    input,
+  );
   if (already)
-    return {
-      ...asStarted(already),
-      planChanged: false,
-      handleLower: page.handleLower,
-    };
-  const [queued] = await tx
+    return { ...started, planChanged: false, handleLower: page.handleLower };
+  const { changed } = await recomputePlan(tx, input.profileId, input.now);
+  return { ...started, planChanged: changed, handleLower: page.handleLower };
+}
+
+// ---- Business Pro (plan Task A3): a business's months. Never takes a profile lock. ----
+
+async function lockBusiness(tx: Tx, businessId: string) {
+  const [row] = await tx
+    .select({
+      id: businesses.id,
+      slug: businesses.slug,
+      plan: businesses.plan,
+      proLapsedAt: businesses.proLapsedAt,
+    })
+    .from(businesses)
+    .where(eq(businesses.id, businessId))
+    .for('update');
+  if (!row) throw new OperationError('BUSINESS_NOT_FOUND');
+  return row;
+}
+
+/**
+ * Rewrites `businesses.plan` from the business's paid months, under the business lock: pro while a
+ * paid month covers now (grace included). Pro to free stamps `pro_lapsed_at`; free to pro clears it.
+ * A business's Pro never touches its owners' own pages.
+ */
+export async function recomputeBusinessPlan(
+  tx: Tx,
+  businessId: string,
+  now: Date,
+): Promise<{ plan: BusinessPlan; changed: boolean; slug: string }> {
+  const business = await lockBusiness(tx, businessId);
+  const [covering] = await tx
     .select({ id: proPeriods.id })
     .from(proPeriods)
     .where(
       and(
-        eq(proPeriods.profileId, input.profileId),
-        eq(proPeriods.status, 'SCHEDULED'),
+        eq(proPeriods.businessId, businessId),
+        lte(proPeriods.startsAt, now),
+        gt(proPeriods.graceEndsAt, now),
       ),
-    );
-  if (queued) throw new OperationError('PRO_ALREADY_RENEWED');
-  const [latest] = await tx
+    )
+    .limit(1);
+  const plan: BusinessPlan = covering ? 'pro' : 'free';
+  if (plan === business.plan)
+    return { plan, changed: false, slug: business.slug };
+  await tx
+    .update(businesses)
+    .set({ plan, proLapsedAt: plan === 'free' ? now : null })
+    .where(eq(businesses.id, businessId));
+  return { plan, changed: true, slug: business.slug };
+}
+
+/** startPaidPeriod for a business: the same rules, under the business lock. */
+export async function startBusinessPaidPeriod(
+  tx: Tx,
+  input: {
+    businessId: string;
+    purchaseId: string;
+    paidBy: ProPaidBy;
+    amountMinor: bigint;
+    currency: 'NGN';
+    now: Date;
+  },
+): Promise<{
+  periodId: string;
+  startsAt: Date;
+  endsAt: Date;
+  status: 'ACTIVE' | 'SCHEDULED';
+  planChanged: boolean;
+  slug: string;
+}> {
+  const business = await lockBusiness(tx, input.businessId);
+  const { already, ...started } = await startPeriodFor(
+    tx,
+    { businessId: input.businessId },
+    input,
+  );
+  if (already) return { ...started, planChanged: false, slug: business.slug };
+  const { changed } = await recomputeBusinessPlan(
+    tx,
+    input.businessId,
+    input.now,
+  );
+  return { ...started, planChanged: changed, slug: business.slug };
+}
+
+/** Moves one subject's months on with the clock; returns how many rows moved. */
+async function moveMonths(
+  tx: Tx,
+  subject: PeriodSubject,
+  now: Date,
+  hooks: {
+    graceStarted?: (row: PeriodRow) => Promise<void>;
+    ended?: (row: PeriodRow) => Promise<void>;
+  },
+): Promise<number> {
+  const rows = await tx
     .select()
     .from(proPeriods)
-    .where(eq(proPeriods.profileId, input.profileId))
-    .orderBy(desc(proPeriods.endsAt))
-    .limit(1);
-  const startsAt = nextPeriodStart(input.now, latest ?? null);
-  const endsAt = proPeriodEnd(startsAt);
-  const status =
-    startsAt.getTime() > input.now.getTime() ? 'SCHEDULED' : 'ACTIVE';
-  // Paid during grace: the old month is over, this one takes over from its end.
-  if (status === 'ACTIVE' && latest && latest.status !== 'ENDED')
+    .where(and(subjectColumn(subject), ne(proPeriods.status, 'ENDED')))
+    .orderBy(asc(proPeriods.startsAt));
+  let count = 0;
+  const set = async (row: PeriodRow, status: ProPeriodStatus) => {
     await tx
       .update(proPeriods)
-      .set({ status: 'ENDED' })
-      .where(eq(proPeriods.id, latest.id));
-  const id = newId();
-  await tx.insert(proPeriods).values({
-    id,
-    profileId: input.profileId,
-    purchaseId: input.purchaseId,
-    startsAt,
-    endsAt,
-    graceEndsAt: proGraceEnd(endsAt),
-    status,
-    paidBy: input.paidBy,
-    amountMinor: input.amountMinor,
-    currency: input.currency,
-    createdAt: input.now,
-  });
-  const { changed } = await recomputePlan(tx, input.profileId, input.now);
-  return {
-    periodId: id,
-    startsAt,
-    endsAt,
-    status,
-    planChanged: changed,
-    handleLower: page.handleLower,
+      .set({ status })
+      .where(eq(proPeriods.id, row.id));
+    row.status = status;
+    count += 1;
   };
+  // A queued month takes over from the one before it, with no grace in between.
+  for (const row of rows)
+    if (row.status === 'SCHEDULED' && row.startsAt <= now) {
+      for (const before of rows)
+        if (
+          before !== row &&
+          before.startsAt < row.startsAt &&
+          before.status !== 'ENDED'
+        )
+          await set(before, 'ENDED');
+      await set(row, 'ACTIVE');
+    }
+  for (const row of rows) {
+    if (row.status === 'ACTIVE' && row.endsAt <= now) {
+      await set(row, 'GRACE');
+      if (row.graceEndsAt > now) await hooks.graceStarted?.(row);
+    }
+    if (row.status === 'GRACE' && row.graceEndsAt <= now) {
+      await set(row, 'ENDED');
+      await hooks.ended?.(row);
+    }
+  }
+  return count;
 }
 
 /** What staff see about a page's Pro: who gave it, and until when it is paid. */
@@ -233,77 +382,58 @@ export interface ProPlanChange {
   plan: PagePlan;
 }
 
+/** A business whose plan changed (Business Pro), for the caller to signal after commit. */
+export interface BusinessPlanChange {
+  businessId: string;
+  slug: string;
+  plan: BusinessPlan;
+}
+
+const DUE = (now: Date) =>
+  sql`((${proPeriods.status} = 'SCHEDULED' AND ${proPeriods.startsAt} <= ${now})
+        OR (${proPeriods.status} = 'ACTIVE' AND ${proPeriods.endsAt} <= ${now})
+        OR (${proPeriods.status} = 'GRACE' AND ${proPeriods.graceEndsAt} <= ${now}))`;
+
 /**
  * The expiry sweep (every minute): queued months whose start has come become ACTIVE, months whose
  * end has come go into GRACE ("grace started" once), and months whose grace has ended are ENDED
  * ("Pro ended" once, unless something else still keeps Pro on). One profile per transaction, under
- * its lock, so a confirmation racing it lands wholly before or after.
+ * its lock, so a confirmation racing it lands wholly before or after. Business months (Business
+ * Pro) are swept the same way, one business per transaction under the business lock; their
+ * notices come with Phase B's mail.
  */
 export async function expireDuePeriods(
   db: Database,
   input: { now: Date; sealing: MailSealing; limit?: number },
-): Promise<{ changed: ProPlanChange[]; moved: number }> {
+): Promise<{
+  changed: ProPlanChange[];
+  businessChanges: BusinessPlanChange[];
+  moved: number;
+}> {
   const { now } = input;
   const due = await db
     .selectDistinct({ profileId: proPeriods.profileId })
     .from(proPeriods)
-    .where(
-      sql`(${proPeriods.status} = 'SCHEDULED' AND ${proPeriods.startsAt} <= ${now})
-        OR (${proPeriods.status} = 'ACTIVE' AND ${proPeriods.endsAt} <= ${now})
-        OR (${proPeriods.status} = 'GRACE' AND ${proPeriods.graceEndsAt} <= ${now})`,
-    )
+    .where(sql`${proPeriods.profileId} IS NOT NULL AND ${DUE(now)}`)
     .limit(input.limit ?? 200);
   const changed: ProPlanChange[] = [];
   let moved = 0;
-  for (const { profileId } of due) {
+  for (const { profileId: pageId } of due) {
+    const profileId = personOf(pageId);
     const result = await guarded(() =>
       db.transaction(async (tx) => {
         const before = await lockProfile(tx, profileId);
-        const rows = await tx
-          .select()
-          .from(proPeriods)
-          .where(
-            and(
-              eq(proPeriods.profileId, profileId),
-              ne(proPeriods.status, 'ENDED'),
-            ),
-          )
-          .orderBy(asc(proPeriods.startsAt));
-        let count = 0;
-        const set = async (row: PeriodRow, status: ProPeriodStatus) => {
-          await tx
-            .update(proPeriods)
-            .set({ status })
-            .where(eq(proPeriods.id, row.id));
-          row.status = status;
-          count += 1;
-        };
-        // A queued month takes over from the one before it, with no grace in between.
-        for (const row of rows)
-          if (row.status === 'SCHEDULED' && row.startsAt <= now) {
-            for (const before of rows)
-              if (
-                before !== row &&
-                before.startsAt < row.startsAt &&
-                before.status !== 'ENDED'
-              )
-                await set(before, 'ENDED');
-            await set(row, 'ACTIVE');
-          }
-        for (const row of rows) {
-          if (row.status === 'ACTIVE' && row.endsAt <= now) {
-            await set(row, 'GRACE');
-            if (row.graceEndsAt > now)
-              await mailOwner(tx, input.sealing, {
-                profileId,
-                type: 'pro_grace_started',
-                data: { graceEndDate: lagosDateWords(row.graceEndsAt) },
-                dedupeKey: `pro_grace_started.${row.id}`,
-                now,
-              });
-          }
-          if (row.status === 'GRACE' && row.graceEndsAt <= now) {
-            await set(row, 'ENDED');
+        const count = await moveMonths(tx, { profileId }, now, {
+          graceStarted: async (row) => {
+            await mailOwner(tx, input.sealing, {
+              profileId,
+              type: 'pro_grace_started',
+              data: { graceEndDate: lagosDateWords(row.graceEndsAt) },
+              dedupeKey: `pro_grace_started.${row.id}`,
+              now,
+            });
+          },
+          ended: async (row) => {
             const plan = await recomputePlan(tx, profileId, now);
             if (plan.plan === 'free')
               await mailOwner(tx, input.sealing, {
@@ -313,8 +443,8 @@ export async function expireDuePeriods(
                 dedupeKey: `pro_ended.${row.id}`,
                 now,
               });
-          }
-        }
+          },
+        });
         const plan = await recomputePlan(tx, profileId, now);
         return {
           change:
@@ -328,7 +458,32 @@ export async function expireDuePeriods(
     moved += result.count;
     if (result.change) changed.push(result.change);
   }
-  return { changed, moved };
+  const dueBusinesses = await db
+    .selectDistinct({ businessId: proPeriods.businessId })
+    .from(proPeriods)
+    .where(sql`${proPeriods.businessId} IS NOT NULL AND ${DUE(now)}`)
+    .limit(input.limit ?? 200);
+  const businessChanges: BusinessPlanChange[] = [];
+  for (const { businessId } of dueBusinesses) {
+    if (businessId === null) continue;
+    const result = await guarded(() =>
+      db.transaction(async (tx) => {
+        const before = await lockBusiness(tx, businessId);
+        const count = await moveMonths(tx, { businessId }, now, {});
+        const plan = await recomputeBusinessPlan(tx, businessId, now);
+        return {
+          change:
+            plan.plan === before.plan
+              ? null
+              : { businessId, slug: plan.slug, plan: plan.plan },
+          count,
+        };
+      }),
+    );
+    moved += result.count;
+    if (result.change) businessChanges.push(result.change);
+  }
+  return { changed, businessChanges, moved };
 }
 
 /**
@@ -355,6 +510,8 @@ export async function sendProReminders(
     .from(proPeriods)
     .where(
       and(
+        // A business's months have their own reminders (Business Pro, Phase B).
+        isNotNull(proPeriods.profileId),
         eq(proPeriods.status, 'ACTIVE'),
         gt(proPeriods.endsAt, now),
         lte(proPeriods.endsAt, horizon),
@@ -375,7 +532,7 @@ export async function sendProReminders(
     const left = row.endsAt.getTime() - now.getTime();
     const which = left <= DAY_MS ? '1d' : '7d';
     const sent = await mailOwner(db, input.sealing, {
-      profileId: row.profileId,
+      profileId: personOf(row.profileId),
       type: 'pro_renewal_reminder',
       data: {
         daysLeft: which === '1d' ? 1 : 7,

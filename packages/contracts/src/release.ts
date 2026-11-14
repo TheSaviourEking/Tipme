@@ -16,6 +16,8 @@ export interface ReleaseInfo {
    * create a business on /for-businesses and in the header; off, they see the coming-soon form.
    */
   business: boolean;
+  /** Business Pro is switched on (BUSINESS_PRO_ENABLED, on top of `business`). */
+  businessPro: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

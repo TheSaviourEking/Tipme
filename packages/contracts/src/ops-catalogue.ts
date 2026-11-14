@@ -241,6 +241,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
   },
+  'OpsBusinessProPriceController.state': {
+    verb: 'GET',
+    permission: 'pro.price',
+    reason:
+      'The Business Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsPagesController.pro': {
     verb: 'GET',
     permission: 'pages.plan',
@@ -333,6 +339,8 @@ export const SERIOUS_ACTIONS = [
   'pro_price.change',
   // Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month.
   'pro.refund',
+  // Business Pro (plan Task A5): its own monthly price, changed like the personal one.
+  'business_pro_price.change',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -354,6 +362,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'changelog.publish': 'Show users a What’s new entry',
   'pro_price.change': 'Change the Pro price',
   'pro.refund': 'Refund a Pro card payment',
+  'business_pro_price.change': 'Change the Business Pro price',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -375,4 +384,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'changelog.publish': 'changelog.publish',
     'pro_price.change': 'pro.price',
     'pro.refund': 'payments.repair',
+    'business_pro_price.change': 'pro.price',
   };

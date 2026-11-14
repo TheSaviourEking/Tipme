@@ -131,6 +131,9 @@ export const apiErrorCodes = [
   'NOTE_NOT_OPEN',
   'BUSINESS_LAST_OWNER',
   'BUSINESS_NOT_VERIFIED',
+  // Business Pro (plan Task A4): adding past the plan's limit. Nobody already there is touched.
+  'BUSINESS_STAFF_LIMIT',
+  'BUSINESS_LOCATION_LIMIT',
   // Business release 2 (R2-0).
   'SHARE_NOT_ALLOWED',
   'SHARE_CHANGE_TOO_SOON',

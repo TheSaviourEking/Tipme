@@ -74,7 +74,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup` |
-| `pro.price` | GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
+| `pro.price` | GET `/v1/ops/business-pro-price`<br>POST `/v1/ops/business-pro-price`<br>GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
@@ -330,6 +330,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/bachs/fee-bearer-confirmation` | `payments.repair` | yes | – | – |
 | POST | `/v1/ops/business-notes/{tipId}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/business-notes/{tipId}/review` | `issues.resolve` | yes | – | – |
+| GET | `/v1/ops/business-pro-price` | `pro.price` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/business-pro-price` | `pro.price` | yes | `ops_request` | – |
 | GET | `/v1/ops/businesses` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}` | `search.view` | n/a (read) | – | – |
 | GET | `/v1/ops/businesses/{id}/logo` | `search.view` | n/a (read) | – | – |

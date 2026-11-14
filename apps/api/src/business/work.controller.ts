@@ -35,6 +35,7 @@ import {
   setInvitationBlock,
   updateMyMembership,
 } from '@tipme/database';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
   CurrentUser,
@@ -56,6 +57,7 @@ import { signalBusiness } from './business-live.js';
 export class WorkController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
@@ -104,6 +106,8 @@ export class WorkController {
       this.database.db,
       auth.userId,
       body,
+      new Date(),
+      { enforceLimits: this.config.BUSINESS_PRO_ENABLED },
     );
     signalBusiness(
       this.database.db,

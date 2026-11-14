@@ -62,6 +62,8 @@ const messages: Record<ApiErrorCode, string> = {
   BUSINESS_LAST_OWNER:
     'Make someone else an owner of the business first, or close it.',
   BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  BUSINESS_STAFF_LIMIT: 'Your business is at its staff limit.',
+  BUSINESS_LOCATION_LIMIT: 'Your business is at its location limit.',
   SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
   SHARE_CHANGE_TOO_SOON:
     'A share can change at most once a month. Try a later start date.',
@@ -419,6 +421,9 @@ const operationErrors: Partial<
   MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
   OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
   BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  // Business Pro (plan Task A4): a state to change (a plan, a seat), not bad input.
+  BUSINESS_STAFF_LIMIT: { status: 409, code: 'BUSINESS_STAFF_LIMIT' },
+  BUSINESS_LOCATION_LIMIT: { status: 409, code: 'BUSINESS_LOCATION_LIMIT' },
   // Business release 2 (R2-0).
   SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
   SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },

@@ -18,6 +18,7 @@ import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { managerOf } from './business-access.js';
 import { myMembership } from './business-members.js';
+import { assertCanAddStaff } from './business-limits.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueMail, type MailSealing } from './mail-queue.js';
@@ -73,6 +74,8 @@ export function inviteToBusiness(
   businessId: string,
   input: InvitationRequest,
   now: Date = new Date(),
+  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  opts: { enforceLimits?: boolean } = {},
 ): Promise<InvitationCreated> {
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -181,6 +184,14 @@ export function inviteToBusiness(
            LIMIT 1`);
         if (open.rows[0]) return { id: open.rows[0].id };
       }
+
+      // Business Pro: a new staff invitation takes a seat until it is answered or expires.
+      if (input.kind === 'staff' && opts.enforceLimits)
+        await assertCanAddStaff(tx, businessId, {
+          countInvitations: true,
+          profileId: invitee?.profileId ?? null,
+          now,
+        });
 
       const id = newId();
       const code = newCode();
@@ -465,6 +476,8 @@ export function acceptBusinessInvitation(
   userId: string,
   answer: InvitationAnswer,
   now: Date = new Date(),
+  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  opts: { enforceLimits?: boolean } = {},
 ): Promise<InvitationAccepted> {
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -477,6 +490,13 @@ export function acceptBusinessInvitation(
           row.page_status !== 'active'
         )
           throw new OperationError('MEMBER_NOT_TIPPABLE');
+        // Accepting re-checks members only (ruling R4); refused, the invitation stays open.
+        if (opts.enforceLimits)
+          await assertCanAddStaff(tx, row.business_id, {
+            countInvitations: false,
+            profileId: row.profile_id,
+            now,
+          });
         const memberId = newId();
         const inserted = await tx.execute(sql`
           INSERT INTO business_members (id, location_id, profile_id, shown_name, invited_by, joined_at)

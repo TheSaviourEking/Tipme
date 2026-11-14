@@ -288,6 +288,30 @@ export function buildProBalancePosting(input: {
 }
 
 /**
+ * Business Pro from the business balance (plan Task A2; ruling R9). Needs finance sign-off, like
+ * its sibling `buildProBalancePosting` (ADR-0006 addendum). Posted only after the partner moved the
+ * money from the business's own connected account to TipMe's: what TipMe owed the business pays for
+ * the month (`business_payable` down, as a business withdrawal takes it), and the money moves from
+ * the connected accounts' balance (`provider_clearing`) to TipMe's own (`platform_clearing`).
+ */
+export function buildBusinessProBalancePosting(input: {
+  amountMinor: bigint;
+  businessId: string;
+}): LedgerLine[] {
+  const { amountMinor, businessId } = input;
+  if (amountMinor <= 0n)
+    throw new RangeError('a Business Pro sale has a positive price');
+  if (!businessId)
+    throw new RangeError('a business balance payment names its business');
+  return [
+    line('business_payable', 'debit', amountMinor, undefined, businessId),
+    line('subscription_revenue', 'credit', amountMinor),
+    line('platform_clearing', 'debit', amountMinor),
+    line('provider_clearing', 'credit', amountMinor),
+  ];
+}
+
+/**
  * A card-paid Pro month refunded by the partner (`refund.paid`; plan Task 9, ruling 6): Pro revenue
  * gives back what was refunded, out of TipMe's own balance. The original card fee is not returned by
  * the partner and stays TipMe's expense; a fee the refund itself carries is TipMe's too.

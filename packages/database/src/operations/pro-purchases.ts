@@ -9,6 +9,7 @@ import {
 import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  businesses,
   proPeriods,
   proPurchases,
   profiles,
@@ -18,9 +19,15 @@ import { mailOwner } from './account-mail.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
+import { type MoneyOwner, ownerColumns, personOf } from './owner.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
-import { recomputePlan, startPaidPeriod } from './pro-periods.js';
+import {
+  type ProPaidBy,
+  recomputePlan,
+  startBusinessPaidPeriod,
+  startPaidPeriod,
+} from './pro-periods.js';
 import { recordSavedCardIn, renewalFailedIn } from './pro-auto-renew.js';
 import { currentProPrice } from './pro-price.js';
 import { jsonSafe } from './provider-events.js';
@@ -156,15 +163,19 @@ export async function lockPurchase(
 }
 
 /**
- * Opens a purchase at the server's price, under the profile lock: refused when the client's
- * expected amount differs (PRO_PRICE_CHANGED), a month is already queued (PRO_ALREADY_RENEWED) or
- * another purchase is open (PRO_PURCHASE_OPEN). The same Idempotency-Key returns the same purchase.
+ * Opens a purchase at the server's price, under the subject's lock (the page's, or for Business Pro
+ * the business's): refused when the client's expected amount differs (PRO_PRICE_CHANGED), a month
+ * is already queued (PRO_ALREADY_RENEWED) or another purchase is open (PRO_PURCHASE_OPEN). A
+ * business must be verified (BUSINESS_NOT_VERIFIED, ruling R11), is priced from the business plan
+ * and names the owner who pays (`boughtBy`). The same Idempotency-Key returns the same purchase.
  * Claims the purchase's one partner create call (`start_claimed_at`) in the same transaction.
  */
 export function requestProPurchase(
   db: Database,
   input: {
-    profileId: string;
+    subject: MoneyOwner;
+    /** The owner paying for a business (required for one, never for a page). */
+    boughtBy?: string;
     method: ProPurchaseMethod;
     expectedAmountMinor: bigint;
     idempotencyKey: string;
@@ -178,44 +189,64 @@ export function requestProPurchase(
         'accountReference' | 'saveCard' | 'renewsPeriodId' | 'provider'
       >
     >;
-    /** More checks under the profile lock, after the price and open checks (the balance's). */
+    /** More checks under the subject's lock, after the price and open checks (the balance's). */
     guard?: (tx: Tx, price: { amountMinor: bigint }) => Promise<void>;
   },
 ): Promise<{ purchase: PurchaseRow; replayed: boolean }> {
+  const { subject } = input;
+  const isBusiness = 'businessId' in subject;
   if (!/^[\w.:-]{8,200}$/.test(input.idempotencyKey))
+    return Promise.reject(new OperationError('INVALID_INPUT'));
+  if (isBusiness !== (input.boughtBy !== undefined))
     return Promise.reject(new OperationError('INVALID_INPUT'));
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
-        input.profileId,
+        // A page's fingerprint is unchanged from before Business Pro.
+        isBusiness ? `business:${subject.businessId}` : subject.profileId,
         input.method,
         String(input.expectedAmountMinor),
       ]),
     )
     .digest('hex');
+  const ofSubject = isBusiness
+    ? eq(proPurchases.businessId, subject.businessId)
+    : eq(proPurchases.profileId, subject.profileId);
   return guarded(() =>
     db.transaction(async (tx) => {
-      const [page] = await tx
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.id, input.profileId))
-        .for('update');
-      if (!page) throw new OperationError('PROFILE_NOT_FOUND');
+      if (isBusiness) {
+        const [business] = await tx
+          .select({ id: businesses.id, status: businesses.status })
+          .from(businesses)
+          .where(eq(businesses.id, subject.businessId))
+          .for('update');
+        if (!business) throw new OperationError('BUSINESS_NOT_FOUND');
+        if (business.status !== 'verified')
+          throw new OperationError('BUSINESS_NOT_VERIFIED');
+      } else {
+        const [page] = await tx
+          .select({ id: profiles.id })
+          .from(profiles)
+          .where(eq(profiles.id, subject.profileId))
+          .for('update');
+        if (!page) throw new OperationError('PROFILE_NOT_FOUND');
+      }
       const [existing] = await tx
         .select()
         .from(proPurchases)
         .where(
-          and(
-            eq(proPurchases.profileId, input.profileId),
-            eq(proPurchases.idempotencyKey, input.idempotencyKey),
-          ),
+          and(ofSubject, eq(proPurchases.idempotencyKey, input.idempotencyKey)),
         );
       if (existing) {
         if (existing.fingerprint !== fingerprint)
           throw new OperationError('IDEMPOTENCY_CONFLICT');
         return { purchase: existing, replayed: true };
       }
-      const price = await currentProPrice(tx, input.now);
+      const price = await currentProPrice(
+        tx,
+        input.now,
+        isBusiness ? 'business' : 'personal',
+      );
       if (!price) throw new OperationError('PRO_PRICE_NOT_SET');
       if (price.amountMinor !== input.expectedAmountMinor)
         throw new OperationError('PRO_PRICE_CHANGED');
@@ -224,7 +255,9 @@ export function requestProPurchase(
         .from(proPeriods)
         .where(
           and(
-            eq(proPeriods.profileId, input.profileId),
+            isBusiness
+              ? eq(proPeriods.businessId, subject.businessId)
+              : eq(proPeriods.profileId, subject.profileId),
             eq(proPeriods.status, 'SCHEDULED'),
           ),
         );
@@ -234,7 +267,7 @@ export function requestProPurchase(
         .from(proPurchases)
         .where(
           and(
-            eq(proPurchases.profileId, input.profileId),
+            ofSubject,
             inArray(proPurchases.status, ['PENDING', 'COLLECTING', 'UNKNOWN']),
           ),
         );
@@ -246,7 +279,8 @@ export function requestProPurchase(
         .insert(proPurchases)
         .values({
           id,
-          profileId: input.profileId,
+          ...ownerColumns(subject),
+          boughtBy: input.boughtBy ?? null,
           method: input.method,
           priceId: price.id,
           amountMinor: price.amountMinor,
@@ -362,7 +396,7 @@ export async function buyProByCheckout(
   },
 ): Promise<ProPurchaseView & { replayed: boolean }> {
   const { purchase, replayed } = await requestProPurchase(db, {
-    profileId: input.profileId,
+    subject: { profileId: input.profileId },
     method: 'card',
     expectedAmountMinor: input.expectedAmountMinor,
     idempotencyKey: input.idempotencyKey,
@@ -569,7 +603,9 @@ export async function confirmProCheckout(
 ): Promise<{
   outcome: ProConfirmOutcome;
   planChanged: boolean;
-  profileId: string;
+  /** The page whose purchase it was, or null for a business's (then `businessId`). */
+  profileId: string | null;
+  businessId: string | null;
   handleLower: string | null;
 }> {
   const { verified, now } = input;
@@ -584,6 +620,7 @@ export async function confirmProCheckout(
         outcome,
         planChanged,
         profileId: row.profileId,
+        businessId: row.businessId,
         handleLower,
       });
       const cause = input.providerEventRowId ? 'provider_event' : 'system';
@@ -623,7 +660,7 @@ export async function confirmProCheckout(
             ...event,
           });
           // An automatic renewal refused: the normal reminders and grace take over.
-          if (row.method === 'saved_card')
+          if (row.method === 'saved_card' && row.profileId !== null)
             await renewalFailedIn(tx, input.sealing, row, now);
         }
         return done('failed');
@@ -645,23 +682,37 @@ export async function confirmProCheckout(
         return done('review');
       }
       const late = row.status === 'EXPIRED' || row.status === 'FAILED';
-      const paidBy =
+      const paidBy: ProPaidBy =
         row.method === 'saved_card'
           ? 'saved_card'
           : verified.method === 'NGN_BANK_TRANSFER'
             ? 'bank_transfer'
             : 'card';
-      let period: Awaited<ReturnType<typeof startPaidPeriod>>;
+      let period: {
+        startsAt: Date;
+        endsAt: Date;
+        planChanged: boolean;
+        handleLower: string | null;
+      };
+      const start = {
+        purchaseId: row.id,
+        paidBy,
+        amountMinor: row.amountMinor,
+        currency: 'NGN' as const,
+        now,
+      };
       try {
+        // A business's month (Business Pro) takes the business lock, never a page's.
+        const businessId = row.businessId;
         period = await tx.transaction((savepoint) =>
-          startPaidPeriod(savepoint, {
-            profileId: row.profileId,
-            purchaseId: row.id,
-            paidBy,
-            amountMinor: row.amountMinor,
-            currency: 'NGN',
-            now,
-          }),
+          businessId !== null
+            ? startBusinessPaidPeriod(savepoint, { ...start, businessId }).then(
+                (started) => ({ ...started, handleLower: null }),
+              )
+            : startPaidPeriod(savepoint, {
+                ...start,
+                profileId: personOf(row.profileId),
+              }),
         );
       } catch (error) {
         // A month already queued meanwhile (a late payment after another purchase): the money is
@@ -694,7 +745,7 @@ export async function confirmProCheckout(
         },
       });
       // The pretend partner reports a card saved while paying here; the real one by webhook.
-      if (row.saveCard && verified.savedMethod)
+      if (row.saveCard && verified.savedMethod && row.profileId !== null)
         await recordSavedCardIn(tx, {
           provider: row.provider ?? '',
           ...verified.savedMethod,
@@ -717,19 +768,21 @@ export async function confirmProCheckout(
           aggregateId: row.id,
           payload: { purchaseId: row.id, profileId: row.profileId },
         });
-      await mailOwner(tx, input.sealing, {
-        profileId: row.profileId,
-        type: 'pro_receipt',
-        data: {
-          amountMinor: String(row.amountMinor),
-          paidBy,
-          startDate: lagosDateWords(period.startsAt),
-          endDate: lagosDateWords(period.endsAt),
-          purchaseRef: row.id.replaceAll('-', '').slice(-8),
-        },
-        dedupeKey: `pro_receipt.${row.id}`,
-        now,
-      });
+      // A business's receipt goes to the owner who paid with Phase B's mail (Task B4).
+      if (row.profileId !== null)
+        await mailOwner(tx, input.sealing, {
+          profileId: row.profileId,
+          type: 'pro_receipt',
+          data: {
+            amountMinor: String(row.amountMinor),
+            paidBy,
+            startDate: lagosDateWords(period.startsAt),
+            endDate: lagosDateWords(period.endsAt),
+            purchaseRef: row.id.replaceAll('-', '').slice(-8),
+          },
+          dedupeKey: `pro_receipt.${row.id}`,
+          now,
+        });
       return done('paid', period.planChanged, period.handleLower);
     }),
   );
@@ -757,7 +810,8 @@ export async function reconcileProPurchases(
   },
 ): Promise<{
   paid: {
-    profileId: string;
+    profileId: string | null;
+    businessId: string | null;
     handleLower: string | null;
     planChanged: boolean;
   }[];
@@ -786,7 +840,8 @@ export async function reconcileProPurchases(
     .orderBy(asc(proPurchases.createdAt))
     .limit(input.limit ?? 50);
   const paid: {
-    profileId: string;
+    profileId: string | null;
+    businessId: string | null;
     handleLower: string | null;
     planChanged: boolean;
   }[] = [];
@@ -829,6 +884,7 @@ export async function reconcileProPurchases(
       if (result.outcome === 'paid')
         paid.push({
           profileId: result.profileId,
+          businessId: result.businessId,
           handleLower: result.handleLower,
           planChanged: result.planChanged,
         });
@@ -864,7 +920,7 @@ export async function endProForReversal(
       });
       if (!input.endPro || row.status !== 'PAID')
         return {
-          profileId: row.profileId,
+          profileId: personOf(row.profileId),
           handleLower: null,
           planChanged: false,
         };
@@ -880,17 +936,18 @@ export async function endProForReversal(
  */
 export async function endPaidMonth(
   tx: Tx,
-  row: { id: string; profileId: string },
+  row: { id: string; profileId: string | null },
   at: Date,
 ): Promise<{
   profileId: string;
   handleLower: string | null;
   planChanged: boolean;
 }> {
+  const profileId = personOf(row.profileId);
   const [page] = await tx
     .select({ handleLower: profiles.handleLower })
     .from(profiles)
-    .where(eq(profiles.id, row.profileId))
+    .where(eq(profiles.id, profileId))
     .for('update');
   await tx.execute(sql`
     UPDATE pro_periods
@@ -901,9 +958,9 @@ export async function endPaidMonth(
                               LEAST(ends_at, ${at}::timestamptz - interval '2 milliseconds'))
                            + interval '1 millisecond'
      WHERE purchase_id = ${row.id} AND status <> 'ENDED'`);
-  const plan = await recomputePlan(tx, row.profileId, at);
+  const plan = await recomputePlan(tx, profileId, at);
   return {
-    profileId: row.profileId,
+    profileId,
     handleLower: page?.handleLower ?? null,
     planChanged: plan.changed,
   };
