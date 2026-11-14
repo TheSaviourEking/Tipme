@@ -5478,6 +5478,9 @@
                   },
                   "tipSound": {
                     "type": "boolean"
+                  },
+                  "newsEmails": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -9376,6 +9379,644 @@
           }
         ],
         "x-tipme-permission": "recoveries.manage"
+      }
+    },
+    "/v1/ops/announcements": {
+      "get": {
+        "operationId": "OpsAnnouncements.list",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      },
+      "post": {
+        "operationId": "OpsAnnouncements.create",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/preview": {
+      "post": {
+        "operationId": "OpsAnnouncements.preview",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}": {
+      "get": {
+        "operationId": "OpsAnnouncements.read",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      },
+      "put": {
+        "operationId": "OpsAnnouncements.edit",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/cancel": {
+      "post": {
+        "operationId": "OpsAnnouncements.cancel",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/send": {
+      "post": {
+        "operationId": "OpsAnnouncements.send",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "reason",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/test": {
+      "post": {
+        "operationId": "OpsAnnouncements.test",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
       }
     },
     "/v1/ops/approvals": {
@@ -15061,7 +15702,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 25,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15090,7 +15731,8 @@
                         "changelog.edit",
                         "changelog.publish",
                         "pro.price",
-                        "switches.manage"
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -15174,7 +15816,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 25,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15203,7 +15845,8 @@
                         "changelog.edit",
                         "changelog.publish",
                         "pro.price",
-                        "switches.manage"
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -15342,7 +15985,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 25,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15371,7 +16014,8 @@
                         "changelog.edit",
                         "changelog.publish",
                         "pro.price",
-                        "switches.manage"
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -15490,7 +16134,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 25,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15519,12 +16163,13 @@
                         "changelog.edit",
                         "changelog.publish",
                         "pro.price",
-                        "switches.manage"
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 25,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15553,7 +16198,8 @@
                         "changelog.edit",
                         "changelog.publish",
                         "pro.price",
-                        "switches.manage"
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -17874,6 +18520,11 @@
                   "CHANGELOG_EDITED_ELSEWHERE",
                   "CHANGELOG_TEXT_NOT_ALLOWED",
                   "CHANGELOG_NOT_FOUND",
+                  "ANNOUNCEMENT_NOT_FOUND",
+                  "ANNOUNCEMENT_EDITED_ELSEWHERE",
+                  "ANNOUNCEMENT_NOT_DRAFT",
+                  "ANNOUNCEMENT_NO_RECIPIENTS",
+                  "ANNOUNCEMENT_EMAIL_NOT_SET_UP",
                   "PRO_PRICE_NOT_SET",
                   "PRO_PRICE_CHANGED",
                   "PRO_PURCHASE_OPEN",

@@ -102,7 +102,8 @@ test('an owner reads every switch with its state, default and history', async ()
   const response = await opsCall(session, 'GET', '/v1/ops/switches');
   assert.equal(response.status, 200);
   const { switches } = (await response.json()).data;
-  assert.equal(switches.length, 12);
+  // 12 from #216, and business_pro, business_signup, business_owners, campaign_pages (train 2).
+  assert.equal(switches.length, 16);
   const studio = switches.find((s) => s.key === 'page_studio');
   assert.equal(studio.on, false);
   assert.equal(studio.envName, 'PAGE_STUDIO_ENABLED');
