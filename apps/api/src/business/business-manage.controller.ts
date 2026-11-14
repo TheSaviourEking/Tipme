@@ -30,6 +30,7 @@ import {
   businessDetail,
   closeLocation,
   listManagers,
+  markVerifiedSeen,
   removeManager,
   updateBusiness,
   updateLocation,
@@ -47,6 +48,7 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { BusinessSignupEnabledGuard } from './business-signup.guard.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { signalBusiness } from './business-live.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
@@ -104,9 +106,22 @@ export class BusinessManageController {
   ): Promise<ApiDataResponse<BusinessDetail>> {
     return {
       data: await this.withPlan(
-        await businessDetail(this.database.db, auth.userId, id),
+        await businessDetail(this.database.db, auth.userId, id, {
+          celebrate: await featureOn(this.database.db, 'business_signup'),
+        }),
       ),
     };
+  }
+
+  /** Business sign-up (R19): the "verified" moment was seen. Idempotent. */
+  @Post(':id/verified-seen')
+  @HttpCode(204)
+  @UseGuards(BusinessSignupEnabledGuard)
+  async verifiedSeen(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await markVerifiedSeen(this.database.db, auth.userId, id);
   }
 
   /** Owners. The address (slug) changes only while the business waits to be verified. */

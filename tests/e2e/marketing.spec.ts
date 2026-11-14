@@ -65,7 +65,8 @@ test('with businesses on, the businesses page invites people to create one', asy
   );
   await expect(
     page.getByRole('link', { name: 'Create your business' }),
-  ).toHaveAttribute('href', '/dashboard/business/apply');
+    // Business sign-up is on in the e2e stack: the business path of sign-up.
+  ).toHaveAttribute('href', '/sign-up?for=business');
   await expect(page.getByLabel('Work email')).toHaveCount(0);
   const main = page.getByRole('main');
   await expect(main).not.toContainText(/₦|\bNGN\b|launch date|\bper month\b/i);
@@ -79,6 +80,11 @@ test('the businesses page is centred: the text and the card sit as one block in 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/for-businesses');
   const hero = page.locator('.business-hero');
+  // The coming-soon fallback also has two parts; measure only once the flags have streamed in and
+  // replaced it, or a part can be swapped out between the count and its box (null).
+  await expect(
+    hero.getByRole('link', { name: 'Create your business' }),
+  ).toBeVisible();
   const parts = hero.locator('> *').filter({ visible: true });
   const text = parts.first();
   const card = parts.last();

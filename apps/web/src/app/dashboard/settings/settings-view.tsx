@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { DataSection } from './sections/data';
 import { GettingPaidSection } from './sections/getting-paid';
@@ -7,7 +7,16 @@ import { MakeItYoursSection } from './sections/make-it-yours';
 import { MyPageSection } from './sections/my-page';
 import { NotificationsSection } from './sections/notifications';
 import { PlanSection } from './sections/plan';
-import { PendingRecovery, SecuritySection } from './sections/security';
+import {
+  ContactDetails,
+  Devices,
+  EmailMoveNotice,
+  PendingRecovery,
+  RecoveryEmailCard,
+  SecuritySection,
+} from './sections/security';
+import { RecipientContext } from '@/components/account/recipient-context';
+import { OwnPageCard } from '@/components/business/own-page-card';
 import { SETTINGS_SECTIONS, type SettingsSection } from './sections/section';
 
 const isSection = (id: string): id is SettingsSection =>
@@ -76,7 +85,36 @@ function SettingsNav() {
   );
 }
 
+/**
+ * Business sign-up, Task D4: Settings for a login with a business and no page. Email, sign-in and
+ * security belong to the login, so they are the same as with a page; "Your own page" offers one.
+ */
+function AccountOnlySettings() {
+  useEffect(() => {
+    if (location.hash === '#own-page')
+      document.getElementById('own-page')?.focus();
+  }, []);
+  return (
+    <div className="settings-grid settings-grid--account">
+      <h1>Settings</h1>
+      <PendingRecovery />
+      <div className="settings-chapters">
+        <OwnPageCard place="settings" />
+        <EmailMoveNotice />
+        <ContactDetails />
+        <RecoveryEmailCard />
+        <Devices />
+      </div>
+    </div>
+  );
+}
+
 export function SettingsView() {
+  if (!useContext(RecipientContext)) return <AccountOnlySettings />;
+  return <PageSettings />;
+}
+
+function PageSettings() {
   // Settings draws itself after the profile loads, after the browser has looked for the anchor:
   // a link to a section (#paid) is followed once the sections exist.
   useEffect(() => {

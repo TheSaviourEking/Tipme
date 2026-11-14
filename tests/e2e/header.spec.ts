@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 
 // The marketing header is sticky, and its "Claim your username" button steps aside while Home's hero
 // claim form is on screen (owner, 5 Nov 2026). On phones the button lives in the open menu only.
+// Business sign-up is on in the e2e stack, so the button reads "Get tipped" (owner, 14 Nov 2026).
 
 const claim = (page: import('@playwright/test').Page) =>
   page.locator('.site-header .nav-claim');
@@ -15,7 +16,7 @@ test('on Home the header button is hidden at the top, shown past the form, hidde
     window.scrollTo({ top: 1400, behavior: 'instant' }),
   );
   await expect(claim(page)).toBeVisible();
-  await expect(claim(page)).toHaveText(/Claim your username/);
+  await expect(claim(page)).toHaveText(/Get tipped/);
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await expect(claim(page)).toBeHidden();
 });
@@ -33,7 +34,7 @@ test('while hidden the header button cannot be focused or reached', async ({
     page
       .getByRole('navigation', { name: 'Main navigation' })
       .getByRole('link', {
-        name: 'Claim your username',
+        name: 'Get tipped',
       }),
   ).toHaveCount(0);
 });
@@ -214,22 +215,17 @@ test('@mobile on a phone the closed header has no claim button; the open menu ha
 }) => {
   await page.goto('/');
   const header = page.locator('.site-header');
-  await expect(
-    header.getByRole('link', { name: 'Claim your username' }),
-  ).toBeHidden();
+  await expect(header.getByRole('link', { name: 'Get tipped' })).toBeHidden();
   await page.evaluate(() =>
     window.scrollTo({ top: 1400, behavior: 'instant' }),
   );
-  await expect(
-    header.getByRole('link', { name: 'Claim your username' }),
-  ).toBeHidden();
+  await expect(header.getByRole('link', { name: 'Get tipped' })).toBeHidden();
   expect((await header.boundingBox())?.y).toBe(0);
   await page.getByRole('button', { name: 'Open menu' }).click();
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
-  await expect(
-    nav.getByRole('link', { name: 'Claim your username' }),
-  ).toBeVisible();
-  await expect(
-    nav.getByRole('link', { name: 'Claim your username' }),
-  ).toHaveAttribute('href', '/sign-up');
+  await expect(nav.getByRole('link', { name: 'Get tipped' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Get tipped' })).toHaveAttribute(
+    'href',
+    '/sign-up',
+  );
 });

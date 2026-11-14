@@ -38,10 +38,19 @@ export class ReleaseInfoController {
   @Get('health/release')
   @Header('Cache-Control', 'no-store')
   async info(): Promise<ApiDataResponse<ReleaseInfo>> {
-    const [analytics, business, businessPro, display] = await Promise.all([
+    const [
+      analytics,
+      business,
+      businessPro,
+      businessSignup,
+      businessOwners,
+      display,
+    ] = await Promise.all([
       featureOn(this.database.db, 'analytics'),
       featureOn(this.database.db, 'business'),
       featureOn(this.database.db, 'business_pro'),
+      featureOn(this.database.db, 'business_signup'),
+      featureOn(this.database.db, 'business_owners'),
       // The pilot notice and the launch time for the web (owner, 14 Nov 2026, #216). Never throws.
       displaySettingsNow(this.database.db),
     ]);
@@ -56,7 +65,10 @@ export class ReleaseInfoController {
         paymentProvider: this.config.PAYMENT_PROVIDER,
         business,
         display,
+        // Each on top of `business`: off whenever businesses are.
         businessPro: business && businessPro,
+        businessSignup: business && businessSignup,
+        businessOwners: business && businessOwners,
       },
     };
   }

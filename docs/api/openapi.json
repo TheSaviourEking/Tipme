@@ -1574,6 +1574,40 @@
             "session": []
           }
         ]
+      },
+      "get": {
+        "operationId": "Account.account",
+        "tags": [
+          "Account"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/v1/me/activity": {
@@ -1778,6 +1812,10 @@
                       "address"
                     ],
                     "additionalProperties": false
+                  },
+                  "ownerName": {
+                    "type": "string",
+                    "maxLength": 480
                   }
                 },
                 "required": [
@@ -3908,6 +3946,46 @@
                 }
               }
             }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/businesses/{id}/verified-seen": {
+      "post": {
+        "operationId": "BusinessManage.verifiedSeen",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done; no body."
           },
           "default": {
             "description": "An error with a stable code; never echoes request values.",
