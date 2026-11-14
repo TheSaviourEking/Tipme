@@ -124,7 +124,8 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  assert.equal(OPS_PERMISSIONS.length, 25);
+  // 24 before; switches.manage (#216) and announcements.send (#213).
+  assert.equal(OPS_PERMISSIONS.length, 26);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],

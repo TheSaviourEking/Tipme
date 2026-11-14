@@ -107,8 +107,14 @@ test('every announcement carries the reason and the email settings link', () => 
     out.text.includes(`Email settings: ${withSettings.unsubscribeUrl}`),
   );
   assert.ok(out.html.includes('abc.def'));
-  // Nothing loaded from anywhere: no tracking pixel of our own.
-  assert.doesNotMatch(out.html, /<img/i);
+  // Nothing loaded but the header's TipMe logo (dev's email-logo change): no tracking pixel of our own.
+  assert.deepEqual(
+    [...out.html.matchAll(/src="([^"]*)"/g)].map((m) => m[1]),
+    [
+      'https://usetipme.xyz/email/tipme-logo-light-2x.png',
+      'https://usetipme.xyz/email/tipme-logo-dark-2x.png',
+    ],
+  );
 });
 
 test('one optional button: a TipMe path gets the link key, an https link goes as it is', () => {
