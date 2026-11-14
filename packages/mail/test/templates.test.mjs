@@ -571,7 +571,7 @@ test('the welcome email lists the three steps in order, in html and text', () =>
   ];
   assert.ok(
     out.text.includes(
-      'One link people can use to thank you with a tip. Three steps and you are ready:\n\n' +
+      'One link people can use to tip you. Three steps and you are ready:\n\n' +
         steps.map((s, i) => `${i + 1}. ${s}`).join('\n'),
     ),
     out.text,
@@ -710,7 +710,7 @@ const PREVIOUS_SAMPLES = {
   withdrawal_paid: { amountMinor: '250000' },
   withdrawal_failed: { amountMinor: '250000' },
   tip_reversed: {},
-  milestone: { copy: '10 tips! People keep coming back to thank you.' },
+  milestone: { copy: '10 tips! People keep coming back to tip you.' },
   // The take-back emails (#133) arrived beside M2 and M2 didn't redraw them: the data they queue
   // today is their own sample's shape.
   username_take_back_notice: MAIL_TYPES.username_take_back_notice.sample,

@@ -53,7 +53,7 @@ test('drawQrCard letters the card in the family it is given', () => {
   assert.equal(card.fonts.length, 3);
   for (const font of card.fonts)
     assert.ok(font.endsWith('"Manrope test", Arial, sans-serif'), font);
-  assert.deepEqual(card.texts, ['Scan to thank', 'Tobi', input.label]);
+  assert.deepEqual(card.texts, ['Scan to tip', 'Tobi', input.label]);
 });
 
 test('without a family it is Arial, as before', () => {

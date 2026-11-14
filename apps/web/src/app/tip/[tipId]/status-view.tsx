@@ -322,7 +322,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         )}
         {paid && (
           <>
-            <h1>{name} got your thanks.</h1>
+            <h1>{name} got your tip.</h1>
             <p>{amount}, confirmed by our payment partner.</p>
           </>
         )}
@@ -410,7 +410,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         <>
           {notices}
           <Link className="tip-thanks__own" href="/sign-up">
-            Know someone who deserves thanks too? Get your own TipMe page
+            Know someone who deserves a tip too? Get your own TipMe page
           </Link>
         </>
       ) : (

@@ -145,7 +145,7 @@ test('receipt: "Stop Ada recognising me" works, removes this handle\'s key, and 
   await visitor.getByRole('button', { name: /^Pay/ }).click();
   await visitor.waitForURL(/\/tip\//);
   await expect(
-    visitor.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    visitor.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible({ timeout: 20_000 });
   await expect(
     visitor.getByText('Ada can recognise you next time.'),
@@ -170,7 +170,7 @@ test('receipt: "Stop Ada recognising me" works, removes this handle\'s key, and 
   // The server agrees: a reload no longer offers it.
   await visitor.reload();
   await expect(
-    visitor.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    visitor.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible({ timeout: 20_000 });
   await expect(
     visitor.getByText('Ada can recognise you next time.'),
@@ -203,7 +203,7 @@ test('a paid tip without the tick has no recognition line on its receipt', async
   await visitor.goto(`/@${handle}`);
   await tipFromProfile(visitor, { name: 'Chidi' });
   await expect(
-    visitor.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    visitor.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible({ timeout: 20_000 });
   await expect(
     visitor.getByText('Ada can recognise you next time.'),
