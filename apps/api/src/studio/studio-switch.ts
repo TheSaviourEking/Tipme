@@ -1,27 +1,21 @@
 import { Inject, Injectable, type CanActivate } from '@nestjs/common';
-import { API_CONFIG, type ApiConfig } from '../config.js';
+import { featureOn } from '@tipme/database';
 import { CodedHttpException } from '../http/coded.exception.js';
+import { DatabaseProvider } from '../infra/database.js';
 
 /**
- * Whether Page Studio is on. Today this reads PAGE_STUDIO_ENABLED; it moves to the admin switch
- * `page_studio` (feat/admin-switches) once that lands, and only this function changes.
- */
-export function pageStudioOn(
-  config: Pick<ApiConfig, 'PAGE_STUDIO_ENABLED'>,
-): boolean {
-  return config.PAGE_STUDIO_ENABLED;
-}
-
-/**
- * Page Studio is off until switched on: every Studio route then answers 404 exactly as an unknown
- * path, before any session or rate-limit check, so nothing shows that it exists. Put it first.
+ * Page Studio is the `page_studio` admin switch (owner, 14 Nov 2026: no variable), off by default.
+ * Off: every Studio route answers 404 exactly as an unknown path, before any session or rate-limit
+ * check, so nothing shows that it exists. Put it first.
  */
 @Injectable()
 export class StudioEnabledGuard implements CanActivate {
-  constructor(@Inject(API_CONFIG) private readonly config: ApiConfig) {}
+  constructor(
+    @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+  ) {}
 
-  canActivate(): boolean {
-    if (!pageStudioOn(this.config))
+  async canActivate(): Promise<boolean> {
+    if (!(await featureOn(this.database.db, 'page_studio')))
       throw new CodedHttpException(404, 'NOT_FOUND');
     return true;
   }

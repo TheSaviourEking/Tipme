@@ -13,7 +13,13 @@ import {
   staffRemoveStudioImage,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  setSwitch,
+  signIn,
+  startStack,
+} from './helpers.mjs';
 
 // Page Studio storage and API (plan Task 7): drafts, the publish gate, photos and their crops,
 // the public page's fallback, a Pro lapse, staff removal, and the switch. Generated images only.
@@ -39,9 +45,10 @@ before(async () => {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_AVATARS_PER_HOUR: '1000',
-      PAGE_STUDIO_ENABLED: 'true',
     },
   });
+  // Page Studio is the `page_studio` admin switch (owner, 14 Nov 2026), off by default; no variable.
+  await setSwitch(database.pool, 'page_studio', true);
 });
 after(async () => {
   await stack.stop();
@@ -532,19 +539,20 @@ test('staff can remove one Studio photo; it drops out of both versions; audited'
   assert.equal(again.changed, false);
 });
 
-test('every Studio route is 404 while Page Studio is off', async () => {
-  const off = await startStack({
-    databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
-  });
+test('every Studio route is 404 while the page_studio switch is off, and back at once when on', async () => {
+  const { cookie, handle } = await page();
+  const draft = doc([row('row00001', [[heading('blk00001')]])]);
+  const saved = (await json(await save(cookie, 0, draft))).body.data;
+  assert.equal((await publish(cookie, saved.rev)).status, 200);
+  assert.ok((await publicPage(handle)).studio);
+  const at = (method, path, body) =>
+    fetch(`${stack.api}${path}`, {
+      method,
+      headers: browserHeaders(cookie),
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+  await setSwitch(database.pool, 'page_studio', false);
   try {
-    const { cookie } = await signIn(off.api, '+2348039999001');
-    const at = (method, path, body) =>
-      fetch(`${off.api}${path}`, {
-        method,
-        headers: browserHeaders(cookie),
-        ...(body ? { body: JSON.stringify(body) } : {}),
-      });
     for (const [method, path, body] of [
       ['GET', '/v1/me/studio'],
       ['PUT', '/v1/me/studio/draft', { rev: 0, draft: doc([]) }],
@@ -570,9 +578,16 @@ test('every Studio route is 404 while Page Studio is off', async () => {
         404,
         `${method} ${path}`,
       );
+    // The published design waits; the standard page shows.
+    const off = await publicPage(handle);
+    assert.equal(off.handle, handle);
+    assert.equal(off.studio, undefined);
   } finally {
-    await off.stop();
+    await setSwitch(database.pool, 'page_studio', true);
   }
+  // Staff turning it on takes effect without a restart.
+  assert.equal((await at('GET', '/v1/me/studio')).status, 200);
+  assert.ok((await publicPage(handle)).studio);
 });
 
 /** An in-memory stand-in for the R2 store (as in cover-api.test.mjs). */
