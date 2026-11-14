@@ -125,7 +125,7 @@ With `PAYMENTS_LIVE_ENABLED=false` and `bachs-live` deployed. Run every query as
   printf 'url = "%s"\n' "$url" | curl -fsS -K - -H 'content-type: application/json' -d '{"text":"TipMe test alert: please ignore."}' -o /dev/null && echo sent
   ```
   See it arrive.
-- [ ] **BLOCKING, `PILOT_NOTICE=on` before the switch.** In Vercel production, then redeploy the web app (`production.md`, "The pilot notice"). It shows nothing until payments are on.
+- [ ] **BLOCKING, the pilot notice on before the switch.** At `/ops/switches` → "What the web app shows" (`production.md`, "The pilot notice"). It shows nothing until payments are on.
 - [ ] **BLOCKING, the reserve funded.** Real money: the owner pays into the live platform balance through the payment partner's dashboard, as it directs (bank transfer or its top-up page; ask it if the dashboard doesn't say). Above ₦1,000, target ₦20,000. ₦1,000 pays about 20 withdrawals, and the alert fires below it. Overview → Payment reserve shows a fresh reading of that amount.
 - [ ] **BLOCKING, the restore drill is recorded** in `production.md` section 5, against Aiven's latest backup.
 - [ ] **BLOCKING, the webhook is set up.** The live endpoint and secret are set at the provider, and `pnpm release:check --web … --api … --expect-provider bachs-live --expect-live false` passes (an unsigned call gets 401). **This doesn't prove a real delivery:** with checkout closed nothing happens to deliver. Ask the payment partner whether its dashboard can send a signed test event. If it can, send one and see it in Ops as a provider event (an unmatched one is fine). If not, the owner's ₦1,000 tip in section 5 is the first real delivery, and the check is there.

@@ -56,8 +56,8 @@ test('a recipient’s CSV has the 10% amounts and status, never message text', a
   const cells = line.split(',');
   // A supporter's name can never run as a spreadsheet formula.
   assert.equal(cells[1], "'=cmd");
-  // ₦2,500.50: TipMe's 10% = ₦250.05 (processing included), Ada receives ₦2,250.45.
-  assert.deepEqual(cells.slice(2, 6), ['2500.50', '250.05', '2250.45', 'Paid']);
+  // ₦2,500.50: TipMe's 7% on Free = ₦175.04 (processing included), Ada receives ₦2,325.46.
+  assert.deepEqual(cells.slice(2, 6), ['2500.50', '175.04', '2325.46', 'Paid']);
   assert.equal(cells[6], reference.slice(-6));
   // Not made at a business: the three business cells are empty.
   assert.deepEqual(cells.slice(7), ['', '', '']);

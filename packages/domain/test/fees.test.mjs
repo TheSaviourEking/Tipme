@@ -7,7 +7,7 @@ import {
   STANDARD_TIP_PRESETS_MINOR,
 } from '../dist/index.js';
 
-// PRD v1.1 proposed commercial rules (pretend money until approved): TipMe keeps 10% of the tip
+// FEE_POLICY_V1 (history since 12 Nov 2026; fees-v2.test.mjs has the current 5%): TipMe kept 10% of the tip
 // and pays the processing fee out of that share; the recipient receives 90%.
 
 const parts = (b) =>
@@ -15,7 +15,7 @@ const parts = (b) =>
 
 test('the PRD example: a ₦5,000 tip gives ₦500 to TipMe (processing included) and ₦4,500 to the recipient', () => {
   assert.equal(FEE_POLICY_V1.version, 'proposed-v1.1');
-  const quote = priceTip(500000n);
+  const quote = priceTip(500000n, FEE_POLICY_V1);
   assert.equal(quote.platformFeeMinor + quote.providerFeeMinor, 50000n);
   assert.equal(quote.providerFeeMinor, 7500n, 'estimated processing, 1.5%');
   assert.equal(
@@ -36,7 +36,7 @@ test('the parts always add up to the tip, rounding half up, and processing never
     10_000_000n,
     999_999_999_999n,
   ]) {
-    const quote = priceTip(tip);
+    const quote = priceTip(tip, FEE_POLICY_V1);
     assert.equal(parts(quote), tip, String(tip));
     assert.ok(quote.platformFeeMinor >= 0n);
     assert.equal(quote.recipientNetMinor, tip - (tip * 1000n + 5000n) / 10000n);
@@ -44,12 +44,18 @@ test('the parts always add up to the tip, rounding half up, and processing never
 });
 
 test('tips below ₦2,000 are refused; there is no maximum: supporters tip what they want', () => {
-  assert.throws(() => priceTip(199999n), AmountOutOfRangeError);
-  assert.equal(priceTip(10_000_001n).recipientNetMinor, 9_000_001n);
-  assert.equal(priceTip(500_000_000_00n).recipientNetMinor, 450_000_000_00n);
+  assert.throws(() => priceTip(199999n, FEE_POLICY_V1), AmountOutOfRangeError);
+  assert.equal(
+    priceTip(10_000_001n, FEE_POLICY_V1).recipientNetMinor,
+    9_000_001n,
+  );
+  assert.equal(
+    priceTip(500_000_000_00n, FEE_POLICY_V1).recipientNetMinor,
+    450_000_000_00n,
+  );
   assert.equal('maxTipMinor' in FEE_POLICY_V1, false);
   assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
-  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200000n);
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
 });
 
 test('a Pro page’s own minimum raises the floor and never lowers it', () => {
@@ -152,9 +158,9 @@ test('the supporter’s charge equals the tip on every path: normal, fee-free an
 
 test('the smallest tip and the smallest withdrawal are both ₦2,000 (owner, 2 Nov 2026)', () => {
   assert.equal(FEE_POLICY_V1.minTipMinor, 200_000n);
-  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200_000n);
-  assert.throws(() => priceTip(199_900n), AmountOutOfRangeError);
-  assert.equal(priceTip(200_000n).recipientNetMinor, 180_000n);
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200_000n);
+  assert.throws(() => priceTip(199_900n, FEE_POLICY_V1), AmountOutOfRangeError);
+  assert.equal(priceTip(200_000n, FEE_POLICY_V1).recipientNetMinor, 180_000n);
 });
 
 test('the standard amounts all clear the minimum', () => {

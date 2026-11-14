@@ -53,9 +53,11 @@ export interface OpsProPriceRow {
   approvedBy: string | null;
   reason: string;
   createdAt: string;
+  /** Which Pro the price is for (Business Pro, plan Task A5). */
+  plan: 'personal' | 'business';
 }
 
-/** `GET /v1/ops/pro-price`. */
+/** `GET /v1/ops/pro-price` and, for Business Pro, `GET /v1/ops/business-pro-price`. */
 export interface OpsProPrice {
   current: OpsProPriceRow | null;
   history: OpsProPriceRow[];

@@ -95,7 +95,7 @@ test('the owner sees this week in groups of 3, no amounts, and the notes; report
   await page.goto('/dashboard/business');
   const week = page.getByRole('region', { name: 'This week' });
   await expect(week.getByTestId('insights-total')).toHaveText('10');
-  const table = week.getByRole('table', { name: 'Who’s thanked most' });
+  const table = week.getByRole('table', { name: 'Who got the most tips' });
   await expect(table.getByRole('row', { name: /Kemi/ })).toContainText('5');
   await expect(table.getByRole('row', { name: /Ada/ })).toContainText(
     'Hidden to protect a colleague’s privacy',
@@ -171,7 +171,7 @@ test('a staff member shares their amounts from Work; the business then sees thei
   await page.goto('/dashboard/business');
   const table = page
     .getByRole('region', { name: 'This week' })
-    .getByRole('table', { name: 'Who’s thanked most' });
+    .getByRole('table', { name: 'Who got the most tips' });
   await expect(
     table.getByRole('columnheader', { name: 'Tip amounts' }),
   ).toBeVisible();

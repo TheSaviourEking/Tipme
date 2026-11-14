@@ -19,10 +19,14 @@ import {
   profiles,
   users,
 } from '../schema.js';
+import { recordAudit } from './audit.js';
 import { managerOf } from './business-access.js';
+import { mailOwnerChange } from './business-owner-mail.js';
+import { assertCanAddLocation } from './business-limits.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
+import type { MailSealing } from './mail-queue.js';
 
 // TipMe for businesses, PR B1: applying for a business, editing it, its locations and its managers.
 // Every write asks managerOf first, so another business's id reads like an unknown one (rule 2).
@@ -81,6 +85,10 @@ export function applyForBusiness(
         role: 'owner',
         addedBy: userId,
         createdAt: now,
+        // R13: how the owner is named where they have no page. At most 60 characters.
+        shownName: Array.from(input.ownerName ?? input.contactName)
+          .slice(0, 60)
+          .join(''),
       });
       // Ids only (issues carry no names or contacts). The applicant is the subject's person, so
       // a staff member who applied can't be the one to close it.
@@ -95,13 +103,17 @@ export function applyForBusiness(
   });
 }
 
-/** The business as a manager sees it. A location manager sees only their location. */
+/**
+ * The business as a manager sees it. A location manager sees only their location. `celebrate`
+ * (business sign-up, R19) is worked out only when asked: the API asks with its flag on.
+ */
 export function businessDetail(
   db: Database,
   userId: string,
   businessId: string,
+  { celebrate = true }: { celebrate?: boolean } = {},
 ): Promise<BusinessDetail> {
-  return guarded(() => readDetail(db, userId, businessId));
+  return guarded(() => readDetail(db, userId, businessId, celebrate));
 }
 
 /**
@@ -160,10 +172,13 @@ export function addLocation(
   businessId: string,
   input: LocationInput,
   now: Date = new Date(),
+  /** Business Pro (plan Task A4): the API passes the business_pro switch. */
+  opts: { enforceLimits?: boolean } = {},
 ): Promise<BusinessDetail> {
   return guarded(async () => {
     await db.transaction(async (tx) => {
       await managerOf(tx, userId, businessId, { owner: true });
+      if (opts.enforceLimits) await assertCanAddLocation(tx, businessId);
       const inserted = await tx
         .insert(businessLocations)
         .values({
@@ -289,6 +304,7 @@ export function listManagers(
         userId: businessManagers.userId,
         displayName: profiles.displayName,
         handle: profiles.handle,
+        shownName: businessManagers.shownName,
       })
       .from(businessManagers)
       .leftJoin(profiles, eq(profiles.userId, businessManagers.userId))
@@ -307,8 +323,11 @@ export function listManagers(
       managerId: row.managerId,
       role: row.role as ManagerRole,
       ...(row.locationId ? { locationId: row.locationId } : {}),
-      // Never a phone or an email: the name their own page shows, else plain words.
-      name: row.displayName || (row.handle ? `@${row.handle}` : 'A TipMe user'),
+      // Never a phone or an email: the name their own page shows, else the name they gave when
+      // they signed up a business with no page (R13), else plain words.
+      name:
+        row.displayName ||
+        (row.handle ? `@${row.handle}` : row.shownName || 'A TipMe user'),
       you: row.userId === userId,
     }));
   });
@@ -316,24 +335,34 @@ export function listManagers(
 
 /**
  * Owners only. Refuses removing the last owner (BUSINESS_LAST_OWNER). The business row is locked
- * first, so two owners removing each other at the same moment leave one.
+ * first, so two owners stepping down at the same moment leave one.
+ *
+ * An owner may end their own seat, but never another owner's (owner, 14 Nov 2026: "it shouldn't
+ * be easy to take over a business"). That attempt is refused with OWNER_REMOVAL_NEEDS_TIPME and
+ * audited; TipMe staff remove owners (`business.owner_remove`) until the removal procedure (plan
+ * #204, Phase E) ships. Every owner is emailed about a refused attempt and about an owner stepping
+ * down, the one asking or leaving included.
  */
 export function removeManager(
   db: Database,
+  sealing: MailSealing,
   userId: string,
   businessId: string,
   managerId: string,
   now: Date = new Date(),
 ): Promise<void> {
-  return guarded(() =>
-    db.transaction(async (tx) => {
+  return guarded(async () => {
+    const outcome = await db.transaction(async (tx) => {
       await managerOf(tx, userId, businessId, { owner: true });
       await lockBusiness(tx, businessId);
-      // Read again under the lock: an owner removing this person at the same moment has won.
+      // Read again under the lock: a co-owner's change at the same moment has won.
       await managerOf(tx, userId, businessId, { owner: true });
       if (!UUID.test(managerId)) throw new OperationError('NOT_A_MANAGER');
       const [target] = await tx
-        .select({ role: businessManagers.role })
+        .select({
+          role: businessManagers.role,
+          userId: businessManagers.userId,
+        })
         .from(businessManagers)
         .where(
           and(
@@ -343,6 +372,25 @@ export function removeManager(
           ),
         );
       if (!target) throw new OperationError('NOT_A_MANAGER');
+      if (target.role === 'owner' && target.userId !== userId) {
+        // Committed on its own (the refusal is thrown after it), so the attempt stays on record.
+        await recordAudit(tx, {
+          staffUserId: userId,
+          action: 'business.owner_removal_blocked',
+          subjectType: 'business',
+          subjectId: businessId,
+          now,
+        });
+        await mailOwnerChange(tx, sealing, {
+          businessId,
+          change: 'removal_blocked',
+          ownerUserId: target.userId,
+          actorUserId: userId,
+          eventId: newId(),
+          now,
+        });
+        return 'blocked' as const;
+      }
       if (target.role === 'owner') {
         const [owners] = await tx
           .select({ n: sql<number>`count(*)::int` })
@@ -361,8 +409,20 @@ export function removeManager(
         .update(businessManagers)
         .set({ removedAt: now })
         .where(eq(businessManagers.id, managerId));
-    }),
-  );
+      // Only an owner's own seat gets here: they stepped down.
+      if (target.role === 'owner')
+        await mailOwnerChange(tx, sealing, {
+          businessId,
+          change: 'stepped_down',
+          ownerUserId: target.userId,
+          eventId: managerId,
+          now,
+        });
+      return 'removed' as const;
+    });
+    if (outcome === 'blocked')
+      throw new OperationError('OWNER_REMOVAL_NEEDS_TIPME');
+  });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -396,6 +456,7 @@ async function readDetail(
   db: Database | Tx,
   userId: string,
   businessId: string,
+  celebrate = false,
 ): Promise<BusinessDetail> {
   const you = await managerOf(db, userId, businessId);
   const [business] = await db
@@ -439,6 +500,7 @@ async function readDetail(
       email: business.contactEmail,
       ...(business.contactPhone ? { phone: business.contactPhone } : {}),
     },
+    appliedAt: business.createdAt.toISOString(),
     locations: locations.map((location) => ({
       id: location.id,
       slug: location.slug,
@@ -449,6 +511,52 @@ async function readDetail(
     you: {
       role: you.role,
       ...(you.locationId ? { locationId: you.locationId } : {}),
+      ...(celebrate &&
+      status === 'verified' &&
+      (await celebrates(db, you.managerId, business.verifiedAt))
+        ? { celebrate: true as const }
+        : {}),
     },
   };
+}
+
+/**
+ * R19: the "verified" moment shows once, to a manager who was on the business when TipMe
+ * verified it and hasn't marked it seen. Anyone added later has nothing to celebrate.
+ */
+async function celebrates(
+  db: Database | Tx,
+  managerId: string,
+  verifiedAt: Date | null,
+): Promise<boolean> {
+  if (!verifiedAt) return false;
+  const [row] = await db
+    .select({
+      createdAt: businessManagers.createdAt,
+      seen: businessManagers.verifiedSeenAt,
+    })
+    .from(businessManagers)
+    .where(eq(businessManagers.id, managerId));
+  return !!row && row.seen === null && row.createdAt <= verifiedAt;
+}
+
+/** Business sign-up (R19): this manager has seen the "verified" moment. Idempotent. */
+export function markVerifiedSeen(
+  db: Database,
+  userId: string,
+  businessId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  return guarded(async () => {
+    const you = await managerOf(db, userId, businessId);
+    await db
+      .update(businessManagers)
+      .set({ verifiedSeenAt: now })
+      .where(
+        and(
+          eq(businessManagers.id, you.managerId),
+          isNull(businessManagers.verifiedSeenAt),
+        ),
+      );
+  });
 }

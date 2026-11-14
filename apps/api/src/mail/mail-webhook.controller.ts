@@ -12,13 +12,18 @@ import {
 import type { RawBodyRequest } from '@nestjs/common';
 import type { ApiDataResponse } from '@tipme/contracts';
 import { applyMailProviderEvent, type MailSealing } from '@tipme/database';
-import { MAIL_PROVIDER_NAMES, type MailProviderName } from '@tipme/mail';
+import {
+  MAIL_PROVIDER_NAMES,
+  type MailProvider,
+  type MailProviderName,
+} from '@tipme/mail';
 import type { Logger } from '@tipme/observability';
 import type { Request } from 'express';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import {
+  ANNOUNCEMENT_PROVIDER,
   MAIL_PROVIDERS,
   MAIL_SEALING,
   MAIL_SUBSCRIPTION_CONFIRM,
@@ -40,6 +45,9 @@ export class MailWebhookController {
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(MAIL_SUBSCRIPTION_CONFIRM)
     private readonly confirmSubscription: ConfirmSubscription,
+    // Last, so callers that build the controller by position keep working; null outside the app.
+    @Inject(ANNOUNCEMENT_PROVIDER)
+    private readonly announcements: MailProvider | null = null,
   ) {}
 
   @Post(':provider')
@@ -48,9 +56,15 @@ export class MailWebhookController {
     @Param('provider') name: string,
     @Req() request: Pick<RawBodyRequest<Request>, 'rawBody' | 'headers'>,
   ): Promise<ApiDataResponse<{ received: number }>> {
-    const provider = MAIL_PROVIDER_NAMES.includes(name as MailProviderName)
-      ? this.providers.get(name as MailProviderName)
-      : undefined;
+    // Brevo sends announcements only, so it is never in the providers map.
+    const provider =
+      name === 'brevo'
+        ? this.announcements?.name === 'brevo'
+          ? this.announcements
+          : undefined
+        : MAIL_PROVIDER_NAMES.includes(name as MailProviderName)
+          ? this.providers.get(name as MailProviderName)
+          : undefined;
     if (!provider) throw new NotFoundException();
     const rawBody = request.rawBody ?? Buffer.alloc(0);
     try {

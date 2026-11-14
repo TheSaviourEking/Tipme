@@ -32,6 +32,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { FeatureSwitches } from '../switches/feature-switches.service.js';
 import { SERIOUS_SERVICES } from './serious-services.js';
 import { uuidParam } from './actions.controller.js';
 import { FreshCode } from './fresh-code.guard.js';
@@ -51,6 +52,7 @@ export class OpsApprovalsController {
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(FeatureSwitches) private readonly switches: FeatureSwitches,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -92,12 +94,19 @@ export class OpsApprovalsController {
     switch (outcome.status) {
       case 'approved': {
         // After the commit: a public page showing the old fee, as the route would refresh it.
-        const { revalidateHandle, revalidateHandles, revalidateBusiness } =
-          (outcome.result ?? {}) as {
-            revalidateHandle?: unknown;
-            revalidateHandles?: unknown;
-            revalidateBusiness?: unknown;
-          };
+        const {
+          revalidateHandle,
+          revalidateHandles,
+          revalidateBusiness,
+          featureSwitchChanged,
+        } = (outcome.result ?? {}) as {
+          revalidateHandle?: unknown;
+          revalidateHandles?: unknown;
+          revalidateBusiness?: unknown;
+          featureSwitchChanged?: unknown;
+        };
+        // A money switch turned on or off: this copy forgets its switches, the others hear it.
+        if (featureSwitchChanged === true) this.switches.changed();
         if (typeof revalidateHandle === 'string')
           this.revalidator.revalidate(revalidateHandle);
         // A take-back that completes at once moves a page off one name onto another.

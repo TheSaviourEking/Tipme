@@ -1,7 +1,7 @@
 'use client';
 import { qrMatrix, renderQrPixels, type QrStyle } from './qr-render.ts';
 
-/** Draws the square share card: frame, "Scan to thank", the code on its light square, name, link. */
+/** Draws the square share card: frame, "Scan to tip", the code on its light square, name, link. */
 export function drawQrCard(
   canvas: HTMLCanvasElement,
   input: {
@@ -54,7 +54,7 @@ export function drawQrCard(
   ctx.fillStyle = style.frameText;
   ctx.textAlign = 'center';
   ctx.font = `600 ${Math.round(size * 0.045)}px ${family}`;
-  ctx.fillText('Scan to thank', size / 2, size * 0.12);
+  ctx.fillText('Scan to tip', size / 2, size * 0.12);
   ctx.font = `700 ${Math.round(size * 0.06)}px ${family}`;
   ctx.fillText(input.name, size / 2, y + pixels.width + size * 0.11);
   ctx.font = `400 ${Math.round(size * 0.038)}px ${family}`;

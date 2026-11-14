@@ -5,6 +5,7 @@ import type {
   MailProviderName,
   OutgoingMail,
 } from './provider.js';
+import { createBrevoProvider } from './brevo/provider.js';
 import { createSesProvider } from './ses/provider.js';
 import { createZeptoMailProvider } from './zeptomail/provider.js';
 
@@ -33,6 +34,22 @@ export const mailSettingsShape = {
     .string()
     .regex(/^arn:aws:sns:[a-z0-9-]+:\d{12}:[\w-]+$/)
     .optional(),
+  // Announcements only (owner, 14 Nov 2026): Brevo, never the provider above. Optional: without
+  // them, announcements can't be sent in production ("Announcement email isn't set up").
+  BREVO_API_KEY: z.string().min(8).optional(),
+  // Code defaults, not deploy settings (owner, 14 Nov 2026): overrides for tests and emergencies.
+  BREVO_API_BASE: z
+    .url({ protocol: /^https$/ })
+    .default('https://api.brevo.com'),
+  // The bearer token set on Brevo's webhook; without it Brevo's bounce reports are refused.
+  BREVO_WEBHOOK_TOKEN: z.string().min(16).optional(),
+  // on: Brevo checks each request and sends nothing (X-Sib-Sandbox: drop).
+  BREVO_SANDBOX: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
+  // The verified sender of every announcement, e.g. news@usetipme.xyz.
+  ANNOUNCEMENT_FROM_ADDRESS: z.email().optional(),
 };
 
 export interface MailSettings {
@@ -49,6 +66,11 @@ export interface MailSettings {
   SES_CONFIGURATION_SET?: string | undefined;
   SES_CONFIGURATION_SET_UNTRACKED?: string | undefined;
   SES_SNS_TOPIC_ARN?: string | undefined;
+  BREVO_API_KEY?: string | undefined;
+  BREVO_API_BASE?: string | undefined;
+  BREVO_WEBHOOK_TOKEN?: string | undefined;
+  BREVO_SANDBOX?: boolean | undefined;
+  ANNOUNCEMENT_FROM_ADDRESS?: string | undefined;
 }
 
 const ZEPTO_KEYS = [
@@ -56,6 +78,7 @@ const ZEPTO_KEYS = [
   'ZEPTOMAIL_API_BASE',
   'ZEPTOMAIL_WEBHOOK_KEY',
 ] as const;
+const BREVO_KEYS = ['BREVO_API_KEY', 'ANNOUNCEMENT_FROM_ADDRESS'] as const;
 const SES_KEYS = [
   'SES_CONFIGURATION_SET',
   'SES_CONFIGURATION_SET_UNTRACKED',
@@ -92,6 +115,8 @@ export function checkMailSettings(
     issue(key, 'required with the other ZeptoMail settings');
   for (const key of partial(s, SES_KEYS) ?? [])
     issue(key, 'required with the other SES settings');
+  for (const key of partial(s, BREVO_KEYS) ?? [])
+    issue(key, 'required with the other announcement email settings');
   if (
     (s.SES_ACCESS_KEY_ID === undefined) !==
     (s.SES_SECRET_ACCESS_KEY === undefined)
@@ -148,4 +173,24 @@ export function configuredMailProviders(
       }),
     );
   return providers;
+}
+
+/**
+ * The one provider announcements go through: Brevo when its key and sender are set, else the
+ * pretend inbox on a copy that has one (never production), else none, and then announcements
+ * can't be sent. Never the provider other mail uses: announcements must not fall back to it.
+ */
+export function announcementMailProvider(
+  s: MailSettings,
+  mockSink: (mail: OutgoingMail) => Promise<void>,
+): MailProvider | null {
+  if (partial(s, BREVO_KEYS)?.length === 0)
+    return createBrevoProvider({
+      apiKey: s.BREVO_API_KEY!,
+      apiBase: s.BREVO_API_BASE ?? 'https://api.brevo.com',
+      fromAddress: s.ANNOUNCEMENT_FROM_ADDRESS!,
+      webhookToken: s.BREVO_WEBHOOK_TOKEN,
+      sandbox: s.BREVO_SANDBOX ?? false,
+    });
+  return isProduction(s) ? null : createMockMailProvider(mockSink);
 }

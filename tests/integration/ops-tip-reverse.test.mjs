@@ -6,7 +6,13 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { totpAt } from '../../packages/domain/dist/index.js';
-import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  opsSignIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 import { GROSS, NET, reportedReversal } from './reversal-fixtures.mjs';
 
 /*
@@ -26,7 +32,6 @@ startTelemetry({
 
 let database;
 let stack;
-let off;
 let owner;
 let ownerId;
 
@@ -51,14 +56,12 @@ before(async () => {
       BUSINESS_SHARES_ENABLED: 'true',
     },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env });
   owner = await opsSignIn(stack.api, database.db, '+2348037770101');
   [{ id: ownerId }] = await q(`SELECT id FROM users WHERE phone_e164 = $1`, [
     '+2348037770101',
   ]);
 });
 after(async () => {
-  await off?.stop();
   await stack?.stop();
   await database?.close();
 });
@@ -86,7 +89,7 @@ const business = async (businessId) =>
 test('staff reverse a shared tip: both parts come back, audited, alone with the alert', async () => {
   const before = await reportedReversal(database, { bps: 1000 });
   const personBefore = await person(before.profileId);
-  assert.equal(await business(before.businessId), 36000n);
+  assert.equal(await business(before.businessId), 37200n);
   const response = await reverse(before.issueId, full);
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual((await response.json()).data, {
@@ -95,7 +98,7 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
     belowZero: false,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 36000n));
+  assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
   const audits = await q(
@@ -197,11 +200,12 @@ test('the approver sees earlier reversals, and an approval after the flags go of
       /Already taken back from this tip: NGN 500\.00 in 1 reversal/,
     );
     // The flags go off before the second person approves: nothing posts.
+    await setSwitch(database.pool, 'business_shares', false);
     await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
       secondId,
     ]);
     const approved = await fetch(
-      `${off.api}/v1/ops/approvals/${requestId}/approve`,
+      `${stack.api}/v1/ops/approvals/${requestId}/approve`,
       {
         method: 'POST',
         headers: browserHeaders(second.cookie),
@@ -218,6 +222,7 @@ test('the approver sees earlier reversals, and an approval after the flags go of
     );
     assert.notEqual(status, 'approved');
   } finally {
+    await setSwitch(database.pool, 'business_shares', true);
     await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
       secondId,
     ]);
@@ -313,8 +318,13 @@ test('only from an open payment_reversed issue, and off without the flags', asyn
   });
   assert.equal((await reverse(other.id, full)).status, 404);
   assert.equal((await reverse(randomUUID(), full)).status, 404);
-  const flagsOff = await reverse(target.issueId, full, off.api);
-  assert.equal(flagsOff.status, 404);
+  await setSwitch(database.pool, 'business_shares', false);
+  try {
+    const flagsOff = await reverse(target.issueId, full);
+    assert.equal(flagsOff.status, 404);
+  } finally {
+    await setSwitch(database.pool, 'business_shares', true);
+  }
   assert.equal(await target.reversals(), 0);
 });
 

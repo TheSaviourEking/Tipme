@@ -23,6 +23,8 @@ const EMAIL_LABELS = {
   weeklyReports: 'Tell me when my weekly report is ready',
   milestones: 'Tell me about milestones and rewards',
   guideEmails: 'Send me guides and suggestions for getting started',
+  // The owner, 14 Nov 2026: off until the person turns it on (marketing is opt-in).
+  newsEmails: 'News and announcements',
 } as const satisfies Partial<Record<PrefKey, string>>;
 
 // The owner's words (3 Nov 2026), exactly.

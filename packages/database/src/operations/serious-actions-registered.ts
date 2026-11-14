@@ -1,4 +1,6 @@
 import {
+  FEATURE_SWITCH_CATALOGUE,
+  isFeatureSwitch,
   OPS_CATALOGUE,
   OPS_ISSUE_OUTCOME_WORDS,
   type OpsIssueOutcome,
@@ -27,7 +29,10 @@ import {
 } from './email-address.js';
 import {
   businessManagerUsers,
+  businessOwnerSeatFacts,
   businessVerifyFacts,
+  describeOwnerRemoval,
+  removeBusinessOwner,
   verifyBusiness,
 } from './business-ops.js';
 import { startStaffRecovery } from './email-recovery.js';
@@ -46,9 +51,11 @@ import {
   type PreparedPayoutRead,
 } from './payout-staff.js';
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
+import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
+import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
 import {
   checkedProPrice,
@@ -160,6 +167,21 @@ const payoutOwners = async (
     .from(businessManagers)
     .where(eq(businessManagers.businessId, owner.businessId));
   return managers.map(({ userId }) => userId);
+};
+
+/** A business's open owners (Business Pro, ruling R22: a refund's subjects). */
+const openBusinessOwners = async (db: Database | Tx, businessId: string) => {
+  const owners = await db
+    .select({ userId: businessManagers.userId })
+    .from(businessManagers)
+    .where(
+      and(
+        eq(businessManagers.businessId, businessId),
+        eq(businessManagers.role, 'owner'),
+        isNull(businessManagers.removedAt),
+      ),
+    );
+  return owners.map(({ userId }) => userId);
 };
 
 const handleOf = async (db: Database | Tx, profileId: string) => {
@@ -501,7 +523,7 @@ const feeChange = acting<{ profileId: string; feeBps: number | null }>({
   },
   describe: async (tx, { profileId, feeBps }) =>
     `Set @${await handleOf(tx, profileId)}'s fee to ${
-      feeBps === null ? 'the standard fee' : `${feeBps / 100}%`
+      feeBps === null ? 'the plan’s rate' : `${feeBps / 100}%`
     }`,
   act: (tx, { profileId, feeBps }, context) =>
     setAccountFee(tx, {
@@ -560,6 +582,40 @@ const proPriceChange = acting<{ amountMinor: string }>({
     })),
 });
 
+/*
+ * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
+ * plan 'business'. Pinned on the current business price only, so a personal change never makes it
+ * stale (and the other way round).
+ */
+const businessProPriceChange = acting<{ amountMinor: string }>({
+  name: 'business_pro_price.change',
+  permission: 'pro.price',
+  target: () => 'business_pro_price',
+  current: async (tx) => {
+    const price = await currentProPrice(tx, new Date(), 'business');
+    return price
+      ? { id: price.id, amountMinor: String(price.amountMinor) }
+      : null;
+  },
+  describe: async (tx, { amountMinor }) => {
+    const to = checkedProPrice(amountMinor);
+    const from = await currentProPrice(tx, new Date(), 'business');
+    return `Change the Business Pro price ${from ? `from ${nairaOf(from.amountMinor)} ` : ''}to ${nairaOf(to)} a month, for new months only`;
+  },
+  act: (tx, { amountMinor }, context) =>
+    setProPrice(tx, {
+      amountMinor: checkedProPrice(amountMinor),
+      plan: 'business',
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      amountMinor: String(set.amountMinor),
+    })),
+});
+
 /**
  * Paid Pro, plan Task 9 (ruling 6): refund a card-paid Pro month, on the member's request, within
  * 14 days. A second person decides; neither the page's owner nor anyone behind its mailbox can.
@@ -571,6 +627,7 @@ const proRefund = acting<{ purchaseId: string }>({
   permission: 'payments.repair',
   subjects: async ({ purchaseId }, db) => {
     const facts = await proRefundFacts(db, purchaseId, new Date());
+    if (facts.businessId) return openBusinessOwners(db, facts.businessId);
     return facts.profileId ? pageOwner(db, facts.profileId) : [];
   },
   target: ({ purchaseId }) => purchaseId,
@@ -619,6 +676,34 @@ const businessVerify = acting<{ businessId: string }>({
       reason: context.reason,
       now: context.now,
     }).then(({ slug }) => ({ revalidateBusiness: slug })),
+});
+
+/**
+ * Owner-change lock (owner, 14 Nov 2026): an owner never removes another owner; TipMe does, with
+ * a written reason and a second person, until the removal procedure (plan #204, Phase E) ships.
+ * Pinned on the seat, so an owner stepping down after asking makes it stale. Never the last owner.
+ * Nobody who runs the business can ask or decide it, even when they are staff.
+ */
+const businessOwnerRemove = acting<{ businessId: string; managerId: string }>({
+  name: 'business.owner_remove',
+  permission: 'businesses.manage',
+  subjects: ({ businessId }, db) => businessManagerUsers(db, businessId),
+  target: ({ managerId }) => managerId,
+  current: (tx, { businessId, managerId }) =>
+    businessOwnerSeatFacts(tx, businessId, managerId),
+  describe: (tx, { businessId, managerId }) =>
+    describeOwnerRemoval(tx, businessId, managerId),
+  act: (tx, { businessId, managerId }, context) => {
+    if (!context.services) throw new OperationError('INVALID_INPUT');
+    return removeBusinessOwner(tx, {
+      businessId,
+      managerId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+      sealing: context.services.sealing,
+    });
+  },
 });
 
 const opsBusinessName = async (db: Database | Tx, businessId: string) => {
@@ -730,7 +815,10 @@ const tipReverse = acting<TipReversePayload>({
     )
       throw new OperationError('INVALID_INPUT');
     // Approval may come after the flags were turned off: then nothing posts (review finding 3).
-    if (!context.services?.businessSharesEnabled)
+    if (
+      !(await readFeatureSwitch(tx, 'business')) ||
+      !(await readFeatureSwitch(tx, 'business_shares'))
+    )
       throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
     // Each partner refund or dispute is reversed once; a second request for it is refused.
     if (await alreadyReversed(tx, payload.partnerReversalId))
@@ -1070,6 +1158,34 @@ const mailProviderSwitch = acting<{ provider: MailProviderName }>({
   },
 });
 
+/* Feature switches (owner, 14 Nov 2026) */
+
+/**
+ * A money switch on or off (docs/runbooks/settings-and-switches.md). Other switches go through the
+ * route alone, with a reason and a fresh code. Pinned on the switch's value when asked, so a request
+ * the switch has since moved past goes stale.
+ */
+const featureSwitchSet = acting<{ key: string; on: boolean }>({
+  name: 'feature_switch.set',
+  permission: 'switches.manage',
+  target: ({ key }) => key,
+  current: async (tx, { key }) =>
+    isFeatureSwitch(key) ? readFeatureSwitch(tx, key) : null,
+  describe: async (_tx, { key, on }) => {
+    if (!isFeatureSwitch(key)) throw new OperationError('INVALID_INPUT');
+    return `Turn ${FEATURE_SWITCH_CATALOGUE[key].label} ${on ? 'on' : 'off'}`;
+  },
+  act: (tx, { key, on }, context) =>
+    setFeatureSwitch(tx, {
+      key,
+      on,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({ ...set, featureSwitchChanged: true as const })),
+});
+
 let registered = false;
 
 /** Safe to call more than once; registering is what the API and the worker do at start. */
@@ -1088,10 +1204,14 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(mailProviderSwitch);
   registerSeriousAction(takeBackAction);
   registerSeriousAction(businessVerify);
+  registerSeriousAction(businessOwnerRemove);
   registerSeriousAction(tipReverse);
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);
   registerSeriousAction(proRefund);
+  registerSeriousAction(featureSwitchSet);
+  registerSeriousAction(businessProPriceChange);
+  registerSeriousAction(announcementSendAction);
 }
 
 /* Routes whose seriousness depends on what is being done */

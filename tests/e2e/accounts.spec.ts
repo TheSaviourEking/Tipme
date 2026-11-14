@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  signOutOfDashboard,
   expectAccessible,
   fitsViewport,
   identity,
@@ -128,8 +129,8 @@ test('a session survives a reload and signing out ends it', async ({
   await page.waitForURL(/\/dashboard\/welcome$/);
   await page.goto('/dashboard');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  // Business sign-up is on in the e2e stack: Sign out sits in the account menu.
+  await signOutOfDashboard(page);
   await page.waitForURL(/\/sign-in/);
   await page.goto('/dashboard/settings');
   await page.waitForURL(/\/sign-in\?next=/);

@@ -230,6 +230,7 @@ export const ISSUE_KINDS = [
   'payout_unexpected',
   'payout_unresolved',
   'payout_fee_short',
+  'payout_fee_adjusted',
   'payout_held',
   'provider_in_debt',
   'provider_event_conflict',
@@ -841,13 +842,20 @@ export interface OpsWithdrawalFreezeState {
   issueOpen: boolean;
 }
 
-/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+/**
+ * One page's pricing for staff (ADR-0014): a staff-set share (null for none), the page's plan and
+ * its rate (owner, 12 Nov 2026: Free 700, Pro 500 bps), and the rate new quotes use: the deal only
+ * when it is below the plan's rate.
+ */
 export interface OpsPagePricing {
   customFeeBps: number | null;
   feeFreeRemaining: number;
+  plan: 'free' | 'pro';
+  planFeeBps: number;
+  feeBps: number;
 }
 
-/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+/** Staff set one page's TipMe fee in basis points (600 = 6%), or clear it with null (ADR-0014). Capped at the plan's rate when quoted. */
 export const opsPageFeeSchema = opsReasonSchema
   .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
   .strict();
@@ -888,6 +896,93 @@ export interface OpsSearchResult {
     payoutId: string | null;
     at: string;
   }[];
+}
+
+// ---- People (owner's ask, 14 Nov 2026): every account, a page at a time ----
+
+export const OPS_PEOPLE_PER_PAGE = [25, 50, 100] as const;
+export const OPS_PEOPLE_SORTS = [
+  'newest',
+  'oldest',
+  'name',
+  'most_tips',
+] as const;
+export type OpsPeopleSort = (typeof OPS_PEOPLE_SORTS)[number];
+/**
+ * What the schema can answer about a page: no profile row is "none"; a TipMe suspension wins over
+ * the owner's own switch; otherwise live or offline (`not_live`). A deleted page counts as none.
+ */
+export const OPS_PEOPLE_PAGE_STATUSES = [
+  'live',
+  'offline',
+  'suspended',
+  'none',
+] as const;
+export type OpsPeoplePageStatus = (typeof OPS_PEOPLE_PAGE_STATUSES)[number];
+
+const calendarDay = z.iso.date();
+
+/**
+ * GET /v1/ops/users. `q` matches a name or handle (a leading @ is ignored), and for `private.view`
+ * holders a whole email address too. Joined dates are Lagos days, both ends included. The
+ * `most_tips` sort needs `private.view`; the API refuses it otherwise.
+ */
+export const opsPeopleQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).max(100_000).default(1),
+    perPage: z
+      .enum(['25', '50', '100'])
+      .default('25')
+      .transform(
+        (value) => Number(value) as (typeof OPS_PEOPLE_PER_PAGE)[number],
+      ),
+    q: z.string().trim().max(100).optional(),
+    plan: z.enum(['free', 'pro']).optional(),
+    pageStatus: z.enum(OPS_PEOPLE_PAGE_STATUSES).optional(),
+    payouts: z.enum(['set_up', 'not_set_up']).optional(),
+    joinedFrom: calendarDay.optional(),
+    joinedTo: calendarDay.optional(),
+    sort: z.enum(OPS_PEOPLE_SORTS).default('newest'),
+  })
+  .strict();
+export type OpsPeopleQuery = z.output<typeof opsPeopleQuerySchema>;
+
+/** One account in the People list. Never a phone number, bank detail or full email. */
+export interface OpsPerson {
+  id: string;
+  /** The page's name, else the name of a business they run, else null. */
+  displayName: string | null;
+  /** null: no page yet. */
+  handle: string | null;
+  /** The page's photo, only while the page is live (the photo route serves live pages only). */
+  avatarPath: string | null;
+  /** The cover colour id from COVER_COLOURS, for the grid's strip; null for the default. */
+  coverColour: string | null;
+  plan: 'free' | 'pro';
+  pageStatus: OpsPeoplePageStatus;
+  payoutsSetUp: boolean;
+  /** Runs a business (an open manager on one). */
+  business: boolean;
+  joinedAt: string;
+  /** The last time any of their sessions was used; null if never signed in. */
+  lastActiveAt: string | null;
+  /** Always masked (`a•••@domain`); the full address is a reveal with a reason. */
+  email: string | null;
+  /** Kobo, SUCCEEDED tips, gross. Present only for `private.view` holders. */
+  tipsTotalMinor?: string;
+}
+
+export interface OpsPeoplePage {
+  items: OpsPerson[];
+  total: number;
+  /** The page served: a page past the end is the last one. */
+  page: number;
+  perPage: (typeof OPS_PEOPLE_PER_PAGE)[number];
+}
+
+/** What a `private.view` reveal with a reason shows. */
+export interface OpsPersonEmail {
+  email: string | null;
 }
 
 // ---- Mail providers (mail platform spec §5) ----

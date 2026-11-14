@@ -3,11 +3,9 @@ import { previewServerKey } from '@tipme/domain';
 import { createSinglePlaceRedirect } from '@/lib/business/single-place';
 import { shortLinkTarget } from '@/lib/handle-redirect';
 import { gateDecision, PREVIEW_COOKIE } from '@/lib/preview-gate';
-import {
-  launchDecision,
-  legacyProfileTarget,
-  parseProductionLaunchAt,
-} from '@/lib/production-launch';
+import { launchTargetFrom } from '@/lib/display-settings';
+import { readDisplaySettings } from '@/lib/display-settings-api';
+import { launchDecision, legacyProfileTarget } from '@/lib/production-launch';
 
 /**
  * Short links (/kemi → /@kemi; the example people are reserved, so they have none) are a real 308 before anything else. Then, on staging/preview only:
@@ -52,7 +50,8 @@ async function businessRedirect(
 export async function proxy(request: NextRequest) {
   const launch = launchDecision({
     path: request.nextUrl.pathname,
-    target: parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT),
+    // Set in admin (owner, 14 Nov 2026, #216); the old setting until then; unreadable, no gate.
+    target: launchTargetFrom(await readDisplaySettings(), process.env),
     now: Date.now(),
   });
   if (launch === 'rewrite') {

@@ -31,7 +31,7 @@ test('test copy keeps today’s wording', () => {
   );
   assert.equal(
     copy.signUpLede,
-    'An email address and a handle is all it takes to start receiving thanks. Payments are in test mode.',
+    'An email address and a handle is all it takes to start receiving tips. Payments are in test mode.',
   );
   assert.equal(
     copy.formTrust,

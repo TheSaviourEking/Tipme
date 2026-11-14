@@ -107,15 +107,27 @@ export default defineConfig({
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
+        // Every photo, cover and logo upload and every cover-design save comes from 127.0.0.1, and CI
+        // runs a changed spec five times; both limits are covered by
+        // tests/integration/avatars-limit.test.mjs.
+        RATE_LIMIT_AVATARS_PER_HOUR: '10000',
+        RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '10000',
         LIVE_UPDATES_ENABLED: 'true',
         // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
         BUSINESS_ENABLED: 'true',
         // Business release 2 (R2-C1's share agreement, R2-B's Money section: only shares fill a
         // business's own balance), also off by default everywhere else.
         BUSINESS_SHARES_ENABLED: 'true',
+        // Business sign-up (Phase D): the "Get tipped" / "For businesses" fork, a business with no
+        // page, and the account-menu switcher. Seeds the business_signup switch on the lane's fresh
+        // database, as the lines above seed theirs; off by default everywhere else.
+        BUSINESS_SIGNUP_ENABLED: 'true',
         // Paid Pro (ADR-0015): buying a month on pretend money, off by default everywhere else.
         // tests/e2e/pro-buy.spec.ts answers the price read itself to show the "off" state.
         PRO_BILLING_ENABLED: 'true',
+        // Campaign pages (Pro): seeds the campaign_pages switch on the lane's fresh database; off by
+        // default everywhere else.
+        CAMPAIGN_PAGES_ENABLED: 'true',
         RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: '10000',
         RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: '10000',
         // Every page opens a stream from 127.0.0.1.

@@ -116,8 +116,8 @@ export default function WeeklyReportPage() {
           {report.tipCount === 0
             ? 'A quiet week.'
             : report.tipCount === 1
-              ? 'You were thanked once.'
-              : `You were thanked ${report.tipCount} times.`}
+              ? 'You got 1 tip.'
+              : `You got ${report.tipCount} tips.`}
         </p>
         <div className="week-hero__stats">
           <div>

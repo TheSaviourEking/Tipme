@@ -1,4 +1,5 @@
 // Release rehearsal (PR-010).
+import type { PublicDisplaySettings } from './switches.js';
 
 /** `test` copies may run the full release check; `live` copies (real people) only read-only. */
 export type ReleaseKind = 'test' | 'live';
@@ -16,6 +17,17 @@ export interface ReleaseInfo {
    * create a business on /for-businesses and in the header; off, they see the coming-soon form.
    */
   business: boolean;
+  /** The pilot notice and the launch time, set in admin (owner, 14 Nov 2026, #216). */
+  display: PublicDisplaySettings;
+  /** Business Pro is switched on (the `business_pro` switch, on top of `business`). */
+  businessPro: boolean;
+  /**
+   * Business sign-up (the `business_signup` switch, on top of `business`): the "Get tipped" / "For
+   * businesses" fork, a business with no personal page, and the account-menu switcher.
+   */
+  businessSignup: boolean;
+  /** Co-owners and handover (the `business_owners` switch, on top of `business`; Phase E, not built yet). */
+  businessOwners: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */
