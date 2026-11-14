@@ -17,6 +17,7 @@ import {
   type ProAutoRenew,
   type ProPurchase,
   type ProPurchaseRequest,
+  type FeatureSwitch,
 } from '@tipme/contracts';
 import {
   buyProByCheckout,
@@ -30,6 +31,7 @@ import {
   myProState,
   pageHandleLower,
   type ProPurchaseView,
+  featureOn,
 } from '@tipme/database';
 import { liveCheckoutOpenFor } from '@tipme/payments';
 import { z } from 'zod';
@@ -79,10 +81,14 @@ export class ProController {
   }
 
   /** Whether this copy lets this page buy: the switch, and live money's own gates. */
-  private billingOpenFor(handle: string | null): boolean {
-    if (!this.config.PRO_BILLING_ENABLED) return false;
+  private async billingOpenFor(handle: string | null): Promise<boolean> {
+    if (!(await this.switchOn('pro_billing'))) return false;
     if (!this.checkout.live) return true;
     return handle !== null && liveCheckoutOpenFor(this.config, handle);
+  }
+
+  private switchOn(key: FeatureSwitch): Promise<boolean> {
+    return featureOn(this.database.db, key);
   }
 
   /** The pretend partner's page lives in the web app; a real one is the partner's own URL. */
@@ -100,6 +106,11 @@ export class ProController {
     const profileId = await myProfileId(this.database.db, auth.userId);
     const state = await myProState(this.database.db, profileId);
     const handle = await this.handleOf(profileId);
+    const [fromBalance, autoRenew, billingOn] = await Promise.all([
+      this.switchOn('pro_pay_from_balance'),
+      this.switchOn('pro_auto_renew'),
+      this.billingOpenFor(handle),
+    ]);
     return {
       data: {
         plan: state.plan,
@@ -131,14 +142,12 @@ export class ProController {
             }
           : null,
         // Paying from the TipMe balance waits on the partner's answer (plan Task 8; ruling 8).
-        methods: this.config.PRO_PAY_FROM_BALANCE
-          ? ['card', 'balance']
-          : ['card'],
-        billingOn: this.billingOpenFor(handle),
+        methods: fromBalance ? ['card', 'balance'] : ['card'],
+        billingOn,
         autoRenew: {
-          available: this.config.PRO_AUTO_RENEW,
+          available: autoRenew,
           on:
-            this.config.PRO_AUTO_RENEW &&
+            autoRenew &&
             (await proAutoRenewState(this.database.db, profileId)).on,
         },
       },
@@ -172,12 +181,12 @@ export class ProController {
       data: 'idempotency-key',
     });
     const profileId = await myProfileId(this.database.db, auth.userId);
-    if (!this.billingOpenFor(await this.handleOf(profileId)))
+    if (!(await this.billingOpenFor(await this.handleOf(profileId))))
       throw new CodedHttpException(404, 'PRO_BILLING_OFF');
     const expectedAmountMinor = BigInt(body.expectedAmountMinor);
     if (body.method === 'balance') {
       // Off: as if the way to pay didn't exist (ruling 8).
-      if (!this.config.PRO_PAY_FROM_BALANCE || body.autoRenew)
+      if (!(await this.switchOn('pro_pay_from_balance')) || body.autoRenew)
         throw new CodedHttpException(400, 'VALIDATION_FAILED');
       const bought = await buyProFromBalance(this.database.db, {
         profileId,
@@ -190,7 +199,7 @@ export class ProController {
       });
       return { data: wire(bought) };
     }
-    if (body.autoRenew && !this.config.PRO_AUTO_RENEW)
+    if (body.autoRenew && !(await this.switchOn('pro_auto_renew')))
       throw new CodedHttpException(400, 'VALIDATION_FAILED');
     const settings = `${this.webOrigin}/dashboard/settings#plan`;
     const customerReference = body.autoRenew

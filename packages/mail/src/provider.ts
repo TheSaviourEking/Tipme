@@ -1,10 +1,15 @@
 /** Mail providers TipMe can send through. Adding one means one adapter here and nothing else. */
-export type MailProviderName = 'mock' | 'zeptomail' | 'ses';
+export type MailProviderName = 'mock' | 'zeptomail' | 'ses' | 'brevo';
 
+/**
+ * Every name a provider can have. `brevo` sends announcements only (announcementMailProvider): it
+ * is never one of the providers other mail uses, never the default and never switched to.
+ */
 export const MAIL_PROVIDER_NAMES: readonly MailProviderName[] = [
   'mock',
   'zeptomail',
   'ses',
+  'brevo',
 ];
 
 /** A rendered email, ready to hand to a provider. Adapters never see template data. */

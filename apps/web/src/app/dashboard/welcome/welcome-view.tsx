@@ -310,7 +310,7 @@ export function WelcomeView() {
         </h1>
         <p className="welcome-lede">
           {live
-            ? 'Your page is live. Anyone with your link or QR code can thank you now.'
+            ? 'Your page is live. Anyone with your link or QR code can tip you now.'
             : 'Your page is ready but not online yet. You can put it online from Settings whenever you like.'}
         </p>
         <Surface material="instrument" className="welcome-card welcome-share">
@@ -420,7 +420,7 @@ export function WelcomeView() {
               maxLength={280}
               value={bio}
               onChange={(event) => setBio(event.target.value)}
-              placeholder="What you make, who you help, or why a little thanks means a lot."
+              placeholder="What you make, who you help, or why a tip means a lot."
               hint={`${bio.length}/280 characters. Shown on your page.`}
             />
             {error && (
@@ -460,7 +460,7 @@ export function WelcomeView() {
             </h1>
             <p className="welcome-copy">
               Right now only you can see it. Once it’s live, anyone with your
-              link or QR code can thank you. You can take it offline any time in
+              link or QR code can tip you. You can take it offline any time in
               Settings.
             </p>
             {profile.suspended && (

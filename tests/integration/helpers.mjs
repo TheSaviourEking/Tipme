@@ -311,3 +311,20 @@ export function openEventStream(url, headers = {}) {
     request.on('error', reject);
   });
 }
+
+/**
+ * Feature switches live in the database (owner, 14 Nov 2026), so a test turns one on or off there,
+ * then clears this process's cached switches (the API and worker of startStack run in this process).
+ * The value a stack's env gives is only its first-start seed.
+ */
+export async function setSwitch(pool, key, on) {
+  const { invalidateFeatureSwitches } =
+    await import('../../packages/database/dist/index.js');
+  await pool.query(
+    `INSERT INTO feature_switches (key, enabled, source, changed_at, reason)
+     VALUES ($1, $2, 'staff', now(), 'Set by a test')
+     ON CONFLICT (key) DO UPDATE SET enabled = $2, source = 'staff', changed_at = now()`,
+    [key, on],
+  );
+  invalidateFeatureSwitches();
+}

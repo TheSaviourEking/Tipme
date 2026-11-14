@@ -64,7 +64,7 @@ export function Footer() {
           </nav>
         </div>
         <div className="footer-bottom">
-          <span>© 2026 TipMe. A little thanks goes a long way.</span>
+          <span>© 2026 TipMe. A little tip goes a long way.</span>
           <PaymentModeSlot>
             {(_mode, copy) => copy.footerNote && <span>{copy.footerNote}</span>}
           </PaymentModeSlot>

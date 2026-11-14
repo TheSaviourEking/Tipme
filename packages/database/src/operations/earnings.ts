@@ -16,7 +16,7 @@ import type { Database } from '../client.js';
 import { guarded } from './errors.js';
 
 // Earnings analytics (Pro, ProEarnings board). Only confirmed tips, at each tip's net (after
-// TipMe's 10%), on the Lagos day it was confirmed. Every amount is a bigint sum in kobo.
+// the TipMe fee each tip recorded), on the Lagos day it was confirmed. Every amount is a bigint sum in kobo.
 
 const ZONE = 'Africa/Lagos';
 
@@ -252,11 +252,21 @@ export function earningsTrend(
 export function myPagePlan(
   db: Database,
   userId: string,
-): Promise<{ profileId: string; pro: boolean } | null> {
+): Promise<{ profileId: string; pro: boolean; handleLower: string } | null> {
   return guarded(async () => {
-    const rows = await db.execute<{ id: string; plan: string }>(sql`
-      SELECT id, plan FROM profiles WHERE user_id = ${userId} AND page_state <> 'deleted' LIMIT 1`);
+    const rows = await db.execute<{
+      id: string;
+      plan: string;
+      handle_lower: string;
+    }>(sql`
+      SELECT id, plan, handle_lower FROM profiles WHERE user_id = ${userId} AND page_state <> 'deleted' LIMIT 1`);
     const row = rows.rows[0];
-    return row ? { profileId: row.id, pro: row.plan === 'pro' } : null;
+    return row
+      ? {
+          profileId: row.id,
+          pro: row.plan === 'pro',
+          handleLower: row.handle_lower,
+        }
+      : null;
   });
 }

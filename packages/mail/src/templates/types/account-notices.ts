@@ -18,7 +18,7 @@ export const welcome = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'One link people can use to thank you with a tip. Three steps and you are ready:',
+            text: 'One link people can use to tip you. Three steps and you are ready:',
           },
           {
             kind: 'steps',

@@ -25,7 +25,13 @@ type Viewer =
  * The /pro page's price block and, on a phone, its foot key (ProPage board). The price is read from
  * the server every time; "Get Pro" shows only when buying is switched on and a price is set.
  */
-export function ProOffer({ sharePercent }: { sharePercent: number }) {
+export function ProOffer({
+  freePercent,
+  proPercent,
+}: {
+  freePercent: number;
+  proPercent: number;
+}) {
   const [price, setPrice] = useState<PriceState>({ kind: 'loading' });
   const [viewer, setViewer] = useState<Viewer>({ kind: 'unknown' });
   const [busy, setBusy] = useState(false);
@@ -154,8 +160,8 @@ export function ProOffer({ sharePercent }: { sharePercent: number }) {
             ) : billingOn ? (
               <>
                 <p className="pro-offer__line">
-                  One plan, everything below. Cancel any time. TipMe keeps{' '}
-                  {sharePercent}% of each tip on both plans.
+                  One plan, everything below. Cancel any time. On Pro, TipMe
+                  keeps {proPercent}% of each tip instead of {freePercent}%.
                 </p>
                 {getPro('Get Pro', 'pro-offer__go')}
                 {problem && (

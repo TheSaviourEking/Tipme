@@ -33,7 +33,7 @@ test('@alone one admin alone does everything at once, sees that they acted alone
   await enrolOwner(page, testInfo);
 
   await page.goto(`/ops/pages?handle=${handle}`);
-  await page.getByLabel('New TipMe fee (%)').fill('7');
+  await page.getByLabel('New TipMe fee (%)').fill('6');
   await page
     .locator('form')
     .filter({ has: page.getByLabel('New TipMe fee (%)') })
@@ -296,7 +296,7 @@ test('@alone a request a second owner can decide shows a count of one on their m
   await expect(page.locator('.ops-frame__count')).toHaveCount(0);
 
   await asker.page.goto(`/ops/pages?handle=${handle}`);
-  await asker.page.getByLabel('New TipMe fee (%)').fill('7');
+  await asker.page.getByLabel('New TipMe fee (%)').fill('6');
   await asker.page
     .locator('form')
     .filter({ has: asker.page.getByLabel('New TipMe fee (%)') })

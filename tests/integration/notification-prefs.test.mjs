@@ -119,6 +119,8 @@ test('preferences default to on, and only true/false for the four known ones are
     guideEmails: true,
     hideTipDetailsInPopups: false,
     tipSound: true,
+    // News and announcements (owner, 14 Nov 2026): off until the person turns it on.
+    newsEmails: false,
   });
   for (const body of [
     {
@@ -173,11 +175,13 @@ test('a PUT with both switches stores them', async () => {
     ...FOUR,
     hideTipDetailsInPopups: true,
     tipSound: false,
+    newsEmails: false,
   });
   assert.deepEqual(await readPrefs(cookie), {
     ...FOUR,
     hideTipDetailsInPopups: true,
     tipSound: false,
+    newsEmails: false,
   });
 });
 
@@ -198,6 +202,7 @@ test('a PUT without the new keys (an older client) leaves them unchanged', async
     milestones: false,
     hideTipDetailsInPopups: true,
     tipSound: false,
+    newsEmails: false,
   });
 });
 
@@ -239,6 +244,7 @@ test('turned off: no tip email, no milestone notice, no weekly-report notice or 
     guideEmails: false,
     hideTipDetailsInPopups: false,
     tipSound: true,
+    newsEmails: false,
   });
 
   await tip('prefs_quiet');

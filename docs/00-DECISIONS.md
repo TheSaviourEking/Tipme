@@ -24,7 +24,7 @@
 | D-02 | Company registration, legal agreements and regulator interpretation | Legal opinion | Founder | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-03 | Payment processor permits tipping, split and settlement flow | Written provider confirmation | Payments | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-04 | Custody/non-custody and settlement account ownership | Signed funds-flow diagram | Finance/Legal | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
-| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: flat 10% TipMe fee, provider paid from it, recipient gets 90% (ADR-0014); refunds and chargebacks OPEN; Pro refunds: see the Pro billing block (9 Nov 2026) |
+| D-05 | Fee policy incl. processing, refunds, chargebacks, net recipient | Approved pricing | Product/Finance | PARTLY DECIDED: plan-based TipMe fee from the next production release (owner, 12 Nov 2026): Free 7%, Pro 5%, processing paid from it (before: flat 10%, ADR-0014; see the 12 Nov block); refunds and chargebacks OPEN; Pro refunds: see the Pro billing block (9 Nov 2026) |
 | D-06 | Recipient verification, payout holds and support model | Provider policy and risk plan | Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-07 | Fraud, sanctions/AML and regional privacy obligations | Compliance assessment | Legal/Risk | OPEN (does not block launch, owner's decision, 1 Nov 2026) |
 | D-08 | Hosting, monitoring budget and supported response coverage | Cost model + staffing | Engineering | OPEN |
@@ -69,7 +69,7 @@
 >   - Every page starts on **Free**: standard amounts of ₦2,000, ₦5,000 and ₦10,000, plus any custom amount from ₦2,000.
 >   - **Pro** lets the recipient choose 1–4 preset amounts and their own minimum, never below ₦2,000. Amounts saved under the old floor are no longer offered. The fee and withdrawal minimum are the same as Free.
 >   - Pro is granted by staff with a written reason and is audited. Paying for Pro: see "Paying for Pro" (9 Nov 2026) below.
->   - Pro does not change the tip fee. The Pro price: see "Paying for Pro" (9 Nov 2026) below.
+>   - Pro does not change the tip fee (superseded 12 Nov 2026: Pro keeps 5%, Free 7%). The Pro price: see "Paying for Pro" (9 Nov 2026) below.
 >   - **Leftover balances:** a withdrawal under ₦2,000 is allowed only when it takes the whole available balance, so nobody is left with money they cannot withdraw or an account they cannot close (the user's decision).
 > - **What the new fee changes in rewards and reports:**
 >   - A fee-free tip now gives the recipient the whole tip, and costs TipMe its whole 10% (processing included).
@@ -182,6 +182,22 @@
 >     - **The stop route has no rate limit:** it needs the receipt's own status token and does nothing without it.
 >     - **The "Your choices" group** on the receipt holds only this line until make-it-yours PR D adds its note-consent withdrawal beside it.
 
+> **Campaign pages, tip goals, thank-yous and statements: the owner's decision, 13–14 Nov 2026.** The owner approved four Pro features and every default on the `ProCampaignPages` board (14 Nov 2026; plan `docs/superpowers/plans/2026-11-14-pro-campaign-pages-goals-thankyous-statements.md`): a page for each Campaign Studio campaign, tip goals worded "tips toward…", custom thank-yous on the receipt and by email, and monthly statements with range exports. It is always the same person: one handle, one balance, one set of withdrawals, the same tip area. This is a product decision. It is not legal advice, and it is not a regulatory, data-protection or payment-partner approval: **D-02, D-03 and D-07 stay OPEN, D-05 stays PARTLY DECIDED.** No fee, minimum, checkout amount, ledger posting or payout changes; statements only read the ledger. Each feature is behind its own switch, off in production until the owner turns it on (admin switches at `/ops/switches`; campaign pages is the `campaign_pages` switch since merge train 2). The owner's rulings:
+>
+> 1. Active goals: 1 on the main page and 1 per campaign.
+> 2. Amounts or percentage: the creator chooses; the default is a percentage.
+> 3. Email: once per tip, from TipMe's address, From name "‹Display name› via TipMe".
+> 4. Statement: made on the 1st (06:00 Lagos) for the month before, emailed as a link; the PDF is never attached.
+> 5. Campaign covers and Page Studio: they count toward Page Studio later (stored as cover choices now).
+> 6. Free keeps its one-line thank-you on the receipt; per-campaign thank-yous, card styles and the email are Pro.
+> 7. "Goal reached" shows for 14 days, or until a new goal is set.
+> 8. Goal target: ₦5,000 to ₦10,000,000, whole naira.
+> 9. The supporter's email is never shown to the creator (not in any of their screens, exports or statements).
+> 10. Campaign pages and search: `noindex, follow`; the canonical address stays `/@handle`.
+> 11. The main goal counts tips to the main page plus tips through campaigns with no goal of their own at the time of the tip.
+>
+> - **G23, "tips toward" and the law (beside D-02):** goals are the owner's product framing, not a legal opinion. The tip goals switch stays off in production until the owner says so. Goal wording refuses "fundraising", "donation", "charity", "crowdfund" and "refund".
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
@@ -230,6 +246,12 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **When a person leaves:** their row, name and notes disappear from the business's view; the location's totals keep their tips (M6). A reported note is hidden from the business until TipMe staff review it (Q4).
 > - **The person's own copy:** the tips file (`/v1/me/exports/tips.csv`) names the business and location a tip was made at and carries the note written about them (a note TipMe removed reads "Removed by TipMe"); the work file (`/v1/me/exports/work.csv`) lists every membership, left ones included.
 
+> **Business Pro (owner, 14 Nov 2026).** The owner's product decision, not legal or regulatory approval: no D-item changes, and nothing here touches tips, fees, checkout or payouts. Board `BusinessPro.dc.html`, plan `docs/superpowers/plans/2026-11-14-business-pro-and-signup.md`, behind the `business_pro` switch on top of `business` (admin, `/ops/switches`; it replaced `BUSINESS_PRO_ENABLED` in merge train 2), off by default.
+> - **Prices:** personal Pro stays ₦5,000 a month. **Business Pro is ₦7,000 a month**, set by staff with `pro.price` exactly like personal Pro (₦100 to ₦1,000,000, whole naira, with a reason; a second person approves, a lone admin acts alone with an alert; history kept; a change applies to new months only, and a shown price is honoured).
+> - **Limits:** Business Free has 3 staff and 1 location; Business Pro has 25 staff and 25 locations, and above that "Talk to us". Owners never count toward the staff limit. A business already above a limit keeps everyone and everything it has and can't add more; a limit never removes or blocks anyone already there, and never stops a tip.
+> - **Fees:** each staff member's tip fee stays their own plan rate (Free 7%, Pro 5%). Business Pro does not give the owner personal Pro.
+> - **Built so far (Phase A):** the plan, the price and the limits. Buying Business Pro, its mail and its features come in later phases. `subscription_revenue` and `platform_clearing` still need finance sign-off (ADR-0006, ADR-0015).
+
 > **Business release 2 (owner's report, 6 Nov 2026).** The owner reported that our payment partner and a legal check said yes to a business sharing staff tips and to team tips. The options are 100/0, 90/10, 80/20, 70/30 and 50/50, with a cap of 50%. This records the owner's report. It is not a regulatory approval, a licence, or written provider confirmation held in this repository. D-03, D-04 and D-05 keep their status (OPEN, OPEN, PARTLY DECIDED), and `AGENTS.md`'s hard stop on real payments is unchanged. Spec `docs/superpowers/specs/2026-11-06-business-design.md` ("Release 2"), plan `docs/superpowers/plans/2026-11-06-business.md` (PRs R2-0 to R2-E). Each part sits behind its own flag on top of `BUSINESS_ENABLED`, off by default: `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED`. The owner turns them on only after the share and team-tip PRs are on dev and the terms and privacy text below is live.
 > - **Safeguards (spec item 11):**
 >   - The split is "staff keeps / business takes", one of the five options; the business never takes more than 50%, so staff always keep at least half. The database refuses any other value.
@@ -246,6 +268,18 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 >   - Q8, a reversal after the money was withdrawn posts anyway: the balance may go below zero, withdrawals for that person or business stop until it is back above zero, and a money issue opens. Nothing is collected automatically. (Default kept.)
 >   - Q9, the share is of what the person receives after TipMe's 10% fee (ADR-0014), so TipMe's fee and the supporter's total are unchanged. The tip page says: "Of what Tobi receives, they keep 90% and 10% goes to The Yellow Chilli." (Owner's answer.)
 >   - Q10, team tips carry no business share. A team tip is split equally among the people on shift at that location when the tip is made; the earliest check-in takes any remaining kobo. (Default kept.)
+
+> **Pricing: Free 7%, Pro 5%, Pro ₦5,000 a month (owner, 12 Nov 2026).** The owner's pricing decision. It is not legal advice, and it is not regulatory or payment-partner approval (D-02, D-03 and D-05 stay as listed).
+> - **TipMe Free:** 7% of each successful tip, no subscription. **TipMe Pro:** ₦5,000 a month plus 5% of each successful tip. Both rates include processing (TipMe pays processing out of its share; the supporter still pays exactly the tip). This replaces the flat 10% (D-05, ADR-0014) and an earlier "flat 5%" instruction the same day.
+> - **When:** from the next production release. A new fee policy (`v2-free-7pct`, `v2-pro-5pct`) applies to quotes created after deploy. A quote already shown (15-minute life) is charged as shown. Tips before keep their recorded 10% (`proposed-v1.1`). Nothing is retroactive.
+> - **Which rate:** the recipient's plan when the quote is made (`profiles.plan`: a staff grant or a paid Pro month, grace included). The rate is recorded on the quote in its version and amounts, so a later plan change never alters a recorded tip. When Pro lapses, the next quotes are 7%. Business tips use the staff member's own plan.
+> - **Old per-page deals:** capped at the page's plan rate. A deal at or above the rate becomes the rate (deals of 7% or more were cleared by migration `0094_fee_deals_capped`, each with a system audit row); a deal below it stays. Fee-free tips already granted stay.
+> - **Pro price:** the default becomes ₦5,000 a month through the price history (migration `0093_pro_price_5000`, with a system audit row). Staff can still change it in ops. Months already paid keep their price.
+> - **Cash rewards** stay at 50% of the fees TipMe recorded on each tip.
+> - **Withdrawals (owner, 12 Nov 2026):** the user pays the partner's ₦50 transfer fee, taken from the amount: withdraw ₦10,000, receive ₦9,950; "Everything" sends the whole balance less ₦50. Each payout records its rule (`payouts.fee_payer`, `user_fee_minor`, migration `0095_payout_fee_payer`): payouts requested before the release keep TipMe topping up, new ones get no top-up and book the fee against the user's (or business's) payable. A ₦50 top-up TipMe already sent and never used pays that account's next withdrawal fee (the user is shown "TipMe pays the ₦50 transfer fee this time"), so it is neither stranded nor counted twice.
+> - **Withdrawals (owner, 14 Nov 2026):** the smallest withdrawal is the system's smallest tip, read from the fee policy's `minTipMinor` (₦2,000 today), so the two can't drift. The whole balance can still be withdrawn below it. **Users pay the partner's whole payout fee, whatever it is; TipMe absorbs nothing.** The partner's docs give no way to know the fee before a payout: its payout quote "carries no fee", and the fee appears only on the created payout (`fee`, `total_debited`), with "NGN 50 flat" as the default and "account-specific fees can differ" (docs.bachs.io `/api-reference/payouts/create-payout-quote`, `/for-you/fees`, `/connect/payouts`). So one config value (`NGN_PAYOUT_FEE_MINOR`, ₦50) is shown as "Transfer fee: ₦50, charged by our payment partner" and taken from the amount. When the payout is paid, a higher fee is debited from the user's (or business's) payable as its own fee line (`payout-fee-extra.<id>`). If that takes the balance below zero, it is recorded there, withdrawals wait (`BALANCE_BELOW_ZERO`) and the next tips pay it back. A lower fee is credited back (`payout-fee-credit.<id>`). Staff get an information-only `payout_fee_adjusted` issue (migration `0096`). Old-rule payouts (`fee_payer = tipme`) are unchanged.
+> - **Withdrawal defaults (Claude's, changeable):** a balance of ₦50 or less can't be withdrawn (`WITHDRAWAL_BELOW_FEE`, said plainly on the screen).
+> - **Claude's defaults (changeable):** both rates are "processing included" (no extra supporter line); the ₦2,000 minimum tip stays.
 
 > **Changelog and What's new (owner, 5–6 Nov 2026).** The owner asked for the full changelog in admin, and for users to see what an update brings when it ships. The `Changelog.dc.html` board was approved on 5–6 Nov 2026. It is on the design canvas only, not in the repo. On 6 Nov the owner said "use the defaults for the changelogs".
 >

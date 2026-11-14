@@ -182,7 +182,7 @@ test('dashboard data', async (t) => {
       assert.equal(detail.message, 'Lovely coffee');
       assert.equal(detail.grossMinor, '200000');
       assert.equal(detail.netMinor, earlyToday.net.toString());
-      assert.equal(detail.platformFeeMinor, '17000');
+      assert.equal(detail.platformFeeMinor, '11000');
       assert.equal(detail.providerFeeMinor, '3000');
       assert.equal(detail.proof.verified, true);
       assert.equal(detail.proof.provider, 'mock');
@@ -488,7 +488,7 @@ test('tip totals count only paid tips, at what the recipient received', async (t
     receivedNetMinor: (a.net + b.net).toString(),
     paidTipCount: 2,
   });
-  assert.equal(totals.receivedNetMinor, '540000');
+  assert.equal(totals.receivedNetMinor, '558000');
   assert.equal((await myTipTotals(db, ADA.id)).paidTipCount, 1);
 });
 

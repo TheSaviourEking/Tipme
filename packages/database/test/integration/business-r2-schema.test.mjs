@@ -57,7 +57,7 @@ test('business release 2 schema', async (t) => {
         values.agreementId,
         values.businessId,
         values.bps ?? 1000,
-        values.shareMinor ?? 18000,
+        values.shareMinor ?? 18600,
       ],
     );
   // A proposal as R2-C1 makes it: proposed_at from the database clock (its default), starting
@@ -142,7 +142,7 @@ test('business release 2 schema', async (t) => {
         }),
         /tip_business_shares_amount/,
       );
-      // 10% of the ₦1,800 net, exactly: accepted once, and then never changed or removed.
+      // 10% of the ₦1,860 net, exactly: accepted once, and then never changed or removed.
       await share({ tipId: atBusiness.tipId, agreementId, businessId });
       await refused(
         q(`UPDATE tip_business_shares SET share_minor = 1 WHERE tip_id = $1`, [

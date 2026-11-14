@@ -5,6 +5,7 @@ import {
   belowMinimum,
   withdrawableNow,
   withdrawFee,
+  withdrawSummary,
   withdrawLamp,
   withdrawRefusal,
   withdrawState,
@@ -17,6 +18,7 @@ const ready = (over = {}) => ({
   ledgerMinor: '180000',
   providerMinor: '500000',
   feeMinor: '5000',
+  feePaidBy: 'user',
   destination: { bankName: 'GTBank', last4: '1234' },
   inReview: false,
   ...over,
@@ -24,12 +26,12 @@ const ready = (over = {}) => ({
 const of = (quote, available = true) =>
   withdrawState({ withdrawalsAvailable: available, quote });
 
-test('ready says where the money goes and who pays the fee', () => {
+test('ready says where the money goes and that the fee comes off the amount', () => {
   const view = of(ready());
   assert.equal(view.canWithdraw, true);
   assert.equal(
     view.notice.body,
-    'You can withdraw ₦1,800 to GTBank ••1234. TipMe pays the ₦50 transfer fee.',
+    'You can withdraw ₦1,800 to GTBank ••1234. Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
 });
 
@@ -360,7 +362,16 @@ test('the unsure words are today’s sentence, split at the full stop', () => {
 });
 
 test('the fee line says who pays the transfer fee, and nothing when there is none', () => {
-  assert.equal(withdrawFee(ready()), 'TipMe pays the ₦50 transfer fee.');
+  // Owner, 12 Nov 2026: users pay it, from the amount.
+  assert.equal(
+    withdrawFee(ready()),
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+  );
+  // While an unused top-up TipMe already sent can pay it.
+  assert.equal(
+    withdrawFee(ready({ feePaidBy: 'tipme' })),
+    'TipMe pays the ₦50 transfer fee this time.',
+  );
   assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
   assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
   assert.equal(withdrawFee(null), null);
@@ -376,4 +387,60 @@ test('below the minimum is only an amount under ₦2,000 that is not everything 
     TOO_SMALL,
     'Too small. The smallest withdrawal is ₦2,000, or your whole balance if it’s less.',
   );
+});
+
+test('the summary: withdraw ₦10,000, the ₦50 fee, you receive ₦9,950 (owner, 12 Nov 2026)', () => {
+  const quote = ready({ withdrawableMinor: '1000000' });
+  assert.deepEqual(withdrawSummary(quote, 1_000_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 995_000n,
+  });
+  // Everything: the whole balance, less the fee.
+  assert.deepEqual(withdrawSummary(ready(), 180_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 175_000n,
+  });
+  // TipMe pays: what arrives is the amount.
+  assert.deepEqual(withdrawSummary(ready({ feePaidBy: 'tipme' }), 180_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'tipme',
+    receiveMinor: 180_000n,
+  });
+  // Nothing would arrive.
+  assert.equal(withdrawSummary(ready(), 5000n), null);
+  assert.equal(withdrawSummary(null, 5000n), null);
+});
+
+test('a balance of ₦50 or less says plainly why it can’t be withdrawn', () => {
+  const view = of(ready({ withdrawableMinor: '4000', ledgerMinor: '4000' }));
+  assert.equal(view.canWithdraw, false);
+  assert.equal(
+    view.notice.body,
+    'Your ₦40 isn’t more than the ₦50 transfer fee, so it can’t be withdrawn yet. It stays in your balance.',
+  );
+  assert.equal(of(ready({ withdrawableMinor: '5000' })).canWithdraw, false);
+  assert.equal(of(ready({ withdrawableMinor: '5001' })).canWithdraw, true);
+  // When TipMe pays, there is no such floor.
+  assert.equal(
+    of(ready({ withdrawableMinor: '4000', feePaidBy: 'tipme' })).canWithdraw,
+    true,
+  );
+  assert.match(
+    withdrawRefusal('WITHDRAWAL_BELOW_FEE').message,
+    /more than the ₦50 transfer fee/,
+  );
+});
+
+test('the fee line names its source plainly, never the partner, and a different fee is explained', async () => {
+  const { FEE_DIFFERENCE_NOTE } = await import('../src/lib/withdraw-state.ts');
+  assert.equal(
+    withdrawFee(ready({ feeMinor: '10000' })),
+    'Transfer fee: ₦100, charged by our payment partner. It comes off the amount you withdraw.',
+  );
+  assert.match(FEE_DIFFERENCE_NOTE, /charges a different fee/);
+  assert.match(FEE_DIFFERENCE_NOTE, /your balance/);
+  for (const text of [withdrawFee(ready()), FEE_DIFFERENCE_NOTE])
+    assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
 });
