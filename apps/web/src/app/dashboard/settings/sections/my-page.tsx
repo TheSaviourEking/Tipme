@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
@@ -576,7 +576,7 @@ export function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: `The smallest tip must be at least ${formatNaira(FEE_POLICY_V1.minTipMinor)}, in whole naira.`,
+        text: `The smallest tip must be at least ${formatNaira(CURRENT_FEE_POLICY.minTipMinor)}, in whole naira.`,
       });
     else
       setError({
@@ -627,7 +627,7 @@ export function TipAmountsSettings() {
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
-          hint={`At least ${formatNaira(FEE_POLICY_V1.minTipMinor)}.`}
+          hint={`At least ${formatNaira(CURRENT_FEE_POLICY.minTipMinor)}.`}
           value={minimum}
           onChange={(e) => {
             setMinimum(e.target.value);

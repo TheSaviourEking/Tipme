@@ -84,8 +84,8 @@ test('a recipient sees their balance, tips and a tip with its proof', async () =
   const tipId = await tipTobi('Lovely coffee');
   const { cookie } = await session('+2348000000002');
   const summary = (await (await get('/v1/me/dashboard', cookie)).json()).data;
-  assert.equal(summary.availableMinor, '360000');
-  assert.equal(summary.today, '360000');
+  assert.equal(summary.availableMinor, '372000');
+  assert.equal(summary.today, '372000');
   assert.equal(summary.last7Days.length, 7);
   const tips = (await (await get('/v1/me/tips?status=paid', cookie)).json())
     .data;

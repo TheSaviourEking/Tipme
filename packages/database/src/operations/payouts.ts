@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
-  FEE_POLICY_V1,
+  CURRENT_FEE_POLICY,
   buildPayoutFeePosting,
   buildPayoutPosting,
   canTransition,
@@ -1690,7 +1690,7 @@ async function requestFor(
       // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
       // they cannot withdraw, or an account they cannot close.
       if (
-        input.amountMinor < FEE_POLICY_V1.minWithdrawalMinor &&
+        input.amountMinor < CURRENT_FEE_POLICY.minWithdrawalMinor &&
         input.amountMinor !== withdrawable
       )
         throw new OperationError('WITHDRAWAL_TOO_SMALL');

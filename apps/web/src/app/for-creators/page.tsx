@@ -1,7 +1,7 @@
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { ActionLink, Container } from '@tipme/ui';
 import { WhereYouMeetPeople } from '@/components/marketing/where-you-meet-people';
-import { TIPME_SHARE_PERCENT } from '@/components/marketing';
+import { FREE_SHARE_PERCENT } from '@/components/marketing';
 import { formatNaira } from '@/lib/demo-amount';
 import { marketingMetadata } from '@/lib/metadata';
 
@@ -11,7 +11,9 @@ export const metadata = marketingMetadata(
   '/for-creators',
 );
 
-const MIN_WITHDRAWAL = formatNaira(Number(FEE_POLICY_V1.minWithdrawalMinor));
+const MIN_WITHDRAWAL = formatNaira(
+  Number(CURRENT_FEE_POLICY.minWithdrawalMinor),
+);
 
 /** Individuals, built to the PageCreators board. The page is server HTML; only the demo is a client island. */
 export default function ForCreators() {
@@ -64,7 +66,7 @@ export default function ForCreators() {
           <div>
             <h2 id="creators-band-title">Your name, your page.</h2>
             <p>
-              Free to start. TipMe keeps {TIPME_SHARE_PERCENT}% of each tip,
+              Free to start. TipMe keeps {FREE_SHARE_PERCENT}% of each tip,
               processing included, and you withdraw to your bank from{' '}
               {MIN_WITHDRAWAL}, or take your whole balance if it is less.
             </p>

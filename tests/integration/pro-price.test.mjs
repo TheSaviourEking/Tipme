@@ -13,7 +13,7 @@ import {
   startStack,
 } from './helpers.mjs';
 
-// Paid Pro, plan Task 3 (owner, 9 Nov 2026): the price lives on the server, ₦2,500 at launch; staff
+// Paid Pro, plan Task 3 (owner, 9 Nov 2026): the price lives on the server, ₦2,500 at launch and ₦5,000 since 12 Nov 2026; staff
 // with pro.price change it with a second approver, or alone with an alert when nobody else can.
 const key = Buffer.from(OPS_TOTP_KEY, 'base64');
 const sealing = ops.mailSealing(Buffer.from(MAIL_SEAL_KEY, 'base64'));
@@ -110,12 +110,12 @@ const approve = (requestId, actorId) =>
 const price = async () =>
   (await ops.currentProPrice(database.db))?.amountMinor ?? null;
 
-test('GET /v1/pro/price returns 250000 NGN a month, cached publicly for 60 seconds', async () => {
+test('GET /v1/pro/price returns 500000 NGN a month, cached publicly for 60 seconds', async () => {
   const response = await fetch(`${stack.api}/v1/pro/price`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('cache-control'), 'public, max-age=60');
   assert.deepEqual((await response.json()).data, {
-    amountMinor: '250000',
+    amountMinor: '500000',
     currency: 'NGN',
     interval: 'month',
     // This copy runs with PRO_BILLING_ENABLED unset, so buying is not open.
@@ -123,15 +123,19 @@ test('GET /v1/pro/price returns 250000 NGN a month, cached publicly for 60 secon
   });
 });
 
-test('the launch price is seeded with the owner’s reason', async () => {
+test('the launch price and the owner’s ₦5,000 are seeded, in order, with the owner’s reasons', async () => {
   const rows = await q(
-    `SELECT amount_minor, currency, set_by, reason FROM pro_prices`,
+    `SELECT amount_minor, currency, set_by, reason FROM pro_prices ORDER BY effective_from`,
   );
-  assert.equal(rows.length, 1);
+  assert.equal(rows.length, 2);
   assert.equal(rows[0].amount_minor, '250000');
-  assert.equal(rows[0].currency, 'NGN');
-  assert.equal(rows[0].set_by, null);
   assert.match(rows[0].reason, /Owner's decision, 9 Nov 2026/);
+  assert.equal(rows[1].amount_minor, '500000');
+  assert.match(rows[1].reason, /12 Nov 2026/);
+  for (const row of rows) {
+    assert.equal(row.currency, 'NGN');
+    assert.equal(row.set_by, null);
+  }
 });
 
 test('staff without pro.price get 403 from the price screen’s routes', async () => {
@@ -172,14 +176,14 @@ test('an owner reads the current price and its history', async () => {
   });
   assert.equal(response.status, 200);
   const { data } = await response.json();
-  assert.equal(data.current.amountMinor, '250000');
-  assert.equal(data.history.length, 1);
+  assert.equal(data.current.amountMinor, '500000');
+  assert.equal(data.history.length, 2);
   assert.equal(data.history[0].setBy, null);
   assert.equal(data.limits.minMinor, '10000');
   assert.equal(data.limits.maxMinor, '100000000');
 });
 
-test('a change with a second staff member waits, and the price stays 250000 until approved', async () => {
+test('a change with a second staff member waits, and the price stays 500000 until approved', async () => {
   const asker = await person();
   await person();
   const outcome = await ask(asker, '300000');
@@ -190,12 +194,12 @@ test('a change with a second staff member waits, and the price stays 250000 unti
   assert.equal(row.permission, 'pro.price');
   assert.equal(
     row.summary,
-    'Change the Pro price from ₦2,500 to ₦3,000 a month, for new months only',
+    'Change the Pro price from ₦5,000 to ₦3,000 a month, for new months only',
   );
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
 });
 
-test('on approval the price is 300000, history has two rows, and the audit names from, to, reason and approver', async () => {
+test('on approval the price is 300000, history has three rows, and the audit names from, to, reason and approver', async () => {
   const asker = await person();
   const approver = await person();
   const { requestId } = await ask(asker, '300000');
@@ -203,7 +207,7 @@ test('on approval the price is 300000, history has two rows, and the audit names
   assert.equal(outcome.status, 'approved', JSON.stringify(outcome));
   assert.equal(await price(), 300000n);
   const history = await ops.proPriceHistory(database.db);
-  assert.equal(history.length, 2);
+  assert.equal(history.length, 3);
   assert.equal(history[0].amountMinor, 300000n);
   assert.equal(history[0].setBy, asker);
   assert.equal(history[0].approvedBy, approver);
@@ -214,7 +218,7 @@ test('on approval the price is 300000, history has two rows, and the audit names
   assert.equal(audit.staff_user_id, asker);
   assert.equal(audit.permission, 'pro.price');
   assert.ok(audit.reason.startsWith(REASON));
-  assert.match(audit.reason, /"from":"250000"/);
+  assert.match(audit.reason, /"from":"500000"/);
   assert.match(audit.reason, /"to":"300000"/);
   assert.match(audit.reason, new RegExp(`"approvedBy":"${approver}"`));
 });
@@ -254,20 +258,20 @@ test('a request goes stale when the price changed while it waited', async () => 
 
 test('out-of-range, part-naira and unchanged prices are refused INVALID_INPUT', async () => {
   const lone = await person();
-  for (const amountMinor of ['9999', '100000100', '250050', '250000', 'abc']) {
+  for (const amountMinor of ['9999', '100000100', '250050', '500000', 'abc']) {
     await assert.rejects(
       ask(lone, amountMinor),
       (error) => error.code === 'INVALID_INPUT',
       amountMinor,
     );
   }
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
 });
 
 test('pro_prices rows cannot be updated or deleted', async () => {
   await assert.rejects(q(`UPDATE pro_prices SET amount_minor = 1`));
   await assert.rejects(q(`DELETE FROM pro_prices`));
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
 });
 
 test('a price set for later is not the current price until then', async () => {
@@ -278,7 +282,7 @@ test('a price set for later is not the current price until then', async () => {
   );
   assert.equal(
     (await ops.currentProPrice(database.db, now)).amountMinor,
-    250000n,
+    500000n,
   );
   assert.equal(
     (

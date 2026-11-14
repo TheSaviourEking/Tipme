@@ -28,7 +28,7 @@ import {
   type MyLinksRequest,
 } from '@tipme/contracts';
 import {
-  FEE_POLICY_V1,
+  CURRENT_FEE_POLICY,
   STANDARD_TIP_PRESETS_MINOR,
   isReservedHandle,
   normaliseHandle,
@@ -272,7 +272,7 @@ export function tipAmountsOf(profile: {
   minTipMinor: bigint | null;
   tipStartMinor?: bigint | null;
 }): TipAmounts {
-  const floor = FEE_POLICY_V1.minTipMinor;
+  const floor = CURRENT_FEE_POLICY.minTipMinor;
   // A page can hold amounts saved under an older, lower floor: offer only what can be paid.
   const payable =
     profile.plan === 'pro' && profile.tipPresetsMinor && profile.minTipMinor
