@@ -486,6 +486,20 @@ test('BUSINESS_SHARES_ENABLED and TEAM_TIPS_ENABLED default to false; true turns
     );
 });
 
+test('BUSINESS_PRO_ENABLED defaults to false; true turns it on; anything else is refused', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  assert.equal(loadApiConfig(dev).BUSINESS_PRO_ENABLED, false);
+  assert.equal(
+    loadApiConfig({ ...dev, BUSINESS_PRO_ENABLED: 'true' })
+      .BUSINESS_PRO_ENABLED,
+    true,
+  );
+  assert.throws(
+    () => loadApiConfig({ ...dev, BUSINESS_PRO_ENABLED: 'yes' }),
+    /BUSINESS_PRO_ENABLED/,
+  );
+});
+
 test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
   const dev = { ...valid, NODE_ENV: 'development' };
   assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
