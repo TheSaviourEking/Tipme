@@ -224,8 +224,11 @@ export class InsightsController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<{ stopped: true }>> {
-    const { profileId } = await this.page(auth);
+    const { profileId, handleLower } = await this.page(auth);
     await stopCampaign(this.database.db, profileId, id);
+    // A campaign page is cached under the profile's tag: a stopped one must go at once.
+    if (await this.flags.isOn('campaign_pages'))
+      this.revalidator.revalidate(handleLower);
     return { data: { stopped: true } };
   }
 
