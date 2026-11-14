@@ -41,6 +41,11 @@ const messages: Record<ApiErrorCode, string> = {
   CAMPAIGN_SLUG_TAKEN:
     'You already have a campaign with that link. Try another.',
   CAMPAIGN_SLUG_UNAVAILABLE: 'That link ending can’t be used. Try another one.',
+  CAMPAIGN_PRO_REQUIRED:
+    'A page for each campaign is part of TipMe Pro.',
+  CAMPAIGN_STOPPED: 'This campaign has stopped, so its page can’t change.',
+  CAMPAIGN_HEADLINE_NAME:
+    'Use your own name in the headline, not someone else’s name or handle.',
   SUPPORT_TOO_MANY_OPEN:
     'You have 3 requests waiting. We’ll answer those first.',
   BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
@@ -367,6 +372,9 @@ const operationErrors: Partial<
     code: 'CAMPAIGN_SLUG_UNAVAILABLE',
   },
   CAMPAIGN_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  CAMPAIGN_PRO_REQUIRED: { status: 403, code: 'CAMPAIGN_PRO_REQUIRED' },
+  CAMPAIGN_STOPPED: { status: 409, code: 'CAMPAIGN_STOPPED' },
+  CAMPAIGN_HEADLINE_NAME: { status: 422, code: 'CAMPAIGN_HEADLINE_NAME' },
   SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },

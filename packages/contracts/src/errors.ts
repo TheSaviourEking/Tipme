@@ -145,6 +145,10 @@ export const apiErrorCodes = [
   'CAMPAIGN_LIMIT',
   'CAMPAIGN_SLUG_TAKEN',
   'CAMPAIGN_SLUG_UNAVAILABLE',
+  // Campaign pages (plan 2026-11-14 Phase A).
+  'CAMPAIGN_PRO_REQUIRED',
+  'CAMPAIGN_STOPPED',
+  'CAMPAIGN_HEADLINE_NAME',
   'SUPPORT_TOO_MANY_OPEN',
   'INTERNAL_ERROR',
 ] as const;

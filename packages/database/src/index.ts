@@ -98,6 +98,7 @@ export * from './operations/plan-history.js';
 export * from './operations/pro-purchases.js';
 export * from './operations/earnings.js';
 export * from './operations/campaigns.js';
+export * from './operations/campaign-pages.js';
 export * from './operations/recaps.js';
 export * from './operations/support.js';
 export * from './operations/pro-balance.js';

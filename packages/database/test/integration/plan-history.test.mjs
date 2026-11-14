@@ -54,15 +54,46 @@ test('proSpans clips to the window', async (t) => {
     await notePlanChange(tx, ADA, 'free', new Date('2026-12-14T00:00:00Z'));
   });
   assert.deepEqual(
-    iso(await proSpans(db.db, ADA, lagosDay('2026-08-01'), lagosDay('2026-09-01'))),
-    [{ from: '2026-08-10T09:00:00.000Z', to: lagosDay('2026-09-01').toISOString() }],
+    iso(
+      await proSpans(
+        db.db,
+        ADA,
+        lagosDay('2026-08-01'),
+        lagosDay('2026-09-01'),
+      ),
+    ),
+    [
+      {
+        from: '2026-08-10T09:00:00.000Z',
+        to: lagosDay('2026-09-01').toISOString(),
+      },
+    ],
   );
   assert.deepEqual(
-    iso(await proSpans(db.db, ADA, lagosDay('2026-12-01'), lagosDay('2027-01-01'))),
-    [{ from: lagosDay('2026-12-01').toISOString(), to: '2026-12-14T00:00:00.000Z' }],
+    iso(
+      await proSpans(
+        db.db,
+        ADA,
+        lagosDay('2026-12-01'),
+        lagosDay('2027-01-01'),
+      ),
+    ),
+    [
+      {
+        from: lagosDay('2026-12-01').toISOString(),
+        to: '2026-12-14T00:00:00.000Z',
+      },
+    ],
   );
   assert.deepEqual(
-    iso(await proSpans(db.db, ADA, lagosDay('2026-10-01'), lagosDay('2026-11-01'))),
+    iso(
+      await proSpans(
+        db.db,
+        ADA,
+        lagosDay('2026-10-01'),
+        lagosDay('2026-11-01'),
+      ),
+    ),
     [
       {
         from: lagosDay('2026-10-01').toISOString(),
@@ -74,12 +105,28 @@ test('proSpans clips to the window', async (t) => {
   await db.db.transaction(async (tx) => {
     await notePlanChange(tx, ADA, 'pro', new Date('2026-12-20T00:00:00Z'));
   });
-  const july = await proSpans(db.db, ADA, lagosDay('2026-07-01'), lagosDay('2026-08-01'));
+  const july = await proSpans(
+    db.db,
+    ADA,
+    lagosDay('2026-07-01'),
+    lagosDay('2026-08-01'),
+  );
   assert.deepEqual(july, []);
-  const december = await proSpans(db.db, ADA, lagosDay('2026-12-01'), lagosDay('2027-01-01'));
+  const december = await proSpans(
+    db.db,
+    ADA,
+    lagosDay('2026-12-01'),
+    lagosDay('2027-01-01'),
+  );
   assert.deepEqual(iso(december), [
-    { from: lagosDay('2026-12-01').toISOString(), to: '2026-12-14T00:00:00.000Z' },
-    { from: '2026-12-20T00:00:00.000Z', to: lagosDay('2027-01-01').toISOString() },
+    {
+      from: lagosDay('2026-12-01').toISOString(),
+      to: '2026-12-14T00:00:00.000Z',
+    },
+    {
+      from: '2026-12-20T00:00:00.000Z',
+      to: lagosDay('2027-01-01').toISOString(),
+    },
   ]);
   assert.equal(wasProAt(december, new Date('2026-12-13T23:59:59.999Z')), true);
   assert.equal(wasProAt(december, new Date('2026-12-14T00:00:00Z')), false);
@@ -103,7 +150,9 @@ test('the migration backfills Pro pages, once', async (t) => {
   const db = await useDatabase(t);
   await db.fresh();
   const dir = new URL('../../drizzle/', import.meta.url);
-  const file = readdirSync(dir).find((name) => /^\d{4}_plan_changes\.sql$/.test(name));
+  const file = readdirSync(dir).find((name) =>
+    /^\d{4}_plan_changes\.sql$/.test(name),
+  );
   assert.ok(file, 'the plan_changes migration exists');
   const backfill = readFileSync(new URL(file, dir), 'utf8')
     .split('--> statement-breakpoint')
@@ -112,7 +161,9 @@ test('the migration backfills Pro pages, once', async (t) => {
   assert.ok(backfill, 'the migration has a backfill');
   // Ada is Pro (made so by SQL, as before the release) with a paid month; Tobi is Pro with none.
   await db.pool.query(`DELETE FROM plan_changes`);
-  await db.pool.query(`UPDATE profiles SET plan = 'pro' WHERE id = ANY($1)`, [[ADA, TOBI]]);
+  await db.pool.query(`UPDATE profiles SET plan = 'pro' WHERE id = ANY($1)`, [
+    [ADA, TOBI],
+  ]);
   await db.pool.query(
     `INSERT INTO pro_periods (id, profile_id, purchase_id, paid_by, amount_minor, currency, starts_at, ends_at, grace_ends_at, status)
      VALUES (gen_random_uuid(), $1, NULL, 'card', 250000, 'NGN', '2026-08-12T08:00:00Z', '2026-09-12T08:00:00Z', '2026-09-15T08:00:00Z', 'ENDED')`,

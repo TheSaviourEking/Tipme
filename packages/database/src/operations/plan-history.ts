@@ -73,7 +73,8 @@ export async function proSpans(
     if (!(clippedFrom < clippedTo)) continue;
     const last = spans[spans.length - 1];
     // Two `pro` rows in a row (a backfill then a note) are one span.
-    if (last && last.to.getTime() === clippedFrom.getTime()) last.to = clippedTo;
+    if (last && last.to.getTime() === clippedFrom.getTime())
+      last.to = clippedTo;
     else spans.push({ from: clippedFrom, to: clippedTo });
   }
   return spans;
@@ -82,5 +83,7 @@ export async function proSpans(
 /** Whether `at` falls inside one of the spans. */
 export function wasProAt(spans: readonly ProSpan[], at: Date): boolean {
   const t = at.getTime();
-  return spans.some((span) => span.from.getTime() <= t && t < span.to.getTime());
+  return spans.some(
+    (span) => span.from.getTime() <= t && t < span.to.getTime(),
+  );
 }

@@ -659,6 +659,13 @@
       "when": 1794681592913,
       "tag": "0093_plan_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1794681860203,
+      "tag": "0094_campaign_pages",
+      "breakpoints": true
     }
   ]
 }
