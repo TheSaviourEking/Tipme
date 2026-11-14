@@ -7,7 +7,7 @@ import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
   'For individuals',
-  'For barbers, drivers, streamers and creators: one personal link or QR code that makes it easy for people to say thanks.',
+  'For barbers, drivers, streamers and creators: one personal link or QR code that makes it easy for people to tip you.',
   '/for-creators',
 );
 
@@ -21,7 +21,7 @@ export default function ForCreators() {
         <section className="creators-hero" aria-labelledby="creators-title">
           <div>
             <h1 id="creators-title" className="creators-title">
-              People already want to thank you.
+              People already want to tip you.
             </h1>
             <p className="creators-lede">
               Barbers, drivers, streamers, creators: put your link in your bio

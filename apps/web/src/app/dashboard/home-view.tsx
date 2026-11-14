@@ -242,7 +242,7 @@ export default function DashboardHome() {
               <li className={live ? undefined : 'recipient-setup__later'}>
                 <div>
                   <strong>Share your link or QR</strong>
-                  <p>Let people know where to send their thanks.</p>
+                  <p>Let people know where to send their tips.</p>
                 </div>
                 {live ? (
                   <Link href="/dashboard/qr">Sharing tools</Link>
@@ -334,7 +334,7 @@ export default function DashboardHome() {
               className="dashboard-recent"
             >
               <div className="dashboard-recent__head">
-                <h2 id="recent-title">Your thanks</h2>
+                <h2 id="recent-title">Your tips</h2>
                 <Link href="/dashboard/tips">See all tips</Link>
               </div>
               <ActivityList

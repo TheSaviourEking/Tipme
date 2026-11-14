@@ -40,7 +40,7 @@ function topTags(person: MemberWeek): string {
 }
 
 /**
- * This week (PR B7, board section 4): who's thanked most at one location, in groups of 3 or
+ * This week (PR B7, board section 4): who got the most tips at one location, in groups of 3 or
  * more, with the busiest hours and the most-mentioned tag. No naira except the weekly totals of
  * people who chose to share theirs.
  */
@@ -176,7 +176,7 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
           {insights.people.length > 0 && (
             <div className="insights__table-wrap">
               <table className="insights__table">
-                <caption>Who’s thanked most</caption>
+                <caption>Who got the most tips</caption>
                 <thead>
                   <tr>
                     <th scope="col">Staff</th>

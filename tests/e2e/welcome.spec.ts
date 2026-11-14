@@ -64,7 +64,7 @@ test('claiming a handle celebrates once: "@handle is yours.", then the hello ste
   ).toBeFocused();
   await expect(
     moment.getByText(
-      'Welcome to TipMe. People can start thanking you the moment your page is online.',
+      'Welcome to TipMe. People can start tipping you the moment your page is online.',
     ),
   ).toBeVisible();
   await expect(moment.getByRole('status')).toHaveText(

@@ -114,7 +114,7 @@ test('the drawn sign decodes to the location URL with src=qr, in every style', (
       'T',
       'The Yellow Chilli',
       'Victoria Island',
-      'Scan to thank our team',
+      'Scan to tip our team',
       '127.0.0.1:3120/b/yellow-chilli/vi',
     ])
       assert.ok(drawn.texts.includes(text), `${style.id} shows ${text}`);

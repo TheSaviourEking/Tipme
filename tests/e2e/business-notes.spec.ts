@@ -39,7 +39,7 @@ const openReceipt = async (
 ) => {
   await page.goto(`/tip/${tipId}#t=${statusToken}`);
   await expect(
-    page.getByRole('heading', { level: 1, name: /got your thanks/ }),
+    page.getByRole('heading', { level: 1, name: /got your tip/ }),
   ).toBeVisible();
 };
 
@@ -111,7 +111,7 @@ test('after paying at a business, the supporter taps tags, writes a few kind wor
   // Written once: the receipt no longer asks.
   await supporter.reload();
   await expect(
-    supporter.getByRole('heading', { level: 1, name: /got your thanks/ }),
+    supporter.getByRole('heading', { level: 1, name: /got your tip/ }),
   ).toBeVisible();
   await expect(
     supporter.getByRole('heading', { name: 'Thanks for tipping Tobi' }),
@@ -142,7 +142,7 @@ test('Skip hides the note for this receipt; nothing is sent and the receipt stay
   ).toBeVisible();
   await supporter.reload();
   await expect(
-    supporter.getByRole('heading', { level: 1, name: /got your thanks/ }),
+    supporter.getByRole('heading', { level: 1, name: /got your tip/ }),
   ).toBeVisible();
   await expect(heading).toHaveCount(0);
   expect(await noteOf(paid.tipId)).toBeUndefined();

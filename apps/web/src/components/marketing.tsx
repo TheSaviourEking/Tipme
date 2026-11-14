@@ -304,7 +304,7 @@ export function TippedSteps() {
         Put your QR on the counter, or your link in your bio.
       </Step>
       <Step
-        title="Get your thanks"
+        title="Get your tips"
         tone="well"
         media={
           <ul className="home-step__tips">
@@ -343,7 +343,7 @@ export function TippingSteps() {
         Add a note if you like. You pay exactly the amount you choose.
       </Step>
       <Step
-        title="Say your thanks"
+        title="Send your tip"
         tone="signature"
         media={<Heart className="home-step__heart" />}
       >
