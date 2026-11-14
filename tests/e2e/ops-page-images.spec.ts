@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { enrolOwner } from './ops-helpers';
 import { API_ORIGIN } from './stack';
+import { chooseAndSave } from './image-picker-helpers';
 
 // Staff review a page's uploaded images (Task 2). The viewer fetches each image from the API
 // with the staff member's session cookie, from another origin, so the cookie, CORS and the
@@ -38,18 +39,22 @@ test('staff view a page’s cover and photo with their session, and remove the c
 }, testInfo) => {
   const { handle } = await signUpRecipient(page, testInfo);
   await page.goto('/dashboard/settings');
-  await page.getByLabel('Choose a photo').setInputFiles({
+  await chooseAndSave(page, page.locator('#photo'), 'Choose a photo', 'photo', {
     name: 'me.jpg',
     mimeType: 'image/jpeg',
     buffer: await jpeg(800, 800),
   });
-  await expect(page.getByText('Photo saved.')).toBeVisible();
-  await page.getByLabel('Upload your own photo').setInputFiles({
+  await expect(
+    page.locator('#photo').getByRole('status').getByText('Photo saved.'),
+  ).toBeVisible();
+  await chooseAndSave(page, page.locator('#cover'), 'Upload a cover', 'cover', {
     name: 'cover.jpg',
     mimeType: 'image/jpeg',
     buffer: await jpeg(1600, 500),
   });
-  await expect(page.getByText('Cover saved.')).toBeVisible();
+  await expect(
+    page.locator('#cover').getByRole('status').getByText('Cover saved.'),
+  ).toBeVisible();
 
   const staff = await (await browser.newContext()).newPage();
   await enrolOwner(staff, testInfo);
