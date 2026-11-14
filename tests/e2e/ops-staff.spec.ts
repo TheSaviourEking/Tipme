@@ -38,6 +38,9 @@ async function askForFee(page: Page, handle: string, percent = '7') {
 
 const requestCard = (page: Page, handle: string) =>
   page.getByRole('article').filter({ hasText: `@${handle}` });
+/** A decided request about this page, in the list of earlier ones. */
+const closedCard = (page: Page, handle: string) =>
+  page.getByRole('listitem').filter({ hasText: `@${handle}` });
 
 test('an owner adds a person; they sign in, enrol, and see only their menu', async ({
   page,
@@ -261,13 +264,16 @@ test('a second person can reject, with a reason, and the person who asked can ca
   await expect(
     other.page.getByText('Rejected. Nothing changed.'),
   ).toBeVisible();
+  // Earlier runs' rejections say the same words, so look in this page's closed request only.
   await expect(
-    other.page.getByText('The fee was never agreed with them'),
+    closedCard(other.page, handle).getByText(
+      'The fee was never agreed with them',
+    ),
   ).toBeVisible();
 
   await page.goto('/ops/approvals');
   await expect(
-    page.getByText('The fee was never agreed with them'),
+    closedCard(page, handle).getByText('The fee was never agreed with them'),
   ).toBeVisible();
   await page.goto(`/ops/pages?handle=${handle}`);
   await expect(page.getByText('(standard)')).toBeVisible();
