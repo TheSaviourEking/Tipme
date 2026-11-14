@@ -46,10 +46,19 @@ test('the individuals page names creators and streamers and keeps one call to cl
   await expect(
     page.getByText(/Barbers, drivers, streamers, creators/),
   ).toBeVisible();
+  // The header's call to action comes from a server slot and can arrive after the page: wait for
+  // it to settle ("Get tipped" with business sign-up on in this stack) before listing the page's
+  // own claim links, or a link can be swapped out between listing and checking it.
+  await expect(
+    page.getByRole('banner').getByRole('link', { name: 'Get tipped' }),
+  ).toBeVisible();
   const claim = page.getByRole('link', { name: 'Claim your username' });
   await expect(claim.first()).toHaveAttribute('href', '/sign-up');
-  for (const link of await claim.all())
-    await expect(link).toHaveAttribute('href', '/sign-up');
+  const hrefs = await claim.evaluateAll((links) =>
+    links.map((link) => link.getAttribute('href')),
+  );
+  expect(hrefs.length).toBeGreaterThan(0);
+  for (const href of hrefs) expect(href).toBe('/sign-up');
   const content = await page.content();
   expect(content).not.toContain('₦1,000');
 });
