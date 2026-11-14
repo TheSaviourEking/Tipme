@@ -123,7 +123,7 @@ test('@alone a money switch waits for a second person, and changes once they app
 
     await page.reload();
     await expect(card.getByTestId('switch-state')).toContainText('On');
-    await card.getByText('History').click();
+    await card.getByText('History', { exact: true }).click();
     await expect(card.getByRole('listitem').first()).toContainText(
       'approved by',
     );

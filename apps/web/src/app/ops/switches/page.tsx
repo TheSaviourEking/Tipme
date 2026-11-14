@@ -114,7 +114,7 @@ function SwitchCard({
             changes it alone, with an alert.
           </p>
         )}
-        {item.history.length > 1 && (
+        {item.history.length > 0 && (
           <details>
             <summary>History</summary>
             <ol className="ops-list">
