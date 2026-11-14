@@ -117,7 +117,11 @@ test('Brevo settings are optional, together, and sandbox is on/off', () => {
   });
   assert.equal(set.BREVO_SANDBOX, true);
   assert.throws(
-    () => loadWorkerConfig({ ...base, BREVO_API_KEY: 'brevo-test-key' }),
+    () =>
+      loadWorkerConfig({
+        ...base,
+        BREVO_API_KEY: 'brevo-test-key',
+      }),
     /ANNOUNCEMENT_FROM_ADDRESS/,
   );
 });
