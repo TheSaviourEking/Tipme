@@ -9,12 +9,18 @@
 // bytes, video status and the profile's bio and link count.
 import fc from 'fast-check';
 import {
+  STUDIO_FIX_NEEDS_INPUT,
   STUDIO_FONTS,
   STUDIO_LIMITS,
+  applyStudioFix,
+  checkDesign,
   cleanStudioText,
   fontsOk,
   resolveStudio,
 } from '../../dist/index.js';
+
+/** fast-check itself, for specs outside this package (the Playwright render test). */
+export { fc };
 
 /** Every generated event is on or after this day, so resolveStudio keeps it. */
 export const TODAY = '2026-11-14';
@@ -464,4 +470,45 @@ export function imageFacts({ width, height, perPixel = 0.08 }) {
       bytes[`${shape}-${w}`] = Math.round(w * (w / aspect) * perPixel);
     }
   return { width, height, bytes };
+}
+
+/**
+ * A random page made to pass the design check the way a person would: apply the first automatic
+ * fix, and where only their input could help (a new photo, new words), remove that block or row.
+ * Pages that pass straight away are mostly tiny; these keep most of what was generated.
+ */
+export function repairToPassing(doc, ctx) {
+  let d = doc;
+  for (let step = 0; step < 120; step += 1) {
+    const { issues } = checkDesign(d, ctx);
+    if (issues.length === 0) return d;
+    const fixable = issues.find((i) =>
+      i.fixes.some((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id)),
+    );
+    let next;
+    if (fixable) {
+      const fix = fixable.fixes.find(
+        (f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id),
+      );
+      next = applyStudioFix(d, fixable, fix.id);
+    } else {
+      const [issue] = issues;
+      if (issue.at.block) next = applyStudioFix(d, issue, 'remove-block');
+      else if (issue.rule === 'photo-resolution')
+        next = applyStudioFix(d, issue, 'plain-background');
+      else next = { ...d, rows: d.rows.filter((r) => r.id !== issue.at.row) };
+    }
+    if (JSON.stringify(next) === JSON.stringify(d))
+      next = { ...d, rows: d.rows.slice(0, -1) };
+    d = next;
+  }
+  return null;
+}
+
+/** A passing page and the facts it passes with, made by repairToPassing. */
+export function studioPassingDocument() {
+  return fc
+    .tuple(studioDocument({ valid: true }), checkContext())
+    .map(([doc, ctx]) => ({ doc: repairToPassing(doc, ctx), ctx }))
+    .filter(({ doc }) => doc !== null);
 }
