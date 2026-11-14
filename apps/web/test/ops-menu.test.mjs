@@ -201,3 +201,14 @@ test('Pro price sits in Work, after Usernames, only with pro.price', () => {
     ['Pages', 'Usernames', 'Pro price'],
   );
 });
+
+// Staff announcements (14 Nov 2026): with the email records, only for announcements.send.
+test('Announcements sits in Email and records, after Changelog, only with announcements.send', () => {
+  assert.ok(!hrefs(['changelog.publish']).includes('/ops/announcements'));
+  assert.deepEqual(
+    opsMenuGroups(['announcements.send', 'changelog.edit'])
+      .find((group) => group.label === 'Email and records')
+      ?.links.map((link) => link.label),
+    ['Changelog', 'Announcements'],
+  );
+});
