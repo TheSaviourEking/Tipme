@@ -133,6 +133,21 @@ Use this only when TipMe needs a name a page holds: a brand, a public figure, on
 
 Links and printed QR codes with the taken name stop working. Nothing about the page's money changes.
 
+## Sending an announcement by email
+
+For news that concerns many people at once, such as a change to fees. It needs `announcements.send`; sending is the serious action `announcement.send` and waits for a second person who holds it too (or runs alone, with the alert, when nobody else does).
+
+1. In **Announcements**, choose **New announcement**. Write the subject, the preview line (shown after the subject in most inboxes) and the text: plain paragraphs with a blank line between them, `**two stars**` around words for bold, and lines starting `- ` for bullets. One button is optional: a TipMe path such as `/pro`, or an `https` link. Never name the payment partner ("our payment partner"), never imply a regulator approved TipMe, and say "tips" for money. The screen refuses those words.
+2. Choose who gets it: everyone with a confirmed email, Free pages, Pro pages, or business owners.
+3. **Save draft**, then **Preview**: the real email, light and dark side by side. **Send a test to me** emails it to your own staff address now; the test has no email settings link, because it is not tied to anyone's settings.
+4. **Ask to send…** with a reason. The screen shows how many people it reaches now; the approver sees that number and the subject in Approvals. Editing the draft afterwards makes the request stale, so ask again.
+5. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker, default 60, 1 to 600), a sixth of it every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email, so sign-in codes are never held up.
+6. **Stop sending…** with a reason stops it at once: nothing more is queued. Emails already queued still go.
+
+**Who gets it.** Only people whose email settings allow it: a confirmed email on a live account, the marketing switch on (it is opt-in: off unless the person turned it on), and the guides and news switch not off. Both are checked again when each email is sent, with the suppression list (bounces and complaints). Every announcement has the email settings link and the one-click unsubscribe header; unsubscribing turns that person's marketing switch off. The same person is never mailed twice for one announcement, even if the worker restarts. Every step is in the audit log (`announcement.created`, `edited`, `test_sent`, `send_started`, `cancelled`, `sent`, and the approval's own rows).
+
+**The rate.** ZeptoMail publishes no per-minute limit, only a daily limit per Mail Agent that staff can set, and that limit is shared with sign-in codes. Before a large send, check the Mail Agent's daily blocking limit leaves room for the day's codes. ZeptoMail is for transactional email and its terms forbid bulk promotional mail, so keep announcements to service news (such as a fee change).
+
 ## Stopping, and starting again
 
 **Stopping takes no code, so it works first time in an incident:** switching off all withdrawals, freezing a page's withdrawals after a reported takeover, and ending an account's sessions. Each still needs its permission and a written reason, and is audited. That is within a live admin session: after an hour idle or 12 hours, opening the session takes one code first.
