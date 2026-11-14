@@ -40,6 +40,7 @@ export * from './operations/pretend-outbox.js';
 export * from './operations/sign-in.js';
 export * from './operations/sessions.js';
 export * from './operations/profiles.js';
+export * from './operations/account.js';
 export * from './operations/username-reservations.js';
 export * from './operations/username-take-backs.js';
 export * from './operations/changelog-admin.js';

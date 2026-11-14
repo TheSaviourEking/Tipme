@@ -154,6 +154,8 @@ export const businessApplicationSchema = z
     contactEmail: emailSchema,
     contactPhone: phoneSchema.optional(),
     location: locationInputSchema,
+    /** Business sign-up (R13): what the owner is called when they have no page. */
+    ownerName: plain(60).optional(),
   })
   .strict();
 export type BusinessApplication = z.infer<typeof businessApplicationSchema>;
@@ -410,9 +412,19 @@ export interface BusinessDetail {
   /** The uploaded logo's served address; it is served publicly only once the business is verified. */
   logoPath?: string;
   contact: { name: string; email: string; phone?: string };
+  /** When the business was sent to TipMe (business sign-up: "Sent to TipMe" while waiting). */
+  appliedAt: string;
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
-  you: { role: ManagerRole; locationId?: string };
+  you: {
+    role: ManagerRole;
+    locationId?: string;
+    /**
+     * Business sign-up (R19): the business was verified while this manager was on it and they
+     * haven't seen the "verified" moment yet. Only with BUSINESS_SIGNUP_ENABLED.
+     */
+    celebrate?: true;
+  };
 }
 export interface MemberRow {
   memberId: string;

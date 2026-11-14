@@ -46,6 +46,11 @@ export class ReleaseInfoController {
         analytics: this.config.ANALYTICS_ENABLED,
         paymentProvider: this.config.PAYMENT_PROVIDER,
         business: this.config.BUSINESS_ENABLED,
+        // Each on top of `business`: off whenever businesses are.
+        businessSignup:
+          this.config.BUSINESS_ENABLED && this.config.BUSINESS_SIGNUP_ENABLED,
+        businessOwners:
+          this.config.BUSINESS_ENABLED && this.config.BUSINESS_OWNERS_ENABLED,
       },
     };
   }

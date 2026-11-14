@@ -1,5 +1,5 @@
 import { Container } from '@tipme/ui';
-import { BusinessAvailableSlot } from '@/components/business/business-available-slot';
+import { ReleaseFlagsSlot } from '@/components/release-flags-slot';
 import { marketingMetadata } from '@/lib/metadata';
 import { BusinessInterestForm } from './business-interest-form';
 import { CreateBusiness } from './create-business';
@@ -29,7 +29,7 @@ function ComingSoon() {
 }
 
 /** On (BUSINESS_ENABLED): an invitation to create a business (owner's answer Q3, 6 Nov 2026). */
-function Open() {
+function Open({ signup }: { signup: boolean }) {
   return (
     <>
       <div>
@@ -41,7 +41,7 @@ function Open() {
           them, and thank them with a tip.
         </p>
       </div>
-      <CreateBusiness />
+      <CreateBusiness signup={signup} />
     </>
   );
 }
@@ -52,9 +52,15 @@ export default function ForBusinesses() {
     <main id="main" tabIndex={-1} className="marketing-page">
       <Container>
         <section className="business-hero" aria-labelledby="businesses-title">
-          <BusinessAvailableSlot fallback={<ComingSoon />}>
-            {(on) => (on ? <Open /> : <ComingSoon />)}
-          </BusinessAvailableSlot>
+          <ReleaseFlagsSlot fallback={<ComingSoon />}>
+            {(flags) =>
+              flags.business ? (
+                <Open signup={flags.businessSignup} />
+              ) : (
+                <ComingSoon />
+              )
+            }
+          </ReleaseFlagsSlot>
         </section>
       </Container>
     </main>

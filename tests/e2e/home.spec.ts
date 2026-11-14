@@ -95,7 +95,8 @@ test('the handle typed on Home is waiting, lowercased, at the handle step of sig
   await page.goto('/');
   const form = page.getByRole('form', { name: 'Claim your link' });
   await form.getByLabel('Your handle').fill(typed);
-  await form.getByRole('button', { name: 'Claim your username' }).click();
+  // Business sign-up is on in the e2e stack: the claim button reads "Get tipped".
+  await form.getByRole('button', { name: 'Get tipped' }).click();
   await expect(page).toHaveURL(/\/sign-up\?handle=/);
   // Through the email and the code (the handle must survive both) to the handle step.
   await signInWithEmail(page, who.email, page.url());

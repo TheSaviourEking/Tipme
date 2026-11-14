@@ -171,6 +171,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | --- | --- | --- | --- | --- |
 | POST | `/v1/auth/sign-out` | yes | – | – |
 | DELETE | `/v1/me/account` | yes | – | – |
+| GET | `/v1/me/account` | n/a (read) | – | – |
 | GET | `/v1/me/activity` | n/a (read) | – | – |
 | DELETE | `/v1/me/avatar` | yes | – | – |
 | PUT | `/v1/me/avatar` | yes | `avatars` | – |
@@ -209,6 +210,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/businesses/{id}/shares` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/accept` | yes | – | – |
 | POST | `/v1/me/businesses/{id}/shares/{agreementId}/decline` | yes | – | – |
+| POST | `/v1/me/businesses/{id}/verified-seen` | yes | – | – |
 | GET | `/v1/me/campaigns` | n/a (read) | – | – |
 | POST | `/v1/me/campaigns` | yes | – | – |
 | GET | `/v1/me/campaigns/{id}` | n/a (read) | – | – |

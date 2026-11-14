@@ -8,6 +8,8 @@ import {
   closeLocation,
   DEMO_PROFILES,
   listManagers,
+  listMembers,
+  markVerifiedSeen,
   removeManager,
   tippableMember,
   updateBusiness,
@@ -607,6 +609,146 @@ test('business setup', async (t) => {
         outcomes.filter((o) => o.status === 'fulfilled').length,
         1,
         'one removal wins',
+      );
+    },
+  );
+});
+
+// Business sign-up, Task D2: a login with no page applies, is named by `shown_name`, and sees the
+// verified moment once.
+test('business sign-up: applying with no page', async (t) => {
+  const database = await useDatabase(t);
+  const q = (text, values) =>
+    database.pool.query(text, values).then((result) => result.rows);
+  await database.fresh();
+  await q(
+    `UPDATE users SET email = 'ada@example.com', email_verified_at = now() WHERE id = $1`,
+    [ADA.userId],
+  );
+  // A login made by an email code, with no page: what "For businesses" leaves behind.
+  const pageless = async (email) => {
+    const id = randomUUID();
+    await q(
+      `INSERT INTO users (id, email, email_verified_at) VALUES ($1, $2, now())`,
+      [id, email],
+    );
+    return id;
+  };
+  const verify = (businessId) =>
+    q(
+      `UPDATE businesses SET status = 'verified', verified_at = now() WHERE id = $1`,
+      [businessId],
+    );
+
+  await t.test(
+    'a code-confirmed login with no page applies and is the owner, named by shown_name',
+    async () => {
+      const ngozi = await pageless(
+        `ngozi-${randomUUID().slice(0, 6)}@example.com`,
+      );
+      const detail = await applyForBusiness(
+        database.db,
+        ngozi,
+        application({ contactName: 'Ngozi Eze', ownerName: 'Ngozi' }),
+      );
+      assert.equal(detail.you.role, 'owner');
+      const [row] = await q(
+        `SELECT role, shown_name, verified_seen_at FROM business_managers WHERE business_id = $1 AND user_id = $2`,
+        [detail.id, ngozi],
+      );
+      assert.deepEqual(row, {
+        role: 'owner',
+        shown_name: 'Ngozi',
+        verified_seen_at: null,
+      });
+      const managers = await listManagers(database.db, ngozi, detail.id);
+      assert.deepEqual(
+        managers.map((m) => [m.name, m.you]),
+        [['Ngozi', true]],
+      );
+    },
+  );
+
+  await t.test(
+    'without ownerName the contact name is the shown name; a page name still wins',
+    async () => {
+      const funke = await pageless(
+        `funke-${randomUUID().slice(0, 6)}@example.com`,
+      );
+      const mine = await applyForBusiness(database.db, funke, application());
+      const [row] = await q(
+        `SELECT shown_name FROM business_managers WHERE business_id = $1 AND user_id = $2`,
+        [mine.id, funke],
+      );
+      assert.equal(row.shown_name, 'Funke Akindele');
+      // Ada has a page: her page name shows, not the contact she typed.
+      const ada = await applyForBusiness(
+        database.db,
+        ADA.userId,
+        application(),
+      );
+      const [adaRow] = await listManagers(database.db, ADA.userId, ada.id);
+      assert.equal(adaRow.name, ADA.displayName);
+    },
+  );
+
+  await t.test(
+    'celebrate is true once the business is verified, false after verified-seen; a manager added after never celebrates',
+    async () => {
+      const owner = await pageless(
+        `owner-${randomUUID().slice(0, 6)}@example.com`,
+      );
+      const detail = await applyForBusiness(database.db, owner, application());
+      assert.equal(
+        (await businessDetail(database.db, owner, detail.id)).you.celebrate,
+        undefined,
+        'not while pending',
+      );
+      await verify(detail.id);
+      assert.equal(
+        (await businessDetail(database.db, owner, detail.id)).you.celebrate,
+        true,
+      );
+      // A co-owner who joins after verification has nothing to celebrate.
+      const later = await pageless(
+        `later-${randomUUID().slice(0, 6)}@example.com`,
+      );
+      await seedManager(database, { businessId: detail.id, userId: later });
+      assert.equal(
+        (await businessDetail(database.db, later, detail.id)).you.celebrate,
+        undefined,
+      );
+      await markVerifiedSeen(database.db, owner, detail.id);
+      await markVerifiedSeen(database.db, owner, detail.id); // idempotent
+      assert.equal(
+        (await businessDetail(database.db, owner, detail.id)).you.celebrate,
+        undefined,
+      );
+      // A stranger's mark reads like an unknown business.
+      assert.equal(
+        await codeOf(markVerifiedSeen(database.db, TOBI.userId, detail.id)),
+        'NOT_A_MANAGER',
+      );
+    },
+  );
+
+  await t.test(
+    'the business-only owner never appears among staff or on a location people list',
+    async () => {
+      const owner = await pageless(
+        `solo-${randomUUID().slice(0, 6)}@example.com`,
+      );
+      const detail = await applyForBusiness(database.db, owner, application());
+      await verify(detail.id);
+      const locationId = detail.locations[0].id;
+      const { memberId } = await seedMember(database, {
+        locationId,
+        profileId: TOBI.id,
+      });
+      const members = await listMembers(database.db, owner, detail.id);
+      assert.deepEqual(
+        members.map((m) => m.memberId),
+        [memberId],
       );
     },
   );

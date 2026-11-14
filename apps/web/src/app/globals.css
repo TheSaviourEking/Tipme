@@ -13066,3 +13066,368 @@ body:has(.business-public) > .site-footer {
 .ops-priority {
   font-weight: 700;
 }
+
+/* Business sign-up (Phase D, BusinessSignup board). Four steps on the auth card. */
+.auth-progress:has(li:nth-child(4)) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+/* The fork: two choices of the same weight on the sign-up card. */
+.sign-up-fork__choices {
+  display: grid;
+  gap: var(--space-3);
+  border: 0;
+}
+.sign-up-fork__choices h2 {
+  margin: 0 0 var(--space-1);
+}
+.sign-up-fork__choice {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-control);
+  cursor: pointer;
+}
+.sign-up-fork__choice:has(input:checked) {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 1px var(--brand-primary);
+}
+.sign-up-fork__choice input {
+  margin-top: 0.2em;
+  accent-color: var(--brand-primary);
+}
+.sign-up-fork__words {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.sign-up-fork__words strong {
+  color: var(--text-primary);
+  font-size: var(--text-base);
+}
+.business-steps__group {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.business-steps__group legend {
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+.business-steps__email {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Home: the quiet line to the business path, under the claim field. */
+.home-business-line {
+  margin-top: var(--space-3);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.home-business-line a {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* The business while TipMe checks it: what happens next. */
+.business-waiting {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+.business-waiting h2,
+.business-waiting h3,
+.business-waiting p {
+  margin: 0;
+}
+.business-waiting__steps {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: waiting;
+}
+.business-waiting__steps li {
+  display: grid;
+  grid-template-columns: 1.75rem 1fr;
+  column-gap: var(--space-3);
+  counter-increment: waiting;
+}
+.business-waiting__steps li::before {
+  content: counter(waiting);
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-recessed);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.business-waiting__steps li[data-done='true']::before {
+  content: '✓';
+  background: var(--brand-primary);
+  color: #fff;
+}
+.business-waiting__steps span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.business-waiting__meanwhile strong {
+  display: block;
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* The verified moment: once, after TipMe's approval is saved. Hearts settle; nothing moves with
+   reduced motion. */
+.verified-moment {
+  position: relative;
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--brand-primary);
+  color: #fff;
+  overflow: hidden;
+}
+.verified-moment h2,
+.verified-moment p {
+  margin: 0;
+  color: inherit;
+}
+.verified-moment h2 {
+  font-family: var(--font-editorial);
+  font-weight: 400;
+}
+.verified-moment__stamp {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.verified-moment__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.verified-moment__hearts {
+  position: absolute;
+  inset-block-start: var(--space-3);
+  inset-inline-end: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+}
+.verified-moment__heart {
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: #fff;
+  opacity: 0.85;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .verified-moment__heart {
+    animation: verified-hearts-settle 900ms var(--ease-spring) both;
+  }
+  .verified-moment__heart:nth-child(2) {
+    animation-delay: 120ms;
+  }
+  .verified-moment__heart:nth-child(3) {
+    animation-delay: 240ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .verified-moment,
+  .verified-moment * {
+    animation: none !important;
+  }
+}
+@keyframes verified-hearts-settle {
+  from {
+    opacity: 0;
+    transform: translateY(-1.5rem) scale(0.6);
+  }
+  to {
+    opacity: 0.85;
+    transform: none;
+  }
+}
+
+/* "Want tips yourself?": a quiet offer, never a pop-up. */
+.own-page-card {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+}
+.own-page-card h2,
+.own-page-card p {
+  margin: 0;
+}
+.own-page-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* The account menu (switcher): the top-right button and its menu; a sheet on a phone. */
+.hat-switcher {
+  position: relative;
+  margin-inline-start: auto;
+}
+.hat-switcher__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-1);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hat-switcher__label {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hat-menu__initial {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-pill);
+  background: var(--brand-primary);
+  color: #fff;
+  font-weight: 600;
+}
+.hat-menu {
+  position: absolute;
+  z-index: 40;
+  inset-inline-end: 0;
+  inset-block-start: calc(100% + var(--space-2));
+  display: grid;
+  gap: var(--space-2);
+  width: min(22rem, calc(100vw - 2 * var(--space-4)));
+  padding: var(--space-3);
+  border-radius: var(--radius-card);
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-instrument);
+}
+.hat-menu__group {
+  display: grid;
+  gap: var(--space-1);
+}
+.hat-menu__heading {
+  margin: 0;
+  padding-inline: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hat-menu__item,
+.hat-menu__plain {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  text-decoration: none;
+  cursor: pointer;
+}
+.hat-menu__item:hover,
+.hat-menu__item:focus-visible,
+.hat-menu__plain:hover,
+.hat-menu__plain:focus-visible {
+  background: var(--surface-recessed);
+}
+.hat-menu__item[aria-current='true'] {
+  box-shadow: inset 3px 0 0 var(--brand-primary);
+}
+.hat-menu__words {
+  display: grid;
+  min-width: 0;
+}
+.hat-menu__name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.hat-menu__detail {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+.hat-menu__tag {
+  margin-inline-start: auto;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-control);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+.hat-menu__end {
+  display: grid;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+@media (max-width: 640px) {
+  .hat-switcher__label {
+    max-width: 9rem;
+  }
+  .hat-menu {
+    position: fixed;
+    inset-inline: var(--space-4);
+    inset-block-start: var(--space-16);
+    width: auto;
+    max-height: calc(100dvh - 2 * var(--space-16));
+    overflow-y: auto;
+  }
+}
+
+/* Business sign-up: the header's "For businesses", a quiet text link beside Sign in. */
+.site-nav .nav-business-start {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding-inline: var(--space-2);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.site-nav .nav-business-start:hover {
+  text-decoration: underline;
+}

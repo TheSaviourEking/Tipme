@@ -81,6 +81,10 @@ export function applyForBusiness(
         role: 'owner',
         addedBy: userId,
         createdAt: now,
+        // R13: how the owner is named where they have no page. At most 60 characters.
+        shownName: Array.from(input.ownerName ?? input.contactName)
+          .slice(0, 60)
+          .join(''),
       });
       // Ids only (issues carry no names or contacts). The applicant is the subject's person, so
       // a staff member who applied can't be the one to close it.
@@ -95,13 +99,17 @@ export function applyForBusiness(
   });
 }
 
-/** The business as a manager sees it. A location manager sees only their location. */
+/**
+ * The business as a manager sees it. A location manager sees only their location. `celebrate`
+ * (business sign-up, R19) is worked out only when asked: the API asks with its flag on.
+ */
 export function businessDetail(
   db: Database,
   userId: string,
   businessId: string,
+  { celebrate = true }: { celebrate?: boolean } = {},
 ): Promise<BusinessDetail> {
-  return guarded(() => readDetail(db, userId, businessId));
+  return guarded(() => readDetail(db, userId, businessId, celebrate));
 }
 
 /**
@@ -289,6 +297,7 @@ export function listManagers(
         userId: businessManagers.userId,
         displayName: profiles.displayName,
         handle: profiles.handle,
+        shownName: businessManagers.shownName,
       })
       .from(businessManagers)
       .leftJoin(profiles, eq(profiles.userId, businessManagers.userId))
@@ -307,8 +316,11 @@ export function listManagers(
       managerId: row.managerId,
       role: row.role as ManagerRole,
       ...(row.locationId ? { locationId: row.locationId } : {}),
-      // Never a phone or an email: the name their own page shows, else plain words.
-      name: row.displayName || (row.handle ? `@${row.handle}` : 'A TipMe user'),
+      // Never a phone or an email: the name their own page shows, else the name they gave when
+      // they signed up a business with no page (R13), else plain words.
+      name:
+        row.displayName ||
+        (row.handle ? `@${row.handle}` : row.shownName || 'A TipMe user'),
       you: row.userId === userId,
     }));
   });
@@ -396,6 +408,7 @@ async function readDetail(
   db: Database | Tx,
   userId: string,
   businessId: string,
+  celebrate = false,
 ): Promise<BusinessDetail> {
   const you = await managerOf(db, userId, businessId);
   const [business] = await db
@@ -439,6 +452,7 @@ async function readDetail(
       email: business.contactEmail,
       ...(business.contactPhone ? { phone: business.contactPhone } : {}),
     },
+    appliedAt: business.createdAt.toISOString(),
     locations: locations.map((location) => ({
       id: location.id,
       slug: location.slug,
@@ -449,6 +463,52 @@ async function readDetail(
     you: {
       role: you.role,
       ...(you.locationId ? { locationId: you.locationId } : {}),
+      ...(celebrate &&
+      status === 'verified' &&
+      (await celebrates(db, you.managerId, business.verifiedAt))
+        ? { celebrate: true as const }
+        : {}),
     },
   };
+}
+
+/**
+ * R19: the "verified" moment shows once, to a manager who was on the business when TipMe
+ * verified it and hasn't marked it seen. Anyone added later has nothing to celebrate.
+ */
+async function celebrates(
+  db: Database | Tx,
+  managerId: string,
+  verifiedAt: Date | null,
+): Promise<boolean> {
+  if (!verifiedAt) return false;
+  const [row] = await db
+    .select({
+      createdAt: businessManagers.createdAt,
+      seen: businessManagers.verifiedSeenAt,
+    })
+    .from(businessManagers)
+    .where(eq(businessManagers.id, managerId));
+  return !!row && row.seen === null && row.createdAt <= verifiedAt;
+}
+
+/** Business sign-up (R19): this manager has seen the "verified" moment. Idempotent. */
+export function markVerifiedSeen(
+  db: Database,
+  userId: string,
+  businessId: string,
+  now: Date = new Date(),
+): Promise<void> {
+  return guarded(async () => {
+    const you = await managerOf(db, userId, businessId);
+    await db
+      .update(businessManagers)
+      .set({ verifiedSeenAt: now })
+      .where(
+        and(
+          eq(businessManagers.id, you.managerId),
+          isNull(businessManagers.verifiedSeenAt),
+        ),
+      );
+  });
 }

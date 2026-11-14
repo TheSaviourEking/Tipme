@@ -30,6 +30,7 @@ import {
   businessDetail,
   closeLocation,
   listManagers,
+  markVerifiedSeen,
   removeManager,
   updateBusiness,
   updateLocation,
@@ -42,8 +43,10 @@ import {
 } from '../auth/session.guard.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
+import { BusinessSignupEnabledGuard } from './business-signup.guard.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { signalBusiness } from './business-live.js';
 
@@ -58,6 +61,7 @@ import { signalBusiness } from './business-live.js';
 export class BusinessManageController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
@@ -84,7 +88,22 @@ export class BusinessManageController {
     @CurrentUser() auth: AuthContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<BusinessDetail>> {
-    return { data: await businessDetail(this.database.db, auth.userId, id) };
+    return {
+      data: await businessDetail(this.database.db, auth.userId, id, {
+        celebrate: this.config.BUSINESS_SIGNUP_ENABLED,
+      }),
+    };
+  }
+
+  /** Business sign-up (R19): the "verified" moment was seen. Idempotent. */
+  @Post(':id/verified-seen')
+  @HttpCode(204)
+  @UseGuards(BusinessSignupEnabledGuard)
+  async verifiedSeen(
+    @CurrentUser() auth: AuthContext,
+    @Param('id') id: string,
+  ): Promise<void> {
+    await markVerifiedSeen(this.database.db, auth.userId, id);
   }
 
   /** Owners. The address (slug) changes only while the business waits to be verified. */

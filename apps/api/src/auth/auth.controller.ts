@@ -24,6 +24,7 @@ import {
 import {
   createSession,
   hasProfile,
+  managesBusiness,
   listSessions,
   activeMailProvider,
   mailSealing,
@@ -172,6 +173,11 @@ export class AuthController {
         userId: result.userId,
         isNew: result.created,
         hasProfile: await hasProfile(db, result.userId),
+        // Only with business sign-up on: off, every login without a page goes to /sign-up.
+        managesBusiness:
+          this.config.BUSINESS_ENABLED && this.config.BUSINESS_SIGNUP_ENABLED
+            ? await managesBusiness(db, result.userId)
+            : false,
       },
     };
   }

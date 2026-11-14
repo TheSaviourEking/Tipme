@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { AuthStage } from '@/components/account/auth-stage';
+import { ReleaseFlagsSlot } from '@/components/release-flags-slot';
 import { SignInView } from './sign-in-view';
 
 export const metadata: Metadata = {
@@ -15,7 +16,9 @@ export default function SignInPage() {
       lede="Use the email you signed up with, and we’ll send you a code."
     >
       <Suspense>
-        <SignInView />
+        <ReleaseFlagsSlot fallback={<SignInView />}>
+          {(flags) => <SignInView businessSignup={flags.businessSignup} />}
+        </ReleaseFlagsSlot>
       </Suspense>
     </AuthStage>
   );

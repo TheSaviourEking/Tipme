@@ -8,6 +8,7 @@ export * from './webhooks.js';
 export * from './checkout.js';
 export * from './payment-accounts.js';
 export * from './auth.js';
+export * from './account.js';
 export * from './covers.js';
 export * from './profiles.js';
 export * from './social-links.js';

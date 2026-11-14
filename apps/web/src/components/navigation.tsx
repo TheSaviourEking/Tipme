@@ -62,9 +62,15 @@ function ProLink({ onClick }: { onClick(): void }) {
 
 export function Navigation({
   businesses,
+  claimWords,
+  businessStart,
 }: {
   /** The Businesses choice's words, rendered on the server per request (BusinessesWho). */
   businesses?: ReactNode;
+  /** The signed-out primary action's words ("Get tipped" with business sign-up on). */
+  claimWords?: ReactNode;
+  /** The header's "For businesses" with business sign-up on. */
+  businessStart?: ReactNode;
 } = {}) {
   const [open, setOpen] = useState(false);
   const [whoOpen, setWhoOpen] = useState(false);
@@ -248,8 +254,20 @@ export function Navigation({
           </Suspense>
           {/* Sign in and Claim your username, or, signed in, Go to my dashboard (NavAccount). Before
               the address is read it is the signed-out pair, as the server renders it. */}
-          <Suspense fallback={<GuestActions onClick={close} />}>
-            <NavAccount onClick={close} />
+          <Suspense
+            fallback={
+              <GuestActions
+                onClick={close}
+                claimWords={claimWords}
+                businessStart={businessStart}
+              />
+            }
+          >
+            <NavAccount
+              onClick={close}
+              claimWords={claimWords}
+              businessStart={businessStart}
+            />
           </Suspense>
         </nav>
       </Container>

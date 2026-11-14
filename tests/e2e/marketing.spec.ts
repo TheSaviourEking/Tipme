@@ -65,7 +65,8 @@ test('with businesses on, the businesses page invites people to create one', asy
   );
   await expect(
     page.getByRole('link', { name: 'Create your business' }),
-  ).toHaveAttribute('href', '/dashboard/business/apply');
+    // Business sign-up is on in the e2e stack: the business path of sign-up.
+  ).toHaveAttribute('href', '/sign-up?for=business');
   await expect(page.getByLabel('Work email')).toHaveCount(0);
   const main = page.getByRole('main');
   await expect(main).not.toContainText(/₦|\bNGN\b|launch date|\bper month\b/i);

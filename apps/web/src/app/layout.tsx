@@ -1,3 +1,7 @@
+import {
+  GetTippedWords,
+  HeaderBusinessStart,
+} from '@/components/release-flags-slot';
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { siteOrigin } from '@/lib/metadata';
@@ -48,7 +52,11 @@ export default function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <Navigation businesses={<BusinessesWho />} />
+        <Navigation
+          businesses={<BusinessesWho />}
+          claimWords={<GetTippedWords />}
+          businessStart={<HeaderBusinessStart />}
+        />
         {children}
         <Footer />
         <UpdateNotice />
