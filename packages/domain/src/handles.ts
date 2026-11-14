@@ -36,6 +36,7 @@ export const RESERVED_HANDLES = [
   'explore',
   'faq',
   'favicon',
+  'fonts',
   'for_creators',
   'for_professionals',
   'help',
