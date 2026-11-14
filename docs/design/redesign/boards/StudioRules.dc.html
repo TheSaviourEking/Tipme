@@ -14,7 +14,7 @@ body{margin:0}
 a{color:#000}a:hover{color:#4d16a8}
 .board{width:1840px;min-height:2400px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
 .bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
-.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1360px}
+.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1400px}
 .tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
 .ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}.no{background:#f6dcdc;color:#7a1f1f}
 .serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400}
@@ -30,8 +30,6 @@ a{color:#000}a:hover{color:#4d16a8}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;font:700 15px Manrope,Arial,sans-serif;text-decoration:none;box-sizing:border-box;cursor:pointer}
 .btn.primary{background:#7a32f9;color:#fff;border:1px solid #6423d8}
 .btn.secondary{background:#fffefa;border:1px solid rgba(20,18,16,.14);color:#000}
-.pill{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 11px/1 Manrope,Arial,sans-serif}
-.pill svg{width:.9em;height:.9em;fill:#e6d6ff}
 .tb{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:20px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 2px 3px rgba(20,18,16,.1),0 18px 40px -12px rgba(20,18,16,.2)}
 .amts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .amts span{height:46px;border-radius:12px;background:#eeede8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px}
@@ -40,80 +38,86 @@ a{color:#000}a:hover{color:#4d16a8}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th{text-align:left;font-size:12px;color:#5d5a54;font-weight:700;padding:8px 10px;border-bottom:1px solid rgba(20,18,16,.12)}
 td{padding:10px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top;line-height:1.45}
+.gr{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 14px;font-size:13.5px;line-height:1.5;color:#2c2a26}
+.gr b{color:#000}
+.gr div{padding:8px 0;border-bottom:1px solid rgba(20,18,16,.08)}
 </style>
 </helmet>
 <div class="board">
-  <h1 class="bh1">What stays fixed, what people can change, and what Free sees</h1>
-  <p class="lead">The rules that keep every Studio page trustworthy and, in the owner’s words of 11 Nov, make sure people “should not be able to make bad designs”: bad designs are impossible by construction, not warned about. And a supporter should recognise TipMe’s tip block, its fees and its report link on any page, however it’s styled. The upload rules below are read from origin/dev today (apps/api/src/profiles/image-upload.ts, cover.controller.ts, avatar.controller.ts; packages/contracts/src/social-links.ts, covers.ts). <span class="tag pr">Proposed</span></p>
+  <h1 class="bh1">What stays fixed, what people can design, and what keeps it good</h1>
+  <p class="lead">Owner, 12 Nov: “They should be able to make custom UI but no bad ones.” Earlier: “make it impossible for the user to build a bad page.” So: <b>guardrails, not presets</b>. People choose freely within a system that corrects what would break and refuses to publish what it can’t correct. A supporter should still recognise TipMe’s tip block, its fees and its report link on any page, however it’s designed. Upload rules are read from origin/dev today (apps/api/src/profiles/image-upload.ts). <span class="tag pr">Proposed</span></p>
 
-  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start">
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr);gap:24px;align-items:start">
     <div class="paper locked">
-      <h3><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="#4d16a8" stroke-width="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#4d16a8" stroke-width="2"></path></svg>Always TipMe (fixed)</h3>
+      <h3><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" fill="none" stroke="#4d16a8" stroke-width="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3" fill="none" stroke="#4d16a8" stroke-width="2"></path></svg>Always TipMe (locked)</h3>
       <ul>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>The tip block</b>: TipMe’s own colours, fonts and shape, in the place the layout gives it (right column on desktop, straight after the name on a phone). Only its amounts change, through today’s Pro tip amounts.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>How fees are shown</b>: the same line and the same full total before paying, on every page and theme.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>The Pro badge</b>: after the handle, as on the ProBadge board. It can’t be moved, recoloured or hidden by a theme.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>The tip block</b>: TipMe’s own colours, fonts and shape, in the right rail on wide screens and straight after the name on phones. None of the person’s colours or fonts reach it. Only its amounts change, through today’s Pro tip amounts.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>How fees are shown</b>: the same line and the same full total before paying, on every page.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>The Pro badge</b>, after the handle; it can’t be moved, recoloured or hidden.</span></li>
         <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><b>“Report this page”</b> and the footer’s <b>Privacy</b> and <b>Terms</b> links (and “Learn about this preview” when it shows).</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span>Name, photo and handle stay at the top, so a page can’t pretend to be someone else’s.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span>Name, photo and handle at the top, so a page can’t pretend to be someone else’s.</span></li>
         <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span>Closed tipping, “not taking tips yet” and the pilot notice show exactly as today.</span></li>
       </ul>
     </div>
 
     <div class="paper">
-      <h3><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z" fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"></path></svg>Theirs to change</h3>
-      <ul>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Theme</b>: 8 curated palettes (today’s cover colours plus Night), each with a light and dark version and a small set of tested accents; 3 font <b>pairs</b> (heading and body together) from the two brand fonts; a background from today’s covers, their photo, or an animated cover.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Nothing unreadable can be chosen.</b> Every text and background pair in every palette is checked before it ships (4.5 to 1 for text, 3 to 1 for large headings, light and dark). No colour picker, so there is no warning state.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Sections</b>, up to 8, each kind once: About, Gallery, Videos, Services and prices, Events, Featured links, Supporter wall, Pinned note. Add, remove, reorder; they snap into the layout’s grid. Each has text limits, and an empty section hides on the public page.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Layout</b>: Classic, Portfolio first or Minimal. Sizes, spacing and line lengths come from the layout, never the person.</span></li>
-      </ul>
+      <h3><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4Z" fill="none" stroke="#000" stroke-width="2" stroke-linejoin="round"></path></svg>Theirs to design, and the guardrail on each</h3>
+      <div class="gr">
+        <div><b>Colour</b></div><div>Any 1 or 2 brand colours. The engine makes every page, card, border and text colour from them (OKLCH shades of the same hue), so every pair passes AA: <b>4.5 to 1</b> for text, <b>3 to 1</b> for large text and controls, on the light and the dark page. A colour that can’t carry text becomes an accent, with one plain sentence saying so.</div>
+        <div><b>Fonts</b></div><div>A library of 14 self-hosted families (no font request to any other site). At most 2 per page: one for headings, one for text. Display faces are headings-only. Every font shows ₦ and Nigerian letters such as ẹ, ọ, ṣ.</div>
+        <div><b>Sizes</b></div><div>From a type scale (Compact, Standard, Roomy), each size clamped between a phone minimum and a desktop maximum. Line length (up to 68 characters) and spacing follow from it. No size is ever typed in.</div>
+        <div><b>Layout</b></div><div>Rows on a 12-column grid: 1, 1:1, 2:1, 1:2 or 1:1:1 columns; blocks in each column; spacing S, M or L; backgrounds Page, Card, Colour or Photo; any order. Phones get one column by rule.</div>
+        <div><b>Blocks</b></div><div>Text, Photo, Gallery, Video, Services, Events, Links, Quote, Supporter wall; each with a few variants. Limits on every list and every text.</div>
+        <div><b>Photos</b></div><div>Smart crop around a focal point, a minimum size, and a shade under any text placed on a photo.</div>
+        <div><b>Corners</b></div><div>Square, Soft or Round.</div>
+      </div>
       <h3 style="margin-top:22px"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="#7a1f1f" stroke-width="2"></circle><path d="M6 18 18 6" stroke="#7a1f1f" stroke-width="2"></path></svg>Never</h3>
       <ul>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No custom HTML, CSS or JavaScript, and no tracking pixels or third-party scripts.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No free colour, font or size picks; no free positioning or resizing; nothing over, inside or in front of the tip block.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No second payment button, no “pay for this service”, no goal or target: TipMe takes tips, not orders (as ProAdditions §6, and tip goals stay deferred).</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No custom HTML, CSS or JavaScript; no tracking pixels or third-party scripts. Everything people type is shown as plain text.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No free positioning, no pixel sizes, nothing overlapping; nothing over, inside or in front of the tip block.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No second payment button, no “pay for this service”, no goal or target. TipMe takes tips, not orders.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="#7a1f1f" stroke-width="2" stroke-linecap="round"></path></svg><span>No publishing while the design check fails. There is no “publish anyway”.</span></li>
       </ul>
     </div>
 
     <div class="paper">
-      <h3>Photos and videos</h3>
-      <p style="margin:0 0 6px"><span class="tag ex">Exists</span> <b>Photos go through today’s upload</b>, the one page photos and covers use:</p>
+      <h3>The design check</h3>
+      <p style="margin:0 0 6px">One check, shared by the editor, the API and publishing. It runs on every edit and again on the server before publishing. Each problem comes with a one-click fix.</p>
       <ul>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>JPEG, PNG or WebP only, up to 5 MB; SVG never.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>Re-encoded to a WebP of a fixed shape: <b>square</b> 512 by 512 (as the page photo) or <b>strip</b> 2240 by 600 (as the cover). Gallery tiles use one of the two.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>All metadata, such as EXIF location, is dropped in the re-encode.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#7a32f9"></circle></svg><span><span class="tag pr">Proposed</span> Cropped and fitted to each section’s shape automatically; the person only picks a focal point. Photos below a minimum size are refused with a plain message. Text never sits on a photo: backgrounds behind text are presets with a built-in scrim.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Contrast</b> of every text, link and control, light and dark, including text on photos.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Fits phones</b>: no overflow or clipped text from 320 px, long words included.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Fonts and sizes</b>: 2 families at most; headings in order.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Crowding</b>: too many blocks in a row or column.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Photos</b>: too small for their spot; missing descriptions.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Page weight</b>: 1.5 MB first load on a phone.</span></li>
+        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#23623b" stroke-width="2" stroke-linecap="round"></path></svg><span><b>Empty or broken</b> blocks, videos and links.</span></li>
       </ul>
-      <p style="margin:16px 0 6px"><span class="tag pr">Proposed</span> <b>Videos are embeds from an allow-list only</b>:</p>
-      <ul>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>A pasted link is checked against listed sites, like social links today (sites to be decided: question 2). Anything else is refused: “We can’t show videos from that site yet.”</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>Shown as a still with a play button; the other site loads only after a tap, so visiting a page sends nothing to it.</span></li>
-        <li><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="3" fill="#5d5a54"></circle></svg><span>No video uploads to TipMe.</span></li>
-      </ul>
-      <p class="src" style="margin-top:14px">Moderation: “Report this page” and its reasons already exist (PROFILE_REPORT_REASONS in packages/contracts/src/profiles.ts). Whether staff also see new gallery images is question 5.</p>
+      <p style="margin:16px 0 6px"><span class="tag ex">Exists</span> <b>Photos use today’s upload</b>: JPEG, PNG or WebP up to 5 MB, never SVG, re-encoded to WebP so metadata such as EXIF location is dropped.</p>
+      <p style="margin:10px 0 6px"><span class="tag pr">Proposed</span> <b>Videos</b> come from an allow-list (YouTube, TikTok, Audiomack), shown as a TipMe-drawn still; the other site loads only after a tap. No video uploads.</p>
+      <p class="src" style="margin-top:12px">Moderation: “Report this page” already exists (PROFILE_REPORT_REASONS); staff can remove any one photo.</p>
     </div>
   </div>
 
-  <div class="paper" style="margin-top:24px;background:#000;color:#fff;border-color:#000;display:grid;grid-template-columns:minmax(0,1fr) 520px;gap:32px;align-items:center">
+  <div class="paper" style="margin-top:24px;background:#000;color:#fff;border-color:#000;display:grid;grid-template-columns:minmax(0,1fr) 600px;gap:32px;align-items:center">
     <div><h3 style="color:#fff;margin:0 0 8px">The promise the build must test</h3>
-      <p style="margin:0;color:#e6e4dc;font-size:15px;line-height:1.55"><b style="color:#fff">Every combination of palette, font pair and layout renders well from 320 to 1440 pixels wide</b>, with the longest allowed text in every section, empty sections, the largest and smallest photo counts, and 200% zoom. 8 palettes × 2 versions × 3 font pairs × 3 layouts = 144 combinations, each checked automatically for contrast, overflow and overlap before a palette, font pair or layout ships. A combination that fails is fixed or removed, never left for a person to find.</p></div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:12.5px;font-weight:700;text-align:center">
-      <span style="padding:12px 6px;border-radius:10px;background:#1c1b19">8 palettes</span><span style="padding:12px 6px;border-radius:10px;background:#1c1b19">light + dark</span><span style="padding:12px 6px;border-radius:10px;background:#1c1b19">3 font pairs</span><span style="padding:12px 6px;border-radius:10px;background:#1c1b19">3 layouts</span>
-      <span style="grid-column:span 4;padding:12px 6px;border-radius:10px;background:#7a32f9">144 combinations × 320, 390, 768, 1024, 1440 px</span>
+      <p style="margin:0;color:#e6e4dc;font-size:15px;line-height:1.55">With free choices there are too many designs to test one by one, so the build tests the <b style="color:#fff">rules</b>. A property test makes thousands of random pages (random colours, fonts, rows, blocks and text lengths) and proves the guardrails always give AA contrast, no overflow from 320 to 1440 px, and a valid page. Every page is checked again when it’s published. A set of example pages is rendered in CI with accessibility and overflow checks and a few screenshots, and the page-weight budget is enforced.</p></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12.5px;font-weight:700;text-align:center">
+      <span style="padding:12px 6px;border-radius:10px;background:#1c1b19">Random colours: every pair AA</span><span style="padding:12px 6px;border-radius:10px;background:#1c1b19">Random pages: valid, fits 320–1440</span><span style="padding:12px 6px;border-radius:10px;background:#1c1b19">Every publish: checked on the server</span>
+      <span style="grid-column:span 3;padding:12px 6px;border-radius:10px;background:#7a32f9">Example pages in CI: axe, overflow, a few screenshots, weight budget</span>
     </div>
   </div>
 
   <!-- FREE -->
   <h2 class="serif" style="margin:48px 0 6px;font-size:32px">What Free sees: their standard page, and a Studio teaser</h2>
-  <p style="margin:0 0 20px;font-size:14.5px;color:#3b3934;max-width:1200px">Free pages stay exactly as today. In My page, a teaser lets them try Studio on their own page as a preview that is never published. Whether Free gets one theme to keep is question 4; drawn here: teaser only.</p>
+  <p style="margin:0 0 20px;font-size:14.5px;color:#3b3934;max-width:1200px">Free pages stay exactly as today. In My page, a teaser lets them try Studio on their own page as a preview that is never published.</p>
   <div style="display:grid;grid-template-columns:390px 390px minmax(0,1fr);gap:40px;align-items:start">
     <div>
       <div class="phone" style="padding:18px">
         <p style="margin:0 0 12px;font:400 30px/1 'DM Serif Display',Georgia,serif">My page</p>
         <div style="background:#7a32f9;color:#fff;border-radius:22px;padding:20px;display:flex;flex-direction:column;gap:10px">
           <p style="margin:0;font-size:12px;font-weight:800;letter-spacing:.04em">PAGE STUDIO · PRO</p>
-          <p style="margin:0;font:400 28px/1.05 'DM Serif Display',Georgia,serif">Make your page look like you</p>
-          <p style="margin:0;font-size:14px;line-height:1.5;color:#efe6ff">Themes, sections like a gallery or your prices, and layouts. Your tip block stays the same, so supporters always know it’s TipMe.</p>
+          <p style="margin:0;font:400 28px/1.05 'DM Serif Display',Georgia,serif">Design a page that looks like you</p>
+          <p style="margin:0;font-size:14px;line-height:1.5;color:#efe6ff">Your colours, your fonts, your own rows of photos, prices and events. Studio keeps it readable on every phone. Your tip block stays the same, so supporters always know it’s TipMe.</p>
           <a href="#" class="btn secondary" style="color:#000">Try it on your page</a>
         </div>
         <div style="margin-top:16px;background:#fffefa;border-radius:16px;padding:14px;border:1px solid rgba(20,18,16,.09);font-size:14px;line-height:1.5;color:#5d5a54">Photo, name, bio, cover and links stay here, as today.</div>
@@ -124,10 +128,10 @@ td{padding:10px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top;li
       <div class="phone">
         <div style="padding:10px 14px;background:#000;color:#fff;font-size:13px;font-weight:700;display:flex;justify-content:space-between;align-items:center">Preview only: not published<a href="#" style="color:#fff">Close</a></div>
         <div style="height:90px;background:#1d4e89"></div>
-        <div style="padding:0 18px;background:#10243f;color:#fff;height:520px">
-          <span aria-hidden="true" style="display:flex;width:72px;height:72px;margin-top:-36px;border-radius:50%;background:#e6d6ff;border:3px solid #10243f;align-items:center;justify-content:center;font:400 28px 'DM Serif Display',Georgia,serif;color:#4d16a8">TA</span>
+        <div style="padding:0 18px;background:#0f2238;color:#fff;height:520px">
+          <span aria-hidden="true" style="display:flex;width:72px;height:72px;margin-top:-36px;border-radius:50%;background:#e6d6ff;border:3px solid #0f2238;align-items:center;justify-content:center;font:400 28px 'DM Serif Display',Georgia,serif;color:#4d16a8">TA</span>
           <p style="margin:8px 0 0;font:400 30px/1 'DM Serif Display',Georgia,serif">Tolu Ade</p>
-          <p style="margin:6px 0 14px;font-size:13px;color:#c9daf0">@tolu</p>
+          <p style="margin:6px 0 14px;font-size:13px;color:#b9c8da">@tolu</p>
           <div class="tb" style="color:#000"><b>Tip Tolu</b><div class="amts"><span>₦2,000</span><span class="on">₦5,000</span><span>₦10,000</span></div><div class="tbgo">Tip ₦5,000</div></div>
           <p style="margin:16px 0 8px;font:400 22px 'DM Serif Display',Georgia,serif">Gallery</p>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span style="height:80px;border-radius:12px;background:#2c5d97"></span><span style="height:80px;border-radius:12px;background:#3a79c2"></span></div>
@@ -137,14 +141,14 @@ td{padding:10px;border-bottom:1px solid rgba(20,18,16,.08);vertical-align:top;li
           <a href="#" class="btn primary">See Pro</a>
         </div>
       </div>
-      <p class="src" style="margin-top:10px">The preview: their own name and photo with a sample theme and section. The Pro badge isn’t shown, because they aren’t Pro.</p>
+      <p class="src" style="margin-top:10px">The preview: their own name and photo with the full editor on an in-memory draft. The Pro badge isn’t shown, because they aren’t Pro.</p>
     </div>
     <div class="paper">
       <h3>Free and Pro, side by side</h3>
       <table>
         <tr><th scope="col"></th><th scope="col">Free</th><th scope="col">Pro</th></tr>
         <tr><td>Page</td><td>Today’s standard page</td><td>Studio page, or the standard one</td></tr>
-        <tr><td>Themes, sections, layouts</td><td>Preview only (question 4)</td><td>All</td></tr>
+        <tr><td>Colours, fonts, rows and blocks</td><td>Preview only, never published</td><td>All, behind the design check</td></tr>
         <tr><td>Cover, photo, bio, social links</td><td>As today: up to 3 links from Free sites</td><td>As today: up to 8, one featured</td></tr>
         <tr><td>Tip block, fees, report link, footer</td><td>Fixed</td><td>Fixed, the same</td></tr>
         <tr><td>“Get your own TipMe page”</td><td>Shown</td><td>Removed, as today</td></tr>
