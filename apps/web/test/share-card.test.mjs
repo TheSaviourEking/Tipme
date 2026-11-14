@@ -234,6 +234,7 @@ test('the face shows the photo when there is one, and the initials when not', ()
 });
 
 const UPLOADED = '/v1/avatars/0b7c3d4e-1111-4222-8333-944455556666/3.webp';
+const PNG = Buffer.from('\x89PNG\r\n\x1a\nfake', 'binary');
 const WEBP = Buffer.from('RIFF\0\0\0\0WEBPVP8 tiny', 'binary');
 /** A fetch that records its calls and answers with `answer(url, init)`. */
 function fakeFetch(answer) {
@@ -251,38 +252,50 @@ const OPTIONS = {
   siteOrigin: 'https://tipme.ng',
 };
 
-test('shareCardPhoto: an uploaded photo is fetched from the API and drawn as data', async () => {
-  const { fetch, calls } = fakeFetch(() => image(WEBP));
+test('shareCardPhoto: an uploaded photo is fetched from the API as its PNG and drawn as data', async () => {
+  const { fetch, calls } = fakeFetch(() => image(PNG, 'image/png'));
   const photo = await shareCardPhoto(UPLOADED, {
     ...OPTIONS,
     headers: { 'x-tipme-preview-key': 'k' },
     fetch,
-    toPng: async (bytes) => Buffer.concat([Buffer.from('png:'), bytes]),
   });
-  assert.equal(
-    photo,
-    `data:image/png;base64,${Buffer.concat([Buffer.from('png:'), WEBP]).toString('base64')}`,
-  );
+  assert.equal(photo, `data:image/png;base64,${PNG.toString('base64')}`);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, `http://api.internal:4000${UPLOADED}`);
+  // next/og cannot draw WebP, so the API's PNG rendition of the same photo.
+  assert.equal(
+    calls[0].url,
+    `http://api.internal:4000${UPLOADED.replace(/\.webp$/, '.png')}`,
+  );
   assert.equal(calls[0].init.headers['x-tipme-preview-key'], 'k');
   assert.equal(calls[0].init.redirect, 'error');
   assert.ok(calls[0].init.signal, 'a timeout');
 });
 
-test('shareCardPhoto: a demo portrait comes from the site itself, without the API key', async () => {
-  const { fetch, calls } = fakeFetch(() => image(WEBP));
-  assert.match(
-    await shareCardPhoto('/portraits/ada.webp', {
+test('shareCardPhoto: a demo illustration comes from the site itself, without the API key', async () => {
+  const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>');
+  const { fetch, calls } = fakeFetch(() => image(SVG, 'image/svg+xml'));
+  assert.equal(
+    await shareCardPhoto('/illustrations/kemi.svg', {
       ...OPTIONS,
       headers: { 'x-tipme-preview-key': 'k' },
       fetch,
-      toPng: async (bytes) => bytes,
     }),
-    /^data:image\/png;base64,/,
+    `data:image/svg+xml;base64,${SVG.toString('base64')}`,
   );
-  assert.equal(calls[0].url, 'https://tipme.ng/portraits/ada.webp');
+  assert.equal(calls[0].url, 'https://tipme.ng/illustrations/kemi.svg');
   assert.equal(calls[0].init.headers['x-tipme-preview-key'], undefined);
+});
+
+test('shareCardPhoto: a WebP is never handed to next/og (it would draw a blank face)', async () => {
+  const { fetch, calls } = fakeFetch(() => image(WEBP));
+  // A demo portrait is WebP and has no PNG rendition: the initials, without a request.
+  assert.equal(
+    await shareCardPhoto('/portraits/ada.webp', { ...OPTIONS, fetch }),
+    null,
+  );
+  assert.equal(calls.length, 0);
+  // An API that answers WebP for the PNG name is not drawn either.
+  assert.equal(await shareCardPhoto(UPLOADED, { ...OPTIONS, fetch }), null);
 });
 
 test('shareCardPhoto: no photo, a path the page would not show, or any failure is null (initials)', async () => {
@@ -330,47 +343,4 @@ test('shareCardPhoto: a slow API gives up after the timeout, and the card still 
     null,
   );
   assert.ok(Date.now() - started < 1000);
-});
-
-test('shareCardPhoto: next/og cannot draw WebP, so a WebP photo is turned into a PNG first', async () => {
-  const PNG = Buffer.from('\x89PNG\r\n\x1a\nfake', 'binary');
-  const seen = [];
-  const toPng = async (bytes) => {
-    seen.push(bytes);
-    return PNG;
-  };
-  assert.equal(
-    await shareCardPhoto(UPLOADED, {
-      ...OPTIONS,
-      fetch: fakeFetch(() => image(WEBP)).fetch,
-      toPng,
-    }),
-    `data:image/png;base64,${PNG.toString('base64')}`,
-  );
-  assert.deepEqual(seen, [WEBP]);
-  // A PNG or JPEG is drawn as it is.
-  assert.match(
-    await shareCardPhoto(UPLOADED, {
-      ...OPTIONS,
-      fetch: fakeFetch(() => image(PNG, 'image/png')).fetch,
-      toPng,
-    }),
-    /^data:image\/png;base64,/,
-  );
-  assert.equal(seen.length, 1);
-  // A WebP that cannot be turned into a PNG gives the initials, never a blank face.
-  for (const broken of [
-    async () => {
-      throw new Error('bad image');
-    },
-    undefined,
-  ])
-    assert.equal(
-      await shareCardPhoto(UPLOADED, {
-        ...OPTIONS,
-        fetch: fakeFetch(() => image(WEBP)).fetch,
-        toPng: broken,
-      }),
-      null,
-    );
 });

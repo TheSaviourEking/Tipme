@@ -76,7 +76,3 @@ Decision: ADOPTED (pinned exact).
 ## Photo storage (31 October 2026)
 
 `@aws-sdk/client-s3` 3.1152.0 (Apache-2.0, https://github.com/aws/aws-sdk-js-v3), a dependency of `@tipme/database`, server-side only. It stores page photos in a private Cloudflare R2 bucket through R2's S3-compatible API (`packages/database/src/photo-store.ts`). Same SDK family and version as `@aws-sdk/client-sesv2`. No browser code, no UI.
-
-## Photos on share cards (14 November 2026)
-
-- **`sharp` 0.35.5** (Apache-2.0), now also a direct, exactly pinned dependency of `@tipme/web` (the same version the API pins, already in the lockfile). Server only: the person share-card route (`app/people/[handle]/share-card/route.tsx`) turns the page's WebP photo into a small PNG, because `next/og` (Satori/resvg) leaves a WebP blank. Never shipped to browsers. Next.js lists `sharp` as a server-external package, so it is not bundled.

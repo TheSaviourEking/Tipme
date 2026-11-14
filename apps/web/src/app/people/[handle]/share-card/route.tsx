@@ -1,5 +1,4 @@
 import { ImageResponse } from 'next/og';
-import sharp from 'sharp';
 import { shareCard, siteOrigin } from '@/lib/metadata';
 import { previewServerKey } from '@tipme/domain';
 import { API_ORIGIN, getPublicProfile } from '@/lib/profiles-api';
@@ -53,13 +52,6 @@ function photoOf(person: PersonCardInput, request: Request) {
   return shareCardPhoto(person.avatarPath, {
     apiOrigin: API_ORIGIN,
     siteOrigin: new URL(request.url).origin,
-    // Twice the face's size, square: sharp crops to cover, as the face does. The pixel limit
-    // guards against an oversized image, as the API's upload does.
-    toPng: (webp) =>
-      sharp(webp, { limitInputPixels: 40_000_000 })
-        .resize(304, 304, { fit: 'cover' })
-        .png()
-        .toBuffer(),
     // Staging/preview: the web server proves itself to the API's gate, as the profile lookup does.
     ...(password
       ? { headers: { 'x-tipme-preview-key': previewServerKey(password) } }
