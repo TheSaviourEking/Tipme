@@ -82,6 +82,11 @@ test('the businesses page is centred: the text and the card sit as one block in 
   const parts = hero.locator('> *').filter({ visible: true });
   const text = parts.first();
   const card = parts.last();
+  // The hero starts as the coming-soon fallback and is swapped for the open page; measuring during
+  // that swap gave a null box under burn-in. Wait for the open page's heading first.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    'Let your customers tip your team.',
+  );
   await expect(parts).toHaveCount(2);
   const [t, c] = [(await text.boundingBox())!, (await card.boundingBox())!];
   // Horizontally: the space left of the text matches the space right of the card.

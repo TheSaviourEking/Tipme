@@ -187,10 +187,12 @@ test('Free page, or an API without recognition: no tick, today’s form', async 
   await visitor.getByLabel('Your name (optional)').fill('Chidi');
   await expect(visitor.getByRole('checkbox', { name: TICK })).toHaveCount(0);
   await expect(visitor.getByText(HINT)).toHaveCount(0);
+  // Checked on the settled form, before the Tip press: the aborted intent can still be moving the
+  // page when axe runs ("Execution context was destroyed"), which made this flaky under burn-in.
+  await expectAccessible(visitor);
   const body = await intentBody(visitor);
   expect(body).not.toHaveProperty('supporterKey');
   expect(await storedKeys(visitor)).toBeNull();
-  await expectAccessible(visitor);
 });
 
 test('a paid tip without the tick has no recognition line on its receipt', async ({
