@@ -14,6 +14,8 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
 import { ThanksSlip } from '@/components/thanks-slip';
+import { AvatarImage } from '@/components/avatar';
+import { hasAvatar } from '@/lib/avatar-source';
 import { BusinessNote } from './business-note';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
@@ -228,7 +230,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   const { view: tip } = screen;
   const name = tip.recipient.displayName;
-  const initial = name.charAt(0).toUpperCase();
+  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
+  // Their photo when the API sends one (only while it is public), else their initial.
+  const photo = tip.recipient.avatarPath;
   const amount = formatNaira(Number(tip.amountMinor));
   const profile = `/@${tip.recipient.handle}`;
   const paid = tip.state === 'paid';
@@ -279,7 +283,18 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
       )}
       {paid ? (
         <div className="tip-thanks__mark" aria-hidden="true">
-          <span className="tip-thanks__initial">{initial}</span>
+          {hasAvatar(photo) ? (
+            <AvatarImage
+              className="tip-thanks__initial tip-thanks__photo"
+              src={photo}
+              name={name}
+              width={132}
+              height={132}
+              sizes="132px"
+            />
+          ) : (
+            <span className="tip-thanks__initial">{initial}</span>
+          )}
           <span className="tip-thanks__tick">✓</span>
         </div>
       ) : null}
@@ -322,7 +337,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         )}
         {paid && (
           <>
-            <h1>{name} got your thanks.</h1>
+            <h1>{name} got your tip.</h1>
             <p>{amount}, confirmed by our payment partner.</p>
           </>
         )}
@@ -410,7 +425,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         <>
           {notices}
           <Link className="tip-thanks__own" href="/sign-up">
-            Know someone who deserves thanks too? Get your own TipMe page
+            Know someone who deserves a tip too? Get your own TipMe page
           </Link>
         </>
       ) : (

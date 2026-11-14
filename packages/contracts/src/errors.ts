@@ -19,6 +19,7 @@ export const apiErrorCodes = [
   'HAS_BALANCE',
   'INSUFFICIENT_BALANCE',
   'WITHDRAWAL_TOO_SMALL',
+  'WITHDRAWAL_BELOW_FEE',
   'WITHDRAWAL_UNAVAILABLE',
   'WITHDRAWALS_PAUSED',
   'WITHDRAWALS_SWITCHED_OFF',
@@ -54,6 +55,7 @@ export const apiErrorCodes = [
   'EMAIL_VERIFICATION_REQUIRED',
   'PAYMENT_ACCOUNT_REQUIRED',
   'PROVIDER_OUTCOME_UNKNOWN',
+  'COUNTRY_NOT_SUPPORTED',
   'PAYMENT_START_REJECTED',
   'TIPPING_NOT_OPEN',
   'NO_CONFIRMED_TEST',
@@ -130,6 +132,8 @@ export const apiErrorCodes = [
   'MEMBER_NOT_TIPPABLE',
   'NOTE_NOT_OPEN',
   'BUSINESS_LAST_OWNER',
+  // Only TipMe staff end another owner's seat, until the removal procedure ships (plan #204, E).
+  'OWNER_REMOVAL_NEEDS_TIPME',
   'BUSINESS_NOT_VERIFIED',
   // Business release 2 (R2-0).
   'SHARE_NOT_ALLOWED',

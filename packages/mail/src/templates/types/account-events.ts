@@ -356,7 +356,7 @@ export const milestone = defineMailType({
   sender: 'notifications',
   preference: 'notify_milestones',
   schema: z.object({ copy: z.string().min(1).max(200) }).strict(),
-  sample: { copy: '10 tips! People keep coming back to thank you.' },
+  sample: { copy: '10 tips! People keep coming back to tip you.' },
   render: (data, ctx) =>
     letter(
       {

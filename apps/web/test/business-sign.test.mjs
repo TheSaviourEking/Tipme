@@ -21,7 +21,7 @@ globalThis.ImageData ??= class ImageData {
 
 /** A canvas that records what is drawn: the code's pixels and every line of text. */
 function fakeCanvas() {
-  const drawn = { images: [], texts: [], fonts: [] };
+  const drawn = { images: [], texts: [], fonts: [], pictures: [], clips: 0 };
   const ctx = {
     font: '',
     fillStyle: '',
@@ -35,6 +35,14 @@ function fakeCanvas() {
     roundRect() {},
     fill() {},
     stroke() {},
+    save() {},
+    restore() {},
+    clip() {
+      drawn.clips += 1;
+    },
+    drawImage(image, x, y, w, h) {
+      drawn.pictures.push({ image, x, y, w, h });
+    },
     putImageData(image, x, y) {
       drawn.images.push({ image, x, y });
     },
@@ -114,7 +122,7 @@ test('the drawn sign decodes to the location URL with src=qr, in every style', (
       'T',
       'The Yellow Chilli',
       'Victoria Island',
-      'Scan to thank our team',
+      'Scan to tip our team',
       '127.0.0.1:3120/b/yellow-chilli/vi',
     ])
       assert.ok(drawn.texts.includes(text), `${style.id} shows ${text}`);
@@ -158,4 +166,63 @@ test('a long business name is shrunk or cut to fit, never drawn past the card', 
   assert.ok(index >= 0);
   const size = Number(/(\d+)px/.exec(drawn.fonts[index])[1]);
   assert.ok(drawn.texts[index].length * size * 0.55 <= 600 * 0.86 + 1);
+});
+
+test('a business with a logo shows the logo in the tile, clipped to it, instead of the initial', () => {
+  const url = codeUrl(ORIGIN, SIGN_PATH);
+  const logo = { width: 512, height: 512 };
+  const { canvas, drawn } = fakeCanvas();
+  drawLocationSign(canvas, {
+    url,
+    business: 'The Yellow Chilli',
+    location: 'Victoria Island',
+    style: SIGN_STYLES[0],
+    width: 1000,
+    logo,
+  });
+  assert.equal(drawn.pictures.length, 1);
+  const tile = Math.round(1000 * 0.13);
+  assert.deepEqual(drawn.pictures[0], {
+    image: logo,
+    x: 500 - tile / 2,
+    y: Math.round(Math.round((1000 * 210) / 148) * 0.08),
+    w: tile,
+    h: tile,
+  });
+  assert.equal(drawn.clips, 1, 'the logo is clipped to the rounded tile');
+  assert.equal(drawn.texts.includes('T'), false, 'no initial');
+  // The code is the same with or without a logo.
+  const { image } = drawn.images[0];
+  assert.equal(jsQR(image.data, image.width, image.height)?.data, url);
+
+  // Without a logo (or when it failed to load), the initial as before.
+  const plain = fakeCanvas();
+  drawLocationSign(plain.canvas, {
+    url,
+    business: 'The Yellow Chilli',
+    location: 'Victoria Island',
+    style: SIGN_STYLES[0],
+    width: 1000,
+    logo: null,
+  });
+  assert.equal(plain.drawn.pictures.length, 0);
+  assert.ok(plain.drawn.texts.includes('T'));
+  assert.deepEqual(plain.drawn.images[0].image.data, image.data);
+});
+
+test('a logo that is not square is cropped to cover the tile, not squashed', () => {
+  const { canvas, drawn } = fakeCanvas();
+  drawLocationSign(canvas, {
+    url: codeUrl(ORIGIN, SIGN_PATH),
+    business: 'The Yellow Chilli',
+    location: 'Victoria Island',
+    style: SIGN_STYLES[0],
+    width: 1000,
+    logo: { width: 400, height: 200 },
+  });
+  const tile = Math.round(1000 * 0.13);
+  const { w, h, x } = drawn.pictures[0];
+  assert.equal(h, tile);
+  assert.equal(w, tile * 2);
+  assert.equal(x, 500 - tile);
 });

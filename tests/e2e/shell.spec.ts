@@ -4,7 +4,7 @@ test('marketing is responsive, keyboard accessible and clearly a preview', async
   page,
 }, testInfo) => {
   await page.goto('/');
-  await expect(page).toHaveTitle('TipMe — A little thanks goes a long way');
+  await expect(page).toHaveTitle('TipMe — A little tip goes a long way');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
     'Let People Celebrate You for the things you do.',
   );

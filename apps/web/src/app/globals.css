@@ -3882,6 +3882,11 @@ body:has(.profile-page) .brand__mark {
   font: 400 3.5rem / 1 var(--font-editorial);
 }
 
+/* The recipient's photo in the same ring; its own initials stand in if it fails to load. */
+.tip-thanks__photo {
+  object-fit: cover;
+}
+
 .tip-thanks__tick {
   position: absolute;
   right: -0.375rem;
@@ -5263,10 +5268,6 @@ body:has(.profile-page) .brand__mark {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.settings-section input[type='file'] {
-  max-width: 100%;
-}
-
 .settings-section h2 {
   font-size: 1.3rem;
   margin: 0;
@@ -6452,6 +6453,14 @@ html:has(.confirm-dialog[open]) {
   background: linear-gradient(var(--surface-subtle), var(--surface-recessed));
   box-shadow: inset 0 0 0 1px var(--edge-hairline);
   font: 400 1.25rem / 1 var(--font-editorial);
+}
+
+.page-card__monogram img,
+.page-card__monogram .avatar--initials {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .page-card__head > div {
@@ -8711,25 +8720,450 @@ html:has(.ops-frame__sheet[open]) {
   }
 }
 
-/* A file input dressed as a button; the real input keeps focus, so the ring is drawn on the label. */
-.cover-upload {
-  position: relative;
-  justify-self: start;
-  cursor: pointer;
+/* The image picker (photo, logo, cover; board "One photo picker", 14 Nov 2026). A tile in the
+   image's shape, one button and, with a mouse, a dashed drop box. The file input stays in the page,
+   visually hidden (.sr-only). */
+.image-picker-wrap {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
-.cover-upload__input {
+.business-details__logo .image-picker-wrap {
+  justify-self: stretch;
+}
+
+.image-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.image-picker__controls {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+.image-picker__button {
+  width: 100%;
+}
+
+/* With a mouse or trackpad: the whole box takes a dropped file. */
+.image-picker[data-fine] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-items: start;
+  gap: var(--space-5);
+  padding: var(--space-4);
+  border: 1.5px dashed rgb(20 18 16 / 18%);
+  border-radius: 1.125rem;
+  transition:
+    background-color var(--duration-tactile) var(--ease-physical),
+    border-color var(--duration-tactile) var(--ease-physical);
+}
+
+.image-picker[data-fine] .image-picker__controls {
+  justify-items: start;
+  width: auto;
+  flex: 1 1 10rem;
+}
+
+.image-picker[data-fine] .image-picker__button {
+  width: auto;
+}
+
+.image-picker[data-dropping] {
+  border: 2px dashed var(--brand-primary);
+  background: var(--brand-soft);
+  padding: calc(var(--space-4) - 0.5px);
+}
+
+.image-picker--cover,
+.image-picker--cover[data-fine] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+  gap: var(--space-3);
+}
+
+.image-picker--cover[data-fine] .image-picker__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+.image-picker__or {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.image-picker__drop-title {
+  margin: 0;
+  color: var(--brand-ink);
+  font: 400 1.375rem/1.1 var(--font-editorial);
+}
+
+.image-picker__controls--drop .image-picker__limits {
+  color: var(--brand-ink);
+}
+
+.image-picker__limits {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+.image-picker__remove {
+  min-height: 44px;
+  padding-inline: var(--space-1);
+}
+
+.image-picker__error {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-2);
+}
+
+.image-picker__error .tm-field-error {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-size: var(--text-sm);
+}
+
+.image-picker__status:empty {
+  margin: 0;
+}
+
+/* The tile: what the page shows now, in the image's own shape. */
+.image-picker__tile {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  width: 6.5rem;
+  height: 6.5rem;
+  border: 3px solid var(--surface-raised);
+  box-shadow:
+    0 1px 2px rgb(20 18 16 / 12%),
+    0 8px 18px -10px rgb(20 18 16 / 35%);
+}
+
+.image-picker__tile--photo {
+  border-radius: 50%;
+}
+
+.image-picker__tile--logo {
+  border-radius: var(--radius-field);
+}
+
+/* A block, so the cover preview inside takes the full width rather than its content's. */
+.image-picker__tile--cover {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 0;
+  border-radius: var(--radius-field);
+  box-shadow: none;
+}
+
+.image-picker__tile--photo > img,
+.image-picker__tile--photo > .avatar--initials {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-picker__initials {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font: 400 2.375rem/1 var(--font-editorial);
+}
+
+.image-picker__logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: var(--key-face-dark);
+  color: var(--surface-base);
+  font: 400 2.75rem/1 var(--font-editorial);
+}
+
+.image-picker__logo--image {
+  background: var(--surface-base);
+}
+
+.image-picker__logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-picker__pending {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: 0;
+  object-fit: cover;
+}
+
+.image-picker__busy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(20 18 16 / 45%);
+}
+
+.image-picker__ring {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: conic-gradient(#fff 0 64%, rgb(255 255 255 / 28%) 64% 100%);
+  mask: radial-gradient(circle, transparent 1.05rem, #000 1.1rem);
+  animation: image-picker-turn 900ms linear infinite;
+}
+
+@keyframes image-picker-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* The position-and-zoom step, in place of the picker, framed exactly as the image will show. */
+.image-picker-crop {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.image-picker-crop__title {
+  margin: 0;
+  font: 400 var(--text-xl) / 1.1 var(--font-editorial);
+}
+
+.image-picker-crop__stage {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  padding: var(--space-8) var(--space-6) var(--space-12);
+  border-radius: var(--radius-field);
+  background: var(--key-face-dark);
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+
+.image-picker-crop__stage:active {
+  cursor: grabbing;
+}
+
+.image-picker-crop--cover .image-picker-crop__stage {
+  padding-inline: var(--space-4);
+}
+
+.image-picker-crop__frame {
+  position: relative;
+  width: min(100%, 15rem);
+}
+
+.image-picker-crop--cover .image-picker-crop__frame {
+  width: 100%;
+}
+
+.image-picker-crop__frame:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
+.image-picker-crop__image {
+  position: absolute;
+  max-width: none;
+  pointer-events: none;
+}
+
+/* Everything outside the frame is dimmed; the frame is what will be saved. */
+.image-picker-crop__window {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 999px rgb(20 18 16 / 62%);
+  pointer-events: none;
+}
+
+.image-picker-crop--photo .image-picker-crop__window::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1.5px dashed rgb(255 255 255 / 75%);
+  border-radius: 50%;
+}
+
+.image-picker-crop__tip {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-3);
+  transform: translateX(-50%);
+  padding: 0.375rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: rgb(20 18 16 / 72%);
+  color: #fff;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.image-picker-crop__zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.image-picker-crop__zoom label {
+  min-width: 2.5rem;
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.image-picker-crop__zoom input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  accent-color: var(--brand-primary);
+}
+
+.image-picker-crop__zoom-key {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-raised-1);
+  color: var(--text-primary);
+  font: 700 1.125rem/1 var(--font-interface);
   cursor: pointer;
 }
 
-.cover-upload:has(input:focus-visible) {
-  outline: 3px solid var(--brand-primary);
-  outline-offset: 3px;
+.image-picker-crop__zoom-key:disabled {
+  color: var(--text-tertiary);
+  box-shadow: none;
+  cursor: default;
+}
+
+.image-picker-crop__looks {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-end;
+}
+
+.image-picker-crop__looks figure {
+  margin: 0;
+}
+
+.image-picker-crop__looks figcaption {
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-align: center;
+}
+
+.image-picker-crop__look {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  width: 4.5rem;
+  height: 4.5rem;
+  border: 3px solid var(--surface-raised);
+  border-radius: var(--radius-control);
+  box-shadow: 0 1px 2px rgb(20 18 16 / 12%);
+}
+
+.image-picker-crop__look--round {
+  border-radius: 50%;
+}
+
+.image-picker-crop__look img {
+  position: absolute;
+  max-width: none;
+}
+
+.image-picker-crop__note {
+  margin: 0;
+}
+
+.image-picker-crop__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* Touch: big targets where a thumb reaches, Save on the right. */
+@media (pointer: coarse) {
+  .image-picker-crop__actions {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+  }
+
+  .image-picker-crop__actions .tm-button {
+    min-height: 56px;
+  }
+
+  .image-picker-crop__actions .tm-button:first-child {
+    order: 2;
+  }
+
+  .image-picker-crop__zoom-key {
+    width: 48px;
+    height: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-picker[data-fine] {
+    transition: none;
+  }
+
+  .image-picker__ring {
+    animation: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .image-picker[data-dropping] {
+    border-color: Highlight;
+  }
+
+  .image-picker-crop__window {
+    border-color: CanvasText;
+  }
 }
 
 .cover-photo-note {
@@ -11370,6 +11804,19 @@ p.tip-choice:focus-visible {
   margin: 0;
 }
 
+/* Another owner's row: how TipMe support removes an owner (interim lock, 14 Nov 2026). */
+.business-manager__support {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.business-manager__support a {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .add-business-link {
   margin: 0;
 }
@@ -13065,4 +13512,565 @@ body:has(.business-public) > .site-footer {
 
 .ops-priority {
   font-weight: 700;
+}
+
+/* People (OpsUsers board, 14 Nov 2026): every account as a list or a grid, a page at a time. */
+.ops-people {
+  gap: var(--space-5);
+}
+
+.ops-people__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
+
+.ops-people__count {
+  margin: 0 0 0.3rem;
+  color: var(--text-secondary);
+  font-weight: 700;
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.ops-people__view {
+  margin-left: auto;
+}
+
+.ops-people__filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(0, 1fr)) minmax(
+      0,
+      1.1fr
+    );
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.ops-people__filters .tm-input,
+.ops-people__sheet .tm-input,
+.ops-people__per-page .tm-input {
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+}
+
+/* A filter that is on reads as on, in the soft brand colour. */
+.ops-people .tm-input.ops-people__set {
+  border-color: color-mix(in srgb, var(--brand-primary), transparent 65%);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font-weight: 700;
+}
+
+@media (max-width: 80rem) {
+  .ops-people__filters {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ops-people__search {
+    grid-column: 1 / -1;
+  }
+}
+
+.ops-people__phone-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.ops-people__phone-bar .ops-people__search {
+  flex: 1;
+  min-width: 0;
+}
+
+.ops-people__phone-bar .tm-input {
+  min-height: 44px;
+}
+
+.ops-people__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.ops-people__chips .tm-button.ops-people__chip {
+  min-height: 32px;
+  padding: 0 var(--space-3);
+  border-color: transparent;
+  background: var(--brand-soft);
+  box-shadow: none;
+  color: var(--brand-ink);
+  font-size: var(--text-xs);
+}
+
+.ops-people__results {
+  min-width: 0;
+  transition: opacity var(--duration-component) var(--ease-physical);
+}
+
+/* Turning a page keeps the old rows, faded, until the new ones arrive: nothing jumps. */
+.ops-people__results--stale {
+  opacity: 0.55;
+}
+
+/* The table: the name is the link, and the whole row is its target. */
+.ops-people__table th {
+  color: var(--text-secondary);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ops-people__table td {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.ops-people__row--linked {
+  position: relative;
+}
+
+.ops-people__row--linked:hover,
+.ops-people__row--linked:focus-within {
+  background: color-mix(in srgb, var(--brand-soft), transparent 50%);
+}
+
+.ops-people__row--linked .ops-people__link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.ops-people__link {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.ops-people__link:hover {
+  text-decoration: underline;
+}
+
+/* The row's own target can't take the focus ring; the row shows it instead. */
+.ops-people__row--linked:has(.ops-people__link:focus-visible) {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: -3px;
+}
+
+.ops-people__link:focus-visible {
+  outline: none;
+}
+
+/* Above the row's link, so it can be pressed on its own. */
+.ops-people .tm-button.ops-people__reveal-button {
+  position: relative;
+  z-index: 1;
+  min-height: 32px;
+  padding: 0 var(--space-2);
+}
+
+.ops-people__reveal-row td {
+  white-space: normal;
+  background: var(--surface-raised);
+}
+
+.ops-people__who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ops-people__who strong {
+  margin-right: var(--space-2);
+}
+
+.ops-people__who small {
+  display: block;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.ops-people__avatar {
+  flex: none;
+  display: inline-flex;
+}
+
+.ops-people__avatar img,
+.ops-people__avatar .avatar--initials {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow:
+    0 0 0 2px var(--surface-raised),
+    0 1px 3px rgb(20 18 16 / 20%);
+}
+
+.ops-people__avatar .avatar--initials {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font: 400 0.95rem / 1 var(--font-editorial);
+}
+
+.ops-people__email-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ops-people__email {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--text-xs);
+}
+
+.ops-people__yes {
+  color: var(--state-success);
+  font-weight: 700;
+}
+
+.ops-people__no {
+  color: var(--text-secondary);
+}
+
+.ops-people__money {
+  font-variant-numeric: var(--numeric-variant);
+  font-weight: 700;
+}
+
+.ops-people__status {
+  gap: 0.35rem;
+}
+
+.ops-people__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ops-people__status--live {
+  background: var(--state-success-soft);
+  color: var(--state-success);
+}
+
+.ops-people__status--suspended {
+  background: var(--state-danger-soft);
+  color: var(--state-danger);
+}
+
+.ops-people .tm-badge.ops-people__business {
+  border-color: var(--key-face-dark);
+  background: var(--key-face-dark);
+  color: var(--text-on-night);
+}
+
+.ops-people__badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* The phone list: each row stacked, the whole row one link of at least 44px. */
+.ops-people__stack {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card-subtle);
+}
+
+.ops-people__stacked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-height: 44px;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.ops-people__stacked:first-child {
+  border-top: 0;
+}
+
+.ops-people__stacked .ops-people__avatar img,
+.ops-people__stacked .ops-people__avatar .avatar--initials {
+  width: 40px;
+  height: 40px;
+}
+
+.ops-people__stacked-text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+  flex: 1;
+}
+
+.ops-people__stacked-text small {
+  color: var(--text-secondary);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* The grid: cards with a cover strip, five across on a wide screen, two on a phone. */
+.ops-people__grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: var(--space-4);
+}
+
+.ops-people__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card-subtle);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+a.ops-people__card:hover {
+  border-color: var(--brand-primary);
+}
+
+.ops-people__cover {
+  display: block;
+  height: 64px;
+  background: linear-gradient(120deg, var(--brand-primary), var(--brand-ink));
+}
+
+.ops-people__cover--none {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--surface-recessed) 0 10px,
+    var(--surface-subtle) 10px 20px
+  );
+}
+
+.ops-people__card .ops-people__avatar {
+  margin: -26px 0 0 14px;
+}
+
+.ops-people__card .ops-people__avatar img,
+.ops-people__card .ops-people__avatar .avatar--initials {
+  width: 52px;
+  height: 52px;
+  box-shadow:
+    0 0 0 3px var(--surface-raised),
+    0 2px 6px rgb(20 18 16 / 25%);
+}
+
+.ops-people__card .ops-people__avatar .avatar--initials {
+  font-size: 1.3rem;
+}
+
+.ops-people__card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) 14px 14px;
+  min-width: 0;
+}
+
+.ops-people__card-name {
+  font: 400 1.2rem / 1.1 var(--font-editorial);
+  overflow-wrap: anywhere;
+}
+
+.ops-people__card-handle,
+.ops-people__card-joined {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Loading: the header, filters and pager stay; only the rows shimmer. */
+.ops-people__skel-row,
+.ops-people__skel-card {
+  display: block;
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
+  animation: tm-pulse 1.8s ease-in-out infinite alternate;
+}
+
+.ops-people__skel-row {
+  height: 3rem;
+  margin-bottom: var(--space-2);
+}
+
+.ops-people__skel-card {
+  height: 11rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-people__skel-row,
+  .ops-people__skel-card {
+    animation: none;
+  }
+}
+
+.ops-people__pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+}
+
+.ops-people__showing {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.ops-people__per-page {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.ops-people__per-page .tm-input {
+  width: auto;
+}
+
+.ops-people__pages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+}
+
+.ops-people .ops-people__step {
+  min-height: 44px;
+}
+
+.ops-people__step[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ops-people__numbers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ops-people__numbers a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  color: var(--text-primary);
+  font-weight: 700;
+  font-variant-numeric: var(--numeric-variant);
+  text-decoration: none;
+}
+
+.ops-people__numbers a:hover {
+  background: var(--surface-recessed);
+}
+
+.ops-people__numbers a[aria-current='page'] {
+  background: var(--text-primary);
+  color: var(--surface-base);
+}
+
+.ops-people__numbers li[aria-hidden='true'] {
+  min-width: 20px;
+  text-align: center;
+  color: var(--text-tertiary);
+}
+
+.ops-people__page-words {
+  padding: 0 var(--space-2);
+  font-weight: 700;
+}
+
+.ops-people__sheet-body {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.ops-people__sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ops-people__sheet-head h2 {
+  margin: 0;
+}
+
+.ops-people__chips-field .filter-row {
+  width: auto;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  gap: var(--space-2);
+}
+
+.ops-people__chips-label {
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+
+.ops-people__dates {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 47.99rem) {
+  .ops-people__view {
+    margin-left: 0;
+  }
+
+  .ops-people__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .ops-people__cover {
+    height: 48px;
+  }
+
+  .ops-people__card .ops-people__avatar {
+    margin: -21px 0 0 10px;
+  }
+
+  .ops-people__card .ops-people__avatar img,
+  .ops-people__card .ops-people__avatar .avatar--initials {
+    width: 42px;
+    height: 42px;
+  }
+
+  .ops-people__card-body {
+    padding: 6px 10px 11px;
+  }
+
+  .ops-people__pages {
+    width: 100%;
+    justify-content: space-between;
+    margin-left: 0;
+  }
 }

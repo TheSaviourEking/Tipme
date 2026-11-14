@@ -56,6 +56,7 @@ import {
   readOverrides,
   readRolePermissions,
   readStaffAccess,
+  readStaffAccessOf,
   type StaffAccess,
   withAuditChange,
 } from './staff.js';
@@ -712,34 +713,52 @@ async function provenEmailOrThrow(tx: Tx, userId: string): Promise<string> {
   return account.email;
 }
 
-async function invitationState(
+/**
+ * `InvitationState` for each of these people, read together: their newest invitation email (ties on
+ * the moment go to the larger id) and whether any unused, unexpired link is left.
+ */
+async function invitationStatesOf(
   db: Database,
-  userId: string,
+  userIds: readonly string[],
   now: Date,
-): Promise<InvitationState> {
-  const [mail] = await db
-    .select({ status: mailMessages.status })
+): Promise<Map<string, InvitationState>> {
+  const states = new Map<string, InvitationState>();
+  if (userIds.length === 0) return states;
+  const mails = await db
+    .selectDistinctOn([mailMessages.userId], {
+      userId: mailMessages.userId,
+      status: mailMessages.status,
+    })
     .from(mailMessages)
     .where(
       and(
-        eq(mailMessages.userId, userId),
+        inArray(mailMessages.userId, [...userIds]),
         eq(mailMessages.type, 'staff_invitation'),
       ),
     )
-    .orderBy(desc(mailMessages.createdAt), desc(mailMessages.id))
-    .limit(1);
-  const [link] = await db
-    .select({ userId: staffEnrolments.userId })
+    .orderBy(
+      mailMessages.userId,
+      desc(mailMessages.createdAt),
+      desc(mailMessages.id),
+    );
+  const links = await db
+    .selectDistinct({ userId: staffEnrolments.userId })
     .from(staffEnrolments)
     .where(
       and(
-        eq(staffEnrolments.userId, userId),
+        inArray(staffEnrolments.userId, [...userIds]),
         isNull(staffEnrolments.usedAt),
         gt(staffEnrolments.expiresAt, now),
       ),
-    )
-    .limit(1);
-  return { status: mail?.status ?? 'none', linkOpen: Boolean(link) };
+    );
+  const status = new Map(mails.map((mail) => [mail.userId, mail.status]));
+  const open = new Set(links.map((row) => row.userId));
+  for (const userId of userIds)
+    states.set(userId, {
+      status: status.get(userId) ?? 'none',
+      linkOpen: open.has(userId),
+    });
+  return states;
 }
 
 export interface StaffPerson {
@@ -775,24 +794,34 @@ export function activeStaffList(db: Database): Promise<StaffPerson[]> {
       .leftJoin(staffTotp, eq(staffTotp.userId, staff.userId))
       .where(isNull(staff.revokedAt))
       .orderBy(staff.grantedAt);
+    // Everyone's access and invitations in a few statements, not two to four per person.
+    const access = await readStaffAccessOf(
+      db,
+      rows.map((row) => row.userId),
+    );
+    const invitations = await invitationStatesOf(
+      db,
+      rows.filter((row) => !row.confirmedAt).map((row) => row.userId),
+      new Date(),
+    );
     const people: StaffPerson[] = [];
-    const now = new Date();
     for (const { confirmedAt, grantedAt, ...row } of rows) {
-      const access = composeAccess(
-        row.roleId,
-        await readRolePermissions(db, row.roleId),
-        await readOverrides(db, row.userId),
-      );
+      const theirs = access.get(row.userId);
+      // Removed between the two reads: they no longer have access, so they aren't listed.
+      if (!theirs) continue;
       people.push({
         ...row,
         grantedAt: grantedAt.toISOString(),
         enrolled: Boolean(confirmedAt),
         invitation: confirmedAt
           ? null
-          : await invitationState(db, row.userId, now),
-        permissions: [...access.permissions].sort(),
-        additions: access.additions,
-        removals: access.removals,
+          : (invitations.get(row.userId) ?? {
+              status: 'none',
+              linkOpen: false,
+            }),
+        permissions: [...theirs.permissions].sort(),
+        additions: theirs.additions,
+        removals: theirs.removals,
       });
     }
     return people;

@@ -61,6 +61,8 @@ const messages: Record<ApiErrorCode, string> = {
   NOTE_NOT_OPEN: 'A note can’t be added to this tip.',
   BUSINESS_LAST_OWNER:
     'Make someone else an owner of the business first, or close it.',
+  OWNER_REMOVAL_NEEDS_TIPME:
+    'To remove an owner, contact TipMe support. We check it with both owners first.',
   BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
   SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
   SHARE_CHANGE_TOO_SOON:
@@ -173,6 +175,8 @@ const messages: Record<ApiErrorCode, string> = {
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
+  WITHDRAWAL_BELOW_FEE:
+    'The amount must be more than the NGN 50 transfer fee, which is taken from it.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:
@@ -245,6 +249,8 @@ const messages: Record<ApiErrorCode, string> = {
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
+  COUNTRY_NOT_SUPPORTED:
+    'Payment accounts can’t be set up in that country. Choose one from the list.',
   INTERNAL_ERROR: 'Something went wrong.',
 };
 
@@ -284,6 +290,7 @@ const operationErrors: Partial<
   HAS_BALANCE: { status: 409, code: 'HAS_BALANCE' },
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
+  WITHDRAWAL_BELOW_FEE: { status: 409, code: 'WITHDRAWAL_BELOW_FEE' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
@@ -419,6 +426,7 @@ const operationErrors: Partial<
   MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
   OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
   BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  OWNER_REMOVAL_NEEDS_TIPME: { status: 403, code: 'OWNER_REMOVAL_NEEDS_TIPME' },
   // Business release 2 (R2-0).
   SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
   SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },

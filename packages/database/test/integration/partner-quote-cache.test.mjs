@@ -166,11 +166,11 @@ test('partner quote cache', async (t) => {
     'the ledger is read fresh: a new tip shows at once and asks the partner again',
     async () => {
       const { provider, cache } = await setup();
-      assert.equal((await quote(provider, cache)).ledgerMinor, 360000n);
+      assert.equal((await quote(provider, cache)).ledgerMinor, 372000n);
       await paidTip();
       const after = await quote(provider, cache);
-      assert.equal(after.ledgerMinor, 720000n);
-      assert.equal(after.withdrawableMinor, 720000n);
+      assert.equal(after.ledgerMinor, 744000n);
+      assert.equal(after.withdrawableMinor, 744000n);
       assert.equal(provider.state.calls, 6);
     },
   );
@@ -179,7 +179,7 @@ test('partner quote cache', async (t) => {
     'a withdrawal always asks the partner, even with a cached quote',
     async () => {
       const { provider, cache } = await setup();
-      assert.equal((await quote(provider, cache)).withdrawableMinor, 360000n);
+      assert.equal((await quote(provider, cache)).withdrawableMinor, 372000n);
       // The partner now holds less than the cached quote says. The request must see that.
       provider.state.availableMinor = 100000n;
       const calls = provider.state.calls;
@@ -198,7 +198,7 @@ test('partner quote cache', async (t) => {
       await withdraw(provider, 200000n);
       const calls = provider.state.calls;
       const after = await quote(provider, cache);
-      assert.equal(after.ledgerMinor, 160000n);
+      assert.equal(after.ledgerMinor, 172000n);
       assert.equal(provider.state.calls, calls + 3);
     },
   );

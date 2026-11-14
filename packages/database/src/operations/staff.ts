@@ -3,7 +3,17 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
 import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
-import { and, desc, eq, gt, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   auditEvents,
@@ -535,6 +545,56 @@ export async function readStaffAccess(
   return composeAccess(row.roleId, names, overrides);
 }
 
+/**
+ * `readStaffAccess` for many people at once, in three statements rather than three each. Anyone
+ * not active staff is left out, as `readStaffAccess` would answer null for them.
+ */
+export async function readStaffAccessOf(
+  db: Database | Tx,
+  userIds: readonly string[],
+): Promise<Map<string, StaffAccess>> {
+  const found = new Map<string, StaffAccess>();
+  if (userIds.length === 0) return found;
+  const rows = await db
+    .select({ userId: staff.userId, roleId: staff.roleId })
+    .from(staff)
+    .where(and(inArray(staff.userId, [...userIds]), isNull(staff.revokedAt)));
+  if (rows.length === 0) return found;
+  const roleIds = [...new Set(rows.map((row) => row.roleId))];
+  const names = await db
+    .select({
+      roleId: rolePermissions.roleId,
+      permission: rolePermissions.permission,
+    })
+    .from(rolePermissions)
+    .where(inArray(rolePermissions.roleId, roleIds));
+  const overrides = await db
+    .select({
+      userId: staffPermissionOverrides.userId,
+      permission: staffPermissionOverrides.permission,
+      effect: staffPermissionOverrides.effect,
+    })
+    .from(staffPermissionOverrides)
+    .where(
+      inArray(
+        staffPermissionOverrides.userId,
+        rows.map((row) => row.userId),
+      ),
+    );
+  for (const row of rows)
+    found.set(
+      row.userId,
+      composeAccess(
+        row.roleId,
+        names
+          .filter((name) => name.roleId === row.roleId)
+          .map((name) => name.permission),
+        overrides.filter((override) => override.userId === row.userId),
+      ),
+    );
+  return found;
+}
+
 const MAILBOX_COLUMNS = {
   email: users.email,
   recoveryEmail: users.recoveryEmail,
@@ -627,8 +687,14 @@ export async function seriousPermissionHolders(
   tx: Database | Tx,
 ): Promise<Map<string, number>> {
   const holders = new Map<string, Set<string>[]>();
-  for (const person of await staffAbleToEnterCode(tx)) {
-    const access = await readStaffAccess(tx, person.userId);
+  const able = await staffAbleToEnterCode(tx);
+  // Read together: one at a time, this held the staff-admin lock for a round trip per person.
+  const everyone = await readStaffAccessOf(
+    tx,
+    able.map((person) => person.userId),
+  );
+  for (const person of able) {
+    const access = everyone.get(person.userId);
     const boxes = mailboxesOf(person);
     // Some actions only an owner may decide, so holding the permission doesn't make a second person.
     if (access?.roleId === 'owner')

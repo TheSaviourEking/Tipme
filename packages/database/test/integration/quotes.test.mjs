@@ -24,8 +24,9 @@ test('quotes', async (t) => {
         currency: 'NGN',
         now,
       });
-      assert.equal(quote.breakdown.recipientNetMinor, 180000n);
-      assert.equal(quote.feePolicyVersion, 'proposed-v1.1');
+      // A Free page (owner, 12 Nov 2026): TipMe keeps 7%, processing included.
+      assert.equal(quote.breakdown.recipientNetMinor, 186000n);
+      assert.equal(quote.feePolicyVersion, 'v2-free-7pct');
       assert.equal(quote.expiresAt.getTime(), now.getTime() + QUOTE_TTL_MS);
       assert.equal(QUOTE_TTL_MS, 15 * 60 * 1000);
     },
@@ -95,10 +96,14 @@ test('quotes', async (t) => {
       assert.equal(custom.breakdown.providerFeeMinor, 3000n);
       assert.equal(custom.breakdown.recipientNetMinor, 190000n);
       assert.equal(custom.breakdown.payerTotalMinor, custom.breakdown.tipMinor);
-      assert.equal(custom.feePolicyVersion, 'proposed-v1.1-custom-500');
+      assert.equal(custom.feePolicyVersion, 'v2-free-7pct-custom-500');
+      // Staff see the page's plan rate and the rate new quotes really use (the deal, capped).
       assert.deepEqual(await pagePricing(database.db, ADA), {
         customFeeBps: 500,
         feeFreeRemaining: 0,
+        plan: 'free',
+        planFeeBps: 700,
+        feeBps: 500,
       });
 
       const { remaining } = await grantFeeFreeTips(database.db, {
@@ -113,7 +118,7 @@ test('quotes', async (t) => {
       assert.equal(free.feeFree, true);
       assert.equal(free.breakdown.payerTotalMinor, free.breakdown.tipMinor);
       assert.equal(free.breakdown.recipientNetMinor, 200000n);
-      assert.equal(free.feePolicyVersion, 'proposed-v1.1-custom-500-fee-free');
+      assert.equal(free.feePolicyVersion, 'v2-free-7pct-custom-500-fee-free');
       // The one credit is reserved by the open fee-free quote: the next quote pays the fee.
       assert.equal((await quoteAda()).feeFree, false);
 
@@ -124,7 +129,7 @@ test('quotes', async (t) => {
         reason: 'Partnership ended',
       });
       const back = await quoteAda();
-      assert.equal(back.feePolicyVersion, 'proposed-v1.1');
+      assert.equal(back.feePolicyVersion, 'v2-free-7pct');
 
       const audit = (
         await database.pool.query(

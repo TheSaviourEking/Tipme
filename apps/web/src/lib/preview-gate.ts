@@ -11,6 +11,8 @@ const OPEN = [
   /^\/(favicon\.ico|robots\.txt|icon\.svg)$/,
   // The home-screen icons and their manifest, exact names only.
   /^\/(apple-icon|manifest\.webmanifest|icons\/192\.png|icons\/512-maskable\.png)$/,
+  // The logo every email loads (packages/mail layout.ts); mail clients have no ticket.
+  /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/,
 ];
 
 export function gateDecision(input: {

@@ -6,10 +6,13 @@ import { Button, Skeleton, StateLine } from '@tipme/ui';
 import {
   downloadCanvas,
   loadBusinessCodes,
+  signLogo,
+  useSignLogo,
   useWebOrigin,
   type CodesAnswer,
 } from '@/lib/business/codes-api';
 import {
+  type SignLogo,
   SIGN_STYLES,
   codeUrl,
   drawLocationSign,
@@ -26,22 +29,26 @@ function SignPreview({
   url,
   business,
   location,
+  logo,
 }: {
   url: string;
   business: string;
   location: string;
+  /** `undefined` while it loads: nothing is drawn until then. */
+  logo: SignLogo | null | undefined;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (canvas.current)
+    if (canvas.current && logo !== undefined)
       drawLocationSign(canvas.current, {
         url,
         business,
         location,
         style: NIGHT,
         width: 480,
+        logo,
       });
-  }, [url, business, location]);
+  }, [url, business, location, logo]);
   return (
     <canvas
       ref={canvas}
@@ -119,9 +126,10 @@ function CodesList({
   businessId: string;
   origin: string;
 }) {
+  const logo = useSignLogo(codes.business.logoPath);
   const locationName = (id: string) =>
     codes.location.find((entry) => entry.locationId === id)?.name ?? '';
-  const downloadSign = (entry: BusinessCodes['location'][number]) => {
+  const downloadSign = async (entry: BusinessCodes['location'][number]) => {
     const canvas = document.createElement('canvas');
     drawLocationSign(canvas, {
       url: codeUrl(origin, entry.path),
@@ -129,6 +137,8 @@ function CodesList({
       location: entry.name,
       style: NIGHT,
       width: 1240,
+      // Waits for the logo if the preview has not loaded it yet; null draws the initial.
+      logo: await signLogo(codes.business.logoPath),
     });
     void downloadCanvas(
       canvas,
@@ -166,10 +176,14 @@ function CodesList({
                 url={codeUrl(origin, entry.path)}
                 business={codes.business.name}
                 location={entry.name}
+                logo={logo}
               />
               <p className="business-codes__name">{entry.name}</p>
               <div className="business-codes__actions">
-                <Button variant="secondary" onClick={() => downloadSign(entry)}>
+                <Button
+                  variant="secondary"
+                  onClick={() => void downloadSign(entry)}
+                >
                   Download {entry.name} sign
                 </Button>
                 <Link

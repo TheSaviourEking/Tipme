@@ -35,7 +35,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(
-      page.getByText('10 tips! People keep coming back to thank you.'),
+      page.getByText('10 tips! People keep coming back to tip you.'),
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expectAccessible(page);
@@ -45,13 +45,13 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   const quoteResponse = visitor.request.post(`${API_ORIGIN}/v1/tip-quotes`, {
     data: { handle, amountMinor: '200000', currency: 'NGN' },
   });
-  // Milestones grant nothing by themselves: the quote still uses the normal 10% (ADR-0014).
+  // Milestones grant nothing by themselves: the quote still uses the plan's normal rate (ADR-0014; Free 7% since 12 Nov 2026).
   const quote = await (await quoteResponse).json();
   expect(quote.data.payerTotalMinor).toBe('200000');
   expect(
     BigInt(quote.data.platformFeeMinor) + BigInt(quote.data.providerFeeMinor),
-  ).toBe(20000n);
-  expect(quote.data.recipientNetMinor).toBe('180000');
+  ).toBe(14000n);
+  expect(quote.data.recipientNetMinor).toBe('186000');
 
   const moment = page.locator('.moment-list li', { hasText: '10 tips!' });
   await moment.getByRole('button', { name: 'Share on my page' }).click();
@@ -76,7 +76,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   await visitor.getByRole('button', { name: /^Pay/ }).click();
   await visitor.waitForURL(/\/tip\//);
   await expect(
-    visitor.getByRole('heading', { name: /got your thanks\.$/ }),
+    visitor.getByRole('heading', { name: /got your tip\.$/ }),
   ).toBeVisible({
     timeout: 20_000,
   });

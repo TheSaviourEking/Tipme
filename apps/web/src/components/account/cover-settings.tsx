@@ -20,6 +20,11 @@ import {
   takesColours,
   type CoverDraft,
 } from '@/lib/cover-choice';
+import {
+  ImagePicker,
+  pickerFailure,
+  type PickerOutcome,
+} from '@/components/image-picker/image-picker';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { apiFetch, apiUrl } from '@/lib/session-client';
 import { COVER_SHRINK_MAX, shrinkPhoto } from '@/lib/shrink-photo';
@@ -166,7 +171,9 @@ export function CoverSettings({
   // The photo being uploaded, shown at once while it is stored.
   const [pending, setPending] = useState<string | null>(null);
   const clear = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const uploadInput = useRef<HTMLInputElement>(null);
+  // The upload or removal line, beside the picker; "Saved" for a design stays by its button.
+  const [photoDone, setPhotoDone] = useState('');
+  const uploadButton = useRef<HTMLButtonElement>(null);
   const refocusUpload = useRef(false);
   useEffect(
     () => () => {
@@ -184,7 +191,7 @@ export function CoverSettings({
   useEffect(() => {
     if (busy || !refocusUpload.current) return;
     refocusUpload.current = false;
-    uploadInput.current?.focus();
+    uploadButton.current?.focus();
   }, [busy]);
 
   // A new photo changes the route's answer, and the path carries its version.
@@ -230,6 +237,7 @@ export function CoverSettings({
   };
   const apply = (next: CoverDraft) => {
     setDone('');
+    setPhotoDone('');
     setError('');
     setTried(null);
     setDraft(next);
@@ -255,16 +263,17 @@ export function CoverSettings({
     } else setError('We couldn’t save that. Please try again.');
   };
 
-  const upload = async (file: File) => {
+  /** The positioned cover from the picker; nothing is sent before Save. */
+  const upload = async (picture: Blob): Promise<PickerOutcome> => {
     setBusy(true);
     setError('');
     setDone('');
+    setPhotoDone('');
     // Shrunk here first, as photos are: a phone photo uploads in seconds. Covers keep more pixels.
-    const photo = await shrinkPhoto(file, COVER_SHRINK_MAX);
+    const photo = await shrinkPhoto(picture, COVER_SHRINK_MAX);
     if (photo.size > PHOTO_LIMIT_BYTES) {
       setBusy(false);
-      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
-      return;
+      return { ok: false, message: photoErrors['PAYLOAD_TOO_LARGE']! };
     }
     // The real picture shows at once; if the upload fails it goes back to the cover it was.
     setPending(URL.createObjectURL(photo));
@@ -275,19 +284,18 @@ export function CoverSettings({
     setBusy(false);
     if (result.ok) {
       setProfile(result.data);
-      say('Cover saved.');
-    } else {
-      setPending(null);
-      setError(
-        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
-      );
+      setPhotoDone('Cover saved.');
+      return { ok: true };
     }
+    setPending(null);
+    return pickerFailure(result.code);
   };
 
   const removePhoto = async () => {
     setBusy(true);
     setError('');
     setDone('');
+    setPhotoDone('');
     const result = await apiFetch<MyProfile>('/v1/me/cover', {
       method: 'DELETE',
     });
@@ -295,7 +303,7 @@ export function CoverSettings({
     if (result.ok) {
       setPending(null);
       setProfile(result.data);
-      say('Cover removed.');
+      setPhotoDone('Cover removed.');
       // The button is about to unmount; focus would fall to the page body. It moves to the upload
       // control once that is enabled again (below).
       refocusUpload.current = true;
@@ -330,36 +338,20 @@ export function CoverSettings({
       <p className="tm-hint">
         The wide image at the top of your page. Your own photo works best.
       </p>
-      <Preview next={layer} />
+      <ImagePicker
+        kind="cover"
+        hasImage={hasPhoto}
+        tile={<Preview next={layer} />}
+        limits="JPEG, PNG or WebP, up to 5 MB. Wide photos work best. TipMe removes hidden details such as where it was taken."
+        onSave={upload}
+        status={photoDone}
+        error={error}
+        disabled={busy}
+        buttonRef={uploadButton}
+      />
       {hasPhoto && stored.state === 'failed' && !pending && (
         <p className="tm-hint">
           Your cover is saved, but we couldn’t show a preview just now.
-        </p>
-      )}
-
-      <label className="cover-upload tm-button tm-button--secondary">
-        <input
-          ref={uploadInput}
-          type="file"
-          className="cover-upload__input"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          aria-describedby={error ? `${id}-error` : `${id}-limits`}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void upload(file);
-            event.target.value = '';
-          }}
-        />
-        Upload your own photo
-      </label>
-      <p className="tm-hint" id={`${id}-limits`}>
-        JPEG, PNG or WebP, up to 5 MB. TipMe removes hidden details such as
-        where it was taken.
-      </p>
-      {error && (
-        <p className="tm-field-error" role="alert" id={`${id}-error`}>
-          {error}
         </p>
       )}
 

@@ -31,6 +31,7 @@ import {
   withdrawalPaid,
 } from './types/account-events.js';
 import { businessInvitation } from './types/business-invitation.js';
+import { businessOwnerChange } from './types/business-owner-change.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { payoutDestinationChanged } from './types/payout-destination-changed.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
@@ -116,6 +117,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     usernameTakeBackDone,
     usernameTakeBackCancelled,
     businessInvitation,
+    businessOwnerChange,
     shareProposed,
   ].map((type) => [type.id, type]),
 );

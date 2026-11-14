@@ -13,7 +13,7 @@ import { WEB_ORIGIN } from './stack';
 // Public boards PR 2: a person's link shows their own card (name, role, handle and cover colour
 // only); everything else, and every page that isn't live, shows the general card.
 
-const GENERAL_ALT = 'TipMe. A little thanks goes a long way.';
+const GENERAL_ALT = 'TipMe. A little tip goes a long way.';
 
 /** Width and height from a PNG's IHDR chunk. */
 function pngSize(bytes: Buffer) {

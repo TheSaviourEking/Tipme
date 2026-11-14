@@ -137,7 +137,9 @@ test('the whole story works together, and leaves nothing visible behind', async 
       // A supporter scans the QR code and tips; the payment is confirmed.
       await tip(visitor, handle, 'Pay', 'Release check: thank you');
       await expect(
-        visitor.getByRole('heading', { name: /paid|thank/i }).first(),
+        visitor
+          .getByRole('heading', { name: /paid|got your tip|thank/i })
+          .first(),
       ).toBeVisible({ timeout: 30_000 });
 
       // The recipient sees it, with a notification, and withdraws everything.

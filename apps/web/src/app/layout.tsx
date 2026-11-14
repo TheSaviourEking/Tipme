@@ -32,7 +32,7 @@ const dmSerif = localFont({
 export const metadata: Metadata = {
   metadataBase: siteOrigin,
   title: {
-    default: 'TipMe — A little thanks goes a long way',
+    default: 'TipMe — A little tip goes a long way',
     template: '%s | TipMe',
   },
   description: SITE_DESCRIPTION,

@@ -6,6 +6,7 @@ import { letter } from '../layout.js';
 export const emailVerificationLink = defineMailType({
   id: 'email_verification_link',
   category: 'security',
+  waiting: true,
   sender: 'security',
   preference: null,
   schema: z.object({ token: z.string().min(16).max(128) }).strict(),

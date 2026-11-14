@@ -98,8 +98,8 @@ export default function MonthlyRecapPage() {
         </h1>
         <p className="week-hero__headline">
           {recap.tipCount === 1
-            ? 'You were thanked once.'
-            : `You were thanked ${recap.tipCount} times.`}
+            ? 'You got 1 tip.'
+            : `You got ${recap.tipCount} tips.`}
         </p>
         <div className="week-hero__stats">
           <div>

@@ -16,7 +16,7 @@ import {
   PayoutRejectedError,
   UncertainProviderOutcomeError,
 } from '../../../payments/dist/index.js';
-import { ADA, useDatabase } from './helpers.mjs';
+import { ADA, atLaunchProPrice, useDatabase } from './helpers.mjs';
 
 const { createMockProvider } = await import('../../../payments/dist/index.js');
 const { Redis } = createRequire(
@@ -34,6 +34,7 @@ const later = (ms) => new Date(NOW.getTime() + ms);
 async function setup(t, credit = 900000n) {
   const db = await useDatabase(t);
   await db.fresh();
+  await atLaunchProPrice(db);
   await db.pool.query(
     `UPDATE users SET email = 'ada@example.com', email_verified_at = now()
        WHERE id = (SELECT user_id FROM profiles WHERE id = $1)`,

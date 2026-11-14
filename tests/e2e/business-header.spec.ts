@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness, seedMember } from './business-fixtures';
+import { chooseAndSave } from './image-picker-helpers';
 
 // The header a business code opens (owner, 6 Nov 2026): "· on today" only while someone is on
 // shift (never a count), and the owner's logo in the tile, the initial without one.
@@ -120,7 +121,7 @@ test('an owner uploads a logo in Details; the public header tile shows it, and R
 
   await page.goto('/dashboard/business');
   const details = page.getByRole('region', { name: 'Details' });
-  await details.getByLabel('Choose a logo').setInputFiles({
+  await chooseAndSave(page, details, 'Choose a logo', 'logo', {
     name: 'logo.jpg',
     mimeType: 'image/jpeg',
     buffer: await logoPhoto(),

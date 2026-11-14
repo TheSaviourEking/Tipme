@@ -14,7 +14,10 @@ import type {
   BachsOnboardingResponse,
   BachsPaymentAccountStatus,
 } from '@tipme/contracts';
-import { bachsOnboardingRequestSchema } from '@tipme/contracts';
+import {
+  bachsOnboardingRequestSchema,
+  isPaymentCountry,
+} from '@tipme/contracts';
 import {
   beginPaymentAccountCreation,
   ensurePayoutSetup,
@@ -33,7 +36,10 @@ import {
   type BachsProvider,
 } from '@tipme/payments';
 import { CodedHttpException } from '../http/coded.exception.js';
-import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import {
+  ValidationFailedException,
+  ZodValidationPipe,
+} from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import {
@@ -49,6 +55,29 @@ import { ProfileRevalidator } from './revalidate.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import type { MailSealing } from '@tipme/database';
+
+/**
+ * The onboarding body, with its own answer for a country outside our payment partner's payout
+ * countries (lowercase included), so the card can say so in plain words. Still a ZodValidationPipe,
+ * so the OpenAPI document reads its schema.
+ */
+export class OnboardingBodyPipe extends ZodValidationPipe<
+  typeof bachsOnboardingRequestSchema
+> {
+  constructor() {
+    super(bachsOnboardingRequestSchema);
+  }
+
+  override transform(value: unknown): BachsOnboardingRequest {
+    const country =
+      typeof value === 'object' && value !== null && 'country' in value
+        ? value.country
+        : undefined;
+    if (typeof country === 'string' && !isPaymentCountry(country))
+      throw new CodedHttpException(400, 'COUNTRY_NOT_SUPPORTED');
+    return super.transform(value);
+  }
+}
 
 @Controller('v1/me/payment-account')
 @UseGuards(SessionGuard, CsrfGuard)
@@ -117,7 +146,7 @@ export class PaymentAccountsController {
   @RateLimit('intents')
   async onboard(
     @CurrentUser() auth: AuthContext,
-    @Body(new ZodValidationPipe(bachsOnboardingRequestSchema))
+    @Body(new OnboardingBodyPipe())
     body: BachsOnboardingRequest,
   ): Promise<ApiDataResponse<BachsOnboardingResponse>> {
     const bachs = this.bachs();
@@ -127,6 +156,18 @@ export class PaymentAccountsController {
     const recipient = await this.recipient(auth.userId);
     if (!recipient.verifiedEmail)
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
+
+    // No country: the return from the hosted setup page, which only re-checks an account that
+    // exists. It never creates one, so a hand-made request can't start an account in no country.
+    if (!body.country) {
+      const existing = await getPaymentAccountForProfile(this.database.db, {
+        profileId: recipient.profileId,
+        provider: 'bachs',
+        environment,
+      });
+      if (!existing || existing.status === 'FAILED')
+        throw new ValidationFailedException(['country']);
+    }
 
     const claim = await beginPaymentAccountCreation(this.database.db, {
       profileId: recipient.profileId,
@@ -143,6 +184,15 @@ export class PaymentAccountsController {
 
     let remoteAccount: BachsRecipientAccount;
     if (claim.created) {
+      // The account failed in between the check above and the claim: nothing to re-check.
+      if (!body.country) {
+        await markPaymentAccountCreationFailed(this.database.db, {
+          profileId: recipient.profileId,
+          provider: 'bachs',
+          environment,
+        });
+        throw new ValidationFailedException(['country']);
+      }
       try {
         remoteAccount = await provider.createRecipientAccount({
           contactEmail: recipient.verifiedEmail,

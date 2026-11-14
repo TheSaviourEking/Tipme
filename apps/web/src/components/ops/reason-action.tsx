@@ -14,6 +14,8 @@ export function ReasonAction({
   variant = 'secondary',
   hint = 'Recorded in the audit log with your name and the time.',
   errorTitle = 'Not done',
+  startOpen = false,
+  onCancel,
 }: {
   open: string;
   field: string;
@@ -24,9 +26,13 @@ export function ReasonAction({
   hint?: string;
   /** Where a failure can't say that nothing happened. */
   errorTitle?: string;
+  /** Opened from elsewhere (a row's own button): the form shows at once. */
+  startOpen?: boolean;
+  /** Told when the form closes without sending, so whoever opened it can close it too. */
+  onCancel?: () => void;
 }) {
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const send = async (event: FormEvent<HTMLFormElement>) => {
@@ -72,7 +78,13 @@ export function ReasonAction({
         <Button type="submit" disabled={busy} aria-busy={busy}>
           {submit}
         </Button>
-        <Button variant="quiet" onClick={() => setOpen(false)}>
+        <Button
+          variant="quiet"
+          onClick={() => {
+            setOpen(false);
+            onCancel?.();
+          }}
+        >
           Cancel
         </Button>
       </div>

@@ -67,3 +67,25 @@ test('the preview password does not hold the manifest or the icons', () => {
   ])
     assert.equal(decide(path, undefined), 'login', path);
 });
+
+// Emails load the logo from the web origin; a mail client has no preview ticket.
+test('the preview password does not hold the email logos', () => {
+  for (const scheme of ['light', 'dark'])
+    for (const scale of ['2x', '3x'])
+      assert.equal(
+        decide(`/email/tipme-logo-${scheme}-${scale}.png`, undefined),
+        'exempt',
+        `${scheme} ${scale}`,
+      );
+  for (const path of [
+    '/email',
+    '/email/',
+    '/email/other.png',
+    '/email/tipme-logo-light.svg',
+    '/email/tipme-logo-light-2x.png/x',
+    '/email/../dashboard',
+    '/email/%2e%2e/x',
+    '/email//tipme-logo-light-2x.png',
+  ])
+    assert.equal(decide(path, undefined), 'login', path);
+});

@@ -235,6 +235,13 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'A page’s Pro payments for deciding a refund: amounts, dates and how paid, no card or bank details.',
   },
+  // People (14 Nov 2026): a search.view list that adds tip totals for private.view holders.
+  'OpsPeopleController.list': {
+    verb: 'GET',
+    permission: 'search.view',
+    reason:
+      'Every account with masked emails; private.view adds tip totals only: amounts, no contact, card or bank details. The full email is a reveal that asks for a code.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',
@@ -328,6 +335,8 @@ export const SERIOUS_ACTIONS = [
   'username.take_back',
   // TipMe for businesses (PR B2): verifying makes a business's printed codes live.
   'business.verify',
+  // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.
+  'business.owner_remove',
   'tip.reverse',
   'changelog.publish',
   'pro_price.change',
@@ -350,6 +359,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'mail_provider.switch': 'Switch the active email provider',
   'username.take_back': 'Take a username back from a page',
   'business.verify': 'Verify a business',
+  'business.owner_remove': 'Remove a business owner',
   'tip.reverse': 'Reverse a refunded or charged-back tip',
   'changelog.publish': 'Show users a What’s new entry',
   'pro_price.change': 'Change the Pro price',
@@ -371,6 +381,7 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'mail_provider.switch': 'providers.manage',
     'username.take_back': 'usernames.manage',
     'business.verify': 'businesses.manage',
+    'business.owner_remove': 'businesses.manage',
     'tip.reverse': 'payments.repair',
     'changelog.publish': 'changelog.publish',
     'pro_price.change': 'pro.price',

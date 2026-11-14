@@ -7,14 +7,18 @@ import {
 } from '@tipme/contracts';
 import { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
 import { characterMap, setsIn } from '@/lib/font-cmap';
+import { avatarSource } from '@/lib/avatar-source';
 
 // The link-preview cards (1200 × 630), drawn by next/og. Both are request-independent drawings of
-// what they are given: the general card of nothing, the person card of `PersonCardInput` only.
+// what they are given: the general card of nothing, the person card of `PersonCardInput` and the
+// photo the route fetched for it (`shareCardPhoto`), only.
 
 export interface PersonCardInput {
   name: string;
   role: string | null;
   handle: string;
+  /** The photo the public page shows (an API path or a demo picture), or null. */
+  avatarPath: string | null;
   band: string;
   face: string;
 }
@@ -26,13 +30,19 @@ const BRAND = '#7a32f9';
 // The Violet cover colour: TipMe purple and its deeper tone.
 const PURPLE = { band: BRAND, face: '#5415c9' } as const;
 
-/** Only what the public page shows: never phone, email, photo, tips, totals or balance. */
+/**
+ * Only what the public page shows: never phone, email, tips, totals or balance. The photo is the
+ * page's own: the API sends it only for a live, active page that has one (a removed photo has no
+ * path), and only a path the page itself would show is kept.
+ */
 export function personCardInput(p: PublicProfile): PersonCardInput {
   const role = p.role?.trim();
+  const photo = p.avatarPath;
   return {
     name: p.displayName,
     role: role ? role : null,
     handle: p.handle,
+    avatarPath: photo && avatarSource(photo, '', '') ? photo : null,
     ...shareCardColours(p.cover),
   };
 }
@@ -148,7 +158,7 @@ export function GeneralCard() {
             letterSpacing: -1.5,
           }}
         >
-          <span>A little thanks</span>
+          <span>A little tip</span>
           <span style={{ color: BRAND }}>goes a long way.</span>
         </div>
         <span
@@ -182,6 +192,8 @@ export function PersonCard(
     host: string;
     /** DM Serif Display's characters (`serifCharacters`); without it the name is set in DM Serif. */
     serif?: ReadonlySet<number>;
+    /** The photo as a data URL (`shareCardPhoto`); without it, the initials. */
+    photo?: string | null;
   },
 ) {
   const initials = initialsOf(p.name);
@@ -210,7 +222,10 @@ export function PersonCard(
             'linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 60%)',
         }}
       />
-      {/* The face: initials only, never the photo. */}
+      {/*
+        The face: the person's photo when they have one, else their initials (owner, 14 Nov 2026;
+        this was initials only before). The photo is the one their public page shows.
+      */}
       <div
         style={{
           position: 'absolute',
@@ -229,7 +244,23 @@ export function PersonCard(
           fontSize: 64,
         }}
       >
-        {initials}
+        {p.photo ? (
+          // next/og draws a plain img; alt text is not part of the picture.
+          // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+          <img
+            src={p.photo}
+            width={FACE}
+            height={FACE}
+            style={{
+              width: FACE,
+              height: FACE,
+              borderRadius: 999,
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          initials
+        )}
       </div>
       <div
         style={{

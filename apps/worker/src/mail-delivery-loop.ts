@@ -18,7 +18,7 @@ export interface MailDelivery {
 }
 
 /**
- * Sends queued mail every `intervalMs` (20 at a time, security first). Once a minute it also
+ * Sends queued mail every `intervalMs` (20 at a time, waiting codes first, then security). Once a minute it also
  * requeues mail a dead worker left `sending`, wipes sealed content past its 7 days and finishes
  * email recoveries whose 24-hour hold has ended. A failed
  * pass is logged by name and tried again next tick; mail waits safely in Postgres.

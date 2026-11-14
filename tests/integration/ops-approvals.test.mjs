@@ -878,6 +878,115 @@ test('the list shows the description, never the payload, and only what you may s
   );
 });
 
+/** Counts statements sent through the pool while `work` runs. */
+async function countingQueries(work) {
+  const original = database.pool.query;
+  let count = 0;
+  database.pool.query = function (...args) {
+    count += 1;
+    return original.apply(this, args);
+  };
+  try {
+    return { result: await work(), count: () => count };
+  } finally {
+    database.pool.query = original;
+  }
+}
+
+test('the list answers for many staff and requests with a bounded number of queries, and the same answers', async () => {
+  const asker = await person({ email: 'janedoe@gmail.com', verified: true });
+  const owner2 = await person();
+  const owner3 = await person();
+  const fees = await roleWith(['fees.manage']);
+  // The asker's second account: never a second person for them.
+  const twin = await person({
+    roleId: fees,
+    email: 'Jane.Doe+ops@gmail.com',
+    verified: true,
+  });
+  const fillers = [];
+  for (let i = 0; i < 60; i += 1) fillers.push(await person({ roleId: fees }));
+
+  const plain = [];
+  for (let i = 0; i < 5; i += 1)
+    plain.push(await ask(asker, { payload: { value: `v${i}` } }));
+  const gatedAsk = async (payload) => {
+    const outcome = await requestSeriousAction(database.db, {
+      name: 'test.gated',
+      payload,
+      actorId: asker,
+      grantId: people.get(asker).grantId,
+      reason: REASON,
+    });
+    assert.equal(outcome.state, 'pending');
+    return outcome.requestId;
+  };
+  // Only owners may decide it; owner2 is who it concerns, so once owner3 goes nobody else is left.
+  const alone = await gatedAsk({ target: 't-alone', subject: owner2 });
+  const gatedOpen = await gatedAsk({ target: 't-open' });
+  const fromFiller = await ask(fillers[0], { payload: { value: 'filler' } });
+  await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [owner3]);
+
+  const viewOf = async (actorId) => {
+    const { result, count } = await countingQueries(() =>
+      ops.listApprovals(database.db, { actorId }),
+    );
+    return {
+      count: count(),
+      byId: new Map(
+        result.map((row) => [
+          row.id,
+          { canDecide: row.canDecide, nobody: row.nobodyElseQualified },
+        ]),
+      ),
+    };
+  };
+  const expectRows = (view, expected) => {
+    assert.equal(view.byId.size, expected.size);
+    for (const [id, want] of expected)
+      assert.deepEqual(view.byId.get(id), want, id);
+  };
+  const nobodyOf = new Map([
+    ...plain.map((id) => [id, false]),
+    [alone, true],
+    [gatedOpen, false],
+    [fromFiller, false],
+  ]);
+  const answers = (canDecide) =>
+    new Map(
+      [...nobodyOf].map(([id, nobody]) => [
+        id,
+        { canDecide: canDecide(id), nobody },
+      ]),
+    );
+
+  const ownerView = await viewOf(owner2);
+  expectRows(
+    ownerView,
+    answers((id) => id !== alone),
+  );
+  const fillerView = await viewOf(fillers[1]);
+  expectRows(
+    fillerView,
+    answers((id) => id !== alone && id !== gatedOpen),
+  );
+  const twinView = await viewOf(twin);
+  expectRows(
+    twinView,
+    answers((id) => id === fromFiller),
+  );
+  const askerView = await viewOf(asker);
+  expectRows(
+    askerView,
+    answers((id) => id === fromFiller),
+  );
+
+  // 64 staff and 8 requests: reading each person once per list, not once per request, keeps this
+  // to about ten statements. Per person per request it was over 2,500.
+  for (const view of [ownerView, fillerView, twinView, askerView])
+    assert.ok(view.count <= 20, `listApprovals sent ${view.count} queries`);
+});
+
 // ---- Alerts ----
 
 const mailTo = (type, userId) =>

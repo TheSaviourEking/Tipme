@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Earnings analytics (Pro; the ProEarnings board, approved 11 Nov 2026). Counted only from what
-// TipMe holds about each confirmed tip: its net amount (after TipMe's 10%) and when it was
+// TipMe holds about each confirmed tip: its net amount (after the TipMe fee it recorded) and when it was
 // confirmed. Lagos calendar dates; weeks start on Monday. Amounts are kobo as decimal strings.
 
 export const EARNINGS_PERIODS = ['week', 'month', 'year'] as const;

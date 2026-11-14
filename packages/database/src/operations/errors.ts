@@ -35,6 +35,7 @@ export type OperationErrorCode =
   | 'INVALID_TIP_MINIMUM'
   | 'INVALID_TIP_START'
   | 'WITHDRAWAL_TOO_SMALL'
+  | 'WITHDRAWAL_BELOW_FEE'
   | 'WITHDRAWAL_UNAVAILABLE'
   | 'WITHDRAWALS_PAUSED'
   | 'WITHDRAWALS_SWITCHED_OFF'
@@ -113,6 +114,8 @@ export type OperationErrorCode =
   | 'NOTE_NOT_OPEN'
   | 'NOTE_TEXT_REFUSED'
   | 'BUSINESS_LAST_OWNER'
+  // An owner tried to end another owner's seat: TipMe staff do that (interim lock, 14 Nov 2026).
+  | 'OWNER_REMOVAL_NEEDS_TIPME'
   | 'BUSINESS_NOT_VERIFIED'
   // Business release 2 (R2-0).
   | 'SHARE_NOT_ALLOWED'

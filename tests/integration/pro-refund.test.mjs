@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
+import { atLaunchProPrice } from '../../packages/database/test/integration/helpers.mjs';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
@@ -25,6 +26,8 @@ const q = (text, values = []) =>
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
+  // How a Pro month is refunded, at the ₦2,500 these figures were written for.
+  await atLaunchProPrice(database);
   await ops.seedDemoProfiles(database.db);
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();

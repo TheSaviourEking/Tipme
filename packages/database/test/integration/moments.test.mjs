@@ -89,7 +89,7 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
       const moments = await listMoments(db, TOBI.id);
       assert.equal(
         moments[0].title,
-        '10 tips! People keep coming back to thank you.',
+        '10 tips! People keep coming back to tip you.',
       );
       assert.equal(await credits(), 0);
       const next = await createQuote(db, {
@@ -97,12 +97,12 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
         tipMinor: 200000n,
         currency: 'NGN',
       });
-      // The standard 10%, processing included: no fee-free tip appeared by itself.
+      // Free's standard 7%, processing included: no fee-free tip appeared by itself.
       assert.equal(
         next.breakdown.platformFeeMinor + next.breakdown.providerFeeMinor,
-        20000n,
+        14000n,
       );
-      assert.equal(next.feePolicyVersion, 'proposed-v1.1');
+      assert.equal(next.feePolicyVersion, 'v2-free-7pct');
     },
   );
 
@@ -116,7 +116,7 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
       );
       assert.equal(
         moment.title,
-        '50 tips! People keep coming back to thank you.',
+        '50 tips! People keep coming back to tip you.',
       );
       assert.equal(
         (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,
@@ -130,9 +130,9 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
         )[0].n,
         0,
       );
-      // Each ₦2,000 tip leaves Tobi ₦1,800; the provider's fee is TipMe's cost.
+      // Each ₦2,000 tip leaves Tobi ₦1,860; the provider's fee is TipMe's cost.
       const { availableMinor } = await balanceOf(db, TOBI.id);
-      assert.equal(availableMinor, 50n * 180000n);
+      assert.equal(availableMinor, 50n * 186000n);
     },
   );
 

@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { MyTipDetail } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { PROCESSING_INCLUDED_FEE_VERSIONS } from '@tipme/domain';
 import { Notice, Skeleton, Surface } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -48,7 +48,7 @@ export default function TipDetailPage() {
     tip.platformFeeMinor,
     tip.providerFeeMinor,
     tip.grossMinor,
-    followsCurrentRule(tip.feePolicyVersion, FEE_POLICY_V1.version),
+    followsCurrentRule(tip.feePolicyVersion, PROCESSING_INCLUDED_FEE_VERSIONS),
   );
   return (
     <div className="dashboard-section tip-detail">
