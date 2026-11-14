@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   expectAccessible,
   fitsViewport,
-  identity,
   signInWithEmail,
   signUpRecipient,
 } from './helpers';
@@ -15,11 +14,30 @@ import {
   mismatchedTip,
   secondOwner,
   sql,
+  takeGrantedOwners,
   totpNow,
 } from './ops-helpers';
 
 // Two or more staff exist here, so serious actions wait. ops-alone.spec.ts covers one person.
 const REASON = 'Checked with the person on a call today';
+
+// Each test brings its own owners, and every pending request mails everyone who could decide it.
+// Left in place, the owners of every earlier run get each new request's mail, and in the later
+// repeats the sign-in codes queue behind thousands of those. So a test's owners go when it ends:
+// exactly the addresses it granted, never a pattern another worker's people could match.
+test.beforeEach(() => {
+  takeGrantedOwners();
+});
+test.afterEach(async () => {
+  const emails = takeGrantedOwners();
+  if (emails.length === 0) return;
+  await sql(
+    `UPDATE staff s SET revoked_at = now() FROM users u
+      WHERE u.id = s.user_id AND s.revoked_at IS NULL
+        AND lower(u.email) = ANY($1::text[])`,
+    [emails.map((email) => email.toLowerCase())],
+  );
+});
 
 const waiting = (page: Page) =>
   page.getByText('Waiting for a second person', { exact: true });
@@ -38,6 +56,9 @@ async function askForFee(page: Page, handle: string, percent = '7') {
 
 const requestCard = (page: Page, handle: string) =>
   page.getByRole('article').filter({ hasText: `@${handle}` });
+/** A decided request about this page, in the list of earlier ones. */
+const closedCard = (page: Page, handle: string) =>
+  page.getByRole('listitem').filter({ hasText: `@${handle}` });
 
 test('an owner adds a person; they sign in, enrol, and see only their menu', async ({
   page,
@@ -55,7 +76,9 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await expect(page.getByRole('heading', { name: roleName })).toBeVisible();
   await expectAccessible(page);
 
-  const { email } = identity({ ...testInfo, workerIndex: 7 });
+  // Not `identity` with another worker's number: each repeat runs in new workers, so worker 7 is
+  // real in the fourth repeat, and two tests would share one person.
+  const email = `invitee@e2e-${randomUUID().slice(0, 8)}.example`;
   await page.goto('/ops/staff/people');
   await page.getByRole('button', { name: 'Add a person…' }).click();
   await page.getByLabel('Their email').fill(email);
@@ -261,13 +284,16 @@ test('a second person can reject, with a reason, and the person who asked can ca
   await expect(
     other.page.getByText('Rejected. Nothing changed.'),
   ).toBeVisible();
+  // Earlier runs' rejections say the same words, so look in this page's closed request only.
   await expect(
-    other.page.getByText('The fee was never agreed with them'),
+    closedCard(other.page, handle).getByText(
+      'The fee was never agreed with them',
+    ),
   ).toBeVisible();
 
   await page.goto('/ops/approvals');
   await expect(
-    page.getByText('The fee was never agreed with them'),
+    closedCard(page, handle).getByText('The fee was never agreed with them'),
   ).toBeVisible();
   await page.goto(`/ops/pages?handle=${handle}`);
   await expect(page.getByText('(standard)')).toBeVisible();
@@ -413,12 +439,14 @@ test('an approver sees a money close’s outcome, and a recovery’s checks, mas
   ).toBeVisible();
 
   const movedTo = `moved.${randomUUID().slice(0, 8)}@example.com`;
+  // This run's own words: a run that stopped before closing its request leaves the same card.
+  const checks = `Matched their last three tips on a call, ref ${randomUUID().slice(0, 6)}`;
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByRole('button', { name: 'Move sign-in email…' }).click();
   await page.getByLabel('New sign-in email').fill(movedTo);
   await page
     .getByLabel('What did you check to be sure who this is?')
-    .fill('Matched their last three tips on a call');
+    .fill(checks);
   await page.getByLabel('Why is this account moving?').fill(REASON);
   await page.getByRole('button', { name: 'Send code to new email' }).click();
   await expect(waiting(page)).toBeVisible();
@@ -432,9 +460,7 @@ test('an approver sees a money close’s outcome, and a recovery’s checks, mas
   await expect(close.getByText(/as: Written off by TipMe/)).toBeVisible();
   await expect(close.getByText(/payment mismatch/)).toBeVisible();
 
-  const move = other.page
-    .getByRole('article')
-    .filter({ hasText: 'Matched their last three tips on a call' });
+  const move = other.page.getByRole('article').filter({ hasText: checks });
   await expect(
     move.getByText('Move an account to a new email address'),
   ).toBeVisible();

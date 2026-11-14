@@ -41,8 +41,10 @@ import {
   checkedReason,
   checkStaffCode,
   lockStaffAdmin,
+  mailboxesOf,
   readMailboxes,
   readStaffAccess,
+  readStaffAccessOf,
   sharesMailbox,
   staffAbleToEnterCode,
   type StaffAccess,
@@ -55,6 +57,9 @@ const RUN_TIMEOUT = '10s';
 // The statement timeout can't see many short statements, or a wait outside the database.
 const RUN_DEADLINE_MS = 15_000;
 const LIST_LIMIT = 100;
+// How many requests the list checks at once: enough to overlap round trips, few enough to leave the
+// pool to other requests.
+const LIST_CHECKS_AT_ONCE = 4;
 const SWEEP_BATCH = 100;
 // Names that say a value is a credential. Requests sit in the clear for approvers and the log.
 const SECRET_KEY = /(code|token|secret)$/i;
@@ -339,6 +344,45 @@ async function canEnterCode(tx: Database | Tx, id: string): Promise<boolean> {
 }
 
 /**
+ * Reads that don't depend on who is deciding, kept for one walk over many deciders or requests:
+ * each person's mailboxes, and each action's subjects for a payload. Without it, a list of requests
+ * read the same people again for every person and every request.
+ */
+interface DecideMemo {
+  mailboxes(userId: string): Promise<Set<string>>;
+  subjects(
+    action: SeriousActionDefinition<unknown>,
+    payload: unknown,
+  ): Promise<string[]>;
+}
+
+function decideMemo(db: Database | Tx, roster?: ApproverRoster): DecideMemo {
+  const boxes = new Map<string, Promise<Set<string>>>();
+  for (const person of roster?.people ?? [])
+    boxes.set(person.userId, Promise.resolve(person.mailboxes));
+  const subjects = new Map<string, Promise<string[]>>();
+  return {
+    mailboxes(userId) {
+      let known = boxes.get(userId);
+      if (!known) {
+        known = readMailboxes(db, userId);
+        boxes.set(userId, known);
+      }
+      return known;
+    },
+    subjects(action, payload) {
+      const key = `${action.name}.${JSON.stringify(payload)}`;
+      let known = subjects.get(key);
+      if (!known) {
+        known = Promise.resolve(action.subjects?.(payload, db) ?? []);
+        subjects.set(key, known);
+      }
+      return known;
+    },
+  };
+}
+
+/**
  * Why this person, already known to hold the permission and able to enter a code, can't decide this
  * action, or null. Same answer for approving, qualifying and the list.
  */
@@ -349,14 +393,16 @@ async function refusalToDecide(
     payload: unknown;
     requesterId: string;
     decider: { userId: string; access: StaffAccess };
+    memo?: DecideMemo;
   },
 ): Promise<
   'APPROVAL_OWN_REQUEST' | 'APPROVAL_SUBJECT' | 'PERMISSION_NOT_HELD' | null
 > {
+  const memo = input.memo ?? decideMemo(db);
   const { userId } = input.decider;
   if (userId === input.requesterId) return 'APPROVAL_OWN_REQUEST';
-  const theirs = await readMailboxes(db, userId);
-  if (sharesMailbox(theirs, await readMailboxes(db, input.requesterId)))
+  const theirs = await memo.mailboxes(userId);
+  if (sharesMailbox(theirs, await memo.mailboxes(input.requesterId)))
     return 'APPROVAL_OWN_REQUEST';
   const action = input.action ? registry.get(input.action) : undefined;
   if (action?.mayDecide) {
@@ -365,10 +411,12 @@ async function refusalToDecide(
   }
   for (const address of action?.mailboxes?.(input.payload) ?? [])
     if (theirs.has(normaliseStaffEmail(address))) return 'APPROVAL_SUBJECT';
-  for (const subject of (await action?.subjects?.(input.payload, db)) ?? []) {
+  for (const subject of action
+    ? await memo.subjects(action, input.payload)
+    : []) {
     const subjectId = canonicalId(subject);
     if (subjectId === userId) return 'APPROVAL_SUBJECT';
-    if (subjectId && sharesMailbox(theirs, await readMailboxes(db, subjectId)))
+    if (subjectId && sharesMailbox(theirs, await memo.mailboxes(subjectId)))
       return 'APPROVAL_SUBJECT';
   }
   return null;
@@ -412,24 +460,102 @@ export function qualifiedApprovers(
     action?: string;
     payload?: unknown;
   },
+  // Read once by a caller asking about many requests: see `readApproverRoster`.
+  shared?: { roster: ApproverRoster },
 ): Promise<string[]> {
   return guarded(async () => {
-    const requesterId = canonicalId(input.requesterId);
-    if (!requesterId) throw new OperationError('INVALID_INPUT');
-    const qualified: string[] = [];
-    for (const person of await staffAbleToEnterCode(db)) {
-      const access = await readStaffAccess(db, person.userId);
-      if (!access?.permissions.has(input.permission)) continue;
-      const refusal = await refusalToDecide(db, {
-        action: input.action,
-        payload: input.payload,
-        requesterId,
-        decider: { userId: person.userId, access },
-      });
-      if (!refusal) qualified.push(person.userId);
-    }
-    return qualified;
+    const roster = shared?.roster ?? (await readApproverRoster(db));
+    return approversAmong(db, roster, decideMemo(db, roster), input, false);
   });
+}
+
+/**
+ * Everyone who could enter a code right now, with what they hold and their mailboxes, read once:
+ * the people `qualifiedApprovers` walks.
+ */
+export interface ApproverRoster {
+  people: readonly {
+    userId: string;
+    access: StaffAccess;
+    mailboxes: Set<string>;
+  }[];
+}
+
+export async function readApproverRoster(
+  db: Database | Tx,
+): Promise<ApproverRoster> {
+  const able = await staffAbleToEnterCode(db);
+  const access = await readStaffAccessOf(
+    db,
+    able.map((person) => person.userId),
+  );
+  return {
+    people: able.flatMap((person) => {
+      const held = access.get(person.userId);
+      return held
+        ? [
+            {
+              userId: person.userId,
+              access: held,
+              mailboxes: mailboxesOf(person),
+            },
+          ]
+        : [];
+    }),
+  };
+}
+
+/** Who on the roster could decide it; with `firstOnly`, stops at the first, for "is there anyone". */
+async function approversAmong(
+  db: Database | Tx,
+  roster: ApproverRoster,
+  memo: DecideMemo,
+  input: {
+    permission: string;
+    requesterId: string;
+    action?: string;
+    payload?: unknown;
+  },
+  firstOnly: boolean,
+): Promise<string[]> {
+  const requesterId = canonicalId(input.requesterId);
+  if (!requesterId) throw new OperationError('INVALID_INPUT');
+  const qualified: string[] = [];
+  for (const person of roster.people) {
+    if (!person.access.permissions.has(input.permission)) continue;
+    const refusal = await refusalToDecide(db, {
+      action: input.action,
+      payload: input.payload,
+      requesterId,
+      decider: { userId: person.userId, access: person.access },
+      memo,
+    });
+    if (!refusal) {
+      qualified.push(person.userId);
+      if (firstOnly) break;
+    }
+  }
+  return qualified;
+}
+
+/** `work` over each item, at most `limit` at a time, answers in the items' order. */
+async function eachBounded<T, R>(
+  items: readonly T[],
+  limit: number,
+  work: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await work(items[index]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, lane),
+  );
+  return results;
 }
 
 /**
@@ -1279,28 +1405,41 @@ export function listApprovals(
       return email ? maskEmail(email) : null;
     };
     const actorAble = await canEnterCode(db, actorId);
-    // Many requests share a requester and permission, and each answer walks all the staff.
+    // Each answer below walks the staff, so the staff and their access are read once for the whole
+    // list, and mailboxes and subjects once per person and payload, not again for every request.
+    const open = (row: ApprovalRow) =>
+      row.status === 'pending' && now < row.expiresAt;
+    const roster = rows.some(open)
+      ? await readApproverRoster(db)
+      : { people: [] };
+    const memo = decideMemo(db, roster);
     const nobody = new Map<string, Promise<boolean>>();
     const nobodyElse = (row: ApprovalRow) => {
       const key = `${row.requestedBy}.${row.permission}.${row.action}.${JSON.stringify(row.payload)}`;
       const known = nobody.get(key);
       if (known) return known;
-      const answer = qualifiedApprovers(db, {
-        permission: row.permission,
-        requesterId: row.requestedBy,
-        action: row.action,
-        payload: row.payload,
-      }).then((people) => people.length === 0);
+      // Only whether anyone is left matters here, so the walk stops at the first.
+      const answer = approversAmong(
+        db,
+        roster,
+        memo,
+        {
+          permission: row.permission,
+          requesterId: row.requestedBy,
+          action: row.action,
+          payload: row.payload,
+        },
+        true,
+      ).then((people) => people.length === 0);
       nobody.set(key, answer);
       return answer;
     };
 
-    const views: OpsApproval[] = [];
-    for (const row of rows) {
-      const open = row.status === 'pending' && now < row.expiresAt;
+    return eachBounded(rows, LIST_CHECKS_AT_ONCE, async (row) => {
+      const isOpen = open(row);
       const mine = row.requestedBy === actorId;
       const canDecide =
-        open &&
+        isOpen &&
         !mine &&
         actorAble &&
         access.permissions.has(row.permission) &&
@@ -1309,8 +1448,9 @@ export function listApprovals(
           payload: row.payload,
           requesterId: row.requestedBy,
           decider: { userId: actorId, access },
+          memo,
         }));
-      views.push({
+      const view: OpsApproval = {
         id: row.id,
         action: row.action,
         summary: row.summary,
@@ -1319,7 +1459,7 @@ export function listApprovals(
         requestedByHint: hint(row.requestedBy),
         reason: row.reason,
         status:
-          row.status === 'pending' && !open
+          row.status === 'pending' && !isOpen
             ? 'expired'
             : (row.status as OpsApprovalStatus),
         decidedBy: row.decidedBy,
@@ -1330,9 +1470,9 @@ export function listApprovals(
         decidedAt: row.decidedAt?.toISOString() ?? null,
         mine,
         canDecide,
-        nobodyElseQualified: open && (await nobodyElse(row)),
-      });
-    }
-    return views;
+        nobodyElseQualified: isOpen && (await nobodyElse(row)),
+      };
+      return view;
+    });
   });
 }
