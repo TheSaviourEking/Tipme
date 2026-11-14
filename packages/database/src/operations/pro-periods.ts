@@ -11,6 +11,7 @@ import { proPeriods, profiles, PRO_PAID_BY } from '../schema.js';
 import { mailOwner } from './account-mail.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
+import { notePlanChange } from './plan-history.js';
 import { legacySocials } from './legacy-socials.js';
 import type { MailSealing } from './mail-queue.js';
 import { currentProPrice } from './pro-price.js';
@@ -85,6 +86,7 @@ export async function recomputePlan(
       socials: legacySocials(visibleLinks(page.links, plan)),
     })
     .where(eq(profiles.id, profileId));
+  await notePlanChange(tx, profileId, plan, now);
   return { plan, changed: true, handleLower: page.handleLower };
 }
 

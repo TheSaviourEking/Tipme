@@ -652,6 +652,13 @@
       "when": 1794389732515,
       "tag": "0092_pro_money",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1794681592913,
+      "tag": "0093_plan_changes",
+      "breakpoints": true
     }
   ]
 }

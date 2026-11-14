@@ -3170,6 +3170,27 @@ export const tipCampaigns = pgTable(
   (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
 );
 
+/**
+ * When a page's plan changed (plan 2026-11-14 Task 2). Written only by `recomputePlan`, the one place
+ * `profiles.plan` changes, so statements know which days were Pro and a goal pauses while Pro has
+ * lapsed. Pages that were Pro at the release got one backfilled `pro` row (ruling G6).
+ */
+export const planChanges = pgTable(
+  'plan_changes',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    plan: text('plan').notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('plan_changes_profile_at').on(table.profileId, table.changedAt),
+    check('plan_changes_plan', sql`${table.plan} IN ('free', 'pro')`),
+  ],
+);
+
 /** One recap per Pro page and Lagos month, however often the monthly job runs. */
 export const monthlyRecaps = pgTable(
   'monthly_recaps',
