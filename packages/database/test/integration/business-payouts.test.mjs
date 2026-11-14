@@ -160,7 +160,7 @@ test('a business balance and its withdrawals', async (t) => {
       ...extra,
     });
   /** What the worker and the provider's answer do with a queued payout. */
-  const settle = async (payoutId, outcome = 'paid') => {
+  const settle = async (payoutId, outcome = 'paid', extra = {}) => {
     assert.equal(
       await startPayout(db, { payoutId, provider: provider() }),
       'started',
@@ -177,6 +177,7 @@ test('a business balance and its withdrawals', async (t) => {
       outcome,
       signatureVerified: true,
       payload: {},
+      ...extra,
     });
   };
   const states = (payoutId) =>
@@ -432,6 +433,126 @@ test('a business balance and its withdrawals', async (t) => {
         'WITHDRAWAL_BELOW_FEE',
       );
       assert.equal(await businessBalance(small.businessId), 5000n);
+      await assertBalanced();
+    },
+  );
+
+  // Owner, 14 Nov 2026: the business pays the partner's whole payout fee, like a person. ₦50 is taken
+  // from the amount; when the payout is paid, more is a fee line on business_payable (below zero if
+  // it must be, and withdrawals wait), less is credited back. Staff are told; TipMe pays nothing.
+  const businessFeeLines = (payoutId) =>
+    q(
+      `SELECT x.operation_key AS key, a.code, e.side, e.amount_minor::text AS amount,
+              e.business_id, e.profile_id
+         FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+         JOIN ledger_transactions x ON x.id = e.transaction_id
+        WHERE x.payout_id = $1 AND x.operation_key LIKE 'payout-fee-%'
+        ORDER BY a.code, e.side`,
+      [payoutId],
+    );
+  const feeIssueOf = (payoutId) =>
+    q(
+      `SELECT kind, severity, subject->>'businessId' AS business FROM issues
+        WHERE subject->>'payoutId' = $1 AND kind LIKE 'payout_fee%'`,
+      [payoutId],
+    );
+
+  await t.test(
+    'the partner charges ₦70: the business pays the ₦20 more from its balance; staff are told',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const { share } = await paidTip(shared);
+      const personBefore = await personBalance();
+      const { payoutId } = await withdraw(shared.businessId, 500000n);
+      await settle(payoutId, 'paid', { actualFeeMinor: 7000n });
+      assert.equal(
+        await businessBalance(shared.businessId),
+        share - 500000n - 2000n,
+      );
+      assert.equal(await personBalance(), personBefore);
+      assert.deepEqual(await businessFeeLines(payoutId), [
+        {
+          key: `payout-fee-extra.${payoutId}`,
+          code: 'business_payable',
+          side: 'debit',
+          amount: '2000',
+          business_id: shared.businessId,
+          profile_id: null,
+        },
+        {
+          key: `payout-fee-extra.${payoutId}`,
+          code: 'provider_clearing',
+          side: 'credit',
+          amount: '2000',
+          business_id: null,
+          profile_id: null,
+        },
+      ]);
+      assert.deepEqual(await feeIssueOf(payoutId), [
+        {
+          kind: 'payout_fee_adjusted',
+          severity: 'info',
+          business: shared.businessId,
+        },
+      ]);
+      await assertBalanced();
+    },
+  );
+
+  await t.test(
+    'the partner charges ₦30: the ₦20 not used is credited back to the business',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const { share } = await paidTip(shared);
+      const { payoutId } = await withdraw(shared.businessId, 500000n);
+      await settle(payoutId, 'paid', { actualFeeMinor: 3000n });
+      assert.equal(
+        await businessBalance(shared.businessId),
+        share - 500000n + 2000n,
+      );
+      assert.deepEqual(await businessFeeLines(payoutId), [
+        {
+          key: `payout-fee-credit.${payoutId}`,
+          code: 'business_payable',
+          side: 'credit',
+          amount: '2000',
+          business_id: shared.businessId,
+          profile_id: null,
+        },
+        {
+          key: `payout-fee-credit.${payoutId}`,
+          code: 'provider_clearing',
+          side: 'debit',
+          amount: '2000',
+          business_id: null,
+          profile_id: null,
+        },
+      ]);
+      await assertBalanced();
+    },
+  );
+
+  await t.test(
+    'more than the business balance can cover: it goes below zero, withdrawals wait, the next share pays it',
+    async () => {
+      await database.fresh();
+      const shared = await atBusiness();
+      const { share } = await paidTip(shared);
+      // Everything: the share less ₦50 is sent, nothing is left.
+      const { payoutId } = await withdraw(shared.businessId, share);
+      await settle(payoutId, 'paid', { actualFeeMinor: 7000n });
+      assert.equal(await businessBalance(shared.businessId), -2000n);
+      assert.equal(
+        await codeOf(withdraw(shared.businessId, 200000n)),
+        'BALANCE_BELOW_ZERO',
+      );
+      const next = await paidTip(shared);
+      assert.equal(
+        await businessBalance(shared.businessId),
+        next.share - 2000n,
+      );
       await assertBalanced();
     },
   );
