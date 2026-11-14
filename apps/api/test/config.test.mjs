@@ -468,20 +468,6 @@ test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS
   );
 });
 
-test('BUSINESS_PRO_ENABLED defaults to false; true turns it on; anything else is refused', () => {
-  const dev = { ...valid, NODE_ENV: 'development' };
-  assert.equal(loadApiConfig(dev).BUSINESS_PRO_ENABLED, false);
-  assert.equal(
-    loadApiConfig({ ...dev, BUSINESS_PRO_ENABLED: 'true' })
-      .BUSINESS_PRO_ENABLED,
-    true,
-  );
-  assert.throws(
-    () => loadApiConfig({ ...dev, BUSINESS_PRO_ENABLED: 'yes' }),
-    /BUSINESS_PRO_ENABLED/,
-  );
-});
-
 test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
   const dev = { ...valid, NODE_ENV: 'development' };
   assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
@@ -514,6 +500,8 @@ const MOVED = [
   'ANALYTICS_ENABLED',
   'ADULT_PLATFORM_LINKS',
   'SUPPORTER_RECOGNITION',
+  // Merge train 2: these never shipped as settings; each is a switch from the start.
+  'BUSINESS_PRO_ENABLED',
 ];
 
 test('the moved switches are not settings any more: none is required or parsed', async () => {

@@ -164,7 +164,7 @@ export function addLocation(
   businessId: string,
   input: LocationInput,
   now: Date = new Date(),
-  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  /** Business Pro (plan Task A4): the API passes the business_pro switch. */
   opts: { enforceLimits?: boolean } = {},
 ): Promise<BusinessDetail> {
   return guarded(async () => {

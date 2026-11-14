@@ -29,9 +29,9 @@ import {
   revokeBusinessInvitation,
   searchInvitees,
   type MailSealing,
+  featureOn,
 } from '@tipme/database';
 import { z } from 'zod';
-import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
   CurrentUser,
@@ -60,7 +60,6 @@ export class BusinessMembersController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
-    @Inject(API_CONFIG) private readonly config: ApiConfig,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
@@ -85,7 +84,7 @@ export class BusinessMembersController {
       businessId,
       body,
       new Date(),
-      { enforceLimits: this.config.BUSINESS_PRO_ENABLED },
+      { enforceLimits: await featureOn(this.database.db, 'business_pro') },
     );
     signalBusiness(this.database.db, this.publishLive, { businessId });
     return { data };

@@ -10,6 +10,7 @@ import {
   WEB,
   browserHeaders,
   opsSignIn,
+  setSwitch,
   startStack,
 } from './helpers.mjs';
 
@@ -25,9 +26,6 @@ const services = () => ({
 
 let database;
 let stack;
-// Business Pro (plan Task A5): a second API with BUSINESS_ENABLED and BUSINESS_PRO_ENABLED on,
-// started by the last test only, so no reset ever races its start.
-let proStack;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
@@ -40,7 +38,6 @@ before(async () => {
 });
 after(async () => {
   await stack?.stop();
-  await proStack?.stop();
   await database.close();
 });
 
@@ -319,11 +316,11 @@ test('a Business Pro price change waits for a second person', async () => {
     'Change the Business Pro price from ₦7,000 to ₦7,500 a month, for new months only',
   );
   assert.equal(await businessPrice(), 700000n);
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
   const approved = await approve(outcome.requestId, approver);
   assert.equal(approved.status, 'approved', JSON.stringify(approved));
   assert.equal(await businessPrice(), 750000n);
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
   const [audit] = await q(
     `SELECT staff_user_id, reason FROM audit_events WHERE action = 'business_pro.price_changed'`,
   );
@@ -338,7 +335,7 @@ test('a lone admin changes the Business Pro price alone, with the alert', async 
   assert.equal(outcome.state, 'ran');
   assert.equal(outcome.aloneReason, 'no_second_person');
   assert.equal(await businessPrice(), 750000n);
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
   assert.equal(
     (
       await q(
@@ -378,7 +375,7 @@ test('a business price change never touches a waiting personal request', async (
   assert.equal(await businessPrice(), 750000n);
 });
 
-test('/v1/ops/business-pro-price is 404 with BUSINESS_PRO_ENABLED off', async () => {
+test('/v1/ops/business-pro-price is 404 with the business_pro switch off', async () => {
   const session = await opsSignIn(
     stack.api,
     database.db,
@@ -391,15 +388,10 @@ test('/v1/ops/business-pro-price is 404 with BUSINESS_PRO_ENABLED off', async ()
 });
 
 test('with it on, an owner reads and changes the Business Pro price through the API', async () => {
-  proStack = await startStack({
-    databaseUrl: database.url,
-    apiEnv: {
-      WEB_ORIGIN: WEB,
-      RATE_LIMIT_AUTH_PER_HOUR: '1000',
-      BUSINESS_ENABLED: 'true',
-      BUSINESS_PRO_ENABLED: 'true',
-    },
-  });
+  // Business Pro (plan Task A5): the business and business_pro switches on, for this test only.
+  await setSwitch(database.pool, 'business', true);
+  await setSwitch(database.pool, 'business_pro', true);
+  const proStack = stack;
   const session = await opsSignIn(
     proStack.api,
     database.db,
@@ -430,5 +422,5 @@ test('with it on, an owner reads and changes the Business Pro price through the 
   const changed = (await change.json()).data;
   assert.equal(changed.current.amountMinor, '750000');
   assert.equal(changed.actedAlone, true);
-  assert.equal(await price(), 250000n);
+  assert.equal(await price(), 500000n);
 });

@@ -15,11 +15,12 @@ import {
 
 // Owner, 14 Nov 2026: switches move from the environment to admin (docs/runbooks/settings-and-switches.md).
 
-test('the registered switches, page_studio and refund_fee_return included for their open PRs', () => {
+test('the registered switches, page_studio and refund_fee_return included for their open PRs, and the train’s', () => {
   assert.deepEqual([...FEATURE_SWITCHES].sort(), [
     'adult_platform_links',
     'analytics',
     'business',
+    'business_pro',
     'business_shares',
     'page_studio',
     'pro_auto_renew',
@@ -216,5 +217,17 @@ test('the launch parser moved here and refuses anything but an exact instant, na
   assert.throws(
     () => parseProductionLaunchAt('2026-10-27T00:00:00'),
     /PRODUCTION_LAUNCH_AT/,
+  );
+});
+
+// Train 2 (owner, 14 Nov 2026: fewer environment variables): Business Pro's variable became a switch.
+test('business_pro is a non-money switch, off by default, seeded from BUSINESS_PRO_ENABLED', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.business_pro;
+  assert.equal(entry.money, false);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'BUSINESS_PRO_ENABLED');
+  assert.equal(
+    featureSwitchFromEnv('business_pro', { BUSINESS_PRO_ENABLED: 'true' }),
+    true,
   );
 });

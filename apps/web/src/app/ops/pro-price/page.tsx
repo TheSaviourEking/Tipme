@@ -209,7 +209,7 @@ function mergedHistory(states: OpsProPrice[]) {
   });
 }
 
-/** Both prices at once; Business Pro's is 404 while BUSINESS_PRO_ENABLED is off. */
+/** Both prices at once; Business Pro's is 404 while the business_pro switch is off. */
 const readBoth = () =>
   Promise.all([
     opsFetch<OpsProPrice>(PLANS.personal.path),
@@ -218,7 +218,7 @@ const readBoth = () =>
 
 /**
  * Prices (board BusinessPro section 4; board OpsProPrice; ADR-0015): what one month of Pro costs,
- * personal and, with BUSINESS_PRO_ENABLED on, Business Pro. A change applies to new months only.
+ * personal and, with the business_pro switch on, Business Pro. A change applies to new months only.
  * The Business Pro card shows only when its route answers (it is 404 with the flag off).
  */
 export default function PricesPage() {

@@ -708,6 +708,20 @@
       "when": 1794688324413,
       "tag": "0100_display_settings_history",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1794690934830,
+      "tag": "0101_business_pro",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1794690945299,
+      "tag": "0102_business_pro_price_seed",
+      "breakpoints": true
     }
   ]
 }

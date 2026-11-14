@@ -1,18 +1,24 @@
 import { Inject, Injectable, type CanActivate } from '@nestjs/common';
-import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
+import { FeatureSwitches } from '../switches/feature-switches.service.js';
 
 /**
- * Business Pro (plan 2026-11-14-business-pro-and-signup) is off until `BUSINESS_PRO_ENABLED=true`,
- * on top of `BUSINESS_ENABLED`: a Business Pro route then answers 404 exactly as an unknown path.
+ * Business Pro (plan 2026-11-14-business-pro-and-signup) is off until staff turn on the
+ * `business_pro` switch, on top of `business`: a Business Pro route then answers 404 exactly as an
+ * unknown path.
  */
 @Injectable()
 export class BusinessProEnabledGuard implements CanActivate {
-  constructor(@Inject(API_CONFIG) private readonly config: ApiConfig) {}
+  constructor(
+    @Inject(FeatureSwitches) private readonly switches: FeatureSwitches,
+  ) {}
 
-  canActivate(): boolean {
-    if (!this.config.BUSINESS_ENABLED || !this.config.BUSINESS_PRO_ENABLED)
-      throw new CodedHttpException(404, 'NOT_FOUND');
+  async canActivate(): Promise<boolean> {
+    const [business, pro] = await Promise.all([
+      this.switches.on('business'),
+      this.switches.on('business_pro'),
+    ]);
+    if (!business || !pro) throw new CodedHttpException(404, 'NOT_FOUND');
     return true;
   }
 }

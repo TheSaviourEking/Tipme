@@ -40,7 +40,7 @@ import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
  * The Business Pro price in admin (owner, 14 Nov 2026; plan Task A5; board BusinessPro section 4).
  * The same contract and rules as `/v1/ops/pro-price`, on plan 'business': reading is `pro.price`,
  * a change is the serious action `business_pro_price.change` (a second person approves, or a lone
- * admin acts alone with an alert). 404 unless BUSINESS_ENABLED and BUSINESS_PRO_ENABLED.
+ * admin acts alone with an alert). 404 unless the `business` and `business_pro` switches are on.
  */
 @Controller('v1/ops/business-pro-price')
 @UseGuards(BusinessProEnabledGuard)

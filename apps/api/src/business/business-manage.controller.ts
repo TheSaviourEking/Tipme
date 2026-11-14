@@ -33,10 +33,10 @@ import {
   removeManager,
   updateBusiness,
   updateLocation,
+  featureOn,
   type MailSealing,
   withBusinessPlan,
 } from '@tipme/database';
-import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
   CurrentUser,
@@ -63,18 +63,21 @@ export class BusinessManageController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
-    @Inject(API_CONFIG) private readonly config: ApiConfig,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
-  /** Business Pro: the plan, usage and lapse join the detail only with BUSINESS_PRO_ENABLED on. */
-  private withPlan(detail: BusinessDetail): Promise<BusinessDetail> {
-    return this.config.BUSINESS_PRO_ENABLED
+  /** Business Pro: the plan, usage and lapse join the detail only with the business_pro switch on. */
+  private async withPlan(detail: BusinessDetail): Promise<BusinessDetail> {
+    return (await this.businessPro())
       ? withBusinessPlan(this.database.db, detail)
-      : Promise.resolve(detail);
+      : detail;
+  }
+
+  private businessPro(): Promise<boolean> {
+    return featureOn(this.database.db, 'business_pro');
   }
 
   /** Anyone signed in with a proven email (owner's answer Q3). Pending until TipMe verifies it. */
@@ -132,7 +135,7 @@ export class BusinessManageController {
       id,
       body,
       new Date(),
-      { enforceLimits: this.config.BUSINESS_PRO_ENABLED },
+      { enforceLimits: await this.businessPro() },
     );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
     return { data: await this.withPlan(data) };

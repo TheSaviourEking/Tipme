@@ -4,7 +4,7 @@ import { enrolOwner } from './ops-helpers';
 
 // Business Pro, plan Task A5 (board BusinessPro section 4): the admin "Prices" screen, Personal Pro
 // and Business Pro side by side, each changed on its own. The e2e stack runs with
-// BUSINESS_PRO_ENABLED off (on, it would put staff and location limits on every other business
+// the business_pro switch off (on, it would put staff and location limits on every other business
 // spec), so the second test answers /v1/ops/business-pro-price itself, in the server's shapes.
 // tests/integration/pro-price.test.mjs proves the real route and its serious action with the flag
 // on. Nothing here changes a real price, so nothing needs putting back.

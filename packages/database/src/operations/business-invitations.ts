@@ -74,7 +74,7 @@ export function inviteToBusiness(
   businessId: string,
   input: InvitationRequest,
   now: Date = new Date(),
-  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  /** Business Pro (plan Task A4): the API passes the business_pro switch. */
   opts: { enforceLimits?: boolean } = {},
 ): Promise<InvitationCreated> {
   return guarded(() =>
@@ -476,7 +476,7 @@ export function acceptBusinessInvitation(
   userId: string,
   answer: InvitationAnswer,
   now: Date = new Date(),
-  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  /** Business Pro (plan Task A4): the API passes the business_pro switch. */
   opts: { enforceLimits?: boolean } = {},
 ): Promise<InvitationAccepted> {
   return guarded(() =>

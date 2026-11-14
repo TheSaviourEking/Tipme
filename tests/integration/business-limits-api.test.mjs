@@ -9,10 +9,16 @@ import {
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  setSwitch,
+  signIn,
+  startStack,
+} from './helpers.mjs';
 
-// Business Pro, plan Task A4: staff and location limits through the API, only with
-// BUSINESS_PRO_ENABLED on. Off, everything is exactly today's.
+// Business Pro, plan Task A4: staff and location limits through the API, only with the
+// business_pro switch on. Off, everything is exactly today's.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -21,27 +27,24 @@ startTelemetry({
 
 const [ADA] = DEMO_PROFILES;
 let database;
-let off;
-let on;
+let stack;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
   await seedDemoProfiles(database.db);
-  const env = (pro) => ({
-    WEB_ORIGIN: WEB,
-    BUSINESS_ENABLED: 'true',
-    BUSINESS_PRO_ENABLED: pro,
-    RATE_LIMIT_AUTH_PER_HOUR: '1000',
-    RATE_LIMIT_HANDLES_PER_MIN: '1000',
+  stack = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_HANDLES_PER_MIN: '1000',
+    },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env('false') });
-  on = await startStack({ databaseUrl: database.url, apiEnv: env('true') });
-  off.cookie = (await signIn(off.api, ADA.phone)).cookie;
-  on.cookie = (await signIn(on.api, ADA.phone)).cookie;
+  await setSwitch(database.pool, 'business', true);
+  stack.cookie = (await signIn(stack.api, ADA.phone)).cookie;
 });
 after(async () => {
-  await off?.stop();
-  await on?.stop();
+  await stack?.stop();
   await database?.close();
 });
 
@@ -67,7 +70,9 @@ const addLocation = (stack, business, slug) =>
     address: '5 Bourdillon, Lagos',
   });
 
-test('flag off: a 5th invite and a 2nd location succeed, and the detail has no plan or usage', async () => {
+test('switch off: a 5th invite and a 2nd location succeed, and the detail has no plan or usage', async () => {
+  await setSwitch(database.pool, 'business_pro', false);
+  const off = stack;
   const business = await seedBusiness(database, { owner: ADA.userId });
   for (let n = 0; n < 5; n += 1)
     assert.equal((await invite(off, business)).status, 201);
@@ -85,7 +90,9 @@ test('flag off: a 5th invite and a 2nd location succeed, and the detail has no p
   assert.equal(release.data.businessPro, false);
 });
 
-test('flag on: the 4th invite gets 409 BUSINESS_STAFF_LIMIT and the detail shows 3 of 3', async () => {
+test('switch on: the 4th invite gets 409 BUSINESS_STAFF_LIMIT and the detail shows 3 of 3', async () => {
+  await setSwitch(database.pool, 'business_pro', true);
+  const on = stack;
   const business = await seedBusiness(database, { owner: ADA.userId });
   for (let n = 0; n < 3; n += 1)
     assert.equal((await invite(on, business)).status, 201);

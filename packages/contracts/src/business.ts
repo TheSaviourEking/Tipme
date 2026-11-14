@@ -413,7 +413,7 @@ export interface BusinessDetail {
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
   you: { role: ManagerRole; locationId?: string };
-  /** Business Pro (plan Task A4): present only with BUSINESS_PRO_ENABLED on. */
+  /** Business Pro (plan Task A4): present only with the business_pro switch on. */
   plan?: BusinessPlanName;
   usage?: BusinessUsage;
   /** When Business Pro last ended; absent while it runs or never ran. */

@@ -140,7 +140,7 @@ export async function assertCanAddLocation(
 }
 
 /**
- * A business's detail with its plan, usage and lapse (BUSINESS_PRO_ENABLED on). The API adds these
+ * A business's detail with its plan, usage and lapse (the business_pro switch on). The API adds these
  * only with the flag on, so with it off the detail is exactly today's.
  */
 export async function withBusinessPlan(
