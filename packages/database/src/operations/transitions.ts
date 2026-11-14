@@ -3,7 +3,8 @@ import { statusTransitions } from '../schema.js';
 import { newId } from './ids.js';
 
 export interface TransitionRecord {
-  entityType: 'tip' | 'attempt' | 'payout' | 'pro_purchase' | 'pro_refund';
+  entityType:
+    'tip' | 'attempt' | 'payout' | 'pro_purchase' | 'pro_refund' | 'tip_refund';
   entityId: string;
   fromStatus: string | null;
   toStatus: string;

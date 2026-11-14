@@ -104,4 +104,5 @@ export * from './operations/recaps.js';
 export * from './operations/support.js';
 export * from './operations/pro-balance.js';
 export * from './operations/pro-refunds.js';
+export * from './operations/tip-refunds.js';
 export * from './operations/pro-auto-renew.js';

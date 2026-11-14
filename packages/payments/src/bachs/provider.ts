@@ -3,6 +3,7 @@ import {
   PlatformCheckoutUnavailableError,
   ProRefundRefusedError,
   SavedCardRefusedError,
+  TipRefundRefusedError,
   type FeePaidBy,
   type NormalizedProviderEvent,
   type PaymentProvider,
@@ -78,6 +79,8 @@ const paymentSchema = z.object({
     .optional(),
   // How it was paid; read on TipMe's own checkouts, where the payer picks card or transfer.
   payment_method_type: z.string().max(64).nullable().optional(),
+  // The partner's own answer to "can this payment be refunded now" (guides/refunds).
+  is_refundable: z.boolean().nullable().optional(),
 });
 
 const accountSchema = z.object({
@@ -472,6 +475,45 @@ export function createBachsProvider(
     return normalizedAccount(updated);
   }
 
+  /** A tip's charge on its recipient's account, read as that account, for a staff refund. */
+  async function readTipCharge(providerReference: string): Promise<{
+    chargeReference: string;
+    method: 'card' | 'bank_transfer' | 'other';
+    refundable: boolean;
+  }> {
+    const scoped = parseScopedCheckoutReference(providerReference);
+    if (!scoped.accountReference)
+      throw new BachsRequestNotSentError(
+        'A tip refund needs the recipient’s account',
+      );
+    const checkout = await client.request({
+      method: 'GET',
+      path: `/v1/checkout-sessions/${encodeURIComponent(scoped.checkoutId)}`,
+      accountReference: scoped.accountReference,
+      schema: checkoutSessionSchema,
+    });
+    const chargeReference = checkout.charge?.payment_id ?? checkout.charge?.id;
+    if (!chargeReference) throw new TipRefundRefusedError('not_refundable');
+    const payment = await client.request({
+      method: 'GET',
+      path: `/v1/payments/${encodeURIComponent(providerIdentifier(chargeReference, 'charge'))}`,
+      accountReference: scoped.accountReference,
+      schema: paymentSchema,
+    });
+    const method = methodOf(payment.payment_method_type);
+    const kind =
+      method === 'NGN_BANK_TRANSFER'
+        ? ('bank_transfer' as const)
+        : method === 'NGN_CARD'
+          ? ('card' as const)
+          : ('other' as const);
+    return {
+      chargeReference: payment.payment_id,
+      method: kind,
+      refundable: kind !== 'bank_transfer' && payment.is_refundable === true,
+    };
+  }
+
   /** A payment on TipMe's own account, read directly (an off-session charge has no checkout). */
   async function readPlatformPayment(paymentId: string) {
     const payment = await client.request({
@@ -775,6 +817,81 @@ export function createBachsProvider(
         // The guide's 400s (not refundable, no balance, too much) create nothing.
         if (error instanceof BachsApiError && error.statusCode === 400)
           throw new ProRefundRefusedError(error.providerCode);
+        if (error instanceof BachsApiError)
+          throw new UncertainProviderOutcomeError(
+            input.reference,
+            `the payment provider returned HTTP ${error.statusCode}`,
+            { cause: 'http_error', httpStatus: error.statusCode },
+          );
+        throw error;
+      }
+      const status = refund.status.toLowerCase();
+      return {
+        refundReference: refund.refund_id,
+        status:
+          status === 'success' || status === 'paid' || status === 'succeeded'
+            ? 'paid'
+            : status === 'failed'
+              ? 'failed'
+              : 'processing',
+      };
+    },
+
+    // Staff "Refund tip" (owner, 14 Nov 2026): the tip's checkout, then its payment, both read as
+    // the recipient's account (X-Account-Id). Never as TipMe: a refund names the account's charge.
+    async readAccountCharge(providerReference) {
+      return readTipCharge(providerReference);
+    },
+
+    // POST /v1/refunds as the recipient's account (sandbox evidence, 14 Nov 2026): only that account
+    // is debited, by exactly `amount`; the platform fee is not refunded; the same key returns the
+    // same refund. One refund per payment, so the amount is final (the tip minus TipMe's fee).
+    async refundAccountCharge(input) {
+      let scoped: { accountReference: string; checkoutId: string };
+      try {
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Refund amount must be positive');
+        if (!/^[\w.:-]{1,128}$/.test(input.reference))
+          throw new TypeError('Invalid refund reference');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid idempotency key');
+        const parsed = parseScopedCheckoutReference(input.providerReference);
+        if (!parsed.accountReference)
+          throw new TypeError('A tip refund needs the recipient’s account');
+        scoped = {
+          accountReference: parsed.accountReference,
+          checkoutId: parsed.checkoutId,
+        };
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid refund',
+          { cause: error },
+        );
+      }
+      const charge = await readTipCharge(input.providerReference);
+      if (charge.method === 'bank_transfer')
+        throw new TipRefundRefusedError('bank_transfer');
+      if (!charge.refundable) throw new TipRefundRefusedError('not_refundable');
+      let refund: z.infer<typeof refundCreatedSchema>;
+      try {
+        refund = await client.request({
+          method: 'POST',
+          path: '/v1/refunds',
+          accountReference: scoped.accountReference,
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.reference,
+          body: {
+            charge_id: providerIdentifier(charge.chargeReference, 'charge'),
+            amount: minorToDecimal(input.amountMinor, 'NGN'),
+            reference: input.reference,
+            idempotency_key: input.idempotencyKey,
+          },
+          schema: refundCreatedSchema,
+        });
+      } catch (error) {
+        // The guide's 400s (not refundable, no balance, too much) create nothing.
+        if (error instanceof BachsApiError && error.statusCode === 400)
+          throw new TipRefundRefusedError('refused', error.providerCode);
         if (error instanceof BachsApiError)
           throw new UncertainProviderOutcomeError(
             input.reference,

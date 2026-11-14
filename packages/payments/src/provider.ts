@@ -203,6 +203,29 @@ export interface PaymentProvider<
     refundReference: string;
     status: 'processing' | 'paid' | 'failed';
   }>;
+  /**
+   * Staff "Refund tip" (owner, 14 Nov 2026): the tip's charge on its recipient's account, read as
+   * that account. `refundable` is the partner's own answer; bank transfers never are.
+   */
+  readAccountCharge?(providerReference: string): Promise<{
+    chargeReference: string;
+    method: 'card' | 'bank_transfer' | 'other';
+    refundable: boolean;
+  }>;
+  /**
+   * Staff "Refund tip": refunds part of a tip's charge as its recipient's account (the tip minus
+   * TipMe's fee), once per key. Raises TipRefundRefusedError when nothing was created, and
+   * UncertainProviderOutcomeError when the answer is unknown.
+   */
+  refundAccountCharge?(input: {
+    providerReference: string;
+    amountMinor: bigint;
+    reference: string;
+    idempotencyKey: string;
+  }): Promise<{
+    refundReference: string;
+    status: 'processing' | 'paid' | 'failed';
+  }>;
   /** Auto-renew: a customer on TipMe's own account, to save a card on. */
   createPlatformCustomer?(input: {
     email: string;
@@ -415,6 +438,20 @@ export class ProRefundRefusedError extends Error {
   constructor(readonly providerCode?: string) {
     super('The payment provider refused the refund');
     this.name = 'ProRefundRefusedError';
+  }
+}
+
+/**
+ * The partner definitely won't refund a tip (nothing was created): paid by bank transfer, already
+ * refunded, or refused (for example, the account can't fund it).
+ */
+export class TipRefundRefusedError extends Error {
+  constructor(
+    readonly reason: 'bank_transfer' | 'not_refundable' | 'refused',
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider will not refund this tip');
+    this.name = 'TipRefundRefusedError';
   }
 }
 

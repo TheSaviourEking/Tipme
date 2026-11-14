@@ -77,6 +77,8 @@ export const entityType = pgEnum('entity_type', [
   'pro_purchase',
   // A staff refund of a card-paid Pro month (plan Task 9, ruling 6).
   'pro_refund',
+  // A staff "Refund tip" (owner, 14 Nov 2026): the tip minus TipMe's fee, through the partner.
+  'tip_refund',
 ]);
 export const transitionCause = pgEnum('transition_cause', [
   'provider_event',
@@ -3301,6 +3303,62 @@ export const proRefunds = pgTable(
     ),
     check('pro_refunds_amount_positive', sql`${table.amountMinor} > 0`),
     currencyCheck('pro_refunds'),
+  ],
+);
+
+/**
+ * A staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS. Staff ask and a second person
+ * approves (`tip.refund`); the worker asks our payment partner, as the recipient's account, for
+ * exactly the tip minus TipMe's fee (`amount_minor`, fixed when asked), with the key
+ * `tipme-tip-refund-<id>`; only refund.paid books it (each side gives back what it received, TipMe
+ * keeps its fee). One refund per tip, but a failed one doesn't count (the partner's refund guide).
+ */
+export const tipRefunds = pgTable(
+  'tip_refunds',
+  {
+    id: uuid('id').primaryKey(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    status: text('status').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    // The payment attempt's provider ('mock' or 'bachs') and its checkout reference on the
+    // recipient's account, which the refund names.
+    provider: text('provider').notNull(),
+    providerReference: text('provider_reference').notNull(),
+    // Why the partner refused it, in TipMe's words: bank_transfer, not_refundable or refused.
+    failure: text('failure'),
+    providerRefundReference: text('provider_refund_reference'),
+    refundedMinor: minor('refunded_minor'),
+    refundFeeMinor: minor('refund_fee_minor'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    // Set when TipMe claims the partner call, before making it.
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('tip_refunds_one_per_tip')
+      .on(table.tipId)
+      .where(sql`${table.status} <> 'FAILED'`),
+    index('tip_refunds_open').on(table.status, table.createdAt),
+    check(
+      'tip_refunds_status',
+      sql`${table.status} IN ('REQUESTED', 'PROCESSING', 'UNKNOWN', 'PAID', 'FAILED')`,
+    ),
+    check(
+      'tip_refunds_failure',
+      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed'))`,
+    ),
+    check('tip_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    currencyCheck('tip_refunds'),
   ],
 );
 
