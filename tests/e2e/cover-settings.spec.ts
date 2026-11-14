@@ -11,6 +11,7 @@ import {
 import { sql } from './ops-helpers';
 import { UNBROKEN_NAME } from './profile-fixtures';
 import { API_ORIGIN } from './stack';
+import { chooseAndSave, chooseImage } from './image-picker-helpers';
 
 // Choosing a cover in Settings (design spec §6, motion §7.6). Reduced motion is on in this suite,
 // so a choice shows at once; the crossfade timings are in the component and the motion document.
@@ -140,12 +141,14 @@ test('uploading a cover wins over a design; removing it returns to the chosen de
   await expect(page.getByText('Saved', { exact: true })).toBeVisible();
   await publicCover(browser, handle, 'dark');
 
-  await page.getByLabel('Upload your own photo').setInputFiles({
+  await chooseAndSave(page, page.locator('#cover'), 'Upload a cover', 'cover', {
     name: 'cover.jpg',
     mimeType: 'image/jpeg',
     buffer: await coverPhoto(),
   });
-  await expect(page.getByText('Cover saved.')).toBeVisible();
+  await expect(
+    page.locator('#cover').getByRole('status').getByText('Cover saved.'),
+  ).toBeVisible();
   // The preview is the stored photo, read from the account's own route (the page needn't be live).
   await expect(shown(page)).toHaveAttribute('data-profile-cover', 'image');
   await expect
@@ -171,7 +174,11 @@ test('uploading a cover wins over a design; removing it returns to the chosen de
   await page.getByRole('button', { name: 'Remove photo' }).click();
   await expect(page.getByText('Cover removed.')).toBeVisible();
   // The button is gone, and focus doesn't fall to the page body: it moves to the upload control.
-  await expect(page.getByLabel('Upload your own photo')).toBeFocused();
+  await expect(
+    page
+      .locator('#cover')
+      .getByRole('button', { name: 'Upload a cover', exact: true }),
+  ).toBeFocused();
   await expect(shown(page)).toHaveAttribute('data-profile-cover', 'outline');
   await expect(note).toHaveCount(0);
   await publicCover(browser, handle, 'outline');
@@ -184,9 +191,9 @@ test('a bad file shows the same plain errors as photos', async ({
   await page.goto('/dashboard/settings');
   await page.getByRole('radio', { name: 'One large heart' }).check();
   const before = await shown(page).getAttribute('data-profile-cover');
-  const upload = page.getByLabel('Upload your own photo');
+  const cover = page.locator('#cover');
 
-  await upload.setInputFiles({
+  await chooseImage(page, cover, 'Upload a cover', {
     name: 'notes.txt',
     mimeType: 'text/plain',
     buffer: Buffer.from('not a picture'),
@@ -205,7 +212,7 @@ test('a bad file shows the same plain errors as photos', async ({
     ),
   ).toBe(DANGER_TEXT);
 
-  await upload.setInputFiles({
+  await chooseImage(page, cover, 'Upload a cover', {
     name: 'huge.jpg',
     mimeType: 'image/jpeg',
     buffer: Buffer.alloc(6 * 1024 * 1024, 7),
@@ -320,7 +327,7 @@ test('a photo that fails to save keeps its error line red', async ({
   })
     .jpeg()
     .toBuffer();
-  await page.getByLabel('Choose a photo').setInputFiles({
+  await chooseAndSave(page, page.locator('#photo'), 'Choose a photo', 'photo', {
     name: 'me.jpg',
     mimeType: 'image/jpeg',
     buffer: photo,
@@ -346,15 +353,23 @@ test('removing the page photo keeps focus in the Photo card', async ({
   })
     .jpeg()
     .toBuffer();
-  await page.getByLabel('Choose a photo').setInputFiles({
+  const card = page.locator('#photo');
+  await chooseAndSave(page, card, 'Choose a photo', 'photo', {
     name: 'me.jpg',
     mimeType: 'image/jpeg',
     buffer: photo,
   });
-  await expect(page.getByText('Photo saved.')).toBeVisible();
-  await page.getByRole('button', { name: 'Remove photo' }).click();
-  await expect(page.getByText('Photo removed.')).toBeVisible();
-  await expect(page.getByLabel('Choose a photo')).toBeFocused();
+  await expect(
+    card.getByRole('status').getByText('Photo saved.'),
+  ).toBeVisible();
+  await card.getByRole('button', { name: 'Remove photo' }).click();
+  await expect(
+    card.getByRole('status').getByText('Photo removed.'),
+  ).toBeVisible();
+  // The button is gone, and focus doesn't fall to the page body: it moves to the picker's button.
+  await expect(
+    card.getByRole('button', { name: 'Choose a photo', exact: true }),
+  ).toBeFocused();
 });
 
 // Settings and the page editor (ScreenSettings): seven sections on one page, each reached by its

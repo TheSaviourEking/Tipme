@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { BusinessDetail } from '@tipme/contracts';
 import { Button, InputField, Slip, StateLine } from '@tipme/ui';
@@ -13,6 +13,11 @@ import {
 import { updateBusiness } from '@/lib/business/setup-api';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
 import { shrinkPhoto } from '@/lib/shrink-photo';
+import {
+  ImagePicker,
+  pickerFailure,
+  type PickerOutcome,
+} from '@/components/image-picker/image-picker';
 import { setupFieldErrors, type SetupField } from '@/lib/business/setup-form';
 
 /** Where the business stands with TipMe. Never "approved", "licensed" or "regulated" (M10). */
@@ -55,47 +60,41 @@ function LogoField({
   business: BusinessDetail;
   onChange?: (next: BusinessDetail) => void;
 }) {
-  const id = useId();
   const logo = useManagedLogo(business);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [done, setDone] = useState('');
-  const chooser = useRef<HTMLInputElement>(null);
-  const refocusChooser = useRef(false);
-  // After Remove logo the button is gone: focus goes to the chooser, once it is enabled again.
-  useEffect(() => {
-    if (busy || !refocusChooser.current) return;
-    refocusChooser.current = false;
-    chooser.current?.focus();
-  }, [busy]);
-  const send = async (file?: File) => {
+  /** The positioned square from the picker; nothing is sent before Save. */
+  const save = async (picture: Blob): Promise<PickerOutcome> => {
     setBusy(true);
     setError('');
     setDone('');
     // A PNG or WebP that already fits is sent as it is, so a transparent logo stays transparent;
     // anything else is shrunk first, like a page photo (a phone photo uploads in seconds).
     const keepsAlpha =
-      file &&
-      (file.type === 'image/png' || file.type === 'image/webp') &&
-      file.size <= PHOTO_LIMIT_BYTES;
-    const logoFile = file
-      ? keepsAlpha
-        ? file
-        : await shrinkPhoto(file)
-      : undefined;
-    if (logoFile && logoFile.size > PHOTO_LIMIT_BYTES) {
+      (picture.type === 'image/png' || picture.type === 'image/webp') &&
+      picture.size <= PHOTO_LIMIT_BYTES;
+    const logoFile = keepsAlpha ? picture : await shrinkPhoto(picture);
+    if (logoFile.size > PHOTO_LIMIT_BYTES) {
       setBusy(false);
-      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
-      return;
+      return { ok: false, message: photoErrors['PAYLOAD_TOO_LARGE']! };
     }
-    const result = logoFile
-      ? await uploadBusinessLogo(business.id, logoFile)
-      : await removeBusinessLogo(business.id);
+    const result = await uploadBusinessLogo(business.id, logoFile);
+    setBusy(false);
+    if (!result.ok) return pickerFailure(result.code);
+    onChange?.(result.data);
+    setDone('Logo saved.');
+    return { ok: true };
+  };
+  const removeLogo = async () => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    const result = await removeBusinessLogo(business.id);
     setBusy(false);
     if (result.ok) {
       onChange?.(result.data);
-      setDone(logoFile ? 'Logo saved.' : 'Logo removed.');
-      if (!logoFile) refocusChooser.current = true;
+      setDone('Logo removed.');
     } else
       setError(
         photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
@@ -105,46 +104,26 @@ function LogoField({
     <div className="business-details__logo">
       <p className="tm-hint">
         Logo (optional). It shows beside your name on your location and staff
-        pages. TipMe crops it to a square and removes hidden details such as
-        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+        pages.
       </p>
-      <BusinessLogoTile
-        name={business.name}
-        src={logo}
-        className="business-page__logo"
+      <ImagePicker
+        kind="logo"
+        hasImage={Boolean(business.logoPath)}
+        tile={
+          <BusinessLogoTile
+            name={business.name}
+            src={logo}
+            className="image-picker__logo"
+          />
+        }
+        limits="JPEG, PNG or WebP, up to 5 MB. TipMe crops it to a square and removes hidden details such as where it was taken."
+        onSave={save}
+        remove={{ label: 'Remove logo', onRemove: () => void removeLogo() }}
+        status={done}
+        error={error}
+        disabled={busy}
+        keepAlpha
       />
-      <div className="tm-field">
-        <label htmlFor={`${id}-logo`}>
-          {business.logoPath ? 'Choose a new logo' : 'Choose a logo'}
-        </label>
-        <input
-          ref={chooser}
-          id={`${id}-logo`}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          aria-describedby={error ? `${id}-logo-error` : undefined}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void send(file);
-            event.target.value = '';
-          }}
-        />
-      </div>
-      {error && (
-        <p className="tm-field-error" role="alert" id={`${id}-logo-error`}>
-          {error}
-        </p>
-      )}
-      {/* Always present, so screen readers announce what is written into it. */}
-      <p role="status" className="tm-hint">
-        {done}
-      </p>
-      {business.logoPath && (
-        <Button variant="quiet" disabled={busy} onClick={() => void send()}>
-          Remove logo
-        </Button>
-      )}
     </div>
   );
 }

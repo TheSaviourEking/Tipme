@@ -4,6 +4,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient, tipAsVisitor } from './helpers';
 import { enrolOwner } from './ops-helpers';
 import { API_ORIGIN } from './stack';
+import { chooseAndSave } from './image-picker-helpers';
 
 // PR-013: reporting a page, profile photos, tip search, notification preferences and admin
 // search, as people would use them.
@@ -64,12 +65,14 @@ test('a recipient adds a photo, searches their tips and turns off tip emails', a
   })
     .jpeg()
     .toBuffer();
-  await page.getByLabel('Choose a photo').setInputFiles({
+  await chooseAndSave(page, page.locator('#photo'), 'Choose a photo', 'photo', {
     name: 'me.jpg',
     mimeType: 'image/jpeg',
     buffer: photo,
   });
-  await expect(page.getByText('Photo saved.')).toBeVisible();
+  await expect(
+    page.locator('#photo').getByRole('status').getByText('Photo saved.'),
+  ).toBeVisible();
   await expect(
     page.getByRole('img', { name: /^Photo of / }).first(),
   ).toBeVisible();

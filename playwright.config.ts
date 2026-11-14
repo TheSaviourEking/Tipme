@@ -107,6 +107,11 @@ export default defineConfig({
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
+        // Every photo, cover and logo upload and every cover-design save comes from 127.0.0.1, and CI
+        // runs a changed spec five times; both limits are covered by
+        // tests/integration/avatars-limit.test.mjs.
+        RATE_LIMIT_AVATARS_PER_HOUR: '10000',
+        RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '10000',
         LIVE_UPDATES_ENABLED: 'true',
         // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
         BUSINESS_ENABLED: 'true',
