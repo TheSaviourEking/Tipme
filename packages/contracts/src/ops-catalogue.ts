@@ -235,6 +235,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'A page’s Pro payments for deciding a refund: amounts, dates and how paid, no card or bank details.',
   },
+  'OpsTipRefundsController.read': {
+    verb: 'GET',
+    permission: 'payments.repair',
+    reason:
+      'What a tip refund would give back and who gives it, for deciding it: amounts and a handle, no supporter details; changes nothing.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',
