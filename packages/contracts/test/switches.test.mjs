@@ -20,8 +20,10 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'adult_platform_links',
     'analytics',
     'business',
+    'business_owners',
     'business_pro',
     'business_shares',
+    'business_signup',
     'page_studio',
     'pro_auto_renew',
     'pro_billing',
@@ -230,4 +232,16 @@ test('business_pro is a non-money switch, off by default, seeded from BUSINESS_P
     featureSwitchFromEnv('business_pro', { BUSINESS_PRO_ENABLED: 'true' }),
     true,
   );
+});
+
+test('business_signup and business_owners are non-money switches, off by default, seeded from their variables', () => {
+  for (const [key, name] of [
+    ['business_signup', 'BUSINESS_SIGNUP_ENABLED'],
+    ['business_owners', 'BUSINESS_OWNERS_ENABLED'],
+  ]) {
+    const entry = FEATURE_SWITCH_CATALOGUE[key];
+    assert.equal(entry.money, false, key);
+    assert.equal(entry.default, false, key);
+    assert.equal(entry.env.name, name);
+  }
 });

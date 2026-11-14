@@ -421,7 +421,7 @@ export interface BusinessDetail {
     locationId?: string;
     /**
      * Business sign-up (R19): the business was verified while this manager was on it and they
-     * haven't seen the "verified" moment yet. Only with BUSINESS_SIGNUP_ENABLED.
+     * haven't seen the "verified" moment yet. Only with the business_signup switch on.
      */
     celebrate?: true;
   };

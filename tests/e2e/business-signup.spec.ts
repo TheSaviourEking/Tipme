@@ -5,7 +5,7 @@ import { expectNoSignUp, recordNavigations } from './business-signup-fixtures';
 import { API_ORIGIN } from './stack';
 
 // Business sign-up, Task D3: the "Get tipped" / "For businesses" fork and the four business
-// steps. The e2e stack runs with BUSINESS_SIGNUP_ENABLED on (playwright.config.ts).
+// steps. The e2e stack runs with the business_signup switch on (seeded from BUSINESS_SIGNUP_ENABLED in playwright.config.ts).
 
 // A sign-up plus four steps is longer than one sign-up's budget.
 test.slow();

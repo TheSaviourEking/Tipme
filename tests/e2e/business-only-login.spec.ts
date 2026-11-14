@@ -12,7 +12,7 @@ import { expectAccessible, signInWithEmail } from './helpers';
 import { sql } from './ops-helpers';
 
 // Business sign-up, Task D4: the dashboard for a login with a business and no page.
-// BUSINESS_SIGNUP_ENABLED is on in the e2e stack (playwright.config.ts).
+// the business_signup switch is on in the e2e stack (seeded from BUSINESS_SIGNUP_ENABLED in playwright.config.ts).
 
 test.slow();
 

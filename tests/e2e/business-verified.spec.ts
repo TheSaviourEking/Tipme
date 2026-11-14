@@ -3,7 +3,7 @@ import { businessOnlyOwner, verifyAsStaff } from './business-signup-fixtures';
 import { expectAccessible } from './helpers';
 
 // Business sign-up, Task D5: what happens next while waiting, and the once-only verified moment.
-// BUSINESS_SIGNUP_ENABLED is on in the e2e stack (playwright.config.ts).
+// the business_signup switch is on in the e2e stack (seeded from BUSINESS_SIGNUP_ENABLED in playwright.config.ts).
 
 test.slow();
 

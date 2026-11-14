@@ -4,10 +4,15 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { browserHeaders, startStack, uniquePrefix } from './helpers.mjs';
+import {
+  browserHeaders,
+  setSwitch,
+  startStack,
+  uniquePrefix,
+} from './helpers.mjs';
 
 // Business sign-up, Task D1: a login's own account read (GET /v1/me/account, no page needed) and
-// `managesBusiness` on sign-in, which only BUSINESS_SIGNUP_ENABLED turns on.
+// `managesBusiness` on sign-in, which only the business_signup switch turns on.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -15,23 +20,30 @@ startTelemetry({
 });
 
 let database;
+// One stack: switches live in the database, so a test turns business_signup off and back on.
 let on;
-let off;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
-  const env = { RATE_LIMIT_AUTH_PER_HOUR: '1000', BUSINESS_ENABLED: 'true' };
   on = await startStack({
     databaseUrl: database.url,
-    apiEnv: { ...env, BUSINESS_SIGNUP_ENABLED: 'true' },
+    apiEnv: { RATE_LIMIT_AUTH_PER_HOUR: '1000' },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env });
+  await setSwitch(database.pool, 'business', true);
+  await setSwitch(database.pool, 'business_signup', true);
 });
 after(async () => {
   await on?.stop();
-  await off?.stop();
   await database?.close();
 });
+const signupOff = async (run) => {
+  await setSwitch(database.pool, 'business_signup', false);
+  try {
+    await run(on);
+  } finally {
+    await setSwitch(database.pool, 'business_signup', true);
+  }
+};
 
 const post = (api, path, body, cookie) =>
   fetch(`${api}${path}`, {
@@ -130,18 +142,20 @@ test('a login with a business and no page signs in with managesBusiness: true', 
   assert.equal((await account.json()).data.hasProfile, false);
 });
 
-test('with BUSINESS_SIGNUP_ENABLED off, managesBusiness is false even for an owner', async () => {
-  const email = unique();
-  const first = await signIn(off.api, email);
-  const applied = await post(
-    off.api,
-    '/v1/me/businesses',
-    application(email),
-    first.cookie,
-  );
-  assert.equal(applied.status, 201);
-  const again = await signIn(off.api, email);
-  assert.equal(again.data.managesBusiness, false);
+test('with the business_signup switch off, managesBusiness is false even for an owner', async () => {
+  await signupOff(async (off) => {
+    const email = unique();
+    const first = await signIn(off.api, email);
+    const applied = await post(
+      off.api,
+      '/v1/me/businesses',
+      application(email),
+      first.cookie,
+    );
+    assert.equal(applied.status, 201);
+    const again = await signIn(off.api, email);
+    assert.equal(again.data.managesBusiness, false);
+  });
 });
 
 test('/health/release carries businessSignup and businessOwners', async () => {
@@ -150,9 +164,23 @@ test('/health/release carries businessSignup and businessOwners', async () => {
   const yes = await read(on.api);
   assert.equal(yes.businessSignup, true);
   assert.equal(yes.businessOwners, false);
-  const no = await read(off.api);
-  assert.equal(no.businessSignup, false);
-  assert.equal(no.businessOwners, false);
+  await signupOff(async (off) => {
+    const no = await read(off.api);
+    assert.equal(no.businessSignup, false);
+    assert.equal(no.businessOwners, false);
+  });
+  // business_owners is its own switch, still on top of `business`.
+  await setSwitch(database.pool, 'business_owners', true);
+  try {
+    assert.equal((await read(on.api)).businessOwners, true);
+    await setSwitch(database.pool, 'business', false);
+    const none = await read(on.api);
+    assert.equal(none.businessSignup, false);
+    assert.equal(none.businessOwners, false);
+  } finally {
+    await setSwitch(database.pool, 'business', true);
+    await setSwitch(database.pool, 'business_owners', false);
+  }
 });
 
 // Business sign-up, Task D2: the whole business path through the API, with no page.

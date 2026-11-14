@@ -22,11 +22,11 @@ export interface ReleaseInfo {
   /** Business Pro is switched on (the `business_pro` switch, on top of `business`). */
   businessPro: boolean;
   /**
-   * Business sign-up (BUSINESS_SIGNUP_ENABLED, on top of `business`): the "Get tipped" / "For
+   * Business sign-up (the `business_signup` switch, on top of `business`): the "Get tipped" / "For
    * businesses" fork, a business with no personal page, and the account-menu switcher.
    */
   businessSignup: boolean;
-  /** Co-owners and handover (BUSINESS_OWNERS_ENABLED, Phase E; not built yet). */
+  /** Co-owners and handover (the `business_owners` switch, on top of `business`; Phase E, not built yet). */
   businessOwners: boolean;
 }
 

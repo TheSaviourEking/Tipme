@@ -24,6 +24,8 @@ export const FEATURE_SWITCHES = [
   'refund_fee_return',
   // Merge train 2 (owner, 14 Nov 2026: fewer variables): each PR's flag became a switch.
   'business_pro',
+  'business_signup',
+  'business_owners',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -148,6 +150,22 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: false,
     default: false,
     env: truthy('BUSINESS_PRO_ENABLED'),
+  },
+  business_signup: {
+    label: 'Business sign-up',
+    description:
+      'People can sign up as a business with no personal page, see “verified” once, and switch between their page and their business in the account menu. Needs TipMe for businesses on.',
+    money: false,
+    default: false,
+    env: truthy('BUSINESS_SIGNUP_ENABLED'),
+  },
+  business_owners: {
+    label: 'Business co-owners',
+    description:
+      'Co-owners and handing a business over (Phase E, not built yet): for now it only tells the web app. Moves no money. Needs TipMe for businesses on.',
+    money: false,
+    default: false,
+    env: truthy('BUSINESS_OWNERS_ENABLED'),
   },
 };
 

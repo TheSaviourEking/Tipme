@@ -41,7 +41,7 @@ export function SignUpFlow({
   businessSignup = false,
 }: {
   todayLede: ReactNode;
-  /** BUSINESS_SIGNUP_ENABLED, read on the server. */
+  /** The business_signup switch, from /health/release, read on the server. */
   businessSignup?: boolean;
 }) {
   const router = useRouter();

@@ -23,6 +23,7 @@ import {
 } from '@tipme/contracts';
 import {
   createSession,
+  featureOn,
   hasProfile,
   managesBusiness,
   listSessions,
@@ -175,7 +176,8 @@ export class AuthController {
         hasProfile: await hasProfile(db, result.userId),
         // Only with business sign-up on: off, every login without a page goes to /sign-up.
         managesBusiness:
-          this.config.BUSINESS_ENABLED && this.config.BUSINESS_SIGNUP_ENABLED
+          (await featureOn(db, 'business')) &&
+          (await featureOn(db, 'business_signup'))
             ? await managesBusiness(db, result.userId)
             : false,
       },

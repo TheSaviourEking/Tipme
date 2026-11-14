@@ -440,7 +440,7 @@ test('API: an owner removing another owner is refused (403 OWNER_REMOVAL_NEEDS_T
   assert.equal(removed.status, 204);
 });
 
-// Business sign-up, Task D2: with BUSINESS_SIGNUP_ENABLED off (this stack), nothing of it shows.
+// Business sign-up, Task D2: with the business_signup switch off (its default), nothing of it shows.
 test('API: with business sign-up off, verified-seen is 404 and a verified owner gets no celebrate', async () => {
   const applied = await call('POST', '/v1/me/businesses', {
     cookie: ada.cookie,

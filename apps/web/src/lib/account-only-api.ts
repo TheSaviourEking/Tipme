@@ -8,7 +8,7 @@ import { apiFetch } from './session-client';
 
 /**
  * Business sign-up, Task D4: whether a signed-in login with no page may use the dashboard as
- * itself. Only with BUSINESS_SIGNUP_ENABLED, and only for someone who manages a business or has a
+ * itself. Only with the business_signup switch on, and only for someone who manages a business or has a
  * manager invitation (to their proven email, or a link kept through sign-in). Staff invitations
  * never count: staff need a page, so they choose a handle first, as today. null: go to /sign-up.
  */

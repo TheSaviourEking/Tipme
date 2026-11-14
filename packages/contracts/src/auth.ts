@@ -35,7 +35,7 @@ export interface SignInVerified {
   hasProfile: boolean;
   /**
    * The login manages a business (or has a manager invitation to its proven email). Always false
-   * unless BUSINESS_SIGNUP_ENABLED: a login with no page then lands on its business, not /sign-up.
+   * unless the business_signup switch is on: a login with no page then lands on its business, not /sign-up.
    */
   managesBusiness: boolean;
 }

@@ -10,7 +10,7 @@ const startsWithPath = (next: string, base: string) =>
 
 /**
  * A page → where they were going. The admin area never needs a page. No page but a business
- * (`managesBusiness`, only ever true with BUSINESS_SIGNUP_ENABLED) → the business, or where they
+ * (`managesBusiness`, only ever true with the business_signup switch on) → the business, or where they
  * were going if that is the business or its statements. Anyone else chooses a handle.
  */
 export function signedInLanding(

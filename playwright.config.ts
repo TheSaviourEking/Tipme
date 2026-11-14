@@ -119,7 +119,8 @@ export default defineConfig({
         // business's own balance), also off by default everywhere else.
         BUSINESS_SHARES_ENABLED: 'true',
         // Business sign-up (Phase D): the "Get tipped" / "For businesses" fork, a business with no
-        // page, and the account-menu switcher. Off by default everywhere else.
+        // page, and the account-menu switcher. Seeds the business_signup switch on the lane's fresh
+        // database, as the lines above seed theirs; off by default everywhere else.
         BUSINESS_SIGNUP_ENABLED: 'true',
         // Paid Pro (ADR-0015): buying a month on pretend money, off by default everywhere else.
         // tests/e2e/pro-buy.spec.ts answers the price read itself to show the "off" state.
