@@ -154,3 +154,24 @@ test('the sample renders with no leftover markup', () => {
   const out = renderMail('announcement', MAIL_TYPES.announcement.sample, ctx);
   assert.doesNotMatch(out.text + out.html, /\*\*|undefined|null/);
 });
+
+// The owner's ruling (14 Nov 2026): a change to fees or terms is a service notice to everyone.
+test('a service notice is account mail with no switch or settings link, and only announcements are bulk', () => {
+  const notice = MAIL_TYPES.service_notice;
+  assert.equal(notice.category, 'account');
+  assert.equal(notice.sender, 'news');
+  assert.equal(notice.preference, null);
+  assert.equal(notice.bulk, true);
+  assert.equal(MAIL_TYPES.announcement.bulk, true);
+  for (const [id, type] of Object.entries(MAIL_TYPES))
+    if (id !== 'announcement' && id !== 'service_notice')
+      assert.notEqual(type.bulk, true, id);
+  const out = renderMail('service_notice', data(), ctx);
+  assert.match(out.html, /<strong[^>]*>TipMe Free: 7% per tip<\/strong>/);
+  assert.match(out.text, /about how TipMe works for you/);
+  assert.doesNotMatch(out.text + out.html, /Email settings/);
+  // The same words a staff member wrote are refused here too.
+  assert.throws(() =>
+    renderMail('service_notice', data({ text: 'Bachs fees' }), ctx),
+  );
+});

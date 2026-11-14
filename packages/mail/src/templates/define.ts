@@ -74,16 +74,25 @@ export interface MailType<T> {
   preference: MailPreference | null;
   /** Opens and clicks are tracked; always false for security mail. */
   tracking: boolean;
+  /**
+   * Sent to many people at once (announcements): only ever through the announcement provider,
+   * never the one that sends sign-in codes, and queued after every other email.
+   */
+  bulk: boolean;
   render(data: T, ctx: MailContext): RenderedMail;
   /** Realistic data for tests and previews. */
   sample: T;
 }
 
 export function defineMailType<T>(
-  type: Omit<MailType<T>, 'tracking'> & { tracking?: boolean },
+  type: Omit<MailType<T>, 'tracking' | 'bulk'> & {
+    tracking?: boolean;
+    bulk?: boolean;
+  },
 ): MailType<T> {
   return {
     ...type,
+    bulk: type.bulk ?? false,
     // Never a tracking pixel or rewritten link next to a code (spec §2).
     tracking: type.category === 'security' ? false : (type.tracking ?? true),
   };

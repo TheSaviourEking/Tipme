@@ -137,6 +137,7 @@ export const announcement = defineMailType({
   category: 'marketing',
   sender: 'news',
   preference: null,
+  bulk: true,
   schema: announcementSchema,
   sample: {
     subject: 'Lower fees on TipMe',
@@ -168,6 +169,48 @@ export const announcement = defineMailType({
         blocks,
         reason:
           'You get news and announcements from TipMe because you have a TipMe account. Turn them off in Email settings.',
+      },
+      ctx,
+    );
+  },
+});
+
+/**
+ * A service notice (owner, 14 Nov 2026): a change to fees, terms or how TipMe works, to everyone
+ * with a confirmed email whatever their marketing choices. Account mail, so it has no settings link
+ * and can't be turned off; bounces, complaints and deleted accounts still stop it (mailGate).
+ */
+export const serviceNotice = defineMailType({
+  id: 'service_notice',
+  category: 'account',
+  sender: 'news',
+  preference: null,
+  bulk: true,
+  schema: announcementSchema,
+  sample: announcement.sample,
+  render: (data, ctx) => {
+    const blocks = announcementBlocks(data.text);
+    const first = blocks[0];
+    if (data.button)
+      blocks.push({
+        kind: 'button',
+        label: data.button.label,
+        href: data.button.url.startsWith('/')
+          ? mailLink(ctx, data.button.url, 'announcement_button')
+          : data.button.url,
+      });
+    return letter(
+      {
+        subject: data.subject,
+        heading: data.subject,
+        preheader:
+          data.preheader ||
+          (first?.kind === 'rich'
+            ? first.spans.map((span) => span.text).join('')
+            : ''),
+        blocks,
+        reason:
+          'You get this because it is about how TipMe works for you: a change to fees, terms or the service. Every account gets these.',
       },
       ctx,
     );

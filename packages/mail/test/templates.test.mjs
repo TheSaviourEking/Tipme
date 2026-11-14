@@ -485,6 +485,7 @@ test('no sample value reaches a subject or preheader', () => {
     share_proposed: ['businessName'],
     // Staff write an announcement's subject and preview line for everyone; they hold nobody's data.
     announcement: ['subject', 'preheader'],
+    service_notice: ['subject', 'preheader'],
   };
   for (const [id, type] of Object.entries(MAIL_TYPES)) {
     const out = renderMail(id, type.sample, ctx);
@@ -733,6 +734,7 @@ const PREVIOUS_SAMPLES = {
   pro_renewal_failed: MAIL_TYPES.pro_renewal_failed.sample,
   // Staff announcements: a new type.
   announcement: MAIL_TYPES.announcement.sample,
+  service_notice: MAIL_TYPES.service_notice.sample,
 };
 
 const settingsCtx = {

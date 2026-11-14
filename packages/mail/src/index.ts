@@ -26,12 +26,14 @@ export {
   type MailSender,
 } from './templates/define.js';
 export { isPretendRecipient, resolveMailProvider } from './routing.js';
+export { createBrevoProvider, type BrevoConfig } from './brevo/provider.js';
 export {
   createZeptoMailProvider,
   type ZeptoMailConfig,
 } from './zeptomail/provider.js';
 export { createSesProvider, type SesConfig } from './ses/provider.js';
 export {
+  announcementMailProvider,
   checkMailSettings,
   configuredMailProviderNames,
   configuredMailProviders,
