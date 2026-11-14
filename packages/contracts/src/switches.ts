@@ -26,6 +26,7 @@ export const FEATURE_SWITCHES = [
   'business_pro',
   'business_signup',
   'business_owners',
+  'campaign_pages',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -166,6 +167,14 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: false,
     default: false,
     env: truthy('BUSINESS_OWNERS_ENABLED'),
+  },
+  campaign_pages: {
+    label: 'Campaign pages',
+    description:
+      'Pro pages can give a campaign link its own page: a headline, a short description and a cover above the same tip area. Off, campaign links open the main page as before.',
+    money: false,
+    default: false,
+    env: truthy('CAMPAIGN_PAGES_ENABLED'),
   },
 };
 

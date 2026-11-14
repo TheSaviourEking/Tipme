@@ -1,36 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { FeatureFlags, proPageFeaturesFromEnv } from '../dist/feature-flags.js';
+import { FeatureFlags } from '../dist/feature-flags.js';
 import { loadApiConfig } from '../dist/config.js';
 
-// The stand-in for the admin switch system (PR #216): one async read per key, so the call sites
-// stay the same when `isOn` becomes `featureOn(db, key)`.
-test('campaign_pages defaults to off; true turns it on; anything else is refused', () => {
-  assert.deepEqual(proPageFeaturesFromEnv({}), { campaign_pages: false });
-  assert.deepEqual(proPageFeaturesFromEnv({ CAMPAIGN_PAGES_ENABLED: '' }), {
-    campaign_pages: false,
-  });
-  assert.deepEqual(proPageFeaturesFromEnv({ CAMPAIGN_PAGES_ENABLED: 'true' }), {
-    campaign_pages: true,
-  });
-  assert.throws(
-    () => proPageFeaturesFromEnv({ CAMPAIGN_PAGES_ENABLED: 'yes' }),
-    /CAMPAIGN_PAGES_ENABLED/,
-  );
+// #220's stand-in became the campaign_pages admin switch (#216) in merge train 2: `isOn` is
+// `featureOn(db, key)`, so the call sites did not change.
+const fakeDb = (rows) => ({
+  select: () => ({ from: async () => rows }),
 });
 
-test('isOn reads the stand-in', async () => {
-  assert.equal(
-    await new FeatureFlags({ campaign_pages: false }).isOn('campaign_pages'),
-    false,
-  );
-  assert.equal(
-    await new FeatureFlags({ campaign_pages: true }).isOn('campaign_pages'),
-    true,
-  );
+test('isOn reads the campaign_pages switch from the database, off when it has no row', async () => {
+  const { resetFeatureSwitchMemory } = await import('@tipme/database');
+  resetFeatureSwitchMemory();
+  const off = new FeatureFlags({ db: fakeDb([]) });
+  assert.equal(await off.isOn('campaign_pages'), false);
+  const on = new FeatureFlags({
+    db: fakeDb([{ key: 'campaign_pages', enabled: true }]),
+  });
+  assert.equal(await on.isOn('campaign_pages'), true);
 });
 
-test('it is not a deploy setting: the API config never carries it', () => {
+test('it is not a deploy setting: the API config never carries it, only as a first-start seed', () => {
   const config = loadApiConfig({
     NODE_ENV: 'development',
     DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/db',
@@ -44,4 +34,5 @@ test('it is not a deploy setting: the API config never carries it', () => {
     CAMPAIGN_PAGES_ENABLED: 'true',
   });
   assert.equal('CAMPAIGN_PAGES_ENABLED' in config, false);
+  assert.deepEqual(config.switchSeeds, { CAMPAIGN_PAGES_ENABLED: 'true' });
 });

@@ -4,10 +4,16 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { seedDemoProfiles } from '../../packages/database/dist/index.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  setSwitch,
+  signIn,
+  startStack,
+} from './helpers.mjs';
 
-// Campaign pages over HTTP (plan 2026-11-14 Task 5). Two API copies on one database: campaign
-// pages switched on, and off (today's answers exactly).
+// Campaign pages over HTTP (plan 2026-11-14 Task 5). One API copy; the campaign_pages switch (admin,
+// #216) is on, and the first test turns it off to see today's answers exactly.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -16,22 +22,18 @@ startTelemetry({
 
 let database;
 let on;
-let off;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
   await seedDemoProfiles(database.db);
-  const apiEnv = { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' };
   on = await startStack({
     databaseUrl: database.url,
-    apiEnv,
-    apiFeatures: { campaign_pages: true },
+    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv });
+  await setSwitch(database.pool, 'campaign_pages', true);
 });
 after(async () => {
   await on.stop();
-  await off.stop();
   await database.close();
 });
 
@@ -75,7 +77,10 @@ async function newCampaign(stack, cookie) {
   return (await response.json()).data;
 }
 
-test('flag off: the page route is 404 and detail has no page field', async () => {
+test('switch off: the page route is 404 and detail has no page field', async () => {
+  await setSwitch(database.pool, 'campaign_pages', false);
+  const off = on;
+  try {
   await setPlan('pro');
   const { cookie } = await ada();
   const campaign = await newCampaign(off, cookie);
@@ -118,6 +123,9 @@ test('flag off: the page route is 404 and detail has no page field', async () =>
   assert.equal(save.status, 404);
   const pub = await get(off, `/v1/profiles/ada/campaigns/${campaign.slug}`);
   assert.equal(pub.status, 404);
+  } finally {
+    await setSwitch(database.pool, 'campaign_pages', true);
+  }
 });
 
 test('Pro saves a page and the public route returns it', async () => {

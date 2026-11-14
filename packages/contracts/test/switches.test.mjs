@@ -24,6 +24,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'business_pro',
     'business_shares',
     'business_signup',
+    'campaign_pages',
     'page_studio',
     'pro_auto_renew',
     'pro_billing',
@@ -244,4 +245,11 @@ test('business_signup and business_owners are non-money switches, off by default
     assert.equal(entry.default, false, key);
     assert.equal(entry.env.name, name);
   }
+});
+
+test('campaign_pages is a non-money switch, off by default, seeded from CAMPAIGN_PAGES_ENABLED (#220)', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.campaign_pages;
+  assert.equal(entry.money, false);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'CAMPAIGN_PAGES_ENABLED');
 });

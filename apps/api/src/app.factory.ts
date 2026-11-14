@@ -1,5 +1,4 @@
 import type { Server } from 'node:http';
-import type { ProPageFeatures } from './feature-flags.js';
 import type { INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -47,8 +46,6 @@ const CREDENTIALED_PATHS = [
 
 export interface CreateAppOptions {
   logDestination?: DestinationStream;
-  /** The Pro page features' stand-in switches (see feature-flags.ts); all off when absent. */
-  features?: ProPageFeatures;
 }
 
 export async function createApp(
@@ -62,7 +59,7 @@ export async function createApp(
   });
   // Nest's own text logger is off: all output is structured JSON from our logger.
   const app = await NestFactory.create<NestExpressApplication>(
-    AppModule.forRoot(config, logger, options.features),
+    AppModule.forRoot(config, logger),
     {
       bodyParser: false,
       // Webhook signatures are verified against the exact bytes received.

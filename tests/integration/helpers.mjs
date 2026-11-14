@@ -41,8 +41,6 @@ export async function startStack({
   workerEnv = {},
   databaseUrl = DATABASE_URL,
   apiEnv = {},
-  /** The API's Pro page feature stand-ins (apps/api/src/feature-flags.ts), e.g. { campaign_pages: true }. */
-  apiFeatures,
 } = {}) {
   const { createApp } = await import('../../apps/api/dist/app.factory.js');
   const { loadApiConfig } = await import('../../apps/api/dist/config.js');
@@ -79,7 +77,7 @@ export async function startStack({
       CHANGELOG_SIGNING_SECRET: CHANGELOG_SECRET,
       ...apiEnv,
     }),
-    { logDestination, ...(apiFeatures ? { features: apiFeatures } : {}) },
+    { logDestination },
   );
   await app.listen(0, '127.0.0.1');
   const worker = await startJobWorker(

@@ -4,8 +4,8 @@ import { accountOf, seedBusiness } from './business-fixtures';
 import { businessOnlyOwner } from './business-signup-fixtures';
 import { expectAccessible, signUpRecipient } from './helpers';
 
-// Business sign-up, Task D6: the account-menu switcher. BUSINESS_SIGNUP_ENABLED is on in the e2e
-// stack (playwright.config.ts).
+// Business sign-up, Task D6: the account-menu switcher. The business_signup switch is on in the
+// e2e stack (seeded from BUSINESS_SIGNUP_ENABLED in playwright.config.ts).
 
 test.slow();
 

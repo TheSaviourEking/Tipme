@@ -150,11 +150,18 @@ test('the migration backfills Pro pages, once', async (t) => {
   const db = await useDatabase(t);
   await db.fresh();
   const dir = new URL('../../drizzle/', import.meta.url);
-  const file = readdirSync(dir).find((name) =>
-    /^\d{4}_plan_changes\.sql$/.test(name),
+  // Merge train 2: the table (generated) and its backfill (generate --custom) are two migrations.
+  const files = readdirSync(dir).filter((name) =>
+    /^\d{4}_plan_changes(_backfill)?\.sql$/.test(name),
   );
-  assert.ok(file, 'the plan_changes migration exists');
-  const backfill = readFileSync(new URL(file, dir), 'utf8')
+  assert.equal(
+    files.length,
+    2,
+    'the plan_changes migration and its backfill exist',
+  );
+  const backfill = files
+    .map((file) => readFileSync(new URL(file, dir), 'utf8'))
+    .join('--> statement-breakpoint')
     .split('--> statement-breakpoint')
     .map((part) => part.replace(/^(\s*--[^\n]*\n)+/, '').trim())
     .find((part) => /^INSERT INTO "?plan_changes"?/i.test(part));

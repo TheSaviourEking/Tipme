@@ -4,8 +4,8 @@ import { seedBusiness } from './business-fixtures';
 import { identity, signInWithEmail } from './helpers';
 import { sql, withDatabase, type TestInfo } from './ops-helpers';
 
-// Business sign-up (Phase D): the e2e stack runs with BUSINESS_SIGNUP_ENABLED on
-// (playwright.config.ts). Every person and business here is new per test.
+// Business sign-up (Phase D): the e2e stack runs with the business_signup switch on
+// (seeded from BUSINESS_SIGNUP_ENABLED in playwright.config.ts). Every person and business here is new per test.
 
 export const dashboardNav = (page: Page) =>
   page.getByRole('navigation', { name: 'Dashboard' });
