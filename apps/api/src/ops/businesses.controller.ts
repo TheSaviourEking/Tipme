@@ -62,6 +62,7 @@ const businessIdOf = (value: string) => {
  * TipMe for businesses, lane B2: staff look businesses up with contacts masked, reveal a contact
  * with a reason (`private.view`), suspend and restore (`businesses.manage`, a reason, audited), and
  * verify one as a serious action (`business.verify`). Every change refreshes the public `/b/` pages.
+ * Removing an owner is a serious action too (`business.owner_remove`).
  */
 @Controller('v1/ops/businesses')
 @UseGuards(BusinessEnabledGuard)
@@ -215,6 +216,49 @@ export class OpsBusinessesController {
     );
     if ('pending' in answer) return { data: answer.pending };
     this.revalidator.revalidateBusiness(answer.result.revalidateBusiness);
+    signalBusiness(this.database.db, this.publishLive, { businessId });
+    return {
+      data: {
+        ...(await opsBusinessDetail(this.database.db, businessId)),
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
+  }
+
+  /**
+   * Owner-change lock (owner, 14 Nov 2026): only TipMe removes a business owner, as a serious
+   * action (`business.owner_remove`): a reason, a fresh code and a second person (202 while it
+   * waits). Never the last owner; every owner is emailed once it runs.
+   */
+  @Post(':id/owners/:managerId/remove')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('businesses.manage')
+  async removeOwner(
+    @CurrentOps() ops: OpsContext,
+    @Param('id') id: string,
+    @Param('managerId') managerId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<(OpsBusinessDetail & OpsActedAlone) | OpsSeriousPending>
+  > {
+    const businessId = businessIdOf(id);
+    if (!UUID.test(managerId))
+      throw new CodedHttpException(404, 'BUSINESS_NOT_FOUND');
+    const answer = pendingOr<{ slug: string }>(
+      await requestSeriousAction(this.database.db, {
+        name: 'business.owner_remove',
+        payload: { businessId, managerId },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
     signalBusiness(this.database.db, this.publishLive, { businessId });
     return {
       data: {

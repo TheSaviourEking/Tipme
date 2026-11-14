@@ -57,6 +57,7 @@ test('business codes', async (t) => {
       await seedMember(database, { locationId: old.id, profileId: ADA });
       const { codes } = await codeOf(database.db, ADA_USER, businessId);
       assert.deepEqual(codes, {
+        // No logo: the sign's tile shows the initial.
         business: { name: 'The Yellow Chilli', slug },
         location: [
           {
@@ -87,6 +88,16 @@ test('business codes', async (t) => {
           },
         ],
       });
+      // With a logo, the codes carry it for the sign's tile.
+      const logoPath = `/v1/business-logos/${businessId}/1.webp`;
+      await database.pool.query(
+        'UPDATE businesses SET logo_path = $2 WHERE id = $1',
+        [businessId, logoPath],
+      );
+      assert.deepEqual(
+        (await codeOf(database.db, ADA_USER, businessId)).codes.business,
+        { name: 'The Yellow Chilli', slug, logoPath },
+      );
     },
   );
 

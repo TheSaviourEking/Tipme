@@ -73,11 +73,42 @@ export interface Letter {
   slab?: { amount: string; line: string };
 }
 
+// The logo (apps/web/public/email, drawn by scripts/design/email-logo.mjs): shown 120 px wide
+// (778 x 293 artwork), loaded at 2x. Light ("tip" in black) by default; dark ("tip" in white)
+// only where the client tells us it is in dark mode.
+const LOGO_W = 120;
+const LOGO_H = 45;
+// When dark: the light logo goes, the dark one's wrapper opens, the chip turns night. Outlook.com
+// and the Outlook apps answer no media query; they mark what they recolour with data-ogsc (text)
+// and data-ogsb (background), so the same rules are repeated under those. They sit in a block of
+// their own, so a client that rejects attribute selectors drops only that block.
+const LOGO_DARK = `.tm-logo{background:${NIGHT}!important;background-image:none!important}.tm-logo-light{display:none!important}.tm-logo-dark-wrap{display:block!important;max-height:none!important;overflow:visible!important}`;
+const scoped = (scope: string, rules: string) =>
+  rules.replace(/(^|\})\./g, `$1${scope} .`);
+
 const STYLE = `<style>
 :root{color-scheme:light dark;supported-color-schemes:light dark}
 @media (max-width:480px){.tm-amount{font-size:54px!important}.tm-slab{padding:24px 22px!important}.tm-slab-h{font-size:30px!important}.tm-card{padding:24px 20px!important}.tm-outer{padding:20px 8px!important}.tm-stat{padding:12px!important}.tm-stat-v{font-size:24px!important}}
-@media (prefers-color-scheme: dark){.tm-paper{background:${NIGHT}!important}.tm-card{background:#1E1C19!important;border-color:#34312C!important}.tm-ink{color:${PAPER}!important}.tm-muted{color:#B5B0A6!important}.tm-muted a{color:#B5B0A6!important}.tm-rule{border-color:#34312C!important}.tm-well{background:#2A2723!important;border-color:#3A3631!important;color:${PAPER}!important}.tm-warn{background:#2E1D52!important;color:${SLAB_LINE}!important}.tm-tag{color:#C9A8FF!important}}
+@media (prefers-color-scheme: dark){.tm-paper{background:${NIGHT}!important}.tm-card{background:#1E1C19!important;border-color:#34312C!important}.tm-ink{color:${PAPER}!important}.tm-muted{color:#B5B0A6!important}.tm-muted a{color:#B5B0A6!important}.tm-rule{border-color:#34312C!important}.tm-well{background:#2A2723!important;border-color:#3A3631!important;color:${PAPER}!important}.tm-warn{background:#2E1D52!important;color:${SLAB_LINE}!important}.tm-tag{color:#C9A8FF!important}${LOGO_DARK}}
+</style><style>
+${scoped('[data-ogsc]', LOGO_DARK)}${scoped('[data-ogsb]', LOGO_DARK)}
 </style>`;
+
+/**
+ * The header: both logos in a paper-coloured chip. Gmail's forced dark mode (its apps) inverts
+ * background colours but not images, nor a background-image, so the chip's gradient keeps a light
+ * ground under the black "tip". In light mode the chip is the page's own paper, so it is unseen.
+ * The dark logo is hidden inline (display:none, max-height:0, mso-hide:all), so clients that read no
+ * <style> show only the light one.
+ */
+function logoHtml(ctx: MailContext): string {
+  const src = (scheme: 'light' | 'dark') =>
+    e(new URL(`/email/tipme-logo-${scheme}-2x.png`, ctx.webOrigin).toString());
+  const img = (scheme: 'light' | 'dark') =>
+    `<img class="tm-logo-${scheme}" src="${src(scheme)}" width="${LOGO_W}" height="${LOGO_H}" alt="TipMe" border="0" style="display:block;width:${LOGO_W}px;height:${LOGO_H}px;border:0;outline:none;text-decoration:none;">`;
+  const chip = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="tm-logo" bgcolor="${PAPER}" style="background:${PAPER};background-image:linear-gradient(${PAPER},${PAPER});border-radius:12px;padding:4px;">${img('light')}<div class="tm-logo-dark-wrap" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${img('dark')}</div></td></tr></table>`;
+  return `<tr><td data-header style="padding:0 0 14px;">${chip}</td></tr>`;
+}
 
 const SHIELD = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-4px;margin-right:6px"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"></path></svg>`;
 
@@ -258,7 +289,8 @@ const blocksTable = (blocks: Block[], firstGap: number | null) =>
 
 /**
  * Table-based, inline-styled HTML (600px) in the boards' paper-and-slab frame, and a matching
- * plain-text body. Nothing is loaded from anywhere: no images, fonts or stylesheets.
+ * plain-text body. The one thing loaded is the logo (two PNGs from the web origin): no other
+ * image, font or stylesheet.
  */
 export function letter(input: Letter, ctx: MailContext): RenderedMail {
   const firstText = input.blocks.find((block) => block.kind === 'text');
@@ -279,7 +311,7 @@ export function letter(input: Letter, ctx: MailContext): RenderedMail {
 
   // Hidden filler after the preheader keeps clients from running the body text into the preview.
   const filler = '&#847;&zwnj;&nbsp;'.repeat(40);
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${e(input.subject)}</title>${STYLE}</head><body class="tm-paper" style="margin:0;padding:0;background:${PAPER};"><div data-preheader style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:${PAPER};">${e(preheader)}${filler}</div>${table(`<tr><td class="tm-outer" align="center" style="padding:28px 12px 36px;">${table(`<tr><td class="tm-ink" style="padding:0 4px 18px;font-family:${SANS};font-size:22px;font-weight:800;letter-spacing:-0.02em;line-height:1;color:${INK};">tipme <span style="color:${BRAND};">&#9829;&#xFE0E;</span></td></tr>${body}${footer}`, ' style="max-width:600px;"')}</td></tr>`, ` class="tm-paper" bgcolor="${PAPER}" style="background:${PAPER};"`)}</body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${e(input.subject)}</title>${STYLE}</head><body class="tm-paper" style="margin:0;padding:0;background:${PAPER};"><div data-preheader style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;color:${PAPER};">${e(preheader)}${filler}</div>${table(`<tr><td class="tm-outer" align="center" style="padding:28px 12px 36px;">${table(`${logoHtml(ctx)}${body}${footer}`, ' style="max-width:600px;"')}</td></tr>`, ` class="tm-paper" bgcolor="${PAPER}" style="background:${PAPER};"`)}</body></html>`;
 
   const text = [
     ...(input.tag ? [SAFETY, ''] : []),

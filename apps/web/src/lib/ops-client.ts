@@ -64,6 +64,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   payout_unexpected: 'Unexpected payout',
   payout_unresolved: 'Withdrawal outcome unknown',
   payout_fee_short: 'Payout fee above what was covered',
+  payout_fee_adjusted: 'Payout fee differed; settled on the balance',
   payout_held: 'Withdrawal waiting on a hold',
   account_takeover_reported: 'Reported account takeover',
   staff_acted_alone: 'Serious action without a second person',

@@ -348,3 +348,94 @@ test('API: applying is rate limited per person', async () => {
     201,
   );
 });
+
+// The owner's ruling (14 Nov 2026): it shouldn't be easy to take over a business. Until the removal
+// procedure (plan #204, Phase E) ships, an owner can't end another owner's seat; TipMe does it.
+test('API: an owner removing another owner is refused (403 OWNER_REMOVAL_NEEDS_TIPME), audited, and nothing changes', async () => {
+  const { businessId } = await seedBusiness(database, { owner: ADA.userId });
+  const [adaSeat] = (
+    await database.pool.query(
+      `SELECT id FROM business_managers WHERE business_id = $1 AND user_id = $2`,
+      [businessId, ADA.userId],
+    )
+  ).rows;
+  const tobiSeat = await seedManager(database, {
+    businessId,
+    userId: TOBI.userId,
+  });
+  const seats = async () =>
+    (
+      await database.pool.query(
+        `SELECT user_id, role, removed_at IS NOT NULL AS removed
+           FROM business_managers WHERE business_id = $1 ORDER BY user_id`,
+        [businessId],
+      )
+    ).rows;
+  const audits = async () =>
+    (
+      await database.pool.query(
+        `SELECT action, staff_user_id, subject_type FROM audit_events
+          WHERE subject_id = $1 ORDER BY created_at, id`,
+        [businessId],
+      )
+    ).rows;
+  const before = await seats();
+
+  const refused = await call(
+    'POST',
+    `/v1/me/businesses/${businessId}/managers/${tobiSeat.managerId}/remove`,
+    { cookie: ada.cookie },
+  );
+  assert.equal(refused.status, 403);
+  assert.equal(refused.body.error.code, 'OWNER_REMOVAL_NEEDS_TIPME');
+  assert.deepEqual(await seats(), before);
+  assert.deepEqual(await audits(), [
+    {
+      action: 'business.owner_removal_blocked',
+      staff_user_id: ADA.userId,
+      subject_type: 'business',
+    },
+  ]);
+  // The other way round too.
+  const back = await call(
+    'POST',
+    `/v1/me/businesses/${businessId}/managers/${adaSeat.id}/remove`,
+    { cookie: tobi.cookie },
+  );
+  assert.equal(back.status, 403);
+  assert.equal(back.body.error.code, 'OWNER_REMOVAL_NEEDS_TIPME');
+  assert.deepEqual(await seats(), before);
+  assert.equal((await audits()).length, 2);
+
+  // An owner can still step down while another owner stays…
+  const left = await call(
+    'POST',
+    `/v1/me/businesses/${businessId}/managers/${tobiSeat.managerId}/remove`,
+    { cookie: tobi.cookie },
+  );
+  assert.equal(left.status, 204);
+  // …but never as the last owner.
+  const last = await call(
+    'POST',
+    `/v1/me/businesses/${businessId}/managers/${adaSeat.id}/remove`,
+    { cookie: ada.cookie },
+  );
+  assert.equal(last.status, 409);
+  assert.equal(last.body.error.code, 'BUSINESS_LAST_OWNER');
+  // Stepping down and the last-owner refusal aren't takeovers: no new audit row.
+  assert.equal((await audits()).length, 2);
+
+  // An owner still removes a location manager.
+  const other = await seedBusiness(database, { owner: ADA.userId });
+  const manager = await seedManager(database, {
+    businessId: other.businessId,
+    userId: TOBI.userId,
+    locationId: other.locations[0].id,
+  });
+  const removed = await call(
+    'POST',
+    `/v1/me/businesses/${other.businessId}/managers/${manager.managerId}/remove`,
+    { cookie: ada.cookie },
+  );
+  assert.equal(removed.status, 204);
+});

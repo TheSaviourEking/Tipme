@@ -6,7 +6,7 @@ import { CreateBusiness } from './create-business';
 
 export const metadata = marketingMetadata(
   'For businesses',
-  'TipMe for businesses: customers thank the people who served them, and every tip goes to that person.',
+  'TipMe for businesses: customers tip the people who served them, and every tip goes to that person.',
   '/for-businesses',
 );
 
@@ -34,11 +34,11 @@ function Open() {
     <>
       <div>
         <h1 id="businesses-title" className="creators-title">
-          Let your customers thank your team.
+          Let your customers tip your team.
         </h1>
         <p className="creators-lede business-hero__lede">
           Customers scan one code at your place, find the person who served
-          them, and thank them with a tip.
+          them, and tip them.
         </p>
       </div>
       <CreateBusiness />

@@ -5,7 +5,8 @@ import {
   HomeClaim,
   HomeDemo,
   MINIMUM_TIP_TEXT,
-  TIPME_SHARE_PERCENT,
+  FREE_SHARE_PERCENT,
+  PRO_SHARE_PERCENT,
   TippedSteps,
   TippingSteps,
 } from '@/components/marketing';
@@ -15,7 +16,7 @@ import { HOME_DESCRIPTION } from '@/lib/payment-mode-copy';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
-  'TipMe — A little thanks goes a long way',
+  'TipMe — A little tip goes a long way',
   HOME_DESCRIPTION,
   '/',
 );
@@ -68,9 +69,10 @@ export default function Home() {
           <div>
             <h2 id="band-title">Appreciation goes a long way.</h2>
             <p>
-              TipMe keeps {TIPME_SHARE_PERCENT}% of each tip, and that covers
-              processing. You receive the rest, and see every tip and note. The
-              smallest tip is {MINIMUM_TIP_TEXT}.
+              TipMe keeps {FREE_SHARE_PERCENT}% of each tip on Free, or{' '}
+              {PRO_SHARE_PERCENT}% on Pro, and that covers processing. You
+              receive the rest, and see every tip and note. The smallest tip is{' '}
+              {MINIMUM_TIP_TEXT}.
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">

@@ -87,7 +87,7 @@ test('business page invites people to create a business when businesses are on',
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'Let your customers thank your team.' }),
+    page.getByRole('heading', { name: 'Let your customers tip your team.' }),
   ).toBeVisible();
   await expect(page.getByRole('main')).toContainText(
     'TipMe staff check your business’s name, address and contact',
@@ -170,7 +170,7 @@ test('share cards: profiles advertise their own card, other pages the general on
 }) => {
   for (const [path, image, alt] of [
     ['/@ada', '/people/ada/share-card', 'Ada Okafor on TipMe'],
-    ['/', '/opengraph-image', 'TipMe. A little thanks goes a long way.'],
+    ['/', '/opengraph-image', 'TipMe. A little tip goes a long way.'],
   ] as const) {
     await page.goto(path);
     const ogImage = await page
@@ -219,14 +219,20 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
-test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
+test('the terms set out Free 7%, Pro 5% and the NGN 2,000 minimums', async ({
   page,
 }) => {
   await page.goto('/legal/terms');
   const fees = page.getByRole('region', { name: 'Fees' });
   await expect(fees).toContainText('you pay exactly the amount you choose');
-  await expect(fees).toContainText('TipMe keeps 10% of each tip');
-  await expect(fees).toContainText('you receive ₦4,500');
+  await expect(fees).toContainText(
+    'TipMe keeps 7% of each tip on the Free plan, or 5% on TipMe Pro',
+  );
+  await expect(fees).toContainText(
+    'From a ₦5,000 tip, you receive ₦4,650 on Free, or ₦4,750 on Pro.',
+  );
+  await expect(fees).not.toContainText('10%');
+  await expect(fees).not.toContainText('₦4,500');
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
 });
@@ -330,7 +336,7 @@ test('the creator page exists as a PRD marketing route', async ({ page }) => {
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'People already want to thank you.',
+    'People already want to tip you.',
   );
 });
 

@@ -6,6 +6,7 @@ import { Button, Skeleton, StateLine } from '@tipme/ui';
 import { track } from '@/lib/analytics';
 import {
   loadBusinessCodes,
+  useSignLogo,
   useWebOrigin,
   type CodesAnswer,
 } from '@/lib/business/codes-api';
@@ -17,6 +18,7 @@ import {
   drawStaffBadge,
   printedLink,
   type SignFormatId,
+  type SignLogo,
 } from '@/lib/business-sign';
 import type { QrStyle } from '@/lib/qr-render';
 
@@ -27,6 +29,8 @@ type Sheet =
       url: string;
       business: string;
       location: string;
+      /** `undefined` while it loads: nothing is drawn until then. */
+      logo: SignLogo | null | undefined;
     }
   | {
       kind: 'badge';
@@ -49,16 +53,18 @@ function SheetCanvas({
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (!canvas.current) return;
-    if (sheet.kind === 'sign')
+    if (sheet.kind === 'sign') {
+      if (sheet.logo === undefined) return;
       drawLocationSign(canvas.current, {
         url: sheet.url,
         business: sheet.business,
         location: sheet.location,
+        logo: sheet.logo,
         style,
         // About 200 dpi on A5, more on A6: crisp on paper.
         width: 1240,
       });
-    else
+    } else
       drawStaffBadge(canvas.current, {
         url: sheet.url,
         name: sheet.name,
@@ -116,6 +122,9 @@ export default function BusinessCodesPrintView() {
         : Promise.resolve<CodesAnswer>({ state: 'failed' })
     ).then(setAnswer);
   }, [businessId]);
+  const logo = useSignLogo(
+    answer?.state === 'ready' ? answer.codes.business.logoPath : undefined,
+  );
 
   const back = (
     <Link
@@ -171,6 +180,7 @@ export default function BusinessCodesPrintView() {
             url: codeUrl(origin, entry.path),
             business: codes.business.name,
             location: entry.name,
+            logo,
           }));
   const print = () => {
     track('qr_printed', { surface: 'qr' });

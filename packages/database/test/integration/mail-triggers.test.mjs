@@ -424,7 +424,7 @@ test('a tip email carries the policy minimum', async (t) => {
   const { FEE_POLICY_V1 } = await import('@tipme/domain');
   assert.equal(
     mail.data.minWithdrawalMinor,
-    FEE_POLICY_V1.minWithdrawalMinor.toString(),
+    FEE_POLICY_V1.minTipMinor.toString(),
   );
   assert.equal(mail.data.minWithdrawalMinor, '200000');
 });

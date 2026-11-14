@@ -41,7 +41,7 @@ test('the individuals page names creators and streamers and keeps one call to cl
 }) => {
   await page.goto('/for-creators');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'People already want to thank you.',
+    'People already want to tip you.',
   );
   await expect(
     page.getByText(/Barbers, drivers, streamers, creators/),
@@ -61,7 +61,7 @@ test('with businesses on, the businesses page invites people to create one', asy
 }) => {
   await page.goto('/for-businesses');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    'Let your customers thank your team.',
+    'Let your customers tip your team.',
   );
   await expect(
     page.getByRole('link', { name: 'Create your business' }),
@@ -82,6 +82,11 @@ test('the businesses page is centred: the text and the card sit as one block in 
   const parts = hero.locator('> *').filter({ visible: true });
   const text = parts.first();
   const card = parts.last();
+  // The hero starts as the coming-soon fallback and is swapped for the open page; measuring during
+  // that swap gave a null box under burn-in. Wait for the open page's heading first.
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText(
+    'Let your customers tip your team.',
+  );
   await expect(parts).toHaveCount(2);
   const [t, c] = [(await text.boundingBox())!, (await card.boundingBox())!];
   // Horizontally: the space left of the text matches the space right of the card.
@@ -93,4 +98,23 @@ test('the businesses page is centred: the text and the card sit as one block in 
   const top = Math.min(t.y, c.y) - (header.y + header.height);
   const bottom = 900 - Math.max(t.y + t.height, c.y + c.height);
   expect(Math.abs(top - bottom)).toBeLessThan(64);
+});
+
+// The owner, 14 Nov 2026: "We should use 'Tips' instead of 'thanks'". Where "thanks" meant the
+// money, the public pages now say tips; gratitude and the tagline stay.
+test('the public pages say tips, not thanks, where they mean the money', async ({
+  page,
+}) => {
+  const replaced =
+    /Get your thanks|Say your thanks|want to thank you|thank your team|thank them with a tip|thank the people|start receiving thanks|you want to thank\b/i;
+  for (const [path, kept] of [
+    ['/', 'Get your tips'],
+    ['/for-creators', 'People already want to tip you.'],
+    ['/for-businesses', 'Let your customers tip your team.'],
+  ] as const) {
+    await page.goto(path);
+    const main = page.getByRole('main');
+    await expect(main).toContainText(kept);
+    await expect(main).not.toContainText(replaced);
+  }
 });

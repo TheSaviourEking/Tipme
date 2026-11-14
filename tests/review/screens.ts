@@ -873,6 +873,7 @@ export const SCREENS: ReviewScreen[] = [
       ['Approvals', 'OpsPages'],
       ['Issues', 'OpsShell'],
       ['Search', 'OpsPages'],
+      ['People', 'OpsUsers'],
       ['Pages', 'OpsPages'],
       ['Usernames', 'OpsPages'],
       ['Visibility', 'OpsPages'],
@@ -880,7 +881,7 @@ export const SCREENS: ReviewScreen[] = [
       ['Providers', 'OpsPages'],
       ['Email', 'OpsPages'],
       ['Audit log', 'OpsPages'],
-      ['People', 'OpsPages'],
+      ['Staff members', 'OpsPages'],
       ['Roles', 'OpsPages'],
       ['Your access', 'OpsPages'],
     ] as const

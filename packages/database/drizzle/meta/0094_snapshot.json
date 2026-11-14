@@ -1,6 +1,6 @@
 {
-  "id": "3cf11fff-52f2-4f47-8777-78283681cea2",
-  "prevId": "c52eae80-0ddc-4f83-a4e5-8417ac13597c",
+  "id": "a56ed48b-93fa-4e31-8d1c-4b85c65c3621",
+  "prevId": "d1937172-f271-4180-aa56-5a1b03cea2b5",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2541,181 +2541,6 @@
         "email_tokens_purpose": {
           "name": "email_tokens_purpose",
           "value": "purpose IN ('verify', 'recover')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.feature_switch_changes": {
-      "name": "feature_switch_changes",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "changed_by": {
-          "name": "changed_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_by": {
-          "name": "approved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "feature_switch_changes_key": {
-          "name": "feature_switch_changes_key",
-          "columns": [
-            {
-              "expression": "key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "feature_switch_changes_changed_by_users_id_fk": {
-          "name": "feature_switch_changes_changed_by_users_id_fk",
-          "tableFrom": "feature_switch_changes",
-          "columnsFrom": ["changed_by"],
-          "tableTo": "users",
-          "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        },
-        "feature_switch_changes_approved_by_users_id_fk": {
-          "name": "feature_switch_changes_approved_by_users_id_fk",
-          "tableFrom": "feature_switch_changes",
-          "columnsFrom": ["approved_by"],
-          "tableTo": "users",
-          "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "feature_switch_changes_source": {
-          "name": "feature_switch_changes_source",
-          "value": "\"feature_switch_changes\".\"source\" IN ('default', 'env', 'staff')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.feature_switches": {
-      "name": "feature_switches",
-      "schema": "",
-      "columns": {
-        "key": {
-          "name": "key",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "changed_by": {
-          "name": "changed_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "changed_at": {
-          "name": "changed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "feature_switches_changed_by_users_id_fk": {
-          "name": "feature_switches_changed_by_users_id_fk",
-          "tableFrom": "feature_switches",
-          "columnsFrom": ["changed_by"],
-          "tableTo": "users",
-          "columnsTo": ["id"],
-          "onUpdate": "no action",
-          "onDelete": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "feature_switches_source": {
-          "name": "feature_switches_source",
-          "value": "\"feature_switches\".\"source\" IN ('default', 'env', 'staff')"
-        },
-        "feature_switches_reason": {
-          "name": "feature_switches_reason",
-          "value": "char_length(\"feature_switches\".\"reason\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -8745,7 +8570,7 @@
       "checkConstraints": {
         "role_permissions_known": {
           "name": "role_permissions_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage', 'businesses.manage', 'changelog.edit', 'changelog.publish', 'pro.price', 'switches.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage', 'businesses.manage', 'changelog.edit', 'changelog.publish', 'pro.price')"
         }
       },
       "isRLSEnabled": false
@@ -9537,7 +9362,7 @@
       "checkConstraints": {
         "staff_permission_overrides_known": {
           "name": "staff_permission_overrides_known",
-          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage', 'businesses.manage', 'changelog.edit', 'changelog.publish', 'pro.price', 'switches.manage')"
+          "value": "permission IN ('issues.view', 'issues.resolve', 'pages.suspend', 'recoveries.cancel', 'analytics.view', 'market.edit', 'audit.view', 'payments.recheck', 'private.view', 'pages.plan', 'search.view', 'fees.manage', 'providers.manage', 'recoveries.manage', 'payouts.resolve', 'email.read', 'email.export', 'payments.repair', 'staff.manage', 'usernames.manage', 'businesses.manage', 'changelog.edit', 'changelog.publish', 'pro.price')"
         },
         "staff_permission_overrides_effect": {
           "name": "staff_permission_overrides_effect",

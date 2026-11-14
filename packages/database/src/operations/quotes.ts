@@ -2,7 +2,8 @@ import {
   AmountOutOfRangeError,
   FEE_FREE_VERSION_SUFFIX,
   assertCurrency,
-  FEE_POLICY_V1,
+  feePolicyForPlan,
+  planShareBps,
   priceTip,
   type FeeBreakdown,
 } from '@tipme/domain';
@@ -67,20 +68,21 @@ async function quote(
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
   const minTipMinor = BigInt(tipAmountsOf(profile).minMinor);
-  // A share staff set for this account (ADR-0014), recorded in the quote's version.
-  const shareBps =
-    profile.customFeeBps === null ? undefined : BigInt(profile.customFeeBps);
+  // The recipient's plan now picks the rate (owner, 12 Nov 2026: Free 7%, Pro 5%), and the quote
+  // records it in its version, so a later plan change never alters this price. A share staff set
+  // for this account (ADR-0014) applies only below the plan's rate.
+  const plan = profile.plan === 'pro' ? 'pro' : 'free';
+  const policy = feePolicyForPlan(plan);
+  const { bps: shareBps, custom } = planShareBps(
+    plan,
+    profile.customFeeBps === null ? null : BigInt(profile.customFeeBps),
+  );
   const baseVersion =
-    shareBps === undefined
-      ? FEE_POLICY_V1.version
-      : `${FEE_POLICY_V1.version}-custom-${profile.customFeeBps}`;
+    custom === null ? policy.version : `${policy.version}-custom-${custom}`;
   let breakdown: FeeBreakdown;
   try {
     // A Pro page's own minimum (PR-012), enforced here whatever the page showed.
-    breakdown = priceTip(input.tipMinor, FEE_POLICY_V1, {
-      minTipMinor,
-      ...(shareBps === undefined ? {} : { shareBps }),
-    });
+    breakdown = priceTip(input.tipMinor, policy, { minTipMinor, shareBps });
   } catch (error) {
     if (error instanceof AmountOutOfRangeError)
       throw new OperationError('AMOUNT_OUT_OF_RANGE');
@@ -114,7 +116,7 @@ async function quote(
         if ((credits?.remaining ?? 0) - open.count > 0) {
           // TipMe gives up its whole share, the processing it would have paid from it included.
           waived = share;
-          chosen = priceTip(input.tipMinor, FEE_POLICY_V1, {
+          chosen = priceTip(input.tipMinor, policy, {
             feeFree: true,
             minTipMinor,
           });

@@ -11,7 +11,7 @@ export function percentToBps(raw: string): number | null {
   return bps <= 10000 ? bps : null;
 }
 
-/** Basis points as staff read them: 1000 → "10%", 750 → "7.5%". */
+/** Basis points as staff read them: 700 → "7%", 750 → "7.5%". */
 export function bpsToPercent(bps: number): string {
   const whole = Math.floor(bps / 100);
   const frac = String(bps % 100)
