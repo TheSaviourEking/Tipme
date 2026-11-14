@@ -419,12 +419,14 @@ test('an approver sees a money close’s outcome, and a recovery’s checks, mas
   ).toBeVisible();
 
   const movedTo = `moved.${randomUUID().slice(0, 8)}@example.com`;
+  // This run's own words: a run that stopped before closing its request leaves the same card.
+  const checks = `Matched their last three tips on a call, ref ${randomUUID().slice(0, 6)}`;
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByRole('button', { name: 'Move sign-in email…' }).click();
   await page.getByLabel('New sign-in email').fill(movedTo);
   await page
     .getByLabel('What did you check to be sure who this is?')
-    .fill('Matched their last three tips on a call');
+    .fill(checks);
   await page.getByLabel('Why is this account moving?').fill(REASON);
   await page.getByRole('button', { name: 'Send code to new email' }).click();
   await expect(waiting(page)).toBeVisible();
@@ -438,9 +440,7 @@ test('an approver sees a money close’s outcome, and a recovery’s checks, mas
   await expect(close.getByText(/as: Written off by TipMe/)).toBeVisible();
   await expect(close.getByText(/payment mismatch/)).toBeVisible();
 
-  const move = other.page
-    .getByRole('article')
-    .filter({ hasText: 'Matched their last three tips on a call' });
+  const move = other.page.getByRole('article').filter({ hasText: checks });
   await expect(
     move.getByText('Move an account to a new email address'),
   ).toBeVisible();
