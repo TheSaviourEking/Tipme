@@ -207,6 +207,17 @@ test('Pro price sits in Work, after Usernames, only with pro.price', () => {
   );
 });
 
+// Feature switches (owner, 14 Nov 2026): beside Providers, the other settings page.
+test('Switches sits in Email and records, after Providers, only with switches.manage', () => {
+  assert.ok(!hrefs(['providers.manage']).includes('/ops/switches'));
+  assert.deepEqual(
+    opsMenuGroups(['switches.manage', 'providers.manage'])
+      .find((group) => group.label === 'Email and records')
+      ?.links.map((link) => link.label),
+    ['Providers', 'Switches'],
+  );
+});
+
 test('People sits in Work right after Search, for search.view only', () => {
   assert.ok(!hrefs(['analytics.view', 'staff.manage']).includes('/ops/users'));
   const work = opsMenuGroups(['search.view']).find(

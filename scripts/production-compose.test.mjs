@@ -88,7 +88,7 @@ test(
       for (const name of names) {
         const passed = config.services[name].environment;
         const missing = read.filter(
-          (k) => !(k in passed) && !deliberate.has(k),
+          (k) => !(k in passed) && !deliberate.has(k) && !CODE_DEFAULT_ONLY(k),
         );
         assert.deepEqual(missing, [], `${name} settings missing from compose`);
         for (const key of deliberate)
@@ -251,7 +251,10 @@ test('production.env.example names every ${VAR} the compose file reads, with no 
   const values = new Map(
     lines.map((l) => [l.split('=')[0], l.slice(l.indexOf('=') + 1)]),
   );
-  const missing = [...new Set(readVars)].filter((v) => !values.has(v));
+  // The moved switches are forwarded for one release only, as seeds (SEED_ONLY below).
+  const missing = [...new Set(readVars)].filter(
+    (v) => !values.has(v) && !SEED_ONLY.includes(v),
+  );
   assert.deepEqual(
     missing,
     [],
@@ -337,4 +340,97 @@ test('every app service notices a dead connection soon', { skip }, () => {
       '8',
       name,
     );
+});
+
+// Feature switches (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md): set in admin now. The
+// compose files forward the old variables for one release, so the first start seeds each switch from
+// the server's current value; nothing defaults them here. The examples no longer name them.
+export const SEED_ONLY = [
+  'PRO_BILLING_ENABLED',
+  'PRO_PAY_FROM_BALANCE',
+  'PRO_REFUNDS',
+  'PRO_AUTO_RENEW',
+  'BUSINESS_ENABLED',
+  'BUSINESS_SHARES_ENABLED',
+  'TEAM_TIPS_ENABLED',
+  'ANALYTICS_ENABLED',
+  'ADULT_PLATFORM_LINKS',
+  'SUPPORTER_RECOGNITION',
+];
+
+test('the env examples no longer name the switches that moved to admin', () => {
+  for (const file of ['production.env.example', 'staging.env.example']) {
+    const example = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY)
+      assert.doesNotMatch(
+        example,
+        new RegExp(`^${name}=`, 'm'),
+        `${file} still sets ${name}`,
+      );
+    assert.match(
+      example,
+      /settings-and-switches\.md/,
+      `${file} says where they went`,
+    );
+  }
+});
+
+test('compose forwards each moved switch for one release, with no default of its own', () => {
+  for (const file of ['compose.production.yml', 'compose.staging.yml']) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY) {
+      const uses = [
+        ...text.matchAll(new RegExp(`\\$\\{${name}([^}]*)\\}`, 'g')),
+      ];
+      assert.ok(uses.length > 0, `${file} no longer forwards ${name}`);
+      for (const use of uses)
+        assert.equal(
+          use[1],
+          ':-',
+          `${file}: ${name} must default to blank (seed only)`,
+        );
+    }
+  }
+});
+
+// Owner, 14 Nov 2026 (#216): limits and money tunables take the code's defaults on every copy. The
+// config keeps each as an optional override, for tests and emergencies; the deploy files name none.
+export const CODE_DEFAULT_ONLY = (name) =>
+  name.startsWith('RATE_LIMIT_') ||
+  name === 'PARTNER_QUOTE_CACHE_SECONDS' ||
+  name === 'BACHS_RESERVE_ALERT_MINOR';
+
+test('rate limits and money tunables are in no deploy file: the code defaults are the values', () => {
+  for (const file of [
+    'compose.production.yml',
+    'compose.staging.yml',
+    'production.env.example',
+    'staging.env.example',
+  ]) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    const named = [...text.matchAll(/\b([A-Z][A-Z0-9_]+)\b/g)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.deepEqual([...new Set(named)], [], `${file} still names them`);
+  }
+  // Still overridable: the schemas keep them.
+  for (const service of ['api', 'worker']) {
+    const source = readFileSync(
+      new URL(`../apps/${service}/src/config.ts`, import.meta.url),
+      'utf8',
+    );
+    const kept = [...source.matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.ok(kept.length > 0, `${service} lost its overrides`);
+  }
 });

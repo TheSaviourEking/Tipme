@@ -15,15 +15,19 @@ after assigning a branch domain. Redeploy the branch from Vercel, or push an
 actual change to this application. Confirm the deployment is Ready and the
 staging domain is attached before running the staging release check.
 
-## Pilot notice
+## Pilot notice and launch time: set in admin
 
-`PILOT_NOTICE=on` (server-only, no `NEXT_PUBLIC_` equivalent) shows a one-line pilot notice beside
-the Tip button, the receipt, the dashboard and Withdraw, but only when payments are live. Off unless
-it is exactly `on`. The app reads it for each request, but Vercel
-applies a changed variable only to a new deployment, so redeploy after changing it. See
+Since 14 Nov 2026 (owner, #216) staff set both at `/ops/switches`, "What the web app shows". The web
+reads them from the API's `/health/release` (each instance at most once a minute), so no deploy is
+needed. Until a setting is first set there, the web keeps reading its old Vercel variable
+(`PILOT_NOTICE`, `PRODUCTION_LAUNCH_AT`); once both are set in admin, delete those Vercel lines and
+redeploy. If the API can't be read, the web keeps the last value it read; with none, there is no pilot
+notice and no launch gate. See `docs/runbooks/settings-and-switches.md` and
 `docs/runbooks/production.md`, "The pilot notice".
 
-## Production countdown for 27 October 2026
+## Production countdown for 27 October 2026 (history)
+
+This launch used the Vercel variable; a future launch time is set in admin instead (above).
 
 The application treats `https://www.usetipme.xyz` as the production authority.
 `https://usetipme.xyz` must remain assigned in Vercel as an alias/redirect; verify

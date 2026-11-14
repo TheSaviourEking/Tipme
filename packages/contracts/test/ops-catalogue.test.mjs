@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed seventeen', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 17);
+test('the serious actions are the agreed eighteen', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 18);
   // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['business.owner_remove'],
@@ -119,7 +119,7 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  assert.equal(OPS_PERMISSIONS.length, 24);
+  assert.equal(OPS_PERMISSIONS.length, 25);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],

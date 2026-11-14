@@ -44,6 +44,7 @@ The menu only offers what someone can use. The server checks every call whatever
 | `market.edit`       | numbers  | no        | Add and change market observations                                                                                          |
 | `providers.manage`  | settings | yes       | Change payment and email provider settings                                                                                  |
 | `staff.manage`      | settings | yes       | Add staff, change their access and roles                                                                                    |
+| `switches.manage`   | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                |
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
 
@@ -72,6 +73,7 @@ These wait for a second person when one is available:
 | `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`  |
 | `pro_price.change`          | Change the Pro price                   | `pro.price`                                                    |
 | `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                              |
+| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)    |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 

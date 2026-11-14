@@ -10,7 +10,7 @@ import {
   rollupAnalytics,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
-import { WEB, opsSignIn, startStack } from './helpers.mjs';
+import { WEB, opsSignIn, setSwitch, startStack } from './helpers.mjs';
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -142,14 +142,15 @@ test('the events route is cross-origin from the web app but never credentialed',
 });
 
 test('with collection off nothing is stored; the limit is per client per minute', async () => {
+  // Collection is the `analytics` switch, set in admin; this stack only differs in its rate limit.
   const off = await startStack({
     databaseUrl: database.url,
     apiEnv: {
       WEB_ORIGIN: WEB,
-      ANALYTICS_ENABLED: 'false',
       RATE_LIMIT_ANALYTICS_PER_MIN: '5',
     },
   });
+  await setSwitch(database.pool, 'analytics', false);
   try {
     // The limiter fails open while Redis is still connecting; wait until the API is ready.
     const deadline = Date.now() + 10_000;
@@ -174,6 +175,7 @@ test('with collection off nothing is stored; the limit is per client per minute'
     assert.equal(health.status, 200);
     assert.equal((await health.json()).data.collecting, false);
   } finally {
+    await setSwitch(database.pool, 'analytics', true);
     await off.stop();
   }
 });
@@ -293,7 +295,7 @@ test('raw events older than 90 days are purged; newer ones stay', async () => {
   assert.equal((await rowsFor(recent)).length, 1);
 });
 
-test('a production copy with ANALYTICS_ENABLED unset collects an anonymous visit (owner, 9 Nov 2026)', async () => {
+test('with the analytics switch at its default, a production copy collects an anonymous visit (owner, 9 Nov 2026)', async () => {
   const { loadApiConfig } = await import('../../apps/api/dist/config.js');
   const { EventsController } =
     await import('../../apps/api/dist/analytics/events.controller.js');
@@ -311,7 +313,15 @@ test('a production copy with ANALYTICS_ENABLED unset collects an anonymous visit
     PREVIEW_PASSWORD: 'p'.repeat(32),
     WEB_ORIGIN: 'https://tipme-demo.onrender.com',
   });
-  const controller = new EventsController(config, { db: database.db });
+  assert.equal(config.switchSeeds.ANALYTICS_ENABLED, undefined);
+  // No stored row: the switch reads its default, on.
+  await database.pool.query(
+    `DELETE FROM feature_switches WHERE key = 'analytics'`,
+  );
+  const { resetFeatureSwitchMemory } =
+    await import('../../packages/database/dist/index.js');
+  resetFeatureSwitchMemory();
+  const controller = new EventsController({ db: database.db });
   const visit = () => ({ name: 'profile_viewed', flowId: randomUUID() });
   const counted = visit();
   await controller.record(counted, 'Mozilla/5.0', undefined, undefined);

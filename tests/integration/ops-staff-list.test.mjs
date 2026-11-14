@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, test } from 'node:test';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
+import { OPS_PERMISSIONS } from '../../packages/contracts/dist/index.js';
 import * as ops from '../../packages/database/dist/index.js';
 
 // The admin staff list (GET /v1/ops/staff) for a large team: the same answer the person-by-person
@@ -228,7 +229,8 @@ test('the staff list for a large team: the same people, order and fields, in a f
   assert.equal(owner.roleId, 'owner');
   assert.equal(owner.enrolled, true);
   assert.equal(owner.invitation, null);
-  assert.equal(owner.permissions.length, 24);
+  // The owner holds every permission in the catalogue (#216 added switches.manage).
+  assert.equal(owner.permissions.length, OPS_PERMISSIONS.length);
   const added = byId.get(team[13].id); // money, i % 4 === 1: two additions, not enrolled
   assert.deepEqual(added.additions, ['analytics.view', 'audit.view']);
   assert.ok(added.permissions.includes('audit.view'));

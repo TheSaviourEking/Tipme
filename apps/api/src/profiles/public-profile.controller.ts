@@ -24,6 +24,7 @@ import {
   normaliseHandle,
   publicProfile,
   reportProfile,
+  featureOn,
 } from '@tipme/database';
 import { bachsEnvironment, liveCheckoutOpenFor } from '@tipme/payments';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -52,8 +53,8 @@ export class PublicProfileController {
     // checkout refuses them otherwise.
     const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
     const page = await publicProfile(this.database.db, handle, {
-      adultLinks: this.config.ADULT_PLATFORM_LINKS,
-      recognition: this.config.SUPPORTER_RECOGNITION,
+      adultLinks: await featureOn(this.database.db, 'adult_platform_links'),
+      recognition: await featureOn(this.database.db, 'supporter_recognition'),
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),

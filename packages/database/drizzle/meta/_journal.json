@@ -680,6 +680,34 @@
       "when": 1794648765988,
       "tag": "0096_payout_fee_adjusted_issue",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1794688320049,
+      "tag": "0097_feature_switches",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1794688321471,
+      "tag": "0098_feature_switches_seed",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1794688322924,
+      "tag": "0099_display_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1794688324413,
+      "tag": "0100_display_settings_history",
+      "breakpoints": true
     }
   ]
 }
