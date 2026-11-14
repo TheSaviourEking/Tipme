@@ -6,6 +6,7 @@ CREATE TABLE "announcements" (
 	"button_label" text,
 	"button_url" text,
 	"audience" text NOT NULL,
+	"kind" text DEFAULT 'news' NOT NULL,
 	"status" text DEFAULT 'draft' NOT NULL,
 	"revision" integer DEFAULT 1 NOT NULL,
 	"recipient_count" integer,
@@ -23,6 +24,8 @@ CREATE TABLE "announcements" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "announcements_audience" CHECK (audience IN ('everyone', 'free', 'pro', 'business_owners')),
 	CONSTRAINT "announcements_status" CHECK (status IN ('draft', 'sending', 'sent', 'cancelled')),
+	CONSTRAINT "announcements_kind" CHECK (kind IN ('news', 'service')),
+	CONSTRAINT "announcements_service_everyone" CHECK (kind <> 'service' OR audience = 'everyone'),
 	CONSTRAINT "announcements_button" CHECK ((button_label IS NULL) = (button_url IS NULL)),
 	CONSTRAINT "announcements_counts" CHECK (queued_count >= 0 AND (recipient_count IS NULL OR recipient_count >= 0))
 );

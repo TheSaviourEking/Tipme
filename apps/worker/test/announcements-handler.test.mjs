@@ -97,3 +97,27 @@ test('nothing sending: nothing logged, nothing queued', async () => {
   assert.equal(outcome, 'announcements_idle');
   assert.deepEqual(logs, []);
 });
+
+test('delivery gets the announcement provider of its own', () => {
+  const source = readFileSync(
+    new URL('../src/job-worker.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(source, /announcementMailProvider\(\s*config,/);
+  assert.match(source, /providers: mailProviders,\s+announcementProvider,/);
+});
+
+test('Brevo settings are optional, together, and sandbox is on/off', () => {
+  assert.equal(loadWorkerConfig(base).BREVO_API_KEY, undefined);
+  const set = loadWorkerConfig({
+    ...base,
+    BREVO_API_KEY: 'brevo-test-key',
+    ANNOUNCEMENT_FROM_ADDRESS: 'news@usetipme.xyz',
+    BREVO_SANDBOX: 'on',
+  });
+  assert.equal(set.BREVO_SANDBOX, true);
+  assert.throws(
+    () => loadWorkerConfig({ ...base, BREVO_API_KEY: 'brevo-test-key' }),
+    /ANNOUNCEMENT_FROM_ADDRESS/,
+  );
+});

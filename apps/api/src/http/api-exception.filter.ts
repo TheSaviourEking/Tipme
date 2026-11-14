@@ -112,6 +112,8 @@ const messages: Record<ApiErrorCode, string> = {
     'This announcement is no longer a draft, so it can’t be changed or sent again.',
   ANNOUNCEMENT_NO_RECIPIENTS:
     'Nobody in this audience can get announcements right now. Nothing was sent.',
+  ANNOUNCEMENT_EMAIL_NOT_SET_UP:
+    'Announcement email isn’t set up on this server, so nothing can be sent.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -376,6 +378,10 @@ const operationErrors: Partial<
   ANNOUNCEMENT_NO_RECIPIENTS: {
     status: 409,
     code: 'ANNOUNCEMENT_NO_RECIPIENTS',
+  },
+  ANNOUNCEMENT_EMAIL_NOT_SET_UP: {
+    status: 409,
+    code: 'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
   },
   // Pro insights (11 Nov 2026).
   CAMPAIGN_LIMIT: { status: 409, code: 'CAMPAIGN_LIMIT' },

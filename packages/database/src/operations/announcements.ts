@@ -3,6 +3,7 @@ import {
   opsAnnouncementDraftSchema,
   opsAnnouncementEditSchema,
   type AnnouncementAudience,
+  type AnnouncementKind,
   type OpsAnnouncement,
   type OpsAnnouncementDraft,
   type OpsAnnouncementEdit,
@@ -45,6 +46,10 @@ type Row = typeof announcements.$inferSelect;
 
 const iso = (date: Date | null) => date?.toISOString() ?? null;
 
+/** The email each kind is sent as: news is marketing, a service notice is account mail. */
+export const announcementMailType = (kind: string) =>
+  kind === 'service' ? 'service_notice' : 'announcement';
+
 /** What the email template takes: the stored words, and the button only when there is one. */
 export function announcementMailData(row: {
   subject: string;
@@ -68,9 +73,14 @@ export function announcementMailData(row: {
  * no row is off) and whose guides and news switch isn't off. The same rules are checked again for
  * each email when it is sent (mailGate), and suppressed addresses are dropped there.
  */
-function audienceWhere(audience: AnnouncementAudience): SQL {
-  const base = sql`u.email IS NOT NULL AND u.email_verified_at IS NOT NULL AND u.deleted_at IS NULL
-    AND mp.marketing IS TRUE AND mp.engagement IS NOT FALSE`;
+function audienceWhere(
+  audience: AnnouncementAudience,
+  kind: AnnouncementKind,
+): SQL {
+  const live = sql`u.email IS NOT NULL AND u.email_verified_at IS NOT NULL AND u.deleted_at IS NULL`;
+  // A service notice (fees, terms) goes to every confirmed, live account: the owner's ruling.
+  if (kind === 'service') return live;
+  const base = sql`${live} AND mp.marketing IS TRUE AND mp.engagement IS NOT FALSE`;
   switch (audience) {
     case 'everyone':
       return base;
@@ -88,13 +98,14 @@ function audienceWhere(audience: AnnouncementAudience): SQL {
 export function countAnnouncementAudience(
   db: Database | Tx,
   audience: AnnouncementAudience,
-  cutoff?: Date,
+  options: { kind?: AnnouncementKind; cutoff?: Date } = {},
 ): Promise<number> {
+  const { kind = 'news', cutoff } = options;
   return guarded(async () => {
     const result = await db.execute<{ count: number }>(
       sql`SELECT count(*)::int AS count FROM users u
         LEFT JOIN mail_preferences mp ON mp.user_id = u.id
-        WHERE ${audienceWhere(audience)}
+        WHERE ${audienceWhere(audience, kind)}
         ${cutoff ? sql`AND u.created_at <= ${cutoff.toISOString()}::timestamptz` : sql``}`,
     );
     return Number(result.rows[0]?.count ?? 0);
@@ -140,6 +151,7 @@ async function toView(
     buttonLabel: row.buttonLabel,
     buttonUrl: row.buttonUrl,
     audience,
+    kind: row.kind as AnnouncementKind,
     state:
       row.status === 'draft' && waitingRequestId
         ? 'waiting'
@@ -147,7 +159,9 @@ async function toView(
     revision: row.revision,
     audienceCount:
       row.status === 'draft'
-        ? await countAnnouncementAudience(db, audience)
+        ? await countAnnouncementAudience(db, audience, {
+            kind: row.kind as AnnouncementKind,
+          })
         : null,
     recipientCount: row.recipientCount,
     queuedCount: row.queuedCount,
@@ -194,7 +208,7 @@ function checkedDraft(input: unknown): OpsAnnouncementDraft {
 export function listAnnouncements(
   db: Database,
   input: { now?: Date } = {},
-): Promise<OpsAnnouncementList> {
+): Promise<Omit<OpsAnnouncementList, 'setUp'>> {
   return guarded(async () => {
     const rows = await db
       .select()
@@ -326,7 +340,7 @@ export function sendAnnouncementTest(
       const to = staffUser?.email ? normaliseEmail(staffUser.email) : null;
       if (!to) throw new OperationError('INVALID_INPUT');
       await enqueueMail(tx, sealing, {
-        type: 'announcement',
+        type: announcementMailType(row.kind),
         to,
         userId: null,
         data: announcementMailData(row),
@@ -410,7 +424,11 @@ async function sendable(
   tx: Database | Tx,
   payload: AnnouncementSendPayload,
   now: Date,
+  services?: SeriousActionServices,
 ): Promise<{ row: Row; count: number }> {
+  // Only the app knows its settings; a caller without them (tests of the flow) isn't checking.
+  if (services && services.announcementSender === null)
+    throw new OperationError('ANNOUNCEMENT_EMAIL_NOT_SET_UP');
   if (
     typeof payload?.id !== 'string' ||
     !Number.isSafeInteger(payload?.revision) ||
@@ -425,7 +443,7 @@ async function sendable(
   const count = await countAnnouncementAudience(
     tx,
     row.audience as AnnouncementAudience,
-    now,
+    { kind: row.kind as AnnouncementKind, cutoff: now },
   );
   if (count === 0) throw new OperationError('ANNOUNCEMENT_NO_RECIPIENTS');
   return { row, count };
@@ -444,7 +462,7 @@ export const announcementSendAction: SeriousActionDefinition<AnnouncementSendPay
     name: ANNOUNCEMENT_SEND_ACTION,
     permission: PERMISSION,
     validate: async (tx, payload, check) => {
-      await sendable(tx, payload, check.now);
+      await sendable(tx, payload, check.now, check.services);
     },
     target: ({ id }) => `announcement:${id}`,
     current: async (tx, { id }) => {
@@ -461,10 +479,19 @@ export const announcementSendAction: SeriousActionDefinition<AnnouncementSendPay
       const { row } = await sendable(tx, payload, new Date());
       const audience =
         ANNOUNCEMENT_AUDIENCE_WORDS[row.audience as AnnouncementAudience];
-      return `Email the announcement “${row.subject}” to ${audience.toLowerCase()}: ${people(payload.countWhenAsked)} when asked, counted again when it starts`;
+      const kind =
+        row.kind === 'service'
+          ? 'Service notice: goes to everyone.'
+          : 'News: only people who turned on news and announcements.';
+      return `${kind} Email “${row.subject}” to ${audience.toLowerCase()}: ${people(payload.countWhenAsked)} when asked, counted again when it starts`;
     },
     run: async (tx, payload, context) => {
-      const { row, count } = await sendable(tx, payload, context.now);
+      const { row, count } = await sendable(
+        tx,
+        payload,
+        context.now,
+        context.services,
+      );
       await tx
         .select({ id: announcements.id })
         .from(announcements)
@@ -529,6 +556,7 @@ export function askToSendAnnouncement(
     const countWhenAsked = await countAnnouncementAudience(
       db,
       row.audience as AnnouncementAudience,
+      { kind: row.kind as AnnouncementKind },
     );
     return requestSeriousAction(db, {
       name: ANNOUNCEMENT_SEND_ACTION,
@@ -582,7 +610,7 @@ export function queueAnnouncementBatch(
       const found = await tx.execute<{ id: string; email: string }>(
         sql`SELECT u.id, u.email FROM users u
           LEFT JOIN mail_preferences mp ON mp.user_id = u.id
-          WHERE ${audienceWhere(row.audience as AnnouncementAudience)}
+          WHERE ${audienceWhere(row.audience as AnnouncementAudience, row.kind as AnnouncementKind)}
             AND u.created_at <= ${(row.cutoff ?? input.now).toISOString()}::timestamptz
             ${row.cursorUserId ? sql`AND u.id > ${row.cursorUserId}::uuid` : sql``}
           ORDER BY u.id
@@ -595,7 +623,7 @@ export function queueAnnouncementBatch(
         const to = normaliseEmail(person.email);
         if (!to) continue;
         await enqueueMail(tx, sealing, {
-          type: 'announcement',
+          type: announcementMailType(row.kind),
           to,
           userId: person.id,
           data,

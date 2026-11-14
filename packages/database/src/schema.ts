@@ -4,6 +4,7 @@ import {
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
   ANNOUNCEMENT_AUDIENCES,
+  ANNOUNCEMENT_KINDS,
   ANNOUNCEMENT_STATUSES,
   OPS_PERMISSIONS,
   type OpsPermission,
@@ -2866,6 +2867,8 @@ export const announcements = pgTable(
     buttonLabel: text('button_label'),
     buttonUrl: text('button_url'),
     audience: text('audience').notNull(),
+    // News (marketing, opt-in) or a service notice (fees, terms: everyone), the owner's ruling.
+    kind: text('kind').notNull().default('news'),
     status: text('status').notNull().default('draft'),
     revision: integer('revision').notNull().default(1),
     // The count when the send was approved: the N in "x of N".
@@ -2891,6 +2894,12 @@ export const announcements = pgTable(
   (table) => [
     check('announcements_audience', inList('audience', ANNOUNCEMENT_AUDIENCES)),
     check('announcements_status', inList('status', ANNOUNCEMENT_STATUSES)),
+    check('announcements_kind', inList('kind', ANNOUNCEMENT_KINDS)),
+    // A service notice concerns every account (contracts: serviceGoesToEveryone).
+    check(
+      'announcements_service_everyone',
+      sql`kind <> 'service' OR audience = 'everyone'`,
+    ),
     check(
       'announcements_button',
       sql`(button_label IS NULL) = (button_url IS NULL)`,

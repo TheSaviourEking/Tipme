@@ -29,9 +29,10 @@ export function addressHmac(sealing: MailSealing, address: string): string {
   return createHmac('sha256', sealing.hmacKey).update(normalised).digest('hex');
 }
 
-// Marketing (announcements) goes after everything else, whatever numbers the rest use: it is only
-// ever sorted on, so 9 stays last if the others are renumbered.
-const PRIORITY = { security: 0, account: 1, marketing: 9 } as const;
+const PRIORITY = { security: 0, account: 1 } as const;
+// Announcements (news and service notices) go after everything else, whatever numbers the rest
+// use: it is only ever sorted on, so 9 stays last if the others are renumbered.
+const BULK_PRIORITY = 9;
 
 /**
  * Queues one email in the caller's transaction, so it exists exactly when the change that caused
@@ -70,7 +71,9 @@ export async function enqueueMail(
       toSealed: sealSecret(sealing.key, to),
       toHint: maskEmail(to),
       dataSealed: sealSecret(sealing.key, JSON.stringify(data)),
-      priority: PRIORITY[type.category as keyof typeof PRIORITY] ?? 2,
+      priority: type.bulk
+        ? BULK_PRIORITY
+        : (PRIORITY[type.category as keyof typeof PRIORITY] ?? 2),
       pinnedProvider: input.pinnedProvider ?? null,
       nextAttemptAt: now,
       expiresAt: input.expiresAt ?? null,

@@ -16,7 +16,11 @@ import {
   withExtractedContext,
   type DestinationStream,
 } from '@tipme/observability';
-import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
+import {
+  announcementMailProvider,
+  configuredMailProviders,
+  type MailProviderName,
+} from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   adaptPoolToServer,
@@ -891,6 +895,11 @@ export async function startJobWorker(
     publishLive,
   });
   // Configured providers; the pretend one "delivers" to the development-only pretend inbox.
+  // Announcements go through their own provider (Brevo), never the ones below (owner, 14 Nov 2026).
+  const announcementProvider = announcementMailProvider(
+    config,
+    pretendMailSink(database.db),
+  );
   const mailProviders = configuredMailProviders(
     config,
     pretendMailSink(database.db),
@@ -916,6 +925,7 @@ export async function startJobWorker(
       db: database.db,
       sealing,
       providers: mailProviders,
+      announcementProvider,
       activeProvider: () => activeProvider(),
       overrideFor: async (userId) => {
         const override = await mailOverrideFor(database.db, userId);

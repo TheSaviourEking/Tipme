@@ -15,6 +15,7 @@ const draft = (extra = {}) => ({
   buttonLabel: null,
   buttonUrl: null,
   audience: 'everyone',
+  kind: 'news',
   ...extra,
 });
 
@@ -79,4 +80,43 @@ test('text problems name the partner and approval claims', () => {
     'regulatory_claim',
   ]);
   assert.deepEqual(announcementTextProblems('Lower fees'), []);
+});
+
+// The owner's ruling (14 Nov 2026): news is opt-in; a service notice goes to everyone.
+test('a draft says which kind it is; a service notice goes to everyone', () => {
+  assert.equal(
+    opsAnnouncementDraftSchema.safeParse({ ...draft(), kind: 'news' }).success,
+    true,
+  );
+  assert.equal(
+    opsAnnouncementDraftSchema.safeParse({ ...draft(), kind: 'service' })
+      .success,
+    true,
+  );
+  assert.equal(
+    opsAnnouncementDraftSchema.safeParse({
+      ...draft({ audience: 'pro' }),
+      kind: 'service',
+    }).success,
+    false,
+  );
+  assert.equal(
+    opsAnnouncementDraftSchema.safeParse({ ...draft(), kind: 'promo' }).success,
+    false,
+  );
+});
+
+test('Settings has a News and announcements switch, optional for older clients', async () => {
+  const { notificationPrefsSchema } = await import('../dist/index.js');
+  const base = {
+    tipEmails: true,
+    weeklyReports: true,
+    milestones: true,
+    guideEmails: true,
+  };
+  assert.equal(notificationPrefsSchema.safeParse(base).success, true);
+  assert.equal(
+    notificationPrefsSchema.safeParse({ ...base, newsEmails: true }).success,
+    true,
+  );
 });

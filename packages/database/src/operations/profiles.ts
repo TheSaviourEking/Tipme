@@ -1341,7 +1341,7 @@ export function getNotificationPrefs(
   userId: string,
 ): Promise<NotificationPrefsView> {
   return guarded(async () =>
-    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+    prefsOf((await myRow(db, userId)).profile, await switchesOf(db, userId)),
   );
 }
 
@@ -1366,23 +1366,36 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
+    // "News and announcements" is the marketing switch: set only when sent (older clients).
+    const news =
+      prefs.newsEmails === undefined ? {} : { marketing: prefs.newsEmails };
     await db
       .insert(mailPreferences)
-      .values({ userId, engagement: prefs.guideEmails })
+      .values({ userId, engagement: prefs.guideEmails, ...news })
       .onConflictDoUpdate({
         target: mailPreferences.userId,
-        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+        set: { engagement: prefs.guideEmails, ...news, updatedAt: new Date() },
       });
-    return prefsOf(updated!, prefs.guideEmails);
+    return prefsOf(updated!, await switchesOf(db, userId));
   });
 }
 
-async function guidesOn(db: Database, userId: string): Promise<boolean> {
+/** The guides switch (on unless turned off) and the news switch (off unless turned on). */
+async function switchesOf(
+  db: Database,
+  userId: string,
+): Promise<{ guideEmails: boolean; newsEmails: boolean }> {
   const [row] = await db
-    .select({ on: mailPreferences.engagement })
+    .select({
+      engagement: mailPreferences.engagement,
+      marketing: mailPreferences.marketing,
+    })
     .from(mailPreferences)
     .where(eq(mailPreferences.userId, userId));
-  return row?.on ?? true;
+  return {
+    guideEmails: row?.engagement ?? true,
+    newsEmails: row?.marketing ?? false,
+  };
 }
 
 const prefsOf = (
@@ -1393,12 +1406,13 @@ const prefsOf = (
     popupHideTipDetails: boolean;
     tipSound: boolean;
   },
-  guideEmails: boolean,
+  switches: { guideEmails: boolean; newsEmails: boolean },
 ): NotificationPrefsView => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
-  guideEmails,
+  guideEmails: switches.guideEmails,
+  newsEmails: switches.newsEmails,
   hideTipDetailsInPopups: profile.popupHideTipDetails,
   tipSound: profile.tipSound,
 });

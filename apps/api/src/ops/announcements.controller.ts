@@ -29,6 +29,7 @@ import {
 } from '@tipme/contracts';
 import {
   announcementMailData,
+  announcementMailType,
   askToSendAnnouncement,
   cancelAnnouncement,
   createAnnouncement,
@@ -79,7 +80,12 @@ export class OpsAnnouncementsController {
   @RateLimit('ops_read')
   @OpsPermission('announcements.send')
   async list(): Promise<ApiDataResponse<OpsAnnouncementList>> {
-    return { data: await listAnnouncements(this.database.db) };
+    return {
+      data: {
+        ...(await listAnnouncements(this.database.db)),
+        setUp: this.services.announcementSender !== null,
+      },
+    };
   }
 
   @Get(':id')
@@ -106,7 +112,7 @@ export class OpsAnnouncementsController {
     body: OpsAnnouncementDraft,
   ): ApiDataResponse<OpsAnnouncementPreview> {
     const { subject, html, text } = renderMail(
-      'announcement',
+      announcementMailType(body.kind),
       announcementMailData(body),
       {
         webOrigin: this.config.WEB_ORIGIN,
@@ -165,6 +171,8 @@ export class OpsAnnouncementsController {
     @CurrentOps() ops: OpsContext,
     @Param('id') id: string,
   ): Promise<ApiDataResponse<OpsAnnouncementTestSent>> {
+    if (this.services.announcementSender === null)
+      throw new CodedHttpException(409, 'ANNOUNCEMENT_EMAIL_NOT_SET_UP');
     return {
       data: await sendAnnouncementTest(this.database.db, this.sealing, {
         staffUserId: ops.userId,

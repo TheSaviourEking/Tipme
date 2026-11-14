@@ -1,5 +1,5 @@
 {
-  "id": "d96a465d-852c-484e-86e9-bed5ceb584f6",
+  "id": "487065e4-9ee5-4725-9da5-e17b1530c2f5",
   "prevId": "a3ad442d-ffab-4a82-b4b2-60cc45f04c46",
   "version": "7",
   "dialect": "postgresql",
@@ -232,6 +232,13 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'news'"
+        },
         "status": {
           "name": "status",
           "type": "text",
@@ -400,6 +407,14 @@
         "announcements_status": {
           "name": "announcements_status",
           "value": "status IN ('draft', 'sending', 'sent', 'cancelled')"
+        },
+        "announcements_kind": {
+          "name": "announcements_kind",
+          "value": "kind IN ('news', 'service')"
+        },
+        "announcements_service_everyone": {
+          "name": "announcements_service_everyone",
+          "value": "kind <> 'service' OR audience = 'everyone'"
         },
         "announcements_button": {
           "name": "announcements_button",

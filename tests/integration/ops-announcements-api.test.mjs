@@ -35,6 +35,7 @@ const draft = {
   buttonLabel: 'See the fees',
   buttonUrl: '/pro',
   audience: 'everyone',
+  kind: 'news',
 };
 
 const call = (session, path, init = {}) =>
@@ -98,6 +99,8 @@ test('write, test, ask: sending waits for a second person (202)', async () => {
   assert.equal(asked.status, 202);
   assert.ok((await asked.json()).data.requestId);
   const listed = await (await call(session, '')).json();
+  // No Brevo key on a test copy: the pretend inbox stands in, so sending is set up.
+  assert.equal(listed.data.setUp, true);
   assert.equal(
     listed.data.rows.find((row) => row.id === announcement.id).state,
     'waiting',

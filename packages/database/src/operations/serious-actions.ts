@@ -74,6 +74,11 @@ export interface SeriousActionServices {
    * `tip.reverse` runs only then, also when it is approved later.
    */
   businessSharesEnabled?: boolean;
+  /**
+   * Who sends announcements on this copy (announcementMailProvider): null when none is set up, so
+   * nothing may be sent. Left out by callers that aren't the app, which then aren't checking.
+   */
+  announcementSender?: MailProviderName | null;
   mail?: {
     production: boolean;
     configured: ReadonlySet<MailProviderName>;

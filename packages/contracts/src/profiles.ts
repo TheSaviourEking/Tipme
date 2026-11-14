@@ -253,6 +253,11 @@ export const notificationPrefsSchema = z
      * owner but is not approved, and would arrive as a separate optional field.
      */
     tipSound: z.boolean().optional(),
+    /**
+     * "News and announcements" (owner, 14 Nov 2026): the marketing switch. Off by default, opt-in.
+     * Optional, so an older client's PUT leaves it as it was.
+     */
+    newsEmails: z.boolean().optional(),
   })
   .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;

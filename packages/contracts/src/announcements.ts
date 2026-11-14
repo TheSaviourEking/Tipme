@@ -33,6 +33,19 @@ export const ANNOUNCEMENT_AUDIENCE_WORDS: Record<AnnouncementAudience, string> =
     business_owners: 'Business owners only',
   };
 
+/**
+ * The owner's ruling (14 Nov 2026). News is marketing: only people who turned on "News and
+ * announcements" get it. A service notice is about fees, terms or how TipMe works and goes to
+ * everyone with a confirmed email, whatever their marketing choices.
+ */
+export const ANNOUNCEMENT_KINDS = ['news', 'service'] as const;
+export type AnnouncementKind = (typeof ANNOUNCEMENT_KINDS)[number];
+
+export const ANNOUNCEMENT_KIND_WORDS: Record<AnnouncementKind, string> = {
+  news: 'News',
+  service: 'Service notice',
+};
+
 /** What is stored. "Waiting for approval" is a draft with a pending request, never a column. */
 export const ANNOUNCEMENT_STATUSES = [
   'draft',
@@ -86,7 +99,14 @@ const draftShape = {
   buttonLabel: userWords(ANNOUNCEMENT_LIMITS.buttonLabel, 1).nullable(),
   buttonUrl: buttonUrl.nullable(),
   audience: z.enum(ANNOUNCEMENT_AUDIENCES),
+  kind: z.enum(ANNOUNCEMENT_KINDS),
 };
+
+/** A service notice concerns every account, so it goes to everyone. */
+const serviceGoesToEveryone = (value: {
+  kind: AnnouncementKind;
+  audience: AnnouncementAudience;
+}) => value.kind === 'news' || value.audience === 'everyone';
 
 const bothOrNeither = (value: {
   buttonLabel: string | null;
@@ -97,14 +117,20 @@ const bothOrNeither = (value: {
 export const opsAnnouncementDraftSchema = z
   .object(draftShape)
   .strict()
-  .refine(bothOrNeither, { message: 'a button needs a label and a link' });
+  .refine(bothOrNeither, { message: 'a button needs a label and a link' })
+  .refine(serviceGoesToEveryone, {
+    message: 'a service notice goes to everyone',
+  });
 export type OpsAnnouncementDraft = z.infer<typeof opsAnnouncementDraftSchema>;
 
 /** `PUT /v1/ops/announcements/:id`: the revision the editor read, so a moved draft is refused. */
 export const opsAnnouncementEditSchema = z
   .object({ ...draftShape, revision: z.number().int().min(1) })
   .strict()
-  .refine(bothOrNeither, { message: 'a button needs a label and a link' });
+  .refine(bothOrNeither, { message: 'a button needs a label and a link' })
+  .refine(serviceGoesToEveryone, {
+    message: 'a service notice goes to everyone',
+  });
 export type OpsAnnouncementEdit = z.infer<typeof opsAnnouncementEditSchema>;
 
 /** `POST …/:id/send`: asks a second person to send the revision the asker read. */
@@ -122,6 +148,7 @@ export interface OpsAnnouncement {
   buttonLabel: string | null;
   buttonUrl: string | null;
   audience: AnnouncementAudience;
+  kind: AnnouncementKind;
   state: AnnouncementState;
   revision: number;
   /** Who it would reach now (drafts), counted live. Null once sending started. */
@@ -140,6 +167,8 @@ export interface OpsAnnouncement {
 
 export interface OpsAnnouncementList {
   rows: OpsAnnouncement[];
+  /** False when no announcement provider is set up: nothing can be tested or sent. */
+  setUp: boolean;
 }
 
 /** The email exactly as it will be sent, rendered by the server's template. */

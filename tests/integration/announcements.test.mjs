@@ -4,6 +4,7 @@ import { after, before, beforeEach, test } from 'node:test';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
+import { MAIL_TYPES } from '../../packages/mail/dist/index.js';
 import { MAIL_SEAL_KEY, OPS_TOTP_KEY } from './helpers.mjs';
 
 // Staff announcements by email (owner-approved, 14 Nov 2026): a second person approves sending;
@@ -116,6 +117,7 @@ const draft = (extra = {}) => ({
   buttonLabel: null,
   buttonUrl: null,
   audience: 'everyone',
+  kind: 'news',
   ...extra,
 });
 
@@ -458,4 +460,258 @@ test('marketing mail is skipped at send time for anyone who turned off marketing
     );
   assert.equal(await gate(off), 'skipped_preference');
   assert.equal(await gate(on), 'send');
+});
+
+/* The owner's ruling (14 Nov 2026): service notices, news opt-in, and Brevo for announcements. */
+
+test('a service notice reaches every confirmed, live account, whatever their marketing choices', async () => {
+  const yes = [
+    await user(),
+    await user({ marketing: false }),
+    await user({ marketing: null }),
+    await user({ engagement: false }),
+  ];
+  await user({ verified: false });
+  await user({ deleted: true });
+  const asker = await staffMember();
+  const approver = await staffMember();
+  const announcement = await create(asker, { kind: 'service' });
+  assert.equal(announcement.kind, 'service');
+  // Staff count too: they have confirmed emails.
+  const staff = 2;
+  assert.equal(announcement.audienceCount, yes.length + staff);
+  await assert.rejects(create(asker, { kind: 'service', audience: 'pro' }), {
+    code: 'INVALID_INPUT',
+  });
+  const outcome = await ask(asker, announcement);
+  const [{ summary }] = await q(
+    `SELECT summary FROM approval_requests WHERE id = $1`,
+    [outcome.requestId],
+  );
+  assert.match(summary, /^Service notice: goes to everyone\./);
+  assert.equal((await approve(outcome.requestId, approver)).status, 'approved');
+  for (let i = 0; i < 3; i += 1) await batch(10);
+  const rows = await queued(announcement.id);
+  assert.equal(rows.length, yes.length + staff);
+  for (const row of rows) {
+    assert.equal(row.type, 'service_notice');
+    assert.equal(row.category, 'account');
+    assert.equal(row.priority, 9);
+  }
+  for (const id of yes)
+    assert.ok(
+      rows.some((row) => row.user_id === id),
+      id,
+    );
+});
+
+test('news says it is opt-in in the approver’s summary', async () => {
+  await user();
+  const asker = await staffMember();
+  await staffMember();
+  const outcome = await ask(asker, await create(asker));
+  const [{ summary }] = await q(
+    `SELECT summary FROM approval_requests WHERE id = $1`,
+    [outcome.requestId],
+  );
+  assert.match(
+    summary,
+    /^News: only people who turned on news and announcements\./,
+  );
+});
+
+test('with no announcement provider set up, asking and approving are refused', async () => {
+  await user();
+  const asker = await staffMember();
+  const approver = await staffMember();
+  const announcement = await create(asker);
+  await assert.rejects(
+    ops.askToSendAnnouncement(database.db, {
+      actorId: asker,
+      grantId: people.get(asker).grantId,
+      id: announcement.id,
+      revision: announcement.revision,
+      reason: REASON,
+      services: { ...services(), announcementSender: null },
+    }),
+    { code: 'ANNOUNCEMENT_EMAIL_NOT_SET_UP' },
+  );
+  const outcome = await ask(asker, announcement);
+  await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
+    approver,
+  ]);
+  const decided = await ops.approveRequest(database.db, {
+    requestId: outcome.requestId,
+    actorId: approver,
+    code: totpAt(
+      people.get(approver).secret,
+      BigInt(Math.floor(Date.now() / 30_000)),
+    ),
+    key,
+    services: { ...services(), announcementSender: null },
+  });
+  assert.equal(decided.status, 'stale');
+});
+
+test('a service notice is still stopped by a bounce or a deleted account', async () => {
+  const gone = await user({ deleted: true });
+  const fine = await user({ marketing: false });
+  const gate = (userId, to = 'x@example.com') =>
+    ops.mailGate(
+      database.db,
+      sealing,
+      {
+        id: randomUUID(),
+        type: 'service_notice',
+        category: 'account',
+        userId,
+        to,
+        data: {},
+        pinnedProvider: null,
+        expiresAt: null,
+        attempts: 0,
+        claimedAt: new Date(),
+      },
+      new Date(),
+    );
+  assert.equal(await gate(fine), 'send');
+  assert.equal(await gate(gone), 'skipped_preference');
+  await q(
+    `INSERT INTO mail_suppressions (address_hmac, reason) VALUES ($1, 'hard_bounce')`,
+    [ops.addressHmac(sealing, 'bounced@example.com')],
+  );
+  assert.equal(await gate(fine, 'bounced@example.com'), 'suppressed');
+});
+
+/** A provider that records what it was asked to send. */
+const recording = (name) => {
+  const sent = [];
+  return {
+    sent,
+    provider: {
+      name,
+      capabilities: { marketing: name === 'brevo' },
+      send: async (mail) => {
+        sent.push(mail);
+        return { providerMessageId: `${name}-${sent.length}` };
+      },
+      verifyWebhook: () => ({ ok: true, events: [] }),
+      status: async () => ({ sandbox: null, detail: null }),
+    },
+  };
+};
+
+const deliver = (providers, announcementProvider) =>
+  ops.deliverDueMail(
+    {
+      db: database.db,
+      sealing,
+      providers: new Map(providers.map((p) => [p.provider.name, p.provider])),
+      announcementProvider,
+      activeProvider: async () => 'zeptomail',
+      overrideFor: async () => null,
+      sender: { domain: 'mail.usetipme.xyz', name: 'TipMe' },
+      webOrigin: 'https://usetipme.xyz',
+      apiOrigin: 'https://api.usetipme.xyz',
+    },
+    { now: new Date(Date.now() + 1000), limit: 50 },
+  );
+
+test('announcements go only through the announcement provider; everything else stays on the active one', async () => {
+  const reader = await user();
+  const zepto = recording('zeptomail');
+  const brevo = recording('brevo');
+  await ops.enqueueMail(database.db, sealing, {
+    type: 'announcement',
+    to: 'reader@usetipme-reader.com',
+    userId: reader,
+    data: { subject: 'News', preheader: '', text: 'Hello' },
+    dedupeKey: `t:${randomUUID()}`,
+  });
+  await ops.enqueueMail(database.db, sealing, {
+    type: 'service_notice',
+    to: 'notice@usetipme-reader.com',
+    userId: null,
+    data: { subject: 'Fees', preheader: '', text: 'Fees change' },
+    dedupeKey: `t:${randomUUID()}`,
+  });
+  await ops.enqueueMail(database.db, sealing, {
+    type: 'sign_in_code',
+    to: 'code@usetipme-reader.com',
+    data: MAIL_TYPES.sign_in_code.sample,
+    dedupeKey: `t:${randomUUID()}`,
+  });
+  await deliver([zepto], brevo.provider);
+  assert.equal(zepto.sent.length, 1);
+  assert.equal(zepto.sent[0].subject, 'Your TipMe sign-in code');
+  assert.deepEqual(brevo.sent.map((mail) => mail.subject).sort(), [
+    'Fees',
+    'News',
+  ]);
+  assert.ok(
+    zepto.sent.every((mail) => !['Fees', 'News'].includes(mail.subject)),
+  );
+  // The news email has its unsubscribe link and header; the service notice has neither.
+  const news = brevo.sent.find((mail) => mail.subject === 'News');
+  assert.ok(news.headers['List-Unsubscribe']);
+  const notice = brevo.sent.find((mail) => mail.subject === 'Fees');
+  assert.equal(notice.headers['List-Unsubscribe'], undefined);
+  const providers = await q(
+    `SELECT provider FROM mail_messages WHERE type IN ('announcement', 'service_notice')`,
+  );
+  assert.deepEqual(
+    providers.map((row) => row.provider),
+    ['brevo', 'brevo'],
+  );
+});
+
+test('with no announcement provider, an announcement fails and never falls back', async () => {
+  const reader = await user();
+  const zepto = recording('zeptomail');
+  await ops.enqueueMail(database.db, sealing, {
+    type: 'announcement',
+    to: 'reader@usetipme-reader.com',
+    userId: reader,
+    data: { subject: 'News', preheader: '', text: 'Hello' },
+    dedupeKey: `t:${randomUUID()}`,
+  });
+  await deliver([zepto], null);
+  assert.equal(zepto.sent.length, 0);
+  const [row] = await q(
+    `SELECT status, last_error FROM mail_messages WHERE type = 'announcement'`,
+  );
+  assert.deepEqual(row, {
+    status: 'failed',
+    last_error: 'announcement_provider_missing',
+  });
+});
+
+test('“News and announcements” in Settings is the marketing switch, off until turned on', async () => {
+  const id = await user({ marketing: null });
+  assert.equal(
+    (await ops.getNotificationPrefs(database.db, id)).newsEmails,
+    false,
+  );
+  const base = {
+    tipEmails: true,
+    weeklyReports: true,
+    milestones: true,
+    guideEmails: true,
+  };
+  const on = await ops.setNotificationPrefs(database.db, id, {
+    ...base,
+    newsEmails: true,
+  });
+  assert.equal(on.newsEmails, true);
+  assert.equal(await ops.countAnnouncementAudience(database.db, 'everyone'), 1);
+  // An older client that doesn't send it leaves it as it was.
+  assert.equal(
+    (await ops.setNotificationPrefs(database.db, id, base)).newsEmails,
+    true,
+  );
+  await ops.setNotificationPrefs(database.db, id, {
+    ...base,
+    newsEmails: false,
+  });
+  assert.equal(await ops.countAnnouncementAudience(database.db, 'everyone'), 0);
 });
