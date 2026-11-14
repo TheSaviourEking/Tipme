@@ -1,6 +1,7 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from './config.js';
+import { FeatureFlags } from './feature-flags.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { ProModule } from './pro/pro.module.js';
@@ -73,8 +74,9 @@ export class AppModule {
         LiveSwitchRecorder,
         { provide: API_CONFIG, useValue: config },
         { provide: LOGGER, useValue: logger },
+        FeatureFlags,
       ],
-      exports: [API_CONFIG, LOGGER, ReadinessService],
+      exports: [API_CONFIG, LOGGER, ReadinessService, FeatureFlags],
       global: true,
     };
   }

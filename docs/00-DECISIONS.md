@@ -182,6 +182,22 @@
 >     - **The stop route has no rate limit:** it needs the receipt's own status token and does nothing without it.
 >     - **The "Your choices" group** on the receipt holds only this line until make-it-yours PR D adds its note-consent withdrawal beside it.
 
+> **Campaign pages, tip goals, thank-yous and statements: the owner's decision, 13–14 Nov 2026.** The owner approved four Pro features and every default on the `ProCampaignPages` board (14 Nov 2026; plan `docs/superpowers/plans/2026-11-14-pro-campaign-pages-goals-thankyous-statements.md`): a page for each Campaign Studio campaign, tip goals worded "tips toward…", custom thank-yous on the receipt and by email, and monthly statements with range exports. It is always the same person: one handle, one balance, one set of withdrawals, the same tip area. This is a product decision. It is not legal advice, and it is not a regulatory, data-protection or payment-partner approval: **D-02, D-03 and D-07 stay OPEN, D-05 stays PARTLY DECIDED.** No fee, minimum, checkout amount, ledger posting or payout changes; statements only read the ledger. Each feature is behind its own switch, off in production until the owner turns it on (until the admin switches of PR #216 land, an API setting such as `CAMPAIGN_PAGES_ENABLED`). The owner's rulings:
+>
+> 1. Active goals: 1 on the main page and 1 per campaign.
+> 2. Amounts or percentage: the creator chooses; the default is a percentage.
+> 3. Email: once per tip, from TipMe's address, From name "‹Display name› via TipMe".
+> 4. Statement: made on the 1st (06:00 Lagos) for the month before, emailed as a link; the PDF is never attached.
+> 5. Campaign covers and Page Studio: they count toward Page Studio later (stored as cover choices now).
+> 6. Free keeps its one-line thank-you on the receipt; per-campaign thank-yous, card styles and the email are Pro.
+> 7. "Goal reached" shows for 14 days, or until a new goal is set.
+> 8. Goal target: ₦5,000 to ₦10,000,000, whole naira.
+> 9. The supporter's email is never shown to the creator (not in any of their screens, exports or statements).
+> 10. Campaign pages and search: `noindex, follow`; the canonical address stays `/@handle`.
+> 11. The main goal counts tips to the main page plus tips through campaigns with no goal of their own at the time of the tip.
+>
+> - **G23, "tips toward" and the law (beside D-02):** goals are the owner's product framing, not a legal opinion. The tip goals switch stays off in production until the owner says so. Goal wording refuses "fundraising", "donation", "charity", "crowdfund" and "refund".
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
