@@ -666,6 +666,20 @@
       "when": 1794677311977,
       "tag": "0094_feature_switches_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1794681586616,
+      "tag": "0095_display_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1794681587803,
+      "tag": "0096_display_settings_history",
+      "breakpoints": true
     }
   ]
 }

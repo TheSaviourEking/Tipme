@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseProductionLaunchAt } from './launch.js';
 import { opsReasonSchema } from './ops.js';
 
 /**
@@ -197,6 +198,7 @@ export interface OpsFeatureSwitch {
 /** `GET /v1/ops/switches`. */
 export interface OpsFeatureSwitches {
   switches: OpsFeatureSwitch[];
+  display: OpsDisplaySetting[];
 }
 
 /** `POST /v1/ops/switches/{key}`: turn it on or off, with a reason. */
@@ -223,3 +225,100 @@ export function featureSwitchSeedsFrom(
   }
   return seeds;
 }
+
+/**
+ * Display settings (owner, 14 Nov 2026, #216): what the web app shows, set in admin instead of its
+ * Vercel settings. Non-money: a reason and a fresh code. Unlike a switch, a display setting has no row
+ * until staff first set it; until then the web keeps reading its own old setting, so release day
+ * changes nothing and the Vercel lines can be deleted once staff have set these here.
+ */
+export const DISPLAY_SETTINGS = ['pilot_notice', 'production_launch_at'] as const;
+export type DisplaySetting = (typeof DISPLAY_SETTINGS)[number];
+
+export interface DisplaySettingEntry {
+  label: string;
+  description: string;
+  /** `on_off`: "on" or "off". `instant`: an exact moment, or none. */
+  kind: 'on_off' | 'instant';
+  /** The web app's old (Vercel) setting it replaces. */
+  envName: string;
+}
+
+export const DISPLAY_SETTING_CATALOGUE: Record<
+  DisplaySetting,
+  DisplaySettingEntry
+> = {
+  pilot_notice: {
+    label: 'Pilot notice',
+    description:
+      '“TipMe is in a pilot. Payments are real. Need help?” where money moves. It shows only while payments are live.',
+    kind: 'on_off',
+    envName: 'PILOT_NOTICE',
+  },
+  production_launch_at: {
+    label: 'Launch time',
+    description:
+      'Before this moment every page shows “coming soon” with a countdown. None: TipMe is open.',
+    kind: 'instant',
+    envName: 'PRODUCTION_LAUNCH_AT',
+  },
+};
+
+export function isDisplaySetting(key: string): key is DisplaySetting {
+  return (DISPLAY_SETTINGS as readonly string[]).includes(key);
+}
+
+/**
+ * The value to store, or throws: "on"/"off" for the notice; for the launch, an exact instant (kept as
+ * UTC) or null for none.
+ */
+export function checkedDisplayValue(
+  key: string,
+  value: string | null,
+): string | null {
+  if (!isDisplaySetting(key)) throw new Error('unknown display setting');
+  if (DISPLAY_SETTING_CATALOGUE[key].kind === 'on_off') {
+    if (value !== 'on' && value !== 'off')
+      throw new Error(`${key} must be on or off`);
+    return value;
+  }
+  if (value === null) return null;
+  return new Date(parseProductionLaunchAt(value) as number).toISOString();
+}
+
+/** On `/health/release`: `set` false means staff never set it, so the web keeps its old setting. */
+export interface PublicDisplaySettings {
+  pilotNotice: { set: boolean; on: boolean };
+  launch: { set: boolean; at: string | null };
+}
+
+export interface OpsDisplaySettingChange {
+  id: string;
+  value: string | null;
+  changedBy: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface OpsDisplaySetting {
+  key: DisplaySetting;
+  label: string;
+  description: string;
+  kind: DisplaySettingEntry['kind'];
+  envName: string;
+  /** False until staff first set it here: the web uses its old setting until then. */
+  set: boolean;
+  value: string | null;
+  changedBy: string | null;
+  changedAt: string | null;
+  reason: string | null;
+  history: OpsDisplaySettingChange[];
+}
+
+/** `POST /v1/ops/display-settings/{key}`: the new value (null: no launch time), with a reason. */
+export const opsDisplaySettingSetSchema = opsReasonSchema
+  .extend({ value: z.string().max(64).nullable() })
+  .strict();
+export type OpsDisplaySettingSetRequest = z.infer<
+  typeof opsDisplaySettingSetSchema
+>;

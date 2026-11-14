@@ -277,3 +277,93 @@ test('history is append-only', async (t) => {
     pool.query('UPDATE feature_switch_changes SET enabled = true'),
   );
 });
+
+// Display settings (owner, 14 Nov 2026, #216): the pilot notice and the launch time.
+test('display settings start unset, so the web keeps its old setting', async (t) => {
+  const { db } = await fresh(t);
+  const { readDisplaySettings } = await import('../../dist/index.js');
+  assert.deepEqual(await readDisplaySettings(db), {
+    pilotNotice: { set: false, on: false },
+    launch: { set: false, at: null },
+  });
+});
+
+test('staff set the pilot notice and the launch time; checked, stored as UTC, audited, with history', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { readDisplaySettings, setDisplaySetting, displaySettingOverview } =
+    await import('../../dist/index.js');
+  const set = (key, value, reason = 'Agreed with the owner today') =>
+    db.transaction((tx) =>
+      setDisplaySetting(tx, { key, value, staffUserId: STAFF, reason, now: new Date() }),
+    );
+  assert.deepEqual(await set('pilot_notice', 'on'), {
+    key: 'pilot_notice',
+    value: 'on',
+    previous: null,
+  });
+  await set('production_launch_at', '2026-12-01T00:00:00+01:00');
+  assert.deepEqual(await readDisplaySettings(db), {
+    pilotNotice: { set: true, on: true },
+    launch: { set: true, at: '2026-11-30T23:00:00.000Z' },
+  });
+  // No launch time: open now. Still "set", so the web stops reading its old setting.
+  await set('production_launch_at', null);
+  assert.deepEqual((await readDisplaySettings(db)).launch, { set: true, at: null });
+  for (const [key, value] of [
+    ['pilot_notice', 'on'],
+    ['pilot_notice', 'yes'],
+    ['production_launch_at', 'tomorrow'],
+    ['nope', 'on'],
+  ])
+    await assert.rejects(set(key, value), (error) => error.code === 'INVALID_INPUT', `${key}=${value}`);
+  const audits = await rows(
+    `SELECT subject_id, permission FROM audit_events WHERE action = 'display_setting.set' ORDER BY created_at`,
+  );
+  assert.equal(audits.length, 3);
+  assert.ok(audits.every((a) => a.permission === 'switches.manage'));
+  const overview = await displaySettingOverview(db);
+  const launch = overview.find((s) => s.key === 'production_launch_at');
+  assert.equal(launch.set, true);
+  assert.equal(launch.value, null);
+  assert.equal(launch.envName, 'PRODUCTION_LAUNCH_AT');
+  assert.equal(launch.history.length, 2);
+  await assert.rejects(rows('DELETE FROM display_setting_changes'));
+});
+
+test('display settings are cached like switches, and a failed read keeps the last known, else unset', async (t) => {
+  const { db, pool } = await fresh(t);
+  const { displaySettingsNow, setDisplaySetting } = await import('../../dist/index.js');
+  await db.transaction((tx) =>
+    setDisplaySetting(tx, {
+      key: 'pilot_notice',
+      value: 'on',
+      staffUserId: STAFF,
+      reason: 'Pilot with real payments',
+      now: new Date(),
+    }),
+  );
+  invalidateFeatureSwitches();
+  const start = Date.now();
+  assert.equal((await displaySettingsNow(db, { now: start })).pilotNotice.on, true);
+  await pool.query(`UPDATE display_settings SET value = 'off'`);
+  assert.equal((await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on, true, 'cached');
+  invalidateFeatureSwitches();
+  assert.equal((await displaySettingsNow(db, { now: start + 1000 })).pilotNotice.on, false);
+  let fail = false;
+  const flaky = {
+    select: (...args) => {
+      if (fail) throw new Error('connection refused');
+      return db.select(...args);
+    },
+  };
+  invalidateFeatureSwitches();
+  assert.equal((await displaySettingsNow(flaky)).pilotNotice.set, true);
+  fail = true;
+  invalidateFeatureSwitches();
+  assert.equal((await displaySettingsNow(flaky)).pilotNotice.set, true, 'last known');
+  const never = { select() { throw new Error('connection refused'); } };
+  assert.deepEqual(await displaySettingsNow(never), {
+    pilotNotice: { set: false, on: false },
+    launch: { set: false, at: null },
+  });
+});

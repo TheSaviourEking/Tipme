@@ -1,3 +1,4 @@
+import { pilotNoticeFrom, type DisplaySettings } from './display-settings.ts';
 import type { PaymentMode } from './payment-mode';
 
 // The pilot notice: one quiet line where money moves, while TipMe is a closed pilot with real
@@ -15,11 +16,13 @@ export function pilotNoticeOn(
 
 /**
  * "Payments are real" is true only in live mode: never on a test copy, and not while a live
- * copy is still closed. So the setting alone never shows the notice.
+ * copy is still closed. So the setting alone never shows the notice. The setting is admin's once set
+ * there (owner, 14 Nov 2026, #216), else the old PILOT_NOTICE; unreadable, no notice.
  */
 export function pilotNoticeShown(
+  settings: DisplaySettings | null,
   env: Record<string, string | undefined>,
   mode: PaymentMode,
 ): boolean {
-  return pilotNoticeOn(env) && mode === 'live';
+  return pilotNoticeFrom(settings, env) && mode === 'live';
 }

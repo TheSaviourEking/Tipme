@@ -15,6 +15,7 @@ import type {
 } from '@tipme/contracts';
 import {
   backupStatus,
+  displaySettingsNow,
   featureOn,
   retentionBlockCode,
   finishReleaseRun,
@@ -37,9 +38,11 @@ export class ReleaseInfoController {
   @Get('health/release')
   @Header('Cache-Control', 'no-store')
   async info(): Promise<ApiDataResponse<ReleaseInfo>> {
-    const [analytics, business] = await Promise.all([
+    const [analytics, business, display] = await Promise.all([
       featureOn(this.database.db, 'analytics'),
       featureOn(this.database.db, 'business'),
+      // The pilot notice and the launch time for the web (owner, 14 Nov 2026, #216). Never throws.
+      displaySettingsNow(this.database.db),
     ]);
     return {
       data: {
@@ -51,6 +54,7 @@ export class ReleaseInfoController {
         analytics,
         paymentProvider: this.config.PAYMENT_PROVIDER,
         business,
+        display,
       },
     };
   }

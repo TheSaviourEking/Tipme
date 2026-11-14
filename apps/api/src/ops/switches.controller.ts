@@ -11,8 +11,11 @@ import {
 import type { Response } from 'express';
 import {
   FEATURE_SWITCH_CATALOGUE,
+  isDisplaySetting,
   isFeatureSwitch,
+  opsDisplaySettingSetSchema,
   opsFeatureSwitchSetSchema,
+  type OpsDisplaySettingSetRequest,
   type ApiDataResponse,
   type FeatureSwitch,
   type OpsActedAlone,
@@ -21,8 +24,10 @@ import {
   type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
+  displaySettingOverview,
   featureSwitchOverview,
   requestSeriousAction,
+  setDisplaySetting,
   setFeatureSwitch,
   type SeriousActionServices,
 } from '@tipme/database';
@@ -51,13 +56,46 @@ export class OpsSwitchesController {
   ) {}
 
   private async read(): Promise<OpsFeatureSwitches> {
-    return { switches: await featureSwitchOverview(this.database.db) };
+    const [switches, display] = await Promise.all([
+      featureSwitchOverview(this.database.db),
+      displaySettingOverview(this.database.db),
+    ]);
+    return { switches, display };
   }
 
   @Get()
   @RateLimit('ops_read')
   @OpsPermission('switches.manage')
   async list(): Promise<ApiDataResponse<OpsFeatureSwitches>> {
+    return { data: await this.read() };
+  }
+
+  /**
+   * A display setting (owner, 14 Nov 2026, #216): the pilot notice or the launch time. Not money: a
+   * reason and a fresh code, audited. The web reads it on /health/release within its minute's cache.
+   */
+  @Post('display/:key')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('switches.manage')
+  async setDisplay(
+    @CurrentOps() ops: OpsContext,
+    @Param('key') key: string,
+    @Body(new ZodValidationPipe(opsDisplaySettingSetSchema))
+    body: OpsDisplaySettingSetRequest,
+  ): Promise<ApiDataResponse<OpsFeatureSwitches>> {
+    if (!isDisplaySetting(key)) throw new CodedHttpException(404, 'NOT_FOUND');
+    await this.database.db.transaction((tx) =>
+      setDisplaySetting(tx, {
+        key,
+        value: body.value,
+        staffUserId: ops.userId,
+        reason: body.reason,
+        now: new Date(),
+      }),
+    );
+    this.switches.changed();
     return { data: await this.read() };
   }
 

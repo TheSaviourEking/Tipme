@@ -501,6 +501,45 @@ export const featureSwitchChanges = pgTable(
   ],
 );
 
+/**
+ * Display settings (owner, 14 Nov 2026, #216): the pilot notice and the launch time, set in admin.
+ * No row until staff first set one: the web app keeps its old setting until then. `value` null is
+ * "no launch time".
+ */
+export const displaySettings = pgTable(
+  'display_settings',
+  {
+    key: text('key').primaryKey(),
+    value: text('value'),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+  },
+  (table) => [
+    check('display_settings_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+/** Every value a display setting has had, for its history on the admin screen. */
+export const displaySettingChanges = pgTable(
+  'display_setting_changes',
+  {
+    id: uuid('id').primaryKey(),
+    key: text('key').notNull(),
+    value: text('value'),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('display_setting_changes_key').on(table.key, table.createdAt),
+  ],
+);
+
 /** A staff test of a provider. Only a hash of the confirmation token is kept. */
 export const providerTests = pgTable(
   'provider_tests',

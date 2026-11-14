@@ -28,3 +28,4 @@ export * from './earnings.js';
 export * from './campaigns.js';
 export * from './support.js';
 export * from './switches.js';
+export * from './launch.js';

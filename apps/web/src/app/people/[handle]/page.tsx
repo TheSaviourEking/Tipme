@@ -18,6 +18,7 @@ import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
+import { getDisplaySettings } from '@/lib/display-settings-api';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -66,7 +67,11 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
   const mode = await getPaymentMode();
   const copy = paymentModeCopy(mode);
-  const pilotShown = pilotNoticeShown(process.env, mode);
+  const pilotShown = pilotNoticeShown(
+    await getDisplaySettings(),
+    process.env,
+    mode,
+  );
   // Closed checkout outranks the owner's own setup: nobody can tip yet.
   const opensSoon = !copy.payable || profileTippingClosed(mode, profile);
   const takesTips = !opensSoon && profile.acceptingTips !== false;

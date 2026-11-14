@@ -1,11 +1,21 @@
 'use client';
-import { useCallback, useEffect, useId, useState } from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import type {
+  OpsDisplaySetting,
   OpsFeatureSwitch,
   OpsFeatureSwitchChange,
   OpsFeatureSwitches,
 } from '@tipme/contracts';
-import { Badge, Card, Lamp, Notice, Skeleton } from '@tipme/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  InputField,
+  Lamp,
+  Notice,
+  Skeleton,
+  TextareaField,
+} from '@tipme/ui';
 import {
   ActionOutcome,
   outcomeOf,
@@ -134,6 +144,155 @@ function SwitchCard({
   );
 }
 
+const DISPLAY_PATH = '/v1/ops/switches/display';
+
+function displayValueWords(item: OpsDisplaySetting): string {
+  if (!item.set)
+    return `Not set here yet: the web app still uses its ${item.envName} setting.`;
+  if (item.kind === 'on_off') return item.value === 'on' ? 'On' : 'Off';
+  return item.value ? when(item.value) : 'None: TipMe is open';
+}
+
+/**
+ * A display setting (owner, 14 Nov 2026, #216): the pilot notice or the launch time. Not money: a
+ * reason and a fresh code. The web app picks it up within a minute.
+ */
+function DisplayCard({
+  item,
+  onChanged,
+}: {
+  item: OpsDisplaySetting;
+  onChanged: () => Promise<void>;
+}) {
+  const id = useId();
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState('');
+
+  const send = async (value: string | null, reason: string) => {
+    setBusy(true);
+    setError('');
+    const answer = await opsAct<OpsFeatureSwitches>(
+      `${DISPLAY_PATH}/${item.key}`,
+      { method: 'POST', body: { value, reason } },
+    );
+    setBusy(false);
+    if (answer.kind === 'refused') {
+      if (outcomeIsUnknown(answer)) await onChanged();
+      return answer.code === 'VALIDATION_FAILED' ||
+        answer.code === 'INVALID_INPUT'
+        ? 'Check the value: an exact time with its offset, such as 2026-12-01T00:00:00+01:00, or nothing. It must differ from the one in use.'
+        : refusalWords(answer);
+    }
+    setDone(`${item.label} saved. The web app shows it within a minute.`);
+    await onChanged();
+    return null;
+  };
+
+  const submitLaunch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const at = String(form.get('at') ?? '').trim();
+    const reason = String(form.get('reason') ?? '').trim();
+    if (reason.length < 10)
+      return setError('Please write a reason of at least 10 characters.');
+    const problem = await send(at === '' ? null : at, reason);
+    if (problem) setError(problem);
+  };
+
+  return (
+    <Card className="settings-section">
+      <section
+        aria-labelledby={`${id}-name`}
+        data-testid={`display-${item.key}`}
+      >
+        <h2 id={`${id}-name`}>{item.label}</h2>
+        <p>{item.description}</p>
+        <p data-testid="display-value">
+          <strong>{displayValueWords(item)}</strong>
+        </p>
+        {item.set && item.changedAt && (
+          <p className="tm-hint">
+            {when(item.changedAt)} · {staffWord(item.changedBy)}
+            <br />
+            {item.reason}
+          </p>
+        )}
+        {done && (
+          <Notice tone="neutral" title="Saved">
+            {done}
+          </Notice>
+        )}
+        {item.kind === 'on_off' ? (
+          <ReasonAction
+            key={String(item.value)}
+            open={`Turn the ${item.label.toLowerCase()} ${item.value === 'on' ? 'off' : 'on'}…`}
+            field={`Why turn the ${item.label.toLowerCase()} ${item.value === 'on' ? 'off' : 'on'}?`}
+            submit={item.value === 'on' ? 'Turn off' : 'Turn on'}
+            onSubmit={(reason) =>
+              send(item.value === 'on' ? 'off' : 'on', reason)
+            }
+          />
+        ) : (
+          <form
+            className="ops-reason"
+            onSubmit={(e) => void submitLaunch(e)}
+            noValidate
+          >
+            <InputField
+              id={`${id}-at`}
+              name="at"
+              label="Launch time"
+              hint="An exact time with its offset, such as 2026-12-01T00:00:00+01:00 for midnight in Lagos. Leave empty for none: TipMe is open."
+              defaultValue={item.value ?? ''}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <TextareaField
+              id={`${id}-reason`}
+              name="reason"
+              label="Reason for this change"
+              hint="Recorded in the audit log with your name and the time."
+              maxLength={500}
+            />
+            {error && (
+              <Notice tone="error" title="Not saved">
+                {error}
+              </Notice>
+            )}
+            <Button type="submit" disabled={busy} aria-busy={busy}>
+              Save launch time
+            </Button>
+          </form>
+        )}
+        {item.history.length > 0 && (
+          <details>
+            <summary>History</summary>
+            <ol className="ops-list">
+              {item.history.map((change) => (
+                <li key={change.id}>
+                  <strong>
+                    {change.value === null
+                      ? 'None'
+                      : item.kind === 'instant'
+                        ? when(change.value)
+                        : change.value === 'on'
+                          ? 'On'
+                          : 'Off'}
+                  </strong>{' '}
+                  · {when(change.createdAt)} · {staffWord(change.changedBy)}
+                  <br />
+                  <span className="tm-hint">{change.reason}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
+      </section>
+    </Card>
+  );
+}
+
 /**
  * Feature switches (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md). Each turns a
  * feature on or off for everyone, with no deploy: a reason and a fresh code, and a second person for
@@ -182,6 +341,14 @@ export default function SwitchesPage() {
       </p>
       {state.switches.map((item) => (
         <SwitchCard key={item.key} item={item} onChanged={read} />
+      ))}
+      <h2>What the web app shows</h2>
+      <p className="tm-hint">
+        These replace settings in the web app&apos;s hosting. Until one is set
+        here, the web app keeps its own setting.
+      </p>
+      {state.display.map((item) => (
+        <DisplayCard key={item.key} item={item} onChanged={read} />
       ))}
     </section>
   );

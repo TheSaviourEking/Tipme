@@ -158,14 +158,14 @@ The public site stays open with checkout closed (owner, 1 Nov), so everyone can 
 5. **Switch payments on for the owner's page only:** follow `live-activation.md` sections 4 and 5: set the repository variable and the env file (`PAYMENTS_LIVE_ENABLED=true`, `LIVE_CHECKOUT_HANDLES=<the owner's handle>`), deploy, then the ₦1,000 smoke tip and withdrawal.
 6. **Widen checkout:** named recipients, then `*` as a separate decision (`live-activation.md` section 6), as Q7 decides.
 
-### The pilot notice (web, Vercel)
+### The pilot notice (set in admin)
 
-The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows next to the money action when the web app has `PILOT_NOTICE=on` **and** this copy's payment mode is `live` (`/health/release` says `bachs-live` with live payments on). On a test copy, or while payments are still switched off (launch step 5), it shows nothing even with the variable set. The owner reviews the wording before activation.
+The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows next to the money action when the **Pilot notice** is on at `/ops/switches` ("What the web app shows"; it replaced the web app's `PILOT_NOTICE` setting, owner 14 Nov 2026) **and** this copy's payment mode is `live` (`/health/release` says `bachs-live` with live payments on). On a test copy, or while payments are still switched off (launch step 5), it shows nothing even when turned on. The owner reviews the wording before activation.
 
-- **When:** set `PILOT_NOTICE=on` and redeploy **before** launch step 5. It has no effect until payments are on, then appears with the first live page. Nothing to do at the switch itself.
+- **When:** turn it on at `/ops/switches` **before** launch step 5. It has no effect until payments are on, then appears with the first live page. Nothing to do at the switch itself.
 - **Where it appears:** directly under the Tip button on a person's page; one line on the receipt after the status message; under the dashboard toolbar; and under "Available" on the Withdraw page. Not in the footer, not on the marketing and legal pages, and not on the pretend checkout.
-- **How to set it:** Vercel → the `tipme` project → Settings → Environment Variables → **Production only**. Add `PILOT_NOTICE` = `on`. Unset, or any other value, means no notice.
-- **It is a server setting, not a build one:** the web app reads it for each request, and it has no `NEXT_PUBLIC_` twin, so nothing about it reaches the browser bundle. Vercel still applies a changed variable only to a **new deployment**: after adding or removing it, **redeploy** (Deployments → the latest → Redeploy). Instant Rollback to an older deployment restores that deployment's value of the variable.
+- **How to set it:** `/ops/switches` → "What the web app shows" → **Pilot notice** → Turn on, with a reason and a fresh code (needs `switches.manage`). No deploy: each web instance picks it up within about a minute. Until it is first set there, the web keeps reading its old Vercel `PILOT_NOTICE`; once set, delete that Vercel line (`settings-and-switches.md`).
+- **If the API can't be read,** the web keeps the last value it read; with none, no notice.
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
 

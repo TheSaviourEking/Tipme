@@ -17,8 +17,10 @@ and what happens to each.
   copy or per process.
 - **Safety gate**: stays in the environment unless moving it is clearly safe. Each says why below.
 - **Product switch** (a feature on or off): **moves to admin** (`/ops/switches`).
-- **Tunable** (limits, rates, lists): moves to admin where safe. None moved in this change; see the owner
-  questions.
+- **Tunable** (limits, rates, lists): the rate limits and money tunables take the code defaults everywhere
+  (owner, 14 Nov 2026): no deploy file names them, and the config keeps each as an optional override.
+- **Display setting** (what the web app shows): moves to admin (owner, 14 Nov 2026): the pilot notice and
+  the launch time.
 
 Where: **A** API, **W** worker, **Web** the web app (Vercel), **P** production deploy files, **S** staging deploy
 files.
@@ -72,7 +74,7 @@ read, and before any read the code default, which is off for every money switch.
 | --------------------------------------------- | ------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `PAYMENTS_LIVE_ENABLED`                       | Whether checkout takes real money (bachs-live only)     | A W P S   | The deploy script checks it together with `ALERT_WEBHOOK_URL` and compares it with what it was told to expect before any colour starts; the worker refuses to start live without the alert address. Moving it would take real money out of that check. |
 | `PAYMENT_PROVIDER`                            | mock, bachs-sandbox or bachs-live                       | A W P S   | Chooses which credentials and adapter a process builds at start; production refuses mock and sandbox at start.                                                                                                                                         |
-| `LIVE_CHECKOUT_HANDLES`                       | Who may take real tips while live payments are on       | A P       | Part of the live-money gate with `PAYMENTS_LIVE_ENABLED` (live-activation runbook). A tunable, but moving it needs the owner's word (question 3).                                                                                                      |
+| `LIVE_CHECKOUT_HANDLES`                       | Who may take real tips while live payments are on       | A P       | Part of the live-money gate with `PAYMENTS_LIVE_ENABLED` (live-activation runbook). A tunable, but moving it needs the owner's word (owner, 14 Nov 2026: stays).                                                                                       |
 | `REWARD_CASH_BUDGET_MINOR_PER_MONTH`          | Monthly cash rewards budget                             | W P S     | Must be 0 in production until D-05; the worker refuses any other value at start.                                                                                                                                                                       |
 | `DEPLOYMENT_MODE`, `RELEASE_KIND`, `NODE_ENV` | What this copy is (production, preview, test)           | A W Web S | Decide what is allowed at all (mock providers, diagnostics, rehearsal settings) before anything else is read.                                                                                                                                          |
 | `POINT_IN_TIME_RECOVERY`                      | Whether this copy keeps its own WAL and base backups    | A S       | Describes the machine's backups; `/health/backups` and the watcher depend on it.                                                                                                                                                                       |
@@ -82,26 +84,44 @@ read, and before any read the code default, which is off for every money switch.
 | `NEXT_PUBLIC_PRETEND_DELIVERY`                | The pretend inbox and crash pages in a production build | Web       | Built into the web bundle; test copies only.                                                                                                                                                                                                           |
 | `NEXT_PUBLIC_PREVIEW_GATE`                    | Sends credentials to the password-gated preview         | Web       | Built into the bundle; describes the preview gateway.                                                                                                                                                                                                  |
 
-## Product switches that stay for now (owner questions)
+## Product switch that stays in the environment
 
-| Variable               | What it does                                                           | Where | Why it stays                                                                                                                                                                                          |
-| ---------------------- | ---------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `LIVE_UPDATES_ENABLED` | Live updates over text/event-stream; off, the stream routes answer 204 | A P S | Wired at process start: it decides whether each API copy opens a Redis subscriber and takes stream slots. Switching it at run time means starting and stopping subscribers on every copy. Question 1. |
-| `PILOT_NOTICE`         | "TipMe is in a pilot. Payments are real." on money pages (Vercel)      | Web   | Read by the web app from its own environment while rendering; the web app has no database. Moving it means the web reads it from the API on every money page. Question 2.                             |
+| Variable               | What it does                                                           | Where | Why it stays                                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LIVE_UPDATES_ENABLED` | Live updates over text/event-stream; off, the stream routes answer 204 | A P S | The owner's decision (14 Nov 2026): it is wired at process start, deciding whether each API copy opens a Redis subscriber and takes stream slots, so it stays a setting that needs a restart. |
 
-## Tunables: stay for now
+## Display settings: moved to admin
 
-| Variable                                                                                                                                                                                                                                                                           | What it does                                                  | Where | Why it stays                                                                                                                                                                        |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `RATE_LIMIT_*` (19: quotes, intents, handles, analytics, reports, unsubscribe, avatars, cover designs, QR art, QR thumbs, bank resolve, bank read, business public, business note, live connect, auth, ops code, ops request, ops read) and `RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR` | Per-address and per-person request limits                     | A P S | Abuse protection (sign-in codes, bank look-ups). Production sets none (all blank: code defaults). Tests, e2e and drills raise them per process through the environment. Question 4. |
-| `PARTNER_QUOTE_CACHE_SECONDS`                                                                                                                                                                                                                                                      | How long a withdrawal quote's provider answer is reused       | A P S | Shares the provider's rate limit with payouts; a wrong value costs payouts. Question 4.                                                                                             |
-| `LIVE_MAX_STREAMS`, `LIVE_HEARTBEAT_MS`                                                                                                                                                                                                                                            | Open streams per API process; the stream's heartbeat          | A P S | Per-process capacity, sized to the machine.                                                                                                                                         |
-| `BACHS_RESERVE_ALERT_MINOR`                                                                                                                                                                                                                                                        | When the payment reserve counts as low                        | W P S | Money alerting; question 4.                                                                                                                                                         |
-| `RECONCILE_INTERVAL_MS`, `RECONCILE_MIN_AGE_MS`                                                                                                                                                                                                                                    | How often and how late the worker asks about unconfirmed tips | W P S | Worker timing, read when its loops start.                                                                                                                                           |
-| `SHUTDOWN_DRAIN_MS`                                                                                                                                                                                                                                                                | How long a stopping API copy drains                           | A P S | Tied to the edge's health-check timing.                                                                                                                                             |
-| `BACKUP_RETAIN`, `BASE_BACKUPS`, `BASE_BACKUP_RETAIN`                                                                                                                                                                                                                              | Staging backups kept                                          | S     | Read by the backup loop, which has no admin.                                                                                                                                        |
-| `PRODUCTION_LAUNCH_AT`                                                                                                                                                                                                                                                             | The coming-soon page's launch time (Vercel)                   | Web   | Read by the web app's proxy on every request, before any API answer. Question 2.                                                                                                    |
-| `MAIL_FROM_DOMAIN`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_REPLY_TO`                                                                                                                                                                                                         | Mail senders                                                  | W P S | Must match domains verified at the mail provider; a typo stops mail.                                                                                                                |
+The web app's two Vercel settings (owner, 14 Nov 2026). Set at `/ops/switches`, under "What the web app shows",
+with a reason and a fresh code (not money), audited, with history. The API serves them on its public
+`/health/release` (`display`), which the web already reads; each web instance asks at most once a minute, so a
+change shows within about a minute.
+
+| Variable (Vercel)      | Setting                | What it does                                                                        |
+| ---------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
+| `PILOT_NOTICE`         | `pilot_notice`         | The pilot line where money moves; still shown only while payments are live          |
+| `PRODUCTION_LAUNCH_AT` | `production_launch_at` | Before it, every page shows "coming soon"; none means TipMe is open (stored as UTC) |
+
+- **Release day:** a display setting has no value until staff first set it. Until then the web keeps reading its
+  own Vercel setting, so nothing changes on deploy. Once both are set at `/ops/switches`, delete the two Vercel
+  lines and redeploy the web app.
+- **If the API can't be read:** the web keeps the last value it read; with none, there is no pilot notice and no
+  launch gate. That is what an unset `PILOT_NOTICE` and an unset `PRODUCTION_LAUNCH_AT` always meant.
+- **The countdown check** (`tests/e2e/countdown.config.ts`, run by hand) runs the web app alone, so it starts a
+  small stand-in API that answers "not set in admin", and the web keeps the run's `PRODUCTION_LAUNCH_AT`.
+
+## Tunables: code defaults, overridable
+
+| Variable                                                                                                                                                                                                                                                                           | What it does                                                  | Where | Why it stays                                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RATE_LIMIT_*` (19: quotes, intents, handles, analytics, reports, unsubscribe, avatars, cover designs, QR art, QR thumbs, bank resolve, bank read, business public, business note, live connect, auth, ops code, ops request, ops read) and `RATE_LIMIT_CODES_PER_NUMBER_PER_HOUR` | Per-address and per-person request limits                     | A P S | Abuse protection (sign-in codes, bank look-ups). Owner, 14 Nov 2026: no deploy file names them; the code default is the value. The config keeps each as an optional override, for tests, e2e, drills and an emergency (add the line to the env file and the compose file). |
+| `PARTNER_QUOTE_CACHE_SECONDS`                                                                                                                                                                                                                                                      | How long a withdrawal quote's provider answer is reused       | A P S | As the rate limits: code default (30 s), overridable.                                                                                                                                                                                                                      |
+| `LIVE_MAX_STREAMS`, `LIVE_HEARTBEAT_MS`                                                                                                                                                                                                                                            | Open streams per API process; the stream's heartbeat          | A P S | Per-process capacity, sized to the machine.                                                                                                                                                                                                                                |
+| `BACHS_RESERVE_ALERT_MINOR`                                                                                                                                                                                                                                                        | When the payment reserve counts as low                        | W P S | As the rate limits: code default (₦1,000), overridable.                                                                                                                                                                                                                    |
+| `RECONCILE_INTERVAL_MS`, `RECONCILE_MIN_AGE_MS`                                                                                                                                                                                                                                    | How often and how late the worker asks about unconfirmed tips | W P S | Worker timing, read when its loops start.                                                                                                                                                                                                                                  |
+| `SHUTDOWN_DRAIN_MS`                                                                                                                                                                                                                                                                | How long a stopping API copy drains                           | A P S | Tied to the edge's health-check timing.                                                                                                                                                                                                                                    |
+| `BACKUP_RETAIN`, `BASE_BACKUPS`, `BASE_BACKUP_RETAIN`                                                                                                                                                                                                                              | Staging backups kept                                          | S     | Read by the backup loop, which has no admin.                                                                                                                                                                                                                               |
+| `MAIL_FROM_DOMAIN`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`, `MAIL_REPLY_TO`                                                                                                                                                                                                         | Mail senders                                                  | W P S | Must match domains verified at the mail provider; a typo stops mail.                                                                                                                                                                                                       |
 
 ## Infrastructure: stays
 
@@ -131,28 +151,32 @@ read, and before any read the code default, which is off for every money switch.
 
 ## Counts
 
-| Class                                                                                          | Variables |
-| ---------------------------------------------------------------------------------------------- | --------- |
-| Counted on `dev` at 0a490475 (the two variables of open PRs are not on `dev`, so not counted). |
+Counted on `dev` at 0a490475 (the two variables of open PRs are not on `dev`, so not counted).
 
 | Class              | Variables                                                                   |
 | ------------------ | --------------------------------------------------------------------------- |
 | Secret             | 30                                                                          |
 | Infrastructure     | 60                                                                          |
 | Safety gate        | 13                                                                          |
-| Product switch     | 12 (10 moved, 2 staying as owner questions); plus 2 registered for open PRs |
-| Tunable            | 35                                                                          |
+| Product switch     | 11 (10 moved, `LIVE_UPDATES_ENABLED` stays); plus 2 registered for open PRs |
+| Display setting    | 2 (both moved)                                                              |
+| Tunable            | 34 (22 now code defaults only: 20 rate limits and 2 money tunables)         |
 | **Total distinct** | **150**                                                                     |
 
-## Questions for the owner
+| Deploy file                    | `dev` | After this change             | After the follow-up |
+| ------------------------------ | ----- | ----------------------------- | ------------------- |
+| `production.env.example` lines | 100   | 68                            | 68                  |
+| `staging.env.example` lines    | 64    | 53                            | 53                  |
+| `compose.production.yml` names | 99    | 77                            | 67                  |
+| `compose.staging.yml` names    | 110   | 88                            | 78                  |
+| Vercel (web) settings          | –     | 2 to delete once set in admin | –                   |
 
-1. **Live updates** (`LIVE_UPDATES_ENABLED`): move it to admin too? It is wired at process start (a Redis
-   subscriber per API copy), so switching it at run time is a bigger change than the others.
-2. **Web app switches on Vercel** (`PILOT_NOTICE`, and the tunable `PRODUCTION_LAUNCH_AT`): move them too, with the
-   web reading them from the API like the business switch? `SITE_INDEXING` stays either way.
-3. **`LIVE_CHECKOUT_HANDLES`** (who may take real tips): leave it with `PAYMENTS_LIVE_ENABLED` in the environment,
-   where the deploy checks live money, or move it to admin as a money setting with a second person?
-4. **Rate limits and money tunables** (`RATE_LIMIT_*`, `PARTNER_QUOTE_CACHE_SECONDS`, `BACHS_RESERVE_ALERT_MINOR`):
-   production sets none of them. Move them to admin as tunables in a follow-up, or simply drop them from the deploy
-   files so the code defaults are the only values?
-5. **Team tips** (`team_tips`) is treated as a money switch (second person). Agree?
+## The owner's answers (14 Nov 2026, on #216)
+
+1. **Live updates** (`LIVE_UPDATES_ENABLED`) stays in the environment: it is wired at process start.
+2. **The pilot notice and the launch time** move to admin as display settings (above), read by the web through
+   `/health/release`, with the fallback above.
+3. **`LIVE_CHECKOUT_HANDLES`** stays in the environment, next to `PAYMENTS_LIVE_ENABLED`.
+4. **Rate limits and money tunables** leave the deploy files: the code defaults are the values, and the config
+   keeps them as optional overrides for tests and emergencies.
+5. **Team tips** is a money switch (a second person approves).

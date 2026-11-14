@@ -1,4 +1,10 @@
 import {
+  checkedDisplayValue,
+  DISPLAY_SETTINGS,
+  DISPLAY_SETTING_CATALOGUE,
+  type DisplaySetting,
+  type OpsDisplaySetting,
+  type PublicDisplaySettings,
   FEATURE_SWITCHES,
   FEATURE_SWITCH_CATALOGUE,
   featureSwitchFromEnv,
@@ -11,6 +17,8 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   approvalRequests,
+  displaySettingChanges,
+  displaySettings,
   featureSwitchChanges,
   featureSwitches,
 } from '../schema.js';
@@ -326,4 +334,170 @@ export async function featureSwitchOverview(
         })),
     };
   });
+}
+
+/* Display settings (owner, 14 Nov 2026, #216): the pilot notice and the launch time. */
+
+/** For `/health/release`: unset (`set: false`) means the web keeps reading its old setting. */
+export async function readDisplaySettings(
+  db: Reader,
+): Promise<PublicDisplaySettings> {
+  const rows = await db
+    .select({ key: displaySettings.key, value: displaySettings.value })
+    .from(displaySettings);
+  const stored = new Map(rows.map((row) => [row.key, row.value]));
+  return {
+    pilotNotice: {
+      set: stored.has('pilot_notice'),
+      on: stored.get('pilot_notice') === 'on',
+    },
+    launch: {
+      set: stored.has('production_launch_at'),
+      at: stored.get('production_launch_at') ?? null,
+    },
+  };
+}
+
+/** Staff set one, with a reason, audited. The same value again, or a malformed one, is refused. */
+export async function setDisplaySetting(
+  tx: Tx,
+  input: {
+    key: string;
+    value: string | null;
+    staffUserId: string;
+    reason: string;
+    now: Date;
+  },
+): Promise<{
+  key: DisplaySetting;
+  value: string | null;
+  previous: string | null;
+}> {
+  let value: string | null;
+  try {
+    value = checkedDisplayValue(input.key, input.value);
+  } catch {
+    throw new OperationError('INVALID_INPUT');
+  }
+  const key = input.key as DisplaySetting;
+  const [row] = await tx
+    .select({ value: displaySettings.value })
+    .from(displaySettings)
+    .where(eq(displaySettings.key, key))
+    .for('update');
+  if (row && row.value === value) throw new OperationError('INVALID_INPUT');
+  const values = {
+    value,
+    changedBy: input.staffUserId,
+    changedAt: input.now,
+    reason: input.reason,
+  };
+  await tx
+    .insert(displaySettings)
+    .values({ key, ...values })
+    .onConflictDoUpdate({ target: displaySettings.key, set: values });
+  await tx.insert(displaySettingChanges).values({
+    id: newId(),
+    key,
+    value,
+    changedBy: input.staffUserId,
+    reason: input.reason,
+    createdAt: input.now,
+  });
+  await recordAudit(tx, {
+    staffUserId: input.staffUserId,
+    action: 'display_setting.set',
+    permission: 'switches.manage',
+    subjectType: 'display_setting',
+    subjectId: key,
+    reason: withAuditChange(input.reason, {
+      from: row ? row.value : 'unset',
+      to: value,
+    }),
+    now: input.now,
+  });
+  return { key, value, previous: row?.value ?? null };
+}
+
+/** Each display setting for the admin screen. */
+export async function displaySettingOverview(
+  db: Database,
+): Promise<OpsDisplaySetting[]> {
+  const [rows, changes] = await Promise.all([
+    db.select().from(displaySettings),
+    db
+      .select()
+      .from(displaySettingChanges)
+      .orderBy(desc(displaySettingChanges.createdAt)),
+  ]);
+  const stored = new Map(rows.map((row) => [row.key, row]));
+  return DISPLAY_SETTINGS.map((key) => {
+    const entry = DISPLAY_SETTING_CATALOGUE[key];
+    const row = stored.get(key);
+    return {
+      key,
+      label: entry.label,
+      description: entry.description,
+      kind: entry.kind,
+      envName: entry.envName,
+      set: Boolean(row),
+      value: row?.value ?? null,
+      changedBy: row?.changedBy ?? null,
+      changedAt: row?.changedAt.toISOString() ?? null,
+      reason: row?.reason ?? null,
+      history: changes
+        .filter((change) => change.key === key)
+        .slice(0, HISTORY_LIMIT)
+        .map((change) => ({
+          id: change.id,
+          value: change.value,
+          changedBy: change.changedBy,
+          reason: change.reason,
+          createdAt: change.createdAt.toISOString(),
+        })),
+    };
+  });
+}
+
+const UNSET_DISPLAY: PublicDisplaySettings = {
+  pilotNotice: { set: false, on: false },
+  launch: { set: false, at: null },
+};
+const keptDisplay = new WeakMap<
+  object,
+  { value: PublicDisplaySettings; at: number; generation: number }
+>();
+
+/**
+ * Display settings as `/health/release` serves them: cached like the switches (cleared by the same
+ * change signal), never throws. A failed read keeps the last value read, else "unset", so the web
+ * keeps its own old setting rather than guess.
+ */
+export async function displaySettingsNow(
+  db: Reader,
+  options: { now?: number } = {},
+): Promise<PublicDisplaySettings> {
+  const now = options.now ?? Date.now();
+  const known = keptDisplay.get(db);
+  if (
+    known &&
+    known.generation === generation &&
+    now - known.at < FEATURE_SWITCH_CACHE_MS
+  )
+    return known.value;
+  const startedAt = generation;
+  try {
+    const value = await readDisplaySettings(db);
+    keptDisplay.set(db, { value, at: now, generation: startedAt });
+    return value;
+  } catch (error) {
+    for (const listener of errorListeners) listener(error);
+    const value = known?.value ?? UNSET_DISPLAY;
+    keptDisplay.set(db, {
+      value,
+      at: now - FEATURE_SWITCH_CACHE_MS + FAILED_READ_RETRY_MS,
+      generation: startedAt,
+    });
+    return value;
+  }
 }

@@ -313,3 +313,46 @@ test('every moved switch still gates its feature', async (t) => {
       key === 'business' || FEATURE_SWITCH_CATALOGUE[key].default,
     );
 });
+
+// Display settings (owner, 14 Nov 2026, #216): the web reads them on /health/release.
+test('an owner sets the pilot notice and the launch time; /health/release serves them', async () => {
+  const session = await opsSignIn(stack.api, database.db, phone());
+  const release = async () =>
+    (await (await fetch(`${stack.api}/health/release`)).json()).data.display;
+  assert.deepEqual(await release(), {
+    pilotNotice: { set: false, on: false },
+    launch: { set: false, at: null },
+  });
+  const listed = (await (await opsCall(session, 'GET', '/v1/ops/switches')).json()).data;
+  assert.deepEqual(
+    listed.display.map((d) => [d.key, d.set, d.envName]),
+    [
+      ['pilot_notice', false, 'PILOT_NOTICE'],
+      ['production_launch_at', false, 'PRODUCTION_LAUNCH_AT'],
+    ],
+  );
+  const set = (key, value) =>
+    opsCall(session, 'POST', `/v1/ops/switches/display/${key}`, { value, reason: REASON });
+  const on = await set('pilot_notice', 'on');
+  assert.equal(on.status, 200);
+  assert.equal(
+    (await on.json()).data.display.find((d) => d.key === 'pilot_notice').value,
+    'on',
+  );
+  assert.deepEqual((await release()).pilotNotice, { set: true, on: true });
+  assert.equal((await set('production_launch_at', '2027-01-01T00:00:00+01:00')).status, 200);
+  assert.deepEqual((await release()).launch, { set: true, at: '2026-12-31T23:00:00.000Z' });
+  assert.equal((await set('production_launch_at', null)).status, 200);
+  assert.deepEqual((await release()).launch, { set: true, at: null });
+  assert.equal((await set('production_launch_at', 'tomorrow')).status, 400);
+  assert.equal((await set('pilot_notice', 'on')).status, 400, 'no change');
+  assert.equal((await set('nope', 'on')).status, 404);
+  const audits = await q(
+    `SELECT subject_id FROM audit_events WHERE action = 'display_setting.set' ORDER BY created_at`,
+  );
+  assert.deepEqual(
+    audits.map((a) => a.subject_id),
+    ['pilot_notice', 'production_launch_at', 'production_launch_at'],
+  );
+  await database.pool.query('DELETE FROM display_settings');
+});

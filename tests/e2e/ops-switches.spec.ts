@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient } from './helpers';
 import { codeFor, enrolOwner, secondOwner, sql } from './ops-helpers';
+import { API_ORIGIN } from './stack';
 
 // Feature switches in admin (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md): an owner
 // turns a feature off and it disappears without a deploy; a money switch waits for a second person.
@@ -139,5 +140,31 @@ test('@alone a money switch waits for a second person, and changes once they app
   } finally {
     await restore('pro_refunds', false);
     await second.context.close();
+  }
+});
+
+// Display settings (owner, 14 Nov 2026, #216): the web reads them from /health/release.
+test('@alone an owner turns the pilot notice on in admin, and the web\u2019s release answer carries it', async ({
+  page,
+}, testInfo) => {
+  await sql(`DELETE FROM display_settings WHERE key = 'pilot_notice'`);
+  try {
+    await enrolOwner(page, testInfo);
+    await page.goto('/ops/switches');
+    const card = page.getByRole('main').getByTestId('display-pilot_notice');
+    await expect(card.getByTestId('display-value')).toContainText(
+      'Not set here yet: the web app still uses its PILOT_NOTICE setting.',
+    );
+    await card
+      .getByRole('button', { name: 'Turn the pilot notice on…' })
+      .click();
+    await card.getByLabel('Why turn the pilot notice on?').fill(REASON);
+    await card.getByRole('button', { name: 'Turn on', exact: true }).click();
+    await expect(card.getByTestId('display-value')).toHaveText('On');
+    await expectAccessible(page);
+    const release = await (await fetch(`${API_ORIGIN}/health/release`)).json();
+    expect(release.data.display.pilotNotice).toEqual({ set: true, on: true });
+  } finally {
+    await sql(`DELETE FROM display_settings WHERE key = 'pilot_notice'`);
   }
 });
