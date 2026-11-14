@@ -31,3 +31,5 @@ export * from './studio-colour.js';
 export * from './studio-type.js';
 export * from './studio-limits.js';
 export * from './studio-document.js';
+export * from './studio-layout.js';
+export * from './studio-check.js';
