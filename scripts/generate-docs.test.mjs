@@ -54,6 +54,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/b/{business}/{location}/{handle}',
   'GET /v1/business-logos/{businessId}/{file}',
   'GET /v1/covers/{profileId}/{file}',
+  // Page Studio photos: only a crop the published design of a live Pro page uses; never a master.
+  'GET /v1/studio-images/{profileId}/{imageId}/{version}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
   'GET /v1/mail/unsubscribe',

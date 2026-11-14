@@ -1,3 +1,5 @@
+import type { StudioIssue } from './studio-check.js';
+
 export const apiErrorCodes = [
   'VALIDATION_FAILED',
   'UNAUTHORIZED',
@@ -146,6 +148,12 @@ export const apiErrorCodes = [
   'CAMPAIGN_SLUG_TAKEN',
   'CAMPAIGN_SLUG_UNAVAILABLE',
   'SUPPORT_TOO_MANY_OPEN',
+  // Page Studio (plan 2026-11-12-page-studio, Task 7).
+  'STUDIO_DRAFT_STALE',
+  'STUDIO_DESIGN_CHECK_FAILED',
+  'STUDIO_PRO_REQUIRED',
+  'IMAGE_TOO_SMALL',
+  'STUDIO_IMAGE_LIMIT',
   'INTERNAL_ERROR',
 ] as const;
 export type ApiErrorCode = (typeof apiErrorCodes)[number];
@@ -159,6 +167,8 @@ export interface ApiErrorResponse {
     fields?: string[];
     /** A fixed code saying more about the refusal, never request data. */
     reason?: string;
+    /** STUDIO_DESIGN_CHECK_FAILED: the server's design check of the person's own draft. */
+    issues?: StudioIssue[];
   };
 }
 

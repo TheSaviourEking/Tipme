@@ -69,7 +69,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan`<br>GET `/v1/ops/pages/{profileId}/pro` |
-| `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
+| `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>GET `/v1/ops/pages/{profileId}/studio-images/{imageId}`<br>POST `/v1/ops/pages/{profileId}/studio-images/{imageId}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
 | `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
@@ -130,6 +130,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
 | POST | `/v1/profiles/{handle}/report` | – | `reports` | – |
 | GET | `/v1/qr-art/previews/{file}` | n/a (read) | – | – |
+| GET | `/v1/studio-images/{profileId}/{imageId}/{version}/{file}` | n/a (read) | – | – |
 | POST | `/v1/tip-intents` | – | `intents` | – |
 | POST | `/v1/tip-quotes` | – | `quotes` | – |
 | POST | `/v1/vitals` | – | `analytics` | – |
@@ -271,6 +272,13 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/sessions` | n/a (read) | – | – |
 | DELETE | `/v1/me/sessions/{id}` | yes | – | – |
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
+| GET | `/v1/me/studio` | n/a (read) | – | – |
+| GET | `/v1/me/studio-images/{imageId}/{version}/{file}` | n/a (read) | – | – |
+| DELETE | `/v1/me/studio/draft` | yes | – | – |
+| PUT | `/v1/me/studio/draft` | yes | `studio_drafts` | – |
+| POST | `/v1/me/studio/images` | yes | `avatars` | – |
+| PUT | `/v1/me/studio/images/{imageId}/focus` | yes | `avatars` | – |
+| POST | `/v1/me/studio/publish` | yes | `studio_drafts` | – |
 | GET | `/v1/me/support` | n/a (read) | – | – |
 | POST | `/v1/me/support` | yes | – | – |
 | PUT | `/v1/me/thanks` | yes | – | – |
@@ -376,6 +384,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/pages/{profileId}/plan` | `pages.plan` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/pricing` | `fees.manage` | n/a (read) | – | – |
 | GET | `/v1/ops/pages/{profileId}/pro` | `pages.plan` | n/a (read) | – | – |
+| GET | `/v1/ops/pages/{profileId}/studio-images/{imageId}` | `pages.suspend` | n/a (read) | – | – |
+| POST | `/v1/ops/pages/{profileId}/studio-images/{imageId}/remove` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/suspend` | `pages.suspend` | yes | – | – |
 | POST | `/v1/ops/pages/{profileId}/unsuspend` | `pages.suspend` | yes | – | – |
 | GET | `/v1/ops/pages/{profileId}/withdrawal-freeze` | `payouts.resolve` | n/a (read) | – | – |
@@ -448,6 +458,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                                  | Rate-limited                                                                                                                                                                                                            |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                                       | Only the current photo of a live, active page                                                                                                                                                                           |
 | `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                                      | Only the current cover of a live, active page                                                                                                                                                                           |
+| `GET /v1/studio-images/{profileId}/{imageId}/{version}/{file}`                         | Page Studio photos on public pages                                                   | Only a crop (never the master) that the published design of a live, active Pro page uses, at its current version; 404 while Page Studio is off                                                                          |
 | `GET /v1/b/{business}/{location}`, `GET /v1/b/{business}/{location}/{handle}`          | A printed business code opens these pages for a supporter without an account (PR B4) | Only verified, not paused businesses and open locations; only people whose page is live and can take a tip; a chosen first name and photo, never a full name, bio, contact or link; 404 while `BUSINESS_ENABLED` is off |
 | `GET /v1/b/{business}`                                                                 | The business page: the places a supporter can pick from                              | Only verified, not paused businesses; open locations' name and address, never a person; 404 while `BUSINESS_ENABLED` is off                                                                                             |
 | `GET /v1/business-logos/{businessId}/{file}`                                           | A business's logo in the header of its public pages                                  | Only the current logo of a verified, not paused business; 404 while `BUSINESS_ENABLED` is off                                                                                                                           |

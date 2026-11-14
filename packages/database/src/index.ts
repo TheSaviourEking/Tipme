@@ -86,6 +86,7 @@ export * from './operations/avatars.js';
 export * from './operations/business-logos.js';
 export * from './operations/covers.js';
 export * from './operations/page-moderation.js';
+export * from './operations/studio.js';
 export * from './operations/ops-search.js';
 export * from './operations/fees.js';
 export * from './operations/export.js';

@@ -30,6 +30,7 @@ import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { pageStudioOn } from '../studio/studio-switch.js';
 
 @Controller('v1')
 export class PublicProfileController {
@@ -54,6 +55,7 @@ export class PublicProfileController {
     const page = await publicProfile(this.database.db, handle, {
       adultLinks: this.config.ADULT_PLATFORM_LINKS,
       recognition: this.config.SUPPORTER_RECOGNITION,
+      studio: pageStudioOn(this.config),
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),

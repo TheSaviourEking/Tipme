@@ -98,6 +98,11 @@ import {
 } from './username-take-backs.js';
 import { publicCelebration } from './moments.js';
 import {
+  deleteStudioData,
+  publicStudioFor,
+  studioPageFacts,
+} from './studio.js';
+import {
   getReadyPaymentAccount,
   type PaymentAccountEnvironment,
 } from './payment-accounts.js';
@@ -969,6 +974,8 @@ export function publicProfile(
     adultLinks?: boolean;
     /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
     recognition?: boolean;
+    /** True while Page Studio is on: a Pro page's published design comes with the page. */
+    studio?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -1002,6 +1009,9 @@ export function publicProfile(
           ...options.requiredAccount,
         })) !== null
       : true;
+    const studio = options.studio
+      ? await publicStudioFor(db, studioPageFacts(profile))
+      : undefined;
     return {
       handle: profile.handle,
       displayName: profile.displayName,
@@ -1023,6 +1033,7 @@ export function publicProfile(
       ...(options.recognition === true && profile.plan === 'pro'
         ? { recognition: true as const }
         : {}),
+      ...(studio ? { studio } : {}),
     };
   });
 }
@@ -1163,6 +1174,8 @@ export function deleteAccount(
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
           });
+        // Page Studio: the designs and their photos are the person's own too.
+        photoKeys.push(...(await deleteStudioData(tx, row.id)));
         await tx
           .insert(handleHolds)
           .values({
