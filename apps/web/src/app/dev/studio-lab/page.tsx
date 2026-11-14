@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { connection } from 'next/server';
 import { inflateRawSync } from 'node:zlib';
 import {
   STUDIO_FONTS,
@@ -57,6 +58,9 @@ const today = () =>
  *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8
  */
 export default async function StudioLabPage({ searchParams }: Props) {
+  // Rendered per request: the lab reads today's Lagos date (to keep today's events), which
+  // Next.js refuses to read while prerendering ("unstable value `new Date()`").
+  await connection();
   if (!studioLabOpen()) notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? q[k] : undefined);
