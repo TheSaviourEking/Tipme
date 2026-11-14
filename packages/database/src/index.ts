@@ -20,6 +20,7 @@ export * from './operations/business-public.js';
 export * from './operations/business-notes.js';
 export * from './operations/business-insights.js';
 export * from './operations/business-pro.js';
+export * from './operations/business-limits.js';
 export * from './operations/business-codes.js';
 export * from './operations/business-live.js';
 export * from './operations/share-agreements.js';

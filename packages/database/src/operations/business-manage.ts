@@ -20,6 +20,7 @@ import {
   users,
 } from '../schema.js';
 import { managerOf } from './business-access.js';
+import { assertCanAddLocation } from './business-limits.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
@@ -160,10 +161,13 @@ export function addLocation(
   businessId: string,
   input: LocationInput,
   now: Date = new Date(),
+  /** Business Pro (plan Task A4): the API passes BUSINESS_PRO_ENABLED. */
+  opts: { enforceLimits?: boolean } = {},
 ): Promise<BusinessDetail> {
   return guarded(async () => {
     await db.transaction(async (tx) => {
       await managerOf(tx, userId, businessId, { owner: true });
+      if (opts.enforceLimits) await assertCanAddLocation(tx, businessId);
       const inserted = await tx
         .insert(businessLocations)
         .values({
