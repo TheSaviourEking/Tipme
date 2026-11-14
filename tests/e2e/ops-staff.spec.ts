@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 import {
   expectAccessible,
   fitsViewport,
-  identityEmailPattern,
   signInWithEmail,
   signUpRecipient,
 } from './helpers';
@@ -15,6 +14,7 @@ import {
   mismatchedTip,
   secondOwner,
   sql,
+  takeGrantedOwners,
   totpNow,
 } from './ops-helpers';
 
@@ -24,18 +24,18 @@ const REASON = 'Checked with the person on a call today';
 // Each test brings its own owners, and every pending request mails everyone who could decide it.
 // Left in place, the owners of every earlier run get each new request's mail, and in the later
 // repeats the sign-in codes queue behind thousands of those. So a test's owners go when it ends:
-// the ones `identity` names for this worker and project, granted since the test began. Worker
-// numbers are real (each repeat gets new workers), so no test here borrows one for someone else.
-let startedAt = new Date();
+// exactly the addresses it granted, never a pattern another worker's people could match.
 test.beforeEach(() => {
-  startedAt = new Date(Date.now() - 1_000);
+  takeGrantedOwners();
 });
-test.afterEach(async ({}, testInfo) => {
+test.afterEach(async () => {
+  const emails = takeGrantedOwners();
+  if (emails.length === 0) return;
   await sql(
     `UPDATE staff s SET revoked_at = now() FROM users u
-      WHERE u.id = s.user_id AND s.revoked_at IS NULL AND s.granted_at >= $1
-        AND u.email LIKE $2`,
-    [startedAt, identityEmailPattern(testInfo)],
+      WHERE u.id = s.user_id AND s.revoked_at IS NULL
+        AND lower(u.email) = ANY($1::text[])`,
+    [emails.map((email) => email.toLowerCase())],
   );
 });
 
@@ -77,7 +77,7 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   await expectAccessible(page);
 
   // Not `identity` with another worker's number: each repeat runs in new workers, so worker 7 is
-  // real in the fourth repeat, and its tests' clean-up would remove this person mid-test.
+  // real in the fourth repeat, and two tests would share one person.
   const email = `invitee@e2e-${randomUUID().slice(0, 8)}.example`;
   await page.goto('/ops/staff/people');
   await page.getByRole('button', { name: 'Add a person…' }).click();
