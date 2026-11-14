@@ -81,48 +81,48 @@ test('switch off: the page route is 404 and detail has no page field', async () 
   await setSwitch(database.pool, 'campaign_pages', false);
   const off = on;
   try {
-  await setPlan('pro');
-  const { cookie } = await ada();
-  const campaign = await newCampaign(off, cookie);
-  const detail = await (
-    await get(off, `/v1/me/campaigns/${campaign.id}`, cookie)
-  ).json();
-  assert.equal('page' in detail.data, false);
-  assert.equal('pagesAvailable' in detail.data, false);
-  // Exactly today's keys.
-  assert.deepEqual(Object.keys(detail.data).sort(), [
-    'createdAt',
-    'displayName',
-    'handle',
-    'id',
-    'name',
-    'receivedNetMinor',
-    'slug',
-    'stoppedAt',
-    'tips',
-    'visits',
-    'weeks',
-  ]);
-  const list = await (await get(off, '/v1/me/campaigns', cookie)).json();
-  assert.equal('pagesAvailable' in list.data, false);
-  // Made while switched off: no page, even on Pro.
-  const [row] = (
-    await database.pool.query(
-      `SELECT page_on, headline FROM campaigns WHERE id = $1`,
-      [campaign.id],
-    )
-  ).rows;
-  assert.deepEqual(row, { page_on: false, headline: null });
-  const save = await send(
-    off,
-    'PUT',
-    `/v1/me/campaigns/${campaign.id}/page`,
-    cookie,
-    page(),
-  );
-  assert.equal(save.status, 404);
-  const pub = await get(off, `/v1/profiles/ada/campaigns/${campaign.slug}`);
-  assert.equal(pub.status, 404);
+    await setPlan('pro');
+    const { cookie } = await ada();
+    const campaign = await newCampaign(off, cookie);
+    const detail = await (
+      await get(off, `/v1/me/campaigns/${campaign.id}`, cookie)
+    ).json();
+    assert.equal('page' in detail.data, false);
+    assert.equal('pagesAvailable' in detail.data, false);
+    // Exactly today's keys.
+    assert.deepEqual(Object.keys(detail.data).sort(), [
+      'createdAt',
+      'displayName',
+      'handle',
+      'id',
+      'name',
+      'receivedNetMinor',
+      'slug',
+      'stoppedAt',
+      'tips',
+      'visits',
+      'weeks',
+    ]);
+    const list = await (await get(off, '/v1/me/campaigns', cookie)).json();
+    assert.equal('pagesAvailable' in list.data, false);
+    // Made while switched off: no page, even on Pro.
+    const [row] = (
+      await database.pool.query(
+        `SELECT page_on, headline FROM campaigns WHERE id = $1`,
+        [campaign.id],
+      )
+    ).rows;
+    assert.deepEqual(row, { page_on: false, headline: null });
+    const save = await send(
+      off,
+      'PUT',
+      `/v1/me/campaigns/${campaign.id}/page`,
+      cookie,
+      page(),
+    );
+    assert.equal(save.status, 404);
+    const pub = await get(off, `/v1/profiles/ada/campaigns/${campaign.slug}`);
+    assert.equal(pub.status, 404);
   } finally {
     await setSwitch(database.pool, 'campaign_pages', true);
   }
