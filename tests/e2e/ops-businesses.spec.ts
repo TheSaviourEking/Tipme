@@ -63,8 +63,15 @@ test('staff find a business with its contact hidden, reveal it with a reason, pa
     '27 Ademola Adetokunbo, Lagos',
   );
   // The business's own content never says "approved" (no regulatory claim); the admin menu and
-  // notices outside main can mention Approvals.
-  await expect(page.getByRole('main').getByText(/approved/i)).toHaveCount(0);
+  // notices outside main can mention Approvals. Only what is shown: the Overview stays mounted,
+  // hidden, and its staff activity lists any serious action a second person approved in this
+  // shared database (an announcement's send, say).
+  await expect(
+    page
+      .getByRole('main')
+      .getByText(/approved/i)
+      .filter({ visible: true }),
+  ).toHaveCount(0);
   await expectAccessible(page);
 
   const contact = section(page, 'Contact');
