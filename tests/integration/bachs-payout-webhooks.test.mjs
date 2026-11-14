@@ -152,15 +152,25 @@ async function fixture(t) {
      VALUES ($1, $2, 'bachs', 'ba_tobi', '058', 'Guaranty Trust Bank', '4321', 'usable')`,
     [randomUUID(), TOBI],
   );
-  const withdraw = async (amountMinor = 400000n) =>
-    (
-      await requestWithdrawal(db, {
-        profileId: TOBI,
-        amountMinor,
-        idempotencyKey: randomUUID(),
-        provider: scripted(),
-      })
-    ).payoutId;
+  /**
+   * A withdrawal as the previous rule made it (TipMe tops the fee up first): these tests cover that
+   * path, which payouts in flight at the 12 Nov 2026 release still take. The new rule, where the
+   * user pays from the amount, is covered by packages/database/test/integration/payout-fee-user.
+   */
+  const withdraw = async (amountMinor = 400000n) => {
+    const { payoutId } = await requestWithdrawal(db, {
+      profileId: TOBI,
+      amountMinor,
+      idempotencyKey: randomUUID(),
+      provider: scripted(),
+    });
+    await q(
+      `UPDATE payouts SET fee_payer = 'tipme', amount_minor = amount_minor + user_fee_minor,
+         user_fee_minor = 0 WHERE id = $1`,
+      [payoutId],
+    );
+    return payoutId;
+  };
   const row = async (payoutId) =>
     (await q('SELECT * FROM payouts WHERE id = $1', [payoutId]))[0];
   const issues = (kind) => q('SELECT * FROM issues WHERE kind = $1', [kind]);

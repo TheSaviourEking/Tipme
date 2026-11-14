@@ -154,6 +154,8 @@ export const businessApplicationSchema = z
     contactEmail: emailSchema,
     contactPhone: phoneSchema.optional(),
     location: locationInputSchema,
+    /** Business sign-up (R13): what the owner is called when they have no page. */
+    ownerName: plain(60).optional(),
   })
   .strict();
 export type BusinessApplication = z.infer<typeof businessApplicationSchema>;
@@ -410,9 +412,36 @@ export interface BusinessDetail {
   /** The uploaded logo's served address; it is served publicly only once the business is verified. */
   logoPath?: string;
   contact: { name: string; email: string; phone?: string };
+  /** When the business was sent to TipMe (business sign-up: "Sent to TipMe" while waiting). */
+  appliedAt: string;
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
-  you: { role: ManagerRole; locationId?: string };
+  you: {
+    role: ManagerRole;
+    locationId?: string;
+    /**
+     * Business sign-up (R19): the business was verified while this manager was on it and they
+     * haven't seen the "verified" moment yet. Only with the business_signup switch on.
+     */
+    celebrate?: true;
+  };
+  /** Business Pro (plan Task A4): present only with the business_pro switch on. */
+  plan?: BusinessPlanName;
+  usage?: BusinessUsage;
+  /** When Business Pro last ended; absent while it runs or never ran. */
+  proLapsedAt?: string;
+}
+/** Business Free or Business Pro. */
+export type BusinessPlanName = 'free' | 'pro';
+/**
+ * What a business uses of its plan's limits (Business Pro, owner 14 Nov 2026). Staff are distinct
+ * people at any of its locations plus open staff invitations, never its open owners. `used` may be
+ * above `limit`: a business over a limit keeps everyone and only stops adding.
+ */
+export interface BusinessUsage {
+  plan: BusinessPlanName;
+  staff: { used: number; limit: number };
+  locations: { used: number; limit: number };
 }
 export interface MemberRow {
   memberId: string;
@@ -553,7 +582,11 @@ export interface OpsBusinessNote {
  * sign and badge show, so the print view needs nothing else.
  */
 export interface BusinessCodes {
-  business: { name: string; slug: string };
+  /**
+   * `logoPath`: the uploaded logo (`/v1/business-logos/…`), drawn in the sign's tile; without one,
+   * the tile shows the initial. Optional: older APIs send none.
+   */
+  business: { name: string; slug: string; logoPath?: string };
   /** Open locations in the manager's scope, by name. */
   location: { locationId: string; slug: string; name: string; path: string }[];
   /** Active members at those locations whose page is live, by location then shown name. */
@@ -580,7 +613,8 @@ export interface OpsBusinessRow {
 export interface OpsBusinessDetail extends OpsBusinessRow {
   // `locations` is the row's count; the list has its own name.
   locationList: BusinessLocationView[];
-  managers: { userHint: string; role: ManagerRole }[];
+  /** `managerId` names a seat for `business.owner_remove`; never a contact detail. */
+  managers: { managerId: string; userHint: string; role: ManagerRole }[];
   verifiedAt?: string;
   suspendedReason?: string;
   /** Whether the owners uploaded a logo; staff read it through their own route, whatever the status. */

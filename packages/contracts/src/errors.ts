@@ -21,6 +21,7 @@ export const apiErrorCodes = [
   'HAS_BALANCE',
   'INSUFFICIENT_BALANCE',
   'WITHDRAWAL_TOO_SMALL',
+  'WITHDRAWAL_BELOW_FEE',
   'WITHDRAWAL_UNAVAILABLE',
   'WITHDRAWALS_PAUSED',
   'WITHDRAWALS_SWITCHED_OFF',
@@ -56,6 +57,7 @@ export const apiErrorCodes = [
   'EMAIL_VERIFICATION_REQUIRED',
   'PAYMENT_ACCOUNT_REQUIRED',
   'PROVIDER_OUTCOME_UNKNOWN',
+  'COUNTRY_NOT_SUPPORTED',
   'PAYMENT_START_REJECTED',
   'TIPPING_NOT_OPEN',
   'NO_CONFIRMED_TEST',
@@ -84,6 +86,11 @@ export const apiErrorCodes = [
   'CHANGELOG_EDITED_ELSEWHERE',
   'CHANGELOG_TEXT_NOT_ALLOWED',
   'CHANGELOG_NOT_FOUND',
+  'ANNOUNCEMENT_NOT_FOUND',
+  'ANNOUNCEMENT_EDITED_ELSEWHERE',
+  'ANNOUNCEMENT_NOT_DRAFT',
+  'ANNOUNCEMENT_NO_RECIPIENTS',
+  'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
   'PRO_PRICE_NOT_SET',
   'PRO_PRICE_CHANGED',
   'PRO_PURCHASE_OPEN',
@@ -132,7 +139,12 @@ export const apiErrorCodes = [
   'MEMBER_NOT_TIPPABLE',
   'NOTE_NOT_OPEN',
   'BUSINESS_LAST_OWNER',
+  // Only TipMe staff end another owner's seat, until the removal procedure ships (plan #204, E).
+  'OWNER_REMOVAL_NEEDS_TIPME',
   'BUSINESS_NOT_VERIFIED',
+  // Business Pro (plan Task A4): adding past the plan's limit. Nobody already there is touched.
+  'BUSINESS_STAFF_LIMIT',
+  'BUSINESS_LOCATION_LIMIT',
   // Business release 2 (R2-0).
   'SHARE_NOT_ALLOWED',
   'SHARE_CHANGE_TOO_SOON',
@@ -147,6 +159,10 @@ export const apiErrorCodes = [
   'CAMPAIGN_LIMIT',
   'CAMPAIGN_SLUG_TAKEN',
   'CAMPAIGN_SLUG_UNAVAILABLE',
+  // Campaign pages (plan 2026-11-14 Phase A).
+  'CAMPAIGN_PRO_REQUIRED',
+  'CAMPAIGN_STOPPED',
+  'CAMPAIGN_HEADLINE_NAME',
   'SUPPORT_TOO_MANY_OPEN',
   // Page Studio (plan 2026-11-12-page-studio, Task 7).
   'STUDIO_DRAFT_STALE',

@@ -115,7 +115,7 @@ export function ClaimMoment({
         @{handle} is yours.
       </h2>
       <p id={`${id}-lede`} className="claim-moment__lede">
-        Welcome to TipMe. People can start thanking you the moment your page is
+        Welcome to TipMe. People can start tipping you the moment your page is
         online.
       </p>
       <p role="status" className="sr-only">

@@ -25,12 +25,12 @@ async function paidReceipt(browser: Browser, handle: string): Promise<Page> {
   }).toPass({ timeout: 10_000 });
   await tipFromProfile(page);
   await expect(
-    page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    page.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible({ timeout: 20_000 });
   return page;
 }
 
-test('a supporter reads the recipient’s thank-you line under "got your thanks."', async ({
+test('a supporter reads the recipient’s thank-you line under "got your tip."', async ({
   page,
   browser,
 }, testInfo) => {

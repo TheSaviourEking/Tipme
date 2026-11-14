@@ -29,6 +29,7 @@ import {
   revokeBusinessInvitation,
   searchInvitees,
   type MailSealing,
+  featureOn,
 } from '@tipme/database';
 import { z } from 'zod';
 import { CsrfGuard } from '../auth/csrf.guard.js';
@@ -82,6 +83,8 @@ export class BusinessMembersController {
       auth.userId,
       businessId,
       body,
+      new Date(),
+      { enforceLimits: await featureOn(this.database.db, 'business_pro') },
     );
     signalBusiness(this.database.db, this.publishLive, { businessId });
     return { data };

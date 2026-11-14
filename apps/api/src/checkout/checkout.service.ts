@@ -18,6 +18,7 @@ import {
   markAttemptUnknown,
   markAttemptInitiated,
   OperationError,
+  featureOn,
 } from '@tipme/database';
 import {
   BachsApiError,
@@ -165,6 +166,10 @@ export class CheckoutService {
       quoteHandleOf(this.database.db, request.quoteId),
     );
     const { db } = this.database;
+    const [recognitionOn, businessOn] = await Promise.all([
+      featureOn(db, 'supporter_recognition'),
+      featureOn(db, 'business'),
+    ]);
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
       idempotencyKey,
@@ -174,11 +179,11 @@ export class CheckoutService {
       celebrationMomentId: request.celebrationMomentId,
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
-      recognitionOn: this.config.SUPPORTER_RECOGNITION,
+      recognitionOn,
       // Campaign Studio: which campaign link the page was opened from; ignored when not one.
       ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).
-      ...(this.config.BUSINESS_ENABLED && request.businessMemberId
+      ...(businessOn && request.businessMemberId
         ? { businessMemberId: request.businessMemberId }
         : {}),
     });

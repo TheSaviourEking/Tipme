@@ -5,7 +5,13 @@ import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { seedDemoProfiles } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 
 // Paid Pro, plan Task 6 (ADR-0015): buying a month on pretend money through the API. The price is
 // the server's; Pro comes only from the partner's confirmation, never from a redirect.
@@ -18,7 +24,6 @@ startTelemetry({
 
 let database;
 let stack;
-let off;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
@@ -28,10 +33,8 @@ before(async () => {
     databaseUrl: database.url,
     apiEnv: { ...apiEnv, PRO_BILLING_ENABLED: 'true' },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv });
 });
 after(async () => {
-  await off.stop();
   await stack.stop();
   await database.close();
 });
@@ -49,7 +52,7 @@ const q = (text, values = []) =>
 const buy = async (
   api,
   cookie,
-  body = { expectedAmountMinor: '250000' },
+  body = { expectedAmountMinor: '500000' },
   key = randomUUID(),
 ) =>
   fetch(`${api}/v1/me/pro/purchases`, {
@@ -70,7 +73,7 @@ test('buying needs a session, the CSRF header and an Idempotency-Key', async () 
   const anonymous = await fetch(`${stack.api}/v1/me/pro/purchases`, {
     method: 'POST',
     headers: browserHeaders(undefined, { 'idempotency-key': randomUUID() }),
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(anonymous.status, 401);
   const noCsrf = await fetch(`${stack.api}/v1/me/pro/purchases`, {
@@ -81,42 +84,44 @@ test('buying needs a session, the CSRF header and an Idempotency-Key', async () 
       cookie,
       'idempotency-key': randomUUID(),
     },
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(noCsrf.status, 403);
   const noKey = await fetch(`${stack.api}/v1/me/pro/purchases`, {
     method: 'POST',
     headers: browserHeaders(cookie),
-    body: JSON.stringify({ expectedAmountMinor: '250000' }),
+    body: JSON.stringify({ expectedAmountMinor: '500000' }),
   });
   assert.equal(noKey.status, 400);
   // The client can't name a price of its own: only an expected amount, checked against the server.
   const extra = await buy(stack.api, cookie, {
-    expectedAmountMinor: '250000',
+    expectedAmountMinor: '500000',
     amountMinor: '100',
   });
   assert.equal(extra.status, 400);
 });
 
-test('with PRO_BILLING_ENABLED off, buying is 404 PRO_BILLING_OFF and GET says billing is off', async () => {
-  // Sessions live in the shared database: the same cookie signs in to both copies.
+test('with the pro_billing switch off, buying is 404 PRO_BILLING_OFF and GET says billing is off', async () => {
   const { cookie } = await session(TOBI_PHONE);
-  const response = await buy(off.api, cookie);
-  assert.equal(response.status, 404);
-  assert.equal((await json(response)).error.code, 'PRO_BILLING_OFF');
-  const mine = await json(
-    await fetch(`${off.api}/v1/me/pro`, { headers: { cookie } }),
-  );
-  assert.equal(mine.data.billingOn, false);
+  await setSwitch(database.pool, 'pro_billing', false);
+  try {
+    const response = await buy(stack.api, cookie);
+    assert.equal(response.status, 404);
+    assert.equal((await json(response)).error.code, 'PRO_BILLING_OFF');
+    const mine = await json(
+      await fetch(`${stack.api}/v1/me/pro`, { headers: { cookie } }),
+    );
+    assert.equal(mine.data.billingOn, false);
+  } finally {
+    await setSwitch(database.pool, 'pro_billing', true);
+  }
 });
 
 test('GET /v1/pro/price tells a signed-out visitor whether buying is open on this copy', async () => {
   // The /pro page shows "Get Pro" or "coming soon to buy" before anyone signs in.
-  for (const [api, open] of [
-    [stack.api, true],
-    [off.api, false],
-  ]) {
-    const response = await fetch(`${api}/v1/pro/price`, {
+  for (const open of [true, false]) {
+    await setSwitch(database.pool, 'pro_billing', open);
+    const response = await fetch(`${stack.api}/v1/pro/price`, {
       headers: { origin: WEB },
     });
     // The page reads it from the browser: the web app may, with no cookie.
@@ -126,9 +131,10 @@ test('GET /v1/pro/price tells a signed-out visitor whether buying is open on thi
       null,
     );
     const { data } = await json(response);
-    assert.equal(data.amountMinor, '250000');
+    assert.equal(data.amountMinor, '500000');
     assert.equal(data.billingOn, open);
   }
+  await setSwitch(database.pool, 'pro_billing', true);
 });
 
 test('GET /v1/me/pro shows the server’s price, card only while paying from the balance is off', async () => {
@@ -140,7 +146,7 @@ test('GET /v1/me/pro shows the server’s price, card only while paying from the
   assert.equal(response.headers.get('cache-control'), 'private, no-store');
   const { data } = await json(response);
   assert.deepEqual(data.price, {
-    amountMinor: '250000',
+    amountMinor: '500000',
     currency: 'NGN',
     interval: 'month',
   });
@@ -166,7 +172,7 @@ test('pretend money end to end: open, a redirect changes nothing, pay on the pre
   assert.equal(opened.status, 201);
   const { data: purchase } = await json(opened);
   assert.equal(purchase.status, 'PENDING');
-  assert.equal(purchase.amountMinor, '250000');
+  assert.equal(purchase.amountMinor, '500000');
   assert.match(
     purchase.checkoutUrl,
     /^http:\/\/localhost:3000\/mock-checkout\/mock_pro_/,
@@ -196,7 +202,7 @@ test('pretend money end to end: open, a redirect changes nothing, pay on the pre
   const summary = await json(
     await fetch(`${stack.api}/v1/mock-provider/checkout/${reference}`),
   );
-  assert.equal(summary.data.amountMinor, '250000');
+  assert.equal(summary.data.amountMinor, '500000');
   const paid = await fetch(
     `${stack.api}/v1/mock-provider/checkout/${reference}`,
     {

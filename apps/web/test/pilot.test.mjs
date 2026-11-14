@@ -24,17 +24,23 @@ test('the notice copy is the owner-reviewed sentence and names no payment provid
 });
 
 test('the notice is shown only when switched on AND payments are live', () => {
-  const on = { PILOT_NOTICE: 'on' };
+  const unset = {
+    pilotNotice: { set: false, on: false },
+    launch: { set: false, at: null },
+  };
+  const on = { ...unset, pilotNotice: { set: true, on: true } };
   // "Payments are real" must never appear on a test copy or before payments are switched on.
-  assert.equal(pilotNoticeShown(on, 'live'), true);
-  assert.equal(pilotNoticeShown(on, 'test'), false);
-  assert.equal(pilotNoticeShown(on, 'closed'), false);
+  assert.equal(pilotNoticeShown(on, {}, 'live'), true);
+  assert.equal(pilotNoticeShown(on, {}, 'test'), false);
+  assert.equal(pilotNoticeShown(on, {}, 'closed'), false);
+  // Not yet set in admin: the old PILOT_NOTICE setting still decides (owner, 14 Nov 2026, #216).
+  assert.equal(pilotNoticeShown(unset, { PILOT_NOTICE: 'on' }, 'live'), true);
   for (const mode of ['test', 'closed', 'live']) {
-    assert.equal(pilotNoticeShown({}, mode), false, `unset, ${mode}`);
+    assert.equal(pilotNoticeShown(unset, {}, mode), false, `unset, ${mode}`);
     assert.equal(
-      pilotNoticeShown({ PILOT_NOTICE: 'off' }, mode),
+      pilotNoticeShown(null, { PILOT_NOTICE: 'on' }, mode),
       false,
-      `off, ${mode}`,
+      `unreadable, ${mode}`,
     );
   }
 });

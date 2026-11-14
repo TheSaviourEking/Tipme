@@ -20,7 +20,10 @@ export async function businessCodes(
     name: string;
     slug: string;
     status: string;
-  }>(sql`SELECT name, slug, status FROM businesses WHERE id = ${businessId}`);
+    logo_path: string | null;
+  }>(
+    sql`SELECT name, slug, status, logo_path FROM businesses WHERE id = ${businessId}`,
+  );
   const row = business.rows[0];
   if (!row) throw new OperationError('NOT_A_MANAGER');
   if (row.status !== 'verified')
@@ -57,7 +60,11 @@ export async function businessCodes(
      ORDER BY l.name, l.id, bm.shown_name, bm.id`);
   const base = `/b/${row.slug}`;
   return {
-    business: { name: row.name, slug: row.slug },
+    business: {
+      name: row.name,
+      slug: row.slug,
+      ...(row.logo_path ? { logoPath: row.logo_path } : {}),
+    },
     location: locations.rows.map((location) => ({
       locationId: location.id,
       slug: location.slug,

@@ -111,7 +111,7 @@ test('a Free page previews a Pro design with its mark, and cannot print, share o
   await page.waitForURL(/\/dashboard\/settings#pro$/);
   await expect(page.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
   await expect(page.getByText('Three changes to your handle')).toBeVisible();
-  await expect(page.locator('#pro')).toContainText('₦2,500 a month');
+  await expect(page.locator('#pro')).toContainText('₦5,000 a month');
   await page.goBack();
   await page.getByRole('radio', { name: /Heart modules/ }).check();
   // A screenshot of it leads to the TipMe home page, never to the person's page.

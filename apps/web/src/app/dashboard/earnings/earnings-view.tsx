@@ -419,7 +419,7 @@ export default function EarningsPage() {
         {download}
       </p>
       <p className="tm-hint">
-        What you received from confirmed tips, after TipMe’s 10%. Days and weeks
+        What you received from confirmed tips, after TipMe’s fee. Days and weeks
         are in Lagos time; weeks start on Monday.
       </p>
       {summary.data ? (

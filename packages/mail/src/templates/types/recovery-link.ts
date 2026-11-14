@@ -6,6 +6,7 @@ import { letter } from '../layout.js';
 export const recoveryLink = defineMailType({
   id: 'recovery_link',
   category: 'security',
+  waiting: true,
   sender: 'security',
   preference: null,
   schema: z.object({ token: z.string().min(16).max(128) }).strict(),

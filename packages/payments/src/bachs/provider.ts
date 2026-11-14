@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAYMENT_COUNTRY_CODES } from '@tipme/contracts';
 import {
   PlatformCheckoutUnavailableError,
   ProRefundRefusedError,
@@ -102,7 +103,8 @@ const accountLinkSchema = z.object({
 
 const accountInputSchema = z.object({
   contactEmail: z.email(),
-  country: z.string().regex(/^[A-Z]{2}$/),
+  // Only our payment partner's payout countries (the same list the API and Settings use).
+  country: z.enum(PAYMENT_COUNTRY_CODES),
   displayName: z.string().trim().min(1).max(255).optional(),
   entityType: z.enum(['individual', 'company']),
   idempotencyKey: z

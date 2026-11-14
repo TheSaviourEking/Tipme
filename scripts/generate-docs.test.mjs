@@ -63,6 +63,8 @@ const PUBLIC_REVIEWED = [
   // Paid Pro (ADR-0015): the monthly price, read only and cached publicly; nothing private.
   'GET /v1/pro/price',
   'GET /v1/profiles/{handle}',
+  // Campaign pages (Pro): a campaign's headline, description and cover; read-only, no session.
+  'GET /v1/profiles/{handle}/campaigns/{slug}',
   'POST /v1/profiles/{handle}/report',
   'GET /v1/qr-art/previews/{file}',
   'POST /v1/tip-intents',

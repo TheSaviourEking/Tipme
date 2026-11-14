@@ -29,7 +29,23 @@ export function addressHmac(sealing: MailSealing, address: string): string {
   return createHmac('sha256', sealing.hmacKey).update(normalised).digest('hex');
 }
 
-const PRIORITY = { security: 0, account: 1 } as const;
+/**
+ * Lower goes first (`claimDueMail`). 0 is mail someone is waiting for on screen; other security mail
+ * (staff alerts, notices) comes next, so a burst of alerts never holds back a sign-in code. The
+ * number is only ever sorted on, so mail queued under the old numbers is still sent.
+ * Announcements (news and service notices, `bulk`) go after everything else: 9, so it stays last if
+ * the others are renumbered.
+ */
+const BULK_PRIORITY = 9;
+function priorityOf(type: {
+  category: string;
+  waiting: boolean;
+  bulk: boolean;
+}): number {
+  if (type.bulk) return BULK_PRIORITY;
+  if (type.waiting) return 0;
+  return { security: 1, account: 2 }[type.category] ?? 3;
+}
 
 /**
  * Queues one email in the caller's transaction, so it exists exactly when the change that caused
@@ -68,7 +84,7 @@ export async function enqueueMail(
       toSealed: sealSecret(sealing.key, to),
       toHint: maskEmail(to),
       dataSealed: sealSecret(sealing.key, JSON.stringify(data)),
-      priority: PRIORITY[type.category as keyof typeof PRIORITY] ?? 2,
+      priority: priorityOf(type),
       pinnedProvider: input.pinnedProvider ?? null,
       nextAttemptAt: now,
       expiresAt: input.expiresAt ?? null,

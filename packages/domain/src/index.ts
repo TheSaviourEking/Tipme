@@ -8,5 +8,6 @@ export * from './totp.js';
 export * from './preview-ticket.js';
 export * from './take-back.js';
 export * from './business.js';
+export * from './business-plan.js';
 export * from './pro.js';
 export * from './earnings.js';

@@ -1,5 +1,8 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
-import { databaseBudgetSettingsShape } from '@tipme/contracts';
+import {
+  databaseBudgetSettingsShape,
+  featureSwitchSeedsFrom,
+} from '@tipme/contracts';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { checkPaymentSettings, paymentSettingsShape } from '@tipme/payments';
@@ -70,6 +73,16 @@ export const workerConfigSchema = z
           .map((d) => d.trim().toLowerCase())
           .filter(Boolean),
       ),
+    // Staff announcements (14 Nov 2026): emails queued per minute, at most, through Brevo. Brevo's
+    // API allows far more; its plan's daily quota and sending reputation are the real limits, and 60
+    // a minute keeps a send a slow trickle behind every other email. A code default, not a deploy
+    // setting (owner, 14 Nov 2026): an override for tests and emergencies only.
+    ANNOUNCEMENT_SENDS_PER_MINUTE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(600)
+      .default(60),
     // Links in emails point here.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
@@ -80,17 +93,6 @@ export const workerConfigSchema = z
     WEB_REVALIDATE_SECRET: z.string().min(32).optional(),
     // Provider, live switch and Bachs API keys: one definition with the API (no webhook secrets).
     ...paymentSettingsShape,
-    // Anonymous analytics. On unless set to false (owner's decision, 9 Nov 2026; D-07 stays open).
-    ANALYTICS_ENABLED: z
-      .enum(['true', 'false'])
-      .default('true')
-      .transform((value) => value === 'true'),
-    // Auto-renew on a saved naira card (plan Task 10; ruling 9): the `pro.renew` sweep charges only
-    // with this on. Off by default, until the sandbox proof (evidence E8 to E10).
-    PRO_AUTO_RENEW: z
-      .enum(['on', 'off'])
-      .default('off')
-      .transform((value) => value === 'on'),
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z
@@ -216,7 +218,10 @@ export const workerConfigSchema = z
       config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ??
       (isProductionCopy(config) ? 0n : PRETEND_REWARD_CASH_BUDGET_MINOR),
   }));
-export type WorkerConfig = z.infer<typeof workerConfigSchema>;
+export type WorkerConfig = z.infer<typeof workerConfigSchema> & {
+  /** As the API's: old switch variables, kept only to seed the switches on the first start. */
+  switchSeeds: Record<string, string>;
+};
 
 export const SERVICE_NAME = 'tipme-worker';
 
@@ -227,5 +232,8 @@ export function loadWorkerConfig(
   const present = Object.fromEntries(
     Object.entries(env).filter(([, value]) => value !== ''),
   );
-  return parseConfig(workerConfigSchema, present);
+  return {
+    ...parseConfig(workerConfigSchema, present),
+    switchSeeds: featureSwitchSeedsFrom(present),
+  };
 }

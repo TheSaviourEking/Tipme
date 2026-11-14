@@ -3,7 +3,7 @@ import { expectAccessible, signInWithEmail, signUpRecipient } from './helpers';
 
 // Paid Pro on the web (plan Tasks 7, 12, 13; ProPage and ProBadge boards). The e2e API runs with
 // PRO_BILLING_ENABLED on and the pretend provider; the "off" and "no price" states answer the
-// public price read here. The price always comes from the server (₦2,500 at launch).
+// public price read here. The price always comes from the server (₦5,000 since 12 Nov 2026; ₦2,500 at launch).
 
 const PHONE = { width: 390, height: 844 };
 const WIDE = { width: 1440, height: 900 };
@@ -36,7 +36,7 @@ async function answerPrice(
           contentType: 'application/json',
           body: JSON.stringify({
             data: {
-              amountMinor: '250000',
+              amountMinor: '500000',
               currency: 'NGN',
               interval: 'month',
               billingOn: answer.billingOn,
@@ -54,7 +54,7 @@ for (const size of [PHONE, WIDE]) {
     await answerPrice(page, { billingOn: false });
     await page.goto('/pro');
     const block = priceBlock(page);
-    await expect(block.getByText('₦2,500', { exact: true })).toBeVisible();
+    await expect(block.getByText('₦5,000', { exact: true })).toBeVisible();
     await expect(
       block
         .getByRole('status')
@@ -125,7 +125,7 @@ test('on a phone the buy key waits at the foot once the price block scrolls away
 }) => {
   await page.setViewportSize(PHONE);
   await page.goto('/pro');
-  const foot = page.getByRole('link', { name: 'Get Pro · ₦2,500 a month' });
+  const foot = page.getByRole('link', { name: 'Get Pro · ₦5,000 a month' });
   await expect(
     priceBlock(page).getByRole('link', { name: 'Get Pro' }),
   ).toBeVisible();
@@ -174,7 +174,11 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
   await expect(plan).toContainText('Your page is on the Free plan.');
-  await expect(plan).toContainText('₦2,500 a month');
+  // The owner's pricing, 12 Nov 2026: the plan sets TipMe's share of each new tip.
+  await expect(plan).toContainText(
+    'TipMe keeps 7% of each tip on Free. On Pro it keeps 5%.',
+  );
+  await expect(plan).toContainText('₦5,000 a month');
   await expect(plan).toContainText('card or bank transfer');
   await expect(plan).not.toContainText(PROVIDER);
   await expectAccessible(page);
@@ -189,8 +193,8 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
     await route.fulfill({ response, json: body });
   });
 
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
-  await expect(plan).toContainText('₦2,500 for one month of Pro');
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
+  await expect(plan).toContainText('₦5,000 for one month of Pro');
   await plan.getByRole('button', { name: 'Continue to payment' }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pro_/);
   await page.getByRole('button', { name: /Pay by bank transfer/ }).click();
@@ -207,12 +211,15 @@ test('Settings Plan: buy by bank transfer, confirmed by the partner, then one mo
     plan.getByRole('status').filter({ hasText: 'Payment confirmed' }),
   ).toBeVisible({ timeout: 20_000 });
   await expect(plan).toContainText(/You’re on Pro, paid until \d{1,2} \w{3}/);
+  await expect(plan).toContainText(
+    'TipMe keeps 5% of each tip while you’re on Pro, instead of 7% on Free.',
+  );
   await expect(plan.locator('.tm-pro-badge')).toBeVisible();
 
   // One month ahead, at most.
   await expect(plan).toContainText('You can pay one month ahead.');
   await plan
-    .getByRole('button', { name: 'Pay for next month · ₦2,500' })
+    .getByRole('button', { name: 'Pay for next month · ₦5,000' })
     .click();
   await plan.getByRole('button', { name: 'Continue to payment' }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pro_/);
@@ -298,7 +305,7 @@ test('a declined payment leaves the page on Free and says so', async ({
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   await plan.getByRole('button', { name: 'Continue to payment' }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pro_/);
   await page.getByRole('button', { name: /Decline/ }).click();
@@ -335,7 +342,7 @@ function purchase(status: string) {
   return {
     purchaseId: '6f1c7a52-1d1f-4a55-9a43-2f2b6c0e7d11',
     status,
-    amountMinor: '250000',
+    amountMinor: '500000',
     currency: 'NGN',
     checkoutUrl: null,
     expiresAt: null,
@@ -355,7 +362,7 @@ test('flags off: the plan offers no balance payment and no auto-renew', async ({
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   await expect(
     plan.getByRole('button', { name: 'Continue to payment' }),
   ).toBeVisible();
@@ -409,29 +416,29 @@ test('balance on: refusals are said plainly, then paying from the balance confir
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
   await expect(plan).toContainText('from your TipMe balance');
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   const fromBalance = plan.getByRole('button', {
-    name: 'Pay ₦2,500 from your balance',
+    name: 'Pay ₦5,000 from your balance',
   });
   await fromBalance.click();
   await expect(plan.getByRole('alert')).toContainText(
-    'Your balance is less than ₦2,500.',
+    'Your balance is less than ₦5,000.',
   );
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   await fromBalance.click();
   await expect(plan.getByRole('alert')).toContainText(
     'Our payment partner couldn’t take this from your balance. Nothing was taken.',
   );
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   await fromBalance.click();
   await expect(
     plan.getByRole('status').filter({ hasText: 'Payment confirmed' }),
   ).toBeVisible();
   await expect(plan).toContainText(/You’re on Pro, paid until \d{1,2} \w{3}/);
   expect(sent).toEqual([
-    { expectedAmountMinor: '250000', method: 'balance' },
-    { expectedAmountMinor: '250000', method: 'balance' },
-    { expectedAmountMinor: '250000', method: 'balance' },
+    { expectedAmountMinor: '500000', method: 'balance' },
+    { expectedAmountMinor: '500000', method: 'balance' },
+    { expectedAmountMinor: '500000', method: 'balance' },
   ]);
   await expect(plan).not.toContainText(PROVIDER);
   expect(await fits(page)).toBe(true);
@@ -461,9 +468,9 @@ test('balance on: an unanswered balance payment says it is being checked until i
   );
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   await plan
-    .getByRole('button', { name: 'Pay ₦2,500 from your balance' })
+    .getByRole('button', { name: 'Pay ₦5,000 from your balance' })
     .click();
   await expect(
     plan.getByRole('status').filter({ hasText: 'We’re checking this payment' }),
@@ -489,7 +496,7 @@ test('auto-renew available: the tick sends autoRenew, and a missing email is sai
   });
   await page.goto('/dashboard/settings#plan');
   const plan = page.locator('#pro');
-  await plan.getByRole('button', { name: 'Get Pro · ₦2,500 a month' }).click();
+  await plan.getByRole('button', { name: 'Get Pro · ₦5,000 a month' }).click();
   const tick = plan.getByRole('checkbox', {
     name: 'Renew automatically on this card',
   });
@@ -499,7 +506,7 @@ test('auto-renew available: the tick sends autoRenew, and a missing email is sai
   await expect(plan.getByRole('alert')).toContainText(
     'To renew automatically, add an email address to your account first.',
   );
-  expect(sent).toEqual([{ expectedAmountMinor: '250000', autoRenew: true }]);
+  expect(sent).toEqual([{ expectedAmountMinor: '500000', autoRenew: true }]);
   await expectAccessible(page);
 });
 

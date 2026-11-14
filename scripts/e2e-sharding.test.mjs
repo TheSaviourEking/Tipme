@@ -53,11 +53,35 @@ test('CI gives @alone its own job in the matrix, not behind a shard', () => {
     new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z-]+:\\n)`).exec(
       ci,
     )?.[1] ?? '';
-  assert.match(job('e2e'), /shard: \[1, 2, 3, 4, 5, 6, alone\]/);
+  assert.match(job('e2e'), /shard: \[1, 2, 3, 4, 5, 6, alone, studio\]/);
+  // The Page Studio render property (~4 minutes, @studio-lab) has a shard of its own, so it never
+  // lands in one of the six numbered shards' 15 minutes.
+  assert.match(
+    job('e2e'),
+    /--shard=\$\{\{ matrix\.shard \}\}\/6 --grep-invert @studio-lab/,
+  );
+  assert.match(
+    job('e2e'),
+    /matrix\.shard != 'alone' && matrix\.shard != 'studio'/,
+  );
+  assert.match(
+    job('e2e'),
+    /test:e2e tests\/e2e\/studio-lab\.spec\.ts --grep @studio-lab/,
+  );
   // scripts/test-integration.mjs only takes numbered shards.
   assert.match(job('integration'), /shard: \[1, 2, 3\]/);
   assert.match(ci, /fail-fast: false/);
   assert.match(ci, /test:e2e --alone/);
+});
+
+test('@studio-lab picks exactly the render property; --grep-invert leaves everything else', () => {
+  const whole = listed([]);
+  const studio = listed(['--grep', '@studio-lab']);
+  const rest = listed(['--grep-invert', '@studio-lab']);
+  assert.ok(studio.length > 0);
+  for (const line of studio)
+    assert.match(line, /studio-lab\.spec\.ts.*@studio-lab/);
+  assert.deepEqual([...studio, ...rest].sort(), [...whole].sort());
 });
 
 test('test:e2e runs both stages through the stage script', () => {

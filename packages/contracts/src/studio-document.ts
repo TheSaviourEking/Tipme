@@ -148,7 +148,7 @@ export interface StudioDocument {
   rows: StudioRow[];
 }
 
-/** What the public page receives (Task 7 adds it to PublicProfile behind PAGE_STUDIO_ENABLED). */
+/** What the public page receives (Task 7 adds it to PublicProfile behind the page_studio switch). */
 export interface PublicStudio {
   document: StudioDocument;
   palette: StudioPalette;

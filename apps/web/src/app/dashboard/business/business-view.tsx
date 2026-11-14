@@ -8,6 +8,10 @@ import type {
 } from '@tipme/contracts';
 import { EmptySlip, Skeleton } from '@tipme/ui';
 import { BusinessLogoTile } from '@/components/business/business-logo-tile';
+import { useAccount } from '@/components/account/account-context';
+import { OwnPageCard } from '@/components/business/own-page-card';
+import { VerifiedMoment } from '@/components/business/verified-moment';
+import { WaitingSteps } from '@/components/business/waiting-steps';
 import { useManagedLogo } from '@/lib/business/logo';
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { apiFetch } from '@/lib/session-client';
@@ -64,6 +68,10 @@ export function BusinessView() {
   }, [chosen, revision]);
   const detail = loaded?.id === chosen ? loaded.detail : null;
   const logo = useManagedLogo(detail);
+  // Business sign-up (Phase D): what happens next while waiting, the verified moment, and a page
+  // of their own for a login with none. Off: today's page exactly.
+  const { account, flags, accountOnly } = useAccount();
+  const signup = flags?.businessSignup === true;
 
   if (roles === undefined)
     return (
@@ -132,22 +140,34 @@ export function BusinessView() {
           <p>When you do, its locations, team and codes show here.</p>
         </EmptySlip>
       ) : detail ? (
-        BUSINESS_SECTIONS.filter(
-          (section) => section.needs !== 'owner' || detail.you.role === 'owner',
-        ).map(({ id, title, Card }) => (
-          <section
-            key={id}
-            id={id}
-            aria-labelledby={`${id}-title`}
-            className="business-section"
-          >
-            <h2 id={`${id}-title`}>{title}</h2>
-            <Card
-              business={detail}
-              onChange={(next) => setLoaded({ id: next.id, detail: next })}
-            />
-          </section>
-        ))
+        <>
+          {signup && detail.you.celebrate && (
+            <VerifiedMoment business={detail} />
+          )}
+          {signup && detail.status === 'pending' && (
+            <WaitingSteps business={detail} email={account?.email ?? null} />
+          )}
+          {signup && accountOnly && detail.you.role === 'owner' && (
+            <OwnPageCard businessName={detail.name} />
+          )}
+          {BUSINESS_SECTIONS.filter(
+            (section) =>
+              section.needs !== 'owner' || detail.you.role === 'owner',
+          ).map(({ id, title, Card }) => (
+            <section
+              key={id}
+              id={id}
+              aria-labelledby={`${id}-title`}
+              className="business-section"
+            >
+              <h2 id={`${id}-title`}>{title}</h2>
+              <Card
+                business={detail}
+                onChange={(next) => setLoaded({ id: next.id, detail: next })}
+              />
+            </section>
+          ))}
+        </>
       ) : (
         <EmptySlip title="Nothing to set up here yet.">
           <p>Your business’s locations, team and codes will show here.</p>

@@ -553,21 +553,24 @@ export default function OpsPagesPage() {
         />
       )}
       {page?.userId && can(access, 'recoveries.manage') && (
-        <MoveSignInEmail key={page.userId} userId={page.userId} />
+        <MoveSignInEmail key={`email-${page.userId}`} userId={page.userId} />
       )}
       {page && can(access, 'payouts.resolve') && (
         <FreezeWithdrawals
-          key={page.profileId}
+          key={`freeze-${page.profileId}`}
           profileId={page.profileId}
           userId={page.userId}
           mayEndSessions={can(access, 'recoveries.manage')}
         />
       )}
       {page && can(access, 'usernames.manage') && (
-        <UsernameCard key={page.handle} handle={page.handle} />
+        <UsernameCard key={`username-${page.handle}`} handle={page.handle} />
       )}
       {page && can(access, 'fees.manage') && (
-        <PagePricing key={page.profileId} profileId={page.profileId} />
+        <PagePricing
+          key={`pricing-${page.profileId}`}
+          profileId={page.profileId}
+        />
       )}
     </div>
   );

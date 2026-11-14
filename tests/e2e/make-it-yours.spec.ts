@@ -26,7 +26,7 @@ test('Make it yours: a Free page writes its thank-you line and sees it in the re
   await field.fill(LINE);
   // The preview follows the edit before anything is saved.
   await expect(receiptPreview(page).getByRole('figure')).toHaveText(LINE);
-  await expect(receiptPreview(page)).toContainText('got your thanks.');
+  await expect(receiptPreview(page)).toContainText('got your tip.');
   await expect(
     page.getByText(`${Array.from(LINE).length} of 140`),
   ).toBeVisible();

@@ -25,9 +25,11 @@ import { DatabaseProvider } from '../infra/database.js';
 import type { PhotoStore } from '@tipme/database';
 import {
   imageVersion,
+  pngVersion,
   readUpload,
   reencodeTo,
   sendImage,
+  toSharePng,
   withSlot,
 } from './image-upload.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
@@ -92,7 +94,10 @@ export class AvatarController {
     return { data: updated };
   }
 
-  /** Public, but only for live pages. */
+  /**
+   * Public, but only for live pages. `<n>.webp` is the photo; `<n>.png` the same photo as a small
+   * PNG for the web's share cards (next/og cannot draw WebP), under the same rules.
+   */
   @Get('avatars/:profileId/:file')
   @Header('X-Content-Type-Options', 'nosniff')
   async serve(
@@ -100,6 +105,16 @@ export class AvatarController {
     @Param('file') file: string,
     @Res() response: Response,
   ): Promise<void> {
+    const png = pngVersion(profileId, file);
+    if (png !== null) {
+      const webp = await avatarFor(
+        this.database.db,
+        { profileId, version: png },
+        this.photos ?? undefined,
+      );
+      sendImage(response, webp && (await toSharePng(webp)), 'image/png');
+      return;
+    }
     const version = imageVersion(profileId, file);
     sendImage(
       response,

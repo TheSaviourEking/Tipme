@@ -9,6 +9,7 @@ import {
   users,
 } from '../schema.js';
 import { mailOwner } from './account-mail.js';
+import { personOf } from './owner.js';
 import { guarded, OperationError } from './errors.js';
 import type { MailSealing } from './mail-queue.js';
 import {
@@ -207,9 +208,9 @@ export async function renewalFailedIn(
   await tx
     .update(proAutoRenew)
     .set({ failedPeriodId: period.id, updatedAt: now })
-    .where(eq(proAutoRenew.profileId, row.profileId));
+    .where(eq(proAutoRenew.profileId, personOf(row.profileId)));
   await mailOwner(tx, sealing, {
-    profileId: row.profileId,
+    profileId: personOf(row.profileId),
     type: 'pro_renewal_failed',
     data: {
       endDate: lagosDateWords(period.endsAt),
@@ -366,7 +367,7 @@ export async function renewProAutomatically(
     let purchase: PurchaseRow;
     try {
       ({ purchase } = await requestProPurchase(db, {
-        profileId: row.profileId,
+        subject: { profileId: personOf(row.profileId) },
         method: 'saved_card',
         expectedAmountMinor: price.amountMinor,
         // One per month: a second run finds the purchase and stops (renews_period_id is unique).
