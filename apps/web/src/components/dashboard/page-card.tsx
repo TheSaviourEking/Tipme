@@ -5,6 +5,8 @@ import type { MyProfile } from '@tipme/contracts';
 import { ProBadge, Surface } from '@tipme/ui';
 import { dateOf } from '@/lib/lagos-time';
 import { PLAN_HREF, readMyPro } from '@/lib/pro-buy';
+import { AvatarImage } from '@/components/avatar';
+import { hasAvatar } from '@/lib/avatar-source';
 
 const initialsFor = (name: string) =>
   name
@@ -46,7 +48,18 @@ export function PageCard({ profile }: { profile: MyProfile }) {
     <Surface material="raised" className="page-card">
       <div className="page-card__head">
         <span className="page-card__monogram" aria-hidden="true">
-          {initialsFor(profile.displayName)}
+          {/* Their photo when they have one; the initials only when not. */}
+          {hasAvatar(profile.avatarPath) ? (
+            <AvatarImage
+              src={profile.avatarPath}
+              name={profile.displayName}
+              width={52}
+              height={52}
+              sizes="52px"
+            />
+          ) : (
+            initialsFor(profile.displayName)
+          )}
         </span>
         <div>
           <p className="page-card__name">

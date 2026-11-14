@@ -119,6 +119,28 @@ test('an owner sets a logo: a 512×512 WebP with no metadata, on the public loca
   for (const leak of ['SecretCam', 'Funke Home Address'])
     assert.equal(bytes.includes(Buffer.from(leak)), false, leak);
 
+  // The web app draws the logo on a printed sign's canvas and downloads it: the browser loads it
+  // with CORS (crossOrigin "anonymous"), so the API allows the web app's origin, never credentials,
+  // and no other origin.
+  const cors = await fetch(`${stack.api}${detail.logoPath}`, {
+    headers: { origin: WEB },
+  });
+  assert.equal(cors.status, 200);
+  assert.equal(cors.headers.get('access-control-allow-origin'), WEB);
+  assert.equal(cors.headers.get('access-control-allow-credentials'), null);
+  const elsewhere = await fetch(`${stack.api}${detail.logoPath}`, {
+    headers: { origin: 'https://elsewhere.example' },
+  });
+  assert.equal(elsewhere.headers.get('access-control-allow-origin'), null);
+
+  // The codes a manager prints carry the logo, so the sign's tile shows it.
+  const codes = await fetch(
+    `${stack.api}/v1/me/businesses/${businessId}/codes`,
+    { headers: browserHeaders(ada.cookie) },
+  );
+  assert.equal(codes.status, 200);
+  assert.equal((await codes.json()).data.business.logoPath, detail.logoPath);
+
   const page = (await (await fetch(`${stack.api}/v1/b/${slug}/vi`)).json())
     .data;
   assert.equal(page.business.logoPath, detail.logoPath);

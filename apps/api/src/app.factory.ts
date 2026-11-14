@@ -30,6 +30,9 @@ const CROSS_ORIGIN_PATHS = [
   '/v1/b/',
   // Paid Pro's public price, read by the /pro page in the browser (ADR-0015): never credentialed.
   '/v1/pro/',
+  // A verified business's public logo, drawn on a printed sign's canvas: the browser loads it with
+  // CORS so the canvas can still be downloaded. Public bytes, GET only, never credentialed.
+  '/v1/business-logos/',
 ];
 // Recipient routes carry the session cookie, so the browser must send credentials.
 const CREDENTIALED_PATHS = [
