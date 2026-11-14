@@ -53,7 +53,11 @@ interface Kept {
 
 /** Per database handle: the API and the worker each have their own (both in one test process). */
 const kept = new WeakMap<object, Kept>();
-const pending = new WeakMap<object, Promise<Values>>();
+/** The read in flight per handle, and the generation it started in: only that generation shares it. */
+const pending = new WeakMap<
+  object,
+  { generation: number; read: Promise<Values> }
+>();
 /** Bumped by every change this process makes or hears of; older reads are then stale. */
 let generation = 0;
 /**
@@ -109,13 +113,22 @@ export async function featureOn(
     now - known.at < FEATURE_SWITCH_CACHE_MS
   )
     return known.values.get(key) ?? fallbackFor(key);
-  let read = pending.get(db);
+  // A read that started before the last change may have read the old row: a caller after the change
+  // starts its own (merge train 2: under load, account-api once saw a switch it had just turned on as off).
+  const inFlight = pending.get(db);
+  let read =
+    inFlight && inFlight.generation === generation ? inFlight.read : undefined;
   if (!read) {
     const startedAt = generation;
+    const keepIfNewest = (entry: Kept): void => {
+      const current = kept.get(db);
+      if (!current || current.generation <= entry.generation)
+        kept.set(db, entry);
+    };
     read = (async () => {
       try {
         const values = await readAll(db);
-        kept.set(db, { values, at: now, generation: startedAt });
+        keepIfNewest({ values, at: now, generation: startedAt });
         return values;
       } catch (error) {
         for (const listener of errorListeners) listener(error);
@@ -128,17 +141,17 @@ export async function featureOn(
               FEATURE_SWITCH_CATALOGUE[k].default,
             ]),
           );
-        kept.set(db, {
+        keepIfNewest({
           values,
           at: now - FEATURE_SWITCH_CACHE_MS + FAILED_READ_RETRY_MS,
           generation: startedAt,
         });
         return values;
       } finally {
-        pending.delete(db);
+        if (pending.get(db)?.read === read) pending.delete(db);
       }
     })();
-    pending.set(db, read);
+    pending.set(db, { generation: startedAt, read });
   }
   const values = await read;
   return values.get(key) ?? fallbackFor(key);
