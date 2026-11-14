@@ -71,6 +71,9 @@ test(
       'LIVE_HEARTBEAT_MS',
       // The mock provider's secret: production never runs the mock provider.
       'MOCK_PROVIDER_WEBHOOK_SECRET',
+      // A tunable with a code default (owner, 14 Nov 2026, #216: deploy settings are secrets and
+      // addresses only); still an override in the schema for an emergency.
+      'ANNOUNCEMENT_SENDS_PER_MINUTE',
     ]);
     const services = {
       api: ['api-blue', 'api-green'],
@@ -337,4 +340,36 @@ test('every app service notices a dead connection soon', { skip }, () => {
       '8',
       name,
     );
+});
+
+// The owner, 14 Nov 2026 (#216): keep deploy settings to a minimum. Secrets and the sender stay;
+// tunables and dev toggles use code defaults (still overridable in the config schemas).
+test('announcement email: secrets and the sender are deploy settings, tunables are not', () => {
+  const files = [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+    'deploy/production.env.example',
+    'deploy/staging.env.example',
+  ].map((path) => [
+    path,
+    readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'),
+  ]);
+  for (const [path, text] of files) {
+    for (const tunable of [
+      'ANNOUNCEMENT_SENDS_PER_MINUTE',
+      'BREVO_SANDBOX',
+      'BREVO_API_BASE',
+    ])
+      assert.doesNotMatch(
+        text,
+        new RegExp(`\\b${tunable}\\b`),
+        `${path}: ${tunable}`,
+      );
+    for (const setting of [
+      'BREVO_API_KEY',
+      'BREVO_WEBHOOK_TOKEN',
+      'ANNOUNCEMENT_FROM_ADDRESS',
+    ])
+      assert.match(text, new RegExp(`\\b${setting}\\b`), `${path}: ${setting}`);
+  }
 });

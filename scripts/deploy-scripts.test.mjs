@@ -288,7 +288,13 @@ test('staging passes every setting the API and worker read (no silent defaults)'
   };
   // Only for tests: never set on a real copy.
   // LIVE_HEARTBEAT_MS: the live stream's heartbeat; tests shorten it, copies keep 20 s.
-  const testOnly = new Set(['TRACE_PROBE_TEST_DELAY_MS', 'LIVE_HEARTBEAT_MS']);
+  // ANNOUNCEMENT_SENDS_PER_MINUTE: a tunable with a code default (owner, 14 Nov 2026, #216: keep
+  // deploy settings to secrets and addresses); an override stays possible in an emergency.
+  const testOnly = new Set([
+    'TRACE_PROBE_TEST_DELAY_MS',
+    'LIVE_HEARTBEAT_MS',
+    'ANNOUNCEMENT_SENDS_PER_MINUTE',
+  ]);
   for (const service of ['api', 'worker']) {
     const config = readFileSync(
       new URL(`../apps/${service}/src/config.ts`, import.meta.url),

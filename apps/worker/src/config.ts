@@ -70,9 +70,10 @@ export const workerConfigSchema = z
           .map((d) => d.trim().toLowerCase())
           .filter(Boolean),
       ),
-    // Staff announcements (14 Nov 2026): emails queued per minute, at most. ZeptoMail publishes no
-    // per-minute limit, only a daily limit per Mail Agent (shared with sign-in codes) and a ban on
-    // bulk sending; 60 a minute keeps an announcement a slow trickle behind every other email.
+    // Staff announcements (14 Nov 2026): emails queued per minute, at most, through Brevo. Brevo's
+    // API allows far more; its plan's daily quota and sending reputation are the real limits, and 60
+    // a minute keeps a send a slow trickle behind every other email. A code default, not a deploy
+    // setting (owner, 14 Nov 2026): an override for tests and emergencies only.
     ANNOUNCEMENT_SENDS_PER_MINUTE: z.coerce
       .number()
       .int()

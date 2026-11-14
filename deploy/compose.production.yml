@@ -124,7 +124,6 @@ x-api-env: &api-env
   # Announcements only (Brevo): optional; unset, announcements cannot be sent.
   BREVO_API_KEY: ${BREVO_API_KEY:-}
   BREVO_WEBHOOK_TOKEN: ${BREVO_WEBHOOK_TOKEN:-}
-  BREVO_SANDBOX: ${BREVO_SANDBOX:-}
   ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
   SES_REGION: ${SES_REGION:-eu-north-1}
   SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
@@ -207,7 +206,6 @@ x-worker: &worker
     QUEUE_PREFIX: ${QUEUE_PREFIX:-tipme}
     PAYMENT_PROVIDER: ${PAYMENT_PROVIDER:?set PAYMENT_PROVIDER (bachs-live in production)}
     PRO_AUTO_RENEW: ${PRO_AUTO_RENEW:-off}
-    ANNOUNCEMENT_SENDS_PER_MINUTE: ${ANNOUNCEMENT_SENDS_PER_MINUTE:-60}
     PAYMENTS_LIVE_ENABLED: ${PAYMENTS_LIVE_ENABLED:-false}
     # The worker reads statuses only: the live key, no webhook secrets. Config refuses bachs-live without it.
     BACHS_LIVE_API_KEY: ${BACHS_LIVE_API_KEY:-}
@@ -220,7 +218,6 @@ x-worker: &worker
     # Announcements only (Brevo): optional; unset, announcements cannot be sent.
     BREVO_API_KEY: ${BREVO_API_KEY:-}
     BREVO_WEBHOOK_TOKEN: ${BREVO_WEBHOOK_TOKEN:-}
-    BREVO_SANDBOX: ${BREVO_SANDBOX:-}
     ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
     SES_REGION: ${SES_REGION:-eu-north-1}
     SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}

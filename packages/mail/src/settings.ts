@@ -37,6 +37,7 @@ export const mailSettingsShape = {
   // Announcements only (owner, 14 Nov 2026): Brevo, never the provider above. Optional: without
   // them, announcements can't be sent in production ("Announcement email isn't set up").
   BREVO_API_KEY: z.string().min(8).optional(),
+  // Code defaults, not deploy settings (owner, 14 Nov 2026): overrides for tests and emergencies.
   BREVO_API_BASE: z
     .url({ protocol: /^https$/ })
     .default('https://api.brevo.com'),

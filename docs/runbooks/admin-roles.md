@@ -145,12 +145,18 @@ For news that concerns many people at once. It needs `announcements.send`; sendi
 1. In **Announcements**, choose **New announcement** and the kind. Write the subject, the preview line (shown after the subject in most inboxes) and the text: plain paragraphs with a blank line between them, `**two stars**` around words for bold, and lines starting `- ` for bullets. One button is optional: a TipMe path such as `/pro`, or an `https` link. Never name the payment partner ("our payment partner"), never imply a regulator approved TipMe, and say "tips" for money. The screen refuses those words.
 2. **Save draft**, then **Preview**: the real email, light and dark side by side. **Send a test to me** emails it to your own staff address now.
 3. **Ask to send…** with a reason. The screen shows how many people it reaches now; the approver sees the kind, the subject and that number in Approvals. Editing the draft afterwards makes the request stale, so ask again.
-4. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker, default 60, 1 to 600), a sixth of it every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email.
+4. Once approved, the audience is counted again (the N), and the worker queues the emails at a steady rate: 60 a minute, 10 every 10 seconds. The screen shows "Sending: x of N" and then "Sent: x of N queued". Announcements wait behind every other email.
 5. **Stop sending…** with a reason stops it at once: nothing more is queued. Emails already queued still go.
 
 The same person is never mailed twice for one announcement, even if the worker restarts. Every step is in the audit log (`announcement.created`, `edited`, `test_sent`, `send_started`, `cancelled`, `sent`, and the approval's own rows).
 
-**Which provider.** Announcements go through Brevo only, never ZeptoMail (which sends sign-in codes and forbids bulk mail), and never fall back to it: with no Brevo set up, the screen says "Announcement email isn't set up" and nothing can be tested or sent. Settings (API and worker): `BREVO_API_KEY` and `ANNOUNCEMENT_FROM_ADDRESS` together, `BREVO_WEBHOOK_TOKEN` for bounce reports, and `BREVO_SANDBOX=on` to have Brevo check requests without sending (staging). Off production, with no key, announcements go to the pretend inbox.
+**Which provider.** Announcements go through Brevo only, never ZeptoMail (which sends sign-in codes and forbids bulk mail), and never fall back to it: with no Brevo set up, the screen says "Announcement email isn't set up" and nothing can be tested or sent. Deploy settings (API and worker): `BREVO_API_KEY` and `ANNOUNCEMENT_FROM_ADDRESS` together, and `BREVO_WEBHOOK_TOKEN` for bounce reports. Off production, with no key, announcements go to the pretend inbox.
+
+**Code defaults, not deploy settings** (owner, 14 Nov 2026: deploy settings are secrets and addresses only). They are absent from the env examples and compose files, and stay overridable in the config schemas for tests and emergencies, by adding them to that copy's env file and its compose `environment` by hand:
+
+- `ANNOUNCEMENT_SENDS_PER_MINUTE` (worker): 60; 1 to 600. Lower it if Brevo or a mailbox provider pushes back.
+- `BREVO_SANDBOX` (API and worker): off. `on` makes Brevo check each request and send nothing.
+- `BREVO_API_BASE` (API and worker): `https://api.brevo.com`.
 
 **Setting up Brevo (once):**
 
