@@ -78,3 +78,31 @@ test('the user’s fee is booked against their own balance, never as TipMe’s e
     'provider_fee_expense',
   );
 });
+
+test('a partner fee under what was taken is credited back to the same payable (owner, 14 Nov 2026)', async () => {
+  const { buildUserPayoutFeeRefundPosting } = await import('../dist/index.js');
+  const person = buildUserPayoutFeeRefundPosting({
+    feeMinor: 2_000n,
+    profileId: 'p1',
+  });
+  assert.deepEqual(
+    person.map((l) => [
+      l.account,
+      l.side,
+      l.amountMinor,
+      l.profileId ?? l.businessId ?? null,
+    ]),
+    [
+      ['recipient_payable', 'credit', 2_000n, 'p1'],
+      ['provider_clearing', 'debit', 2_000n, null],
+    ],
+  );
+  const business = buildUserPayoutFeeRefundPosting({
+    feeMinor: 2_000n,
+    businessId: 'b1',
+  });
+  assert.equal(business[0].account, 'business_payable');
+  assert.throws(() =>
+    buildUserPayoutFeeRefundPosting({ feeMinor: 0n, profileId: 'p1' }),
+  );
+});

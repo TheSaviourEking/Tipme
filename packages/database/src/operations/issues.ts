@@ -88,6 +88,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_unexpected: 'money',
   payout_unresolved: 'money',
   payout_fee_short: 'money',
+  payout_fee_adjusted: 'info',
   payout_held: 'money',
   account_takeover_reported: 'money',
   provider_in_debt: 'money',
@@ -145,6 +146,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
     case 'payout_unresolved':
       return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
+    case 'payout_fee_adjusted':
+      return `The provider charged a different fee for a withdrawal for ${page} than the one taken from the amount. The difference was settled on their balance (more taken, or less credited back); TipMe paid nothing. For information.`;
     case 'payout_fee_short':
       return `The provider charged more for a withdrawal for ${page} than the fee TipMe charged them or covered, so their balance there is short by the difference. TipMe absorbs it: top it up.`;
     case 'payout_held':

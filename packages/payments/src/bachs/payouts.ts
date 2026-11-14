@@ -17,9 +17,12 @@ import {
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
 
-// Bachs charges this flat fee on top of an NGN payout and offers no same-currency quote:
-// https://docs.bachs.io/guides/payouts/payout-using-api.md ("The fee is charged on top").
-const NGN_PAYOUT_FEE_MINOR = 5000n;
+// Bachs charges a flat fee on top of an NGN payout, and nothing states it before the payout exists:
+// its payout quote "carries no fee" (docs /api-reference/payouts/create-payout-quote), and the fee
+// appears only on the created payout (fee, total_debited). The default is "NGN 50 flat"
+// (docs /for-you/fees), though "account-specific fees can differ", so this one value is what the
+// user is shown and charged up front; any difference is settled on their balance once known.
+import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
 
 // Shown on the recipient's bank statement. Without it Bachs sends its own name; keep it under
 // 15 characters: https://docs.bachs.io/guides/payouts/payout-using-api.md

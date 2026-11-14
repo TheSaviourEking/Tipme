@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto';
 import {
-  CURRENT_FEE_POLICY,
+  belowWithdrawalMinimum,
   buildPayoutFeePosting,
   buildPayoutPosting,
   buildUserPayoutFeePosting,
+  buildUserPayoutFeeRefundPosting,
   userPaidWithdrawal,
   canTransition,
   formatMinor,
@@ -647,11 +648,9 @@ async function noteActualFee(
   now: Date,
 ): Promise<void> {
   await tx.update(payouts).set({ feeMinor }).where(eq(payouts.id, payout.id));
-  if (payout.feePayer === 'user') {
-    if (feeMinor > payout.userFeeMinor)
-      await openFeeShortIssue(tx, payout.id, now);
-    return;
-  }
+  // The user pays the partner's whole fee (owner, 14 Nov 2026): any difference is settled on
+  // their balance when the payout is paid, never here.
+  if (payout.feePayer === 'user') return;
   const [credit] = payout.feeTransferReference
     ? await tx
         .select({ amountMinor: providerFeeCredits.amountMinor })
@@ -918,18 +917,36 @@ async function recordPayoutOutcomeIn(
             ...ownerOf(payout),
           }),
         });
-      // Anything the partner charged above that is TipMe's (Claude's default ruling), with an alert.
-      const extra = feeMinor - payout.userFeeMinor;
-      if (payout.accountReference && extra > 0n) {
+      // The user pays the partner's whole fee, whatever it is (owner, 14 Nov 2026). The partner
+      // only says it once the payout exists, so ₦50 was taken from the amount; more is a fee line
+      // on the same payable (below zero if it must be, recorded, and paid back by the next tips),
+      // less is credited back. Staff are told, for information: TipMe pays nothing.
+      const difference = feeMinor - payout.userFeeMinor;
+      if (difference !== 0n) {
+        const owner = ownerOf(payout);
         await postLedgerTransaction(tx, {
           operationType: 'payout',
-          operationKey: `payout-fee.${payout.id}`,
+          operationKey:
+            difference > 0n
+              ? `payout-fee-extra.${payout.id}`
+              : `payout-fee-credit.${payout.id}`,
           currency: payout.currency,
           payoutId: payout.id,
           traceId,
-          lines: buildPayoutFeePosting({ feeMinor: extra }),
+          lines:
+            difference > 0n
+              ? buildUserPayoutFeePosting({ feeMinor: difference, ...owner })
+              : buildUserPayoutFeeRefundPosting({
+                  feeMinor: -difference,
+                  ...owner,
+                }),
         });
-        await openFeeShortIssue(tx, payout.id, now);
+        await openIssue(tx, {
+          dedupeKey: `payout_fee_adjusted.${payout.id}`,
+          kind: 'payout_fee_adjusted',
+          subject: { payoutId: payout.id, ...owner },
+          now,
+        });
       }
     } else if (payout.accountReference && feeMinor > 0n) {
       // Requested under the old rule (or paid by an unused top-up): the fee is TipMe's cost; the
@@ -1759,12 +1776,9 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
-      // they cannot withdraw, or an account they cannot close.
-      if (
-        input.amountMinor < CURRENT_FEE_POLICY.minWithdrawalMinor &&
-        input.amountMinor !== withdrawable
-      )
+      // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), except to take all that
+      // can be taken: nobody is left with money they cannot withdraw, or an account they cannot close.
+      if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
       // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and
       // nothing can be sent when the amount is not more than the fee.

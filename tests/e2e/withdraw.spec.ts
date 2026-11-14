@@ -68,7 +68,7 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
   await expect(meter(page)).toContainText('Ready to withdraw ₦1,860');
   // Owner, 12 Nov 2026: the user pays the transfer fee, from the amount.
   await expect(meter(page)).toContainText(
-    'The ₦50 transfer fee comes off the amount you withdraw.',
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
   const chip = meter(page).locator('.withdraw__chip');
   await expect(chip).toContainText(/to .+ ••\d{4}/);

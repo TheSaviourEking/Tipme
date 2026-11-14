@@ -1,5 +1,5 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
-import { CURRENT_FEE_POLICY } from '@tipme/domain';
+import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import type { LampTone } from '@tipme/ui';
 import { formatNaira } from './demo-amount.ts';
 
@@ -204,8 +204,15 @@ export function withdrawFee(
   if (quote?.state !== 'ready' || quote.feeMinor === '0') return null;
   return quote.feePaidBy === 'tipme'
     ? `TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee this time.`
-    : `The ${formatNaira(quote.feeMinor)} transfer fee comes off the amount you withdraw.`;
+    : `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
 }
+
+/**
+ * Users pay the partner's whole fee (owner, 14 Nov 2026). The partner only states it once the payout
+ * exists, so the quoted fee is taken from the amount and any difference is settled afterwards.
+ */
+export const FEE_DIFFERENCE_NOTE =
+  'If our payment partner charges a different fee, the difference is taken from or added back to your balance.';
 
 /**
  * The summary for an amount chosen: the fee, who pays it, and what arrives (withdraw ₦10,000, receive
@@ -286,7 +293,7 @@ export function withdrawRefusal(code: string | undefined): {
     };
   if (code === 'WITHDRAWAL_TOO_SMALL')
     return {
-      message: `The smallest withdrawal is ${formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}.`,
+      message: `The smallest withdrawal is ${formatNaira(withdrawalMinimumMinor())}.`,
       reload: true,
     };
   if (code === 'WITHDRAWAL_BELOW_FEE')
@@ -356,11 +363,11 @@ export function withdrawableNow(input: {
 }
 
 /** What the field says for an amount below the smallest withdrawal (WithdrawRedesign §2). */
-export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or your whole balance if it’s less.`;
+export const TOO_SMALL = `Too small. The smallest withdrawal is ${formatNaira(withdrawalMinimumMinor())}, or your whole balance if it’s less.`;
 
 /**
  * The amount is below the smallest withdrawal and isn't the whole of what can go now
- * (CURRENT_FEE_POLICY): the server would refuse it, so the field says so before anything is sent.
+ * (belowWithdrawalMinimum: the smallest tip, owner 14 Nov 2026): the server would refuse it, so the field says so before anything is sent.
  */
 export function belowMinimum(
   chosen: bigint | null,
@@ -369,7 +376,6 @@ export function belowMinimum(
   return (
     chosen !== null &&
     chosen > BigInt(0) &&
-    chosen < CURRENT_FEE_POLICY.minWithdrawalMinor &&
-    chosen !== withdrawable
+    belowWithdrawalMinimum(chosen, withdrawable)
   );
 }

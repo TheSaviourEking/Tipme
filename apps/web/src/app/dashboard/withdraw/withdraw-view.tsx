@@ -7,7 +7,7 @@ import type {
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
-import { CURRENT_FEE_POLICY } from '@tipme/domain';
+import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
   Button,
   InputField,
@@ -37,6 +37,7 @@ import {
   withdrawableNow,
   withdrawFee,
   withdrawSummary,
+  FEE_DIFFERENCE_NOTE,
   withdrawLamp,
   withdrawRefusal,
   withdrawState,
@@ -341,14 +342,13 @@ export default function WithdrawPage({
         next: result.data.nextCursor,
       });
   };
-  const smallest = formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor);
+  const smallest = formatNaira(withdrawalMinimumMinor());
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
   const sendable =
     chosen !== null &&
     chosen <= withdrawable &&
-    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
-      chosen === withdrawable);
+    !belowWithdrawalMinimum(chosen, withdrawable);
   // Users pay the transfer fee from the amount (owner, 12 Nov 2026): what arrives is the amount
   // less the fee, and the whole amount leaves the balance. Only an amount that sends something
   // gets figures.
@@ -542,6 +542,9 @@ export default function WithdrawPage({
                 >
                   {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
                 </Button>
+                {figures?.feePaidBy === 'user' && (
+                  <p className="tm-hint">{FEE_DIFFERENCE_NOTE}</p>
+                )}
                 <p className="tm-hint">
                   Once sent, a withdrawal can’t be cancelled. The smallest
                   withdrawal is {smallest}, or your whole balance if it’s less.

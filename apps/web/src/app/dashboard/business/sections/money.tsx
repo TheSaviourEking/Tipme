@@ -6,7 +6,7 @@ import type {
   BusinessDetail,
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
-import { CURRENT_FEE_POLICY } from '@tipme/domain';
+import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
 import { businessMoneyState } from '@/lib/business/money-state';
@@ -89,8 +89,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     chosen !== null &&
     chosen > BigInt(0) &&
     chosen <= withdrawable &&
-    (chosen >= CURRENT_FEE_POLICY.minWithdrawalMinor ||
-      chosen === withdrawable);
+    !belowWithdrawalMinimum(chosen, withdrawable);
   // The business pays the transfer fee from the amount, like a person (owner, 12 Nov 2026).
   const summary =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
@@ -206,13 +205,13 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
           <p className="tm-hint" data-testid="business-you-receive">
             {summary.feePaidBy === 'tipme'
               ? `TipMe pays the ${formatNaira(summary.feeMinor)} transfer fee this time: the business receives ${formatNaira(summary.receiveMinor)}.`
-              : `The ${formatNaira(summary.feeMinor)} transfer fee comes off it: the business receives ${formatNaira(summary.receiveMinor)}.`}
+              : `Transfer fee: ${formatNaira(summary.feeMinor)}, charged by our payment partner. It comes off the amount: the business receives ${formatNaira(summary.receiveMinor)}. If the fee is different, the difference is settled on the business’s balance.`}
           </p>
         )}
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal is{' '}
-          {formatNaira(CURRENT_FEE_POLICY.minWithdrawalMinor)}, or the whole
-          balance if it’s less.
+          {formatNaira(withdrawalMinimumMinor())}, or the whole balance if it’s
+          less.
         </p>
       </form>
       <GetPaidCard
