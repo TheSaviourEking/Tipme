@@ -58,3 +58,17 @@ export const changeBusiness = (
     method: 'POST',
     body: { reason },
   });
+
+/**
+ * Owner-change lock (14 Nov 2026): TipMe removes a business owner as a serious action. It waits
+ * for a second person when one qualifies, and never removes the last owner.
+ */
+export const removeBusinessOwner = (
+  businessId: string,
+  managerId: string,
+  reason: string,
+) =>
+  opsAct<OpsBusinessDetail>(
+    path(businessId, `/owners/${encodeURIComponent(managerId)}/remove`),
+    { method: 'POST', body: { reason } },
+  );

@@ -21,9 +21,11 @@ import {
 } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { managerOf } from './business-access.js';
+import { mailOwnerChange } from './business-owner-mail.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
+import type { MailSealing } from './mail-queue.js';
 
 // TipMe for businesses, PR B1: applying for a business, editing it, its locations and its managers.
 // Every write asks managerOf first, so another business's id reads like an unknown one (rule 2).
@@ -321,10 +323,13 @@ export function listManagers(
  *
  * An owner may end their own seat, but never another owner's (owner, 14 Nov 2026: "it shouldn't
  * be easy to take over a business"). That attempt is refused with OWNER_REMOVAL_NEEDS_TIPME and
- * audited; TipMe staff handle it until the removal procedure (plan #204, Phase E) ships.
+ * audited; TipMe staff remove owners (`business.owner_remove`) until the removal procedure (plan
+ * #204, Phase E) ships. Every owner is emailed about a refused attempt and about an owner stepping
+ * down, the one asking or leaving included.
  */
 export function removeManager(
   db: Database,
+  sealing: MailSealing,
   userId: string,
   businessId: string,
   managerId: string,
@@ -360,6 +365,14 @@ export function removeManager(
           subjectId: businessId,
           now,
         });
+        await mailOwnerChange(tx, sealing, {
+          businessId,
+          change: 'removal_blocked',
+          ownerUserId: target.userId,
+          actorUserId: userId,
+          eventId: newId(),
+          now,
+        });
         return 'blocked' as const;
       }
       if (target.role === 'owner') {
@@ -380,6 +393,15 @@ export function removeManager(
         .update(businessManagers)
         .set({ removedAt: now })
         .where(eq(businessManagers.id, managerId));
+      // Only an owner's own seat gets here: they stepped down.
+      if (target.role === 'owner')
+        await mailOwnerChange(tx, sealing, {
+          businessId,
+          change: 'stepped_down',
+          ownerUserId: target.userId,
+          eventId: managerId,
+          now,
+        });
       return 'removed' as const;
     });
     if (outcome === 'blocked')

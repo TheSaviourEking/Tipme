@@ -27,7 +27,10 @@ import {
 } from './email-address.js';
 import {
   businessManagerUsers,
+  businessOwnerSeatFacts,
   businessVerifyFacts,
+  describeOwnerRemoval,
+  removeBusinessOwner,
   verifyBusiness,
 } from './business-ops.js';
 import { startStaffRecovery } from './email-recovery.js';
@@ -621,6 +624,34 @@ const businessVerify = acting<{ businessId: string }>({
     }).then(({ slug }) => ({ revalidateBusiness: slug })),
 });
 
+/**
+ * Owner-change lock (owner, 14 Nov 2026): an owner never removes another owner; TipMe does, with
+ * a written reason and a second person, until the removal procedure (plan #204, Phase E) ships.
+ * Pinned on the seat, so an owner stepping down after asking makes it stale. Never the last owner.
+ * Nobody who runs the business can ask or decide it, even when they are staff.
+ */
+const businessOwnerRemove = acting<{ businessId: string; managerId: string }>({
+  name: 'business.owner_remove',
+  permission: 'businesses.manage',
+  subjects: ({ businessId }, db) => businessManagerUsers(db, businessId),
+  target: ({ managerId }) => managerId,
+  current: (tx, { businessId, managerId }) =>
+    businessOwnerSeatFacts(tx, businessId, managerId),
+  describe: (tx, { businessId, managerId }) =>
+    describeOwnerRemoval(tx, businessId, managerId),
+  act: (tx, { businessId, managerId }, context) => {
+    if (!context.services) throw new OperationError('INVALID_INPUT');
+    return removeBusinessOwner(tx, {
+      businessId,
+      managerId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+      sealing: context.services.sealing,
+    });
+  },
+});
+
 const opsBusinessName = async (db: Database | Tx, businessId: string) => {
   const [row] = await db
     .select({ name: businesses.name, slug: businesses.slug })
@@ -1088,6 +1119,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(mailProviderSwitch);
   registerSeriousAction(takeBackAction);
   registerSeriousAction(businessVerify);
+  registerSeriousAction(businessOwnerRemove);
   registerSeriousAction(tipReverse);
   registerSeriousAction(changelogPublishAction);
   registerSeriousAction(proPriceChange);

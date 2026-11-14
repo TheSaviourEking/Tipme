@@ -33,6 +33,7 @@ import {
   removeManager,
   updateBusiness,
   updateLocation,
+  type MailSealing,
 } from '@tipme/database';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
@@ -46,6 +47,7 @@ import { DatabaseProvider } from '../infra/database.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { signalBusiness } from './business-live.js';
+import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 
 /**
  * Lane B1 (PR B1): apply for a business, edit it, its locations and its managers. Signed in, under
@@ -58,6 +60,7 @@ import { signalBusiness } from './business-live.js';
 export class BusinessManageController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     // Optional: integration tests may build this controller without the live module.
     @Optional()
     @Inject(LIVE_PUBLISHER)
@@ -160,7 +163,8 @@ export class BusinessManageController {
 
   /**
    * Owners. Never the last owner (BUSINESS_LAST_OWNER), and never another owner
-   * (OWNER_REMOVAL_NEEDS_TIPME, 403, audited): an owner only steps down themselves.
+   * (OWNER_REMOVAL_NEEDS_TIPME, 403, audited): an owner only steps down themselves. Every owner
+   * is emailed about a refused attempt and about an owner stepping down.
    */
   @Post(':id/managers/:managerId/remove')
   @HttpCode(204)
@@ -169,7 +173,13 @@ export class BusinessManageController {
     @Param('id') id: string,
     @Param('managerId') managerId: string,
   ): Promise<void> {
-    await removeManager(this.database.db, auth.userId, id, managerId);
+    await removeManager(
+      this.database.db,
+      this.sealing,
+      auth.userId,
+      id,
+      managerId,
+    );
     signalBusiness(this.database.db, this.publishLive, { businessId: id });
   }
 }
