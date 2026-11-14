@@ -768,6 +768,9 @@ async function coverFee(
   accountRef: string,
   log?: PayoutStartLog,
 ): Promise<void> {
+  // Users pay their own fee, from the amount (owner, 12 Nov 2026): TipMe sends no top-up for it.
+  // Payouts requested before that rule, or paid by an unused top-up, keep TipMe paying.
+  if (payout.feePayer === 'user') return;
   const feeMinor = payout.feeMinor ?? 0n;
   if (payout.feeTransferReference || feeMinor <= 0n) return;
   if (await claimFeeCredit(db, payout, accountRef, feeMinor)) return;

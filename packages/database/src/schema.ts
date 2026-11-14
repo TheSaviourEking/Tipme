@@ -1227,6 +1227,14 @@ export const payouts = pgTable(
     // The provider's fee for this payout, in minor units of the payout currency.
     feeMinor: minor('fee_minor'),
     feeTransferReference: text('fee_transfer_reference'),
+    // Who pays the partner's fee, fixed at request (owner, 12 Nov 2026): 'user' takes it from the
+    // amount chosen (amount_minor is what is sent; user_fee_minor comes off the payable too); 'tipme'
+    // tops the account up (every payout before the rule, and one that spends an unused top-up).
+    feePayer: text('fee_payer').notNull().default('tipme'),
+    // What the user was charged for the fee, never changed by what the partner later reports.
+    userFeeMinor: bigint('user_fee_minor', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
     // Written and committed before any provider write. The attempt that set it clears it only on a
     // definite answer of its own; an outcome learned later by a read leaves it as evidence. While it
     // is set the payout is looked up, never sent again.
@@ -1252,6 +1260,11 @@ export const payouts = pgTable(
       .on(table.businessId, table.createdAt.desc(), table.id.desc())
       .where(sql`business_id IS NOT NULL`),
     check('payouts_fee_not_negative', sql`fee_minor IS NULL OR fee_minor >= 0`),
+    check('payouts_fee_payer', sql`fee_payer IN ('tipme', 'user')`),
+    check(
+      'payouts_user_fee',
+      sql`user_fee_minor >= 0 AND (fee_payer = 'user' OR user_fee_minor = 0)`,
+    ),
     check(
       'payouts_start_step',
       sql`start_step IS NULL OR start_step IN ('fee', 'payout')`,

@@ -14,6 +14,7 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
+import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
 import { attemptKey, paymentKey, payoutIdKey, payoutKey } from './keys.js';
 import type { Scenario } from './scenario.js';
 
@@ -380,7 +381,7 @@ export function createMockProvider(options: {
     },
 
     async quotePayoutFee() {
-      return { feeMinor: 5000n, exact: false };
+      return { feeMinor: NGN_PAYOUT_FEE_MINOR, exact: false };
     },
 
     async collectToPlatform({ accountRef, amountMinor, idempotencyKey }) {

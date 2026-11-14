@@ -1,4 +1,4 @@
-import { CURRENT_FEE_POLICY } from '@tipme/domain';
+import { withdrawalMinimumMinor } from '@tipme/domain';
 import { ActionLink, Container } from '@tipme/ui';
 import { WhereYouMeetPeople } from '@/components/marketing/where-you-meet-people';
 import { FREE_SHARE_PERCENT } from '@/components/marketing';
@@ -11,9 +11,7 @@ export const metadata = marketingMetadata(
   '/for-creators',
 );
 
-const MIN_WITHDRAWAL = formatNaira(
-  Number(CURRENT_FEE_POLICY.minWithdrawalMinor),
-);
+const MIN_WITHDRAWAL = formatNaira(Number(withdrawalMinimumMinor()));
 
 /** Individuals, built to the PageCreators board. The page is server HTML; only the demo is a client island. */
 export default function ForCreators() {

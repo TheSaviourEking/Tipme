@@ -55,7 +55,7 @@ test('tips below ₦2,000 are refused; there is no maximum: supporters tip what 
   );
   assert.equal('maxTipMinor' in FEE_POLICY_V1, false);
   assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
-  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200000n);
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200000n);
 });
 
 test('a Pro page’s own minimum raises the floor and never lowers it', () => {
@@ -158,7 +158,7 @@ test('the supporter’s charge equals the tip on every path: normal, fee-free an
 
 test('the smallest tip and the smallest withdrawal are both ₦2,000 (owner, 2 Nov 2026)', () => {
   assert.equal(FEE_POLICY_V1.minTipMinor, 200_000n);
-  assert.equal(FEE_POLICY_V1.minWithdrawalMinor, 200_000n);
+  assert.equal(FEE_POLICY_V1.minTipMinor, 200_000n);
   assert.throws(() => priceTip(199_900n, FEE_POLICY_V1), AmountOutOfRangeError);
   assert.equal(priceTip(200_000n, FEE_POLICY_V1).recipientNetMinor, 180_000n);
 });

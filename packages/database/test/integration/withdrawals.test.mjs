@@ -505,6 +505,8 @@ test('withdrawals through the provider', async (t) => {
         ledgerMinor: 372000n,
         providerMinor: 240000n,
         feeMinor: 5000n,
+        // Users pay it, from the amount (owner, 12 Nov 2026).
+        feePaidBy: 'user',
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
       const more = await quoteOf(withBalance(1800000n));
