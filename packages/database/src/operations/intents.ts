@@ -12,6 +12,7 @@ import {
   tips,
 } from '../schema.js';
 import { tippableMember } from './business-access.js';
+import { fixShareOnTip, shareInForce } from './share-at-tip.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { recordSupporter, supporterKeyHash } from './supporters.js';
@@ -61,6 +62,11 @@ export interface CreatePaymentIntentInput {
    * quote's page inside the transaction and ignored when it doesn't hold: never a refusal.
    */
   businessMemberId?: string;
+  /**
+   * The API's BUSINESS_SHARES_ENABLED (business release 2, R2-C2). Only with it is a share fixed on
+   * a tip made at a membership whose agreement is in force; off, nothing about shares is read.
+   */
+  sharesOn?: boolean;
   /**
    * The campaign link ending the tip page was opened from (Campaign Studio). Matched to this
    * page's running campaign inside the transaction and ignored otherwise; not in the fingerprint,
@@ -219,6 +225,18 @@ export async function createPaymentIntent(
       if (page?.pageState !== 'live' || page.status !== 'active')
         throw new OperationError('TIP_NOT_PAYABLE');
 
+      // R2-C2: the supporter must have been shown the split in force now. A quote made before an
+      // agreement started, changed or ended is stale: they re-quote and see the current one.
+      const share =
+        input.sharesOn && member
+          ? await shareInForce(tx, profileId, member.memberId)
+          : null;
+      if (
+        input.sharesOn &&
+        (share?.agreementId ?? null) !== (quote.shareAgreementId ?? null)
+      )
+        throw new OperationError('QUOTE_EXPIRED');
+
       const intentId = newId();
       // No conflict target: the idempotency key and the single-use quote are both unique.
       const inserted = await tx
@@ -268,6 +286,14 @@ export async function createPaymentIntent(
         cause: 'system',
         traceId,
       });
+      if (share)
+        await fixShareOnTip(tx, {
+          tipId,
+          agreementId: share.agreementId,
+          businessId: share.businessId,
+          businessBps: share.businessBps,
+          recipientNetMinor: quote.recipientNetMinor,
+        });
       if (input.campaign)
         await attributeTip(tx, { profileId, tipId, slug: input.campaign });
       // Pro only, read in this transaction: a page that left Pro records no new supporter.

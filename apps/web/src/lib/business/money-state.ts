@@ -1,4 +1,5 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
+import { belowWithdrawalMinimum } from '@tipme/domain';
 import { formatNaira } from '../demo-amount.ts';
 
 export interface BusinessMoneyState {
@@ -46,8 +47,8 @@ export function businessMoneyState(
       });
     case 'setup_needed':
       return no({
-        title: 'Not available yet',
-        body: 'Withdrawals for a business aren’t available with our payment partner yet. The balance stays here and is safe.',
+        title: 'Set up the business’s payout account',
+        body: 'The business needs its own payout account with our payment partner before it can withdraw. The balance stays here and is safe.',
       });
     case 'no_destination':
       return no({
@@ -71,14 +72,45 @@ export function businessMoneyState(
               ? 'The business has nothing to withdraw yet.'
               : 'The business’s share is still on its way to our payment partner. You can withdraw it once it arrives.',
         });
+      // The business pays the transfer fee from the amount (owner, 12 Nov 2026): a balance not
+      // more than the fee would send nothing, so it can't be withdrawn, and the page says why.
+      const userPays = quote.feePaidBy === 'user' && quote.feeMinor !== '0';
+      if (userPays && withdrawable <= BigInt(quote.feeMinor))
+        return no({
+          title: 'Nothing to withdraw right now',
+          body: `The business’s ${formatNaira(quote.withdrawableMinor)} isn’t more than the ${formatNaira(quote.feeMinor)} transfer fee, so it can’t be withdrawn yet. It stays in the business’s balance.`,
+        });
       return {
         canWithdraw: true,
         withdrawableMinor: withdrawable,
         notice: {
           title: 'Ready to withdraw',
-          body: `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.`,
+          body:
+            `You can withdraw ${formatNaira(quote.withdrawableMinor)} to ${quote.destination.bankName} ••${quote.destination.last4}.` +
+            (userPays
+              ? ` The ${formatNaira(quote.feeMinor)} transfer fee comes off the amount you withdraw.`
+              : ''),
         },
       };
     }
   }
+}
+
+/**
+ * What a business may send (owner, 12 and 14 Nov 2026): the shared withdrawal rule (at least the
+ * minimum tip, or everything it can withdraw now; `belowWithdrawalMinimum`), never more, and always
+ * more than the fee it pays from the amount (`feeMinor`; zero when TipMe's unused top-up pays it),
+ * so something arrives.
+ */
+export function businessCanSend(
+  amountMinor: bigint,
+  withdrawableMinor: bigint,
+  feeMinor: bigint,
+): boolean {
+  return (
+    amountMinor > BigInt(0) &&
+    amountMinor > feeMinor &&
+    amountMinor <= withdrawableMinor &&
+    !belowWithdrawalMinimum(amountMinor, withdrawableMinor)
+  );
 }

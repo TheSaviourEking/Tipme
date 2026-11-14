@@ -29,7 +29,7 @@ const feeForm = (page: Page) =>
   page.locator('form').filter({ has: page.getByLabel('New TipMe fee (%)') });
 
 /** Fills the fee form on the Pages screen for this handle; nothing has happened until approved. */
-async function askForFee(page: Page, handle: string, percent = '7') {
+async function askForFee(page: Page, handle: string, percent = '6') {
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByLabel('New TipMe fee (%)').fill(percent);
   await feeForm(page).getByLabel('Reason').fill(REASON);
@@ -205,7 +205,7 @@ test('a serious action says it is waiting, and a second person sees the exact ch
   await expect(waiting(page)).toBeVisible();
   await expect(page.getByText('Nothing has changed yet.')).toBeVisible();
   await expect(page.getByText('The fee is now')).toHaveCount(0);
-  await expect(page.getByText('(standard)')).toBeVisible();
+  await expect(page.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
   await expectAccessible(page);
 
   // Asking again finds the same request, and says so.
@@ -220,7 +220,7 @@ test('a serious action says it is waiting, and a second person sees the exact ch
   await overview.getByRole('link', { name: 'Open approvals' }).click();
   const card = requestCard(other.page, handle);
   await expect(card.getByText('Change a page’s fee')).toBeVisible();
-  await expect(card.getByText(`Set @${handle}'s fee to 7%`)).toBeVisible();
+  await expect(card.getByText(`Set @${handle}'s fee to 6%`)).toBeVisible();
   await expect(card.getByText(REASON)).toBeVisible();
   await expectAccessible(other.page);
 
@@ -270,7 +270,7 @@ test('a second person can reject, with a reason, and the person who asked can ca
     page.getByText('The fee was never agreed with them'),
   ).toBeVisible();
   await page.goto(`/ops/pages?handle=${handle}`);
-  await expect(page.getByText('(standard)')).toBeVisible();
+  await expect(page.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
 
   await askForFee(page, handle, '5');
   await expect(waiting(page)).toBeVisible();

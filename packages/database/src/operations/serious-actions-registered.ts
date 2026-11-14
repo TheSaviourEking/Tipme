@@ -501,7 +501,7 @@ const feeChange = acting<{ profileId: string; feeBps: number | null }>({
   },
   describe: async (tx, { profileId, feeBps }) =>
     `Set @${await handleOf(tx, profileId)}'s fee to ${
-      feeBps === null ? 'the standard fee' : `${feeBps / 100}%`
+      feeBps === null ? 'the plan’s rate' : `${feeBps / 100}%`
     }`,
   act: (tx, { profileId, feeBps }, context) =>
     setAccountFee(tx, {
@@ -729,9 +729,9 @@ const tipReverse = acting<TipReversePayload>({
       issue.subject.tipId !== payload.tipId
     )
       throw new OperationError('INVALID_INPUT');
-    // Approval may come after the flags were turned off: then nothing posts (review finding 3).
-    if (!context.services?.businessSharesEnabled)
-      throw new OperationError('TIP_NOT_REVERSIBLE', 'flags_off');
+    // Every refunded or charged-back tip is reversed, whatever the release 2 flags (owner, 12 Nov
+    // 2026: money never moves without its posting). The shares flag gates only what is about a
+    // share: the worker moves a business's share back only while it is on.
     // Each partner refund or dispute is reversed once; a second request for it is refused.
     if (await alreadyReversed(tx, payload.partnerReversalId))
       throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed_this');
@@ -751,6 +751,8 @@ const tipReverse = acting<TipReversePayload>({
       partnerReversalId: payload.partnerReversalId,
       refundFeeMinor: BigInt(refundFeeMinor ?? '0'),
       refundedMinor: BigInt(payload.refundedMinor),
+      // A lost dispute's fee goes back here; a refund's was already asked for at refund.paid.
+      ...(context.services?.refundFeeReturn ? { feeReturnOn: true } : {}),
       now: context.now,
     });
     return {

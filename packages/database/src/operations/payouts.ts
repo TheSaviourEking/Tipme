@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
 import {
-  FEE_POLICY_V1,
+  belowWithdrawalMinimum,
   buildPayoutFeePosting,
   buildPayoutPosting,
+  buildUserPayoutFeePosting,
+  buildUserPayoutFeeRefundPosting,
+  userPaidWithdrawal,
   canTransition,
   formatMinor,
   PAYOUT_TRANSITIONS,
@@ -46,6 +49,7 @@ import {
   type IssueSubject,
 } from '../schema.js';
 import { balanceIn, businessBalanceIn } from './balance.js';
+import { freeFeeCredit } from './fee-credits.js';
 import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
@@ -54,6 +58,7 @@ import {
   withdrawalsSwitchState,
 } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
+import { reverseTip } from './reversals.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -499,6 +504,8 @@ export function flagPaymentReversal(
     refundState?: 'pending' | 'paid' | 'failed' | null;
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
+    /** REFUND_FEE_RETURN (owner, 12 Nov 2026): a final refund sends TipMe's fee back. */
+    feeReturnOn?: boolean;
     now?: Date;
   },
 ): Promise<'flagged' | 'dispute_won'> {
@@ -594,6 +601,42 @@ export function flagPaymentReversal(
         });
         issueId = issue.id;
       }
+      // Owner, 12 Nov 2026 (REFUND_FEE_RETURN): once a refund is final (refund.paid, for the
+      // amount it gave back; never after a final failure), it is reversed in the ledger here, in
+      // this transaction, and that reversal asks for TipMe's fee to go back (`reverseTip`). Money
+      // never moves without its posting, and both are keyed on the refund: a replayed event finds
+      // the reversal done and does nothing. Staff confirming it later is refused as done. If it
+      // can't be reversed here (more than is left), it waits for staff, as before.
+      if (
+        input.feeReturnOn &&
+        state === 'paid' &&
+        input.refundedMinor &&
+        partnerReversalId &&
+        tip &&
+        known?.subject.refundState !== 'failed'
+      ) {
+        try {
+          const reversed = await tx.transaction((savepoint) =>
+            reverseTip(savepoint, {
+              tipId: tip.id,
+              partnerReversalId,
+              refundedMinor: input.refundedMinor!,
+              refundFeeMinor: input.refundFeeMinor ?? 0n,
+              feeReturnOn: true,
+              now,
+            }),
+          );
+          if (reversed.created)
+            await tx
+              .update(issues)
+              .set({
+                summary: sql`${issues.summary} || ${' TipMe reversed it in the ledger when the refund was final, and its fee is going back to the person. Check it, then close this issue.'}`,
+              })
+              .where(eq(issues.id, issueId));
+        } catch (error) {
+          if (!(error instanceof OperationError)) throw error;
+        }
+      }
       // A failed refund moved nothing: no hold for it.
       if (state === 'failed') return 'flagged' as const;
       // Everyone the tip paid waits: the person, or each person of a team tip (R2-D). Never a
@@ -628,16 +671,25 @@ const openFeeShortIssue = (tx: Tx, payoutId: string, now: Date) =>
   });
 
 /**
- * The fee the provider actually charged becomes the payout's cost. Above what the top-up covered,
- * the difference came out of the recipient's money at the provider, so a person has to look.
+ * The fee the provider actually charged becomes the payout's cost. Above what the top-up covered (or,
+ * when the user pays, above what they were charged), the difference came out of the account at the
+ * provider: TipMe absorbs it, and a person has to look.
  */
 async function noteActualFee(
   tx: Tx,
-  payout: { id: string; feeTransferReference: string | null },
+  payout: {
+    id: string;
+    feeTransferReference: string | null;
+    feePayer: string;
+    userFeeMinor: bigint;
+  },
   feeMinor: bigint,
   now: Date,
 ): Promise<void> {
   await tx.update(payouts).set({ feeMinor }).where(eq(payouts.id, payout.id));
+  // The user pays the partner's whole fee (owner, 14 Nov 2026): any difference is settled on
+  // their balance when the payout is paid, never here.
+  if (payout.feePayer === 'user') return;
   const [credit] = payout.feeTransferReference
     ? await tx
         .select({ amountMinor: providerFeeCredits.amountMinor })
@@ -889,9 +941,55 @@ async function recordPayoutOutcomeIn(
         amountMinor: formatMinor(payout.amountMinor),
       },
     });
-    // A payout through an account costs TipMe the fee; the pretend provider has no such cost.
     const feeMinor = input.actualFeeMinor ?? payout.feeMinor ?? 0n;
-    if (payout.accountReference && feeMinor > 0n) {
+    if (payout.feePayer === 'user') {
+      // The user's fee, taken from what they chose (owner, 12 Nov 2026), comes off their payable.
+      if (payout.userFeeMinor > 0n)
+        await postLedgerTransaction(tx, {
+          operationType: 'payout',
+          operationKey: `payout-user-fee.${payout.id}`,
+          currency: payout.currency,
+          payoutId: payout.id,
+          traceId,
+          lines: buildUserPayoutFeePosting({
+            feeMinor: payout.userFeeMinor,
+            ...ownerOf(payout),
+          }),
+        });
+      // The user pays the partner's whole fee, whatever it is (owner, 14 Nov 2026). The partner
+      // only says it once the payout exists, so ₦50 was taken from the amount; more is a fee line
+      // on the same payable (below zero if it must be, recorded, and paid back by the next tips),
+      // less is credited back. Staff are told, for information: TipMe pays nothing.
+      const difference = feeMinor - payout.userFeeMinor;
+      if (difference !== 0n) {
+        const owner = ownerOf(payout);
+        await postLedgerTransaction(tx, {
+          operationType: 'payout',
+          operationKey:
+            difference > 0n
+              ? `payout-fee-extra.${payout.id}`
+              : `payout-fee-credit.${payout.id}`,
+          currency: payout.currency,
+          payoutId: payout.id,
+          traceId,
+          lines:
+            difference > 0n
+              ? buildUserPayoutFeePosting({ feeMinor: difference, ...owner })
+              : buildUserPayoutFeeRefundPosting({
+                  feeMinor: -difference,
+                  ...owner,
+                }),
+        });
+        await openIssue(tx, {
+          dedupeKey: `payout_fee_adjusted.${payout.id}`,
+          kind: 'payout_fee_adjusted',
+          subject: { payoutId: payout.id, ...owner },
+          now,
+        });
+      }
+    } else if (payout.accountReference && feeMinor > 0n) {
+      // Requested under the old rule (or paid by an unused top-up): the fee is TipMe's cost; the
+      // pretend provider has no such cost.
       await postLedgerTransaction(tx, {
         operationType: 'payout',
         operationKey: `payout-fee.${payout.id}`,
@@ -971,6 +1069,11 @@ export type WithdrawalQuoteResult =
       ledgerMinor: bigint;
       providerMinor: bigint;
       feeMinor: bigint;
+      /**
+       * Who pays `feeMinor` on a withdrawal asked for now (owner, 12 Nov 2026): 'user' takes it from
+       * the amount chosen; 'tipme' only while an unused top-up TipMe already sent can pay it.
+       */
+      feePaidBy: 'user' | 'tipme';
       destination: { bankName: string; last4: string };
     }
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
@@ -1345,7 +1448,8 @@ async function queuedNotStarted(
 ): Promise<bigint> {
   const [row] = await db
     .select({
-      total: sql<string>`COALESCE(SUM(${payouts.amountMinor}), 0)`,
+      // What will leave the account: the amount sent and the fee the user pays from it.
+      total: sql<string>`COALESCE(SUM(${payouts.amountMinor} + ${payouts.userFeeMinor}), 0)`,
     })
     .from(payouts)
     .where(
@@ -1518,16 +1622,40 @@ async function quoteFor(
   if (read.state === 'unavailable') return { state: 'provider_unavailable' };
   if (read.state === 'setup_needed') return read;
   const providerMinor = notNegative(read.availableMinor - queuedMinor);
+  const feePaidBy = await guarded(() =>
+    feePayerFor(db, route, input.provider.name, read.feeMinor),
+  );
   return {
     state: 'ready',
     withdrawableMinor: notNegative(lower(ledgerMinor, providerMinor)),
     ledgerMinor,
     providerMinor,
     feeMinor: read.feeMinor,
+    feePaidBy,
     destination: route.destination
       ? { bankName: route.destination.bankName, last4: route.destination.last4 }
       : { bankName: 'Pretend bank', last4: '0000' },
   };
+}
+
+/**
+ * Who pays the partner's fee on a withdrawal asked for now (owner, 12 Nov 2026): the user, from the
+ * amount, unless an unused top-up TipMe already sent to this account can pay it (fee-credits.ts).
+ */
+async function feePayerFor(
+  db: Database | Tx,
+  route: { accountReference: string | null },
+  providerName: string,
+  feeMinor: bigint,
+): Promise<'user' | 'tipme'> {
+  if (!route.accountReference || feeMinor <= 0n) return 'user';
+  const credit = await freeFeeCredit(db, {
+    accountRef: route.accountReference,
+    provider: recordedProviderName(providerName),
+    currency: 'NGN',
+    feeMinor,
+  });
+  return credit ? 'tipme' : 'user';
 }
 
 /** What stands in for an account reference with the pretend provider, which has none. */
@@ -1687,13 +1815,28 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // ₦2,000 minimum, except to take all that can be taken: nobody is left with money
-      // they cannot withdraw, or an account they cannot close.
-      if (
-        input.amountMinor < FEE_POLICY_V1.minWithdrawalMinor &&
-        input.amountMinor !== withdrawable
-      )
+      // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), for a person and a
+      // business alike, except to take all that can be taken: nobody is left with money they
+      // cannot withdraw, or an account they cannot close.
+      if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
+      // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and
+      // nothing can be sent when the amount is not more than the fee.
+      const feePayer = await feePayerFor(
+        tx,
+        route,
+        providerName,
+        read.feeMinor,
+      );
+      const userPaid =
+        feePayer === 'user'
+          ? userPaidWithdrawal({
+              chosenMinor: input.amountMinor,
+              feeMinor: read.feeMinor,
+            })
+          : null;
+      if (feePayer === 'user' && !userPaid)
+        throw new OperationError('WITHDRAWAL_BELOW_FEE');
       if (await collectedElsewhere(tx, { owner, provider: providerName }))
         throw new OperationError('WITHDRAWAL_UNAVAILABLE');
       if (destinationId) {
@@ -1718,7 +1861,9 @@ async function requestFor(
           id: payoutId,
           ...ownerColumns(owner),
           currency: 'NGN',
-          amountMinor: input.amountMinor,
+          amountMinor: userPaid ? userPaid.sendMinor : input.amountMinor,
+          feePayer,
+          userFeeMinor: userPaid ? userPaid.feeMinor : 0n,
           status: 'REQUESTED',
           idempotencyKey: input.idempotencyKey,
           requestFingerprint: fingerprint,

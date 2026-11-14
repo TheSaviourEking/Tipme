@@ -21,3 +21,15 @@ export async function useDatabase(t) {
     },
   };
 }
+
+/**
+ * Puts the Pro price back at the ₦2,500 these tests were written around, as a newer price row
+ * (prices are history and refuse edits). Since 12 Nov 2026 a reset leaves ₦5,000 (migration 0093);
+ * tests about how Pro is paid, not what it costs, keep their figures this way.
+ */
+export async function atLaunchProPrice(database) {
+  await database.pool.query(
+    `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, reason, created_at)
+     VALUES (gen_random_uuid(), 250000, 'NGN', clock_timestamp(), 'Test fixture: the launch price', clock_timestamp())`,
+  );
+}

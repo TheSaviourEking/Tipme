@@ -115,6 +115,14 @@ export default async function BusinessStaffPage({
                 memberId: person.memberId,
                 name: page.business.name,
                 slug: page.business.slug,
+                ...(page.share
+                  ? {
+                      share: {
+                        personKeepsPercent: page.share.personKeepsPercent,
+                        businessPercent: page.share.businessPercent,
+                      },
+                    }
+                  : {}),
               }}
             />
           )}

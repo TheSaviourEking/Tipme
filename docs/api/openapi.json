@@ -1870,6 +1870,54 @@
         ]
       }
     },
+    "/v1/me/businesses/{businessId}/payout-account": {
+      "post": {
+        "operationId": "BusinessPayouts.setUpPayoutAccount",
+        "tags": [
+          "BusinessPayouts"
+        ],
+        "parameters": [
+          {
+            "name": "businessId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "intents",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/businesses/{businessId}/payout-destination": {
       "get": {
         "operationId": "BusinessPayouts.destination",
@@ -8327,6 +8375,42 @@
         ]
       }
     },
+    "/v1/me/work/shared": {
+      "get": {
+        "operationId": "ShareAgreements.shared",
+        "tags": [
+          "ShareAgreements"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/work/shares": {
       "get": {
         "operationId": "ShareAgreements.mine",
@@ -11514,6 +11598,7 @@
                 "payout_unexpected",
                 "payout_unresolved",
                 "payout_fee_short",
+                "payout_fee_adjusted",
                 "payout_held",
                 "provider_in_debt",
                 "provider_event_conflict",
@@ -11540,7 +11625,8 @@
                 "pro_reversed",
                 "support_request",
                 "pro_collect_unknown",
-                "pro_refund_failed"
+                "pro_refund_failed",
+                "share_transfer_stuck"
               ]
             }
           },
@@ -16430,6 +16516,11 @@
                   "currency": {
                     "type": "string",
                     "const": "NGN"
+                  },
+                  "businessMemberId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   }
                 },
                 "required": [
@@ -16913,6 +17004,7 @@
                   "HAS_BALANCE",
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
+                  "WITHDRAWAL_BELOW_FEE",
                   "WITHDRAWAL_UNAVAILABLE",
                   "WITHDRAWALS_PAUSED",
                   "WITHDRAWALS_SWITCHED_OFF",

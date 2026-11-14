@@ -8,7 +8,6 @@ import {
   Post,
   Res,
   SetMetadata,
-  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -72,8 +71,6 @@ import {
   PAYMENT_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
 import { CodedHttpException } from '../http/coded.exception.js';
-import { BusinessEnabledGuard } from '../business/business-enabled.guard.js';
-import { SharesEnabledGuard } from '../business/release2-flags.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
@@ -193,11 +190,11 @@ export class OpsActionsController {
   /**
    * Business release 2 (Q7): from the partner's `payment_reversed` issue, staff take back the tip
    * the partner refunded or charged back, every line of it, after checking the partner's dashboard.
-   * A second person approves it when there is one (`tip.reverse`). Never automatic. Off (404) until
-   * shares are on: with both flags off, a refund changes no balance, as in release 1 (D-05).
+   * A second person approves it when there is one (`tip.reverse`). For every tip, whatever the
+   * release 2 flags (owner, 12 Nov 2026: money never moves without its posting); a final refund is
+   * already reversed at refund.paid while REFUND_FEE_RETURN is on, and asking again is refused.
    */
   @Post('issues/:id/reverse-tip')
-  @UseGuards(BusinessEnabledGuard, SharesEnabledGuard)
   @HttpCode(200)
   @RateLimit('ops_request')
   @FreshCode()

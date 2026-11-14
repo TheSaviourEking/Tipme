@@ -86,16 +86,21 @@ const business = async (businessId) =>
 test('staff reverse a shared tip: both parts come back, audited, alone with the alert', async () => {
   const before = await reportedReversal(database, { bps: 1000 });
   const personBefore = await person(before.profileId);
-  assert.equal(await business(before.businessId), 36000n);
+  assert.equal(await business(before.businessId), 37200n);
   const response = await reverse(before.issueId, full);
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual((await response.json()).data, {
     reversed: true,
     posted: true,
-    belowZero: false,
+    // The fee goes back without its ₦60 processing part, which the person bears (owner, 14 Nov
+    // 2026), so their balance ends that much below zero, and it says so.
+    belowZero: true,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 36000n));
+  assert.equal(
+    await person(before.profileId),
+    personBefore - (NET - 37200n) - 6000n,
+  );
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
   const audits = await q(
@@ -153,7 +158,7 @@ test('two webhook events for one ₦500 refund reverse exactly ₦500', async ()
   assert.equal(reversed, '50000');
 });
 
-test('the approver sees earlier reversals, and an approval after the flags go off posts nothing', async () => {
+test('the approver sees earlier reversals, and an approval on a copy with the flags off still posts', async () => {
   const target = await reportedReversal(database, { refundedMinor: 100000n });
   // An earlier refund of this tip, already reversed (another partner refund).
   const earlierId = `refund.re_${randomUUID().replaceAll('-', '')}`;
@@ -196,7 +201,8 @@ test('the approver sees earlier reversals, and an approval after the flags go of
       summary,
       /Already taken back from this tip: NGN 500\.00 in 1 reversal/,
     );
-    // The flags go off before the second person approves: nothing posts.
+    // The flags go off before the second person approves: it still posts (owner, 12 Nov 2026:
+    // money the partner moved is never left without its posting; the flags gate shares only).
     await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
       secondId,
     ]);
@@ -210,13 +216,14 @@ test('the approver sees earlier reversals, and an approval after the flags go of
         }),
       },
     );
-    assert.notEqual(approved.status, 500, await approved.clone().text());
-    assert.equal(await target.reversals(), 1);
+    assert.equal(approved.status, 200, await approved.clone().text());
+    // The earlier refund's reversal, and now this one.
+    assert.equal(await target.reversals(), 2);
     const [{ status }] = await q(
       `SELECT status FROM approval_requests WHERE id = $1`,
       [requestId],
     );
-    assert.notEqual(status, 'approved');
+    assert.equal(status, 'approved');
   } finally {
     await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
       secondId,
@@ -303,7 +310,7 @@ test('it needs payments.repair, a fresh code, a reason and the dashboard check',
   assert.equal(await target.reversals(), 0);
 });
 
-test('only from an open payment_reversed issue, and off without the flags', async () => {
+test('only from an open payment_reversed issue, and with or without the release 2 flags', async () => {
   const target = await reportedReversal(database);
   const other = await ops.openIssue(database.db, {
     dedupeKey: `stuck_tip.${randomUUID()}`,
@@ -313,9 +320,11 @@ test('only from an open payment_reversed issue, and off without the flags', asyn
   });
   assert.equal((await reverse(other.id, full)).status, 404);
   assert.equal((await reverse(randomUUID(), full)).status, 404);
-  const flagsOff = await reverse(target.issueId, full, off.api);
-  assert.equal(flagsOff.status, 404);
   assert.equal(await target.reversals(), 0);
+  // Owner, 12 Nov 2026: a refunded tip is reversed whatever the release 2 flags.
+  const flagsOff = await reverse(target.issueId, full, off.api);
+  assert.equal(flagsOff.status, 200, await flagsOff.clone().text());
+  assert.equal(await target.reversals(), 1);
 });
 
 test("only a paid refund is reversed, for exactly what the partner gave back, and its fee is TipMe's", async () => {

@@ -177,6 +177,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/business-roles` | n/a (read) | – | – |
 | POST | `/v1/me/businesses` | yes | `business_apply` | – |
 | GET | `/v1/me/businesses/{businessId}/balance` | n/a (read) | – | – |
+| POST | `/v1/me/businesses/{businessId}/payout-account` | yes | `intents` | – |
 | GET | `/v1/me/businesses/{businessId}/payout-destination` | n/a (read) | – | – |
 | PUT | `/v1/me/businesses/{businessId}/payout-destination` | yes | `auth_verify` | – |
 | POST | `/v1/me/businesses/{businessId}/payout-destination/code` | yes | `auth_code` | – |
@@ -301,6 +302,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/work/invitations/preview` | yes | – | – |
 | GET | `/v1/me/work/notes` | n/a (read) | – | – |
 | POST | `/v1/me/work/notes/{tipId}/report` | yes | – | – |
+| GET | `/v1/me/work/shared` | n/a (read) | – | – |
 | GET | `/v1/me/work/shares` | n/a (read) | – | – |
 | POST | `/v1/me/work/shares/{agreementId}/accept` | yes | – | – |
 | POST | `/v1/me/work/shares/{agreementId}/counter` | yes | – | – |

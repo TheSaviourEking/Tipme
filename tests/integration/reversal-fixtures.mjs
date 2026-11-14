@@ -9,7 +9,7 @@ import {
 } from '../../packages/database/test/integration/business-fixtures.mjs';
 
 export const GROSS = 400000n;
-export const NET = 360000n;
+export const NET = 372000n;
 
 /**
  * A paid ₦4,000 tip to `handle` (Tobi by default), at a business taking `bps` of their net when

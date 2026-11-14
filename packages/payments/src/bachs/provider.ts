@@ -163,6 +163,16 @@ export interface BachsProvider
     entityType: 'individual' | 'company';
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
+  /**
+   * Business release 2, option B: a company account that only receives (the recipient persona:
+   * payouts and transfers, sandbox S1), never takes payments, so no selfie check or review.
+   */
+  createReceiveOnlyAccount(input: {
+    contactEmail: string;
+    country: string;
+    displayName?: string;
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
   createOnboardingLink(input: {
     accountReference: string;
     refreshUrl: string;
@@ -1041,6 +1051,29 @@ export function createBachsProvider(
           responsibilities: {
             fees: { collector: 'platform' },
           },
+        },
+        schema: accountSchema,
+      });
+      return normalizedAccount(account);
+    },
+
+    async createReceiveOnlyAccount(input) {
+      const validInput = accountInputSchema.parse({
+        ...input,
+        entityType: 'company',
+      });
+      const account = await client.request({
+        method: 'POST',
+        path: '/v1/accounts',
+        idempotencyKey: validInput.idempotencyKey,
+        operationReference: validInput.idempotencyKey,
+        body: {
+          contact_email: validInput.contactEmail,
+          country: validInput.country,
+          display_name: validInput.displayName,
+          entity_type: 'company',
+          configuration: { ...PAYOUT_CONFIGURATION },
+          responsibilities: { fees: { collector: 'platform' } },
         },
         schema: accountSchema,
       });

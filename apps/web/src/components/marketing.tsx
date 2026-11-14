@@ -1,10 +1,10 @@
 /** Marketing pieces for the home page. */
 import Image from 'next/image';
 import type { ReactNode } from 'react';
-import { FEE_POLICY_V1, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
+import { CURRENT_FEE_POLICY, STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { Button } from '@tipme/ui';
 import { formatNaira } from '@/lib/demo-amount';
-import { TIPME_SHARE_PERCENT } from '@/lib/fee-share';
+import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
 
@@ -13,13 +13,13 @@ import { IndigoQr } from './marketing/indigo-qr';
    (how-lever.tsx), so the headline and the claim field never wait for client JavaScript. */
 
 /** TipMe's share as a whole percentage, from the fee policy. */
-export { TIPME_SHARE_PERCENT };
+export { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT };
 const naira = (minor: bigint) => formatNaira(Number(minor));
 // The three standard amounts; the middle one is shown chosen in the pictures.
 const [SMALL_TIP, DEFAULT_TIP, LARGE_TIP] = STANDARD_TIP_PRESETS_MINOR;
 
 /** The smallest tip, from the fee policy, for the sentence that states it. */
-export const MINIMUM_TIP_TEXT = naira(FEE_POLICY_V1.minTipMinor);
+export const MINIMUM_TIP_TEXT = naira(CURRENT_FEE_POLICY.minTipMinor);
 
 /** The claim field: a plain GET form, so it works before (and without) JavaScript. */
 export function HomeClaim() {

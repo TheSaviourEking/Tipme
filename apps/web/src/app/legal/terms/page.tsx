@@ -1,5 +1,13 @@
 import { LegalPlaceholder } from '@/components/legal-placeholder';
+import { FEE_POLICY_V2_FREE, FEE_POLICY_V2_PRO, priceTip } from '@tipme/domain';
+import { formatNaira } from '@/lib/demo-amount';
+import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { previewMetadata } from '@/lib/metadata';
+
+// The example in the Fees section, worked out by the same pricing the quotes use.
+const EXAMPLE_TIP = BigInt(500000);
+const exampleNet = (policy: typeof FEE_POLICY_V2_FREE) =>
+  formatNaira(Number(priceTip(EXAMPLE_TIP, policy).recipientNetMinor));
 
 export const metadata = previewMetadata(
   'Terms of use',
@@ -19,7 +27,7 @@ export default function TermsPlaceholder() {
         'Liability and how these terms change',
       ]}
     >
-      {/* The owner's decision, 3 Nov 2026: state the fee here. Amounts follow FEE_POLICY_V1. */}
+      {/* The owner's decisions, 3 and 12 Nov 2026: state the fee here (Free 7%, Pro 5%). Amounts follow the fee policies. */}
       <section aria-labelledby="fees">
         <h2 id="fees">Fees</h2>
         <p>
@@ -27,15 +35,24 @@ export default function TermsPlaceholder() {
           choose. TipMe adds no charge on top. The smallest tip is ₦2,000.
         </p>
         <p>
-          <strong>If you receive tips,</strong> TipMe keeps 10% of each tip,
-          unless we have agreed a different fee with you, and you receive the
-          rest. The 10% includes the cost of processing the payment. From a
-          ₦5,000 tip, you receive ₦4,500.
+          <strong>If you receive tips,</strong> TipMe keeps {FREE_SHARE_PERCENT}
+          % of each tip on the Free plan, or {PRO_SHARE_PERCENT}% on TipMe Pro,
+          unless we have agreed a lower fee with you, and you receive the rest.
+          The fee includes the cost of processing the payment. From a{' '}
+          {formatNaira(Number(EXAMPLE_TIP))} tip, you receive{' '}
+          {exampleNet(FEE_POLICY_V2_FREE)} on Free, or{' '}
+          {exampleNet(FEE_POLICY_V2_PRO)} on Pro. The fee is set by your plan
+          when the supporter sees the amount, so a tip keeps the fee it was
+          shown with if your plan changes afterwards.
         </p>
         <p>
           <strong>Withdrawals:</strong> The smallest withdrawal is ₦2,000,
-          unless you are withdrawing your whole balance. TipMe does not charge
-          you to withdraw.
+          unless you are withdrawing your whole balance. Each withdrawal has our
+          payment partner’s ₦50 transfer fee, taken from the amount: if you
+          withdraw ₦10,000, you receive ₦9,950. A balance of ₦50 or less can’t
+          be withdrawn. If our payment partner charges a different fee for a
+          withdrawal, the difference is taken from or added back to your
+          balance.
         </p>
       </section>
       {/* The owner's decision, 3 Nov 2026: a username can be taken back, with 7 days of notice. */}

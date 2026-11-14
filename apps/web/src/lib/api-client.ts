@@ -51,10 +51,20 @@ const json = (body: unknown, headers: Record<string, string> = {}) => ({
   body: JSON.stringify(body),
 });
 
-export const quoteTip = (handle: string, amountMinor: number) =>
+export const quoteTip = (
+  handle: string,
+  amountMinor: number,
+  businessMemberId?: string,
+) =>
   call<TipQuote>(
     '/v1/tip-quotes',
-    json({ handle, amountMinor: String(amountMinor), currency: 'NGN' }),
+    json({
+      handle,
+      amountMinor: String(amountMinor),
+      currency: 'NGN',
+      // A tip at a business: its share, if one is agreed, comes back on the quote.
+      ...(businessMemberId ? { businessMemberId } : {}),
+    }),
   );
 
 /** One idempotency key per draft: a retry or double tap with it can never create a second tip. */

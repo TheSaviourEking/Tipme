@@ -160,3 +160,67 @@ export function lagosDateOf(at: Date): string {
 export function lagosMonthOf(at: Date): string {
   return lagosDateOf(at).slice(0, 7);
 }
+
+// ---- Release 2 on option B (owner, 11 Nov 2026): moving a share between partner accounts ----
+
+/**
+ * What a sweep sends on to the business once its share has reached TipMe: the share less what is
+ * held back for shares the business withdrew before their tip was refunded. Hold-backs are paid
+ * oldest first (callers pass them in that order), each never beyond what it still owes.
+ */
+export function allocateHoldbacks(
+  shareMinor: bigint,
+  holdbacks: readonly { id: string; remainingMinor: bigint }[],
+): { deliverMinor: bigint; repay: { id: string; amountMinor: bigint }[] } {
+  if (shareMinor <= 0n) throw new RangeError('a share is positive');
+  let left = shareMinor;
+  const repay: { id: string; amountMinor: bigint }[] = [];
+  for (const holdback of holdbacks) {
+    if (left === 0n) break;
+    if (holdback.remainingMinor <= 0n) continue;
+    const take =
+      holdback.remainingMinor < left ? holdback.remainingMinor : left;
+    repay.push({ id: holdback.id, amountMinor: take });
+    left -= take;
+  }
+  return { deliverMinor: left, repay };
+}
+
+/**
+ * What must move after a refund, from the reversal's own lines. Our partner takes the whole refund
+ * from the staff member's account, and keeps TipMe's share with TipMe. TipMe sends back only what
+ * the ledger took from its own fee (`platform_fee_revenue`), never the processing fee it recovered
+ * from the tip (owner, 14 Nov 2026): that part (`processingKeptMinor`) stays with TipMe, and the
+ * person bears it. The business gives back what the ledger took from its share. A refund's own fee
+ * is TipMe's expense (provider_fee_expense) and is never sent to anyone.
+ */
+export function refundMoves(
+  reversal: readonly {
+    account: string;
+    side: 'debit' | 'credit';
+    amountMinor: bigint;
+    businessId?: string;
+  }[],
+  input: { businessId: string },
+): {
+  feeReturnMinor: bigint;
+  businessBackMinor: bigint;
+  processingKeptMinor: bigint;
+} {
+  let feeReturnMinor = 0n;
+  let businessBackMinor = 0n;
+  let processingKeptMinor = 0n;
+  for (const line of reversal) {
+    if (line.side !== 'debit') continue;
+    if (line.account === 'platform_fee_revenue')
+      feeReturnMinor += line.amountMinor;
+    if (line.account === 'provider_fee_recovered')
+      processingKeptMinor += line.amountMinor;
+    if (
+      line.account === 'business_payable' &&
+      line.businessId === input.businessId
+    )
+      businessBackMinor += line.amountMinor;
+  }
+  return { feeReturnMinor, businessBackMinor, processingKeptMinor };
+}

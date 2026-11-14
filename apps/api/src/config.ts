@@ -247,6 +247,12 @@ export const apiConfigSchema = z
     // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
     BUSINESS_SHARES_ENABLED: flag,
     TEAM_TIPS_ENABLED: flag,
+    // Owner, 12 Nov 2026: TipMe returns its platform fee on every refunded tip (once refund.paid
+    // is final) and on a lost dispute staff reverse, by transfer to the person's account. Unset:
+    // on with the pretend provider (and e2e), off with our real partner until the owner turns it
+    // on. Shared business tips get it whatever this says (option B).
+    REFUND_FEE_RETURN: z.enum(['true', 'false']).optional(),
+
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
@@ -388,7 +394,14 @@ export const apiConfigSchema = z
         message: 'required for the mock provider',
       });
     }
-  });
+  })
+  .transform((config) => ({
+    ...config,
+    REFUND_FEE_RETURN:
+      config.REFUND_FEE_RETURN === undefined
+        ? config.PAYMENT_PROVIDER === 'mock'
+        : config.REFUND_FEE_RETURN === 'true',
+  }));
 export type ApiConfig = z.infer<typeof apiConfigSchema>;
 
 export const API_CONFIG = Symbol('API_CONFIG');

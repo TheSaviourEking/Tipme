@@ -230,6 +230,7 @@ export const ISSUE_KINDS = [
   'payout_unexpected',
   'payout_unresolved',
   'payout_fee_short',
+  'payout_fee_adjusted',
   'payout_held',
   'provider_in_debt',
   'provider_event_conflict',
@@ -264,6 +265,9 @@ export const ISSUE_KINDS = [
   // Paid Pro: a balance payment the partner never answered, and a refund the partner refused.
   'pro_collect_unknown',
   'pro_refund_failed',
+  // Business release 2, option B: a share movement between partner accounts that needs a person
+  // (TipMe holds a business's share it could not send on, or a transfer's answer didn't match).
+  'share_transfer_stuck',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -841,13 +845,20 @@ export interface OpsWithdrawalFreezeState {
   issueOpen: boolean;
 }
 
-/** One page's pricing for staff (ADR-0014): a staff-set share, or null for the policy's 10%. */
+/**
+ * One page's pricing for staff (ADR-0014): a staff-set share (null for none), the page's plan and
+ * its rate (owner, 12 Nov 2026: Free 700, Pro 500 bps), and the rate new quotes use: the deal only
+ * when it is below the plan's rate.
+ */
 export interface OpsPagePricing {
   customFeeBps: number | null;
   feeFreeRemaining: number;
+  plan: 'free' | 'pro';
+  planFeeBps: number;
+  feeBps: number;
 }
 
-/** Staff set one page's TipMe fee in basis points (1000 = 10%), or clear it with null (ADR-0014). */
+/** Staff set one page's TipMe fee in basis points (600 = 6%), or clear it with null (ADR-0014). Capped at the plan's rate when quoted. */
 export const opsPageFeeSchema = opsReasonSchema
   .extend({ feeBps: z.number().int().min(0).max(10000).nullable() })
   .strict();

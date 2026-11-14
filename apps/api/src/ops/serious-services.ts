@@ -59,6 +59,7 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
       payoutLog: (entry) => logger.warn({ ...entry }),
       businessSharesEnabled:
         config.BUSINESS_ENABLED && config.BUSINESS_SHARES_ENABLED,
+      refundFeeReturn: config.REFUND_FEE_RETURN,
       mail: {
         production:
           config.NODE_ENV === 'production' &&

@@ -101,6 +101,9 @@ export const operationType = pgEnum('operation_type', [
   'pro_sale',
   // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
   'pro_refund',
+  // A refund whose fee TipMe returns keeps the processing TipMe recovered from the tip (owner,
+  // 14 Nov 2026): the person bears it, so their payable is debited and TipMe keeps the recovery.
+  'refund_processing',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -682,6 +685,10 @@ export const paymentAccounts = pgTable(
     payoutSetupAttemptedAt: timestamp('payout_setup_attempted_at', {
       withTimezone: true,
     }),
+    // Business release 2, option B: a business's account only receives (payouts and transfers,
+    // the partner's recipient persona) and never takes card payments, so it is ACTIVE without
+    // charges_enabled. Only a business's account can be one.
+    receiveOnly: boolean('receive_only').notNull().default(false),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -717,7 +724,11 @@ export const paymentAccounts = pgTable(
     ),
     check(
       'payment_accounts_active_can_charge',
-      sql`status <> 'ACTIVE' OR charges_enabled`,
+      sql`status <> 'ACTIVE' OR charges_enabled OR receive_only`,
+    ),
+    check(
+      'payment_accounts_receive_only_business',
+      sql`NOT receive_only OR business_id IS NOT NULL`,
     ),
   ],
 );
@@ -1026,6 +1037,11 @@ export const tipQuotes = pgTable(
     waivedPlatformFeeMinor: minor('waived_platform_fee_minor')
       .notNull()
       .default(sql`0`),
+    // Business release 2 (R2-C2): the share agreement the supporter was shown on this quote, if
+    // any. The intent fixes a share only when the one in force then is this same agreement.
+    shareAgreementId: uuid('share_agreement_id').references(
+      () => shareAgreements.id,
+    ),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
@@ -1227,6 +1243,14 @@ export const payouts = pgTable(
     // The provider's fee for this payout, in minor units of the payout currency.
     feeMinor: minor('fee_minor'),
     feeTransferReference: text('fee_transfer_reference'),
+    // Who pays the partner's fee, fixed at request (owner, 12 Nov 2026): 'user' takes it from the
+    // amount chosen (amount_minor is what is sent; user_fee_minor comes off the payable too); 'tipme'
+    // tops the account up (every payout before the rule, and one that spends an unused top-up).
+    feePayer: text('fee_payer').notNull().default('tipme'),
+    // What the user was charged for the fee, never changed by what the partner later reports.
+    userFeeMinor: bigint('user_fee_minor', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
     // Written and committed before any provider write. The attempt that set it clears it only on a
     // definite answer of its own; an outcome learned later by a read leaves it as evidence. While it
     // is set the payout is looked up, never sent again.
@@ -1252,6 +1276,11 @@ export const payouts = pgTable(
       .on(table.businessId, table.createdAt.desc(), table.id.desc())
       .where(sql`business_id IS NOT NULL`),
     check('payouts_fee_not_negative', sql`fee_minor IS NULL OR fee_minor >= 0`),
+    check('payouts_fee_payer', sql`fee_payer IN ('tipme', 'user')`),
+    check(
+      'payouts_user_fee',
+      sql`user_fee_minor >= 0 AND (fee_payer = 'user' OR user_fee_minor = 0)`,
+    ),
     check(
       'payouts_start_step',
       sql`start_step IS NULL OR start_step IN ('fee', 'payout')`,
@@ -3297,3 +3326,162 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Business release 2, option B (owner, 11 Nov 2026): money TipMe moves between partner accounts for
+ * a shared tip. The partner refuses a transfer between two accounts, so every movement goes through
+ * TipMe's own balance in two legs: `out` (an account to TipMe, `destination: "self"`) and `in`
+ * (TipMe to an account). Each leg has its own idempotency key (`tipme-share-out-<id>`,
+ * `tipme-share-in-<id>`), is claimed here before the partner is asked, and an unknown answer is read
+ * back, never sent blindly. The second leg starts only once the first is confirmed paid.
+ *
+ * - `sweep`: the business's share, staff -> TipMe -> business, once the tip's money is available.
+ * - `recover`: a refunded tip's share the business still holds, business -> TipMe -> staff.
+ * - `fee_return`: TipMe's fee on a refunded tip, TipMe -> the person tipped (no `out` leg). On
+ *   every refunded tip once the refund is final (owner, 12 Nov 2026, behind REFUND_FEE_RETURN), and
+ *   on a lost dispute staff reverse; once per partner refund or dispute (`partner_reversal_id`).
+ * - `holdback_repay`: part of a later sweep held back from the business for a share it had already
+ *   withdrawn, TipMe -> the staff member it is owed to (no `out` leg: the sweep brought it in).
+ *
+ * The ledger is unchanged by these moves: it records what each party is owed, and these only make
+ * each partner balance match it.
+ */
+export const shareTransfers = pgTable(
+  'share_transfers',
+  {
+    id: uuid('id').primaryKey(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    kind: text('kind').notNull(),
+    // Every kind but fee_return is about a business; a fee goes back on any tip.
+    businessId: uuid('business_id').references(() => businesses.id),
+    // The staff member the tip was for (sweep, recover, fee_return) or is owed (holdback_repay).
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    currency: currency(),
+    // What the first leg moves (or, without one, what TipMe sends).
+    amountMinor: minor('amount_minor').notNull(),
+    // What the `in` leg sends, fixed once the `out` leg is confirmed: for a sweep, the share less
+    // what is held back. Null until then.
+    deliverMinor: minor('deliver_minor'),
+    status: text('status').notNull(),
+    provider: text('provider').notNull(),
+    outReference: text('out_reference'),
+    inReference: text('in_reference'),
+    // recover: the reversal that asked for it (one per reversal).
+    reversalTransactionId: uuid('reversal_transaction_id').references(
+      () => ledgerTransactions.id,
+    ),
+    // fee_return: the partner's refund or dispute it answers (`refund.<id>`, `dispute.<id>`).
+    partnerReversalId: text('partner_reversal_id'),
+    // holdback_repay: the sweep that brought the money in, and the hold-back it pays.
+    parentId: uuid('parent_id').references(
+      (): AnyPgColumn => shareTransfers.id,
+    ),
+    holdbackId: uuid('holdback_id').references(
+      (): AnyPgColumn => shareHoldbacks.id,
+    ),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    currencyCheck('share_transfers'),
+    check(
+      'share_transfers_kind',
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay')`,
+    ),
+    check(
+      'share_transfers_status',
+      sql`status IN ('waiting', 'out_sent', 'out_paid', 'in_sent', 'done', 'cancelled', 'gap', 'review')`,
+    ),
+    check('share_transfers_amount', sql`amount_minor > 0`),
+    check(
+      'share_transfers_deliver',
+      sql`deliver_minor IS NULL OR (deliver_minor >= 0 AND deliver_minor <= amount_minor)`,
+    ),
+    // Without an `out` leg there is nothing to wait for or claim on the way out.
+    check(
+      'share_transfers_one_leg',
+      sql`kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
+    ),
+    check(
+      'share_transfers_links',
+      sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
+        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
+        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)`,
+    ),
+    check(
+      'share_transfers_business',
+      sql`kind = 'fee_return' OR business_id IS NOT NULL`,
+    ),
+    uniqueIndex('share_transfers_one_sweep')
+      .on(table.tipId)
+      .where(sql`kind = 'sweep'`),
+    uniqueIndex('share_transfers_once_per_reversal')
+      .on(table.reversalTransactionId)
+      .where(sql`kind = 'recover'`),
+    // A fee goes back once per partner refund or dispute, however often its events arrive.
+    uniqueIndex('share_transfers_fee_once')
+      .on(table.partnerReversalId)
+      .where(sql`kind = 'fee_return'`),
+    uniqueIndex('share_transfers_once_per_holdback')
+      .on(table.parentId, table.holdbackId)
+      .where(sql`parent_id IS NOT NULL`),
+    index('share_transfers_due').on(table.status, table.nextAttemptAt),
+    index('share_transfers_business').on(table.businessId, table.status),
+  ],
+);
+
+/**
+ * A refunded tip's share the business had already withdrawn (owner, 11 Nov 2026): TipMe could not
+ * pull it back, so it is held back from the business's later shares and paid to the staff member
+ * until `remaining_minor` is zero. The business is told in the app.
+ */
+export const shareHoldbacks = pgTable(
+  'share_holdbacks',
+  {
+    id: uuid('id').primaryKey(),
+    businessId: uuid('business_id')
+      .notNull()
+      .references(() => businesses.id),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    // The recovery that found the money gone: one hold-back each.
+    recoverId: uuid('recover_id')
+      .notNull()
+      .unique()
+      .references(() => shareTransfers.id),
+    currency: currency(),
+    amountMinor: minor('amount_minor').notNull(),
+    remainingMinor: minor('remaining_minor').notNull(),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    currencyCheck('share_holdbacks'),
+    check(
+      'share_holdbacks_amounts',
+      sql`amount_minor > 0 AND remaining_minor >= 0 AND remaining_minor <= amount_minor`,
+    ),
+    check(
+      'share_holdbacks_settled',
+      sql`(remaining_minor = 0) = (settled_at IS NOT NULL)`,
+    ),
+    index('share_holdbacks_open')
+      .on(table.businessId, table.createdAt)
+      .where(sql`remaining_minor > 0`),
+  ],
+);

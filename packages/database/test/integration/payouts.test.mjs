@@ -74,7 +74,7 @@ test('payouts and proof', async (t) => {
         tipIds: tips,
         idempotencyKey: key,
       });
-      assert.equal(first.amountMinor, 360000n);
+      assert.equal(first.amountMinor, 372000n);
       assert.equal(first.replayed, false);
       const again = await createPayout(database.db, {
         profileId: ADA,
@@ -119,7 +119,7 @@ test('payouts and proof', async (t) => {
     async () => {
       await database.fresh();
       const tip = await tipFor('ada');
-      assert.equal(await payable(), '180000');
+      assert.equal(await payable(), '186000');
       const { payoutId } = await createPayout(database.db, {
         profileId: ADA,
         tipIds: [tip],
@@ -170,7 +170,7 @@ test('payouts and proof', async (t) => {
         idempotencyKey: randomUUID(),
       });
       assert.notEqual(retry.payoutId, payoutId);
-      assert.equal(await payable(), '180000');
+      assert.equal(await payable(), '186000');
     },
   );
 
@@ -358,10 +358,10 @@ test('payouts and proof', async (t) => {
       assert.ok(proof.payment.providerEventId);
       assert.deepEqual(proof.breakdown, {
         grossMinor: '200000',
-        platformFeeMinor: '17000',
+        platformFeeMinor: '11000',
         quotedProviderFeeMinor: '3000',
         actualProviderFeeMinor: '3000',
-        recipientNetMinor: '180000',
+        recipientNetMinor: '186000',
       });
       assert.ok(proof.paymentLedgerTransactionId);
       assert.equal(proof.payout.status, 'PAID');

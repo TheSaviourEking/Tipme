@@ -14,6 +14,8 @@ import {
 import type {
   ApiDataResponse,
   BusinessBalance,
+  BusinessPayoutAccountStart,
+  BusinessPayoutAccountState,
   PayoutBank,
   PayoutBankResolveRequest,
   PayoutBankResolveResponse,
@@ -30,6 +32,10 @@ import {
 } from '@tipme/contracts';
 import {
   businessBalanceOf,
+  businessPaymentAccount,
+  businessShareMoney,
+  claimBusinessPaymentAccount,
+  recordBusinessPaymentAccount,
   businessWithdrawalQuote,
   getPayoutDestination,
   managerOf,
@@ -45,7 +51,12 @@ import {
   type PayoutReader,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
-import type { PayoutPort } from '@tipme/payments';
+import { withdrawalMinimumMinor } from '@tipme/domain';
+import {
+  BachsApiError,
+  type BachsProvider,
+  type PayoutPort,
+} from '@tipme/payments';
 import { z } from 'zod';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
@@ -53,7 +64,10 @@ import {
   SessionGuard,
   type AuthContext,
 } from '../auth/session.guard.js';
-import { WITHDRAWAL_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import {
+  BACHS_PROVIDER_TOKEN,
+  WITHDRAWAL_PROVIDER_TOKEN,
+} from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
@@ -105,6 +119,8 @@ export class BusinessPayoutsController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: RedisPartnerQuoteCache,
+    @Inject(BACHS_PROVIDER_TOKEN)
+    private readonly bachs: BachsProvider | null,
   ) {}
 
   @Get('balance')
@@ -114,18 +130,103 @@ export class BusinessPayoutsController {
     @Param('businessId') businessId: string,
   ): Promise<ApiDataResponse<BusinessBalance>> {
     await this.owner(auth, businessId);
-    const { availableMinor } = await businessBalanceOf(
-      this.database.db,
-      businessId,
-    );
+    const [{ availableMinor }, money, payoutAccount] = await Promise.all([
+      businessBalanceOf(this.database.db, businessId),
+      businessShareMoney(this.database.db, businessId),
+      this.payoutAccountState(businessId),
+    ]);
     return {
       data: {
         businessId,
         currency: 'NGN',
         balanceMinor: availableMinor.toString(),
         canWithdraw: availableMinor > 0n,
+        onTheWayMinor: money.onTheWayMinor.toString(),
+        heldBackMinor: money.heldBackMinor.toString(),
+        minWithdrawalMinor: withdrawalMinimumMinor().toString(),
+        payoutAccount,
       },
     };
+  }
+
+  /**
+   * Option B: sets up the business's own receive-only account with our payment partner (payouts
+   * and transfers only; no card payments, so no selfie check or review). Safe to repeat: the
+   * account is claimed first and made once. Answers the partner's page when it asks for the
+   * business's registered name; the bank is then added below as for a person.
+   */
+  @Post('payout-account')
+  @HttpCode(200)
+  @RateLimit('intents')
+  async setUpPayoutAccount(
+    @CurrentUser() auth: AuthContext,
+    @Param('businessId') businessId: string,
+  ): Promise<ApiDataResponse<BusinessPayoutAccountStart>> {
+    await this.owner(auth, businessId);
+    const bachs = this.liveAccounts();
+    if (!bachs) return { data: { payoutAccount: 'not_needed' } };
+    const where = {
+      businessId,
+      provider: 'bachs',
+      environment: bachs.environment,
+    };
+    const claim = await this.ownerOnly(() =>
+      claimBusinessPaymentAccount(this.database.db, {
+        ...where,
+        userId: auth.userId,
+      }),
+    );
+    let reference = claim.account.providerAccountReference;
+    // A lost answer is asked again with the SAME key: our partner answers the same account, so a
+    // business never gets two.
+    if (claim.created || !reference) {
+      if (!claim.contactEmail)
+        throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
+      try {
+        const made = await bachs.createReceiveOnlyAccount({
+          contactEmail: claim.contactEmail,
+          country: 'NG',
+          displayName: claim.businessName,
+          idempotencyKey: `tipme-biz-acct-${claim.account.id}`,
+        });
+        reference = made.accountReference;
+        if (made.holdsLocalCurrency === false)
+          await bachs
+            .holdLocalCurrency(reference)
+            .catch((error: unknown) =>
+              this.logFailure('local_currency', error),
+            );
+      } catch (error) {
+        this.logFailure('create_account', error);
+        await recordBusinessPaymentAccount(this.database.db, {
+          ...where,
+          status: error instanceof BachsApiError ? 'FAILED' : 'UNKNOWN',
+        });
+        throw new CodedHttpException(
+          503,
+          error instanceof BachsApiError
+            ? 'DEPENDENCY_UNAVAILABLE'
+            : 'PROVIDER_OUTCOME_UNKNOWN',
+        );
+      }
+    }
+    if (!reference)
+      throw new CodedHttpException(503, 'PROVIDER_OUTCOME_UNKNOWN');
+    const account = await this.syncAccount(businessId, reference, true);
+    const payoutAccount = this.stateOf(account.status);
+    if (payoutAccount === 'ready') return { data: { payoutAccount } };
+    const page = new URL(
+      `/dashboard/business?business=${encodeURIComponent(businessId)}#money`,
+      this.config.WEB_ORIGIN,
+    ).toString();
+    const onboardingUrl = await this.calling('onboarding_link', () =>
+      bachs.createOnboardingLink({
+        accountReference: reference!,
+        refreshUrl: page,
+        returnUrl: page,
+      }),
+    );
+    return { data: { payoutAccount, onboardingUrl } };
   }
 
   /** One partner read per visit at most, through the shared quote cache (#118). */
@@ -155,6 +256,7 @@ export class BusinessPayoutsController {
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
               feeMinor: quote.feeMinor.toString(),
+              feePaidBy: quote.feePaidBy,
             }
           : { ...quote, inReview },
     };
@@ -221,7 +323,7 @@ export class BusinessPayoutsController {
     body: PayoutBankResolveRequest,
   ): Promise<ApiDataResponse<PayoutBankResolveResponse>> {
     await this.owner(auth, businessId);
-    if (!this.accountReference(businessId))
+    if (!(await this.accountReference(businessId)))
       throw new CodedHttpException(409, 'PAYOUT_SETUP_NEEDED');
     const resolved = await this.calling('resolve', () =>
       this.provider.resolveBankAccount(body),
@@ -268,7 +370,7 @@ export class BusinessPayoutsController {
   ): Promise<ApiDataResponse<PayoutDestinationView | null>> {
     await this.owner(auth, businessId);
     // Everything that can be refused without spending the code is refused first.
-    const reference = this.accountReference(businessId);
+    const reference = await this.accountReference(businessId);
     if (!reference) throw new CodedHttpException(409, 'PAYOUT_SETUP_NEEDED');
     const bank = (await this.listBanks()).find(
       ({ code }) => code === body.bankCode,
@@ -321,6 +423,11 @@ export class BusinessPayoutsController {
       provider: this.provider.name,
       businessId,
     });
+    // A bank in the business's name is what live asks for: the account may now be ready.
+    if (this.liveAccounts())
+      await this.syncAccount(businessId, reference, false).catch(
+        (error: unknown) => this.logFailure('sync_account', error),
+      );
     return { data: await this.view(businessId) };
   }
 
@@ -343,15 +450,104 @@ export class BusinessPayoutsController {
   }
 
   /**
-   * The account a business's bank hangs from. Only the pretend provider has one today: it has no
-   * accounts, so the business stands in, as a profile does for a person. R2-B creates no business
-   * account with our live partner (a funds-flow question for the owner, see the R2-B report), so
-   * live answers PAYOUT_SETUP_NEEDED and nothing can be sent.
+   * The account a business's bank hangs from. The pretend provider has no accounts, so the business
+   * stands in, as a profile does for a person. With our live partner (option B) it is the
+   * business's own receive-only account, once set up above; until then PAYOUT_SETUP_NEEDED.
    */
-  private accountReference(businessId: string): string | null {
-    return this.provider.capabilities?.connectedAccounts === false
-      ? businessId
-      : null;
+  private async accountReference(businessId: string): Promise<string | null> {
+    if (this.provider.capabilities?.connectedAccounts === false)
+      return businessId;
+    const bachs = this.liveAccounts();
+    if (!bachs) return null;
+    const account = await businessPaymentAccount(this.database.db, {
+      businessId,
+      provider: 'bachs',
+      environment: bachs.environment,
+    });
+    return account?.providerAccountReference ?? null;
+  }
+
+  /** The partner adapter that can make accounts, when this copy talks to one. */
+  private liveAccounts(): BachsProvider | null {
+    if (this.provider.capabilities?.connectedAccounts === false) return null;
+    return this.bachs;
+  }
+
+  private stateOf(status: string | undefined): BusinessPayoutAccountState {
+    if (status === undefined) return 'needed';
+    if (status === 'ACTIVE') return 'ready';
+    if (status === 'FAILED') return 'needed';
+    return 'setting_up';
+  }
+
+  /** Reads the account's state from TipMe's records; re-asks our partner while it is setting up. */
+  private async payoutAccountState(
+    businessId: string,
+  ): Promise<BusinessPayoutAccountState> {
+    const bachs = this.liveAccounts();
+    if (!bachs) return 'not_needed';
+    const account = await businessPaymentAccount(this.database.db, {
+      businessId,
+      provider: 'bachs',
+      environment: bachs.environment,
+    });
+    if (!account) return 'needed';
+    if (account.status === 'ACTIVE' || !account.providerAccountReference)
+      return this.stateOf(account.status);
+    try {
+      return this.stateOf(
+        (
+          await this.syncAccount(
+            businessId,
+            account.providerAccountReference,
+            false,
+          )
+        ).status,
+      );
+    } catch (error) {
+      this.logFailure('sync_account', error);
+      return this.stateOf(account.status);
+    }
+  }
+
+  /**
+   * Payouts become TipMe's to make (manual), then the account's payout and transfer capabilities
+   * decide whether it is ready. Both calls are safe to repeat.
+   */
+  private async syncAccount(
+    businessId: string,
+    reference: string,
+    setManual: boolean,
+  ) {
+    const bachs = this.liveAccounts()!;
+    const where = {
+      businessId,
+      provider: 'bachs',
+      environment: bachs.environment,
+    };
+    const current = await businessPaymentAccount(this.database.db, where);
+    let manual = current?.manualPayouts ?? false;
+    if (!manual && setManual) {
+      await this.calling('manual_payouts', () =>
+        bachs.setManualPayouts(reference),
+      );
+      manual = true;
+    }
+    const capability = await this.calling('capability', () =>
+      bachs.payoutCapability(reference),
+    );
+    return recordBusinessPaymentAccount(this.database.db, {
+      ...where,
+      providerAccountReference: reference,
+      status:
+        capability.status === 'active'
+          ? 'ACTIVE'
+          : capability.status === 'restricted'
+            ? 'RESTRICTED'
+            : 'ONBOARDING',
+      requirementsDue: capability.requirementsDue,
+      manualPayouts: manual,
+    });
   }
 
   private async view(

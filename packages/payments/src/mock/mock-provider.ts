@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { UncertainProviderOutcomeError } from '../bachs/errors.js';
 import {
   PayoutRejectedError,
+  PlatformRefusalError,
   ProRefundRefusedError,
   SavedCardRefusedError,
 } from '../provider.js';
@@ -14,10 +15,11 @@ import type {
   WebhookVerification,
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
+import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
 import { attemptKey, paymentKey, payoutIdKey, payoutKey } from './keys.js';
 import type { Scenario } from './scenario.js';
 
-/** Same rounding as FEE_POLICY_V1's estimated processing fee (150 bps, half up). */
+/** Same rounding as CURRENT_FEE_POLICY's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
   (amountMinor * 150n + 5000n) / 10000n;
 
@@ -380,7 +382,7 @@ export function createMockProvider(options: {
     },
 
     async quotePayoutFee() {
-      return { feeMinor: 5000n, exact: false };
+      return { feeMinor: NGN_PAYOUT_FEE_MINOR, exact: false };
     },
 
     async collectToPlatform({ accountRef, amountMinor, idempotencyKey }) {
@@ -395,6 +397,28 @@ export function createMockProvider(options: {
         amountMinor: amountMinor.toString(),
       });
       // The transfer exists, but its answer is lost; the read-back finds it.
+      if (next === 'uncertain')
+        throw new UncertainProviderOutcomeError(
+          idempotencyKey,
+          'the request may have reached the payment provider but its response was not received',
+          { cause: 'no_response' },
+        );
+      return { transferRef, status: 'paid' };
+    },
+
+    // Option B's second leg: TipMe's balance to an account. Kept beside the collects, so one
+    // read-back finds either by its key.
+    async transferToAccount({ accountRef, amountMinor, idempotencyKey }) {
+      const next = await redis.getdel(
+        `mockprovider:${prefix}:next-move:${accountRef}`,
+      );
+      if (next === 'refused')
+        throw new PlatformRefusalError('reserve_empty', 'INSUFFICIENT_BALANCE');
+      const transferRef = `mock_transfer_${idempotencyKey}`;
+      await redis.hset(`mockprovider:${prefix}:collect:${idempotencyKey}`, {
+        transferRef,
+        amountMinor: amountMinor.toString(),
+      });
       if (next === 'uncertain')
         throw new UncertainProviderOutcomeError(
           idempotencyKey,

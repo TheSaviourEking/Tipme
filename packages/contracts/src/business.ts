@@ -69,6 +69,8 @@ export const NOTE_REVIEW_OUTCOMES = ['restored', 'removed'] as const;
 export const BUSINESS_NOTIFICATION_KINDS = [
   'business_invitation',
   'business_verified',
+  // Release 2, option B: a refunded tip's share was already withdrawn, so it is held back.
+  'business_share_held_back',
 ] as const;
 
 /** A number the business may see, or "fewer than 3". Never a raw count below MIN_GROUP. */
@@ -329,6 +331,8 @@ export interface PublicStaffTipPage {
   business: PublicLocation['business'];
   location: PublicLocation['location'];
   person: StaffCard;
+  /** Release 2 (R2-C2): the split agreed with the business, told before paying. */
+  share?: ShareDisclosure;
   /** Exactly what the person's own page gives the tip form, its "opens soon" state included. */
   profile: Pick<
     PublicProfile,
@@ -745,4 +749,36 @@ export interface BusinessBalance {
   /** May be negative after a reversal (Q8); withdrawals then stop. */
   balanceMinor: string;
   canWithdraw: boolean;
+  /**
+   * Option B: shares already in the balance whose money is still on its way to the business's own
+   * account (it moves once each tip's money is available with our payment partner).
+   */
+  onTheWayMinor: string;
+  /** Refunded tips' shares the business had already withdrawn, taken from its next shares. */
+  heldBackMinor: string;
+  /** The smallest withdrawal a business can make, unless it takes everything it can. */
+  minWithdrawalMinor: string;
+  /** Whether the business's own payout account with our payment partner is set up. */
+  payoutAccount: BusinessPayoutAccountState;
+}
+
+/** `not_needed` with the pretend partner; `needed` until set up; then `setting_up` or `ready`. */
+export type BusinessPayoutAccountState =
+  'not_needed' | 'needed' | 'setting_up' | 'ready';
+
+/** Setting up the business's payout account: done, or the partner's page to finish it on. */
+export interface BusinessPayoutAccountStart {
+  payoutAccount: BusinessPayoutAccountState;
+  /** Our payment partner's hosted page for the business's registered name, when it asks. */
+  onboardingUrl?: string;
+}
+
+/** Option B, the staff member's own view: what they have shared with a business they work at. */
+export interface MySharedTips {
+  memberId: string;
+  businessName: string;
+  /** This Lagos month's shares of their paid tips there, and how many tips. */
+  monthMinor: string;
+  monthTips: number;
+  totalMinor: string;
 }

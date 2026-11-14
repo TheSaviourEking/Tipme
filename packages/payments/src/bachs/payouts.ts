@@ -17,9 +17,12 @@ import {
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
 
-// Bachs charges this flat fee on top of an NGN payout and offers no same-currency quote:
-// https://docs.bachs.io/guides/payouts/payout-using-api.md ("The fee is charged on top").
-const NGN_PAYOUT_FEE_MINOR = 5000n;
+// Bachs charges a flat fee on top of an NGN payout, and nothing states it before the payout exists:
+// its payout quote "carries no fee" (docs /api-reference/payouts/create-payout-quote), and the fee
+// appears only on the created payout (fee, total_debited). The default is "NGN 50 flat"
+// (docs /for-you/fees), though "account-specific fees can differ", so this one value is what the
+// user is shown and charged up front; any difference is settled on their balance once known.
+import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
 
 // Shown on the recipient's bank statement. Without it Bachs sends its own name; keep it under
 // 15 characters: https://docs.bachs.io/guides/payouts/payout-using-api.md
@@ -178,6 +181,14 @@ const transferListSchema = z.union([
   z.object({ data: z.array(listedTransferSchema) }),
 ]);
 const TRANSFER_LIST_LIMIT = 100;
+
+const sentTransferSchema = z.object({
+  id: identifierSchema,
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().min(1).max(32),
+  destination: z.string(),
+});
 
 const collectedSchema = z.object({
   id: identifierSchema,
@@ -607,7 +618,7 @@ export function createBachsPayouts(
             destination: 'self',
             amount,
             currency: input.currency,
-            description: 'TipMe Pro',
+            description: input.description ?? 'TipMe Pro',
             // Listing can't filter by it, but every transfer returns it: the read-back finds ours.
             transfer_group: idempotencyKey,
           },
@@ -615,6 +626,40 @@ export function createBachsPayouts(
         }),
       );
       if (!sameMoney(transfer.amount, transfer.currency, input.amountMinor))
+        throw unexpected(idempotencyKey);
+      return {
+        transferRef: transfer.id,
+        status: transfer.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+      };
+    },
+
+    // POST /v1/transfers as the platform: TipMe's balance to an account (option B's second leg, and a
+    // refunded tip's fee going back). https://docs.bachs.io/connect/transfers.md
+    async transferToAccount(input) {
+      const account = checkedIdentifier(input.accountRef, 'account reference');
+      const idempotencyKey = checkedKey(input.idempotencyKey);
+      const amount = checkedAmount(input.amountMinor, input.currency);
+      const transfer = await moneyWrite(idempotencyKey, TRANSFER_REFUSALS, () =>
+        client.request({
+          method: 'POST',
+          path: '/v1/transfers',
+          idempotencyKey,
+          operationReference: idempotencyKey,
+          body: {
+            destination: account,
+            amount,
+            currency: input.currency,
+            description: input.description,
+            // Every transfer returns it, so the read-back finds ours among the account's.
+            transfer_group: idempotencyKey,
+          },
+          schema: sentTransferSchema,
+        }),
+      );
+      if (
+        transfer.destination !== account ||
+        !sameMoney(transfer.amount, transfer.currency, input.amountMinor)
+      )
         throw unexpected(idempotencyKey);
       return {
         transferRef: transfer.id,

@@ -15,6 +15,7 @@ import {
   shareReportSchema,
   type ApiDataResponse,
   type BusinessShareRow,
+  type MySharedTips,
   type ShareAgreementView,
   type ShareCounter,
   type ShareProposal,
@@ -27,6 +28,7 @@ import {
   declineShare,
   listBusinessShares,
   myShares,
+  mySharedTips,
   proposeShare,
   reportBusiness,
   type MailSealing,
@@ -131,6 +133,24 @@ export class ShareAgreementsController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<ShareAgreementView[]>> {
     return { data: await myShares(this.database.db, auth.userId) };
+  }
+
+  /** Option B: what this person has shared with each business they work at. Theirs alone. */
+  @Get('work/shared')
+  @Header('Cache-Control', 'private, no-store')
+  async shared(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<MySharedTips[]>> {
+    const rows = await mySharedTips(this.database.db, auth.userId);
+    return {
+      data: rows.map((row) => ({
+        memberId: row.memberId,
+        businessName: row.businessName,
+        monthMinor: row.monthMinor.toString(),
+        monthTips: row.monthTips,
+        totalMinor: row.totalMinor.toString(),
+      })),
+    };
   }
 
   @Post('work/shares/:agreementId/accept')

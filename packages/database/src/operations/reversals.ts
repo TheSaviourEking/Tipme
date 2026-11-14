@@ -1,5 +1,6 @@
 import {
   buildReversalPosting,
+  refundMoves,
   type AccountCode,
   type LedgerLine,
 } from '@tipme/domain';
@@ -19,6 +20,7 @@ import { guarded, OperationError } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
+import { planRefundTransfers, scheduleFeeReturn } from './share-transfers.js';
 
 /** Whose balance a reversal left below zero (Q8). */
 export type BelowZero = { profileId: string } | { businessId: string };
@@ -78,6 +80,12 @@ export async function reverseTip(
     refundedMinor: bigint;
     /** A fee the refund itself carried: TipMe's expense, out of the partner balance. */
     refundFeeMinor?: bigint;
+    /**
+     * REFUND_FEE_RETURN (owner, 12 Nov 2026): TipMe's fee goes back to the person by transfer. A
+     * shared tip gets it whatever the flag (option B). For a refund it was usually already asked
+     * for at refund.paid; the same partner refund never gets it twice.
+     */
+    feeReturnOn?: boolean;
     traceId?: string | null;
     now?: Date;
   },
@@ -218,6 +226,55 @@ export async function reverseTip(
   });
 
   const now = input.now ?? new Date();
+  // Option B: a shared tip's money is put right between the partner accounts too (TipMe's fee back
+  // to the staff member; the business's share back from it, or held back from its next shares).
+  // Only a tip with a share has anything to move, so every other reversal is exactly as before.
+  if (posted.created) {
+    await planRefundTransfers(tx, {
+      tipId: tip.id,
+      reversalTransactionId: posted.transactionId,
+      lines,
+      now,
+    });
+    const shared = lines.some((l) => l.account === 'business_payable');
+    if (input.feeReturnOn || shared) {
+      const moves = refundMoves(lines, { businessId: '' });
+      const returning = await scheduleFeeReturn(tx, {
+        tipId: tip.id,
+        partnerReversalId: input.partnerReversalId,
+        refundedMinor: input.refundedMinor,
+        // The reversal's own figure for TipMe's own fee, so the partner balance meets the ledger.
+        amountMinor: moves.feeReturnMinor,
+      });
+      // Owner, 14 Nov 2026: the processing TipMe recovered from the tip is not returned. The
+      // partner took the whole refund from the person's account, so they bear it: their payable
+      // is debited and TipMe keeps the recovery, keyed on this reversal (once).
+      const person = lines.find(
+        (l) => l.account === 'recipient_payable' && l.profileId,
+      )?.profileId;
+      if (returning && person && moves.processingKeptMinor > 0n)
+        await postLedgerTransaction(tx, {
+          operationType: 'refund_processing',
+          operationKey: `refund-processing.${operationKey}`,
+          currency: tip.currency,
+          tipId: tip.id,
+          lines: [
+            {
+              account: 'recipient_payable',
+              side: 'debit',
+              amountMinor: moves.processingKeptMinor,
+              profileId: person,
+            },
+            {
+              account: 'provider_fee_recovered',
+              side: 'credit',
+              amountMinor: moves.processingKeptMinor,
+            },
+          ],
+          traceId: input.traceId ?? activeTraceId(),
+        });
+    }
+  }
   const belowZero: BelowZero[] = [];
   const touched = new Set(lines.map(ownerKey));
   for (const profileId of people) {

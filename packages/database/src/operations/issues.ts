@@ -88,6 +88,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   payout_unexpected: 'money',
   payout_unresolved: 'money',
   payout_fee_short: 'money',
+  payout_fee_adjusted: 'info',
   payout_held: 'money',
   account_takeover_reported: 'money',
   provider_in_debt: 'money',
@@ -115,6 +116,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   support_request: 'account',
   pro_collect_unknown: 'money',
   pro_refund_failed: 'money',
+  share_transfer_stuck: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -145,8 +147,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The provider paid out money for ${page} that TipMe did not ask for. Withdrawals for them are on hold until it is checked.`;
     case 'payout_unresolved':
       return `A withdrawal for ${page} has an unknown outcome. Find it at the provider and verify it; do not start it again.`;
+    case 'payout_fee_adjusted':
+      return `The provider charged a different fee for a withdrawal for ${page} than the one taken from the amount. The difference was settled on their balance (more taken, or less credited back); TipMe paid nothing. For information.`;
     case 'payout_fee_short':
-      return `The provider charged more for a withdrawal for ${page} than TipMe covered, so their balance there is short by the difference. Top it up.`;
+      return `The provider charged more for a withdrawal for ${page} than the fee TipMe charged them or covered, so their balance there is short by the difference. TipMe absorbs it: top it up.`;
     case 'payout_held':
       return `A withdrawal for ${page} was not started because their withdrawals went on hold first. Nothing was sent, and the money stays reserved.`;
     case 'provider_in_debt':
@@ -199,6 +203,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The partner could not refund a Pro card payment for ${page}. Their Pro month is unchanged and nothing was booked. A failed refund doesn't count, so it can be asked again.`;
     case 'pro_reversed':
       return `The partner reported a refund or dispute on a Pro payment for ${page}. A paid refund or a lost dispute ends that Pro month; nothing else was changed.`;
+    case 'share_transfer_stuck':
+      return `A business share movement for ${page} needs checking: TipMe's partner refused to send it on, or answered with another amount. TipMe may be holding the money. Check the partner dashboard for the transfers in its group before doing anything; nothing is sent again until then.`;
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }
