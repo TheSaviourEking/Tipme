@@ -155,11 +155,14 @@ export function RecipientIdentity({
   profile,
   firstName,
   celebrationLabel = null,
+  after,
 }: {
   profile: PublicProfile;
   firstName: string;
   /** A moment this page shared and supporters can add a tip to, such as "10th tip". */
   celebrationLabel?: string | null;
+  /** Shown under the bio: a campaign page's top (and, later, a tip goal). */
+  after?: ReactNode;
 }) {
   return (
     <section
@@ -198,6 +201,7 @@ export function RecipientIdentity({
       </div>
       {profile.role && <p className="profile-role">{profile.role}</p>}
       {profile.bio && <p className="profile-bio">{profile.bio}</p>}
+      {after}
       {celebrationLabel && (
         <p className="profile-celebration">
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">

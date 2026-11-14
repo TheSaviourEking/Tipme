@@ -2146,6 +2146,32 @@ body:has(.profile-page) .brand__mark {
   overflow-wrap: anywhere;
 }
 
+/* A campaign's own page (ProCampaignPages board, section 3): its headline and description under
+   the person's name. Editorial type, no card: the person stays the page's subject. */
+.campaign-top {
+  margin: var(--space-6) 0 0;
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border-subtle);
+  max-width: 34em;
+}
+
+.campaign-top__headline {
+  margin: 0;
+  font-size: clamp(1.375rem, 1.1rem + 1.2vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.campaign-top__description {
+  margin: 0.625rem 0 0;
+  color: var(--text-secondary);
+  font-size: 1.0625rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
 /* A row of plain links with icons, optically flush with the text above. */
 .profile-contact {
   display: flex;
@@ -2706,6 +2732,18 @@ body:has(.profile-page) .brand__mark {
 .profile-foot__own {
   color: var(--text-primary);
   font-weight: 600;
+}
+
+.profile-foot__campaign {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.profile-foot__campaign a {
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .profile-foot .report-page {
