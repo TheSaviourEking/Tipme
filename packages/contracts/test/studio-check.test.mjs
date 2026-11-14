@@ -15,6 +15,7 @@ import {
   sameIssue,
   studioColourName,
   studioDocumentSchema,
+  studioEagerImages,
   studioIssueKeys,
   studioLargeText,
 } from '../dist/index.js';
@@ -449,4 +450,52 @@ test('defaultStudioDocument passes the design check', () => {
       JSON.stringify(profile),
     );
   }
+});
+
+test('the photos that load first are the ones the weight estimate counts', () => {
+  const filler = (i) =>
+    row(`row0000${i}`, [
+      [
+        {
+          id: `blk0000${i}`,
+          kind: 'text',
+          variant: 'paragraph',
+          text: 'Words. '.repeat(80).trim(),
+        },
+      ],
+    ]);
+  const top = page(
+    row('row00001', [[photo('blk00001')]], { background: { photo: IMG } }),
+  );
+  const low = page(
+    filler(2),
+    filler(3),
+    filler(4),
+    row('row00001', [[photo('blk00001')]]),
+  );
+  assert.deepEqual([...studioEagerImages(top, CTX)].sort(), [
+    'bg:row00001',
+    'blk00001',
+  ]);
+  assert.deepEqual([...studioEagerImages(low, CTX)], []);
+  const gallery = page(
+    row('row00001', [
+      [
+        {
+          id: 'blk00001',
+          kind: 'gallery',
+          variant: 'grid',
+          images: IMAGE_POOL.slice(0, 9).map((imageId) => ({
+            imageId,
+            alt: 'a',
+          })),
+        },
+      ],
+    ]),
+  );
+  const eager = [...studioEagerImages(gallery, CTX)];
+  assert.ok(
+    eager.includes('blk00001:0') && !eager.includes('blk00001:8'),
+    eager.join(),
+  );
 });

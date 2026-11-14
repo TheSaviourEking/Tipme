@@ -169,7 +169,14 @@ export const STUDIO_WEIGHT = {
 } as const;
 
 export const RENDITION_WIDTHS = [480, 960, 1440] as const;
-const ASPECT = { square: 1, wide: 16 / 9, tall: 4 / 5, strip: 3.73 } as const;
+/** Width ÷ height of each crop TipMe makes of a Studio photo (Task 7 makes the files). */
+export const STUDIO_IMAGE_ASPECT = {
+  square: 1,
+  wide: 16 / 9,
+  tall: 4 / 5,
+  strip: 3.73,
+} as const;
+const ASPECT = STUDIO_IMAGE_ASPECT;
 type Shape = keyof typeof ASPECT;
 
 // ---------------------------------------------------------------------------------------------
@@ -399,6 +406,27 @@ export function studioWeight(
   doc: StudioDocument,
   ctx: StudioCheckContext,
 ): { bytes: number; heaviestRow: string } {
+  const { bytes, heaviestRow } = firstScreens(doc, ctx);
+  return { bytes, heaviestRow };
+}
+
+/**
+ * The photos that load straight away on a phone: those the weight estimate counts. Everything
+ * else loads lazily. Keys: `bg:<rowId>` for a row's photo, `<blockId>` for a photo block, and
+ * `<blockId>:<index>` for a gallery photo.
+ */
+export function studioEagerImages(
+  doc: StudioDocument,
+  ctx: StudioCheckContext,
+): Set<string> {
+  return firstScreens(doc, ctx).eager;
+}
+
+function firstScreens(
+  doc: StudioDocument,
+  ctx: StudioCheckContext,
+): { bytes: number; heaviestRow: string; eager: Set<string> } {
+  const eager = new Set<string>();
   const heading = fontById(doc.fonts.heading);
   const body = fontById(doc.fonts.body);
   const fileBytes = (f: StudioFont) =>
@@ -413,7 +441,8 @@ export function studioWeight(
   const spacing = { s: 16, m: 24, l: 40 } as const;
   let y = 0;
   let heaviest = { bytes: 0, row: '' };
-  const count = (row: StudioRow, add: number) => {
+  const count = (row: StudioRow, add: number, key: string) => {
+    eager.add(key);
     bytes += add;
     if (add > heaviest.bytes) heaviest = { bytes: add, row: row.id };
   };
@@ -423,6 +452,7 @@ export function studioWeight(
       count(
         row,
         renditionBytes(ctx, row.background.photo, 'strip', mainWidth(v)),
+        `bg:${row.id}`,
       );
     y += spacing[row.spacing];
     for (const [c, cell] of row.cells.entries()) {
@@ -442,6 +472,7 @@ export function studioWeight(
                     : 'square',
                 w,
               ),
+              b.id,
             );
           if (b.kind === 'gallery') {
             const tile = tileWidth(w, b.variant, false) + STUDIO_GRID.tileGap;
@@ -464,6 +495,7 @@ export function studioWeight(
                     'square',
                     tileWidth(w, b.variant, i === 0),
                   ),
+                  `${b.id}:${i}`,
                 );
             });
           }
@@ -473,7 +505,7 @@ export function studioWeight(
     }
     y += spacing[row.spacing];
   }
-  return { bytes, heaviestRow: heaviest.row };
+  return { bytes, heaviestRow: heaviest.row, eager };
 }
 
 /** The widest screen the model sizes for: photos are judged at their spot here. */
