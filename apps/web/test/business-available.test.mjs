@@ -58,7 +58,10 @@ test('releaseFlags: each later flag needs business on, and only an explicit true
     businessOwners: false,
   };
   assert.deepEqual(releaseFlags(null), off);
-  assert.deepEqual(releaseFlags({ business: 'true', businessSignup: true }), off);
+  assert.deepEqual(
+    releaseFlags({ business: 'true', businessSignup: true }),
+    off,
+  );
   assert.deepEqual(
     releaseFlags({ business: false, businessSignup: true, businessPro: true }),
     off,
@@ -75,11 +78,16 @@ test('releaseFlags: each later flag needs business on, and only an explicit true
       businessSignup: 'yes',
       businessOwners: true,
     }),
-    { business: true, businessPro: true, businessSignup: false, businessOwners: true },
+    {
+      business: true,
+      businessPro: true,
+      businessSignup: false,
+      businessOwners: true,
+    },
   );
 });
 
-test('the flags reader shares the business reader\'s keeping: a failed read is all off', async () => {
+test("the flags reader shares the business reader's keeping: a failed read is all off", async () => {
   const read = createReleaseFlagsReader({
     read: async () => {
       throw new Error('down');

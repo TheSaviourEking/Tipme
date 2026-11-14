@@ -3,7 +3,11 @@ import type { ApiDataResponse, MyAccount } from '@tipme/contracts';
 import { myAccount } from '@tipme/database';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
-import { CurrentUser, SessionGuard, type AuthContext } from './session.guard.js';
+import {
+  CurrentUser,
+  SessionGuard,
+  type AuthContext,
+} from './session.guard.js';
 
 /**
  * Business sign-up, Task D1: the login's own account. A session is all it needs (never a page),

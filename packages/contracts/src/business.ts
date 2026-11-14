@@ -412,6 +412,8 @@ export interface BusinessDetail {
   /** The uploaded logo's served address; it is served publicly only once the business is verified. */
   logoPath?: string;
   contact: { name: string; email: string; phone?: string };
+  /** When the business was sent to TipMe (business sign-up: "Sent to TipMe" while waiting). */
+  appliedAt: string;
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
   you: {

@@ -79,7 +79,11 @@ const application = (email) => ({
   slug: `mama-${randomUUID().slice(0, 8)}`,
   contactName: 'Ngozi Eze',
   contactEmail: email,
-  location: { name: 'Admiralty Way', slug: 'admiralty', address: '1 Admiralty Way, Lekki' },
+  location: {
+    name: 'Admiralty Way',
+    slug: 'admiralty',
+    address: '1 Admiralty Way, Lekki',
+  },
 });
 
 test('GET /v1/me/account needs a session', async () => {
@@ -176,12 +180,19 @@ test('a login with no page applies, and sees celebrate once after verification',
   );
   assert.deepEqual((await detail()).you, { role: 'owner', celebrate: true });
   for (let i = 0; i < 2; i++) {
-    const seen = await post(on.api, `/v1/me/businesses/${id}/verified-seen`, {}, cookie);
+    const seen = await post(
+      on.api,
+      `/v1/me/businesses/${id}/verified-seen`,
+      {},
+      cookie,
+    );
     assert.equal(seen.status, 204);
   }
   assert.deepEqual((await detail()).you, { role: 'owner' });
   const managers = await (
-    await fetch(`${on.api}/v1/me/businesses/${id}/managers`, { headers: { cookie } })
+    await fetch(`${on.api}/v1/me/businesses/${id}/managers`, {
+      headers: { cookie },
+    })
   ).json();
   assert.deepEqual(
     managers.data.map((m) => m.name),

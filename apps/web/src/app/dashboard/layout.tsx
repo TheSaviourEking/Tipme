@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
 import { PilotNotice } from '@/components/pilot-notice';
 import { PaymentModeScope } from '@/components/payment-mode-slot';
+import { ReleaseFlagsScope } from '@/components/release-flags-slot';
 import { DashboardShell } from './dashboard-shell';
 
 export const metadata: Metadata = {
@@ -27,9 +28,12 @@ export default function DashboardLayout({
       }
     >
       <PaymentModeScope>
-        <DashboardShell pilotNotice={<PilotNotice />}>
-          {children}
-        </DashboardShell>
+        {/* Business sign-up: the flags for the shell (account-only mode, the switcher). */}
+        <ReleaseFlagsScope>
+          <DashboardShell pilotNotice={<PilotNotice />}>
+            {children}
+          </DashboardShell>
+        </ReleaseFlagsScope>
       </PaymentModeScope>
     </Suspense>
   );

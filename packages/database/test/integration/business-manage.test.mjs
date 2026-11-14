@@ -621,9 +621,10 @@ test('business sign-up: applying with no page', async (t) => {
   const q = (text, values) =>
     database.pool.query(text, values).then((result) => result.rows);
   await database.fresh();
-  await q(`UPDATE users SET email = 'ada@example.com', email_verified_at = now() WHERE id = $1`, [
-    ADA.userId,
-  ]);
+  await q(
+    `UPDATE users SET email = 'ada@example.com', email_verified_at = now() WHERE id = $1`,
+    [ADA.userId],
+  );
   // A login made by an email code, with no page: what "For businesses" leaves behind.
   const pageless = async (email) => {
     const id = randomUUID();
@@ -642,7 +643,9 @@ test('business sign-up: applying with no page', async (t) => {
   await t.test(
     'a code-confirmed login with no page applies and is the owner, named by shown_name',
     async () => {
-      const ngozi = await pageless(`ngozi-${randomUUID().slice(0, 6)}@example.com`);
+      const ngozi = await pageless(
+        `ngozi-${randomUUID().slice(0, 6)}@example.com`,
+      );
       const detail = await applyForBusiness(
         database.db,
         ngozi,
@@ -669,7 +672,9 @@ test('business sign-up: applying with no page', async (t) => {
   await t.test(
     'without ownerName the contact name is the shown name; a page name still wins',
     async () => {
-      const funke = await pageless(`funke-${randomUUID().slice(0, 6)}@example.com`);
+      const funke = await pageless(
+        `funke-${randomUUID().slice(0, 6)}@example.com`,
+      );
       const mine = await applyForBusiness(database.db, funke, application());
       const [row] = await q(
         `SELECT shown_name FROM business_managers WHERE business_id = $1 AND user_id = $2`,
@@ -677,7 +682,11 @@ test('business sign-up: applying with no page', async (t) => {
       );
       assert.equal(row.shown_name, 'Funke Akindele');
       // Ada has a page: her page name shows, not the contact she typed.
-      const ada = await applyForBusiness(database.db, ADA.userId, application());
+      const ada = await applyForBusiness(
+        database.db,
+        ADA.userId,
+        application(),
+      );
       const [adaRow] = await listManagers(database.db, ADA.userId, ada.id);
       assert.equal(adaRow.name, ADA.displayName);
     },
@@ -686,7 +695,9 @@ test('business sign-up: applying with no page', async (t) => {
   await t.test(
     'celebrate is true once the business is verified, false after verified-seen; a manager added after never celebrates',
     async () => {
-      const owner = await pageless(`owner-${randomUUID().slice(0, 6)}@example.com`);
+      const owner = await pageless(
+        `owner-${randomUUID().slice(0, 6)}@example.com`,
+      );
       const detail = await applyForBusiness(database.db, owner, application());
       assert.equal(
         (await businessDetail(database.db, owner, detail.id)).you.celebrate,
@@ -699,7 +710,9 @@ test('business sign-up: applying with no page', async (t) => {
         true,
       );
       // A co-owner who joins after verification has nothing to celebrate.
-      const later = await pageless(`later-${randomUUID().slice(0, 6)}@example.com`);
+      const later = await pageless(
+        `later-${randomUUID().slice(0, 6)}@example.com`,
+      );
       await seedManager(database, { businessId: detail.id, userId: later });
       assert.equal(
         (await businessDetail(database.db, later, detail.id)).you.celebrate,
@@ -722,7 +735,9 @@ test('business sign-up: applying with no page', async (t) => {
   await t.test(
     'the business-only owner never appears among staff or on a location people list',
     async () => {
-      const owner = await pageless(`solo-${randomUUID().slice(0, 6)}@example.com`);
+      const owner = await pageless(
+        `solo-${randomUUID().slice(0, 6)}@example.com`,
+      );
       const detail = await applyForBusiness(database.db, owner, application());
       await verify(detail.id);
       const locationId = detail.locations[0].id;

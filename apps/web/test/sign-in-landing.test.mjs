@@ -44,6 +44,7 @@ test('a business-only login lands on its business, never /sign-up', () => {
 test('anyone else without a page chooses a handle', () => {
   assert.equal(signedInLanding(result(), '/dashboard'), '/sign-up');
   // An older API that doesn't send the field reads as false.
-  const { managesBusiness: _, ...old } = result();
+  const old = result();
+  delete old.managesBusiness;
   assert.equal(signedInLanding(old, '/dashboard/business'), '/sign-up');
 });

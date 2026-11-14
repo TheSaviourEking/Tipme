@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { signUpRecipient } from './helpers';
+import { signOutOfDashboard, signUpRecipient } from './helpers';
 import { accountOf, seedBusiness } from './business-fixtures';
 
 // The owner, 6 Nov 2026: signed in, the header's "Sign in" and "Claim your username" give way to
@@ -24,9 +24,9 @@ test('signed in, the header offers the dashboard instead of Sign in and Claim', 
   await expect(dashboard).toBeVisible();
   await expect(dashboard).toHaveAttribute('href', '/dashboard');
   await expect(nav(page).getByRole('link', { name: 'Sign in' })).toHaveCount(0);
-  await expect(
-    nav(page).getByRole('link', { name: 'Claim your username' }),
-  ).toHaveCount(0);
+  await expect(nav(page).getByRole('link', { name: 'Get tipped' })).toHaveCount(
+    0,
+  );
   // No business: no Business link.
   await expect(nav(page).getByRole('link', { name: 'Business' })).toHaveCount(
     0,
@@ -94,7 +94,8 @@ test('signing out puts Sign in back', async ({ page }, testInfo) => {
   );
   await signUpRecipient(page, testInfo, { live: false });
   await page.goto('/dashboard');
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  // Business sign-up is on in the e2e stack: Sign out sits in the account menu.
+  await signOutOfDashboard(page);
   await page.waitForURL(/\/sign-in/);
   await page.goto('/');
   await expect(nav(page).getByRole('link', { name: 'Sign in' })).toBeVisible();

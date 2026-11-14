@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useId, useState } from 'react';
+import { useContext, useEffect, useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   PendingEmailRecovery,
@@ -9,7 +9,8 @@ import type {
 } from '@tipme/contracts';
 import { Button, Card, InputField, Notice } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
-import { useRecipient } from '@/components/account/recipient-context';
+import { RecipientContext } from '@/components/account/recipient-context';
+import { AccountContext } from '@/components/account/account-context';
 import { RECOVERY_EMAIL_CHANGED } from '@/lib/owner-attention';
 import { useLiveEvents } from '@/components/live/live-provider';
 
@@ -318,7 +319,16 @@ export function RecoveryEmailCard() {
 
 export function ContactDetails() {
   const id = useId();
-  const { profile, setProfile } = useRecipient();
+  // With a page, its own read; with none (business sign-up), the login's.
+  const recipient = useContext(RecipientContext);
+  const login = useContext(AccountContext);
+  const profile = recipient?.profile;
+  const signInEmail = profile
+    ? (profile.email ?? null)
+    : (login?.account?.email ?? null);
+  const emailVerified = profile
+    ? profile.emailVerified
+    : (login?.account?.emailVerified ?? false);
   const [email, setEmail] = useState('');
   const [emailNote, setEmailNote] = useState('');
   const [code, setCode] = useState('');
@@ -347,11 +357,13 @@ export function ContactDetails() {
       body: { email: email.trim(), code },
     });
     if (result.ok) {
-      setProfile({
-        ...profile,
-        email: result.data.email,
-        emailVerified: true,
-      });
+      if (recipient && profile)
+        recipient.setProfile({
+          ...profile,
+          email: result.data.email,
+          emailVerified: true,
+        });
+      else login?.refreshAccount();
       setEmailStep('idle');
       setEmail('');
       setCode('');
@@ -379,7 +391,7 @@ export function ContactDetails() {
       method: 'PATCH',
       body: { emailPublic },
     });
-    if (result.ok) setProfile(result.data);
+    if (result.ok) recipient?.setProfile(result.data);
   };
 
   return (
@@ -388,8 +400,8 @@ export function ContactDetails() {
       <p>
         You sign in with:{' '}
         <strong>
-          {profile.email
-            ? `${profile.email}${profile.emailVerified ? '' : ' (not confirmed)'}`
+          {signInEmail
+            ? `${signInEmail}${emailVerified ? '' : ' (not confirmed)'}`
             : 'no email yet'}
         </strong>
       </p>
@@ -436,9 +448,9 @@ export function ContactDetails() {
       </form>
       <p className="tm-hint">
         Phone numbers are coming soon.{' '}
-        {profile.phone ? `Yours on file: ${profile.phone}.` : ''}
+        {profile?.phone ? `Yours on file: ${profile.phone}.` : ''}
       </p>
-      {profile.emailVerified && (
+      {profile?.emailVerified && (
         <label className="tip-remember" htmlFor={`${id}-email-public`}>
           <input
             id={`${id}-email-public`}

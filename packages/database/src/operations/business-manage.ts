@@ -452,6 +452,7 @@ async function readDetail(
       email: business.contactEmail,
       ...(business.contactPhone ? { phone: business.contactPhone } : {}),
     },
+    appliedAt: business.createdAt.toISOString(),
     locations: locations.map((location) => ({
       id: location.id,
       slug: location.slug,

@@ -66,15 +66,29 @@ async function codeEmails(page: Page, email: string): Promise<string[]> {
   }
 }
 
-/** Signs in with an email code, reading the code from the pretend inbox. */
+/**
+ * Signs in with an email code, reading the code from the pretend inbox. `start: null` stays on
+ * the page the test already opened (a sign-up card reached by clicking).
+ */
 export async function signInWithEmail(
   page: Page,
   email: string,
-  start = '/sign-in',
+  start: string | null = '/sign-in',
 ) {
   const before = (await codeEmails(page, email)).length;
-  await page.goto(start);
-  await page.getByLabel('Email address').fill(email);
+  if (start !== null) await page.goto(start);
+  // With business sign-up on, a plain /sign-up asks "What brings you to TipMe?" first: these
+  // helpers take today's path, "Get tipped" (business-signup.spec.ts covers the question itself).
+  const emailField = page.getByLabel('Email address');
+  const fork = page.getByRole('radiogroup', {
+    name: 'What brings you to TipMe?',
+  });
+  await expect(emailField.or(fork)).toBeVisible();
+  if (await fork.isVisible()) {
+    await fork.getByRole('radio', { name: /^Get tipped/ }).check();
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  await emailField.fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByLabel('6-digit code')).toBeVisible();
   // The worker sends it shortly after; wait for this one, not an earlier sign-in's.
@@ -178,3 +192,18 @@ export const hasRedEdge = (field: Locator) =>
       getComputedStyle(el).boxShadow,
     ),
   );
+
+/**
+ * Signs out from the dashboard. With business sign-up on (the e2e stack), Sign out sits in the
+ * account menu, behind the top-right button (Task D6).
+ */
+export async function signOutOfDashboard(page: Page) {
+  await page
+    .getByRole('main')
+    .getByRole('button', { name: /^Account:/ })
+    .click();
+  await page
+    .getByRole('menu')
+    .getByRole('menuitem', { name: 'Sign out' })
+    .click();
+}

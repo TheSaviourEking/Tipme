@@ -113,6 +113,9 @@ export default defineConfig({
         // Business release 2 (R2-C1's share agreement, R2-B's Money section: only shares fill a
         // business's own balance), also off by default everywhere else.
         BUSINESS_SHARES_ENABLED: 'true',
+        // Business sign-up (Phase D): the "Get tipped" / "For businesses" fork, a business with no
+        // page, and the account-menu switcher. Off by default everywhere else.
+        BUSINESS_SIGNUP_ENABLED: 'true',
         // Paid Pro (ADR-0015): buying a month on pretend money, off by default everywhere else.
         // tests/e2e/pro-buy.spec.ts answers the price read itself to show the "off" state.
         PRO_BILLING_ENABLED: 'true',
