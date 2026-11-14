@@ -11,6 +11,7 @@ import {
 import { tipFromProfile } from '../shared/tip-flow';
 import { signUpRecipient } from './helpers';
 import { accountOf, seedBusiness } from './business-fixtures';
+import { chooseAndSave } from './image-picker-helpers';
 import { sql } from './ops-helpers';
 import { WEB_ORIGIN } from './stack';
 
@@ -76,12 +77,16 @@ const setName = (handle: string, name: string) =>
 
 async function uploadPhoto(page: Page) {
   await page.goto('/dashboard/settings');
-  await page.getByLabel('Choose a photo').setInputFiles({
+  // The shared picker (#199): its button, then the position step saved as it opens.
+  const card = page.locator('#photo');
+  await chooseAndSave(page, card, 'Choose a photo', 'photo', {
     name: 'me.jpg',
     mimeType: 'image/jpeg',
     buffer: await flat(ORANGE.r, ORANGE.g, ORANGE.b),
   });
-  await expect(page.getByText('Photo saved.')).toBeVisible();
+  await expect(
+    card.getByRole('status').getByText('Photo saved.'),
+  ).toBeVisible();
 }
 
 /** A visitor tips the page and lands on the paid receipt, left open for the test. */
@@ -95,7 +100,7 @@ async function paidReceipt(browser: Browser, handle: string, name: string) {
   }).toPass({ timeout: 10_000 });
   await tipFromProfile(page);
   await expect(
-    page.getByRole('heading', { name: `${name} got your thanks.` }),
+    page.getByRole('heading', { name: `${name} got your tip.` }),
   ).toBeVisible({ timeout: 20_000 });
   return page.locator('.tip-thanks');
 }
@@ -200,7 +205,7 @@ test('a business with a logo downloads a sign whose tile is the logo, and the co
 
   await page.goto('/dashboard/business');
   const details = page.getByRole('region', { name: 'Details' });
-  await details.getByLabel('Choose a logo').setInputFiles({
+  await chooseAndSave(page, details, 'Choose a logo', 'logo', {
     name: 'logo.jpg',
     mimeType: 'image/jpeg',
     buffer: await flat(ORANGE.r, ORANGE.g, ORANGE.b, 600, 400),
