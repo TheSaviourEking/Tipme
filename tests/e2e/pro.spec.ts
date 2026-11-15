@@ -6,6 +6,11 @@ import { API_ORIGIN, WEB_ORIGIN } from './stack';
 // Free and Pro (PR-012): staff make a page Pro, the recipient chooses their own amounts and
 // minimum, and supporters see the exact amount they will pay.
 
+// A route handler still running when a test ends (a live re-read mid route.fetch()) must not fail it.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test('staff make a page Pro, the recipient chooses amounts, and supporters see them', async ({
   page,
   browser,
@@ -357,8 +362,10 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
     }),
   ).toBeVisible();
   await expect(heading).toBeFocused();
-  await page.unroute(profileUrl);
-  await page.unroute(handleUrl);
+  // A late re-read can still be inside the profile handler, between route.fetch() and fulfill.
+  // unroute() would let that request go to the network under it, and the handler's fulfill would
+  // throw "Route is already handled!": so wait for handlers in flight, then drop both routes.
+  await page.unrouteAll({ behavior: 'wait' });
 
   // Pro ended elsewhere, likewise.
   // The dashboard reads the profile on load and again when its live stream connects (the

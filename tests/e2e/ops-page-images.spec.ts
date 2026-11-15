@@ -39,19 +39,36 @@ test('staff view a page’s cover and photo with their session, and remove the c
 }, testInfo) => {
   const { handle } = await signUpRecipient(page, testInfo);
   await page.goto('/dashboard/settings');
-  await chooseAndSave(page, page.locator('#photo'), 'Choose a photo', 'photo', {
-    name: 'me.jpg',
-    mimeType: 'image/jpeg',
-    buffer: await jpeg(800, 800),
-  });
+  // A save ends when the API answers the upload (it decodes and re-encodes the picture first); the
+  // "saved" line follows that answer. So wait for the answer itself, within the test's time rather
+  // than an expect's 5 s, and name its status: a slow save passes, and a refused one says why
+  // instead of failing as a missing line.
+  const upload = async (path: string, save: () => Promise<void>) => {
+    const answered = page.waitForResponse(
+      (r) =>
+        r.url() === `${API_ORIGIN}${path}` && r.request().method() === 'PUT',
+    );
+    await save();
+    const answer = await answered;
+    expect(answer.status(), await answer.text()).toBe(200);
+  };
+  await upload('/v1/me/avatar', async () =>
+    chooseAndSave(page, page.locator('#photo'), 'Choose a photo', 'photo', {
+      name: 'me.jpg',
+      mimeType: 'image/jpeg',
+      buffer: await jpeg(800, 800),
+    }),
+  );
   await expect(
     page.locator('#photo').getByRole('status').getByText('Photo saved.'),
   ).toBeVisible();
-  await chooseAndSave(page, page.locator('#cover'), 'Upload a cover', 'cover', {
-    name: 'cover.jpg',
-    mimeType: 'image/jpeg',
-    buffer: await jpeg(1600, 500),
-  });
+  await upload('/v1/me/cover', async () =>
+    chooseAndSave(page, page.locator('#cover'), 'Upload a cover', 'cover', {
+      name: 'cover.jpg',
+      mimeType: 'image/jpeg',
+      buffer: await jpeg(1600, 500),
+    }),
+  );
   await expect(
     page.locator('#cover').getByRole('status').getByText('Cover saved.'),
   ).toBeVisible();
