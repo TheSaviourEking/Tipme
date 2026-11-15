@@ -8,6 +8,11 @@ import {
   tipAsVisitor,
 } from './helpers';
 
+// A route handler still running when a test ends (a live re-read mid route.fetch()) must not fail it.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test('a new recipient sees the first-day screen, then their tip and its proof', async ({
   page,
   browser,
@@ -297,13 +302,21 @@ test('on a phone the dashboard has a tab bar of four @mobile', async ({
 
 test('a long unbroken name fits at 320px', async ({ page }, testInfo) => {
   await signUpRecipient(page, testInfo);
+  // Nothing in flight: the page signed up on may still be reading /v1/me/profile (or re-reading it on
+  // a live update), and the goto below would abort that read mid-handler and dispose its response.
+  await page.goto('about:blank');
   await page.route('**/v1/me/profile', async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
-    await route.fulfill({
-      response,
-      json: { data: { ...body.data, displayName: UNBROKEN_NAME } },
-    });
+    try {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({
+        response,
+        json: { data: { ...body.data, displayName: UNBROKEN_NAME } },
+      });
+    } catch {
+      // The request went away under the handler (page navigated or closed): nothing to answer.
+      await route.fallback().catch(() => {});
+    }
   });
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/dashboard');
