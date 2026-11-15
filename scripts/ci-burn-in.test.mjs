@@ -5,7 +5,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { MAX_SHARDS, shardCount, shardFiles } from './ci-burn-in.mjs';
+import {
+  MAX_SHARDS,
+  RELEASE_SKIP_NOTE,
+  shardCount,
+  shardFiles,
+} from './ci-burn-in.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const specs = (n) =>
@@ -111,4 +116,55 @@ test('CI shards the burn-in and keeps one e2e-burn-in result that fails when any
   assert.match(result, /SHARDS: \$\{\{ needs\.e2e-burn-in-shard\.result \}\}/);
 
   assert.match(job('record-tested-tree'), /needs:[\s\S]*\be2e-burn-in\b/);
+});
+
+test('a release PR into main plans 0 shards with a clear summary; a PR into dev is unchanged', () => {
+  assert.equal(
+    RELEASE_SKIP_NOTE,
+    'Release PR into main: burn-in skipped; specs were burnt in on dev',
+  );
+  const run = (BASE_REF) => {
+    const dir = mkdtempSync(join(tmpdir(), 'burn-in-'));
+    const out = join(dir, 'output');
+    const summary = join(dir, 'summary');
+    execFileSync('node', [join(root, 'scripts/ci-burn-in.mjs'), 'plan'], {
+      env: {
+        ...process.env,
+        SPECS: specs(9).join(' '),
+        BASE_REF,
+        GITHUB_OUTPUT: out,
+        GITHUB_STEP_SUMMARY: summary,
+      },
+    });
+    const read = (f) => {
+      try {
+        return readFileSync(f, 'utf8');
+      } catch {
+        return '';
+      }
+    };
+    return { out: read(out), summary: read(summary) };
+  };
+  const main = run('main');
+  assert.equal(main.out, 'count=0\nshards=[]\n');
+  assert.ok(main.summary.includes(RELEASE_SKIP_NOTE));
+  for (const base of ['dev', 'feat/x', '']) {
+    const other = run(base);
+    assert.equal(other.out, 'count=2\nshards=[1,2]\n', `base ${base}`);
+    assert.ok(!other.summary.includes(RELEASE_SKIP_NOTE));
+  }
+});
+
+test('CI passes the base ref to the plan, and e2e-burn-in passes with 0 shards', () => {
+  const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+  const job = (name) =>
+    new RegExp(`\\n  ${name}:\\n([\\s\\S]*?)(?=\\n  [a-z0-9-]+:\\n|$)`).exec(
+      ci,
+    )?.[1] ?? '';
+  assert.match(
+    job('e2e-burn-in-plan'),
+    /BASE_REF: \$\{\{ github\.base_ref \}\}\n\s+run: node scripts\/ci-burn-in\.mjs plan/,
+  );
+  // 0 shards (skipped or no spec): the aggregate exits 0 before looking at the shard result.
+  assert.match(job('e2e-burn-in'), /if \[ "\$COUNT" = 0 \]; then exit 0; fi/);
 });
