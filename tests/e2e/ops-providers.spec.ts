@@ -24,20 +24,45 @@ test.afterAll(async () => {
   });
 });
 
-/** The newest test email's link, from the pretend inbox (reloading until it arrives). */
-async function testEmailLink(page: import('@playwright/test').Page) {
+const linkIn = (text: string | null) =>
+  /(\/ops\/providers\/confirm\S*#t=[\w-]+)/.exec(text ?? '')?.[1] ?? '';
+
+/** The newest test email's link in the pretend inbox now, or '' when there is none yet. */
+async function newestTestLinkNow(page: import('@playwright/test').Page) {
+  const inbox = await page.context().newPage();
+  await inbox.goto('/dev/inbox');
+  // The inbox loads in the browser; signing in left a code there, so wait for that first.
+  await expect(inbox.getByRole('article').first()).toBeVisible();
+  const mails = inbox
+    .getByRole('article')
+    .filter({ hasText: 'TipMe mail test' });
+  const link = (await mails.count())
+    ? linkIn(await mails.first().textContent())
+    : '';
+  await inbox.close();
+  return link;
+}
+
+/**
+ * The newest test email's link, reloading the pretend inbox until one arrives that isn't `seen`.
+ * A repeated run finds the last run's mail (its link already used) until the new one lands.
+ */
+async function testEmailLink(page: import('@playwright/test').Page, seen = '') {
   const inbox = await page.context().newPage();
   const mail = inbox
     .getByRole('article')
     .filter({ hasText: 'TipMe mail test' })
     .first();
+  let link = '';
   await expect(async () => {
     await inbox.goto('/dev/inbox');
     await expect(mail).toBeVisible({ timeout: 1000 });
+    link = linkIn(await mail.textContent());
+    expect(link).not.toBe('');
+    expect(link).not.toBe(seen);
   }).toPass({ timeout: 25_000 });
-  const text = (await mail.textContent()) ?? '';
   await inbox.close();
-  return /(\/ops\/providers\/confirm\S*#t=[\w-]+)/.exec(text)?.[1] ?? '';
+  return link;
 }
 
 test('@alone staff send a test, confirm it from the inbox, and make the provider active', async ({
@@ -60,11 +85,12 @@ test('@alone staff send a test, confirm it from the inbox, and make the provider
   await card
     .getByLabel('Why are you testing this provider?')
     .fill('Checking mail before launch');
+  const seen = await newestTestLinkNow(page);
   await card.getByRole('button', { name: 'Send the test email' }).click();
   await expect(card.getByText(/Test sent to s•••@example\.com/)).toBeVisible();
 
   // A signed-out staff member opening the link comes back to it after signing in.
-  const link = await testEmailLink(page);
+  const link = await testEmailLink(page, seen);
   await page.goto(link);
   await expect(page.getByText(/Test confirmed/)).toBeVisible();
   await expectAccessible(page);
