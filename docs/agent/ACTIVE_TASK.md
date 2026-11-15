@@ -1,3 +1,9 @@
+# Current task: the home page's first paint (15 November 2026)
+
+- Branch `perf/home-first-paint` from `origin/dev`. Production (be8d4167) failed the release check's speed budget: `/` LCP 2876 and 2136 ms (budget 2000). The LCP is the headline and equals FCP: the whole first paint waited for one render-blocking stylesheet, `globals.css`, which grew from 175 KB to 299 KB source (26.8 to 41.9 KB gzip served) between the 4 Nov release (ffb3485d) and now, mostly dashboard and admin styles that every public page downloaded.
+- Built: rules that can match only under `/dashboard` or only under `/ops` moved to `app/dashboard/dashboard.css` and `app/ops/ops.css`, imported by those layouts. A rule of `globals.css` that must still follow a moved one (same specificity, a shared property) is repeated in the area file so the cascade order is unchanged, also after client navigation between areas; `test/route-css.test.mjs` checks the copies match and holds the home page's stylesheets to 32 KB gzip. Release check: `coldVisitor` (the staging ticket only, empty cache) and `throttledLcp` fails a load that used the cache.
+- Next: CI, the owner merges into `dev`, staging release check (now cold), then production.
+
 # Current task: the production migration deadlock fix (15 November 2026)
 
 - Branch `fix/deploy-migration-deadlock` from `origin/dev`. Deploy production (main @ `05231073`) failed twice at Migrations with 40P01: drizzle runs migrations 0071–0112 in one transaction, which deadlocked with the old workers' jobs. Each attempt rolled back; production is unchanged.
