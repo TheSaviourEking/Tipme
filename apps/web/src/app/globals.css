@@ -4471,15 +4471,14 @@ body:has(.profile-page) .brand__mark {
 
 /*
  * The claim moment: "@handle is yours.", once, over the hello step, after the server confirmed the
- * claim (DECISION-LOG 2026-11-06). 1600ms in all: the card falls (0-350ms) and lands (350-550ms),
- * the stamp presses (550-800ms), the hearts rise and the words arrive (800-1200ms), then the scene
- * rises away (1200-1600ms). Reduced motion gets the still scene.
+ * claim (DECISION-LOG 2026-11-06). The card falls (0-350ms) and lands (350-550ms), the stamp
+ * presses (550-800ms), the hearts rise and the words arrive (800-1200ms). Then it stays until the
+ * person moves on (DECISION-LOG 2026-11-15). Reduced motion gets the still scene.
  */
 .claim-moment {
   --claim-land: 550ms;
   --claim-stamp: 550ms;
   --claim-words: 800ms;
-  --claim-away: 1200ms;
 
   position: fixed;
   z-index: 200;
@@ -4492,15 +4491,6 @@ body:has(.profile-page) .brand__mark {
   overflow: hidden auto;
   background: var(--canvas);
   text-align: center;
-  animation: claim-away var(--duration-spatial) var(--ease-physical)
-    var(--claim-away) forwards;
-}
-
-@keyframes claim-away {
-  to {
-    opacity: 0;
-    transform: translateY(-16px);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  CLAIM_MOMENT_MS,
+import * as claimMoment from '../src/lib/claim-moment.ts';
+
+const {
+  CLAIM_LANDED_MS,
+  CLAIM_TAP_ARMED_MS,
   claimBuzz,
+  endsClaimMoment,
   markClaimed,
   takeClaimed,
-} from '../src/lib/claim-moment.ts';
+} = claimMoment;
 
 function memoryStorage() {
   const items = new Map();
@@ -29,8 +33,39 @@ const throwing = {
   },
 };
 
-test('the moment lasts 1.6 seconds', () => {
-  assert.equal(CLAIM_MOMENT_MS, 1600);
+test('the moment never hands over by itself: there is no duration to wait out', () => {
+  // Owner, 15 Nov 2026: it stays until they move on.
+  assert.equal('CLAIM_MOMENT_MS' in claimMoment, false);
+});
+
+test('Escape and Enter end it; other keys (Tab, letters, a held key) do not', () => {
+  assert.equal(endsClaimMoment({ kind: 'key', key: 'Escape' }), true);
+  assert.equal(endsClaimMoment({ kind: 'key', key: 'Enter' }), true);
+  for (const key of ['Tab', 'a', ' ', 'Shift', 'ArrowDown', 'Meta'])
+    assert.equal(endsClaimMoment({ kind: 'key', key }), false, key);
+  // A held Enter from the claim form repeats into the moment; that is not a choice to move on.
+  assert.equal(
+    endsClaimMoment({ kind: 'key', key: 'Enter', repeat: true }),
+    false,
+  );
+});
+
+test('the tap that brought them here does not end it; a tap after the card lands does', () => {
+  assert.ok(CLAIM_TAP_ARMED_MS > CLAIM_LANDED_MS);
+  assert.equal(endsClaimMoment({ kind: 'tap', sinceShownMs: 0 }), false);
+  assert.equal(
+    endsClaimMoment({ kind: 'tap', sinceShownMs: CLAIM_LANDED_MS }),
+    false,
+  );
+  assert.equal(
+    endsClaimMoment({ kind: 'tap', sinceShownMs: CLAIM_TAP_ARMED_MS - 1 }),
+    false,
+  );
+  assert.equal(
+    endsClaimMoment({ kind: 'tap', sinceShownMs: CLAIM_TAP_ARMED_MS }),
+    true,
+  );
+  assert.equal(endsClaimMoment({ kind: 'tap', sinceShownMs: 60_000 }), true);
 });
 
 test('takeClaimed is true once after markClaimed for the same handle, then false', () => {

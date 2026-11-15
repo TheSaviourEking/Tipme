@@ -5,6 +5,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
+  passClaimMoment,
   signInWithEmail,
 } from './helpers';
 import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
@@ -12,7 +13,11 @@ import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 async function claimNewPage(
   page: import('@playwright/test').Page,
   testInfo: import('@playwright/test').TestInfo,
-  { skipMoment = true, handle }: { skipMoment?: boolean; handle?: string } = {},
+  {
+    skipMoment = true,
+    handle,
+    byKeyboard = false,
+  }: { skipMoment?: boolean; handle?: string; byKeyboard?: boolean } = {},
 ) {
   const who = { ...identity(testInfo), ...(handle ? { handle } : {}) };
   await signInWithEmail(page, who.email, '/sign-up');
@@ -23,14 +28,14 @@ async function claimNewPage(
   ).toHaveText('Your username');
   await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
-  await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
+  const claim = page.getByRole('button', { name: `Claim @${who.handle}` });
+  if (byKeyboard) {
+    await claim.focus();
+    await page.keyboard.press('Enter');
+  } else await claim.click();
   await page.waitForURL(/\/dashboard\/welcome$/);
   // The claim moment plays once; most tests here are about the steps after it.
-  if (skipMoment)
-    await page
-      .getByRole('dialog', { name: `@${who.handle} is yours.` })
-      .getByRole('button', { name: 'Continue' })
-      .click();
+  if (skipMoment) await passClaimMoment(page, who.handle);
   return who;
 }
 
@@ -48,7 +53,16 @@ async function recordVibration(page: import('@playwright/test').Page) {
 const buzzes = (page: import('@playwright/test').Page) =>
   page.evaluate(() => (window as unknown as { __buzz: unknown[] }).__buzz);
 
-test('claiming a handle celebrates once: "@handle is yours.", then the hello step', async ({
+/** The drawn focus ring of an element: 'none' unless an outline shows. */
+const ring = (locator: import('@playwright/test').Locator) =>
+  locator.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return style.outlineStyle === 'none' || style.outlineWidth === '0px'
+      ? 'none'
+      : `${style.outlineWidth} ${style.outlineStyle}`;
+  });
+
+test('claiming a username celebrates once: "@username is yours." stays until Continue, then the hello step', async ({
   page,
 }, testInfo) => {
   // The full scene, as most people see it (the suite otherwise runs with reduced motion).
@@ -59,9 +73,10 @@ test('claiming a handle celebrates once: "@handle is yours.", then the hello ste
   });
   const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
   await expect(moment).toBeVisible();
-  await expect(
-    moment.getByRole('heading', { name: `@${handle} is yours.` }),
-  ).toBeFocused();
+  const title = moment.getByRole('heading', { name: `@${handle} is yours.` });
+  // Screen readers land on the heading, but it is not a control: no purple box around it.
+  await expect(title).toBeFocused();
+  expect(await ring(title)).toBe('none');
   await expect(
     moment.getByText(
       'Welcome to TipMe. People can start tipping you the moment your page is online.',
@@ -85,13 +100,23 @@ test('claiming a handle celebrates once: "@handle is yours.", then the hello ste
       .locator('.claim-moment__stamp')
       .evaluate((el) => getComputedStyle(el).animationName),
   ).not.toBe('none');
-  // Axe runs on the moment in the still test: mid-fade text would read as low contrast here.
+  // Axe runs on the moment in the still test: mid-animation text would read as low contrast here.
+
+  // It stays: well past the old 1.6 s it is still there, whole, with focus where it was.
+  await page.waitForTimeout(2500);
+  await expect(moment).toBeVisible();
+  expect(
+    await moment.evaluate((el) => Number(getComputedStyle(el).opacity)),
+  ).toBe(1);
+  await expect(title).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('claim-moment.png') });
 
-  // It hands over by itself, and focus lands on the hello heading.
+  // Continue hands over; focus lands on the hello heading with no ring flashing there.
+  await moment.getByRole('button', { name: 'Continue' }).click();
   const hello = page.getByRole('heading', { name: 'Welcome to TipMe.' });
-  await expect(hello).toBeFocused({ timeout: 3000 });
+  await expect(hello).toBeFocused();
   await expect(moment).toHaveCount(0);
+  expect(await ring(hello)).toBe('none');
   expect(await buzzes(page)).toEqual([30]);
   await expectAccessible(page);
 
@@ -104,27 +129,77 @@ test('claiming a handle celebrates once: "@handle is yours.", then the hello ste
   ).toHaveCount(0);
 });
 
-for (const how of ['Escape', 'Continue'] as const)
-  test(`${how} skips the moment at once`, async ({ page }, testInfo) => {
-    await page.emulateMedia({ reducedMotion: 'no-preference' });
-    // Time runs normally until the moment shows; then it stops, so only the key or the button can
-    // end it, never the 1.6 s timer.
-    await page.clock.install();
+for (const how of ['Escape', 'Enter'] as const)
+  test(`${how} ends the moment`, async ({ page }, testInfo) => {
     const { handle } = await claimNewPage(page, testInfo, {
       skipMoment: false,
     });
     const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
     await expect(moment).toBeVisible();
-    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 100);
-    await page.waitForTimeout(2000);
-    await expect(moment).toBeVisible();
-    if (how === 'Escape') await page.keyboard.press('Escape');
-    else await moment.getByRole('button', { name: 'Continue' }).click();
+    await expect(
+      moment.getByRole('heading', { name: `@${handle} is yours.` }),
+    ).toBeFocused();
+    await page.keyboard.press(how);
     await expect(moment).toHaveCount(0);
     await expect(
       page.getByRole('heading', { name: 'Welcome to TipMe.' }),
     ).toBeFocused();
   });
+
+test('Tab moves focus inside the moment and never ends it or leaves it', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await claimNewPage(page, testInfo, {
+    skipMoment: false,
+    byKeyboard: true,
+  });
+  const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
+  const next = moment.getByRole('button', { name: 'Continue' });
+  await expect(moment).toBeVisible();
+  // Claimed from the keyboard, the heading still gets no ring: it is somewhere to read, not a
+  // control.
+  const title = moment.getByRole('heading', { name: `@${handle} is yours.` });
+  await expect(title).toBeFocused();
+  expect(await ring(title)).toBe('none');
+  await page.keyboard.press('Tab');
+  await expect(next).toBeFocused();
+  // Continue is the only control, so Tab and Shift+Tab come back round to it.
+  await page.keyboard.press('Tab');
+  await expect(next).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(next).toBeFocused();
+  // Other keys change nothing either.
+  await page.keyboard.press('a');
+  await expect(moment).toBeVisible();
+  // From the keyboard, the control shows its ring.
+  expect(await ring(next)).not.toBe('none');
+  await page.keyboard.press('Enter');
+  await expect(moment).toHaveCount(0);
+});
+
+test('the tap that claimed is not a tap to move on; a tap once the card is down is', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  // Time stops right after the moment shows, so the card has not landed when we tap.
+  await page.clock.install();
+  const { handle } = await claimNewPage(page, testInfo, {
+    skipMoment: false,
+  });
+  const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
+  await expect(moment).toBeVisible();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 100);
+  await page.mouse.click(10, 10);
+  await expect(moment).toBeVisible();
+  // Once the card is down, a tap anywhere is a choice to move on.
+  await page.clock.runFor(1000);
+  await expect(moment).toBeVisible();
+  await page.mouse.click(10, 10);
+  await expect(moment).toHaveCount(0);
+  await expect(
+    page.getByRole('heading', { name: 'Welcome to TipMe.' }),
+  ).toBeFocused();
+});
 
 test('reduced motion shows the still scene with no animation', async ({
   page,
@@ -155,10 +230,13 @@ test('reduced motion shows the still scene with no animation', async ({
   await page.screenshot({
     path: testInfo.outputPath('claim-moment-still.png'),
   });
-  // The same hand-over, and still no vibration.
+  // It stays here too; Continue hands over the same way, still with no vibration.
+  await page.waitForTimeout(2000);
+  await expect(moment).toBeVisible();
+  await moment.getByRole('button', { name: 'Continue' }).click();
   await expect(
     page.getByRole('heading', { name: 'Welcome to TipMe.' }),
-  ).toBeFocused({ timeout: 3000 });
+  ).toBeFocused();
   expect(await buzzes(page)).toEqual([]);
 });
 
@@ -168,11 +246,9 @@ test('someone who presses "I’ll do this later" was still celebrated first', as
   const { handle } = await claimNewPage(page, testInfo, {
     skipMoment: false,
   });
-  await expect(
-    page.getByRole('heading', { name: `@${handle} is yours.` }),
-  ).toBeVisible();
-  // Any tap hands over.
-  await page.mouse.click(10, 10);
+  const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
+  await expect(moment).toBeVisible();
+  await moment.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('link', { name: 'I’ll do this later' }).click();
   await page.waitForURL(/\/dashboard$/);
@@ -184,9 +260,60 @@ test('someone who presses "I’ll do this later" was still celebrated first', as
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
+/** The stamp's box must not cover the amounts or the Tip button's words, and stays on the card. */
+async function expectStampClear(page: import('@playwright/test').Page) {
+  const boxes = await page.evaluate(() => {
+    const box = (r: DOMRect) => ({
+      x: r.left,
+      y: r.top,
+      right: r.right,
+      bottom: r.bottom,
+    });
+    const card = document.querySelector('.claim-moment__card')!;
+    // The words of the Tip button, not the whole black bar.
+    const words = document.createRange();
+    words.selectNodeContents(card.querySelector('.claim-moment__tip')!);
+    return {
+      stamp: box(
+        card.querySelector('.claim-moment__stamp')!.getBoundingClientRect(),
+      ),
+      keys: [...card.querySelectorAll('.claim-moment__keys > span')].map((k) =>
+        box(k.getBoundingClientRect()),
+      ),
+      tip: box(words.getBoundingClientRect()),
+      card: box(card.getBoundingClientRect()),
+    };
+  });
+  type Box = { x: number; y: number; right: number; bottom: number };
+  const overlaps = (a: Box, b: Box) =>
+    a.x < b.right && b.x < a.right && a.y < b.bottom && b.y < a.bottom;
+  expect(boxes.keys.length).toBeGreaterThan(0);
+  for (const key of boxes.keys) expect(overlaps(boxes.stamp, key)).toBe(false);
+  expect(overlaps(boxes.stamp, boxes.tip)).toBe(false);
+  expect(boxes.stamp.x).toBeGreaterThanOrEqual(boxes.card.x);
+  expect(boxes.stamp.right).toBeLessThanOrEqual(boxes.card.right);
+}
+
+for (const width of [390, 1440])
+  test(`the stamp sits clear of the amounts and the Tip button at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 800 });
+    // The longest username there is: 30 characters.
+    const handle = `${identity(testInfo).handle}_${'x'.repeat(30)}`.slice(
+      0,
+      30,
+    );
+    await claimNewPage(page, testInfo, { skipMoment: false, handle });
+    await expect(
+      page.getByRole('dialog', { name: `@${handle} is yours.` }),
+    ).toBeVisible();
+    await expectStampClear(page);
+  });
+
 test('the moment fits a 320px phone @mobile', async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 320, height: 640 });
-  // The longest handle there is: 30 characters.
+  // The longest username there is: 30 characters.
   const handle = `${identity(testInfo).handle}_${'x'.repeat(30)}`.slice(0, 30);
   await claimNewPage(page, testInfo, { skipMoment: false, handle });
   const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
@@ -201,6 +328,7 @@ test('the moment fits a 320px phone @mobile', async ({ page }, testInfo) => {
   expect(stamp!.y + stamp!.height).toBeLessThanOrEqual(title!.y);
   expect(title!.x).toBeGreaterThanOrEqual(0);
   expect(title!.x + title!.width).toBeLessThanOrEqual(320);
+  await expectStampClear(page);
   await expectAccessible(page);
   await page.screenshot({
     path: testInfo.outputPath('claim-moment-320.png'),

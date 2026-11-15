@@ -377,6 +377,14 @@ the appreciation moment) is unchanged.
 - **Manifest.** `/manifest.webmanifest`, name and short name "TipMe", `start_url` "/", `display: browser`, theme `#7A32F9`, background `#FFFFFF`. `browser` because the manifest adds no offline or app features, and it keeps the address bar, including on the payment partner's page.
 - **Gates.** The launch gate and the preview password leave exactly these four paths open, as they do `icon.svg`.
 
+## 2026-11-15 — The claim moment stays
+
+- **Owner's feedback and choice, 15 Nov 2026** ("it pops in and pops out"; it stays until they move on). A visual and interaction decision, not a regulatory approval; no D-item is affected. It replaces the hand-over rules in the 6 Nov entry below; the trigger, copy, hearts, vibration and one-time marker are unchanged.
+- **No timer.** The scene plays (fall, land, stamp, hearts, words; 0–1200ms) and stays. There is no rise-away and no `CLAIM_MOMENT_MS`.
+- **What ends it.** "Continue", Escape or Enter (not a held key's repeats). Tab moves focus round inside the moment (it is `aria-modal`); no other key ends it. A tap anywhere ends it only from 800ms (`CLAIM_TAP_ARMED_MS`: the card is down at 550ms, plus a guard), so the claim tap, or its late click on a phone, never dismisses it. Focus then goes to the hello heading, as before.
+- **No ring on the heading.** The heading takes focus so screen readers start there, but it is not a control, so it draws no focus ring, however the claim was made (as `main` and the settings chapters do). Keyboard focus on "Continue" keeps its ring.
+- **The stamp has its own row** between the link and the amounts, tilted 4°, so it never covers the amounts or the Tip button's words at any width; the longest username wraps to two balanced lines.
+
 ## 2026-11-06 — The claim moment
 
 - **Owner-approved board, 5 Nov 2026** (Sign-up celebration). A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.

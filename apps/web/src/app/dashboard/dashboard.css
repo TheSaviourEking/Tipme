@@ -1611,7 +1611,6 @@
   --claim-land: 550ms;
   --claim-stamp: 550ms;
   --claim-words: 800ms;
-  --claim-away: 1200ms;
 
   position: fixed;
   z-index: 200;
@@ -1624,8 +1623,6 @@
   overflow: hidden auto;
   background: var(--canvas);
   text-align: center;
-  animation: claim-away var(--duration-spatial) var(--ease-physical)
-    var(--claim-away) forwards;
 }
 
 .claim-moment__scene {
@@ -1712,23 +1709,25 @@
 }
 
 /*
- * The stamp: purple ink pressed across the card's keys, a signature mark rather than a wash. It
- * sits below the name and link so the card still says whose page it is.
+ * The stamp: purple ink pressed onto the card, a signature mark rather than a wash. It has its own
+ * row between the link and the amounts, so it never covers the amounts or the Tip button's words;
+ * a long username wraps to two balanced lines. The tilt is small enough that its corners stay in
+ * the row's margins.
  */
 .claim-moment__stamp {
-  position: absolute;
-  top: 70%;
-  left: 54%;
-  max-width: 80%;
+  justify-self: center;
+  max-width: calc(100% - 2 * var(--space-5));
+  margin-block: var(--space-1);
   padding: 0.3rem 0.6rem;
   overflow-wrap: anywhere;
+  text-wrap: balance;
   border: 3px solid var(--brand-primary);
   border-radius: 0.5rem;
   background: var(--surface-raised);
   color: var(--brand-primary);
-  font: 800 0.8125rem / 1.15 var(--font-interface);
+  font: 800 0.75rem / 1.2 var(--font-interface);
   letter-spacing: 0.06em;
-  transform: translate(-50%, -50%) rotate(-8deg);
+  transform: rotate(-4deg);
   animation: claim-stamp var(--duration-component) var(--ease-spring)
     var(--claim-stamp) both;
 }
@@ -1800,6 +1799,11 @@
     var(--claim-words) both;
 }
 
+/* Focus lands here so screen readers start at the heading; it is not a control, so no ring. */
+.claim-moment__title:focus {
+  outline: none;
+}
+
 .claim-moment__lede {
   max-width: 26rem;
   margin: 0;
@@ -1832,13 +1836,13 @@
 @keyframes claim-stamp {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) rotate(-8deg) scale(1.9);
+    transform: rotate(-4deg) scale(1.9);
   }
   70% {
     opacity: 1;
   }
   to {
-    transform: translate(-50%, -50%) rotate(-8deg) scale(1);
+    transform: rotate(-4deg) scale(1);
   }
 }
 

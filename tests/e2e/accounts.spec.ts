@@ -4,6 +4,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
+  passClaimMoment,
   signInWithEmail,
   signUpRecipient,
 } from './helpers';
@@ -23,6 +24,7 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await expect(page.getByText(`@${handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, handle);
   await expect(
     page.getByRole('heading', { name: 'Welcome to TipMe.' }),
   ).toBeVisible();
@@ -127,6 +129,7 @@ test('a session survives a reload and signing out ends it', async ({
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   // A new page lands on the welcome, which has no toolbar.
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, who.handle);
   await page.goto('/dashboard');
   await page.reload();
   // Business sign-up is on in the e2e stack: Sign out sits in the account menu.
@@ -230,6 +233,7 @@ test('the welcome preview follows what you type @mobile', async ({
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, who.handle);
   await page.getByRole('button', { name: 'Let’s set up your page' }).click();
   await page.getByLabel('What you do').fill('Maths tutor');
   const preview = page.getByRole('complementary', {

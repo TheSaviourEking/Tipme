@@ -8,7 +8,7 @@ import {
   pagelessLogin,
   recordNavigations,
 } from './business-signup-fixtures';
-import { expectAccessible, signInWithEmail } from './helpers';
+import { expectAccessible, passClaimMoment, signInWithEmail } from './helpers';
 import { sql } from './ops-helpers';
 
 // Business sign-up, Task D4: the dashboard for a login with a business and no page.
@@ -81,6 +81,7 @@ test('Settings has the login’s own sections, and “Turn on your page” leads
   await expect(page.getByText(`@${owner.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${owner.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, owner.handle);
   await page.goto('/dashboard/business');
   await expect(
     dashboardNav(page).getByRole('link', { name: 'Tips' }),
