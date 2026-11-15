@@ -2,10 +2,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@tipme/ui';
 import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
-import { CLAIM_MOMENT_MS, claimBuzz } from '@/lib/claim-moment';
+import { claimBuzz, endsClaimMoment } from '@/lib/claim-moment';
 import { formatNaira } from '@/lib/demo-amount';
 
-/** When the card lands (the timeline is in globals.css, `.claim-moment`). */
+/** When the card touches down, for the buzz (the timeline is in globals.css, `.claim-moment`). */
 const LAND_MS = 350;
 
 /** The heart from the master wordmark, as `icon.svg` draws it. */
@@ -26,11 +26,12 @@ const prefersStill = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
 
 /**
- * "@handle is yours.": shown once, over the hello step, after the server confirmed the claim. The
- * page card falls and lands, the stamp presses, purple hearts rise and the words arrive. At 1.6 s,
- * or on any tap, any key, Continue or Escape, it hands over (`onDone`). Reduced motion gets the
- * still scene and no vibration. The scene is a picture: screen readers hear the heading and one
- * polite line.
+ * "@username is yours.": shown once, over the hello step, after the server confirmed the claim.
+ * The page card falls and lands, the stamp presses, purple hearts rise and the words arrive. It
+ * stays until the person moves on: Continue, Escape, Enter, or a tap once the card is down (the
+ * claim tap itself never counts) hands over (`onDone`). Tab goes round inside it. Reduced motion
+ * gets the still scene and no vibration. The scene is a picture: screen readers hear the heading
+ * and one polite line.
  */
 export function ClaimMoment({
   handle,
@@ -42,6 +43,7 @@ export function ClaimMoment({
   onDone: () => void;
 }) {
   const id = useId();
+  const dialog = useRef<HTMLDivElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const [still] = useState(prefersStill);
   // Filled after mount, so the live region exists before its words do and they are announced.
@@ -49,7 +51,53 @@ export function ClaimMoment({
 
   useEffect(() => {
     title.current?.focus();
-    const finish = () => onDone();
+    const shownAt = performance.now();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        // The moment covers the page (aria-modal): Tab goes round inside it, never behind it.
+        const stops = [
+          ...(dialog.current?.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled])',
+          ) ?? []),
+        ];
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        if (!first || !last) return;
+        const at = document.activeElement;
+        const inside = at instanceof HTMLElement && stops.includes(at);
+        if (event.shiftKey && (!inside || at === first)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (!inside || at === last)) {
+          event.preventDefault();
+          first.focus();
+        }
+        return;
+      }
+      if (
+        endsClaimMoment({ kind: 'key', key: event.key, repeat: event.repeat })
+      ) {
+        // Enter on Continue would also click it; one hand-over is enough.
+        event.preventDefault();
+        onDone();
+      }
+    };
+    // A tap ends it on click, after the tap's own mousedown has moved focus, so the hand-over's
+    // focus on the hello heading is the last word. Continue handles its own click.
+    const onTap = (event: MouseEvent) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('.claim-moment__continue')
+      )
+        return;
+      if (
+        endsClaimMoment({
+          kind: 'tap',
+          sinceShownMs: performance.now() - shownAt,
+        })
+      )
+        onDone();
+    };
     const announce = setTimeout(
       () =>
         setAnnouncement(
@@ -58,23 +106,20 @@ export function ClaimMoment({
       50,
     );
     const buzz = setTimeout(() => claimBuzz(navigator, still), LAND_MS);
-    const handOver = setTimeout(finish, CLAIM_MOMENT_MS);
-    document.addEventListener('keydown', finish);
-    // A tap ends it on click, after the tap's own mousedown has moved focus, so the hand-over's
-    // focus on the hello heading is the last word.
-    document.addEventListener('click', finish);
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('click', onTap);
     return () => {
       clearTimeout(announce);
       clearTimeout(buzz);
-      clearTimeout(handOver);
-      document.removeEventListener('keydown', finish);
-      document.removeEventListener('click', finish);
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('click', onTap);
     };
   }, [handle, still, onDone]);
 
   const hearts = still ? 3 : 6;
   return (
     <div
+      ref={dialog}
       className={`claim-moment${still ? ' claim-moment--still' : ''}`}
       role="dialog"
       aria-modal="true"
@@ -91,6 +136,8 @@ export function ClaimMoment({
           <span className="claim-moment__link">
             {host ? `${host}/@${handle}` : `/@${handle}`}
           </span>
+          {/* Pressed in its own space between the link and the amounts, never over them. */}
+          <span className="claim-moment__stamp">@{handle} · YOURS</span>
           <span className="claim-moment__keys">
             {STANDARD_TIP_PRESETS_MINOR.map((amount) => (
               <span key={String(amount)}>{formatNaira(amount)}</span>
@@ -99,7 +146,6 @@ export function ClaimMoment({
           <span className="claim-moment__tip">
             Tip {formatNaira(STANDARD_TIP_PRESETS_MINOR[0])}
           </span>
-          <span className="claim-moment__stamp">@{handle} · YOURS</span>
         </div>
         {Array.from({ length: hearts }, (_, index) => (
           <Heart
