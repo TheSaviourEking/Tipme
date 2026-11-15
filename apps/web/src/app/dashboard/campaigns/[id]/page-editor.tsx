@@ -289,7 +289,7 @@ export function CampaignPageEditor({
     if (result.code === 'CAMPAIGN_HEADLINE_NAME')
       setErrors({
         headline:
-          'Use your own name in the headline, not someone else’s name or handle.',
+          'Use your own name in the headline, not someone else’s name or username.',
       });
     else if (result.code === 'CAMPAIGN_PRO_REQUIRED')
       setErrors({ form: 'A page for each campaign is part of TipMe Pro.' });

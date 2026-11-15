@@ -161,7 +161,7 @@ test('looking up a second page from Pages leaves exactly one of each card', asyn
   await oneOfEach();
 
   for (const handle of [second.handle, first.handle, second.handle]) {
-    await page.getByLabel('Handle', { exact: true }).fill(handle);
+    await page.getByLabel('Username', { exact: true }).fill(handle);
     await page.getByRole('button', { name: 'Find page' }).click();
     await expect(
       main.getByRole('heading', { level: 2, name: new RegExp(`@${handle}$`) }),

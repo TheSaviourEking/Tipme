@@ -418,7 +418,7 @@ export default function EmailConsolePage() {
           </select>
         </div>
         <div className="tm-field">
-          <label htmlFor={`${id}-account`}>Account (handle or user id)</label>
+          <label htmlFor={`${id}-account`}>Account (username or user id)</label>
           <input
             id={`${id}-account`}
             className="tm-input"

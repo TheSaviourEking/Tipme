@@ -52,7 +52,9 @@ export function ClaimMoment({
     const finish = () => onDone();
     const announce = setTimeout(
       () =>
-        setAnnouncement(`Your handle @${handle} is claimed. Welcome to TipMe.`),
+        setAnnouncement(
+          `Your username @${handle} is claimed. Welcome to TipMe.`,
+        ),
       50,
     );
     const buzz = setTimeout(() => claimBuzz(navigator, still), LAND_MS);

@@ -948,7 +948,7 @@ test('a finance role with fees.manage only can find a page and change its fee', 
   );
   await page.goto('/ops');
   await nav(page).getByRole('link', { name: 'Pages' }).click();
-  await page.getByLabel('Handle').fill(handle);
+  await page.getByLabel('Username').fill(handle);
   await page.getByRole('button', { name: 'Find page' }).click();
   await expect(page.getByLabel('New TipMe fee (%)')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Make Pro…' })).toHaveCount(0);

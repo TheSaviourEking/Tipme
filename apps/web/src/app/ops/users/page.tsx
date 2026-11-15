@@ -980,7 +980,9 @@ export default function OpsPeoplePage() {
             autoComplete="off"
             spellCheck={false}
             maxLength={100}
-            placeholder={money ? 'Name, @handle or email' : 'Name or @handle'}
+            placeholder={
+              money ? 'Name, @username or email' : 'Name or @username'
+            }
             value={text}
             onChange={(event) => {
               typed.current = true;

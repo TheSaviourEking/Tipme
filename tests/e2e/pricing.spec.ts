@@ -16,7 +16,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   const staff = await (await browser.newContext()).newPage();
   await enrolOwner(staff, testInfo);
   await staff.getByRole('link', { name: 'Pages' }).click();
-  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await expect(staff.getByRole('heading', { name: 'Pricing' })).toBeVisible();
   await expect(staff.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
@@ -100,7 +100,7 @@ test('the Pro explanation lists QR designs, three handle changes and no footer l
   await expect(pro.getByRole('heading', { name: 'TipMe Pro' })).toBeVisible();
   await expect(pro).toContainText('Your page is on the Free plan.');
   await expect(pro).toContainText('Pro QR designs');
-  await expect(pro).toContainText('Three changes to your handle');
+  await expect(pro).toContainText('Three changes to your username');
   await expect(pro).toContainText(
     'No “Get your own TipMe page” link at the foot of your page',
   );

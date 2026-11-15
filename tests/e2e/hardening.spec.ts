@@ -40,8 +40,8 @@ test('a renamed page keeps its old link and QR code working, and nobody can take
   const renamed = `${handle}_n`;
   await makePagePro(browser, handle, testInfo);
   await page.goto('/dashboard/settings');
-  await page.getByLabel('Handle').fill(renamed);
-  await page.getByRole('button', { name: 'Change handle' }).click();
+  await page.getByLabel('Username').fill(renamed);
+  await page.getByRole('button', { name: 'Change username' }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Yes, change it' })
@@ -52,7 +52,7 @@ test('a renamed page keeps its old link and QR code working, and nobody can take
     ),
   ).toBeVisible();
   await expect(
-    page.getByText(`Old handles that lead here: @${handle}`),
+    page.getByText(`Old usernames that lead here: @${handle}`),
   ).toBeVisible();
   await expectAccessible(page);
 

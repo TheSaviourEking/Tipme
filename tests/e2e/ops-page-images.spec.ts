@@ -59,7 +59,7 @@ test('staff view a page’s cover and photo with their session, and remove the c
   const staff = await (await browser.newContext()).newPage();
   await enrolOwner(staff, testInfo);
   await staff.getByRole('link', { name: 'Pages' }).click();
-  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await expect(
     staff.getByRole('heading', { name: 'Images', exact: true }),

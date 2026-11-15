@@ -9,8 +9,8 @@ import { useSiteHost } from '@/lib/site-host';
 
 const describe: Record<HandleStatus, string> = {
   available: '',
-  taken: 'That handle is taken. Try another.',
-  reserved: 'That handle is reserved. Try another.',
+  taken: 'That username is taken. Try another.',
+  reserved: 'That username is reserved. Try another.',
   invalid: 'Use 3–30 letters, numbers or underscores.',
 };
 
@@ -74,7 +74,7 @@ export function HandleClaim({
     }
     setError(
       result.code === 'HANDLE_TAKEN'
-        ? 'Someone just took that handle. Try another.'
+        ? 'Someone just took that username. Try another.'
         : result.code === 'ALREADY_HAS_PAGE'
           ? 'You already have a page.'
           : 'We couldn’t claim it. Please try again.',
@@ -83,17 +83,17 @@ export function HandleClaim({
 
   return (
     <form className="auth-form" onSubmit={claim} noValidate>
-      <h2>Choose your handle</h2>
+      <h2>Choose your username</h2>
       <p className="tm-hint">
         It becomes your link, so choose one you’ll keep. Changing it later is
         part of TipMe Pro.
       </p>
       <p className="handle-link" aria-hidden="true">
-        {host}/@<span>{raw.trim() || 'yourhandle'}</span>
+        {host}/@<span>{raw.trim() || 'yourusername'}</span>
       </p>
       <InputField
         id={`${id}-handle`}
-        label="Handle"
+        label="Username"
         autoComplete="off"
         autoCapitalize="none"
         spellCheck={false}
@@ -111,7 +111,7 @@ export function HandleClaim({
         disabled={!available || busy}
         aria-busy={busy}
       >
-        {available ? `Claim @${available}` : 'Claim handle'}
+        {available ? `Claim @${available}` : 'Claim username'}
       </Button>
     </form>
   );

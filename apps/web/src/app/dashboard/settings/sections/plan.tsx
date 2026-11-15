@@ -469,7 +469,8 @@ export function ProPlan() {
           sticker. Free pages keep the three standard QR looks.
         </li>
         <li>
-          Three changes to your handle. Free pages keep the handle they claimed.
+          Three changes to your username. Free pages keep the username they
+          claimed.
         </li>
         <li>
           Every animated cover, in any colour, and you choose how it plays
