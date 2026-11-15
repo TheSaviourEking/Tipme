@@ -37,11 +37,19 @@ test('signed in, the header offers the dashboard instead of Sign in and Claim', 
   await expect(
     nav(page).getByRole('link', { name: 'Go to my dashboard' }),
   ).toHaveCount(0);
+  // Nor anywhere else in the dashboard: its own bar leads there, and the page's action is the one
+  // primary (UI audit, 15 Nov 2026).
   await page.goto('/dashboard/settings');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Settings' }),
+  ).toBeVisible();
   await openMenu(page, testInfo.project.name);
   await expect(
     nav(page).getByRole('link', { name: 'Go to my dashboard' }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(nav(page).getByRole('link', { name: 'Business' })).toHaveCount(
+    0,
+  );
 });
 
 test('someone who runs a business also gets a Business link', async ({

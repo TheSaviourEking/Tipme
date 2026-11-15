@@ -1,3 +1,9 @@
+# Current task: dashboard UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-dashboard` from `origin/dev` (after #241). One PR into `dev`, not merged; it must merge after release PR #242. CSS (dashboard.css only; the route-css test stays green), small TSX changes (nav-account, earnings, bar chart, tips empty state, QR thumbnails, recap slip, campaigns stacked rows), one new spec (`dashboard-layout.spec.ts`), `nav-account.spec.ts` updated. No migration, no API change.
+- Left for others or the owner: the profile-error redirect and endless data skeletons (behaviour agent), copy strings, the campaign editor form, the claim moment, a one-row bar at 1440 (tabs or sidebar), page-shaped skeletons, the remaining generic `Notice`s, avatars, money/date formats.
+- Next: CI, then the owner merges after #242.
+
 # Current task: UI audit fixes, behaviour and words (15 November 2026)
 
 - Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.
