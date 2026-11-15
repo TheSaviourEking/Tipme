@@ -33,6 +33,7 @@ function server({ envName, envBody, composeName, env: extraEnv }) {
     FAKE_RUNNING: join(home, 'running'),
     FAKE_IMAGES: join(home, 'images'),
     FAKE_ATTACHED: join(home, 'attached'),
+    FAKE_WORKER: join(home, 'worker'),
     HEALTH_TRIES: '2',
     ...extraEnv(home),
   };
@@ -81,6 +82,17 @@ if [[ " $* " == *" up "* && " $* " == *" api "* ]]; then
   if [[ " $FAKE_PREMOVE_VERSIONS " == *" $TIPME_VERSION "* ]]; then rm -f "$FAKE_ATTACHED"; else touch "$FAKE_ATTACHED"; fi
 fi
 if [[ " $* " == *" ps -q api "* ]]; then echo api-container; exit 0; fi
+# The worker: \`up\` runs it on that version; \`stop\` keeps its container (worker.stopped), which
+# \`start\` runs again unchanged. Its version is in $FAKE_WORKER while it runs.
+if [[ " $* " == *" up "* && " $* " == *" worker "* ]]; then echo "$TIPME_VERSION" > "$FAKE_WORKER"; rm -f "$FAKE_WORKER.stopped"; fi
+if [[ " $* " == *" ps --services --status running "* ]]; then
+  [[ -f "$FAKE_WORKER" ]] && echo worker
+  [[ -f "$FAKE_RUNNING" ]] && echo api
+  exit 0
+fi
+if [[ " $* " == *" stop "*" worker "* ]]; then [[ ! -f "$FAKE_WORKER" ]] || mv "$FAKE_WORKER" "$FAKE_WORKER.stopped"; exit 0; fi
+if [[ " $* " == *" start "*" worker "* ]]; then [[ -f "$FAKE_WORKER.stopped" ]] || exit 1; mv "$FAKE_WORKER.stopped" "$FAKE_WORKER"; exit 0; fi
+if [[ " $* " == *" run --rm migrate "* && -n "$FAKE_MIGRATE_FAILS" ]]; then exit 1; fi
 if [[ "$1" == "inspect" ]]; then echo "tipme-staging_internal $([[ -f "$FAKE_ATTACHED" ]] && echo edge-staging)"; exit 0; fi
 if [[ "$1 $2" == "network connect" ]]; then touch "$FAKE_ATTACHED"; exit 0; fi
 # config --services: what the version's compose file defines (versions marked new add retention).
@@ -188,8 +200,30 @@ if [[ " $* " == *" up "* ]]; then
   rm -f "$FAKE_STATE/turn"
   exit 0
 fi
-if [[ " $* " == *" stop "* ]]; then rm -f "$FAKE_STATE/$last"; exit 0; fi
+# What runs: every colour or worker with a state file.
+if [[ " $* " == *" ps --services --status running "* ]]; then
+  for f in "$FAKE_STATE"/api-blue "$FAKE_STATE"/api-green "$FAKE_STATE"/worker-a "$FAKE_STATE"/worker-b; do
+    [[ -f "$f" ]] && basename "$f"
+  done
+  exit 0
+fi
+# \`stop\` keeps each named container (<name>.stopped); \`start\` runs it again unchanged, and fails
+# for a service with no container (as Compose does) or when FAKE_START_FAILS is set.
+if [[ " $* " == *" stop "* || " $* " == *" start "* ]]; then
+  for name in "$@"; do
+    [[ "$name" == api-* || "$name" == worker-* ]] || continue
+    if [[ " $* " == *" stop "* ]]; then
+      [[ ! -f "$FAKE_STATE/$name" ]] || mv "$FAKE_STATE/$name" "$FAKE_STATE/$name.stopped"
+    else
+      [[ -z "$FAKE_START_FAILS" && -f "$FAKE_STATE/$name.stopped" ]] || exit 1
+      mv "$FAKE_STATE/$name.stopped" "$FAKE_STATE/$name"
+    fi
+  done
+  exit 0
+fi
 if [[ " $* " == *" run --rm migrate "* && -n "$FAKE_MIGRATE_FAILS" ]]; then exit 1; fi
+# The SSH session running the deploy drops while the migrations run.
+if [[ " $* " == *" run --rm migrate "* && -n "$FAKE_MIGRATE_HANGUP" ]]; then kill -HUP "$PPID"; exit 0; fi
 exit 0`,
   );
   fake('git', 'echo "git $*" >> "$FAKE_LOG"; exit 1');

@@ -5,6 +5,7 @@ import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -151,10 +152,104 @@ test('workers are replaced one at a time after the switch', () => {
     /up -d --wait --no-deps worker-b \|.*version=bbbbbbb2 /,
   );
   assert.ok(stop >= 0 && stop < a && a < b, calls.join('\n'));
-  // Never both in one call (that would stop both at once).
-  assert.equal(indexOf(calls, /worker-a.*worker-b|worker-b.*worker-a/), -1);
+  // Never both replaced in one call (that would take both down at once on a running worker).
+  assert.equal(
+    indexOf(calls, / up .*(worker-a.*worker-b|worker-b.*worker-a)/),
+    -1,
+  );
   assert.equal(running('worker-a'), B);
   assert.equal(running('worker-b'), B);
+});
+
+test('the old workers are paused before the migrations and left to the replace step when they succeed', () => {
+  const { run, read, ship, running } = stageProduction();
+  ship(A);
+  ship(B);
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = composeCalls(read).length;
+  const result = run('deploy-production.sh', [B]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /==> Pausing workers for migrations: worker-a worker-b/,
+  );
+  assert.doesNotMatch(result.stderr, /Workers resumed/);
+  const calls = composeCalls(read).slice(before);
+  const roles = indexOf(calls, / run --rm db-roles /);
+  const pause = indexOf(calls, / stop worker-a worker-b \|/);
+  const migrate = indexOf(calls, / run --rm migrate /);
+  const colour = indexOf(calls, / up .*api-green \|/);
+  const a = indexOf(calls, /up -d --wait --no-deps worker-a \|/);
+  assert.ok(
+    roles < pause && pause < migrate && migrate < colour && colour < a,
+    calls.join('\n'),
+  );
+  // The APIs keep serving while the migrations run; the workers are never started back on A.
+  assert.equal(indexOf(calls.slice(0, colour), / stop .*api-/), -1);
+  assert.equal(indexOf(calls, / start /), -1, calls.join('\n'));
+  assert.equal(running('worker-a'), B);
+  assert.equal(running('worker-b'), B);
+  assert.equal(running('api-green'), B);
+});
+
+test('a first deploy has no workers to pause, and starts none back', () => {
+  const { run, read, ship, running } = stageProduction();
+  ship(A);
+  const result = run('deploy-production.sh', [A]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /==> No workers running to pause/);
+  const calls = composeCalls(read);
+  assert.equal(indexOf(calls, / (stop|start) /), -1, calls.join('\n'));
+  assert.equal(running('worker-a'), A);
+});
+
+test('only the workers actually running are paused, and only they are started again', () => {
+  const { run, read, ship, running, home } = stageProduction();
+  ship(A);
+  ship(B);
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  // worker-b has crashed (no container running).
+  rmSync(join(home, 'fake', 'worker-b'));
+  const before = composeCalls(read).length;
+  const result = run('deploy-production.sh', [B], { FAKE_MIGRATE_FAILS: '1' });
+  assert.notEqual(result.status, 0);
+  const calls = composeCalls(read).slice(before);
+  assert.ok(indexOf(calls, / stop worker-a \|/) >= 0, calls.join('\n'));
+  assert.ok(indexOf(calls, / start worker-a \|/) >= 0, calls.join('\n'));
+  assert.equal(indexOf(calls, /worker-b/), -1, calls.join('\n'));
+  assert.equal(running('worker-a'), A);
+});
+
+test('a dropped SSH session during the migrations still starts the paused workers again', () => {
+  const { run, ship, running, exists } = stageProduction();
+  ship(A);
+  ship(B);
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const result = run('deploy-production.sh', [B], { FAKE_MIGRATE_HANGUP: '1' });
+  assert.equal(result.status, 129);
+  assert.match(result.stderr, /==> Workers resumed/);
+  assert.equal(running('worker-a'), A);
+  assert.equal(running('worker-b'), A);
+  assert.equal(running('api-green'), '', 'no colour started');
+  assert.equal(exists('releases/.deploy.lock'), false, 'the lock is released');
+});
+
+test('a worker that cannot be started again is named with the command to start it, and the deploy still fails', () => {
+  const { run, ship, running } = stageProduction();
+  ship(A);
+  ship(B);
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const result = run('deploy-production.sh', [B], {
+    FAKE_MIGRATE_FAILS: '1',
+    FAKE_START_FAILS: '1',
+  });
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /Could not start the paused workers again: .*compose\.sh start worker-a worker-b/,
+  );
+  assert.equal(running('worker-a'), '');
+  assert.equal(running('api-blue'), A, 'the API keeps serving');
 });
 
 test('every compose call carries the home, all three versions and the env file, with the live colour on its real version', () => {
@@ -209,10 +304,21 @@ test('an unhealthy new colour leaves the old one serving and stops the new one',
   const calls = composeCalls(read).slice(before);
   assert.ok(indexOf(calls, / stop -t 20 api-green \|/) >= 0, calls.join('\n'));
   assert.equal(indexOf(calls, / stop .*api-blue/), -1, 'blue keeps serving');
-  assert.equal(indexOf(calls, /worker-/), -1, 'workers are not touched');
+  // The old workers, paused for the migrations, are started again unchanged (never replaced).
+  assert.equal(indexOf(calls, / up .*worker-/), -1, 'workers are not replaced');
+  assert.ok(
+    indexOf(calls, / start worker-a worker-b \|/) >
+      indexOf(calls, / stop -t 20 api-green \|/),
+    calls.join('\n'),
+  );
+  assert.match(
+    result.stderr,
+    /==> Workers resumed \(the deploy stopped after migrating, before the new workers started\): worker-a worker-b/,
+  );
   assert.equal(running('api-blue'), A);
   assert.equal(running('api-green'), '');
   assert.equal(running('worker-a'), A);
+  assert.equal(running('worker-b'), A);
   assert.deepEqual(colours(), { blue: A, active: 'blue' });
   assert.equal(read('releases/current').trim(), A);
   assert.equal(read('releases/deployed').trim(), A);
@@ -231,22 +337,38 @@ test('a new colour that fails to start is stopped too, and the old one keeps ser
   assert.equal(exists('releases/.deploy.lock'), false, 'the lock is released');
 });
 
-test('a failed migration stops the deploy before any colour changes', () => {
-  const { run, read, ship, running, colours } = stageProduction();
+test('a failed migration stops the deploy before any colour changes, and starts the paused workers again', () => {
+  const { run, read, ship, running, colours, exists } = stageProduction();
   ship(A);
   ship(B);
   assert.equal(run('deploy-production.sh', [A]).status, 0);
   const before = composeCalls(read).length;
   const result = run('deploy-production.sh', [B], { FAKE_MIGRATE_FAILS: '1' });
-  assert.notEqual(result.status, 0);
+  assert.equal(result.status, 1, 'the migration’s failure is the exit status');
   const calls = composeCalls(read).slice(before);
-  assert.equal(
-    indexOf(calls, /api-(blue|green)|worker-/),
-    -1,
+  assert.equal(indexOf(calls, /api-(blue|green)/), -1, calls.join('\n'));
+  const pause = indexOf(calls, / stop worker-a worker-b \|/);
+  const migrate = indexOf(calls, / run --rm migrate /);
+  const resume = indexOf(calls, / start worker-a worker-b \|/);
+  assert.ok(
+    pause >= 0 && pause < migrate && migrate < resume,
     calls.join('\n'),
   );
+  assert.equal(
+    resume,
+    calls.length - 1,
+    'nothing runs after the workers resume',
+  );
+  assert.equal(indexOf(calls, / up .*worker-/), -1, 'never replaced');
+  assert.match(
+    result.stderr,
+    /==> Workers resumed \(migrations failed\): worker-a worker-b/,
+  );
   assert.equal(running('api-blue'), A);
+  assert.equal(running('worker-a'), A);
+  assert.equal(running('worker-b'), A);
   assert.deepEqual(colours(), { blue: A, active: 'blue' });
+  assert.equal(exists('releases/.deploy.lock'), false, 'the lock is released');
 });
 
 test('rollback starts the previous version on the idle colour and switches back', () => {

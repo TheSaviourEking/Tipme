@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Deploys one version to production with no downtime (blue/green). GitHub Actions has already
 # built, tested and shipped the image and this version's files (deploy-production workflow).
-#   roles → migrate (as the migrator; Aiven backs up continuously) → roles → start the idle colour
-#   on the new version → wait until the public API serves it → stop the old colour → replace the
-#   workers one at a time → record.
+#   roles → pause the old workers → migrate (as the migrator; Aiven backs up continuously) → roles
+#   → start the idle colour on the new version → wait until the public API serves it → stop the old
+#   colour → replace the workers one at a time → record. Old workers paused and not yet replaced
+#   are started again whenever the deploy stops early.
 # If the new colour is unhealthy it is stopped and the old colour keeps serving (nothing else
 # changes). Migrations are forward-only and must stay compatible with the release still serving.
 #
@@ -33,9 +34,17 @@ compose_for "$version" up -d --wait --no-recreate redis
 echo "==> Database roles"
 compose_for "$version" run --rm db-roles
 
+# The old workers' jobs deadlocked with the migration transaction (lib.sh, "Workers paused for
+# migrations"). The API colours keep serving. If anything stops this deploy before the new workers
+# replace them, the exit trap (take_lock) starts the same worker containers again.
+pause_workers "$version" worker-a worker-b
+
 echo "==> Migrations"
 MIGRATE_CONFIRM_DATABASE=$(setting MIGRATE_CONFIRM_DATABASE) MIGRATE_BACKUP_DONE=1 \
   compose_for "$version" run --rm migrate
+# Migrated: the old workers still run on the new schema (migrations stay compatible with the
+# release serving), so a deploy stopped from here on resumes them too.
+resume_reason="the deploy stopped after migrating, before the new workers started"
 compose_for "$version" run --rm db-roles
 
 start_idle_colour "$version"
