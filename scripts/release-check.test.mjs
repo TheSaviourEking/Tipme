@@ -140,7 +140,7 @@ async function liveCopy(info, t, { webhookStatus = 401 } = {}) {
   const record = join(dir, 'suite.json');
   writeFileSync(
     join(dir, 'pnpm'),
-    `#!/usr/bin/env bash\necho "{\\"full\\":\\"$RELEASE_FULL\\",\\"provider\\":\\"$RELEASE_PAYMENT_PROVIDER\\",\\"expectLive\\":\\"$RELEASE_EXPECT_LIVE\\"}" > "${record}"\n`,
+    `#!/usr/bin/env bash\necho "{\\"full\\":\\"$RELEASE_FULL\\",\\"provider\\":\\"$RELEASE_PAYMENT_PROVIDER\\",\\"expectLive\\":\\"$RELEASE_EXPECT_LIVE\\",\\"speed\\":\\"$RELEASE_SPEED\\"}" > "${record}"\n`,
   );
   chmodSync(join(dir, 'pnpm'), 0o755);
   return {
@@ -249,4 +249,16 @@ test('a mock copy is not asked about the Bachs webhook', async (t) => {
   );
   assert.equal((await check(copy)).code, 0);
   assert.deepEqual(copy.posts, []);
+});
+
+test('the speed budget is enforced unless told to report only, and --speed is handed to the suite', async (t) => {
+  const copy = await liveCopy({}, t);
+  assert.equal((await check(copy)).code, 0);
+  assert.equal(copy.suite()?.speed, 'enforce');
+  const report = await check(copy, ['--speed', 'report']);
+  assert.equal(report.code, 0, report.stderr);
+  assert.equal(copy.suite()?.speed, 'report');
+  const bad = await check(copy, ['--speed', 'ignore']);
+  assert.equal(bad.code, 2);
+  assert.match(bad.stderr, /--speed must be enforce or report/);
 });

@@ -7,7 +7,8 @@ import type {
   EarningsSummary,
   EarningsTrend,
 } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, Skeleton } from '@tipme/ui';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useRecipient } from '@/components/account/recipient-context';
 import { BarChart, type Bar } from '@/components/dashboard/bar-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -409,9 +410,10 @@ export default function EarningsPage() {
   });
   if (summary.error === 'load' && !summary.data)
     return (
-      <Notice tone="error" title="We couldn’t load your earnings">
-        Please reload the page.
-      </Notice>
+      <LoadFailed
+        title="We couldn’t load your earnings"
+        onRetry={summary.reload}
+      />
     );
   return (
     <div className="dashboard-section earnings">

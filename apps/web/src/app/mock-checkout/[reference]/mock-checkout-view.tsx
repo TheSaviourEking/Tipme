@@ -16,12 +16,12 @@ const outcomes = [
   {
     outcome: 'no-reply',
     label: 'No reply',
-    hint: 'Paid, but the provider never tells TipMe.',
+    hint: 'Paid, but TipMe is never told.',
   },
   {
     outcome: 'wrong-amount',
     label: 'Wrong amount',
-    hint: 'The provider reports a different amount.',
+    hint: 'A different amount is reported to TipMe.',
   },
 ] as const;
 
@@ -53,7 +53,7 @@ const describeFailure = (code: string, status: number) =>
     ? 'This payment has expired and can no longer be paid.'
     : status === 404
       ? 'This payment doesn’t exist.'
-      : 'The test provider is unavailable. Please try again.';
+      : 'The test payment page is unavailable. Please try again.';
 
 type Summary = {
   amountMinor: string;
@@ -97,9 +97,7 @@ export function MockCheckoutView() {
 
   return (
     <section className="mock-provider" aria-labelledby="mock-provider-title">
-      <p className="mock-provider__label">
-        Test payment provider · no real money
-      </p>
+      <p className="mock-provider__label">Test payment page · no real money</p>
       <h1 id="mock-provider-title">Confirm payment</h1>
       {failed && (
         <Slip tone="error" title="Payment unavailable">
@@ -131,7 +129,7 @@ export function MockCheckoutView() {
               : `To ${summary.recipientDisplayName}, via TipMe`}
           </p>
           <fieldset className="mock-provider__outcomes" disabled={paying}>
-            <legend>Choose what the test provider does</legend>
+            <legend>Choose what happens</legend>
             {pro &&
               proOutcomes.map(({ outcome, method, label, hint }) => (
                 <button

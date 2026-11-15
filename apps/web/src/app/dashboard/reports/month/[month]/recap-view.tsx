@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { MonthlyRecapData } from '@tipme/contracts';
 import { Button, Card, Skeleton, Slip } from '@tipme/ui';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -28,9 +29,12 @@ export default function MonthlyRecapPage() {
   const { profile } = useRecipient();
   const copy = paymentModeCopy(usePaymentMode());
   const pro = profile.plan === 'pro';
-  const { data: recap, error } = usePanel<MonthlyRecapData>(
-    `/v1/me/recaps/${encodeURIComponent(month)}`,
-  );
+  const {
+    data: recap,
+    error,
+    failedStatus,
+    reload,
+  } = usePanel<MonthlyRecapData>(`/v1/me/recaps/${encodeURIComponent(month)}`);
   // The dashboard renders only in the browser (dashboard-shell), so this reads no server value.
   const [showTotal, setShowTotal] = useState(readTotal);
   const preview = useRef<HTMLCanvasElement>(null);
@@ -83,16 +87,16 @@ export default function MonthlyRecapPage() {
         </p>
       </Slip>
     );
+  // No recap for the month (404) is not a fault: it isn't made yet, so it is said neutrally
+  // (DECISION-LOG 2026-10-27). Only a failed read is an error, with Try again (UI audit, 15 Nov 2026).
   if (error === 'load' && !recap)
-    return (
-      // Usually a month whose recap isn't due yet: nothing has gone wrong, so the neutral slip, not
-      // the error tone (ScreenAudit; DECISION-LOG 2026-10-27).
-      <Slip tone="neutral" title="We couldn’t find that month’s recap">
-        <p>
-          Recaps are made on the 1st for the month before.{' '}
-          <Link href="/dashboard/earnings">See your earnings</Link>
-        </p>
+    return failedStatus === 404 ? (
+      <Slip tone="neutral" title="This month’s recap isn’t ready yet">
+        Recaps are made on the 1st for the month before.{' '}
+        <Link href="/dashboard/earnings">See your earnings</Link>
       </Slip>
+    ) : (
+      <LoadFailed title="We couldn’t load your recap" onRetry={reload} />
     );
   if (!recap) return <Skeleton label="Loading your recap" />;
   const shareable = recapShareable(recap, profile, { showTotal: true });

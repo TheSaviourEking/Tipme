@@ -2,14 +2,8 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { LiveEventType, MyTipRow, TipTotals } from '@tipme/contracts';
-import {
-  Button,
-  EmptySlip,
-  InputField,
-  Notice,
-  Skeleton,
-  Stamp,
-} from '@tipme/ui';
+import { Button, EmptySlip, InputField, Skeleton, Stamp } from '@tipme/ui';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { formatNaira } from '@/lib/demo-amount';
 import { dayKey, timeOf } from '@/lib/lagos-time';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -142,11 +136,7 @@ export default function TipsPage() {
   };
 
   if (error === 'load' && !data)
-    return (
-      <Notice tone="error" title="We couldn’t load your tips">
-        Please reload the page.
-      </Notice>
-    );
+    return <LoadFailed title="We couldn’t load your tips" onRetry={reload} />;
 
   // No tip at all yet (not a filter or a search that found none): the shared empty state, with no
   // CSV, search or filters for a list that has nothing in it (DECISION-LOG: EmptySlip).

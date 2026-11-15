@@ -3,6 +3,11 @@
 - Branch `fix/ui-audit-dashboard`; PR into `dev`, not merged (after #242). Before/after screenshots at 320, 390 and 1440 were taken on e2e lane 7 against throwaway containers (removed). The PR body maps every audit item to fixed or left, with the reason.
 - Verified: web unit tests, typecheck, lint, format, `route-css.test.mjs`, the new and changed e2e specs (burn-in flakes only in sign-up/loading timing while the machine's load average was ~80), and the related dashboard specs.
 
+# Current handoff: UI audit fixes, behaviour and words (15 November 2026)
+
+- Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.
+- No CSS, no migration, no API change. Tests: `apps/web/test/dashboard-load.test.mjs`, `panel-read.test.mjs`, `payment-mode-copy.test.mjs`; e2e `tests/e2e/dashboard-read-failures.spec.ts` plus copy assertions in touched specs. Next: CI, owner review and merge into `dev`.
+
 # Current handoff: the home page's first paint (15 November 2026)
 
 - Branch `perf/home-first-paint` from `origin/dev`; PR into `dev`, not merged. Web CSS split, one unit test, release-check change, `dialogs.spec.ts` opens the dashboard/admin dialogs where their styles now load. No migration, no API change.

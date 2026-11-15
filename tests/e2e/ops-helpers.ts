@@ -56,6 +56,8 @@ export async function enrolOwner(page: Page, testInfo: TestInfo) {
     page.getByRole('heading', { name: 'Set up your authenticator' }),
   ).toBeVisible();
   await expectAccessible(page);
+  // Staff screens never tell people to run a command (UI audit, 15 Nov 2026).
+  await expect(page.getByRole('main')).not.toContainText(/pnpm|ops:grant/);
   await page.getByLabel('Enrolment code').fill(enrolmentCode);
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(
