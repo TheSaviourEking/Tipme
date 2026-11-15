@@ -281,6 +281,56 @@ app_services() {
   done
 }
 
+# --- Workers paused for migrations (both stacks) ---
+# Drizzle applies every pending migration in one long transaction. The running release's workers
+# commit short multi-table transactions every few seconds, and their locks met the migration's in
+# a deadlock on both tries of a production deploy (Nov 2026), so they are stopped while it runs;
+# the APIs keep serving. Queued jobs wait in Redis; each job is safe to run late or twice.
+# Until the new version's workers replace them, the exit trap starts the same containers again
+# (`start`: nothing is recreated), so a deploy that stops early leaves the workers as they were.
+paused_workers=()
+paused_with=""
+resume_reason="migrations failed"
+
+# Stops the named worker services that are running now, remembering which. A first deploy has none.
+pause_workers() {
+  local version=$1 running service
+  shift
+  running=$(compose_for "$version" ps --services --status running)
+  for service in "$@"; do
+    grep -qx "$service" <<<"$running" && paused_workers+=("$service")
+  done
+  if ((${#paused_workers[@]} == 0)); then
+    echo "==> No workers running to pause"
+    return 0
+  fi
+  paused_with=$version
+  echo "==> Pausing workers for migrations: ${paused_workers[*]}"
+  compose_for "$version" stop "${paused_workers[@]}"
+}
+
+# A paused worker the new version now runs (or the deploy restarted): no longer the trap's.
+worker_replaced() {
+  local service=$1 name
+  local -a kept=()
+  for name in "${paused_workers[@]+"${paused_workers[@]}"}"; do
+    [[ "$name" == "$service" ]] || kept+=("$name")
+  done
+  paused_workers=("${kept[@]+"${kept[@]}"}")
+}
+
+# On exit: starts again any worker still paused. Never changes the exit status; a worker it
+# cannot start is named for the operator.
+resume_paused_workers() {
+  ((${#paused_workers[@]} > 0)) || return 0
+  if compose_for "$paused_with" start "${paused_workers[@]}"; then
+    echo "==> Workers resumed ($resume_reason): ${paused_workers[*]}" >&2
+  else
+    echo "!! Could not start the paused workers again: TIPME_STACK=$TIPME_STACK $TIPME_HOME/live/scripts/compose.sh start ${paused_workers[*]}" >&2
+  fi
+  paused_workers=()
+}
+
 # --- Production only (blue/green) ---
 
 # One deploy or rollback at a time: a second would pick the same idle colour and could stop the
@@ -292,7 +342,7 @@ take_lock() {
     exit 2
   fi
   echo "pid $$ since $(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$LOCK/owner"
-  trap 'rm -rf "$LOCK"' EXIT
+  trap 'resume_paused_workers; rm -rf "$LOCK"' EXIT
   # Bash skips the EXIT trap when a signal kills it (a dropped SSH session sends HUP).
   trap 'exit 129' HUP
   trap 'exit 130' INT
@@ -334,7 +384,8 @@ start_idle_colour() {
 
 # The new colour serves: record it first (if anything later fails, the state names the colour that
 # is serving), then stop the old colour (the edge stops sending it traffic as it fails readiness;
-# 20 s covers its drain) and replace the workers one at a time onto the same version.
+# 20 s covers its drain) and replace the workers one at a time onto the same version. A worker
+# paused for the migrations is stopped already: `up` recreates it on the new version all the same.
 switch_to_idle() {
   local version=$1 old=$active_colour
   active_colour=$(idle_colour)
@@ -346,5 +397,6 @@ switch_to_idle() {
   for worker in worker-a worker-b; do
     echo "==> Replacing $worker"
     compose_for "$version" up -d --wait --no-deps "$worker"
+    worker_replaced "$worker"
   done
 }

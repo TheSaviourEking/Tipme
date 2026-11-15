@@ -1,19 +1,30 @@
 import {
   ANNOUNCEMENT_AUDIENCE_WORDS,
+  announcementDailyLimitOf,
   opsAnnouncementDraftSchema,
   opsAnnouncementEditSchema,
   type AnnouncementAudience,
   type AnnouncementKind,
   type OpsAnnouncement,
+  type OpsAnnouncementDailyLimit,
   type OpsAnnouncementDraft,
   type OpsAnnouncementEdit,
   type OpsAnnouncementList,
   type OpsAnnouncementTestSent,
 } from '@tipme/contracts';
-import { announcementSchema, type AnnouncementData } from '@tipme/mail';
+import {
+  announcementSchema,
+  MAIL_TYPES,
+  type AnnouncementData,
+} from '@tipme/mail';
 import { and, asc, desc, eq, gt, inArray, sql, type SQL } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { announcements, approvalRequests, users } from '../schema.js';
+import {
+  announcements,
+  approvalRequests,
+  displaySettings,
+  users,
+} from '../schema.js';
 import { recordAudit } from './audit.js';
 import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
@@ -223,7 +234,10 @@ export function listAnnouncements(
     const views: OpsAnnouncement[] = [];
     for (const row of rows)
       views.push(await toView(db, row, waiting.get(row.id) ?? null));
-    return { rows: views };
+    return {
+      rows: views,
+      dailyLimit: await announcementDailyUse(db, input.now ?? new Date()),
+    };
   });
 }
 
@@ -574,6 +588,71 @@ export function askToSendAnnouncement(
   });
 }
 
+/* The daily limit (owner, 15 Nov 2026) */
+
+const DAY_MS = 86_400_000;
+const DAILY_LIMIT_KEY = 'announcement_daily_limit';
+/** Advisory lock key (any fixed bigint): one batch at a time counts and queues against the limit. */
+const DAILY_LIMIT_LOCK = 7_316_100_215;
+
+/** Every email type sent through the announcement provider (Brevo): announcements, notices, tests. */
+const BULK_TYPES = Object.entries(MAIL_TYPES)
+  .filter(([, type]) => type.bulk)
+  .map(([id]) => id);
+
+/** The limit staff set in Switches, or the default (300) while unset. */
+export async function announcementDailyLimit(
+  db: Database | Tx,
+): Promise<number> {
+  const [row] = await db
+    .select({ value: displaySettings.value })
+    .from(displaySettings)
+    .where(eq(displaySettings.key, DAILY_LIMIT_KEY));
+  return announcementDailyLimitOf(row?.value);
+}
+
+/**
+ * How much of the daily limit is used, from the mail queue itself (no counter that could drift).
+ * Brevo's free plan allows 300 a day and we don't know the hour its day starts, so the window rolls:
+ * an email counts while it waits in the queue (its credit is still to be used, however old it is)
+ * and for 24 hours after it was sent. One never sent (skipped, suppressed, failed) used no credit.
+ */
+export async function announcementDailyUse(
+  db: Database | Tx,
+  now: Date,
+): Promise<OpsAnnouncementDailyLimit> {
+  const limit = await announcementDailyLimit(db);
+  const since = new Date(now.getTime() - DAY_MS).toISOString();
+  const types = sql.join(
+    BULK_TYPES.map((type) => sql`${type}`),
+    sql`, `,
+  );
+  const result = await db.execute<{
+    waiting: number;
+    sent: number;
+    oldest: string | Date | null;
+  }>(
+    sql`SELECT
+      (SELECT count(*)::int FROM mail_messages
+        WHERE type IN (${types}) AND status IN ('queued', 'sending')) AS waiting,
+      (SELECT count(*)::int FROM mail_messages
+        WHERE type IN (${types}) AND sent_at > ${since}::timestamptz
+          AND status NOT IN ('queued', 'sending')) AS sent,
+      (SELECT min(sent_at) FROM mail_messages
+        WHERE type IN (${types}) AND sent_at > ${since}::timestamptz
+          AND status NOT IN ('queued', 'sending')) AS oldest`,
+  );
+  const row = result.rows[0];
+  const used = Number(row?.waiting ?? 0) + Number(row?.sent ?? 0);
+  const oldest = row?.oldest ? new Date(row.oldest) : null;
+  return {
+    limit,
+    used,
+    remaining: Math.max(0, limit - used),
+    freesAt: oldest ? new Date(oldest.getTime() + DAY_MS).toISOString() : null,
+  };
+}
+
 /* The worker's part */
 
 export interface AnnouncementBatchResult {
@@ -583,13 +662,16 @@ export interface AnnouncementBatchResult {
   queued: number;
   /** True when this batch found nobody left and marked it sent. */
   finished: boolean;
+  /** True when the daily limit held people back: the send waits, still `sending`. */
+  paused: boolean;
 }
 
 /**
  * Queues the next `limit` people of the oldest announcement that is sending, in one transaction
- * with its progress. A second worker skips the locked row. A batch that finds fewer than `limit`
- * people left finishes the send. Someone whose preferences changed since the approval is skipped
- * here, and again at send time.
+ * with its progress. A second worker skips the locked row. Never more than what is left of the daily
+ * limit: at the limit it queues nobody and the send stays `sending`, carrying on by itself as the
+ * 24 hours free up. A batch that finds nobody after the people it queued finishes the send.
+ * Someone whose preferences changed since the approval is skipped here, and again at send time.
  */
 export function queueAnnouncementBatch(
   db: Database,
@@ -605,8 +687,19 @@ export function queueAnnouncementBatch(
         .orderBy(asc(announcements.createdAt), asc(announcements.id))
         .limit(1)
         .for('update', { skipLocked: true });
-      if (!row) return { announcementId: null, queued: 0, finished: false };
-      const limit = Math.max(1, Math.floor(input.limit));
+      if (!row)
+        return {
+          announcementId: null,
+          queued: 0,
+          finished: false,
+          paused: false,
+        };
+      // Two batches (two announcements, two workers) count and queue one after the other, so
+      // together they never pass the limit.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${DAILY_LIMIT_LOCK})`);
+      const { remaining } = await announcementDailyUse(tx, input.now);
+      const take = Math.min(Math.max(1, Math.floor(input.limit)), remaining);
+      // One more than it may take, to know whether anyone is left after them.
       const found = await tx.execute<{ id: string; email: string }>(
         sql`SELECT u.id, u.email FROM users u
           LEFT JOIN mail_preferences mp ON mp.user_id = u.id
@@ -614,11 +707,20 @@ export function queueAnnouncementBatch(
             AND u.created_at <= ${(row.cutoff ?? input.now).toISOString()}::timestamptz
             ${row.cursorUserId ? sql`AND u.id > ${row.cursorUserId}::uuid` : sql``}
           ORDER BY u.id
-          LIMIT ${limit}`,
+          LIMIT ${take + 1}`,
       );
+      const finished = found.rows.length <= take;
+      const next = found.rows.slice(0, take);
+      if (next.length === 0 && !finished)
+        return {
+          announcementId: row.id,
+          queued: 0,
+          finished: false,
+          paused: true,
+        };
       const data = announcementMailData(row);
       let queued = 0;
-      for (const person of found.rows) {
+      for (const person of next) {
         // An address that can't be mailed is passed over; it never holds back the rest.
         const to = normaliseEmail(person.email);
         if (!to) continue;
@@ -632,8 +734,7 @@ export function queueAnnouncementBatch(
         });
         queued += 1;
       }
-      const finished = found.rows.length < limit;
-      const last = found.rows[found.rows.length - 1];
+      const last = next[next.length - 1];
       await tx
         .update(announcements)
         .set({
@@ -656,7 +757,7 @@ export function queueAnnouncementBatch(
           }),
           now: input.now,
         });
-      return { announcementId: row.id, queued, finished };
+      return { announcementId: row.id, queued, finished, paused: false };
     }),
   );
 }

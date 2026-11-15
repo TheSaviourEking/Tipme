@@ -168,13 +168,51 @@ test('the display settings are the pilot notice and the launch time, each naming
     await import('../dist/index.js');
   assert.deepEqual(
     [...DISPLAY_SETTINGS],
-    ['pilot_notice', 'production_launch_at'],
+    ['pilot_notice', 'production_launch_at', 'announcement_daily_limit'],
   );
   assert.equal(DISPLAY_SETTING_CATALOGUE.pilot_notice.envName, 'PILOT_NOTICE');
   assert.equal(
     DISPLAY_SETTING_CATALOGUE.production_launch_at.envName,
     'PRODUCTION_LAUNCH_AT',
   );
+  for (const key of ['pilot_notice', 'production_launch_at'])
+    assert.equal(DISPLAY_SETTING_CATALOGUE[key].group, 'web');
+});
+
+// The announcements daily limit (owner, 15 Nov 2026) is kept with the display settings, in its own
+// "Limits" group: a whole number from 1 to 100,000, 300 while unset. It replaced no variable.
+test('the announcements daily limit is a whole number from 1 to 100,000, 300 while unset', async () => {
+  const {
+    ANNOUNCEMENT_DAILY_LIMIT,
+    DISPLAY_SETTING_CATALOGUE,
+    announcementDailyLimitOf,
+    checkedDisplayValue,
+  } = await import('../dist/index.js');
+  const entry = DISPLAY_SETTING_CATALOGUE.announcement_daily_limit;
+  assert.equal(entry.kind, 'count');
+  assert.equal(entry.group, 'limits');
+  assert.equal(entry.envName, null);
+  assert.deepEqual(ANNOUNCEMENT_DAILY_LIMIT, {
+    default: 300,
+    min: 1,
+    max: 100_000,
+  });
+  assert.equal(checkedDisplayValue('announcement_daily_limit', '1'), '1');
+  assert.equal(
+    checkedDisplayValue('announcement_daily_limit', '100000'),
+    '100000',
+  );
+  assert.equal(checkedDisplayValue('announcement_daily_limit', '0300'), '300');
+  for (const bad of [null, '0', '100001', '-1', '2.5', '1e3', ' 5', 'many'])
+    assert.throws(
+      () => checkedDisplayValue('announcement_daily_limit', bad),
+      String(bad),
+    );
+  assert.equal(announcementDailyLimitOf(undefined), 300);
+  assert.equal(announcementDailyLimitOf(null), 300);
+  assert.equal(announcementDailyLimitOf('nonsense'), 300);
+  assert.equal(announcementDailyLimitOf('0'), 300);
+  assert.equal(announcementDailyLimitOf('1200'), 1200);
 });
 
 test('a display value is checked: on or off for the notice; an exact instant, or none, for the launch', async () => {

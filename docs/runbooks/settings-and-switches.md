@@ -123,6 +123,15 @@ change shows within about a minute.
 - **The countdown check** (`tests/e2e/countdown.config.ts`, run by hand) runs the web app alone, so it starts a
   small stand-in API that answers "not set in admin", and the web keeps the run's `PRODUCTION_LAUNCH_AT`.
 
+## Limits: set in admin
+
+Stored with the display settings (the same table, reason, fresh code, audit and history), shown at `/ops/switches`
+under "Limits". Each replaced no variable; while unset its default applies. Not served on `/health/release`.
+
+| Setting                    | Default | Bounds      | What it does                                                                                                    |
+| -------------------------- | ------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
+| `announcement_daily_limit` | 300     | 1 – 100,000 | Most announcement emails (tests included) queued in any 24 hours; at the limit a send pauses (`admin-roles.md`) |
+
 ## Tunables: code defaults, overridable
 
 | Variable                                                                                                                                                                                                                                                                           | What it does                                                  | Where | Why it stays                                                                                                                                                                                                                                                               |

@@ -715,3 +715,153 @@ test('“News and announcements” in Settings is the marketing switch, off unti
   });
   assert.equal(await ops.countAnnouncementAudience(database.db, 'everyone'), 0);
 });
+
+/*
+ * The daily limit (owner, 15 Nov 2026). Brevo's free plan sends 300 emails a day, so no more
+ * announcement emails are queued in any 24 hours than the limit staff set in Switches (default 300).
+ * It counts every email that goes through Brevo, whichever announcement, and staff tests too: those
+ * waiting in the mail queue, and those sent in the last 24 hours. At the limit the send pauses,
+ * still `sending`, and carries on by itself as the 24 hours free up.
+ */
+const HOUR = 3_600_000;
+const batchAt = (limit, now) =>
+  ops.queueAnnouncementBatch(database.db, sealing, { now, limit });
+
+async function dailyLimit(value) {
+  const staffUserId = await staffMember();
+  await database.db.transaction((tx) =>
+    ops.setDisplaySetting(tx, {
+      key: 'announcement_daily_limit',
+      value,
+      staffUserId,
+      reason: 'Matching the free plan of the email service',
+      now: new Date(),
+    }),
+  );
+}
+
+/** As if the worker sent everything waiting, at `at`. */
+const sendWaiting = (at) =>
+  q(
+    `UPDATE mail_messages SET status = 'sent', sent_at = $1, final_at = $1
+      WHERE type IN ('announcement', 'service_notice') AND status = 'queued'`,
+    [at],
+  );
+
+test('the daily limit is 300 until staff set it, from 1 to 100,000', async () => {
+  const use = await ops.announcementDailyUse(database.db, new Date());
+  assert.deepEqual(use, { limit: 300, used: 0, remaining: 300, freesAt: null });
+  for (const bad of ['0', '100001', '-5', '2.5', 'lots', null])
+    await assert.rejects(
+      dailyLimit(bad),
+      (error) => error.code === 'INVALID_INPUT',
+      String(bad),
+    );
+  await dailyLimit('100000');
+  await dailyLimit('1');
+  assert.equal(
+    (await ops.announcementDailyUse(database.db, new Date())).limit,
+    1,
+  );
+  const [audit] = await q(
+    `SELECT permission FROM audit_events WHERE action = 'display_setting.set' AND subject_id = 'announcement_daily_limit' ORDER BY seq DESC LIMIT 1`,
+  );
+  assert.equal(audit.permission, 'switches.manage');
+});
+
+test('at the limit a send pauses, still sending, and carries on as the 24 hours free up', async () => {
+  const everyone = [];
+  for (let i = 0; i < 5; i += 1) everyone.push(await user());
+  await dailyLimit('3');
+  const { announcement } = await sending();
+  const start = new Date();
+  const first = await batchAt(10, start);
+  assert.deepEqual(first, {
+    announcementId: announcement.id,
+    queued: 3,
+    finished: false,
+    paused: false,
+  });
+  // The limit is used: nothing more, still sending.
+  const paused = await batchAt(10, new Date(start.getTime() + 1000));
+  assert.equal(paused.queued, 0);
+  assert.equal(paused.paused, true);
+  assert.equal(paused.finished, false);
+  let state = await ops.readAnnouncement(database.db, announcement.id);
+  assert.equal(state.state, 'sending');
+  assert.equal(state.queuedCount, 3);
+  // Sent, but within the 24 hours: still counted.
+  await sendWaiting(start);
+  assert.equal((await batchAt(10, new Date(start.getTime() + HOUR))).queued, 0);
+  const listed = await ops.listAnnouncements(database.db, {
+    now: new Date(start.getTime() + HOUR),
+  });
+  assert.deepEqual(listed.dailyLimit, {
+    limit: 3,
+    used: 3,
+    remaining: 0,
+    freesAt: new Date(start.getTime() + 24 * HOUR).toISOString(),
+  });
+  // The next day it carries on from where it stopped, and finishes.
+  const later = new Date(start.getTime() + 24 * HOUR + 1000);
+  const resumed = await batchAt(10, later);
+  assert.equal(resumed.queued, 2);
+  assert.equal(resumed.finished, true);
+  state = await ops.readAnnouncement(database.db, announcement.id);
+  assert.equal(state.state, 'sent');
+  assert.equal(state.queuedCount, 5);
+  const rows = await queued(announcement.id);
+  assert.deepEqual(rows.map((row) => row.user_id).sort(), everyone.sort());
+});
+
+test('a batch queues only up to what is left today; tests, waiting mail and other sends count', async () => {
+  for (let i = 0; i < 6; i += 1) await user();
+  await dailyLimit('4');
+  const { asker, announcement } = await sending();
+  // A staff test goes through the same email service, so it counts.
+  await ops.sendAnnouncementTest(database.db, sealing, {
+    staffUserId: asker,
+    id: announcement.id,
+  });
+  // Mail still waiting from days ago counts too: it hasn't used its credit yet.
+  await q(`UPDATE mail_messages SET created_at = now() - interval '3 days'`);
+  const now = new Date();
+  assert.equal((await batchAt(10, now)).queued, 3);
+  assert.equal((await batchAt(10, now)).queued, 0);
+  // An email that was never sent (skipped at send time) used no credit: room for one more.
+  await q(
+    `UPDATE mail_messages SET status = 'skipped', final_at = now() WHERE dedupe_key LIKE 'announcement_test:%'`,
+  );
+  assert.equal((await batchAt(10, now)).queued, 1);
+  const state = await ops.readAnnouncement(database.db, announcement.id);
+  assert.equal(state.queuedCount, 4);
+  assert.equal(state.state, 'sending');
+});
+
+test('the last people fitting exactly in the limit finish the send at once', async () => {
+  await user();
+  await user();
+  await dailyLimit('2');
+  const { announcement } = await sending();
+  const result = await batchAt(10, new Date());
+  assert.equal(result.queued, 2);
+  assert.equal(result.finished, true);
+  assert.equal(
+    (await ops.readAnnouncement(database.db, announcement.id)).state,
+    'sent',
+  );
+});
+
+test('two announcements sending at once share one daily limit', async () => {
+  for (let i = 0; i < 6; i += 1) await user();
+  await dailyLimit('5');
+  await sending();
+  await sending({ subject: 'A second piece of news' });
+  const now = new Date();
+  await Promise.all([batchAt(4, now), batchAt(4, now), batchAt(4, now)]);
+  for (let i = 0; i < 4; i += 1) await batchAt(4, now);
+  const [{ count }] = await q(
+    `SELECT count(*)::int AS count FROM mail_messages WHERE type = 'announcement'`,
+  );
+  assert.equal(count, 5);
+});
