@@ -80,9 +80,11 @@ before(async () => {
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();
   ops.registerRealSeriousActions();
-  // tip.reverse runs only while business shares are on (R2-A review finding 3): stored switches now.
+  // Business shares on, as a shared tip needs them (tip.reverse itself runs whatever the switches).
   await setSwitch(database.pool, 'business', true);
   await setSwitch(database.pool, 'business_shares', true);
+  // #221: tip.refund re-reads its money switch when it runs.
+  await setSwitch(database.pool, 'tip_refunds', true);
   ops.registerSeriousAction({
     name: 'test.overstays',
     permission: SENSITIVE,
