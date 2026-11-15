@@ -3246,3 +3246,44 @@ a.ops-people__card:hover {
 .ops-section > section > h3 {
   margin: var(--space-2) 0 0;
 }
+
+/* A page's Pro payments (16 Nov 2026): a paid month is a success state, a refunded one recessed;
+   never purple. A row's reason it can't be refunded sits under its refund state. */
+.ops-pay-state--paid {
+  background: var(--state-success-soft);
+  color: var(--state-success);
+}
+
+.ops-pay-state--refunded {
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+}
+
+.ops-pay-state,
+.ops-pro-payments .ops-table__action .tm-button {
+  white-space: nowrap;
+}
+
+.ops-pay-why {
+  display: block;
+  margin-top: var(--space-1);
+}
+
+/* The refund form under the table, and taking back a tip from its issue: the words, then the
+   reasoned action, on the 8px rhythm. */
+.ops-pro-refund,
+.ops-tip-reverse {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ops-pro-refund {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--edge-hairline);
+}
+
+.ops-pro-refund p,
+.ops-tip-reverse p {
+  margin: 0;
+}

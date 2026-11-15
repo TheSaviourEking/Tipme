@@ -31,6 +31,7 @@ import {
 } from '@/components/ops/action-outcome';
 import { PageImages } from '@/components/ops/page-images';
 import { PagePricing, ValueWithReason } from '@/components/ops/page-pricing';
+import { ProPayments } from '@/components/ops/pro-payments';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { TakeBackForm } from '@/components/ops/take-back-form';
 import { takeBackStateWords } from '@/lib/take-back-words';
@@ -535,6 +536,13 @@ export default function OpsPagesPage() {
             />
           )}
         </Card>
+      )}
+      {/* Pro payments and their refunds need payments.repair, as the API does; others don't see it. */}
+      {page && can(access, 'payments.repair') && (
+        <ProPayments
+          key={`pro-payments-${page.profileId}`}
+          profileId={page.profileId}
+        />
       )}
       {page?.images && can(access, 'pages.suspend') && (
         <PageImages

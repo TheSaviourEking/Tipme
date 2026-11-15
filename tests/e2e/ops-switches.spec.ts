@@ -18,6 +18,48 @@ const restore = (key: string, on: boolean) =>
 const switchCard = (page: Page, key: string) =>
   page.getByRole('main').getByTestId(`switch-${key}`);
 
+/** With STAFF_TOOLS_SHOTS set: the screen at 390 and 1440, for review. */
+async function shoot(page: Page, name: string) {
+  const shots = process.env.STAFF_TOOLS_SHOTS;
+  if (!shots) return;
+  const size = page.viewportSize();
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.screenshot({
+      path: `${shots}/${name}-${width}.png`,
+      fullPage: true,
+    });
+  }
+  if (size) await page.setViewportSize(size);
+}
+
+// 16 Nov 2026: team_tips and business_owners have nothing built behind them. They stay listed,
+// marked, with no "Turn on" (the API refuses it too, tests/integration/feature-switches-api).
+test('a switch with nothing built behind it is marked and offers no way to turn it on', async ({
+  page,
+}, testInfo) => {
+  await enrolOwner(page, testInfo);
+  await page.goto('/ops/switches');
+  for (const key of ['team_tips', 'business_owners']) {
+    const card = switchCard(page, key);
+    await expect(card.getByText('Not built yet')).toBeVisible();
+    await expect(card.getByTestId('switch-not-built')).toHaveText(
+      'Nothing is built behind this switch yet, so it can’t be turned on.',
+    );
+    await expect(
+      card.getByRole('button', { name: /^Turn .* on…$/ }),
+    ).toHaveCount(0);
+  }
+  // A built one still offers its action.
+  await expect(
+    switchCard(page, 'page_studio').getByRole('button', {
+      name: /^Turn Page Studio (on|off)…$/,
+    }),
+  ).toBeVisible();
+  await expectAccessible(page);
+  await shoot(page, 'switches-not-built');
+});
+
 // @alone: a switch changes the feature for every page, so nothing may run beside it.
 test('@alone an owner turns OnlyFans and Fansly links off and a Pro page’s editor shows them hidden', async ({
   page,

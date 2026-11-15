@@ -149,6 +149,17 @@ export interface OpsProPayment {
   refund: {
     status: 'REQUESTED' | 'PROCESSING' | 'UNKNOWN' | 'PAID' | 'FAILED';
   } | null;
+  /** The Pro month this payment bought; null for a payment with no month recorded. */
+  period: { startsAt: string; endsAt: string } | null;
+}
+
+/**
+ * `GET /v1/ops/pro/pages/:profileId/payments`: a page's paid Pro months, newest first. Readable
+ * whatever the `pro_refunds` switch; `refundsOn` says whether staff can ask for a refund now.
+ */
+export interface OpsProPayments {
+  refundsOn: boolean;
+  payments: OpsProPayment[];
 }
 
 /** `POST /v1/ops/pro/purchases/:purchaseId/refund`: the member's request, in staff's words. */

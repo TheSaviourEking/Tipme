@@ -189,6 +189,8 @@ const REFUSALS: Record<string, string> = {
     'Announcement email isn’t set up on this server. Nothing was sent.',
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Nothing changed; see the reasons by the field.',
+  SWITCH_NOT_BUILT:
+    'Nothing is built behind this switch yet, so it can’t be turned on. Nothing changed.',
   APPROVAL_NO_APPROVER:
     'Nobody who can approve this is set up yet. Nothing changed; ask an owner to give someone changelog.publish.',
 };

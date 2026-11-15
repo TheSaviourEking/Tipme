@@ -14,6 +14,7 @@ import {
   type ApiDataResponse,
   type OpsActedAlone,
   type OpsProPayment,
+  type OpsProPayments,
   type OpsProRefundRequest,
   type OpsSeriousPending,
 } from '@tipme/contracts';
@@ -36,9 +37,10 @@ import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * Pro refunds in admin (plan Task 9; ruling 6), behind PRO_REFUNDS (off by default). Staff with
- * `payments.repair` see a page's Pro payments and ask to refund a card one on the member's request;
- * a second person decides (`pro.refund`). The refund screen itself is a follow-up.
+ * Pro refunds in admin (plan Task 9; ruling 6). Staff with `payments.repair` see a page's Pro
+ * payments whatever the switch (the history moves no money), and, only while the `pro_refunds`
+ * money switch is on, ask to refund a card one on the member's request; a second person decides
+ * (`pro.refund`). The admin page view shows both (`components/ops/pro-payments.tsx`).
  */
 @Controller('v1/ops/pro')
 export class OpsProPaymentsController {
@@ -58,22 +60,29 @@ export class OpsProPaymentsController {
   @OpsPermission('payments.repair')
   async list(
     @Param('profileId') profileId: string,
-  ): Promise<ApiDataResponse<OpsProPayment[]>> {
-    await this.on();
+  ): Promise<ApiDataResponse<OpsProPayments>> {
     if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
-    const rows = await opsProPayments(this.database.db, profileId, new Date());
-    return {
-      data: rows.map((row) => ({
-        purchaseId: row.purchaseId,
-        amountMinor: String(row.amountMinor),
-        currency: 'NGN',
-        paidAt: row.paidAt?.toISOString() ?? null,
-        paidBy: row.paidBy as OpsProPayment['paidBy'],
-        refundable: row.refundable,
-        words: row.words,
-        refund: row.refund ? { status: row.refund.status } : null,
-      })),
-    };
+    const [refundsOn, rows] = await Promise.all([
+      featureOn(this.database.db, 'pro_refunds'),
+      opsProPayments(this.database.db, profileId, new Date()),
+    ]);
+    const payments: OpsProPayment[] = rows.map((row) => ({
+      purchaseId: row.purchaseId,
+      amountMinor: String(row.amountMinor),
+      currency: 'NGN',
+      paidAt: row.paidAt?.toISOString() ?? null,
+      paidBy: row.paidBy as OpsProPayment['paidBy'],
+      refundable: row.refundable,
+      words: row.words,
+      refund: row.refund ? { status: row.refund.status } : null,
+      period: row.period
+        ? {
+            startsAt: row.period.startsAt.toISOString(),
+            endsAt: row.period.endsAt.toISOString(),
+          }
+        : null,
+    }));
+    return { data: { refundsOn, payments } };
   }
 
   @Post('purchases/:purchaseId/refund')

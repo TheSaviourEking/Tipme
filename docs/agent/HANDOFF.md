@@ -1,3 +1,9 @@
+# Current handoff: admin money screens (16 November 2026)
+
+- Branch `feat/ops-pro-refunds-reverse`; PR into `dev`, not merged. New: `components/ops/pro-payments.tsx`, `components/ops/tip-reverse.tsx`, `lib/pro-payment-view.ts`, `lib/tip-reverse-view.ts`; switches screen shows "Not built yet". Contracts: `OpsProPayments`, `OpsProPayment.period`, `OpsFeatureSwitch.notBuilt`, `featureSwitchBuilt`, error `SWITCH_NOT_BUILT`. Runbook `settings-and-switches.md` and DECISION-LOG (2026-11-16) updated.
+- Passed (lane 6, throwaway containers `tipme-refrev-*`, removed after): web/contracts/api unit tests, typecheck, lint, `route-css.test.mjs`, integration `feature-switches-api`, `pro-refund`, `ops-tip-reverse`, `account-api`, database `feature-switches`; e2e `ops-pro-payments`, `ops-tip-reverse`, `ops-switches` (desktop, mobile, @alone). Not run: the full e2e and integration suites (CI), burn-in.
+- Left: the `payment_reversed` issue summary (server words) still names the partner on the staff screen; not changed here.
+
 # Current handoff: admin UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-ops`; PR into `dev`, not merged, merge after #242. Web and `packages/ui` CSS/markup only; no migration, no API change. New `tests/e2e/ops-layout.spec.ts`; pricing e2e tests click the new "…" openers.
