@@ -5,6 +5,7 @@ import { PilotNotice } from '@/components/pilot-notice';
 import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { ReleaseFlagsScope } from '@/components/release-flags-slot';
 import { DashboardShell } from './dashboard-shell';
+import './dashboard.css';
 
 export const metadata: Metadata = {
   title: { default: 'Dashboard', template: '%s · Dashboard | TipMe' },
