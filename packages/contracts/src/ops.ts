@@ -268,6 +268,8 @@ export const ISSUE_KINDS = [
   // Business release 2, option B: a share movement between partner accounts that needs a person
   // (TipMe holds a business's share it could not send on, or a transfer's answer didn't match).
   'share_transfer_stuck',
+  // A staff "Refund tip" our payment partner refused or failed (owner, 14 Nov 2026).
+  'tip_refund_failed',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

@@ -45,6 +45,7 @@ import {
   runShareTransfers,
   renewProAutomatically,
   sendProRefunds,
+  sendTipRefunds,
   sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
@@ -328,6 +329,18 @@ export async function startJobWorker(
       ['mock', mockProvider],
       ['bachs', bachsProvider],
     ];
+    // Staff tip refunds (owner, 14 Nov 2026): approved ones are sent once, as the recipient's
+    // account; refund.paid settles them. Only the `tip_refunds` switch lets anyone ask or approve one,
+    // as with Pro refunds: one already approved is still sent.
+    for (const [providerName, provider] of providers) {
+      if (!provider?.refundAccountCharge) continue;
+      const tipRefunds = await sendTipRefunds(database.db, {
+        provider,
+        providerName,
+        now,
+      });
+      totals.failed += tipRefunds.failed;
+    }
     for (const [providerName, provider] of providers) {
       if (!provider?.initializePlatformCheckout) continue;
       const result = await reconcileProPurchases(database.db, {

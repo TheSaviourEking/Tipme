@@ -27,6 +27,8 @@ export const FEATURE_SWITCHES = [
   'business_signup',
   'business_owners',
   'campaign_pages',
+  // Staff "Refund tip", PR #221 (feat/tip-refund): moves money, so a money switch.
+  'tip_refunds',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -175,6 +177,14 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: false,
     default: false,
     env: truthy('CAMPAIGN_PAGES_ENABLED'),
+  },
+  tip_refunds: {
+    label: 'Tip refunds',
+    description:
+      'Staff can refund a tip through our payment partner, with a second person: the supporter gets back the tip minus TipMe’s fee.',
+    money: true,
+    default: false,
+    env: onOff('TIP_REFUNDS'),
   },
 };
 

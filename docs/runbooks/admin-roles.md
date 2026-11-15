@@ -77,6 +77,7 @@ These wait for a second person when one is available:
 | `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                             |
 | `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)   |
 | `announcement.send`         | Send an announcement by email          | `announcements.send`                                          |
+| `tip.refund`                | Refund a tip (TipMe keeps its fee)     | `payments.repair` (behind the `tip_refunds` switch)           |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 

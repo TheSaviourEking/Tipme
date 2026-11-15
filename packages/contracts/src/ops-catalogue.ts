@@ -251,6 +251,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'A page’s Pro payments for deciding a refund: amounts, dates and how paid, no card or bank details.',
   },
+  'OpsTipRefundsController.read': {
+    verb: 'GET',
+    permission: 'payments.repair',
+    reason:
+      'What a tip refund would give back and who gives it, for deciding it: amounts and a handle, no supporter details; changes nothing.',
+  },
   // People (14 Nov 2026): a search.view list that adds tip totals for private.view holders.
   'OpsPeopleController.list': {
     verb: 'GET',
@@ -401,6 +407,8 @@ export const SERIOUS_ACTIONS = [
   'business_pro_price.change',
   // Staff announcements (14 Nov 2026): email one announcement to an audience.
   'announcement.send',
+  // Owner, 14 Nov 2026: refund a tip, the tip minus TipMe's fee (TipMe keeps its fee).
+  'tip.refund',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -426,6 +434,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'feature_switch.set': 'Turn a money switch on or off',
   'business_pro_price.change': 'Change the Business Pro price',
   'announcement.send': 'Send an announcement by email',
+  'tip.refund': 'Refund a tip (TipMe keeps its fee)',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -451,4 +460,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'feature_switch.set': 'switches.manage',
     'business_pro_price.change': 'pro.price',
     'announcement.send': 'announcements.send',
+    'tip.refund': 'payments.repair',
   };

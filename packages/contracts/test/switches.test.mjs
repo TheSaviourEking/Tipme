@@ -33,6 +33,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'refund_fee_return',
     'supporter_recognition',
     'team_tips',
+    'tip_refunds',
   ]);
   for (const key of FEATURE_SWITCHES) {
     const entry = FEATURE_SWITCH_CATALOGUE[key];
@@ -54,6 +55,7 @@ test('money switches are exactly the owner’s list (and team tips), and none de
     'pro_refunds',
     'refund_fee_return',
     'team_tips',
+    'tip_refunds',
   ]);
   for (const key of money)
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
@@ -265,4 +267,17 @@ test('refund_fee_return says only what it does: final refunds recorded without t
   assert.equal(entry.label, 'Record final refunds at once');
   assert.match(entry.description, /without two staff/);
   assert.doesNotMatch(entry.description, /chargeback|dispute|fee/i);
+});
+
+// #221 (owner, 14 Nov 2026: fewer variables): staff tip refunds move money, so a money switch.
+test('tip_refunds is a money switch, off by default, seeded from TIP_REFUNDS (on/off)', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.tip_refunds;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'TIP_REFUNDS');
+  assert.equal(
+    featureSwitchFromEnv('tip_refunds', { TIP_REFUNDS: 'on' }),
+    true,
+  );
+  assert.match(entry.description, /minus TipMe’s fee/);
 });

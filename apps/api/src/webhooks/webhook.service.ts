@@ -9,6 +9,9 @@ import { z } from 'zod';
 import {
   applyPayoutSignal,
   applyProRefundEvent,
+  applyTipRefundEvent,
+  findTipRefund,
+  tipRefundIdOf,
   recordSavedCard,
   confirmProCheckout,
   endProForReversal,
@@ -435,6 +438,22 @@ export class WebhookService {
     event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
     environment: BachsProvider['environment'],
   ): Promise<string> {
+    // A refund TipMe asked for (staff "Refund tip", owner 14 Nov 2026): the partner repeats TipMe's
+    // reference, and its refund.paid books it. Not a staff money issue: two staff already approved it.
+    const tipRefundId = tipRefundIdOf(event.operationReference);
+    if (tipRefundId && event.refundState) {
+      const known = await findTipRefund(this.database.db, tipRefundId);
+      if (!known) return this.unmatchedBachs(event);
+      const outcome = await applyTipRefundEvent(this.database.db, {
+        tipRefundId,
+        refundState: event.refundState,
+        partnerReversalId: event.partnerReversalId,
+        refundedMinor: event.refundedMinor,
+        refundFeeMinor: event.refundFeeMinor,
+        now: new Date(),
+      });
+      return `tip_refund_${outcome}`;
+    }
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
     // The `refund_fee_return` switch (owner, 12 and 14 Nov 2026): with it on, a final refund is

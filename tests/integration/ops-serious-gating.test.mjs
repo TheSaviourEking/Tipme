@@ -80,9 +80,11 @@ before(async () => {
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();
   ops.registerRealSeriousActions();
-  // tip.reverse runs only while business shares are on (R2-A review finding 3): stored switches now.
+  // Business shares on, as a shared tip needs them (tip.reverse itself runs whatever the switches).
   await setSwitch(database.pool, 'business', true);
   await setSwitch(database.pool, 'business_shares', true);
+  // #221: tip.refund re-reads its money switch when it runs.
+  await setSwitch(database.pool, 'tip_refunds', true);
   ops.registerSeriousAction({
     name: 'test.overstays',
     permission: SENSITIVE,
@@ -380,6 +382,51 @@ const wired = {
             purchaseId,
           ])
         ).length === 1,
+    };
+  },
+  // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) records the refund only.
+  'tip.refund': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `tiprf_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live')`,
+      [userId, handle],
+    );
+    const quote = await ops.createQuote(database.db, {
+      handle,
+      tipMinor: 1_000_000n,
+      currency: 'NGN',
+    });
+    const intent = await ops.createPaymentIntent(database.db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    const reference = `mock_pay_${randomUUID()}`;
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: intent.attemptId,
+      provider: 'mock',
+      providerReference: reference,
+    });
+    await ops.recordProviderEvent(database.db, {
+      provider: 'mock',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId: intent.attemptId,
+      providerReference: reference,
+      amountMinor: 1_000_000n,
+      currency: 'NGN',
+      providerFeeMinor: 20000n,
+      signatureVerified: true,
+      payload: {},
+    });
+    return {
+      payload: { tipId: intent.tipId },
+      happened: async () =>
+        (await q(`SELECT 1 FROM tip_refunds WHERE tip_id = $1`, [intent.tipId]))
+          .length === 1,
     };
   },
   'username.take_back': async () => {

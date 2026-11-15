@@ -7,6 +7,7 @@ import {
   PlatformRefusalError,
   ProRefundRefusedError,
   SavedCardRefusedError,
+  TipRefundRefusedError,
 } from '../provider.js';
 import type {
   PaymentProvider,
@@ -453,6 +454,44 @@ export function createMockProvider(options: {
         );
         if (existing !== reference)
           throw new ProRefundRefusedError('BAD_REQUEST');
+      }
+      return { refundReference: `mock_rf_${reference}`, status: 'processing' };
+    },
+
+    // Staff "Refund tip": the pretend partner refunds a tip once per payment. A tip it was told was
+    // paid by bank transfer (`mockprovider:<prefix>:method:<reference>`) can't be refunded.
+    async readAccountCharge(providerReference) {
+      const method =
+        (await redis.get(
+          `mockprovider:${prefix}:method:${providerReference}`,
+        )) === 'bank_transfer'
+          ? ('bank_transfer' as const)
+          : ('card' as const);
+      const refunded = await redis.exists(
+        `mockprovider:${prefix}:tip-refund:${providerReference}`,
+      );
+      return {
+        chargeReference: `mock_ch_${providerReference}`,
+        method,
+        refundable: method === 'card' && refunded === 0,
+      };
+    },
+
+    async refundAccountCharge({ providerReference, reference }) {
+      const charge = await this.readAccountCharge!(providerReference);
+      if (charge.method === 'bank_transfer')
+        throw new TipRefundRefusedError('bank_transfer');
+      const claimed = await redis.set(
+        `mockprovider:${prefix}:tip-refund:${providerReference}`,
+        reference,
+        'NX',
+      );
+      if (claimed !== 'OK') {
+        const existing = await redis.get(
+          `mockprovider:${prefix}:tip-refund:${providerReference}`,
+        );
+        if (existing !== reference)
+          throw new TipRefundRefusedError('not_refundable');
       }
       return { refundReference: `mock_rf_${reference}`, status: 'processing' };
     },
