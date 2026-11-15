@@ -55,33 +55,33 @@ Every role except `release_check` holds `changelog.edit` (the owner's default, 6
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs                                                          |
-| --------------------------- | -------------------------------------- | -------------------------------------------------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                            |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                              |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it    |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                  |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                  |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                          |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                 |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                 |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                  |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                             |
-| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it           |
-| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers)   |
-| `business.owner_remove`     | Remove a business owner                | `businesses.manage` (not one of the business’s own managers)   |
-| `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (business release 2, behind the shares flag) |
-| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`  |
-| `pro_price.change`          | Change the Pro price                   | `pro.price`                                                    |
-| `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                    |
-| `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                              |
-| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)    |
-| `announcement.send`         | Send an announcement by email          | `announcements.send`                                           |
-| `tip.refund`                | Refund a tip (TipMe keeps its fee)     | `payments.repair` (behind the `tip_refunds` switch)            |
+| Action                      | In plain words                         | Needs                                                         |
+| --------------------------- | -------------------------------------- | ------------------------------------------------------------- |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                           |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                             |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it   |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                 |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                 |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                         |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                 |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                            |
+| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it          |
+| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers)  |
+| `business.owner_remove`     | Remove a business owner                | `businesses.manage` (not one of the business’s own managers)  |
+| `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (any tip, whatever the business switches)   |
+| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish` |
+| `pro_price.change`          | Change the Pro price                   | `pro.price`                                                   |
+| `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                   |
+| `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                             |
+| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)   |
+| `announcement.send`         | Send an announcement by email          | `announcements.send`                                          |
+| `tip.refund`                | Refund a tip (TipMe keeps its fee)     | `payments.repair` (behind the `tip_refunds` switch)           |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 
-Reversing a refunded or charged-back tip (`tip.reverse`, business release 2) starts from the partner's `payment_reversed` issue, after checking the refund or dispute in the partner's dashboard. A refund follows the partner's refund guide: `refund.created` only notes it as pending; it can be reversed once `refund.paid` arrives, for exactly the `refunded_amount` the partner reports (enter that amount; a different one is refused); `refund.failed` means nothing moved, so close the issue. A dispute (the partner documents no dispute events) is reversed for the amount you enter. The partner keeps the fees it already charged ("Fees already charged are not returned"): the reversal takes back the person's part, any business's part and TipMe's fee in proportion, the provider fee stays TipMe's cost, and a fee on the refund itself is TipMe's cost too. Each partner refund or dispute is reversed once: several webhook events about one refund join one issue, a second request for it is refused, and the approval text shows what earlier reversals already took back. A won dispute opens no issue. An issue whose events named no refund or dispute id can't be reversed here; settle it at the partner and close it by hand. Reversing does not close the issue: a `payment_reversed` issue stays open, and keeps that person's withdrawals on hold, until staff resolve it. A reversal can take a balance below zero; withdrawals then stop until it is back, and a `balance_below_zero` money issue opens. It only runs while business shares are on, including when it is approved later.
+Reversing a refunded or charged-back tip (`tip.reverse`, business release 2) starts from the partner's `payment_reversed` issue, after checking the refund or dispute in the partner's dashboard. A refund follows the partner's refund guide: `refund.created` only notes it as pending; it can be reversed once `refund.paid` arrives, for exactly the `refunded_amount` the partner reports (enter that amount; a different one is refused); `refund.failed` means nothing moved, so close the issue. A dispute (the partner documents no dispute events) is reversed for the amount you enter. TipMe keeps its fee on a refund (owner, 14 Nov 2026): a refund takes back only what the person and any business received, in proportion, and if the partner refunded more than that, a second `payment_reversed` issue says how much more (TipMe's fee stays in its books). On a chargeback the person gives back only what they received, and TipMe sends its fee back to them once per dispute (always for a shared tip; for any other tip while the **Record final refunds at once** switch, `refund_fee_return`, is on). A fee on the refund itself is TipMe's cost. Each partner refund or dispute is reversed once: several webhook events about one refund join one issue, a second request for it is refused, and the approval text shows what earlier reversals already took back. A won dispute opens no issue. An issue whose events named no refund or dispute id can't be reversed here; settle it at the partner and close it by hand. Reversing does not close the issue: a `payment_reversed` issue stays open, and keeps that person's withdrawals on hold, until staff resolve it. A reversal can take a balance below zero; withdrawals then stop until it is back, and a `balance_below_zero` money issue opens. It runs for every tip, whatever the business switches, also when approved after they changed (owner, 12 Nov 2026: money the partner moved is never left without its posting). While `refund_fee_return` is on, a final refund (`refund.paid`) is already reversed when it arrives, and asking again is refused as done; while it is off, a final refund waits for staff (the owner's open question, 14 Nov 2026).
 
 `changelog.publish` is the one action asked for with a different permission from the one that decides it. An editor without `changelog.publish` can never run it alone: with no publisher able to enter a code, asking is refused ("Nobody who can approve this is set up yet."). A publisher doesn't ask: their own Approve on the entry page, with a fresh code, is the one approval (owner's default, 6 Nov 2026).
 
