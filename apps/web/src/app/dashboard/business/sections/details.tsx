@@ -4,7 +4,20 @@ import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { BusinessDetail } from '@tipme/contracts';
 import { Button, InputField, Slip, StateLine } from '@tipme/ui';
+import { BusinessLogoTile } from '@/components/business/business-logo-tile';
+import {
+  removeBusinessLogo,
+  uploadBusinessLogo,
+  useManagedLogo,
+} from '@/lib/business/logo';
 import { updateBusiness } from '@/lib/business/setup-api';
+import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
+import { shrinkPhoto } from '@/lib/shrink-photo';
+import {
+  ImagePicker,
+  pickerFailure,
+  type PickerOutcome,
+} from '@/components/image-picker/image-picker';
 import { setupFieldErrors, type SetupField } from '@/lib/business/setup-form';
 
 /** Where the business stands with TipMe. Never "approved", "licensed" or "regulated" (M10). */
@@ -33,6 +46,85 @@ function Standing({ business }: { business: BusinessDetail }) {
         once it’s verified.
       </span>
     </p>
+  );
+}
+
+/**
+ * Owners: the square logo the public pages show beside the name (the initial without one). The
+ * page photo's pipeline: the same limits, and TipMe re-encodes it without hidden details.
+ */
+function LogoField({
+  business,
+  onChange,
+}: {
+  business: BusinessDetail;
+  onChange?: (next: BusinessDetail) => void;
+}) {
+  const logo = useManagedLogo(business);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState('');
+  /** The positioned square from the picker; nothing is sent before Save. */
+  const save = async (picture: Blob): Promise<PickerOutcome> => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    // A PNG or WebP that already fits is sent as it is, so a transparent logo stays transparent;
+    // anything else is shrunk first, like a page photo (a phone photo uploads in seconds).
+    const keepsAlpha =
+      (picture.type === 'image/png' || picture.type === 'image/webp') &&
+      picture.size <= PHOTO_LIMIT_BYTES;
+    const logoFile = keepsAlpha ? picture : await shrinkPhoto(picture);
+    if (logoFile.size > PHOTO_LIMIT_BYTES) {
+      setBusy(false);
+      return { ok: false, message: photoErrors['PAYLOAD_TOO_LARGE']! };
+    }
+    const result = await uploadBusinessLogo(business.id, logoFile);
+    setBusy(false);
+    if (!result.ok) return pickerFailure(result.code);
+    onChange?.(result.data);
+    setDone('Logo saved.');
+    return { ok: true };
+  };
+  const removeLogo = async () => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    const result = await removeBusinessLogo(business.id);
+    setBusy(false);
+    if (result.ok) {
+      onChange?.(result.data);
+      setDone('Logo removed.');
+    } else
+      setError(
+        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
+      );
+  };
+  return (
+    <div className="business-details__logo">
+      <p className="tm-hint">
+        Logo (optional). It shows beside your name on your location and staff
+        pages.
+      </p>
+      <ImagePicker
+        kind="logo"
+        hasImage={Boolean(business.logoPath)}
+        tile={
+          <BusinessLogoTile
+            name={business.name}
+            src={logo}
+            className="image-picker__logo"
+          />
+        }
+        limits="JPEG, PNG or WebP, up to 5 MB. TipMe crops it to a square and removes hidden details such as where it was taken."
+        onSave={save}
+        remove={{ label: 'Remove logo', onRemove: () => void removeLogo() }}
+        status={done}
+        error={error}
+        disabled={busy}
+        keepAlpha
+      />
+    </div>
   );
 }
 
@@ -114,6 +206,7 @@ export function DetailsCard({
   return (
     <div className="business-details">
       <Standing business={business} />
+      {owner && <LogoField business={business} onChange={onChange} />}
       {owner ? (
         <form
           className="business-details__form"

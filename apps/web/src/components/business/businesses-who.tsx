@@ -5,7 +5,7 @@ export function BusinessesWhoText({ on }: { on: boolean }) {
   return on ? (
     <>
       <strong>Businesses</strong>
-      <span>Create your business and let customers thank your team.</span>
+      <span>Create your business and let customers tip your team.</span>
     </>
   ) : (
     <>

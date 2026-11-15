@@ -52,7 +52,9 @@ export function ClaimMoment({
     const finish = () => onDone();
     const announce = setTimeout(
       () =>
-        setAnnouncement(`Your handle @${handle} is claimed. Welcome to TipMe.`),
+        setAnnouncement(
+          `Your username @${handle} is claimed. Welcome to TipMe.`,
+        ),
       50,
     );
     const buzz = setTimeout(() => claimBuzz(navigator, still), LAND_MS);
@@ -115,7 +117,7 @@ export function ClaimMoment({
         @{handle} is yours.
       </h2>
       <p id={`${id}-lede`} className="claim-moment__lede">
-        Welcome to TipMe. People can start thanking you the moment your page is
+        Welcome to TipMe. People can start tipping you the moment your page is
         online.
       </p>
       <p role="status" className="sr-only">

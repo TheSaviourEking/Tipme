@@ -5,6 +5,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   Query,
@@ -30,7 +31,9 @@ import {
   requestSeriousAction,
   restoreBusiness,
   revealBusinessContact,
+  staffBusinessLogo,
   suspendBusiness,
+  type PhotoStore,
   type SeriousActionServices,
 } from '@tipme/database';
 import { BusinessEnabledGuard } from '../business/business-enabled.guard.js';
@@ -38,11 +41,15 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { sendPrivateImage } from '../profiles/image-upload.js';
+import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from '../business/business-live.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const businessIdOf = (value: string) => {
@@ -55,6 +62,7 @@ const businessIdOf = (value: string) => {
  * TipMe for businesses, lane B2: staff look businesses up with contacts masked, reveal a contact
  * with a reason (`private.view`), suspend and restore (`businesses.manage`, a reason, audited), and
  * verify one as a serious action (`business.verify`). Every change refreshes the public `/b/` pages.
+ * Removing an owner is a serious action too (`business.owner_remove`).
  */
 @Controller('v1/ops/businesses')
 @UseGuards(BusinessEnabledGuard)
@@ -64,6 +72,13 @@ export class OpsBusinessesController {
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Optional()
+    @Inject(PHOTO_STORE)
+    private readonly photos: PhotoStore | null = null,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Get()
@@ -85,6 +100,27 @@ export class OpsBusinessesController {
     return {
       data: await opsBusinessDetail(this.database.db, businessIdOf(id)),
     };
+  }
+
+  /**
+   * The business's logo, whatever its status: what the owners will show publicly once it's
+   * verified. Never cached.
+   */
+  @Get(':id/logo')
+  @OpsPermission('search.view')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async logo(
+    @Param('id') id: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await staffBusinessLogo(
+        this.database.db,
+        businessIdOf(id),
+        this.photos ?? undefined,
+      ),
+    );
   }
 
   /** The full contact and the managers' emails: audited with the reason (access-control rule 6). */
@@ -123,7 +159,10 @@ export class OpsBusinessesController {
       reason: body.reason,
     });
     // After the commit: the location and staff pages stop at once (M11).
-    if (changed) this.revalidator.revalidateBusiness(slug);
+    if (changed) {
+      this.revalidator.revalidateBusiness(slug);
+      signalBusiness(this.database.db, this.publishLive, { businessId });
+    }
     return { data: await opsBusinessDetail(this.database.db, businessId) };
   }
 
@@ -142,7 +181,10 @@ export class OpsBusinessesController {
       businessId,
       reason: body.reason,
     });
-    if (changed) this.revalidator.revalidateBusiness(slug);
+    if (changed) {
+      this.revalidator.revalidateBusiness(slug);
+      signalBusiness(this.database.db, this.publishLive, { businessId });
+    }
     return { data: await opsBusinessDetail(this.database.db, businessId) };
   }
 
@@ -174,6 +216,50 @@ export class OpsBusinessesController {
     );
     if ('pending' in answer) return { data: answer.pending };
     this.revalidator.revalidateBusiness(answer.result.revalidateBusiness);
+    signalBusiness(this.database.db, this.publishLive, { businessId });
+    return {
+      data: {
+        ...(await opsBusinessDetail(this.database.db, businessId)),
+        ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
+      },
+    };
+  }
+
+  /**
+   * Owner-change lock (owner, 14 Nov 2026): only TipMe removes a business owner, as a serious
+   * action (`business.owner_remove`): a reason, a fresh code and a second person (202 while it
+   * waits). Never the last owner; every owner is emailed once it runs.
+   */
+  @Post(':id/owners/:managerId/remove')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('businesses.manage')
+  async removeOwner(
+    @CurrentOps() ops: OpsContext,
+    @Param('id') id: string,
+    @Param('managerId') managerId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<(OpsBusinessDetail & OpsActedAlone) | OpsSeriousPending>
+  > {
+    const businessId = businessIdOf(id);
+    if (!UUID.test(managerId))
+      throw new CodedHttpException(404, 'BUSINESS_NOT_FOUND');
+    const answer = pendingOr<{ slug: string }>(
+      await requestSeriousAction(this.database.db, {
+        name: 'business.owner_remove',
+        payload: { businessId, managerId },
+        actorId: ops.userId,
+        grantId: ops.grantId,
+        reason: body.reason,
+        services: this.services,
+      }),
+      response,
+    );
+    if ('pending' in answer) return { data: answer.pending };
+    signalBusiness(this.database.db, this.publishLive, { businessId });
     return {
       data: {
         ...(await opsBusinessDetail(this.database.db, businessId)),

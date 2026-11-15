@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  signOutOfDashboard,
   expectAccessible,
   fitsViewport,
   identity,
@@ -15,10 +16,10 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   const { email, handle } = identity(testInfo);
   await signInWithEmail(page, email, '/sign-up');
   await expect(
-    page.getByRole('heading', { name: 'Choose your handle' }),
+    page.getByRole('heading', { name: 'Choose your username' }),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.getByLabel('Handle').fill(handle);
+  await page.getByLabel('Username').fill(handle);
   await expect(page.getByText(`@${handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -97,6 +98,23 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   await expect(attention.getByText('Your page is offline')).toHaveCount(0);
 });
 
+test('signing in returns only once the session is set and the page has moved on', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  const other = await (await browser.newContext()).newPage();
+  try {
+    await signInWithEmail(other, who.email);
+    // Read at once, not retried: callers go straight on to other pages after the helper.
+    const names = (await other.context().cookies()).map(({ name }) => name);
+    expect(names).toContain('tipme_session');
+    expect(new URL(other.url()).pathname).toMatch(/^\/dashboard/);
+  } finally {
+    await other.context().close();
+  }
+});
+
 test('a session survives a reload and signing out ends it', async ({
   page,
 }, testInfo) => {
@@ -104,15 +122,15 @@ test('a session survives a reload and signing out ends it', async ({
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up');
   await page.waitForURL(/\/sign-up|\/dashboard/);
-  await page.getByLabel('Handle').waitFor();
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').waitFor();
+  await page.getByLabel('Username').fill(who.handle);
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   // A new page lands on the welcome, which has no toolbar.
   await page.waitForURL(/\/dashboard\/welcome$/);
   await page.goto('/dashboard');
   await page.reload();
-  await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  // Business sign-up is on in the e2e stack: Sign out sits in the account menu.
+  await signOutOfDashboard(page);
   await page.waitForURL(/\/sign-in/);
   await page.goto('/dashboard/settings');
   await page.waitForURL(/\/sign-in\?next=/);
@@ -208,7 +226,7 @@ test('the welcome preview follows what you type @mobile', async ({
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up');
   // The code was typed into the one field; the handle step has no code cells.
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -309,7 +327,7 @@ test('a dropped code check is retried once quietly and signs in', async ({
   });
   await signInWithEmail(page, email, '/sign-up');
   await expect(
-    page.getByRole('heading', { name: 'Choose your handle' }),
+    page.getByRole('heading', { name: 'Choose your username' }),
   ).toBeVisible();
   expect(checks).toBe(2);
 });

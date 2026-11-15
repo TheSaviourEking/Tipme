@@ -1,3 +1,7 @@
+import {
+  GetTippedWords,
+  HeaderBusinessStart,
+} from '@/components/release-flags-slot';
 import type { Metadata } from 'next';
 import localFont from 'next/font/local';
 import { siteOrigin } from '@/lib/metadata';
@@ -32,7 +36,7 @@ const dmSerif = localFont({
 export const metadata: Metadata = {
   metadataBase: siteOrigin,
   title: {
-    default: 'TipMe — A little thanks goes a long way',
+    default: 'TipMe — A little tip goes a long way',
     template: '%s | TipMe',
   },
   description: SITE_DESCRIPTION,
@@ -48,7 +52,11 @@ export default function RootLayout({
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <Navigation businesses={<BusinessesWho />} />
+        <Navigation
+          businesses={<BusinessesWho />}
+          claimWords={<GetTippedWords />}
+          businessStart={<HeaderBusinessStart />}
+        />
         {children}
         <Footer />
         <UpdateNotice />

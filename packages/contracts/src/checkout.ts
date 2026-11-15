@@ -9,6 +9,8 @@ export const tipQuoteRequestSchema = z
     handle: z.string().min(1).max(60),
     amountMinor: z.string().regex(/^\d{1,12}$/),
     currency: z.literal('NGN'),
+    /** The business membership the tip page is for: its share, if any, is shown before paying. */
+    businessMemberId: z.uuid().optional(),
   })
   .strict();
 export type TipQuoteRequest = z.infer<typeof tipQuoteRequestSchema>;
@@ -29,7 +31,7 @@ export interface TipQuote {
   feeFree: boolean;
   /**
    * Business release 2: the share agreed with the business the tip is made at, shown before
-   * paying. Only with BUSINESS_SHARES_ENABLED, and only for a tip made at that business.
+   * paying. Only with the `business_shares` switch on, and only for a tip made at that business.
    */
   share?: ShareDisclosure;
 }
@@ -46,6 +48,7 @@ export const tipPurposes = [
 export type TipPurpose = (typeof tipPurposes)[number];
 
 // Hyphenated hex, any version: the same shape z.uuid() accepts in practice for our ids.
+const CAMPAIGN_ENDING = /^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const tipIntentRequestSchema = z
@@ -78,6 +81,20 @@ export const tipIntentRequestSchema = z
         typeof value === 'string' && UUID.test(value) ? value : undefined,
       )
       .meta({ type: 'string', format: 'uuid' }),
+    /**
+     * The campaign link ending the tip page was opened from (Campaign Studio). A label the server
+     * matches to that page's running campaign and otherwise ignores: never a refusal, so a
+     * malformed one is dropped here. Not part of the request fingerprint.
+     */
+    campaign: z
+      .unknown()
+      .optional()
+      .transform((value) =>
+        typeof value === 'string' && CAMPAIGN_ENDING.test(value)
+          ? value
+          : undefined,
+      )
+      .meta({ type: 'string' }),
   })
   .strict();
 export type TipIntentRequest = z.infer<typeof tipIntentRequestSchema>;
@@ -115,7 +132,16 @@ export type TipStatusState = (typeof tipStatusStates)[number];
 /** What the status screen may show. Never includes the supporter's message. */
 export interface TipStatusView {
   state: TipStatusState;
-  recipient: { handle: string; displayName: string };
+  recipient: {
+    handle: string;
+    displayName: string;
+    /**
+     * The recipient's photo, as their public page shows it (an API path or a demo picture). Absent
+     * when they have none, or while it is not public: the page is not live, TipMe paused it, or, for
+     * a tip made at a business, they hid their photo there. Older APIs send none.
+     */
+    avatarPath?: string;
+  };
   amountMinor: string;
   currency: string;
   completedAt: string | null;
@@ -148,4 +174,9 @@ export interface TipStatusView {
   team?: { location: string; people: number };
   /** Business release 2: the share the business received of this tip, in percentages only. */
   share?: ShareDisclosure;
+  /**
+   * Owner, 14 Nov 2026: a paid tip TipMe refunded. What the supporter got back, the tip minus
+   * TipMe's fee (which TipMe keeps). Only once our payment partner has confirmed the refund.
+   */
+  refund?: { refundedMinor: string };
 }

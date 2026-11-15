@@ -6,7 +6,13 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { totpAt } from '../../packages/domain/dist/index.js';
-import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  opsSignIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 import { GROSS, NET, reportedReversal } from './reversal-fixtures.mjs';
 
 /*
@@ -26,7 +32,6 @@ startTelemetry({
 
 let database;
 let stack;
-let off;
 let owner;
 let ownerId;
 
@@ -51,14 +56,12 @@ before(async () => {
       BUSINESS_SHARES_ENABLED: 'true',
     },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env });
   owner = await opsSignIn(stack.api, database.db, '+2348037770101');
   [{ id: ownerId }] = await q(`SELECT id FROM users WHERE phone_e164 = $1`, [
     '+2348037770101',
   ]);
 });
 after(async () => {
-  await off?.stop();
   await stack?.stop();
   await database?.close();
 });
@@ -86,7 +89,7 @@ const business = async (businessId) =>
 test('staff reverse a shared tip: both parts come back, audited, alone with the alert', async () => {
   const before = await reportedReversal(database, { bps: 1000 });
   const personBefore = await person(before.profileId);
-  assert.equal(await business(before.businessId), 36000n);
+  assert.equal(await business(before.businessId), 37200n);
   const response = await reverse(before.issueId, full);
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual((await response.json()).data, {
@@ -95,9 +98,30 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
     belowZero: false,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 36000n));
+  assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
+  // Owner, 14 Nov 2026: TipMe keeps its fee on a refund. This one was the whole ₦4,000, made at the
+  // partner: the person and the business gave back what they received, TipMe's ₦280 stays in its
+  // books, and staff are told the partner refunded ₦280 more.
+  const [kept] = await q(
+    `SELECT COALESCE(SUM(CASE e.side WHEN 'credit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+       FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+       JOIN ledger_transactions x ON x.id = e.transaction_id
+      WHERE x.tip_id = $1 AND a.code IN ('platform_fee_revenue', 'provider_fee_recovered')`,
+    [before.tipId],
+  );
+  assert.equal(kept.net, (GROSS - NET).toString());
+  const over = await q(
+    `SELECT summary FROM issues WHERE kind = 'payment_reversed' AND dedupe_key LIKE 'refund_over_net.%'
+        AND subject->>'tipId' = $1`,
+    [before.tipId],
+  );
+  assert.equal(over.length, 1);
+  assert.match(
+    over[0].summary,
+    /₦280 more than this tip's recipients received/,
+  );
   const audits = await q(
     `SELECT action, reason FROM audit_events WHERE action = 'serious_action.ran_alone'
       AND staff_user_id = $1 ORDER BY seq DESC LIMIT 1`,
@@ -153,7 +177,7 @@ test('two webhook events for one ₦500 refund reverse exactly ₦500', async ()
   assert.equal(reversed, '50000');
 });
 
-test('the approver sees earlier reversals, and an approval after the flags go off posts nothing', async () => {
+test('the approver sees earlier reversals, and an approval after the switches went off still posts', async () => {
   const target = await reportedReversal(database, { refundedMinor: 100000n });
   // An earlier refund of this tip, already reversed (another partner refund).
   const earlierId = `refund.re_${randomUUID().replaceAll('-', '')}`;
@@ -196,12 +220,15 @@ test('the approver sees earlier reversals, and an approval after the flags go of
       summary,
       /Already taken back from this tip: NGN 500\.00 in 1 reversal/,
     );
-    // The flags go off before the second person approves: nothing posts.
+    // The switches go off before the second person approves: it still posts (owner, 12 Nov 2026:
+    // money the partner moved is never left without its posting; the switches gate shares only).
+    await setSwitch(database.pool, 'business', false);
+    await setSwitch(database.pool, 'business_shares', false);
     await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
       secondId,
     ]);
     const approved = await fetch(
-      `${off.api}/v1/ops/approvals/${requestId}/approve`,
+      `${stack.api}/v1/ops/approvals/${requestId}/approve`,
       {
         method: 'POST',
         headers: browserHeaders(second.cookie),
@@ -210,14 +237,17 @@ test('the approver sees earlier reversals, and an approval after the flags go of
         }),
       },
     );
-    assert.notEqual(approved.status, 500, await approved.clone().text());
-    assert.equal(await target.reversals(), 1);
+    assert.equal(approved.status, 200, await approved.clone().text());
+    // The earlier refund's reversal, and now this one.
+    assert.equal(await target.reversals(), 2);
     const [{ status }] = await q(
       `SELECT status FROM approval_requests WHERE id = $1`,
       [requestId],
     );
-    assert.notEqual(status, 'approved');
+    assert.equal(status, 'approved');
   } finally {
+    await setSwitch(database.pool, 'business', true);
+    await setSwitch(database.pool, 'business_shares', true);
     await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
       secondId,
     ]);
@@ -303,7 +333,7 @@ test('it needs payments.repair, a fresh code, a reason and the dashboard check',
   assert.equal(await target.reversals(), 0);
 });
 
-test('only from an open payment_reversed issue, and off without the flags', async () => {
+test('only from an open payment_reversed issue, and with or without the release 2 flags', async () => {
   const target = await reportedReversal(database);
   const other = await ops.openIssue(database.db, {
     dedupeKey: `stuck_tip.${randomUUID()}`,
@@ -313,9 +343,18 @@ test('only from an open payment_reversed issue, and off without the flags', asyn
   });
   assert.equal((await reverse(other.id, full)).status, 404);
   assert.equal((await reverse(randomUUID(), full)).status, 404);
-  const flagsOff = await reverse(target.issueId, full, off.api);
-  assert.equal(flagsOff.status, 404);
   assert.equal(await target.reversals(), 0);
+  // Owner, 12 Nov 2026: a refunded tip is reversed whatever the release 2 switches.
+  await setSwitch(database.pool, 'business', false);
+  await setSwitch(database.pool, 'business_shares', false);
+  try {
+    const flagsOff = await reverse(target.issueId, full);
+    assert.equal(flagsOff.status, 200, await flagsOff.clone().text());
+  } finally {
+    await setSwitch(database.pool, 'business', true);
+    await setSwitch(database.pool, 'business_shares', true);
+  }
+  assert.equal(await target.reversals(), 1);
 });
 
 test("only a paid refund is reversed, for exactly what the partner gave back, and its fee is TipMe's", async () => {
@@ -359,4 +398,62 @@ test("only a paid refund is reversed, for exactly what the partner gave back, an
   // The whole refund and its ₦15 fee leave the partner balance; the fee is TipMe's expense.
   assert.equal(clearing, '121500');
   assert.equal(fee, '1500');
+});
+
+// Owner, 14 Nov 2026: on a chargeback TipMe always bears its fee. It sends its whole fee to the
+// person's account once per dispute (`fee_return`), so they lose only what they received. No switch
+// decides this: `refund_fee_return` only records final refunds at once, and here it stays off.
+test('a lost dispute sends TipMe’s fee back once with the refund_fee_return switch off, plain or shared', async () => {
+  await setSwitch(database.pool, 'refund_fee_return', false);
+  const chargedBack = async (options) => {
+    const tip = await reportedReversal(database, {
+      ...options,
+      events: ['refund.created'],
+    });
+    const disputeId = `dispute.dp_${randomUUID().replaceAll('-', '')}`;
+    await ops.flagPaymentReversal(database.db, {
+      attemptId: tip.attemptId,
+      eventId: `evt_chargeback_${randomUUID()}`,
+      eventType: 'dispute.created',
+      partnerReversalId: disputeId,
+      disputeWon: false,
+    });
+    const [{ id: issueId }] = await q(
+      `SELECT id FROM issues WHERE dedupe_key = $1`,
+      [`event.payment.reversed.${tip.attemptId}.${disputeId}`],
+    );
+    return { ...tip, disputeId, chargebackIssue: issueId };
+  };
+  const feeReturns = (disputeId) =>
+    q(
+      `SELECT profile_id, amount_minor::text AS amount FROM share_transfers
+        WHERE kind = 'fee_return' AND partner_reversal_id = $1`,
+      [disputeId],
+    );
+  // Every ledger transaction of the tip balances: its debits equal its credits.
+  const unbalanced = (tipId) =>
+    q(
+      `SELECT x.id FROM ledger_transactions x JOIN ledger_entries e ON e.transaction_id = x.id
+        WHERE x.tip_id = $1
+        GROUP BY x.id
+       HAVING sum(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END) <> 0`,
+      [tipId],
+    );
+
+  for (const options of [{}, { bps: 1000 }]) {
+    const tip = await chargedBack(options);
+    const answer = await reverse(tip.chargebackIssue, full);
+    assert.equal(answer.status, 200, await answer.clone().text());
+    assert.equal(await tip.reversals(), 1);
+    // TipMe's whole fee on the ₦4,000 tip (₦280), to the person, once.
+    assert.deepEqual(await feeReturns(tip.disputeId), [
+      { profile_id: tip.profileId, amount: (GROSS - NET).toString() },
+    ]);
+    // The same dispute again is refused and sends nothing more.
+    const again = await reverse(tip.chargebackIssue, full);
+    assert.equal(again.status, 409, await again.clone().text());
+    assert.equal((await feeReturns(tip.disputeId)).length, 1);
+    assert.equal(await tip.reversals(), 1);
+    assert.deepEqual(await unbalanced(tip.tipId), []);
+  }
 });

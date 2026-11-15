@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   avatarFor,
+  businessLogoFor,
   deleteAccount,
   mailSealing,
   movePhotosToStore,
   removeAvatar,
+  removeBusinessLogo,
   setAvatar,
+  setBusinessLogo,
 } from '../../dist/index.js';
+import { seedBusiness } from './business-fixtures.mjs';
 import { ADA, useDatabase } from './helpers.mjs';
 
 // Page photos kept in an object store (R2) instead of Postgres: the row keeps only the key, the
@@ -166,5 +170,55 @@ test('without a store, photos stay in Postgres exactly as before', async (t) => 
       version: versionOf(profile.avatarPath),
     }),
     webp('db'),
+  );
+});
+
+// Business logos (6 Nov 2026) are kept exactly like page photos.
+test('a business logo goes to the store like a photo; a new one replaces it, removing it removes it', async (t) => {
+  const database = await fresh(t);
+  const { db, rows, userId } = database;
+  const { businessId } = await seedBusiness(database, { owner: userId });
+  const store = memoryStore();
+  const first = await setBusinessLogo(db, userId, businessId, webp('a'), store);
+  const [row] = await rows(
+    'SELECT bytes, object_key FROM business_logos WHERE business_id = $1',
+    [businessId],
+  );
+  assert.equal(row.bytes, null);
+  assert.match(row.object_key, /^logos\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/);
+  assert.deepEqual(
+    await businessLogoFor(
+      db,
+      { businessId, version: versionOf(first.detail.logoPath) },
+      store,
+    ),
+    webp('a'),
+  );
+  await setBusinessLogo(db, userId, businessId, webp('b'), store);
+  assert.equal(store.objects.size, 1, 'the first object is gone');
+  await removeBusinessLogo(db, userId, businessId, store);
+  assert.equal(store.objects.size, 0);
+});
+
+test('business logos already in Postgres move to the store with the photos', async (t) => {
+  const database = await fresh(t);
+  const { db, rows, userId } = database;
+  const { businessId } = await seedBusiness(database, { owner: userId });
+  const { detail } = await setBusinessLogo(db, userId, businessId, webp('old'));
+  const store = memoryStore();
+  assert.equal(await movePhotosToStore(db, store), 1);
+  const [row] = await rows(
+    'SELECT bytes, object_key FROM business_logos WHERE business_id = $1',
+    [businessId],
+  );
+  assert.equal(row.bytes, null);
+  assert.match(row.object_key, /^logos\//);
+  assert.deepEqual(
+    await businessLogoFor(
+      db,
+      { businessId, version: versionOf(detail.logoPath) },
+      store,
+    ),
+    webp('old'),
   );
 });

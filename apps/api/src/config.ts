@@ -1,6 +1,7 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
 import { databaseBudgetSettingsShape } from '@tipme/contracts';
 import { productionDatabaseUrlProblem } from '@tipme/database';
+import { featureSwitchSeedsFrom } from '@tipme/contracts';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import {
   bachsEnvironment,
@@ -125,29 +126,6 @@ export const apiConfigSchema = z
       .min(0)
       .max(300)
       .default(30),
-    // OnlyFans and Fansly links (Pro only, the owner's decision of 5 Nov 2026). `off` hides them
-    // from every public page and refuses new ones, deleting nothing: the lever for the payment
-    // partner's answer (docs/runbooks/adult-platform-links.md). Default on.
-    ADULT_PLATFORM_LINKS: z
-      .enum(['on', 'off'])
-      .default('on')
-      .transform((value) => value === 'on'),
-    // Repeat supporters (Pro additions, option (a)): "Let {name} recognise me next time" on Pro
-    // pages. `off` hides the tick box, stops recording and (later) hides the recipient's list,
-    // deleting nothing: the lever if the D-07 privacy review says to wait
-    // (docs/runbooks/supporter-recognition.md). Default on.
-    SUPPORTER_RECOGNITION: z
-      .enum(['on', 'off'])
-      .default('on')
-      .transform((value) => value === 'on'),
-    // Anonymous analytics collection. Unset: on in development and test, off in production until
-    // the privacy decision (D-07) is made.
-    ANALYTICS_ENABLED: z
-      .enum(['true', 'false'])
-      .optional()
-      .transform((value) =>
-        value === undefined ? undefined : value === 'true',
-      ),
     // Sign-in code requests per client per hour (each number is also limited to 3 an hour).
     RATE_LIMIT_AUTH_PER_HOUR: z.coerce.number().int().min(1).default(10),
     // Authenticator codes re-entered per staff member per hour (the code itself locks after 5 misses).
@@ -217,14 +195,6 @@ export const apiConfigSchema = z
     TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
     // Live updates (signals over text/event-stream). Off: both stream routes answer 204.
     LIVE_UPDATES_ENABLED: flag,
-    // TipMe for businesses (plan 2026-11-06-business). Off: every business route answers 404 and
-    // a tip intent's businessMemberId is dropped before it reaches the database.
-    BUSINESS_ENABLED: flag,
-    // Business release 2, each on top of BUSINESS_ENABLED and off by default. Off: the API ignores
-    // a share or team-tip field and every posting is today's. The owner turns each on only after
-    // its PR (R2-C2, R2-D) is on dev and the terms and privacy text is live.
-    BUSINESS_SHARES_ENABLED: flag,
-    TEAM_TIPS_ENABLED: flag,
     // Open streams per API process; beyond it a connect gets 503 and the page polls.
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
@@ -367,7 +337,13 @@ export const apiConfigSchema = z
       });
     }
   });
-export type ApiConfig = z.infer<typeof apiConfigSchema>;
+export type ApiConfig = z.infer<typeof apiConfigSchema> & {
+  /**
+   * Feature switches are set in admin (owner, 14 Nov 2026). The old variables still present, kept
+   * only to seed each switch on the first start after release (docs/runbooks/settings-and-switches.md).
+   */
+  switchSeeds: Record<string, string>;
+};
 
 export const API_CONFIG = Symbol('API_CONFIG');
 export const SERVICE_NAME = 'tipme-api';
@@ -379,5 +355,8 @@ export function loadApiConfig(
   const present = Object.fromEntries(
     Object.entries(env).filter(([, value]) => value !== ''),
   );
-  return parseConfig(apiConfigSchema, present);
+  return {
+    ...parseConfig(apiConfigSchema, present),
+    switchSeeds: featureSwitchSeedsFrom(present),
+  };
 }

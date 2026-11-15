@@ -52,7 +52,9 @@ for (const screen of SCREENS) {
     await page.screenshot({
       path: `${OUT}/${file}`,
       // A screen with fixed bars is shot one phone screen tall, so they sit where they really do.
-      fullPage: !(screen.viewport && testInfo.project.name === 'phone'),
+      fullPage:
+        screen.fullPage ??
+        !(screen.viewport && testInfo.project.name === 'phone'),
       animations: 'disabled',
       caret: 'hide',
     });

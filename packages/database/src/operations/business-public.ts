@@ -18,6 +18,7 @@ import {
   handleAliases,
   profiles,
 } from '../schema.js';
+import { shareInForce } from './share-at-tip.js';
 import { guarded } from './errors.js';
 import {
   getReadyPaymentAccount,
@@ -36,6 +37,8 @@ export interface PublicReadOptions {
     provider: string;
     environment: PaymentAccountEnvironment;
   };
+  /** The `business_shares` switch: the staff page then tells the agreed split before any amount. */
+  sharesOn?: boolean;
 }
 
 /** At most this many people answer one search ("I don't see them"). */
@@ -159,6 +162,7 @@ async function openLocation(
       businessId: businesses.id,
       businessSlug: businesses.slug,
       businessName: businesses.name,
+      logoPath: businesses.logoPath,
       locationId: businessLocations.id,
       locationSlug: businessLocations.slug,
       locationName: businessLocations.name,
@@ -180,6 +184,7 @@ async function openLocation(
       slug: row.businessSlug,
       name: row.businessName,
       verified: true,
+      ...(row.logoPath ? { logoPath: row.logoPath } : {}),
     },
     location: {
       id: row.locationId,
@@ -243,6 +248,7 @@ export function publicBusiness(
       .select({
         businessSlug: businesses.slug,
         businessName: businesses.name,
+        logoPath: businesses.logoPath,
         slug: businessLocations.slug,
         name: businessLocations.name,
         address: businessLocations.address,
@@ -264,6 +270,7 @@ export function publicBusiness(
         slug: first.businessSlug,
         name: first.businessName,
         verified: true,
+        ...(first.logoPath ? { logoPath: first.logoPath } : {}),
       },
       locations: rows.map(({ slug, name, address }) => ({
         slug,
@@ -385,7 +392,21 @@ export function publicStaffTipPage(
         )
       : [];
     if (!open || !row) return { redirectTo: `/@${profile.handle}` };
+    // R2-C2: the split in force, in percentages only, so the supporter knows before paying. The
+    // quote says it again and the intent fixes it only if it is still this one.
+    const share = options.sharesOn
+      ? await shareInForce(db, profile.id, row.memberId)
+      : null;
     return {
+      ...(share
+        ? {
+            share: {
+              businessPercent: share.businessBps / 100,
+              personKeepsPercent: 100 - share.businessBps / 100,
+              businessName: share.businessName,
+            },
+          }
+        : {}),
       business: open.business,
       location: { slug: open.location.slug, name: open.location.name },
       person: card(row, now),

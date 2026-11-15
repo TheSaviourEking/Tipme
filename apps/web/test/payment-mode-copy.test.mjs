@@ -31,7 +31,7 @@ test('test copy keeps today’s wording', () => {
   );
   assert.equal(
     copy.signUpLede,
-    'An email address and a handle is all it takes to start receiving thanks. Payments are in test mode.',
+    'An email address and a username is all it takes to start receiving tips. Payments are in test mode.',
   );
   assert.equal(
     copy.formTrust,
@@ -40,10 +40,6 @@ test('test copy keeps today’s wording', () => {
   assert.equal(
     copy.formPartner,
     'A test page stands in for our payment partner. Confirm there.',
-  );
-  assert.equal(
-    paymentModeCopy('live').formPartner,
-    'Our payment partner handles this. You’ll confirm on its page.',
   );
   assert.equal(paymentModeCopy('closed').formPartner, null);
   assert.equal(
@@ -129,4 +125,32 @@ test('the pill has a detail only in test mode', () => {
   );
   assert.equal(paymentModeCopy('live').dashboardBadgeDetail, null);
   assert.equal(paymentModeCopy('closed').dashboardBadgeDetail, null);
+});
+
+// Public-boards PR 9, Task 9.2 (plan Q2 default). Proof the line is true: the form starts nothing
+// unless the quote's tipMinor and payerTotalMinor equal the key's amount (appreciation-form.tsx,
+// fenced in pay-path.test.mjs), and a provider event books nothing unless it matches
+// payerTotalMinor exactly (packages/database/src/operations/provider-events.ts).
+test('live mode has one line beside the Tip key', () => {
+  const live = paymentModeCopy('live');
+  assert.equal(
+    live.formPartner,
+    'You pay exactly this. You’ll confirm on our partner’s page.',
+  );
+  assert.equal(live.formTrust, null);
+});
+
+test('test mode keeps its two lines; closed mode has none', () => {
+  const test = paymentModeCopy('test');
+  assert.equal(
+    test.formPartner,
+    'A test page stands in for our payment partner. Confirm there.',
+  );
+  assert.equal(
+    test.formTrust,
+    'No account needed. You pay exactly this amount.',
+  );
+  const closed = paymentModeCopy('closed');
+  assert.equal(closed.formPartner, null);
+  assert.equal(closed.formTrust, null);
 });

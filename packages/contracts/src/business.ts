@@ -69,6 +69,8 @@ export const NOTE_REVIEW_OUTCOMES = ['restored', 'removed'] as const;
 export const BUSINESS_NOTIFICATION_KINDS = [
   'business_invitation',
   'business_verified',
+  // Release 2, option B: a refunded tip's share was already withdrawn, so it is held back.
+  'business_share_held_back',
 ] as const;
 
 /** A number the business may see, or "fewer than 3". Never a raw count below MIN_GROUP. */
@@ -154,6 +156,8 @@ export const businessApplicationSchema = z
     contactEmail: emailSchema,
     contactPhone: phoneSchema.optional(),
     location: locationInputSchema,
+    /** Business sign-up (R13): what the owner is called when they have no page. */
+    ownerName: plain(60).optional(),
   })
   .strict();
 export type BusinessApplication = z.infer<typeof businessApplicationSchema>;
@@ -311,7 +315,8 @@ export interface StaffCard {
   onShift: boolean;
 }
 export interface PublicLocation {
-  business: { slug: string; name: string; verified: true };
+  /** `logoPath`: the uploaded logo (`/v1/business-logos/…`); without one, the tile shows the initial. */
+  business: { slug: string; name: string; verified: true; logoPath?: string };
   location: { slug: string; name: string };
   /** On shift first (by started_at), then everyone else (by shownName). */
   people: StaffCard[];
@@ -328,6 +333,8 @@ export interface PublicStaffTipPage {
   business: PublicLocation['business'];
   location: PublicLocation['location'];
   person: StaffCard;
+  /** Release 2 (R2-C2): the split agreed with the business, told before paying. */
+  share?: ShareDisclosure;
   /** Exactly what the person's own page gives the tip form, its "opens soon" state included. */
   profile: Pick<
     PublicProfile,
@@ -406,10 +413,39 @@ export interface BusinessDetail {
   status: BusinessStatus;
   suspendedReason?: string;
   slugLocked: boolean;
+  /** The uploaded logo's served address; it is served publicly only once the business is verified. */
+  logoPath?: string;
   contact: { name: string; email: string; phone?: string };
+  /** When the business was sent to TipMe (business sign-up: "Sent to TipMe" while waiting). */
+  appliedAt: string;
   /** A location manager sees only their location. */
   locations: BusinessLocationView[];
-  you: { role: ManagerRole; locationId?: string };
+  you: {
+    role: ManagerRole;
+    locationId?: string;
+    /**
+     * Business sign-up (R19): the business was verified while this manager was on it and they
+     * haven't seen the "verified" moment yet. Only with the business_signup switch on.
+     */
+    celebrate?: true;
+  };
+  /** Business Pro (plan Task A4): present only with the business_pro switch on. */
+  plan?: BusinessPlanName;
+  usage?: BusinessUsage;
+  /** When Business Pro last ended; absent while it runs or never ran. */
+  proLapsedAt?: string;
+}
+/** Business Free or Business Pro. */
+export type BusinessPlanName = 'free' | 'pro';
+/**
+ * What a business uses of its plan's limits (Business Pro, owner 14 Nov 2026). Staff are distinct
+ * people at any of its locations plus open staff invitations, never its open owners. `used` may be
+ * above `limit`: a business over a limit keeps everyone and only stops adding.
+ */
+export interface BusinessUsage {
+  plan: BusinessPlanName;
+  staff: { used: number; limit: number };
+  locations: { used: number; limit: number };
 }
 export interface MemberRow {
   memberId: string;
@@ -550,7 +586,11 @@ export interface OpsBusinessNote {
  * sign and badge show, so the print view needs nothing else.
  */
 export interface BusinessCodes {
-  business: { name: string; slug: string };
+  /**
+   * `logoPath`: the uploaded logo (`/v1/business-logos/…`), drawn in the sign's tile; without one,
+   * the tile shows the initial. Optional: older APIs send none.
+   */
+  business: { name: string; slug: string; logoPath?: string };
   /** Open locations in the manager's scope, by name. */
   location: { locationId: string; slug: string; name: string; path: string }[];
   /** Active members at those locations whose page is live, by location then shown name. */
@@ -577,9 +617,12 @@ export interface OpsBusinessRow {
 export interface OpsBusinessDetail extends OpsBusinessRow {
   // `locations` is the row's count; the list has its own name.
   locationList: BusinessLocationView[];
-  managers: { userHint: string; role: ManagerRole }[];
+  /** `managerId` names a seat for `business.owner_remove`; never a contact detail. */
+  managers: { managerId: string; userHint: string; role: ManagerRole }[];
   verifiedAt?: string;
   suspendedReason?: string;
+  /** Whether the owners uploaded a logo; staff read it through their own route, whatever the status. */
+  hasLogo?: boolean;
 }
 /**
  * PR B2: the Businesses list's filter and search. `q` matches the name or the slug only, never a
@@ -740,4 +783,36 @@ export interface BusinessBalance {
   /** May be negative after a reversal (Q8); withdrawals then stop. */
   balanceMinor: string;
   canWithdraw: boolean;
+  /**
+   * Option B: shares already in the balance whose money is still on its way to the business's own
+   * account (it moves once each tip's money is available with our payment partner).
+   */
+  onTheWayMinor: string;
+  /** Refunded tips' shares the business had already withdrawn, taken from its next shares. */
+  heldBackMinor: string;
+  /** The smallest withdrawal a business can make, unless it takes everything it can. */
+  minWithdrawalMinor: string;
+  /** Whether the business's own payout account with our payment partner is set up. */
+  payoutAccount: BusinessPayoutAccountState;
+}
+
+/** `not_needed` with the pretend partner; `needed` until set up; then `setting_up` or `ready`. */
+export type BusinessPayoutAccountState =
+  'not_needed' | 'needed' | 'setting_up' | 'ready';
+
+/** Setting up the business's payout account: done, or the partner's page to finish it on. */
+export interface BusinessPayoutAccountStart {
+  payoutAccount: BusinessPayoutAccountState;
+  /** Our payment partner's hosted page for the business's registered name, when it asks. */
+  onboardingUrl?: string;
+}
+
+/** Option B, the staff member's own view: what they have shared with a business they work at. */
+export interface MySharedTips {
+  memberId: string;
+  businessName: string;
+  /** This Lagos month's shares of their paid tips there, and how many tips. */
+  monthMinor: string;
+  monthTips: number;
+  totalMinor: string;
 }

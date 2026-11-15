@@ -1,0 +1,39 @@
+name: E2E setup
+description: >-
+  Everything `pnpm test:e2e` needs on a fresh runner, shared by the e2e shards and the e2e burn-in:
+  pnpm and Node, dependencies, Chromium, Postgres and Redis, and the Turbo cache. Run after checkout.
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v5
+      with:
+        node-version-file: .nvmrc
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+    # The browser and the system packages it needs are cached: a slow Ubuntu mirror once
+    # held one shard's install for eight minutes.
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cache/ms-playwright
+          ~/.cache/playwright-apt
+        key: playwright-chromium-apt-${{ hashFiles('pnpm-lock.yaml') }}
+    - name: Install Chromium and its system packages (from the cache when present)
+      shell: bash
+      run: |
+        mkdir -p ~/.cache/playwright-apt
+        sudo cp ~/.cache/playwright-apt/*.deb /var/cache/apt/archives/ 2>/dev/null || true
+        pnpm exec playwright install --with-deps chromium
+        cp /var/cache/apt/archives/*.deb ~/.cache/playwright-apt/ 2>/dev/null || true
+    - run: docker compose up -d --wait postgres redis
+      shell: bash
+    # Build, lint, typecheck and test results of unchanged packages are reused from the last
+    # run (turbo.json declares every setting that changes a build, so a stale one is never used).
+    # The key names the calling job, as before this was shared.
+    - uses: actions/cache@v4
+      with:
+        path: .turbo/cache
+        key: turbo-${{ github.job }}-${{ github.sha }}
+        restore-keys: turbo-${{ github.job }}-

@@ -8,6 +8,7 @@ import {
 } from '@tipme/contracts';
 import { Button, Skeleton, StateLine } from '@tipme/ui';
 import { loadMyNotes, reportMyNote } from '@/lib/business/notes-api';
+import { useBusinessLive } from '@/lib/business/use-business-live';
 
 const TAG_LABEL = Object.fromEntries(
   BUSINESS_NOTE_TAGS.map((tag) => [tag.id, tag.label]),
@@ -103,6 +104,7 @@ export function NotesCard({ membership }: { membership: MyMembership }) {
   useEffect(() => {
     void load();
   }, [load]);
+  useBusinessLive(() => void load());
 
   if (notes === undefined) return <Skeleton label="Loading your notes" />;
   if (notes === null)

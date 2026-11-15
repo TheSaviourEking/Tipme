@@ -5,7 +5,7 @@ Page photos and uploaded covers are re-encoded by the API (photos 512×512 WebP,
 - **R2 configured:** in a **private** R2 bucket, with the database row holding only the object's key.
 - **R2 not configured:** in Postgres, as before. Local development and tests use this.
 
-The bucket is never public. The API serves each photo at `/v1/avatars/<page>/<version>.webp` and each cover at `/v1/covers/<page>/<version>.webp`, and only while the page is live and not paused. So a hidden page's photo stays hidden, even to someone who saved its link.
+The bucket is never public. The API serves each photo at `/v1/avatars/<page>/<version>.webp` and each cover at `/v1/covers/<page>/<version>.webp`, and only while the page is live and not paused. So a hidden page's photo stays hidden, even to someone who saved its link. Business logos sit in the same bucket under `logos/<business id>/<random>.webp`; the API serves each at `/v1/business-logos/<business>/<version>.webp` only while the business is verified (its managers and TipMe staff read it through their own signed-in routes whatever its status). The move script below moves them with the photos.
 
 ## Switching R2 on (per copy: staging, then production)
 

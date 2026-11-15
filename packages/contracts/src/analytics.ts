@@ -76,6 +76,12 @@ export const analyticsEventSchema = z
       .optional(),
     // "Has this browser visited TipMe before": a yes/no flag, no identifier.
     returning: z.boolean().optional(),
+    // The campaign link ending the page was opened from (`/@handle/<ending>`, Campaign Studio).
+    // Kept only as the campaign's id when that page has such a running campaign.
+    campaign: z
+      .string()
+      .regex(/^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$/)
+      .optional(),
   })
   .strict();
 export type AnalyticsEvent = z.infer<typeof analyticsEventSchema>;

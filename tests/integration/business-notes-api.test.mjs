@@ -147,8 +147,12 @@ test('text with a link or a phone number is refused with fields ["body"]; nothin
     const { error } = await response.json();
     assert.equal(error.code, 'VALIDATION_FAILED');
     assert.deepEqual(error.fields, ['body']);
-    // The refused words are never echoed back.
-    assert.doesNotMatch(JSON.stringify(error), /tobi\.com|803/);
+    // The refused words are never echoed back. The support reference is 32 random hex
+    // characters and can hold "803" by chance, so it is checked for its own shape and the
+    // rest of the error is searched for the refused words.
+    const { reference, ...rest } = error;
+    assert.match(reference, /^[0-9a-f]{32}$/);
+    assert.doesNotMatch(JSON.stringify(rest), /tobi\.com|803/);
   }
   const unknownTag = await writeNote(tipId, statusToken, { tags: ['rude'] });
   assert.equal(unknownTag.status, 400);

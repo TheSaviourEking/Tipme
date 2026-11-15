@@ -103,12 +103,13 @@ test('a verified business lists each open location, links to its page, and names
 
   await links.nth(1).click();
   await supporter.waitForURL(new RegExp(`/b/${business.slug}/lekki$`));
+  // Nobody is on shift at Lekki, so the header names the place only (owner, 6 Nov 2026).
   await expect(
     supporter
       .getByRole('main')
       .getByTestId('business-header')
-      .getByText('Lekki Phase 1 · on today'),
-  ).toBeVisible();
+      .locator('.business-header__where'),
+  ).toHaveText('Lekki Phase 1');
   await context.close();
 });
 

@@ -1,8 +1,10 @@
 import { Module, type DynamicModule } from '@nestjs/common';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from './config.js';
+import { FeatureFlags } from './feature-flags.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
+import { ProModule } from './pro/pro.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { MomentsModule } from './moments/moments.controller.js';
@@ -25,7 +27,9 @@ import { MailModule } from './mail/mail.module.js';
 import { ChangelogModule } from './changelog/changelog.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { LiveModule } from './live/live.module.js';
+import { FeatureSwitchesModule } from './switches/feature-switches.service.js';
 import { BusinessModule } from './business/business.module.js';
+import { InsightsModule } from './insights/insights.controller.js';
 
 import { LOGGER } from './tokens.js';
 
@@ -40,9 +44,11 @@ export class AppModule {
       imports: [
         InfraModule,
         LiveModule,
+        FeatureSwitchesModule,
         CheckoutModule,
         AuthModule,
         ProfilesModule,
+        ProModule,
         DashboardModule,
         NotificationsModule,
         MomentsModule,
@@ -52,6 +58,7 @@ export class AppModule {
         MailModule,
         BusinessModule,
         ChangelogModule,
+        InsightsModule,
         ...(config.PAYMENT_PROVIDER === 'mock' ? [MockCheckoutModule] : []),
         ...(config.MAIL_DEFAULT_PROVIDER === 'mock'
           ? [PretendInboxModule]
@@ -69,8 +76,9 @@ export class AppModule {
         LiveSwitchRecorder,
         { provide: API_CONFIG, useValue: config },
         { provide: LOGGER, useValue: logger },
+        FeatureFlags,
       ],
-      exports: [API_CONFIG, LOGGER, ReadinessService],
+      exports: [API_CONFIG, LOGGER, ReadinessService, FeatureFlags],
       global: true,
     };
   }

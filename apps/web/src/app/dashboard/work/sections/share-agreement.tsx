@@ -5,16 +5,19 @@ import {
   SHARE_REPORT_LIMIT,
   SHARE_REPORT_REASONS,
   type MyMembership,
+  type MySharedTips,
   type ShareAgreementView,
   type ShareBps,
   type ShareReportReason,
 } from '@tipme/contracts';
 import { Button, Choice, Skeleton, StateLine, TextareaField } from '@tipme/ui';
+import { formatNaira } from '@/lib/demo-amount';
 import {
   acceptShare,
   counterShare,
   declineShare,
   loadMyShares,
+  loadMySharedTips,
   reportBusiness,
   shareDate,
   shareProblem,
@@ -215,11 +218,20 @@ export function ShareAgreementCard({
   const [views, setViews] = useState<ShareAgreementView[] | null | undefined>(
     undefined,
   );
+  const [shared, setShared] = useState<MySharedTips | null>(null);
   const load = useCallback(() => {
     void loadMyShares().then((loaded) =>
       setViews(loaded.ok && Array.isArray(loaded.data) ? loaded.data : null),
     );
-  }, []);
+    void loadMySharedTips().then((loaded) =>
+      setShared(
+        loaded.ok && Array.isArray(loaded.data)
+          ? (loaded.data.find((row) => row.memberId === membership.memberId) ??
+              null)
+          : null,
+      ),
+    );
+  }, [membership.memberId]);
   useEffect(load, [load]);
 
   if (views === undefined) return <Skeleton label="Loading your share" />;
@@ -235,6 +247,18 @@ export function ShareAgreementCard({
         <p>You keep all your tips here.</p>
       ) : (
         agreed.map((view) => <p key={view.agreementId}>{standing(view)}</p>)
+      )}
+      {shared && BigInt(shared.totalMinor) > BigInt(0) && (
+        <p data-testid="work-shared">
+          This month you shared{' '}
+          <strong>{formatNaira(shared.monthMinor)}</strong> with{' '}
+          {shared.businessName}, from {shared.monthTips}{' '}
+          {shared.monthTips === 1 ? 'tip' : 'tips'}.{' '}
+          <span className="tm-hint">
+            {formatNaira(shared.totalMinor)} in all. A refunded tip’s share
+            comes back to you.
+          </span>
+        </p>
       )}
       {proposal && <Proposal view={proposal} onChanged={load} />}
       <p className="tm-hint">

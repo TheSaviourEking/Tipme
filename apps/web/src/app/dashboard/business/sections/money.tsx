@@ -4,16 +4,20 @@ import type { FormEvent } from 'react';
 import type {
   BusinessBalance,
   BusinessDetail,
+  BusinessPayoutAccountStart,
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { withdrawalMinimumMinor } from '@tipme/domain';
 import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
-import { businessMoneyState } from '@/lib/business/money-state';
+import {
+  businessCanSend,
+  businessMoneyState,
+} from '@/lib/business/money-state';
 import { formatNaira } from '@/lib/demo-amount';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
-import { withdrawRefusal } from '@/lib/withdraw-state';
+import { withdrawRefusal, withdrawSummary } from '@/lib/withdraw-state';
 
 type Loaded =
   | { kind: 'loading' }
@@ -39,6 +43,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
   const [error, setError] = useState('');
   const [done, setDone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [settingUp, setSettingUp] = useState(false);
+  const [setupError, setSetupError] = useState('');
   // One key per request, so a double tap never withdraws twice.
   const key = useRef<string | null>(null);
 
@@ -85,11 +91,44 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
   const chosen = amount === null ? null : BigInt(amount);
   const withdrawable = state.withdrawableMinor;
+  // The business pays the transfer fee from the amount, like a person (owner, 12 Nov 2026).
+  const userFee =
+    quote?.state === 'ready' && quote.feePaidBy === 'user'
+      ? BigInt(quote.feeMinor)
+      : BigInt(0);
   const sendable =
-    chosen !== null &&
-    chosen > BigInt(0) &&
-    chosen <= withdrawable &&
-    (chosen >= FEE_POLICY_V1.minWithdrawalMinor || chosen === withdrawable);
+    chosen !== null && businessCanSend(chosen, withdrawable, userFee);
+  const summary =
+    sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
+  const onTheWay = BigInt(balance.onTheWayMinor);
+  const heldBack = BigInt(balance.heldBackMinor);
+  const needsAccount =
+    balance.payoutAccount === 'needed' ||
+    balance.payoutAccount === 'setting_up';
+
+  // Option B: the business's own payout account with our payment partner, set up by an owner.
+  const setUpAccount = async () => {
+    setSettingUp(true);
+    setSetupError('');
+    const result = await apiFetch<BusinessPayoutAccountStart>(
+      `${base}/payout-account`,
+      { method: 'POST', body: {} },
+    );
+    if (result.ok && result.data.onboardingUrl) {
+      window.location.assign(result.data.onboardingUrl);
+      return;
+    }
+    setSettingUp(false);
+    if (result.ok) {
+      await load();
+      return;
+    }
+    setSetupError(
+      result.code === 'EMAIL_VERIFICATION_REQUIRED'
+        ? 'Confirm your email address first, then try again.'
+        : 'We couldn’t reach our payment partner just now. Please try again in a few minutes.',
+    );
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -108,7 +147,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     });
     setBusy(false);
     if (result.ok) {
-      setDone(formatNaira(amount));
+      setDone(formatNaira(summary ? Number(summary.receiveMinor) : amount));
       setRaw('');
       key.current = null;
       await load();
@@ -126,7 +165,9 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       setError(
         result.code === 'INSUFFICIENT_BALANCE'
           ? 'That is more than the business’s available balance.'
-          : refusal.message,
+          : result.code === 'WITHDRAWAL_TOO_SMALL'
+            ? `The smallest withdrawal for a business is ${formatNaira(withdrawalMinimumMinor())}, or everything it has.`
+            : refusal.message,
       );
   };
 
@@ -142,6 +183,47 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         The business’s share of tips its people agreed to share. Only owners see
         this.
       </p>
+      {onTheWay > BigInt(0) && (
+        <p data-testid="business-on-the-way">
+          On its way: <strong>{formatNaira(onTheWay)}</strong>.{' '}
+          <span className="tm-hint">
+            Each share reaches the business once our payment partner has settled
+            its tip.
+          </span>
+        </p>
+      )}
+      {heldBack > BigInt(0) && (
+        <Notice title="Held back from the next shares">
+          A tip was refunded after its share had been withdrawn.{' '}
+          {formatNaira(heldBack)} will be taken from the business’s next shares
+          and returned to the staff member.
+        </Notice>
+      )}
+      {needsAccount && (
+        <div className="business-money__setup">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={setUpAccount}
+            disabled={settingUp}
+            aria-busy={settingUp}
+          >
+            {balance.payoutAccount === 'setting_up'
+              ? 'Finish setting up the payout account'
+              : 'Set up the payout account'}
+          </Button>
+          <p className="tm-hint">
+            Our payment partner asks for the business’s registered name and a
+            bank account in that name. It only receives money: it never takes
+            card payments.
+          </p>
+          {setupError && (
+            <Notice tone="error" title="Not set up yet">
+              {setupError}
+            </Notice>
+          )}
+        </div>
+      )}
       <Notice title={state.notice.title}>
         {state.notice.body}
         {state.notice.href && state.notice.linkLabel && (
@@ -193,17 +275,22 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         <Button
           type="submit"
           variant="continue"
-          disabled={
-            busy || !state.canWithdraw || (amount !== null && !sendable)
-          }
+          disabled={busy || !state.canWithdraw || (amount !== null && !summary)}
           aria-busy={busy}
         >
           {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
         </Button>
+        {summary && (
+          <p className="tm-hint" data-testid="business-you-receive">
+            {summary.feePaidBy === 'user' && summary.feeMinor > BigInt(0)
+              ? `Transfer fee: ${formatNaira(summary.feeMinor)}, charged by our payment partner. It comes off the amount: the business receives ${formatNaira(summary.receiveMinor)}. If the fee is different, the difference is settled on the business’s balance.`
+              : `No transfer fee comes off it this time: the business receives ${formatNaira(summary.receiveMinor)}.`}
+          </p>
+        )}
         <p className="tm-hint">
-          Once sent, a withdrawal can’t be cancelled. The smallest withdrawal is{' '}
-          {formatNaira(FEE_POLICY_V1.minWithdrawalMinor)}, or the whole balance
-          if it’s less.
+          Once sent, a withdrawal can’t be cancelled. The smallest withdrawal
+          for a business is {formatNaira(withdrawalMinimumMinor())}, or
+          everything it has.
         </p>
       </form>
       <GetPaidCard

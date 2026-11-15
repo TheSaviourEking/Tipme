@@ -27,3 +27,13 @@ export function avatarSource(
 /** Whether a page has a picture `Avatar` can show (otherwise show initials instead). */
 export const hasAvatar = (path: string | null | undefined): path is string =>
   Boolean(path && avatarSource(path, '', API_ORIGIN));
+
+/** A business's uploaded logo, served by the API (/v1/business-logos/...); anything else is ignored. */
+export function businessLogoSource(
+  path: string | null | undefined,
+  apiOrigin: string,
+): string | null {
+  return path && /^\/v1\/business-logos\/[0-9a-f-]+\/\d+\.webp$/.test(path)
+    ? `${apiOrigin}${path}`
+    : null;
+}

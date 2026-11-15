@@ -31,6 +31,7 @@ import {
   withdrawalPaid,
 } from './types/account-events.js';
 import { businessInvitation } from './types/business-invitation.js';
+import { businessOwnerChange } from './types/business-owner-change.js';
 import { emailVerificationLink } from './types/email-verification-link.js';
 import { payoutDestinationChanged } from './types/payout-destination-changed.js';
 import { phoneChangeWarning } from './types/phone-change-warning.js';
@@ -46,6 +47,13 @@ import {
   staffInvitation,
   staffInvitationDeclined,
 } from './types/staff-invitation.js';
+import {
+  proEnded,
+  proReceipt,
+  proGraceStarted,
+  proRenewalFailed,
+  proRenewalReminder,
+} from './types/pro-notices.js';
 import { tipReceived } from './types/tip-received.js';
 import {
   usernameTakeBackCancelled,
@@ -54,13 +62,21 @@ import {
   usernameTakeBackReminder,
 } from './types/username-take-back.js';
 import { weeklyReport } from './types/weekly-report.js';
+import { monthlyRecap } from './types/monthly-recap.js';
+import { announcement, serviceNotice } from './types/announcement.js';
 
 // Heterogeneous registry: each entry checks its own data with its schema before rendering.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
   [
     tipReceived,
+    proRenewalReminder,
+    proGraceStarted,
+    proEnded,
+    proReceipt,
+    proRenewalFailed,
     weeklyReport,
+    monthlyRecap,
     emailVerificationLink,
     recoveryLink,
     staffInvitation,
@@ -102,7 +118,10 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     usernameTakeBackDone,
     usernameTakeBackCancelled,
     businessInvitation,
+    businessOwnerChange,
     shareProposed,
+    announcement,
+    serviceNotice,
   ].map((type) => [type.id, type]),
 );
 

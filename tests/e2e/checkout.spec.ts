@@ -15,6 +15,13 @@ async function expectAccessible(page: Page) {
     ),
   ).toEqual([]);
 }
+// The receipt polls its status until it settles, and several tests here answer that poll with
+// route.fetch(). A poll still in a handler when the page closes reads a disposed response and fails
+// the test after its last check (burn-in, 14 Nov 2026). So the handlers go before the page does.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const fitsViewport = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
@@ -55,7 +62,7 @@ async function tip(
   return new URL(page.url()).pathname.split('/')[2] ?? '';
 }
 const paidHeading = (page: Page) =>
-  page.getByRole('heading', { name: /^.+ got your thanks\.$/ });
+  page.getByRole('heading', { name: /^.+ got your tip\.$/ });
 
 test('a supporter can attach a structured purpose to a tip', async ({
   page,
@@ -229,7 +236,7 @@ test('while checking, one quiet pulse and no celebration', async ({ page }) => {
 test('once confirmed, one moment and then the receipt', async ({ page }) => {
   await tip(page, { handle: 'ada' });
   const live = page.getByRole('status').filter({
-    has: page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    has: page.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   });
   await expect(live).toBeVisible();
   await expect(page.locator('.tm-celebration')).toHaveCount(1);
@@ -262,7 +269,7 @@ test('the whole page name leads the thank-you and the failure, not its first wor
   });
   await tip(page, { handle: 'ada' });
   await expect(
-    page.getByRole('heading', { name: 'Lagos Bakery got your thanks.' }),
+    page.getByRole('heading', { name: 'Lagos Bakery got your tip.' }),
   ).toBeVisible();
   await page.unroute('**/v1/tips/*/status');
   await page.route('**/v1/tips/*/status', async (route) => {
@@ -323,7 +330,7 @@ test('one status region stays mounted from checking to confirmed, so the change 
         (window as unknown as { __live: Element }).__live,
     ),
   ).toBe(true);
-  await expect(live).toContainText('got your thanks.');
+  await expect(live).toContainText('got your tip.');
 });
 
 test('in forced colours the thank-you slab and receipt keep an edge', async ({
@@ -405,7 +412,7 @@ test('the thank-you and receipt fit a phone @mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await tip(page, { handle: 'ada' });
   await expect(
-    page.getByRole('heading', { name: 'Ada Okafor got your thanks.' }),
+    page.getByRole('heading', { name: 'Ada Okafor got your tip.' }),
   ).toBeVisible();
   await expect(
     page.getByRole('region', { name: 'Your receipt' }),
@@ -488,14 +495,22 @@ test('fix: an unreachable API on first load shows a recoverable error, not a ske
 }) => {
   await tip(page);
   await expect(paidHeading(page)).toBeVisible();
-  await page.route('**/v1/tips/*/status', (route) => route.abort());
+  // The receipt keeps retrying on a timer while it can't reach TipMe. The API stays unreachable
+  // until the moment Check again is pressed, so it is the button that brings the receipt back: a
+  // timed retry landing first used to take the button away mid-click (CI on #181).
+  let reachable = false;
+  await page.route('**/v1/tips/*/status', (route) =>
+    reachable ? route.continue() : route.abort(),
+  );
   await page.reload();
   await expect(
     page.getByRole('heading', { name: 'We can’t reach TipMe right now' }),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.unroute('**/v1/tips/*/status');
-  await page.getByRole('button', { name: 'Check again' }).click();
+  const again = page.getByRole('button', { name: 'Check again' });
+  await expect(again).toBeEnabled();
+  reachable = true;
+  await again.click();
   await expect(paidHeading(page)).toBeVisible();
 });
 
@@ -728,4 +743,75 @@ test('minor: the pretend provider page can retry loading', async ({ page }) => {
   await page.unroute('**/v1/mock-provider/checkout/*');
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByText('NGN 2,000.00')).toBeVisible();
+});
+
+test('waiting on a desktop: the status beside the amount, not a small card on an empty page', async ({
+  page,
+}) => {
+  // R1 (ScreenAudit: "A small card alone on a wide empty canvas on desktop").
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let state = 'waiting';
+  await page.route('**/v1/tips/*/status', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, state, completedAt: null } },
+    });
+  });
+  await tip(page, { handle: 'ada' });
+  const card = page.locator('.tip-status-card--waiting');
+  await expect(card).toBeVisible();
+  const live = card.locator('.tip-status-live');
+  const amount = card.locator('.tip-status-amount');
+  await expect(amount).toHaveText('₦2,000');
+  expect((await card.boundingBox())!.width).toBeGreaterThanOrEqual(800);
+  const liveBox = (await live.boundingBox())!;
+  const amountBox = (await amount.boundingBox())!;
+  expect(liveBox.x + liveBox.width).toBeLessThanOrEqual(amountBox.x);
+  expect(amountBox.y).toBeLessThan(liveBox.y + liveBox.height);
+  expect(amountBox.y + amountBox.height).toBeGreaterThan(liveBox.y);
+  // The live region is the same element after the state changes: only its words change.
+  await live.evaluate((element) => {
+    (element as HTMLElement & { stillHere?: boolean }).stillHere = true;
+  });
+  state = 'declined';
+  await expect(page.locator('.tip-status-card--declined')).toBeVisible({
+    timeout: 15_000,
+  });
+  expect(
+    await page
+      .locator('.tip-status-live')
+      .evaluate(
+        (element) =>
+          (element as HTMLElement & { stillHere?: boolean }).stillHere === true,
+      ),
+  ).toBe(true);
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('a payment that didn’t go through is a paper slip with a Not sent stamp the screen reader skips', async ({
+  page,
+}) => {
+  // R1 (ScreenAudit: "Failure reads flat: no slip, no stamp").
+  await tip(page, { handle: 'ada', outcome: /^Decline/ });
+  const card = page.locator('.tip-status-card--declined');
+  await expect(card).toBeVisible();
+  const stamp = card.locator('.tm-slip__stamp');
+  await expect(stamp).toBeVisible();
+  await expect(stamp).toHaveAttribute('aria-hidden', 'true');
+  await expect(stamp).toHaveText(/Not\s*sent/);
+  await expect(page.getByRole('status').first()).not.toContainText('Not sent');
+  expect(
+    await card.evaluate(
+      (element) => getComputedStyle(element, '::before').content,
+    ),
+  ).not.toBe('none');
+  await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute(
+    'href',
+    '/@ada',
+  );
+  await page.setViewportSize({ width: 320, height: 720 });
+  expect(await fitsViewport(page)).toBe(true);
+  await expectAccessible(page);
 });

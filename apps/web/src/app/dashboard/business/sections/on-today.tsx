@@ -4,6 +4,7 @@ import type { BusinessDetail, MemberRow } from '@tipme/contracts';
 import { Button, EmptySlip, Skeleton, Slip, StateLine } from '@tipme/ui';
 import { setMemberShift, shiftProblem } from '@/lib/business/shifts-api';
 import { apiFetch } from '@/lib/session-client';
+import { useBusinessRevision } from '@/lib/business/use-business-live';
 
 /**
  * Business → On today (PR B6): a manager checks people in and out. One switch per person; on
@@ -18,6 +19,7 @@ export function OnTodayCard({ business }: { business: BusinessDetail }) {
     members: MemberRow[] | 'failed';
   } | null>(null);
   const key = `${business.id}:${attempt}`;
+  const revision = useBusinessRevision();
   useEffect(() => {
     let live = true;
     void apiFetch<MemberRow[]>(`/v1/me/businesses/${business.id}/members`).then(
@@ -33,7 +35,7 @@ export function OnTodayCard({ business }: { business: BusinessDetail }) {
     return () => {
       live = false;
     };
-  }, [business.id, key]);
+  }, [business.id, key, revision]);
   const members = loaded?.key === key ? loaded.members : null;
   const load = () => setAttempt((n) => n + 1);
 
@@ -64,7 +66,8 @@ export function OnTodayCard({ business }: { business: BusinessDetail }) {
     <ul className="on-today" data-testid="on-today">
       {members.map((member) => (
         <OnTodayRow
-          key={member.memberId}
+          // A check-in elsewhere (a live re-read) restarts the row from the new state.
+          key={`${member.memberId}:${member.onShift}`}
           businessId={business.id}
           member={member}
           place={several ? placeOf(member.locationId) : undefined}

@@ -14,6 +14,7 @@ import {
   useInsightsView,
   weekText,
 } from '@/lib/business/insights-api';
+import { useBusinessRevision } from '@/lib/business/use-business-live';
 
 const REASONS: { value: NoteReport['reason']; label: string }[] = [
   { value: 'abusive', label: 'Abusive or threatening' },
@@ -106,6 +107,7 @@ export function NotesCard({ business }: { business: BusinessDetail }) {
   const locationId = view?.locationId ?? '';
   const week = view?.week ?? '';
   const key = ready ? `${locationId}|${week}` : '';
+  const revision = useBusinessRevision();
   useEffect(() => {
     if (!ready) return;
     let live = true;
@@ -119,7 +121,7 @@ export function NotesCard({ business }: { business: BusinessDetail }) {
     return () => {
       live = false;
     };
-  }, [business.id, ready, locationId, week]);
+  }, [business.id, ready, locationId, week, revision]);
 
   if (!ready || !view) return <Skeleton label="Loading notes" />;
   const notes = loaded?.key === key ? loaded.notes : undefined;

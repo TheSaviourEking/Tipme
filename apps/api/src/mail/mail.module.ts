@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MailWebhookController } from './mail-webhook.controller.js';
 import { UnsubscribeController } from './unsubscribe.controller.js';
 import {
+  announcementProviderProvider,
   mailProvidersProvider,
   mailSealingProvider,
   subscriptionConfirmProvider,
@@ -10,10 +11,15 @@ import {
 @Module({
   controllers: [MailWebhookController, UnsubscribeController],
   providers: [
+    announcementProviderProvider,
     mailProvidersProvider,
     mailSealingProvider,
     subscriptionConfirmProvider,
   ],
-  exports: [mailProvidersProvider, mailSealingProvider],
+  exports: [
+    announcementProviderProvider,
+    mailProvidersProvider,
+    mailSealingProvider,
+  ],
 })
 export class MailModule {}

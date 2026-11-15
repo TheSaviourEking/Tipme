@@ -17,8 +17,6 @@ import {
   type PagePlan,
   type ProfilePatch,
   type PublicProfile,
-  type SocialLink,
-  type Socials,
   type TipAmounts,
   PRO_LINK_LIMIT,
   linksNeedPro,
@@ -30,7 +28,7 @@ import {
   type MyLinksRequest,
 } from '@tipme/contracts';
 import {
-  FEE_POLICY_V1,
+  CURRENT_FEE_POLICY,
   STANDARD_TIP_PRESETS_MINOR,
   isReservedHandle,
   normaliseHandle,
@@ -69,6 +67,9 @@ import {
   signInCodes,
   signInLockouts,
   supporters,
+  campaigns,
+  monthlyRecaps,
+  supportRequests,
   users,
 } from '../schema.js';
 import { recordAudit } from './audit.js';
@@ -84,6 +85,8 @@ import {
   withAuditChange,
 } from './staff.js';
 import { mailOwner } from './account-mail.js';
+import { legacySocials } from './legacy-socials.js';
+import { proStatusOf, setStaffPro } from './pro-periods.js';
 import { removeObjects } from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
@@ -94,6 +97,11 @@ import {
   myTakeBack,
 } from './username-take-backs.js';
 import { publicCelebration } from './moments.js';
+import {
+  deleteStudioData,
+  publicStudioFor,
+  studioPageFacts,
+} from './studio.js';
 import {
   getReadyPaymentAccount,
   type PaymentAccountEnvironment,
@@ -269,7 +277,7 @@ export function tipAmountsOf(profile: {
   minTipMinor: bigint | null;
   tipStartMinor?: bigint | null;
 }): TipAmounts {
-  const floor = FEE_POLICY_V1.minTipMinor;
+  const floor = CURRENT_FEE_POLICY.minTipMinor;
   // A page can hold amounts saved under an older, lower floor: offer only what can be paid.
   const payable =
     profile.plan === 'pro' && profile.tipPresetsMinor && profile.minTipMinor
@@ -425,6 +433,15 @@ export function opsPageByHandle(
   });
 }
 
+const opsPageWithPro = async (
+  db: Database | Tx,
+  row: typeof profiles.$inferSelect,
+  now: Date = new Date(),
+): Promise<OpsPage> => ({
+  ...opsPage(row),
+  ...(await proStatusOf(db, row.id, row.staffPro, now)),
+});
+
 const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
   profileId: row.id,
   userId: row.userId,
@@ -442,8 +459,9 @@ const opsPage = (row: typeof profiles.$inferSelect): OpsPage => ({
 
 /**
  * Staff make a page Pro or Free again (permission `pages.plan`), with a reason; audited as
- * `page.plan_pro` or `page.plan_free`. Asking for the plan it already has changes and records
- * nothing (a stale admin screen).
+ * `page.plan_pro` or `page.plan_free`. Asking for the grant it already has changes and records
+ * nothing (a stale admin screen). This is the staff grant: a paid month keeps Pro on until its
+ * grace ends, whatever staff set (ADR-0015).
  */
 export function setPagePlan(
   db: Database,
@@ -467,31 +485,32 @@ export function setPagePlan(
         )
         .for('update');
       if (!current) throw new OperationError('NO_PAGE');
-      if (current.plan === input.plan)
-        return {
-          ...opsPage(current),
-          handleLower: current.handleLower,
-          changed: false,
-        };
+      const now = new Date();
+      // Paid Pro (ADR-0015): staff set their grant; a paid month keeps Pro on whatever it says.
+      const { changed, grantChanged } = await setStaffPro(
+        tx,
+        input.profileId,
+        input.plan === 'pro',
+        now,
+      );
       const [row] = await tx
-        .update(profiles)
-        .set({
-          plan: input.plan,
-          // What shows changes with the plan, so the old links column follows it (see setMyLinks).
-          // TODO(social-links): stop writing it in the release that drops the column.
-          socials: legacySocials(visibleLinks(current.links, input.plan)),
-        })
-        .where(eq(profiles.id, input.profileId))
-        .returning();
-      await recordAudit(tx, {
-        staffUserId: input.staffUserId,
-        action: input.plan === 'pro' ? 'page.plan_pro' : 'page.plan_free',
-        permission: 'pages.plan',
-        subjectType: 'profile',
-        subjectId: input.profileId,
-        reason: input.reason,
-      });
-      return { ...opsPage(row!), handleLower: row!.handleLower, changed: true };
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, input.profileId));
+      if (grantChanged || changed)
+        await recordAudit(tx, {
+          staffUserId: input.staffUserId,
+          action: input.plan === 'pro' ? 'page.plan_pro' : 'page.plan_free',
+          permission: 'pages.plan',
+          subjectType: 'profile',
+          subjectId: input.profileId,
+          reason: input.reason,
+        });
+      return {
+        ...(await opsPageWithPro(tx, row!, now)),
+        handleLower: row!.handleLower,
+        changed,
+      };
     }),
   );
 }
@@ -607,20 +626,6 @@ export function updateMyProfile(
       throw new OperationError('QR_DESIGN_PRO_REQUIRED');
     return toMine(db, await myRow(db, userId));
   });
-}
-
-/** The first Facebook, Instagram and X links, in the old shape, for tabs opened before `links`. */
-function legacySocials(links: readonly SocialLink[]): Socials {
-  const socials: Socials = {};
-  for (const link of links)
-    if (
-      (link.platform === 'facebook' ||
-        link.platform === 'instagram' ||
-        link.platform === 'x') &&
-      !socials[link.platform]
-    )
-      socials[link.platform] = link.url;
-  return socials;
 }
 
 /**
@@ -969,6 +974,8 @@ export function publicProfile(
     adultLinks?: boolean;
     /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
     recognition?: boolean;
+    /** True while Page Studio is on: a Pro page's published design comes with the page. */
+    studio?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -1002,6 +1009,9 @@ export function publicProfile(
           ...options.requiredAccount,
         })) !== null
       : true;
+    const studio = options.studio
+      ? await publicStudioFor(db, studioPageFacts(profile))
+      : undefined;
     return {
       handle: profile.handle,
       displayName: profile.displayName,
@@ -1023,6 +1033,7 @@ export function publicProfile(
       ...(options.recognition === true && profile.plan === 'pro'
         ? { recognition: true as const }
         : {}),
+      ...(studio ? { studio } : {}),
     };
   });
 }
@@ -1135,6 +1146,17 @@ export function deleteAccount(
           .where(eq(profiles.id, row.id));
         // Opted-in supporters of this page go with it (their tip links cascade); the tips stay.
         await tx.delete(supporters).where(eq(supporters.profileId, row.id));
+        // Pro insights: campaign names, recaps and support words are the person's own; the tips stay.
+        await tx.execute(
+          sql`DELETE FROM tip_campaigns WHERE campaign_id IN (SELECT id FROM campaigns WHERE profile_id = ${row.id})`,
+        );
+        await tx.delete(campaigns).where(eq(campaigns.profileId, row.id));
+        await tx
+          .delete(monthlyRecaps)
+          .where(eq(monthlyRecaps.profileId, row.id));
+        await tx
+          .delete(supportRequests)
+          .where(eq(supportRequests.userId, input.userId));
         // The photo is personal data too: its bytes go with the page (PR-013).
         await tx
           .delete(profileAvatars)
@@ -1152,6 +1174,8 @@ export function deleteAccount(
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
           });
+        // Page Studio: the designs and their photos are the person's own too.
+        photoKeys.push(...(await deleteStudioData(tx, row.id)));
         await tx
           .insert(handleHolds)
           .values({
@@ -1330,7 +1354,7 @@ export function getNotificationPrefs(
   userId: string,
 ): Promise<NotificationPrefsView> {
   return guarded(async () =>
-    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+    prefsOf((await myRow(db, userId)).profile, await switchesOf(db, userId)),
   );
 }
 
@@ -1355,23 +1379,36 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
+    // "News and announcements" is the marketing switch: set only when sent (older clients).
+    const news =
+      prefs.newsEmails === undefined ? {} : { marketing: prefs.newsEmails };
     await db
       .insert(mailPreferences)
-      .values({ userId, engagement: prefs.guideEmails })
+      .values({ userId, engagement: prefs.guideEmails, ...news })
       .onConflictDoUpdate({
         target: mailPreferences.userId,
-        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+        set: { engagement: prefs.guideEmails, ...news, updatedAt: new Date() },
       });
-    return prefsOf(updated!, prefs.guideEmails);
+    return prefsOf(updated!, await switchesOf(db, userId));
   });
 }
 
-async function guidesOn(db: Database, userId: string): Promise<boolean> {
+/** The guides switch (on unless turned off) and the news switch (off unless turned on). */
+async function switchesOf(
+  db: Database,
+  userId: string,
+): Promise<{ guideEmails: boolean; newsEmails: boolean }> {
   const [row] = await db
-    .select({ on: mailPreferences.engagement })
+    .select({
+      engagement: mailPreferences.engagement,
+      marketing: mailPreferences.marketing,
+    })
     .from(mailPreferences)
     .where(eq(mailPreferences.userId, userId));
-  return row?.on ?? true;
+  return {
+    guideEmails: row?.engagement ?? true,
+    newsEmails: row?.marketing ?? false,
+  };
 }
 
 const prefsOf = (
@@ -1382,12 +1419,28 @@ const prefsOf = (
     popupHideTipDetails: boolean;
     tipSound: boolean;
   },
-  guideEmails: boolean,
+  switches: { guideEmails: boolean; newsEmails: boolean },
 ): NotificationPrefsView => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
-  guideEmails,
+  guideEmails: switches.guideEmails,
+  newsEmails: switches.newsEmails,
   hideTipDetailsInPopups: profile.popupHideTipDetails,
   tipSound: profile.tipSound,
 });
+
+/**
+ * Paid Pro (ADR-0015): why a page is Pro, and until when it is paid. Billing details, so only for
+ * staff who change plans (`pages.plan`); the page lookup itself stays public-level.
+ */
+export async function opsPageProStatus(
+  db: Database | Tx,
+  profileId: string,
+): Promise<Required<Pick<OpsPage, 'proSource' | 'paidUntil' | 'graceUntil'>>> {
+  const [page] = await db
+    .select({ staffPro: profiles.staffPro })
+    .from(profiles)
+    .where(eq(profiles.id, profileId));
+  return proStatusOf(db, profileId, page?.staffPro ?? false);
+}

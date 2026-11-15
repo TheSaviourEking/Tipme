@@ -158,14 +158,14 @@ The public site stays open with checkout closed (owner, 1 Nov), so everyone can 
 5. **Switch payments on for the owner's page only:** follow `live-activation.md` sections 4 and 5: set the repository variable and the env file (`PAYMENTS_LIVE_ENABLED=true`, `LIVE_CHECKOUT_HANDLES=<the owner's handle>`), deploy, then the ₦1,000 smoke tip and withdrawal.
 6. **Widen checkout:** named recipients, then `*` as a separate decision (`live-activation.md` section 6), as Q7 decides.
 
-### The pilot notice (web, Vercel)
+### The pilot notice (set in admin)
 
-The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows next to the money action when the web app has `PILOT_NOTICE=on` **and** this copy's payment mode is `live` (`/health/release` says `bachs-live` with live payments on). On a test copy, or while payments are still switched off (launch step 5), it shows nothing even with the variable set. The owner reviews the wording before activation.
+The line "TipMe is in a pilot. Payments are real. Need help? support@usetipme.xyz" shows next to the money action when the **Pilot notice** is on at `/ops/switches` ("What the web app shows"; it replaced the web app's `PILOT_NOTICE` setting, owner 14 Nov 2026) **and** this copy's payment mode is `live` (`/health/release` says `bachs-live` with live payments on). On a test copy, or while payments are still switched off (launch step 5), it shows nothing even when turned on. The owner reviews the wording before activation.
 
-- **When:** set `PILOT_NOTICE=on` and redeploy **before** launch step 5. It has no effect until payments are on, then appears with the first live page. Nothing to do at the switch itself.
+- **When:** turn it on at `/ops/switches` **before** launch step 5. It has no effect until payments are on, then appears with the first live page. Nothing to do at the switch itself.
 - **Where it appears:** directly under the Tip button on a person's page; one line on the receipt after the status message; under the dashboard toolbar; and under "Available" on the Withdraw page. Not in the footer, not on the marketing and legal pages, and not on the pretend checkout.
-- **How to set it:** Vercel → the `tipme` project → Settings → Environment Variables → **Production only**. Add `PILOT_NOTICE` = `on`. Unset, or any other value, means no notice.
-- **It is a server setting, not a build one:** the web app reads it for each request, and it has no `NEXT_PUBLIC_` twin, so nothing about it reaches the browser bundle. Vercel still applies a changed variable only to a **new deployment**: after adding or removing it, **redeploy** (Deployments → the latest → Redeploy). Instant Rollback to an older deployment restores that deployment's value of the variable.
+- **How to set it:** `/ops/switches` → "What the web app shows" → **Pilot notice** → Turn on, with a reason and a fresh code (needs `switches.manage`). No deploy: each web instance picks it up within about a minute. Until it is first set there, the web keeps reading its old Vercel `PILOT_NOTICE`; once set, delete that Vercel line (`settings-and-switches.md`).
+- **If the API can't be read,** the web keeps the last value it read; with none, no notice.
 - **Check after step 5:** open `/@<a real handle>` (the line sits under the Tip button), a receipt and `/dashboard`; each shows it with a `mailto:support@usetipme.xyz` link. A brief API outage makes the web treat the copy as closed for a few seconds, and the line disappears with it.
 - Search indexing is separate: leave `SITE_INDEXING` unset while this is a closed pilot.
 
@@ -212,6 +212,33 @@ SELECT 'alias', handle_lower, NULL FROM handle_aliases
 ### Never set the pretend-delivery switch in production
 
 `NEXT_PUBLIC_PRETEND_DELIVERY` belongs to test copies only (the e2e stack, `review:screens`, local staging). In a production build it opens `/dev/inbox` (every sign-in code, readable by anyone) and `/dev/crash`. Production web must not set it; check the Vercel production environment before launch.
+
+## 11. TipMe for businesses: turning it on and verifying the first business (owner)
+
+Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until staff turn on the **TipMe for businesses** switch at `/ops/switches` (it replaced `BUSINESS_ENABLED`, 14 Nov 2026; `settings-and-switches.md`). While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own switches (**Business shares**, **Team tips**) stay off; this section does not turn them on.
+
+Shares (option B, `docs/00-DECISIONS.md`, 11 Nov 2026) need the **Business shares** switch (`business_shares`, a money switch) on, with **TipMe for businesses**. The API and the worker read the same switch: the API fixes a share on a tip and shows it before paying; the worker moves each share staff → TipMe → business once its tip's money is available (48 hours after the tip, a code value), and puts refunds right. With it off, nothing about a share moves. A `share_transfer_stuck` issue means TipMe may be holding a business's share: check the partner dashboard for the transfers with the keys in the issue before doing anything.
+
+The **Record final refunds at once** switch (`refund_fee_return`, a money switch, off by default; owner's call, 12 and 14 Nov 2026) records a final refund (`refund.paid`) in the ledger at once instead of waiting for two staff; that is all it does. A refund itself never returns TipMe's fee. A lost dispute staff reverse always sends TipMe's fee back to the person, once per dispute, whatever the switches (owner, 14 Nov 2026: TipMe always bears its fee on a chargeback), and the worker always moves those fee returns; a business's shares move only while `business` and `business_shares` are on.
+
+**Before turning it on:**
+
+1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.
+2. At least **two** staff members hold `businesses.manage` and can enter an authenticator code (`docs/runbooks/admin-roles.md`). **The system refuses a business's own managers:** a staff member who manages the business can neither ask for its verification nor approve it. Either answers `APPROVAL_SUBJECT` and nothing is recorded, even for a lone admin who owns the business (#176). So with only two staff, at least one must not manage the business.
+
+**Turning it on:**
+
+3. **Staging first.** Turn on **TipMe for businesses** at staging's `/ops/switches`, with a reason and a fresh code; no restart. Check `curl -s https://$STAGING_API_HOST/health/release` shows `"business":true`. The web reads that answer; no web deploy is needed.
+4. Walk the journey on staging: create a business from the navbar's "Businesses", verify it from `/ops/businesses` as a second staff member, invite someone by link, check them in, print the location sign, tip through it with the pretend partner, and see the count and note on the Business page.
+5. Then turn it on at production's `/ops/switches`, and check `/health/release` on production the same way (within 15 seconds).
+
+**Verifying the first business (staff, not one of its managers):**
+
+6. Open `/ops/businesses`, then the business. Check its name, address and a contact against something outside TipMe (O2: no documents are uploaded). The contact shows masked; **Reveal** needs a reason and is audited. Each location links to its public page: before verification it reads "isn't taking tips on TipMe right now", which is expected.
+7. **Verify this business** with a reason and a fresh code. With a second qualified person it waits for their approval; it runs alone only when nobody else qualifies, which the log and the alert record. If you manage this business, it is refused.
+8. After verification the location page shows the verified line and the people on shift, and the owners can print their codes.
+
+**To turn it off:** turn the switch off at `/ops/switches`. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
 
 ## Staff access
 

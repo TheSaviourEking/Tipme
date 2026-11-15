@@ -31,8 +31,15 @@ export const totpNow = async (secret: string, offset = 0n) => {
   return totpAt(secret, BigInt(Math.floor(Date.now() / 30_000)) + offset);
 };
 
+// Addresses this worker made Owner, for a spec that removes its own owners when a test ends.
+// A worker runs one test at a time, so between two takes these are that test's alone.
+const grantedOwners: string[] = [];
+/** The addresses granted Owner in this worker since the last take, and forgets them. */
+export const takeGrantedOwners = (): string[] => grantedOwners.splice(0);
+
 /** As `pnpm ops:grant-owner` would: Owner role and a one-time enrolment code. */
 export async function grantOwner(email: string): Promise<string> {
+  grantedOwners.push(email);
   return withDatabase(
     async (db, ops) =>
       (await ops.grantOwner(db, { email })).enrolmentCode as string,
@@ -228,7 +235,7 @@ export async function makePagePro(
   await enrolOwner(staff, testInfo);
   // Through the menu: at phone width the admin links sit in the Menu sheet.
   await openOpsLink(staff, 'Pages');
-  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await staff.getByRole('button', { name: 'Make Pro…' }).click();
   await staff

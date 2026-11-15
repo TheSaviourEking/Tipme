@@ -283,7 +283,7 @@ test('ISSUE_KINDS has business_waiting and business_note_reported', () => {
 test('the business notification kinds and error codes exist', () => {
   assert.deepEqual(
     [...BUSINESS_NOTIFICATION_KINDS],
-    ['business_invitation', 'business_verified'],
+    ['business_invitation', 'business_verified', 'business_share_held_back'],
   );
   for (const code of [
     'BUSINESS_NOT_FOUND',
@@ -296,6 +296,7 @@ test('the business notification kinds and error codes exist', () => {
     'MEMBER_NOT_TIPPABLE',
     'NOTE_NOT_OPEN',
     'BUSINESS_LAST_OWNER',
+    'OWNER_REMOVAL_NEEDS_TIPME',
     'BUSINESS_NOT_VERIFIED',
     'INVITATIONS_BLOCKED',
     'INVITEE_UNAVAILABLE',

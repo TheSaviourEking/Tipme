@@ -4,6 +4,7 @@ import {
   Header,
   HttpCode,
   Inject,
+  Optional,
   Param,
   Post,
   UseGuards,
@@ -23,6 +24,8 @@ import { DatabaseProvider } from '../infra/database.js';
 import { FreshCode } from './fresh-code.guard.js';
 import { CurrentOps, type OpsContext } from './ops.guard.js';
 import { OpsPermission } from './permission.decorator.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { signalBusiness } from '../business/business-live.js';
 
 /**
  * TipMe for businesses, PR B5: a reported note. Staff read its words only through a reveal with a
@@ -33,6 +36,10 @@ import { OpsPermission } from './permission.decorator.js';
 export class OpsBusinessNotesController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    // Optional: integration tests may build this controller without the live module.
+    @Optional()
+    @Inject(LIVE_PUBLISHER)
+    private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
   @Post('business-notes/:tipId/reveal')
@@ -69,6 +76,7 @@ export class OpsBusinessNotesController {
       outcome: body.outcome,
       reason: body.reason,
     });
+    signalBusiness(this.database.db, this.publishLive, { tipId });
     return { data: { outcome: body.outcome } };
   }
 }

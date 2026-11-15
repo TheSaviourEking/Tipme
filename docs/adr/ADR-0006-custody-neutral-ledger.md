@@ -71,3 +71,20 @@ PRD 6.3 to 6.5, 7; AGENTS.md financial invariants; docs/03-DOMAIN-AND-PAYMENTS.m
   - It is balanced and append-only. Its unique operation key (`reward.<momentId>`) means a reward can never pay twice.
   - Supporters' tips are never touched.
 - **Status:** development only. Real money still needs D-03, D-04, D-05 and finance sign-off.
+
+## Addendum (paid Pro, 2026-11-09): Pro sales on TipMe's own account
+
+Needs finance sign-off before real money (ADR-0015).
+
+| Code                   | Kind    | Meaning                                                                                                                                     |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `subscription_revenue` | revenue | What recipients paid TipMe for Pro                                                                                                          |
+| `platform_clearing`    | asset   | Money held for TipMe on its **own** partner account; kept apart from `provider_clearing` so it reconciles against TipMe's own balance there |
+
+| Operation (key)                     | Debit                                                                       | Credit                       |
+| ----------------------------------- | --------------------------------------------------------------------------- | ---------------------------- |
+| `pro_sale` by checkout (`pro.<id>`) | `platform_clearing` gross − partner fee; `provider_fee_expense` partner fee | `subscription_revenue` gross |
+
+- The partner fee booked is always the read-back's figure, never computed. A fee above the gross is refused.
+- Pro is not a tip: there is no `platform_fee_revenue`, no `recipient_payable`, no reward and no milestone in a Pro sale.
+- Paying from the TipMe balance (debit `recipient_payable`, credit `subscription_revenue`, only after the partner's transfer succeeds) and Pro refunds are not built yet; they will add their rows here.

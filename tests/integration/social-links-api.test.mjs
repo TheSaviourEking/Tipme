@@ -3,7 +3,13 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  signIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 
 // PUT /v1/me/links (SocialLinks board, owner 5 Nov 2026): the plan's limits hold on the server,
 // whatever a browser sends.
@@ -166,9 +172,10 @@ test('the adult-platform switch: off hides OnlyFans and Fansly and refuses new o
     apiEnv: {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
-      ADULT_PLATFORM_LINKS: 'off',
     },
   });
+  // The switch is stored, set in admin: this copy differs only in name.
+  await setSwitch(database.pool, 'adult_platform_links', false);
   try {
     const at = (method, path, body) =>
       fetch(`${off.api}${path}`, {
@@ -195,6 +202,7 @@ test('the adult-platform switch: off hides OnlyFans and Fansly and refuses new o
       200,
     );
   } finally {
+    await setSwitch(database.pool, 'adult_platform_links', true);
     await off.stop();
   }
 });

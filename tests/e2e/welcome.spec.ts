@@ -20,8 +20,8 @@ async function claimNewPage(
     page
       .getByRole('list', { name: 'Creating your page' })
       .locator('[aria-current="step"]'),
-  ).toHaveText('Your handle');
-  await page.getByLabel('Handle').fill(who.handle);
+  ).toHaveText('Your username');
+  await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -64,11 +64,11 @@ test('claiming a handle celebrates once: "@handle is yours.", then the hello ste
   ).toBeFocused();
   await expect(
     moment.getByText(
-      'Welcome to TipMe. People can start thanking you the moment your page is online.',
+      'Welcome to TipMe. People can start tipping you the moment your page is online.',
     ),
   ).toBeVisible();
   await expect(moment.getByRole('status')).toHaveText(
-    `Your handle @${handle} is claimed. Welcome to TipMe.`,
+    `Your username @${handle} is claimed. Welcome to TipMe.`,
   );
   // The card, stamp and hearts are pictures only.
   const scene = page.locator('.claim-moment__scene');

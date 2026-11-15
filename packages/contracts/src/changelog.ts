@@ -31,7 +31,7 @@ export type ChangelogState =
  * same word, so the source check and the stored-text check never disagree.
  */
 export const PROVIDER_WORD = /\bbachs\b/i;
-const REGULATORY_CLAIM =
+export const REGULATORY_CLAIM =
   /\b(licen[cs]ed|regulated|approved by|authori[sz]ed by|CBN|central bank|insured|guaranteed)\b/i;
 const HEADING = /^#{1,6}(\s|$)/;
 const FOR_USERS_HEADING = /^#{1,6}\s*for users\s*$/i;
@@ -97,7 +97,9 @@ export function forUsersSection(body: string | null | undefined): string {
 
 /**
  * The draft an incoming PR makes. staffText = title + ' — ' + firstParagraph, cut to the limit at a
- * word. No "For users" text → a staff-only entry.
+ * word. No "For users" text → a staff-only entry. CI sends only these two parts of the body
+ * (essentialBody in scripts/changelog-client.mjs mirrors firstParagraph and forUsersSection; keep
+ * them in step, which scripts/changelog-client.test.mjs checks).
  */
 export function draftFromPullRequest(pr: {
   title: string;

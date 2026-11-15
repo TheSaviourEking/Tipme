@@ -19,6 +19,8 @@ const ENVIRONMENTS: Readonly<
   sandbox: { origin: SANDBOX_API_ORIGIN, keyPrefix: 'sk_sandbox_' },
   live: { origin: LIVE_API_ORIGIN, keyPrefix: 'sk_live_' },
 };
+/** Names TipMe to the partner; no version or host detail. */
+const USER_AGENT = 'TipMe/1.0 (+https://usetipme.xyz)';
 const timeoutSchema = z.number().int().min(100).max(120_000);
 
 interface RequestOptions<T> {
@@ -81,6 +83,8 @@ export class BachsApiClient {
     const headers: Record<string, string> = {
       authorization: `Bearer ${this.options.apiKey}`,
       accept: 'application/json',
+      // The partner's edge refuses requests without one (sandbox evidence, 9 Nov 2026).
+      'User-Agent': USER_AGENT,
     };
     if (options.body !== undefined)
       headers['content-type'] = 'application/json';

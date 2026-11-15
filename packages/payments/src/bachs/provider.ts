@@ -1,12 +1,17 @@
 import { z } from 'zod';
-import type {
-  FeePaidBy,
-  NormalizedProviderEvent,
-  PaymentProvider,
-  PayoutPort,
-  ProviderCapabilities,
-  TransactionStatus,
-  WebhookVerification,
+import { PAYMENT_COUNTRY_CODES } from '@tipme/contracts';
+import {
+  PlatformCheckoutUnavailableError,
+  ProRefundRefusedError,
+  SavedCardRefusedError,
+  TipRefundRefusedError,
+  type FeePaidBy,
+  type NormalizedProviderEvent,
+  type PaymentProvider,
+  type PayoutPort,
+  type ProviderCapabilities,
+  type TransactionStatus,
+  type WebhookVerification,
 } from '../provider.js';
 import {
   BachsApiClient,
@@ -15,6 +20,7 @@ import {
   type BachsEnvironment,
 } from './client.js';
 import {
+  BachsApiError,
   BachsProtocolError,
   BachsRequestNotSentError,
   UncertainProviderOutcomeError,
@@ -23,10 +29,20 @@ import { decimalToMinor, minorToDecimal } from './money.js';
 import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
+/**
+ * Owner, 14 Nov 2026: a tip is refunded only by TipMe (the supporter gets back the tip minus TipMe's
+ * fee), never by the account holder from the partner's dashboard. Its `dashboard_features.refunds`
+ * switch starts off; TipMe sends it off explicitly on every account it creates, and never turns it on.
+ */
+const NO_DASHBOARD_REFUNDS = {
+  dashboard_features: { refunds: false },
+} as const;
+
 const checkoutCreatedSchema = z.object({
   checkout_id: z.string().min(1),
   checkout_url: z.string().url(),
   status: z.string().min(1),
+  expires_at: z.string().nullable().optional(),
 });
 
 const checkoutSessionSchema = z.object({
@@ -62,6 +78,10 @@ const paymentSchema = z.object({
     })
     .nullable()
     .optional(),
+  // How it was paid; read on TipMe's own checkouts, where the payer picks card or transfer.
+  payment_method_type: z.string().max(64).nullable().optional(),
+  // The partner's own answer to "can this payment be refunded now" (guides/refunds).
+  is_refundable: z.boolean().nullable().optional(),
 });
 
 const accountSchema = z.object({
@@ -95,7 +115,8 @@ const accountLinkSchema = z.object({
 
 const accountInputSchema = z.object({
   contactEmail: z.email(),
-  country: z.string().regex(/^[A-Z]{2}$/),
+  // Only our payment partner's payout countries (the same list the API and Settings use).
+  country: z.enum(PAYMENT_COUNTRY_CODES),
   displayName: z.string().trim().min(1).max(255).optional(),
   entityType: z.enum(['individual', 'company']),
   idempotencyKey: z
@@ -115,6 +136,11 @@ export interface BachsProviderConfig {
   environment: BachsEnvironment;
   /** Omitted for a read-only adapter (the worker): it then refuses every webhook. */
   webhookSecrets?: readonly string[];
+  /**
+   * TipMe's own organization at Bachs (BACHS_PLATFORM_ORGANIZATION_ID). Its events with no
+   * `account` are TipMe's own (Pro purchases). Unset: every event is read as a connected account's.
+   */
+  platformOrganizationId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -151,6 +177,16 @@ export interface BachsProvider
     entityType: 'individual' | 'company';
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
+  /**
+   * Business release 2, option B: a company account that only receives (the recipient persona:
+   * payouts and transfers, sandbox S1), never takes payments, so no selfie check or review.
+   */
+  createReceiveOnlyAccount(input: {
+    contactEmail: string;
+    country: string;
+    displayName?: string;
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
   createOnboardingLink(input: {
     accountReference: string;
     refreshUrl: string;
@@ -171,7 +207,45 @@ const capabilities: ProviderCapabilities = {
   platformFees: true,
   payouts: true,
   lookupByOperationReference: false,
+  platformCheckout: true,
 };
+
+/** TipMe's own checkouts (paid Pro): `platform:<checkout_id>`, never an account id. */
+const PLATFORM_PREFIX = 'platform:';
+/** TipMe's own off-session charges (auto-renew): `platform-charge:<payment_id>`. */
+const PLATFORM_CHARGE_PREFIX = 'platform-charge:';
+
+// https://docs.bachs.io/guides/refunds
+const refundCreatedSchema = z.object({
+  refund_id: z.string().min(1).max(200),
+  status: z.string().min(1),
+});
+// https://docs.bachs.io/guides/payments/charge-a-saved-card
+const customerSchema = z.object({ customer_id: z.string().min(1).max(200) });
+const chargeSchema = z.object({
+  payment_id: z.string().min(1).max(200),
+  status: z.string().min(1),
+});
+// Errors the saved-card guide lists: nothing could be charged.
+const SAVED_CARD_REFUSALS = new Set([
+  'NO_SAVED_PAYMENT_METHOD',
+  'SAVED_PAYMENT_METHOD_NOT_FOUND',
+  'PAYMENT_METHOD_UNUSABLE',
+  'PAYMENT_METHOD_NOT_ENABLED',
+  'NOT_FOUND',
+  'VALIDATION_ERROR',
+]);
+/** Partner checkouts last 30 minutes (sandbox evidence, 9 Nov 2026); asked for explicitly. */
+const PLATFORM_CHECKOUT_MINUTES = 30;
+
+function methodOf(
+  value: string | null | undefined,
+): 'NGN_CARD' | 'NGN_BANK_TRANSFER' | undefined {
+  const method = value?.toUpperCase() ?? '';
+  if (method.includes('BANK')) return 'NGN_BANK_TRANSFER';
+  if (method.includes('CARD')) return 'NGN_CARD';
+  return undefined;
+}
 
 function statusValue(value: string): TransactionStatus {
   const status = value.toLowerCase();
@@ -222,9 +296,18 @@ function providerIdentifier(value: string, label: string): string {
 }
 
 function parseScopedCheckoutReference(value: string): {
-  accountReference: string;
+  /** Null for TipMe's own checkouts: no account header is sent. */
+  accountReference: string | null;
   checkoutId: string;
 } {
+  if (value.startsWith(PLATFORM_PREFIX))
+    return {
+      accountReference: null,
+      checkoutId: providerIdentifier(
+        value.slice(PLATFORM_PREFIX.length),
+        'checkout reference',
+      ),
+    };
   const separator = value.indexOf(':');
   if (separator <= 0 || separator === value.length - 1)
     throw new TypeError('Invalid Bachs checkout reference');
@@ -394,6 +477,85 @@ export function createBachsProvider(
     return normalizedAccount(updated);
   }
 
+  /** A tip's charge on its recipient's account, read as that account, for a staff refund. */
+  async function readTipCharge(providerReference: string): Promise<{
+    chargeReference: string;
+    method: 'card' | 'bank_transfer' | 'other';
+    refundable: boolean;
+  }> {
+    const scoped = parseScopedCheckoutReference(providerReference);
+    if (!scoped.accountReference)
+      throw new BachsRequestNotSentError(
+        'A tip refund needs the recipient’s account',
+      );
+    const checkout = await client.request({
+      method: 'GET',
+      path: `/v1/checkout-sessions/${encodeURIComponent(scoped.checkoutId)}`,
+      accountReference: scoped.accountReference,
+      schema: checkoutSessionSchema,
+    });
+    const chargeReference = checkout.charge?.payment_id ?? checkout.charge?.id;
+    if (!chargeReference) throw new TipRefundRefusedError('not_refundable');
+    const payment = await client.request({
+      method: 'GET',
+      path: `/v1/payments/${encodeURIComponent(providerIdentifier(chargeReference, 'charge'))}`,
+      accountReference: scoped.accountReference,
+      schema: paymentSchema,
+    });
+    const method = methodOf(payment.payment_method_type);
+    const kind =
+      method === 'NGN_BANK_TRANSFER'
+        ? ('bank_transfer' as const)
+        : method === 'NGN_CARD'
+          ? ('card' as const)
+          : ('other' as const);
+    return {
+      chargeReference: payment.payment_id,
+      method: kind,
+      refundable: kind !== 'bank_transfer' && payment.is_refundable === true,
+    };
+  }
+
+  /** A payment on TipMe's own account, read directly (an off-session charge has no checkout). */
+  async function readPlatformPayment(paymentId: string) {
+    const payment = await client.request({
+      method: 'GET',
+      path: `/v1/payments/${encodeURIComponent(paymentId)}`,
+      schema: paymentSchema,
+    });
+    const status = statusValue(payment.status);
+    if (payment.currency !== 'NGN')
+      return {
+        status,
+        amountMinor: 0n,
+        currency: payment.currency,
+        feeMinor: 0n,
+        feePaidBy: 'platform' as const,
+        chargeReference: payment.payment_id,
+      };
+    const amountMinor = providerAmountToMinor(
+      payment.amount_paid ?? payment.amount,
+      payment.currency,
+    );
+    const fee = payment.fees ?? null;
+    if (fee && fee.currency !== payment.currency)
+      throw new BachsProtocolError(
+        'Bachs processing fee currency differs from payment currency',
+      );
+    const feeMinor = fee ? providerAmountToMinor(fee.amount, fee.currency) : 0n;
+    const waitingForFee = status === 'succeeded' && fee === null;
+    return {
+      status: waitingForFee ? ('pending' as const) : status,
+      amountMinor,
+      currency: payment.currency,
+      feeMinor,
+      feePaidBy: 'platform' as const,
+      ...(waitingForFee ? { collected: true as const } : {}),
+      method: 'NGN_CARD' as const,
+      chargeReference: payment.payment_id,
+    };
+  }
+
   return {
     name: client.environment === 'live' ? 'bachs-live' : 'bachs-sandbox',
     environment: client.environment,
@@ -502,6 +664,99 @@ export function createBachsProvider(
       };
     },
 
+    async initializePlatformCheckout(input) {
+      // Checked before anything is sent: a refusal here means Bachs never saw the request.
+      let successUrl: string;
+      let cancelUrl: string;
+      try {
+        if (input.currency !== 'NGN')
+          throw new TypeError('TipMe sells Pro in naira only');
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Checkout amount must be positive');
+        providerIdentifier(input.purchaseId, 'purchase reference');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid Bachs idempotency key');
+        successUrl = validateHttpsOrLocalUrl(input.successUrl);
+        cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid Bachs checkout',
+          { cause: error },
+        );
+      }
+      let checkout: z.infer<typeof checkoutCreatedSchema>;
+      try {
+        checkout = await client.request({
+          method: 'POST',
+          path: '/v1/checkout-sessions',
+          // No X-Account-Id: the checkout is on TipMe's own account, and no platform fee.
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.purchaseId,
+          body: {
+            pricing: {
+              amount: minorToDecimal(input.amountMinor, input.currency),
+              currency: input.currency,
+            },
+            reference: input.purchaseId,
+            success_url: successUrl,
+            cancel_url: cancelUrl,
+            customer_creation: 'if_required',
+            payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
+            customer_bears_fee: false,
+            expires_in_minutes: PLATFORM_CHECKOUT_MINUTES,
+            // Auto-renew opt-in: the card is saved on this customer as they pay.
+            ...(input.saveCard
+              ? {
+                  customer: {
+                    customer_id: providerIdentifier(
+                      input.saveCard.customerReference,
+                      'customer reference',
+                    ),
+                  },
+                  save_payment_method: true,
+                }
+              : {}),
+          },
+          schema: checkoutCreatedSchema,
+        });
+      } catch (error) {
+        // TipMe's own account can't take payments here (live needs it verified): definite.
+        if (
+          error instanceof BachsApiError &&
+          error.providerCode === 'ACCOUNT_NOT_ACTIVATED'
+        )
+          throw new PlatformCheckoutUnavailableError(error.providerCode);
+        throw error;
+      }
+      if (checkout.status.toLowerCase() !== 'open')
+        throw new UncertainProviderOutcomeError(
+          input.purchaseId,
+          'Bachs created a checkout in an unexpected state',
+          { cause: 'unexpected_state' },
+        );
+      let checkoutUrl: string;
+      try {
+        checkoutUrl = bachsHostedUrl(checkout.checkout_url);
+      } catch (error) {
+        if (error instanceof BachsProtocolError)
+          throw new UncertainProviderOutcomeError(
+            input.purchaseId,
+            'Bachs created a checkout but returned an unsafe URL',
+            { cause: 'unsafe_url' },
+          );
+        throw error;
+      }
+      const stated = checkout.expires_at ? new Date(checkout.expires_at) : null;
+      return {
+        providerReference: `${PLATFORM_PREFIX}${providerIdentifier(checkout.checkout_id, 'checkout reference')}`,
+        checkoutUrl,
+        expiresAt:
+          stated && !Number.isNaN(stated.getTime())
+            ? stated
+            : new Date(Date.now() + PLATFORM_CHECKOUT_MINUTES * 60_000),
+      };
+    },
+
     async findPayment(attemptId) {
       throw new UncertainProviderOutcomeError(
         attemptId,
@@ -514,7 +769,9 @@ export function createBachsProvider(
       const checkout = await client.request({
         method: 'GET',
         path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: checkoutSessionSchema,
       });
       if (!checkout.checkout_url)
@@ -524,13 +781,232 @@ export function createBachsProvider(
       return bachsHostedUrl(checkout.checkout_url);
     },
 
+    // POST /v1/refunds on TipMe's own account. The same idempotency_key on the same payment returns
+    // the existing refund for 24 hours; a 409 or 5xx may mean one exists: uncertain.
+    async refundPlatformCharge(input) {
+      let body: Record<string, unknown>;
+      try {
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Refund amount must be positive');
+        if (!/^[\w.:-]{1,128}$/.test(input.reference))
+          throw new TypeError('Invalid refund reference');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid idempotency key');
+        body = {
+          charge_id: providerIdentifier(input.chargeReference, 'charge'),
+          amount: minorToDecimal(input.amountMinor, 'NGN'),
+          reference: input.reference,
+          reason: 'Customer requested cancellation',
+          idempotency_key: input.idempotencyKey,
+        };
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid refund',
+          { cause: error },
+        );
+      }
+      let refund: z.infer<typeof refundCreatedSchema>;
+      try {
+        refund = await client.request({
+          method: 'POST',
+          path: '/v1/refunds',
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.reference,
+          body,
+          schema: refundCreatedSchema,
+        });
+      } catch (error) {
+        // The guide's 400s (not refundable, no balance, too much) create nothing.
+        if (error instanceof BachsApiError && error.statusCode === 400)
+          throw new ProRefundRefusedError(error.providerCode);
+        if (error instanceof BachsApiError)
+          throw new UncertainProviderOutcomeError(
+            input.reference,
+            `the payment provider returned HTTP ${error.statusCode}`,
+            { cause: 'http_error', httpStatus: error.statusCode },
+          );
+        throw error;
+      }
+      const status = refund.status.toLowerCase();
+      return {
+        refundReference: refund.refund_id,
+        status:
+          status === 'success' || status === 'paid' || status === 'succeeded'
+            ? 'paid'
+            : status === 'failed'
+              ? 'failed'
+              : 'processing',
+      };
+    },
+
+    // Staff "Refund tip" (owner, 14 Nov 2026): the tip's checkout, then its payment, both read as
+    // the recipient's account (X-Account-Id). Never as TipMe: a refund names the account's charge.
+    async readAccountCharge(providerReference) {
+      return readTipCharge(providerReference);
+    },
+
+    // POST /v1/refunds as the recipient's account (sandbox evidence, 14 Nov 2026): only that account
+    // is debited, by exactly `amount`; the platform fee is not refunded; the same key returns the
+    // same refund. One refund per payment, so the amount is final (the tip minus TipMe's fee).
+    async refundAccountCharge(input) {
+      let scoped: { accountReference: string; checkoutId: string };
+      try {
+        if (input.amountMinor <= 0n)
+          throw new RangeError('Refund amount must be positive');
+        if (!/^[\w.:-]{1,128}$/.test(input.reference))
+          throw new TypeError('Invalid refund reference');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid idempotency key');
+        const parsed = parseScopedCheckoutReference(input.providerReference);
+        if (!parsed.accountReference)
+          throw new TypeError('A tip refund needs the recipient’s account');
+        scoped = {
+          accountReference: parsed.accountReference,
+          checkoutId: parsed.checkoutId,
+        };
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid refund',
+          { cause: error },
+        );
+      }
+      const charge = await readTipCharge(input.providerReference);
+      if (charge.method === 'bank_transfer')
+        throw new TipRefundRefusedError('bank_transfer');
+      if (!charge.refundable) throw new TipRefundRefusedError('not_refundable');
+      let refund: z.infer<typeof refundCreatedSchema>;
+      try {
+        refund = await client.request({
+          method: 'POST',
+          path: '/v1/refunds',
+          accountReference: scoped.accountReference,
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.reference,
+          body: {
+            charge_id: providerIdentifier(charge.chargeReference, 'charge'),
+            amount: minorToDecimal(input.amountMinor, 'NGN'),
+            reference: input.reference,
+            idempotency_key: input.idempotencyKey,
+          },
+          schema: refundCreatedSchema,
+        });
+      } catch (error) {
+        // The guide's 400s (not refundable, no balance, too much) create nothing.
+        if (error instanceof BachsApiError && error.statusCode === 400)
+          throw new TipRefundRefusedError('refused', error.providerCode);
+        if (error instanceof BachsApiError)
+          throw new UncertainProviderOutcomeError(
+            input.reference,
+            `the payment provider returned HTTP ${error.statusCode}`,
+            { cause: 'http_error', httpStatus: error.statusCode },
+          );
+        throw error;
+      }
+      const status = refund.status.toLowerCase();
+      return {
+        refundReference: refund.refund_id,
+        status:
+          status === 'success' || status === 'paid' || status === 'succeeded'
+            ? 'paid'
+            : status === 'failed'
+              ? 'failed'
+              : 'processing',
+      };
+    },
+
+    // POST /v1/customers on TipMe's own account.
+    async createPlatformCustomer(input) {
+      const customer = await client.request({
+        method: 'POST',
+        path: '/v1/customers',
+        idempotencyKey: input.idempotencyKey,
+        operationReference: input.idempotencyKey,
+        body: { email: input.email, name: input.name },
+        schema: customerSchema,
+      });
+      return {
+        customerReference: providerIdentifier(
+          customer.customer_id,
+          'customer reference',
+        ),
+      };
+    },
+
+    // POST /v1/charges: off-session, once per Idempotency-Key. A refused card is a 201 `failed`.
+    async chargeSavedCard(input) {
+      let body: Record<string, unknown>;
+      try {
+        if (input.currency !== 'NGN')
+          throw new TypeError('TipMe sells Pro in naira only');
+        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+          throw new TypeError('Invalid idempotency key');
+        body = {
+          customer: providerIdentifier(input.customerReference, 'customer'),
+          payment_method: providerIdentifier(
+            input.paymentMethodReference,
+            'payment method',
+          ),
+          amount: minorToDecimal(input.amountMinor, 'NGN'),
+          currency: 'NGN',
+          description: 'TipMe Pro',
+          reference: providerIdentifier(input.reference, 'reference'),
+        };
+      } catch (error) {
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid charge',
+          { cause: error },
+        );
+      }
+      let charge: z.infer<typeof chargeSchema>;
+      try {
+        charge = await client.request({
+          method: 'POST',
+          path: '/v1/charges',
+          idempotencyKey: input.idempotencyKey,
+          operationReference: input.reference,
+          body,
+          schema: chargeSchema,
+        });
+      } catch (error) {
+        if (
+          error instanceof BachsApiError &&
+          error.statusCode < 500 &&
+          error.providerCode &&
+          SAVED_CARD_REFUSALS.has(error.providerCode)
+        )
+          throw new SavedCardRefusedError(error.providerCode);
+        if (error instanceof BachsApiError)
+          throw new UncertainProviderOutcomeError(
+            input.reference,
+            `the payment provider returned HTTP ${error.statusCode}`,
+            { cause: 'http_error', httpStatus: error.statusCode },
+          );
+        throw error;
+      }
+      const status = statusValue(charge.status);
+      return {
+        providerReference: `${PLATFORM_CHARGE_PREFIX}${providerIdentifier(charge.payment_id, 'charge reference')}`,
+        // `processing` is not success: only the read-back says it was paid.
+        status: status === 'failed' ? 'failed' : 'pending',
+      };
+    },
+
     async verifyTransaction(providerReference, expectation) {
+      if (providerReference.startsWith(PLATFORM_CHARGE_PREFIX))
+        return readPlatformPayment(
+          providerIdentifier(
+            providerReference.slice(PLATFORM_CHARGE_PREFIX.length),
+            'charge reference',
+          ),
+        );
       const scopedReference = parseScopedCheckoutReference(providerReference);
 
       const checkout = await client.request({
         method: 'GET',
         path: `/v1/checkout-sessions/${encodeURIComponent(scopedReference.checkoutId)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: checkoutSessionSchema,
       });
       const checkoutStatus = checkout.status.toLowerCase();
@@ -583,7 +1059,9 @@ export function createBachsProvider(
       const payment = await client.request({
         method: 'GET',
         path: `/v1/payments/${encodeURIComponent(paymentReference)}`,
-        accountReference: scopedReference.accountReference,
+        ...(scopedReference.accountReference
+          ? { accountReference: scopedReference.accountReference }
+          : {}),
         schema: paymentSchema,
       });
       if (payment.currency !== checkout.currency) {
@@ -611,6 +1089,23 @@ export function createBachsProvider(
         throw new BachsProtocolError(
           'Bachs processing fee currency differs from payment currency',
         );
+
+      // TipMe's own checkout (paid Pro): TipMe is the merchant and bears the fee, with no platform
+      // fee to check. Its fee is the read-back's; with none yet, the money is held as collected.
+      if (scopedReference.accountReference === null) {
+        const method = methodOf(payment.payment_method_type);
+        const waitingForFee = providerStatus === 'succeeded' && fee === null;
+        return {
+          status: waitingForFee ? 'pending' : providerStatus,
+          amountMinor,
+          currency: payment.currency,
+          feeMinor,
+          feePaidBy: 'platform',
+          ...(waitingForFee ? { collected: true as const } : {}),
+          ...(method ? { method } : {}),
+          chargeReference: payment.payment_id,
+        };
+      }
 
       const platformFeeMinor =
         payment.platform_fee === null || payment.platform_fee === undefined
@@ -651,7 +1146,13 @@ export function createBachsProvider(
       headers,
       now,
     ): WebhookVerification<NormalizedProviderEvent> {
-      return verifyBachsWebhook(rawBody, headers, webhookSecrets, now);
+      return verifyBachsWebhook(
+        rawBody,
+        headers,
+        webhookSecrets,
+        now,
+        config.platformOrganizationId,
+      );
     },
 
     async createRecipientAccount(input) {
@@ -678,6 +1179,31 @@ export function createBachsProvider(
           responsibilities: {
             fees: { collector: 'platform' },
           },
+          ...NO_DASHBOARD_REFUNDS,
+        },
+        schema: accountSchema,
+      });
+      return normalizedAccount(account);
+    },
+
+    async createReceiveOnlyAccount(input) {
+      const validInput = accountInputSchema.parse({
+        ...input,
+        entityType: 'company',
+      });
+      const account = await client.request({
+        method: 'POST',
+        path: '/v1/accounts',
+        idempotencyKey: validInput.idempotencyKey,
+        operationReference: validInput.idempotencyKey,
+        body: {
+          contact_email: validInput.contactEmail,
+          country: validInput.country,
+          display_name: validInput.displayName,
+          entity_type: 'company',
+          configuration: { ...PAYOUT_CONFIGURATION },
+          responsibilities: { fees: { collector: 'platform' } },
+          ...NO_DASHBOARD_REFUNDS,
         },
         schema: accountSchema,
       });

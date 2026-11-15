@@ -62,6 +62,13 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'payment.reversed': none,
   // A staff alert only. The owner's dashboard learns of the new username on its next profile read.
   'username.take_back_done': none,
+  // Paid Pro: staff alerts. A page whose plan changed is signalled where it changed.
+  'pro.amount_mismatch': none,
+  'pro.late_payment': none,
+  'pro.conflict': none,
+  'pro.reversed': none,
+  'pro.collect_unknown': none,
+  'pro.refund_failed': none,
   // Nothing has changed yet when it is queued: the job worker signals after the start ran.
   [PAYOUT_START_EVENT]: none,
   [PLATFORM_REFUSAL_EVENT]: none,
@@ -134,4 +141,28 @@ export function jobSignalsFor(
     ];
   }
   return [];
+}
+
+/**
+ * A paid tip made at a business (plan B9 Task 23): `business.changed` to its managers and team,
+ * looked up from the tip's checked label by `audience` (businessLiveAudience). A plain tip has no
+ * label and gives []. Never throws: a failed lookup only means the pages catch up on their next read.
+ */
+export async function businessTipSignals(
+  data: unknown,
+  audience: (ref: { tipId: string }) => Promise<string[]>,
+): Promise<LiveMessage[]> {
+  const tipId =
+    data && typeof data === 'object'
+      ? (data as { tipId?: unknown }).tipId
+      : undefined;
+  if (typeof tipId !== 'string' || !UUID.test(tipId)) return [];
+  try {
+    return (await audience({ tipId })).map((user) => ({
+      to: { user },
+      type: 'business.changed' as const,
+    }));
+  } catch {
+    return [];
+  }
 }

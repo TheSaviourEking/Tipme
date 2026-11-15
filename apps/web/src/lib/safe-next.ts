@@ -1,5 +1,6 @@
 /**
- * Where to go after signing in: only a dashboard (or admin) path on this site, resolved the way the browser
+ * Where to go after signing in: only a dashboard (or admin) path on this site, or the /pro page
+ * (a signed-out person who pressed Get Pro comes back to buy), resolved the way the browser
  * would (so "/\evil.com" or "//evil.com" can never leave it). Anything else goes to the dashboard.
  */
 export function safeNext(value: string | null, origin: string): string {
@@ -10,6 +11,7 @@ export function safeNext(value: string | null, origin: string): string {
     // Signing in only ever leads back into the dashboard, or the admin area for staff.
     const within = (root: string) =>
       url.pathname === root || url.pathname.startsWith(`${root}/`);
+    if (url.pathname === '/pro') return '/pro';
     if (!within('/dashboard') && !within('/ops')) return '/dashboard';
     return `${url.pathname}${url.search}`;
   } catch {

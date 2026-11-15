@@ -10,7 +10,7 @@ import {
   rollupAnalytics,
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
-import { WEB, opsSignIn, startStack } from './helpers.mjs';
+import { WEB, opsSignIn, setSwitch, startStack } from './helpers.mjs';
 
 startTelemetry({
   serviceName: 'tipme-integration',
@@ -142,14 +142,15 @@ test('the events route is cross-origin from the web app but never credentialed',
 });
 
 test('with collection off nothing is stored; the limit is per client per minute', async () => {
+  // Collection is the `analytics` switch, set in admin; this stack only differs in its rate limit.
   const off = await startStack({
     databaseUrl: database.url,
     apiEnv: {
       WEB_ORIGIN: WEB,
-      ANALYTICS_ENABLED: 'false',
       RATE_LIMIT_ANALYTICS_PER_MIN: '5',
     },
   });
+  await setSwitch(database.pool, 'analytics', false);
   try {
     // The limiter fails open while Redis is still connecting; wait until the API is ready.
     const deadline = Date.now() + 10_000;
@@ -174,6 +175,7 @@ test('with collection off nothing is stored; the limit is per client per minute'
     assert.equal(health.status, 200);
     assert.equal((await health.json()).data.collecting, false);
   } finally {
+    await setSwitch(database.pool, 'analytics', true);
     await off.stop();
   }
 });
@@ -291,4 +293,44 @@ test('raw events older than 90 days are purged; newer ones stay', async () => {
   });
   assert.equal((await rowsFor(old)).length, 0);
   assert.equal((await rowsFor(recent)).length, 1);
+});
+
+test('with the analytics switch at its default, a production copy collects an anonymous visit (owner, 9 Nov 2026)', async () => {
+  const { loadApiConfig } = await import('../../apps/api/dist/config.js');
+  const { EventsController } =
+    await import('../../apps/api/dist/analytics/events.controller.js');
+  const config = loadApiConfig({
+    DATABASE_URL: database.url,
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    STATUS_TOKEN_SECRET: 's'.repeat(32),
+    AUTH_CODE_SECRET: 'a'.repeat(32),
+    WEB_REVALIDATE_SECRET: 'r'.repeat(32),
+    OPS_TOTP_KEY: Buffer.alloc(32, 1).toString('base64'),
+    MAIL_SEAL_KEY: Buffer.alloc(32, 2).toString('base64'),
+    NODE_ENV: 'production',
+    DEPLOYMENT_MODE: 'preview',
+    PREVIEW_PASSWORD: 'p'.repeat(32),
+    WEB_ORIGIN: 'https://tipme-demo.onrender.com',
+  });
+  assert.equal(config.switchSeeds.ANALYTICS_ENABLED, undefined);
+  // No stored row: the switch reads its default, on.
+  await database.pool.query(
+    `DELETE FROM feature_switches WHERE key = 'analytics'`,
+  );
+  const { resetFeatureSwitchMemory } =
+    await import('../../packages/database/dist/index.js');
+  resetFeatureSwitchMemory();
+  const controller = new EventsController({ db: database.db });
+  const visit = () => ({ name: 'profile_viewed', flowId: randomUUID() });
+  const counted = visit();
+  await controller.record(counted, 'Mozilla/5.0', undefined, undefined);
+  assert.equal((await rowsFor(counted.flowId)).length, 1);
+  // Global Privacy Control and Do Not Track still store nothing in production.
+  const gpc = visit();
+  await controller.record(gpc, 'Mozilla/5.0', '1', undefined);
+  const dnt = visit();
+  await controller.record(dnt, 'Mozilla/5.0', undefined, '1');
+  assert.equal((await rowsFor(gpc.flowId)).length, 0);
+  assert.equal((await rowsFor(dnt.flowId)).length, 0);
 });

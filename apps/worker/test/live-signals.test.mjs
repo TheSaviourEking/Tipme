@@ -11,6 +11,7 @@ import { DOMAIN_EVENT_NAMES } from '../dist/handlers/domain-events.js';
 import { createWorkerLivePublisher } from '../dist/live-publisher.js';
 import {
   LIVE_SIGNAL_MAPPED_EVENTS,
+  businessTipSignals,
   jobSignalsFor,
   liveSignalFor,
 } from '../dist/live-signals.js';
@@ -248,4 +249,35 @@ test('jobSignalsFor reports.weekly gives reports.changed and notifications.chang
     profileIds: [PROFILE],
   }))
     assert.deepEqual(parseLiveMessage(JSON.stringify(m)), m);
+});
+
+test('a paid tip signals business.changed to each user the business audience names', async () => {
+  const asked = [];
+  const users = [
+    '33333333-3333-4333-8333-333333333333',
+    '44444444-4444-4444-8444-444444444444',
+  ];
+  const signals = await businessTipSignals(
+    { tipId: TIP, profileId: PROFILE },
+    async (ref) => {
+      asked.push(ref);
+      return users;
+    },
+  );
+  assert.deepEqual(asked, [{ tipId: TIP }]);
+  assert.deepEqual(signals, [
+    { to: { user: users[0] }, type: 'business.changed' },
+    { to: { user: users[1] }, type: 'business.changed' },
+  ]);
+});
+
+test('a tip with no valid id, or a lookup that fails, signals nothing', async () => {
+  let asked = 0;
+  const audience = async () => {
+    asked += 1;
+    throw new Error('down');
+  };
+  assert.deepEqual(await businessTipSignals({ tipId: 'nope' }, audience), []);
+  assert.equal(asked, 0);
+  assert.deepEqual(await businessTipSignals({ tipId: TIP }, audience), []);
 });

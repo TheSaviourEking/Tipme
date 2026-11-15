@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import {
   buildSlackPayload,
   getGitCommits,
+  slackMention,
   main,
   parseCommits,
 } from './notify-slack.mjs';
@@ -195,4 +196,33 @@ test('getGitCommits lists only what is new since the deployed version, without m
   );
   assert.deepEqual(commits.fixes, []);
   assert.deepEqual(commits.features, []);
+});
+
+test('the person who deployed is mentioned by their Slack member ID, or shown by GitHub login', () => {
+  const users = JSON.stringify({
+    TheSaviourEking: 'U012AB3CD',
+    'named-only': 'Saviour Eking',
+  });
+  assert.equal(slackMention('TheSaviourEking', users), '<@U012AB3CD>');
+  // Only member IDs are accepted; anything else falls back to the GitHub login.
+  assert.equal(slackMention('named-only', users), '@named-only');
+  assert.equal(slackMention('someone-else', users), '@someone-else');
+  assert.equal(slackMention('TheSaviourEking', 'not json'), '@TheSaviourEking');
+  assert.equal(slackMention('TheSaviourEking', ''), '@TheSaviourEking');
+  // Slack control characters in a login cannot forge a mention or a link.
+  assert.equal(slackMention('<!channel>', ''), '@&lt;!channel&gt;');
+});
+
+test('the payload mentions the deployer in the notification text and the Triggered by field', () => {
+  const payload = buildSlackPayload({
+    status: 'success',
+    actor: 'TheSaviourEking',
+    slackUsers: JSON.stringify({ TheSaviourEking: 'U012AB3CD' }),
+  });
+  // Slack shows `text` in the notification; a mention there notifies the person.
+  assert.match(payload.text, /<@U012AB3CD>/);
+  const fields = payload.blocks.flatMap((b) => b.fields ?? []);
+  const triggered = fields.find((f) => f.text.startsWith('*Triggered by:*'));
+  assert.equal(triggered.type, 'mrkdwn');
+  assert.equal(triggered.text, '*Triggered by:*\n<@U012AB3CD>');
 });

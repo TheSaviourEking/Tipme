@@ -349,7 +349,7 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
   // Likewise the profile columns that handle changes and covers add (0062, 0063), and the
-  // social links list (0074_social_links), the live-update switches (0075_live_popup_prefs), the thank-you line (0076_note_consent_and_thanks), the cover animation (0077_cover_animation), and the starting amount (0079_tip_start).
+  // social links list (0074_social_links), the live-update switches (0075_live_popup_prefs), the thank-you line (0076_note_consent_and_thanks), the cover animation (0077_cover_animation), the starting amount (0079_tip_start), and the staff Pro grant (0088_pro_periods).
   await pool.query(
     `ALTER TABLE profiles
        ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,
@@ -366,7 +366,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        ADD COLUMN thanks_signed boolean NOT NULL DEFAULT false,
        ADD COLUMN cover_animation text,
        ADD COLUMN cover_motion text,
-       ADD COLUMN tip_start_minor bigint`,
+       ADD COLUMN tip_start_minor bigint,
+       ADD COLUMN staff_pro boolean NOT NULL DEFAULT false`,
   );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
@@ -387,7 +388,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        DROP COLUMN thanks_signed,
        DROP COLUMN cover_animation,
        DROP COLUMN cover_motion,
-       DROP COLUMN tip_start_minor`,
+       DROP COLUMN tip_start_minor,
+       DROP COLUMN staff_pro`,
   );
   const payoutId = randomUUID();
   await pool.query(

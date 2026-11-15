@@ -28,6 +28,7 @@ import {
   type OpsPagePlanRequest,
   type OpsActedAlone,
   type OpsPagePricing,
+  type OpsPageProStatus,
   type OpsReasonRequest,
   type OpsSeriousPending,
   type OpsWithdrawalFreeze,
@@ -37,11 +38,14 @@ import {
   freezeWithdrawals,
   grantHandleChanges,
   opsPageByHandle,
+  opsPageProStatus,
   pagePricing,
   requestSeriousAction,
   type SeriousActionServices,
   setPagePlan,
   staffRemovePageImage,
+  staffRemoveStudioImage,
+  staffViewStudioImage,
   staffViewPageImage,
   type MailSealing,
   type PhotoStore,
@@ -193,6 +197,58 @@ export class OpsPagesController {
     return { data: { removed: changed } };
   }
 
+  /** One Page Studio photo, as staff review it (owner ruling 9): the master; audited, never cached. */
+  @Get(':profileId/studio-images/:imageId')
+  @OpsPermission('pages.suspend')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async studioImage(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('imageId') imageId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await staffViewStudioImage(
+        this.database.db,
+        {
+          staffUserId: ops.userId,
+          profileId: uuidOf(profileId),
+          imageId: uuidOf(imageId),
+        },
+        this.photos ?? undefined,
+      ),
+    );
+  }
+
+  /** Takes down one Page Studio photo: it drops out of the draft and the published page. */
+  @Post(':profileId/studio-images/:imageId/remove')
+  @HttpCode(200)
+  @OpsPermission('pages.suspend')
+  async removeStudioImage(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('imageId') imageId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ removed: boolean }>> {
+    const { handle, changed } = await staffRemoveStudioImage(this.database.db, {
+      staffUserId: ops.userId,
+      profileId: uuidOf(profileId),
+      imageId: uuidOf(imageId),
+      reason: body.reason,
+      sealing: this.sealing,
+      store: this.photos ?? undefined,
+    });
+    if (changed) {
+      this.revalidator.revalidate(handle);
+      void this.publishLive({
+        to: { profile: profileId },
+        type: 'profile.changed',
+      });
+    }
+    return { data: { removed: changed } };
+  }
+
   /** More handle changes for one page; no public effect, so nothing to refresh. */
   @Post(':handle/handle-changes')
   @HttpCode(200)
@@ -212,6 +268,19 @@ export class OpsPagesController {
         reason: body.reason,
       }),
     };
+  }
+
+  /**
+   * Paid Pro (ADR-0015): why the page is Pro (a staff grant or a paid month) and until when.
+   * Billing details, so for whoever changes plans; the page lookup itself stays public-level.
+   */
+  @Get(':profileId/pro')
+  @OpsPermission('pages.plan')
+  async pro(
+    @Param('profileId') profileId: string,
+  ): Promise<ApiDataResponse<OpsPageProStatus>> {
+    if (!UUID.test(profileId)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return { data: await opsPageProStatus(this.database.db, profileId) };
   }
 
   @Get(':profileId/pricing')

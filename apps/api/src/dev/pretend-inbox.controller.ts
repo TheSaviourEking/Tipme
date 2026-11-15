@@ -23,6 +23,17 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 
+function authorisePreviewDevRoute(
+  config: ApiConfig,
+  authorization: string | undefined,
+): void {
+  if (
+    config.DEPLOYMENT_MODE === 'preview' &&
+    !bearerMatches(authorization, config.RELEASE_CHECK_TOKEN)
+  )
+    throw new CodedHttpException(404, 'NOT_FOUND');
+}
+
 /**
  * What the pretend messenger and mailbox "sent", newest first, so codes and links can be used
  * locally and in tests. Registered only with MAIL_DEFAULT_PROVIDER=mock (refused in production).
@@ -41,11 +52,7 @@ export class PretendInboxController {
   async inbox(
     @Headers('authorization') authorization: string | undefined,
   ): Promise<ApiDataResponse<PretendMessage[]>> {
-    if (
-      this.config.DEPLOYMENT_MODE === 'preview' &&
-      !bearerMatches(authorization, this.config.RELEASE_CHECK_TOKEN)
-    )
-      throw new CodedHttpException(404, 'NOT_FOUND');
+    authorisePreviewDevRoute(this.config, authorization);
     const rows = await listPretendOutbox(this.database.db, { limit: 30 });
     return {
       data: rows.map((row) => ({
@@ -73,6 +80,7 @@ const weekSchema = z
       .optional(),
   })
   .strict();
+const weeklyBody = new ZodValidationPipe(weekSchema);
 
 /** Development only: run scheduled jobs now instead of waiting for Monday morning. */
 @Controller('v1/dev/jobs')
@@ -85,13 +93,16 @@ export class DevJobsController {
   @Post('weekly-report')
   @HttpCode(200)
   async weekly(
-    @Body(new ZodValidationPipe(weekSchema)) body: z.infer<typeof weekSchema>,
+    @Headers('authorization') authorization: string | undefined,
+    @Body() body: unknown,
   ): Promise<ApiDataResponse<{ isoWeek: string; created: number }>> {
-    const isoWeek = body.isoWeek ?? previousIsoWeek(new Date());
+    authorisePreviewDevRoute(this.config, authorization);
+    const parsed = weeklyBody.transform(body);
+    const isoWeek = parsed.isoWeek ?? previousIsoWeek(new Date());
     const { created } = await runWeeklyReports(this.database.db, {
       sealing: mailSealing(Buffer.from(this.config.MAIL_SEAL_KEY, 'base64')),
       isoWeek,
-      ...(body.handle ? { onlyHandle: body.handle } : {}),
+      ...(parsed.handle ? { onlyHandle: parsed.handle } : {}),
     });
     return { data: { isoWeek, created } };
   }

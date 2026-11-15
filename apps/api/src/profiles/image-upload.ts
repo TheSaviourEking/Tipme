@@ -102,14 +102,38 @@ export function imageVersion(profileId: string, file: string): number | null {
 }
 
 /**
+ * A page photo's PNG rendition (`<n>.png`), for the web's share cards: next/og cannot draw WebP.
+ * The version, or null for any other name.
+ */
+export function pngVersion(profileId: string, file: string): number | null {
+  const version = /^(\d{1,9})\.png$/.exec(file)?.[1];
+  return UUID.test(profileId) && version ? Number(version) : null;
+}
+
+/** The stored WebP (already re-encoded, metadata-free) as a 304×304 PNG: twice the card's face. */
+export function toSharePng(webp: Buffer): Promise<Buffer> {
+  return withSlot(() =>
+    sharp(webp, { limitInputPixels: MAX_INPUT_PIXELS })
+      .timeout({ seconds: 5 })
+      .resize(304, 304, { fit: 'cover' })
+      .png()
+      .toBuffer(),
+  );
+}
+
+/**
  * A version's URL is never reused (a new image is a new version), so it caches, but for an hour
  * only: a hidden page's image should not linger.
  */
-export function sendImage(response: Response, bytes: Buffer | null): void {
+export function sendImage(
+  response: Response,
+  bytes: Buffer | null,
+  type: 'image/webp' | 'image/png' = 'image/webp',
+): void {
   if (!bytes) throw new CodedHttpException(404, 'NOT_FOUND');
   response
     .status(200)
-    .setHeader('Content-Type', 'image/webp')
+    .setHeader('Content-Type', type)
     .setHeader('Cache-Control', 'public, max-age=3600, immutable')
     .setHeader('Content-Security-Policy', "default-src 'none'")
     .end(bytes);

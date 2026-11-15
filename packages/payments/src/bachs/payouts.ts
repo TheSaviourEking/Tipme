@@ -17,9 +17,12 @@ import {
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
 
-// Bachs charges this flat fee on top of an NGN payout and offers no same-currency quote:
-// https://docs.bachs.io/guides/payouts/payout-using-api.md ("The fee is charged on top").
-const NGN_PAYOUT_FEE_MINOR = 5000n;
+// Bachs charges a flat fee on top of an NGN payout, and nothing states it before the payout exists:
+// its payout quote "carries no fee" (docs /api-reference/payouts/create-payout-quote), and the fee
+// appears only on the created payout (fee, total_debited). The default is "NGN 50 flat"
+// (docs /for-you/fees), though "account-specific fees can differ", so this one value is what the
+// user is shown and charged up front; any difference is settled on their balance once known.
+import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
 
 // Shown on the recipient's bank statement. Without it Bachs sends its own name; keep it under
 // 15 characters: https://docs.bachs.io/guides/payouts/payout-using-api.md
@@ -154,6 +157,45 @@ const TRANSFER_REFUSALS: Readonly<
   NOT_FOUND: 'other',
   VALIDATION_ERROR: 'other',
 };
+
+// Paying for Pro from the balance (plan Task 8): the debited side is the person's own account, so
+// these are about their money, not TipMe's reserve. https://docs.bachs.io/connect/transfers.md
+const COLLECT_REFUSALS: Readonly<Record<string, PayoutFailureReason>> = {
+  ORGANIZATION_IN_DEBT: 'in_debt',
+  INSUFFICIENT_BALANCE: 'other',
+  NOT_FOUND: 'other',
+  VALIDATION_ERROR: 'other',
+};
+
+// A transfer read back (GET /v1/transfers): `status` paid once on both balances, else pending.
+const listedTransferSchema = z.object({
+  id: identifierSchema,
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().min(1).max(32),
+  transfer_group: z.string().nullable().optional(),
+});
+// The guide shows no list envelope; `items` as for payouts, or `data`.
+const transferListSchema = z.union([
+  z.object({ items: z.array(listedTransferSchema) }),
+  z.object({ data: z.array(listedTransferSchema) }),
+]);
+const TRANSFER_LIST_LIMIT = 100;
+
+const sentTransferSchema = z.object({
+  id: identifierSchema,
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().min(1).max(32),
+  destination: z.string(),
+});
+
+const collectedSchema = z.object({
+  id: identifierSchema,
+  status: z.string().min(1),
+  amount: z.string(),
+  currency: z.string().min(1).max(32),
+});
 
 /** Bachs's failure text is free-form: only ever an allowlisted reason leaves the adapter. */
 export function payoutFailureReason(text: string): PayoutFailureReason {
@@ -557,6 +599,118 @@ export function createBachsPayouts(
       )
         throw unexpected(idempotencyKey);
       return { transferRef: transfer.id };
+    },
+
+    // POST /v1/transfers AS the account (X-Account-Id), `destination: "self"`: the account's
+    // available balance moves to TipMe's own. https://docs.bachs.io/connect/transfers.md
+    async collectToPlatform(input) {
+      const account = checkedIdentifier(input.accountRef, 'account reference');
+      const idempotencyKey = checkedKey(input.idempotencyKey);
+      const amount = checkedAmount(input.amountMinor, input.currency);
+      const transfer = await moneyWrite(idempotencyKey, COLLECT_REFUSALS, () =>
+        client.request({
+          method: 'POST',
+          path: '/v1/transfers',
+          accountReference: account,
+          idempotencyKey,
+          operationReference: idempotencyKey,
+          body: {
+            destination: 'self',
+            amount,
+            currency: input.currency,
+            description: input.description ?? 'TipMe Pro',
+            // Listing can't filter by it, but every transfer returns it: the read-back finds ours.
+            transfer_group: idempotencyKey,
+          },
+          schema: collectedSchema,
+        }),
+      );
+      if (!sameMoney(transfer.amount, transfer.currency, input.amountMinor))
+        throw unexpected(idempotencyKey);
+      return {
+        transferRef: transfer.id,
+        status: transfer.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+      };
+    },
+
+    // POST /v1/transfers as the platform: TipMe's balance to an account (option B's second leg, and a
+    // refunded tip's fee going back). https://docs.bachs.io/connect/transfers.md
+    async transferToAccount(input) {
+      const account = checkedIdentifier(input.accountRef, 'account reference');
+      const idempotencyKey = checkedKey(input.idempotencyKey);
+      const amount = checkedAmount(input.amountMinor, input.currency);
+      const transfer = await moneyWrite(idempotencyKey, TRANSFER_REFUSALS, () =>
+        client.request({
+          method: 'POST',
+          path: '/v1/transfers',
+          idempotencyKey,
+          operationReference: idempotencyKey,
+          body: {
+            destination: account,
+            amount,
+            currency: input.currency,
+            description: input.description,
+            // Every transfer returns it, so the read-back finds ours among the account's.
+            transfer_group: idempotencyKey,
+          },
+          schema: sentTransferSchema,
+        }),
+      );
+      if (
+        transfer.destination !== account ||
+        !sameMoney(transfer.amount, transfer.currency, input.amountMinor)
+      )
+        throw unexpected(idempotencyKey);
+      return {
+        transferRef: transfer.id,
+        status: transfer.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+      };
+    },
+
+    // GET /v1/transfers?connected_account_id=, newest first, matched on our transfer_group.
+    async findPlatformCollection(accountRef, idempotencyKey) {
+      const account = checkedIdentifier(accountRef, 'account reference');
+      const key = checkedKey(idempotencyKey);
+      let listed: z.infer<typeof transferListSchema>;
+      try {
+        listed = await client.request({
+          method: 'GET',
+          path: `/v1/transfers?connected_account_id=${encodeURIComponent(account)}&limit=${TRANSFER_LIST_LIMIT}`,
+          schema: transferListSchema,
+        });
+      } catch (error) {
+        throw new UncertainProviderOutcomeError(
+          key,
+          'the transfers could not be read back',
+          error instanceof BachsApiError
+            ? { cause: 'http_error', httpStatus: error.statusCode }
+            : { cause: 'unreadable_response' },
+        );
+      }
+      const items = 'items' in listed ? listed.items : listed.data;
+      const ours = items.find((item) => item.transfer_group === key);
+      if (!ours) {
+        // A full page may have pushed ours off it: absence there proves nothing.
+        if (items.length >= TRANSFER_LIST_LIMIT)
+          throw new UncertainProviderOutcomeError(
+            key,
+            'too many transfers to be sure',
+            { cause: 'unexpected_shape' },
+          );
+        return null;
+      }
+      let amountMinor: bigint;
+      try {
+        amountMinor = decimalToMinor(ours.amount, ours.currency);
+      } catch {
+        throw unexpected(key);
+      }
+      return {
+        transferRef: ours.id,
+        status: ours.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+        amountMinor,
+        currency: ours.currency,
+      };
     },
 
     // POST /v1/balance_settings with X-Account-Id. A schedule is set per currency:

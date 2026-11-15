@@ -66,7 +66,15 @@ function liveReleaseStub(): Promise<{ origin: string; close: () => void }> {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          data: { paymentProvider: 'bachs-live', paymentsLive: true },
+          data: {
+            paymentProvider: 'bachs-live',
+            paymentsLive: true,
+            // Not set in admin yet (owner, 14 Nov 2026, #216): the web keeps PILOT_NOTICE=on.
+            display: {
+              pilotNotice: { set: false, on: false },
+              launch: { set: false, at: null },
+            },
+          },
         }),
       );
       return;
@@ -246,12 +254,9 @@ test.describe('live mode', () => {
     expect(await fitsViewport(live)).toBe(true);
 
     await live.goto(receipt);
-    await expect(live.locator('.tip-thanks')).toContainText(
-      /got your thanks\./,
-      {
-        timeout: 20_000,
-      },
-    );
+    await expect(live.locator('.tip-thanks')).toContainText(/got your tip\./, {
+      timeout: 20_000,
+    });
     await expect(
       live.locator('.tip-thanks').getByTestId('pilot-notice'),
     ).toHaveText(SENTENCE);

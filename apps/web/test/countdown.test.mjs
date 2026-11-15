@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   countdownAnnouncement,
   countdownParts,
+  launchIso,
+  launchLabel,
   launchMinuteBucket,
-  LAGOS_LAUNCH_LABEL,
+  launchShortLabel,
   LAGOS_LAUNCH_TARGET,
 } from '../src/lib/countdown.ts';
 
@@ -63,11 +66,59 @@ test('the announcement bucket changes at most once per remaining minute', () => 
   assert.equal(launchMinuteBucket(target, target + 1), 0);
 });
 
-test('the public target label and UTC instant describe Lagos midnight', () => {
+test('the default launch instant is Lagos midnight on 27 October', () => {
   assert.equal(LAGOS_LAUNCH_TARGET, '2026-10-26T23:00:00Z');
-  assert.equal(LAGOS_LAUNCH_LABEL, '27 October 2026 · 00:00 WAT');
   assert.equal(
     Date.parse(LAGOS_LAUNCH_TARGET),
     Date.parse('2026-10-27T00:00:00+01:00'),
   );
+  assert.equal(
+    launchLabel(Date.parse(LAGOS_LAUNCH_TARGET)),
+    '27 October 2026 · 00:00 WAT',
+  );
+});
+
+test('launchLabel writes the Lagos date and time', () => {
+  assert.equal(
+    launchLabel(Date.parse('2026-10-26T23:00:00Z')),
+    '27 October 2026 · 00:00 WAT',
+  );
+  assert.equal(
+    launchLabel(Date.parse('2027-01-15T08:30:00Z')),
+    '15 January 2027 · 09:30 WAT',
+  );
+  // Crosses the year in Lagos, not in UTC.
+  assert.equal(
+    launchLabel(Date.parse('2026-12-31T23:30:00Z')),
+    '1 January 2027 · 00:30 WAT',
+  );
+});
+
+test('launchShortLabel drops the year', () => {
+  assert.equal(
+    launchShortLabel(Date.parse('2026-10-26T23:00:00Z')),
+    '27 October · 00:00 WAT',
+  );
+  assert.equal(
+    launchShortLabel(Date.parse('2027-01-15T08:30:00Z')),
+    '15 January · 09:30 WAT',
+  );
+});
+
+test('launchIso gives the machine-readable instant for <time datetime>', () => {
+  assert.equal(
+    launchIso(Date.parse('2027-01-15T09:30:00+01:00')),
+    '2027-01-15T08:30:00.000Z',
+  );
+});
+
+test('no fixed launch label is left in the page or its card', () => {
+  for (const file of [
+    '../src/app/coming-soon/page.tsx',
+    '../src/app/coming-soon/opengraph-image.tsx',
+  ]) {
+    const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /27 October/, file);
+    assert.doesNotMatch(source, /LAGOS_LAUNCH_LABEL/, file);
+  }
 });

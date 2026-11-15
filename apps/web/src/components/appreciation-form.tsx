@@ -27,6 +27,7 @@ import type { PaymentMode } from '@/lib/payment-mode';
 import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 import { TipAction } from './tip-action';
+import { campaignFromPath } from '@/lib/campaign-link';
 
 type QuoteState =
   | { kind: 'idle' }
@@ -107,7 +108,13 @@ export function AppreciationForm({
    * carries the membership as a label the server checks (and ignores when it no longer holds), and
    * this tab remembers the business for "Tip {name} again", only with the supporter's opt-in.
    */
-  business?: { memberId: string; name: string; slug: string };
+  business?: {
+    memberId: string;
+    name: string;
+    slug: string;
+    /** The split agreed with the business (R2-C2), told before paying. */
+    share?: { personKeepsPercent: number; businessPercent: number };
+  };
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -135,6 +142,17 @@ export function AppreciationForm({
   // when the name is emptied, so a new name always asks again.
   const [recognise, setRecognise] = useState(false);
   const [error, setError] = useState('');
+  // The minimum, said quietly while typing (public-boards PR 9, Q1): only after a 700 ms pause, so
+  // typing 2,000 through 2, 20 and 200 is never scolded. Not on blur: a hint appearing as the
+  // field loses focus to the Tip key would move the key under the pointer mid-click.
+  // The typed text at the last pause: any keystroke after it means typing again.
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const typingPaused = pausedAt === custom;
+  useEffect(() => {
+    if (!custom) return;
+    const timer = window.setTimeout(() => setPausedAt(custom), 700);
+    return () => window.clearTimeout(timer);
+  }, [custom]);
   // The optional details stay mounted when closed, so what was typed survives closing.
   const [extrasOpen, setExtrasOpen] = useState(false);
   const [messageError, setMessageError] = useState('');
@@ -169,6 +187,7 @@ export function AppreciationForm({
   const form = useRef<HTMLFormElement>(null);
   const onProfile = surface === 'profile';
 
+  const minimumRule = `Enter an amount of ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`;
   const amount =
     selection === 'other'
       ? options.parse(custom)
@@ -180,7 +199,7 @@ export function AppreciationForm({
     setQuote({ kind: 'loading', amount: minor });
     // A read: a dropped connection is tried once more, quietly.
     const { result } = await sendWithOneRetry('tip-quote', () =>
-      quoteTip(handle, minor),
+      quoteTip(handle, minor, business?.memberId),
     );
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
@@ -251,7 +270,7 @@ export function AppreciationForm({
     if (!amount) {
       setError(
         selection === 'other'
-          ? `Enter an amount of ${options.rangeText}, like ${presets[0]?.label ?? '1,000'} or 2,500.50.`
+          ? minimumRule
           : 'Choose an amount or enter your own.',
       );
       if (selection === 'other') customField.current?.focus();
@@ -312,6 +331,8 @@ export function AppreciationForm({
       }
     }
     const key = draftKey.current;
+    const campaign =
+      surface === 'profile' ? campaignFromPath(location.pathname) : undefined;
     // The same key and body: the API replays the original tip for it (intents.ts), so the quiet
     // second try can never start a second tip.
     const body = {
@@ -325,6 +346,8 @@ export function AppreciationForm({
         ? { celebrationMomentId: celebration.momentId }
         : {}),
       ...(business ? { businessMemberId: business.memberId } : {}),
+      // Campaign Studio: the link ending this page was opened from (never shown to the supporter).
+      ...(campaign ? { campaign } : {}),
     };
     const { result } = await sendWithOneRetry('tip-intent', () =>
       createTip(key, body),
@@ -480,6 +503,12 @@ export function AppreciationForm({
   // lights up (states plan, Task 9). A mistyped one gets the line alone.
   const belowMinimum =
     selection === 'other' && Boolean(error) && options.belowMinimum(custom);
+  // The same words as the error, as a hint (not an alert, no red edge) until Tip is pressed.
+  const minimumHint =
+    selection === 'other' &&
+    !error &&
+    typingPaused &&
+    options.belowMinimum(custom);
   const extras = (
     <>
       <div className="tm-field">
@@ -608,11 +637,26 @@ export function AppreciationForm({
   // focus and takes a live region with it. So the words are read from one hidden region outside
   // the bar, and the visible copies stay out of the accessibility tree. Try again stays in it.
   const shownOnly = onProfile ? ({ 'aria-hidden': true } as const) : {};
+  // The page's split first; a quote's own (the server's word at quote time) replaces it.
+  const disclosed =
+    shown.kind === 'ready' && shown.quote.share
+      ? shown.quote.share
+      : business?.share
+        ? { ...business.share, businessName: business.name }
+        : null;
   const quoteArea = (
     <div
       className="tip-quote"
       {...(onProfile ? {} : { 'aria-live': 'polite' })}
     >
+      {/* Business release 2 (Q9): the agreed share is told before paying, in words, never by
+          colour alone. Only the quote from the server says it. */}
+      {disclosed && (
+        <p className="tip-quote__share" data-testid="tip-share">
+          Of what {recipient} receives, they keep {disclosed.personKeepsPercent}
+          % and {disclosed.businessPercent}% goes to {disclosed.businessName}.
+        </p>
+      )}
       {shown.kind === 'failed' && (
         <div className="tip-quote__failed">
           <p className="tm-field-error" {...shownOnly}>
@@ -748,9 +792,15 @@ export function AppreciationForm({
             setCustom(event.target.value);
             setError('');
           }}
+          aria-describedby={minimumHint ? `${id}-minimum` : undefined}
           error={selection === 'other' && error ? error : undefined}
           flag={belowMinimum ? `below ${options.minLabel}` : ''}
         />
+        {minimumHint && (
+          <p id={`${id}-minimum`} className="tm-hint tip-minimum-hint">
+            {minimumRule}
+          </p>
+        )}
         {onProfile ? (
           <p className="tip-quote-live sr-only" aria-live="polite">
             {shown.kind === 'failed' ? shown.message : ''}

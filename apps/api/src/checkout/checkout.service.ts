@@ -18,6 +18,7 @@ import {
   markAttemptUnknown,
   markAttemptInitiated,
   OperationError,
+  featureOn,
 } from '@tipme/database';
 import {
   BachsApiError,
@@ -134,10 +135,14 @@ export class CheckoutService {
     await this.refuseWhileClosed(async () =>
       pageHandleOf(this.database.db, request.handle),
     );
+    const sharesOn = request.businessMemberId ? await this.sharesOn() : false;
     const result = await createQuote(this.database.db, {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
       currency: request.currency,
+      ...(sharesOn && request.businessMemberId
+        ? { businessMemberId: request.businessMemberId, sharesOn: true }
+        : {}),
     });
     const { breakdown } = result;
     return {
@@ -153,7 +158,26 @@ export class CheckoutService {
       expiresAt: result.expiresAt.toISOString(),
       feePolicyVersion: result.feePolicyVersion,
       feeFree: result.feeFree,
+      ...(result.share
+        ? {
+            share: {
+              businessPercent: result.share.businessBps / 100,
+              personKeepsPercent: 100 - result.share.businessBps / 100,
+              businessName: result.share.businessName,
+            },
+          }
+        : {}),
     };
+  }
+
+  /** Business release 2: shares need both switches; off, nothing about a share is read or fixed. */
+  private async sharesOn(): Promise<boolean> {
+    const { db } = this.database;
+    const [business, shares] = await Promise.all([
+      featureOn(db, 'business'),
+      featureOn(db, 'business_shares'),
+    ]);
+    return business && shares;
   }
 
   /** Creates or replays an intent, keeping external writes tied to one durable attempt claim. */
@@ -165,6 +189,11 @@ export class CheckoutService {
       quoteHandleOf(this.database.db, request.quoteId),
     );
     const { db } = this.database;
+    const [recognitionOn, businessOn, sharesOn] = await Promise.all([
+      featureOn(db, 'supporter_recognition'),
+      featureOn(db, 'business'),
+      featureOn(db, 'business_shares'),
+    ]);
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
       idempotencyKey,
@@ -174,11 +203,14 @@ export class CheckoutService {
       celebrationMomentId: request.celebrationMomentId,
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
-      recognitionOn: this.config.SUPPORTER_RECOGNITION,
+      recognitionOn,
+      // Campaign Studio: which campaign link the page was opened from; ignored when not one.
+      ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).
-      ...(this.config.BUSINESS_ENABLED && request.businessMemberId
+      ...(businessOn && request.businessMemberId
         ? { businessMemberId: request.businessMemberId }
         : {}),
+      ...(businessOn && sharesOn ? { sharesOn: true } : {}),
     });
     const start = await findAttemptStart(db, intent.attemptId);
     if (!start) throw new OperationError('ATTEMPT_NOT_FOUND');

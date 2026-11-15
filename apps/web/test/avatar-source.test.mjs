@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { avatarSource } from '../src/lib/avatar-source.ts';
+import { avatarSource, businessLogoSource } from '../src/lib/avatar-source.ts';
 
 test('an uploaded photo is served by the API; the demo illustrations by the web app', () => {
   assert.deepEqual(
@@ -45,4 +45,21 @@ test('an uploaded photo is served by the API; the demo illustrations by the web 
     avatarSource('javascript:alert(1)', 'Ada', 'https://api.example.test'),
     null,
   );
+});
+
+test('a business logo is only ever the API’s logo address; anything else is the initial', () => {
+  const api = 'https://api.example.test';
+  assert.equal(
+    businessLogoSource('/v1/business-logos/abc-1/2.webp', api),
+    'https://api.example.test/v1/business-logos/abc-1/2.webp',
+  );
+  for (const path of [
+    undefined,
+    null,
+    '',
+    '/v1/avatars/abc/2.webp',
+    'https://evil.example/v1/business-logos/abc/2.webp',
+    '/v1/business-logos/abc/2.svg',
+  ])
+    assert.equal(businessLogoSource(path, api), null, String(path));
 });

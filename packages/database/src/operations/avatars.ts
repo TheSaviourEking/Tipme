@@ -3,7 +3,12 @@ import type { MyProfile } from '@tipme/contracts';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
-import { profileAvatars, profileCovers, profiles } from '../schema.js';
+import {
+  businessLogos,
+  profileAvatars,
+  profileCovers,
+  profiles,
+} from '../schema.js';
 import { guarded } from './errors.js';
 import {
   lockLivePage,
@@ -139,7 +144,7 @@ export function avatarFor(
 }
 
 /**
- * Moves page photos and covers still kept in Postgres to the object store (once, when R2 is
+ * Moves page photos, covers and business logos still kept in Postgres to the object store (once, when R2 is
  * switched on). Returns how many moved.
  */
 export function movePhotosToStore(
@@ -149,7 +154,8 @@ export function movePhotosToStore(
   return guarded(
     async () =>
       (await moveRowsToStore(db, store, profileAvatars, 'avatars')) +
-      (await moveRowsToStore(db, store, profileCovers, 'covers')),
+      (await moveRowsToStore(db, store, profileCovers, 'covers')) +
+      (await moveRowsToStore(db, store, businessLogos, 'logos')),
   );
 }
 

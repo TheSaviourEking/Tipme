@@ -7,10 +7,17 @@ import {
 } from '@tipme/contracts';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { paymentAttempts, profiles, tipMessages, tips } from '../schema.js';
+import {
+  businessMembers,
+  paymentAttempts,
+  profiles,
+  tipMessages,
+  tips,
+} from '../schema.js';
 import { noteWindowStart } from './business-notes.js';
 import { guarded } from './errors.js';
 import { tipIsRecognised } from './supporters.js';
+import { paidTipRefund } from './tip-refunds.js';
 
 /** After this long without an answer the supporter is told we are still checking. */
 export const CHECKING_AFTER_MS = 2 * 60 * 1000;
@@ -38,6 +45,9 @@ export function tipStatusView(
         displayName: profiles.displayName,
         plan: profiles.plan,
         pageStatus: profiles.status,
+        pageState: profiles.pageState,
+        avatarPath: profiles.avatarPath,
+        showPhoto: businessMembers.showPhoto,
         thanksLine: profiles.thanksLine,
         thanksStyle: profiles.thanksStyle,
         thanksSigned: profiles.thanksSigned,
@@ -45,6 +55,7 @@ export function tipStatusView(
       })
       .from(tips)
       .innerJoin(profiles, eq(profiles.id, tips.profileId))
+      .leftJoin(businessMembers, eq(businessMembers.id, tips.businessMemberId))
       .where(eq(tips.id, tipId));
     if (!tip) return null;
     let state: TipStatusState;
@@ -137,9 +148,25 @@ export function tipStatusView(
             tip.completedAt.getTime() >= noteWindowStart(now).getTime(),
         };
     }
+    // The photo follows the same rules as the public page and the photo route (avatarFor): only
+    // while the page is live and not paused, and, for a tip made at a business, only if the person
+    // shows their photo there. A removed photo has no path, so it never shows.
+    const photo =
+      tip.avatarPath &&
+      tip.pageState === 'live' &&
+      tip.pageStatus === 'active' &&
+      tip.showPhoto !== false
+        ? tip.avatarPath
+        : null;
+    // A refund TipMe made (owner, 14 Nov 2026), once the partner confirmed it.
+    const refund = state === 'paid' ? await paidTipRefund(db, tipId) : null;
     return {
       state,
-      recipient: { handle: tip.handle, displayName: tip.displayName },
+      recipient: {
+        handle: tip.handle,
+        displayName: tip.displayName,
+        ...(photo ? { avatarPath: photo } : {}),
+      },
       amountMinor: tip.grossMinor.toString(),
       currency: tip.currency,
       completedAt: tip.completedAt?.toISOString() ?? null,
@@ -148,6 +175,9 @@ export function tipStatusView(
       ...(thanks ? { thanks } : {}),
       ...(recognised ? { recognised: true as const } : {}),
       ...(businessNote ? { businessNote } : {}),
+      ...(refund
+        ? { refund: { refundedMinor: refund.refundedMinor.toString() } }
+        : {}),
     };
   });
 }

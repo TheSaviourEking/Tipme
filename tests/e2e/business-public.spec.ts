@@ -47,7 +47,7 @@ async function visitor(browser: Browser) {
 
 const paid = (page: Page) =>
   expect(
-    page.getByRole('heading', { name: /^.+ got your thanks\.$/ }),
+    page.getByRole('heading', { name: /^.+ got your tip\.$/ }),
   ).toBeVisible({ timeout: 20_000 });
 
 async function payOnMockCheckout(page: Page) {

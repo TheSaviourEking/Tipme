@@ -14,6 +14,8 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { tipStatus } from '@/lib/api-client';
 import { ThanksSlip } from '@/components/thanks-slip';
+import { AvatarImage } from '@/components/avatar';
+import { hasAvatar } from '@/lib/avatar-source';
 import { BusinessNote } from './business-note';
 import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
@@ -228,7 +230,9 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   const { view: tip } = screen;
   const name = tip.recipient.displayName;
-  const initial = name.charAt(0).toUpperCase();
+  const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
+  // Their photo when the API sends one (only while it is public), else their initial.
+  const photo = tip.recipient.avatarPath;
   const amount = formatNaira(Number(tip.amountMinor));
   const profile = `/@${tip.recipient.handle}`;
   const paid = tip.state === 'paid';
@@ -279,7 +283,18 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
       )}
       {paid ? (
         <div className="tip-thanks__mark" aria-hidden="true">
-          <span className="tip-thanks__initial">{initial}</span>
+          {hasAvatar(photo) ? (
+            <AvatarImage
+              className="tip-thanks__initial tip-thanks__photo"
+              src={photo}
+              name={name}
+              width={132}
+              height={132}
+              sizes="132px"
+            />
+          ) : (
+            <span className="tip-thanks__initial">{initial}</span>
+          )}
           <span className="tip-thanks__tick">✓</span>
         </div>
       ) : null}
@@ -322,7 +337,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
         )}
         {paid && (
           <>
-            <h1>{name} got your thanks.</h1>
+            <h1>{name} got your tip.</h1>
             <p>{amount}, confirmed by our payment partner.</p>
           </>
         )}
@@ -375,6 +390,12 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
               </>
             )}
           </dl>
+          {tip.refund && (
+            <p className="tip-thanks__refund" data-testid="receipt-refund">
+              Refunded {formatNaira(Number(tip.refund.refundedMinor))} (TipMe’s
+              fee is kept)
+            </p>
+          )}
           {pilotNotice}
           {celebration && (
             <aside className="tip-recognition" aria-label="Your tips">
@@ -405,24 +426,45 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
             </Button>
           )}
         </Surface>
-      ) : (
-        pilotNotice
-      )}
-      {notices}
+      ) : null}
       {paid ? (
-        <Link className="tip-thanks__own" href="/sign-up">
-          Know someone who deserves thanks too? Get your own TipMe page
-        </Link>
+        <>
+          {notices}
+          <Link className="tip-thanks__own" href="/sign-up">
+            Know someone who deserves a tip too? Get your own TipMe page
+          </Link>
+        </>
       ) : (
-        <div className="tip-status-actions">
-          {retry && (
-            <ActionLink variant="continue" href={profile}>
-              Try again
-            </ActionLink>
+        // Beside the live region on a desktop (R1), under it on a phone: the figures the page
+        // already has, then the next steps. A wrapper only; the live region above never moves.
+        <div className="tip-status-side">
+          {tip.state === 'declined' && (
+            // Decoration: the heading says it, so screen readers skip the stamp.
+            <span
+              className="tm-slip__stamp tm-slip__stamp--red tip-status-stamp"
+              aria-hidden="true"
+            >
+              Not
+              <br />
+              sent
+            </span>
           )}
-          <Button variant="secondary" onClick={() => void copyReceipt()}>
-            {copied ? 'Receipt link copied' : 'Copy receipt link'}
-          </Button>
+          <p className="tip-status-amount">{amount}</p>
+          {tip.reference && (
+            <p className="tip-status-ref">Reference {tip.reference}</p>
+          )}
+          {pilotNotice}
+          {notices}
+          <div className="tip-status-actions">
+            {retry && (
+              <ActionLink variant="continue" href={profile}>
+                Try again
+              </ActionLink>
+            )}
+            <Button variant="secondary" onClick={() => void copyReceipt()}>
+              {copied ? 'Receipt link copied' : 'Copy receipt link'}
+            </Button>
+          </div>
         </div>
       )}
     </Surface>

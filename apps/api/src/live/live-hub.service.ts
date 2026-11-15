@@ -5,6 +5,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { liveChannel, type LiveMessage } from '@tipme/contracts';
+import { invalidateFeatureSwitches } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ReadinessService } from '../health/readiness.service.js';
@@ -46,6 +47,7 @@ export function createLiveHub(o: {
   maxStreams: number;
   metrics?: Pick<LiveMetrics, 'delivered' | 'invalid'>;
   createClient?: (url: string) => SubscriberClient;
+  onSwitchesChanged?: () => void;
 }): LiveHub {
   const router: LiveRouter = createLiveRouter({
     maxPerUser: MAX_STREAMS_PER_USER,
@@ -59,6 +61,7 @@ export function createLiveHub(o: {
     },
     clearTimer: (timer) => clearTimeout(timer as NodeJS.Timeout),
     onDelivered: (type) => o.metrics?.delivered(type),
+    ...(o.onSwitchesChanged ? { onSwitchesChanged: o.onSwitchesChanged } : {}),
   });
   let subscriber: LiveSubscriber | null = null;
   let invalid = 0;
@@ -123,6 +126,8 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
       logger,
       maxStreams: config.LIVE_MAX_STREAMS,
       metrics: this.metrics,
+      // Another copy changed a switch: forget ours at once rather than within the cache's 15 s.
+      onSwitchesChanged: invalidateFeatureSwitches,
     });
     this.hub = hub;
     // Without this, closeIdleConnections never closes a stream and every stop waits out its deadline.

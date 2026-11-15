@@ -468,24 +468,6 @@ test('LIVE_UPDATES_ENABLED defaults to false; true turns it on; LIVE_MAX_STREAMS
   );
 });
 
-test('BUSINESS_SHARES_ENABLED and TEAM_TIPS_ENABLED default to false; true turns each on alone', () => {
-  const off = loadApiConfig({ ...valid, NODE_ENV: 'development' });
-  assert.equal(off.BUSINESS_SHARES_ENABLED, false);
-  assert.equal(off.TEAM_TIPS_ENABLED, false);
-  const shares = loadApiConfig({
-    ...valid,
-    NODE_ENV: 'development',
-    BUSINESS_SHARES_ENABLED: 'true',
-  });
-  assert.equal(shares.BUSINESS_SHARES_ENABLED, true);
-  assert.equal(shares.TEAM_TIPS_ENABLED, false);
-  for (const name of ['BUSINESS_SHARES_ENABLED', 'TEAM_TIPS_ENABLED'])
-    assert.throws(
-      () => loadApiConfig({ ...valid, NODE_ENV: 'development', [name]: 'yes' }),
-      new RegExp(name),
-    );
-});
-
 test('the changelog signing secret is optional, at least 32 characters, and blank means off', () => {
   const dev = { ...valid, NODE_ENV: 'development' };
   assert.equal(loadApiConfig(dev).CHANGELOG_SIGNING_SECRET, undefined);
@@ -502,5 +484,63 @@ test('the changelog signing secret is optional, at least 32 characters, and blan
   assert.throws(
     () => loadApiConfig({ ...dev, CHANGELOG_SIGNING_SECRET: 'short' }),
     /CHANGELOG_SIGNING_SECRET/,
+  );
+});
+
+// Feature switches (owner, 14 Nov 2026): set in admin. The old variables only seed the switch on the
+// first start (docs/runbooks/settings-and-switches.md), so the schema neither requires nor holds them.
+const MOVED = [
+  'PRO_BILLING_ENABLED',
+  'PRO_PAY_FROM_BALANCE',
+  'PRO_REFUNDS',
+  'PRO_AUTO_RENEW',
+  'BUSINESS_ENABLED',
+  'BUSINESS_SHARES_ENABLED',
+  'TEAM_TIPS_ENABLED',
+  'ANALYTICS_ENABLED',
+  'ADULT_PLATFORM_LINKS',
+  'SUPPORTER_RECOGNITION',
+  // Merge train 2: these never shipped as settings; each is a switch from the start.
+  'BUSINESS_PRO_ENABLED',
+  'BUSINESS_SIGNUP_ENABLED',
+  'BUSINESS_OWNERS_ENABLED',
+  // Page Studio (owner, 14 Nov 2026): the `page_studio` switch only, never a setting.
+  'PAGE_STUDIO_ENABLED',
+];
+
+test('the moved switches are not settings any more: none is required or parsed', async () => {
+  const { apiConfigSchema } = await import('../dist/config.js');
+  const config = loadApiConfig({ ...valid, NODE_ENV: 'development' });
+  for (const name of MOVED) {
+    assert.ok(
+      !(name in apiConfigSchema.shape),
+      `${name} is still in the schema`,
+    );
+    assert.ok(!(name in config), `${name} is still parsed`);
+  }
+  assert.deepEqual(config.switchSeeds, {});
+});
+
+test('an old switch variable is kept only to seed the switch, in its own words; a bad one is refused by name', () => {
+  const dev = { ...valid, NODE_ENV: 'development' };
+  const config = loadApiConfig({
+    ...dev,
+    PRO_BILLING_ENABLED: 'true',
+    SUPPORTER_RECOGNITION: 'off',
+    BUSINESS_ENABLED: '',
+    PAGE_STUDIO_ENABLED: 'true',
+  });
+  assert.deepEqual(config.switchSeeds, {
+    PRO_BILLING_ENABLED: 'true',
+    SUPPORTER_RECOGNITION: 'off',
+    PAGE_STUDIO_ENABLED: 'true',
+  });
+  assert.throws(
+    () => loadApiConfig({ ...dev, BUSINESS_SHARES_ENABLED: 'yes' }),
+    /BUSINESS_SHARES_ENABLED/,
+  );
+  assert.throws(
+    () => loadApiConfig({ ...dev, PRO_REFUNDS: 'true' }),
+    /PRO_REFUNDS/,
   );
 });

@@ -6,6 +6,9 @@ import {
   BODY_CAP_BYTES,
   ChangelogRequestError,
   draftPayload,
+  essentialBody,
+  firstParagraph,
+  forUsersSection,
   post,
   sign,
 } from './changelog-client.mjs';
@@ -268,4 +271,91 @@ test('the client limits match the contracts', () => {
     'utf8',
   );
   assert.match(middleware, /128 \* 1024/);
+});
+
+// A big PR's body, shaped like #226's (about 31 000 characters): template headings, a comment,
+// long notes and test output, and a "For users" section in the middle.
+const BIG_BODY = [
+  '## Summary',
+  '<!-- Say what changed and why. -->',
+  'Page Studio phases 2–4: the document model, the renderer and the API, all behind page_studio.',
+  'Owners can design their page in the studio.',
+  '',
+  '## Notes',
+  ...Array.from(
+    { length: 300 },
+    (_, i) => `- note ${i}: ${'détail '.repeat(12)}`,
+  ),
+  '',
+  '## For users',
+  '<!-- One or two sentences a user would understand. -->',
+  'You can now design your page in Page Studio:',
+  'colours, fonts and layout, with a live preview.',
+  '',
+  '## Tests',
+  '```',
+  ...Array.from({ length: 200 }, (_, i) => `ok ${i} - something passes ₦`),
+  '```',
+].join('\n');
+
+test('essentialBody keeps only the first paragraph and the "For users" section', () => {
+  assert.ok(BIG_BODY.length > 30_000, `${BIG_BODY.length}`);
+  const short = essentialBody(BIG_BODY);
+  assert.equal(
+    short,
+    'Page Studio phases 2–4: the document model, the renderer and the API, all behind page_studio. Owners can design their page in the studio.\n\n## For users\nYou can now design your page in Page Studio: colours, fonts and layout, with a live preview.',
+  );
+  // No "For users" section: the paragraph alone. Nothing readable: null.
+  assert.equal(essentialBody('Why.\n\n## Notes\nlong'), 'Why.');
+  assert.equal(essentialBody('## Summary\n<!-- hint -->\n'), null);
+  assert.equal(essentialBody(''), null);
+  assert.equal(essentialBody(null), null);
+});
+
+test('draftPayload sends a big body as just the parts TipMe reads, signed over those bytes', async () => {
+  const payload = draftPayload({
+    number: 226,
+    title: 'Page Studio phases 2–4',
+    body: BIG_BODY,
+    mergeCommitSha: 'a'.repeat(40),
+    mergedAt: '2026-11-15T00:11:00Z',
+  });
+  assert.equal(payload.body, essentialBody(BIG_BODY));
+  assert.ok(Buffer.byteLength(JSON.stringify(payload)) < 1024);
+  reset({ status: 200, body: { data: { created: true } } });
+  await post(base, 'drafts', payload, FIXTURE.secret);
+  const [request] = received;
+  assert.deepEqual(JSON.parse(request.raw.toString('utf8')), payload);
+  const expected = sign(
+    FIXTURE.secret,
+    request.raw,
+    Number(request.headers['x-tipme-timestamp']) * 1000,
+  );
+  assert.equal(request.headers['x-tipme-signature'], expected.signature);
+});
+
+test("essentialBody reads the same as the full body, by the contracts' own rules", async () => {
+  const contracts = await import('../packages/contracts/dist/index.js');
+  const bodies = [
+    BIG_BODY,
+    'Why.\n\n## For users\nYou can pin a supporter note.',
+    '## For users\nOnly this.',
+    '### Summary\n\nFirst line\nsecond line\n\n#### FOR USERS  \n  You can,\n\n  now.\n## Next',
+    'Text <!-- unclosed comment\n## For users\nhidden',
+    'Lead <!-- a --> text\r\n\r\n# for users\r\nWindows lines\r\n',
+    '<!<!--x-->-- odd comment\n\n## For users\nyes',
+    '#hashtag first\n\n## For users\n#hashtag too',
+    'No sections at all, just one long line',
+  ];
+  for (const body of bodies) {
+    assert.equal(firstParagraph(body), contracts.firstParagraph(body), body);
+    assert.equal(forUsersSection(body), contracts.forUsersSection(body), body);
+    for (const title of ['feat: x', 'a'.repeat(2000)]) {
+      assert.deepEqual(
+        contracts.draftFromPullRequest({ title, body: essentialBody(body) }),
+        contracts.draftFromPullRequest({ title, body }),
+        body,
+      );
+    }
+  }
 });

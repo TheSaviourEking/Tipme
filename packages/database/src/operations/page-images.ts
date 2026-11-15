@@ -2,7 +2,12 @@ import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Database, Tx } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
-import { profileAvatars, profileCovers, profiles } from '../schema.js';
+import {
+  businessLogos,
+  profileAvatars,
+  profileCovers,
+  profiles,
+} from '../schema.js';
 import { OperationError } from './errors.js';
 
 // What page photos and covers share. Not part of the package's public surface.
@@ -55,6 +60,12 @@ export async function lockLivePage(tx: Tx, profileId: string) {
   if (!page) throw new OperationError('NO_PAGE');
 }
 
+/** A table of stored images: one row per owner (a page or a business), bytes or an object key. */
+type ImageTable =
+  typeof profileAvatars | typeof profileCovers | typeof businessLogos;
+const ownerOf = (table: ImageTable) =>
+  'businessId' in table ? table.businessId : table.profileId;
+
 /**
  * Copies one table's images from Postgres to the object store and clears them from the table,
  * one at a time: covers are too big to hold them all in memory. Each row changes only if its image
@@ -63,33 +74,34 @@ export async function lockLivePage(tx: Tx, profileId: string) {
 export async function moveRowsToStore(
   db: Database,
   store: PhotoStore,
-  table: typeof profileAvatars | typeof profileCovers,
-  prefix: 'avatars' | 'covers',
+  table: ImageTable,
+  prefix: 'avatars' | 'covers' | 'logos',
 ): Promise<number> {
-  const pages = await db
-    .select({ profileId: table.profileId })
+  const owner = ownerOf(table);
+  const owners = await db
+    .select({ id: owner })
     .from(table)
     .where(isNotNull(table.bytes));
   let moved = 0;
-  for (const { profileId } of pages) {
+  for (const { id } of owners) {
     const [row] = await db
       .select({ version: table.version, bytes: table.bytes })
       .from(table)
-      .where(and(eq(table.profileId, profileId), isNotNull(table.bytes)));
+      .where(and(eq(owner, id), isNotNull(table.bytes)));
     if (!row) continue;
-    const objectKey = `${prefix}/${profileId}/${randomUUID()}.webp`;
+    const objectKey = `${prefix}/${id}/${randomUUID()}.webp`;
     await store.put(objectKey, row.bytes!);
     const updated = await db
       .update(table)
       .set({ bytes: null, objectKey })
       .where(
         and(
-          eq(table.profileId, profileId),
+          eq(owner, id),
           eq(table.version, row.version),
           isNotNull(table.bytes),
         ),
       )
-      .returning({ profileId: table.profileId });
+      .returning({ id: owner });
     if (updated.length) moved += 1;
     else await removeObjects(store, [objectKey]);
   }

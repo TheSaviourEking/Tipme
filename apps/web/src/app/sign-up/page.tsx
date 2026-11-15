@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { Skeleton } from '@tipme/ui';
 import { AuthStage } from '@/components/account/auth-stage';
 import { ModeText } from '@/components/payment-mode-slot';
+import { ReleaseFlagsSlot } from '@/components/release-flags-slot';
 import { SignUpFlow } from './sign-up-flow';
 
 export const metadata: Metadata = {
@@ -9,17 +11,23 @@ export const metadata: Metadata = {
 };
 
 export default function SignUpPage() {
+  const todayLede = <ModeText pick="signUpLede" />;
+  // The stage's words follow the path the card is on (business sign-up), so the flow draws it.
+  // Until the flags are read, today's stage with the card still checking.
   return (
-    <AuthStage
-      title="Your page, in a minute."
-      lede={<ModeText pick="signUpLede" />}
-      promises={[
-        'No card or bank details to start',
-        'Your email stays private',
-        'Skip anything and finish later',
-      ]}
+    <ReleaseFlagsSlot
+      fallback={
+        <AuthStage title="Your page, in a minute." lede={todayLede}>
+          <Skeleton label="Checking whether you’re signed in" />
+        </AuthStage>
+      }
     >
-      <SignUpFlow />
-    </AuthStage>
+      {(flags) => (
+        <SignUpFlow
+          todayLede={todayLede}
+          businessSignup={flags.businessSignup}
+        />
+      )}
+    </ReleaseFlagsSlot>
   );
 }

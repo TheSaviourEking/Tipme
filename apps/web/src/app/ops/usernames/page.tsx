@@ -405,7 +405,7 @@ export default function UsernamesPage() {
     <div className="ops-dashboard">
       <h1>Usernames</h1>
       <p className="tm-hint">
-        A reserved username can’t be claimed at sign-up or taken by a handle
+        A reserved username can’t be claimed at sign-up or taken by a username
         change. The public sees “reserved”, exactly as for TipMe’s own words.
         Reserving and releasing happen at once, with your reason in the audit
         log. Taking a username back from a page waits for a second person when

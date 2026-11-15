@@ -436,3 +436,31 @@ the appreciation moment) is unchanged.
 
 - The empty list uses `EmptyWell` (the admin empty state), not `EmptySlip`.
 - List rows show the state as plain bold text; the entry page uses `StateLine`.
+
+## 2026-11-11 — Screen audit fixes: the receipt before it's paid, money pages, Settings, the slim footer (#191)
+
+- **Owner's approval, 11 Nov 2026** of the withdraw-and-audit plan's R1, D1, S1 and X1 (`docs/superpowers/plans/2026-11-05-withdraw-and-audit.md`; boards `TipJourney`, `ScreenTips`, `ScreenTipReport`, `ScreenDashboard`, `ScreenSettings`, `ScreenAudit`). A visual decision, not a legal, regulatory or provider approval; no D-item changes. The plan's layout proposals are built with their defaults.
+- **Receipt before it's paid (R1).** From 56rem the waiting, checking, declined and expired receipts are two columns: the live region (the same element in every state) beside the amount, reference and next steps. Declined and expired use the slip's paper and perforated edge. Declined gets a red "Not sent" stamp, `aria-hidden` and outside the live region; expired gets no stamp (no new word).
+- **Money as the instrument (D1).** Tips: one paper card per day, hairlines between rows, amounts in DM Serif, a non-paid tip's state as a `Stamp`; from 64rem a sticky column holds the totals, the CSV and the controls. Tip detail: the receipt and the note (a quoted slip) side by side, the receipt centred when there is no note. Home: the side column is at least 18rem, the week's figure in DM Serif. The tabs-or-sidebar question stays with the owner (top tabs kept).
+- **Settings (S1).** From 64rem the section list is the board's 232px and touches the content's hairline; forms are 32.5rem; the cover grid shows three across; the preview stands beside My page from 64rem (was 75rem). Settings stays one scrolling page.
+- **A slim footer inside the recipient dashboard (X1).** The © line, the test-mode note and a "Legal" nav (Privacy, Terms). Public pages keep the full footer.
+- **Missed visits.** While a payment notice shows, Home says "Your page was opened N times today, but nobody could tip you yet. It takes a few minutes to set up." (PR #31's wording). The count is distinct anonymous page visits for the Lagos day, rehearsal left out, no identities; GPC/DNT visits are never stored, and with analytics off nothing is shown. The owner's own visits are counted (open question).
+
+## 2026-11-11 — Coming soon: the date follows the launch time (#192, public PR 3)
+
+- **Owner's approval, 11 Nov 2026** (board `redesign/boards/ComingSoon.dc.html`; plan `docs/superpowers/plans/2026-11-05-public-boards.md`, PR 3). A product and visual decision, not a regulatory approval.
+- **The date line follows the launch time.** It is written in Africa/Lagos from `PRODUCTION_LAUNCH_AT` (27 October as the fallback); the share card reads it per request.
+- **The paper card is decorative** (`aria-hidden`, hidden on phones as the board draws it; Q11 default). The tiles are pressed keys in a recessed well, Seconds stays purple.
+- **Every line of copy stays.** "TipMe opens at midnight in Lagos." is unchanged even though the date now follows the launch time (Q10, open for the owner).
+
+## 2026-11-11 — QR print (#192, public PR 5)
+
+- **Owner's approval, 11 Nov 2026** (board `redesign/boards/QrPrint.dc.html`). The four proposals ship with the owner's default yes (Q13): the link printed once on the Free card; the formats as keys with a paper picture each (`aria-hidden`); a dashed 0.3 mm cut line on the receipt slip and the lock screen; the pilot notice, paused-page notice and "Needs your attention" hidden on paper. A visual decision, not a regulatory approval.
+- **The Print key stays purple, as the board draws it.** The plan's text said black (open for the owner).
+
+## 2026-11-11 — The public tip form wears the Tipper's journey materials (#192, public PR 8 and 9)
+
+- **Owner's approval, 11 Nov 2026** (board `redesign/boards/TipForm.dc.html`). A visual decision, not a regulatory approval; fees, the ₦2,000 minimum, the quote and checkout are unchanged.
+- **Materials (PR 8).** The panel is paper, the heading DM Serif, the amount keys raised, the fields and checkboxes recessed (still native inputs), the drawer a ruled row with a chevron, the Tip key a 56px black key. Scoped to `.profile-composer`: the home demo form keeps its look, and the selected key's fill stays with `AmountChoice` (and make-it-yours' accent).
+- **The minimum as a quiet hint (PR 9, Q1, built with the plan's default; needs the owner's yes).** The same words show as the Other field's hint (`tm-hint`, `aria-describedby`, no red edge, no alert) after 700 ms without typing. Not on blur, so the Tip key does not move while it is being clicked. Pressing Tip still shows the error and starts nothing.
+- **One line under the Tip key in live mode (PR 9, Q2, built with the default; needs the owner's yes).** "You pay exactly this. You’ll confirm on our partner’s page." replaces the two lines, dropping "No account needed." Test mode keeps its two lines. Proof: the form starts nothing unless the quote matches the key's amount, and the provider event must match `payerTotalMinor` or nothing is booked (`packages/database/src/operations/provider-events.ts`).

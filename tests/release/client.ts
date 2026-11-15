@@ -107,7 +107,18 @@ export async function signIn(page: Page, email: string, start = '/sign-in') {
   await page.goto(start);
   // Codes from earlier runs to the same address are not this sign-in's code.
   const seen = new Set((await codeMessages(page, email)).map((m) => m.id));
-  await page.getByLabel('Email address').fill(email);
+  // With the business_signup switch on, /sign-up first asks "What brings you to TipMe?". The
+  // release check takes the personal path, "Get tipped", as the e2e helpers do.
+  const emailField = page.getByLabel('Email address');
+  const fork = page.getByRole('radiogroup', {
+    name: 'What brings you to TipMe?',
+  });
+  await expect(emailField.or(fork)).toBeVisible();
+  if (await fork.isVisible()) {
+    await fork.getByRole('radio', { name: /^Get tipped/ }).check();
+    await page.getByRole('button', { name: 'Continue' }).click();
+  }
+  await emailField.fill(email);
   await page.getByRole('button', { name: 'Send code' }).click();
   await expect(page.getByLabel('6-digit code')).toBeVisible();
   await page.getByLabel('6-digit code').fill(await readCode(page, email, seen));

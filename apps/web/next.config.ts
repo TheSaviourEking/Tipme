@@ -79,7 +79,14 @@ const nextConfig: NextConfig = {
   // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy
   // /people/handle redirect lives in Proxy so the production launch gate runs before it.
   async rewrites() {
-    return [{ source: '/@:handle', destination: '/people/:handle' }];
+    return [
+      { source: '/@:handle', destination: '/people/:handle' },
+      // Campaign Studio: a campaign link opens the same page (people/[handle]/[campaign]).
+      {
+        source: '/@:handle/:campaign',
+        destination: '/people/:handle/:campaign',
+      },
+    ];
   },
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];

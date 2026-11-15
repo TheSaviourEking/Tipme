@@ -71,7 +71,8 @@ test('homepage makes creating a recipient page a clear next step', async ({
     page.getByRole('form', { name: 'Claim your link' }),
   ).toHaveAttribute('action', '/sign-up');
   await expect(
-    page.getByRole('main').getByRole('link', { name: 'Claim your username' }),
+    // Business sign-up is on in the e2e stack: "Get tipped".
+    page.getByRole('main').getByRole('link', { name: 'Get tipped' }),
   ).toHaveAttribute('href', '/sign-up');
   await expect(
     page.getByText(/Payments are in test mode/).last(),
@@ -87,7 +88,7 @@ test('business page invites people to create a business when businesses are on',
 }) => {
   await page.goto('/for-businesses');
   await expect(
-    page.getByRole('heading', { name: 'Let your customers thank your team.' }),
+    page.getByRole('heading', { name: 'Let your customers tip your team.' }),
   ).toBeVisible();
   await expect(page.getByRole('main')).toContainText(
     'TipMe staff check your business’s name, address and contact',
@@ -170,7 +171,7 @@ test('share cards: profiles advertise their own card, other pages the general on
 }) => {
   for (const [path, image, alt] of [
     ['/@ada', '/people/ada/share-card', 'Ada Okafor on TipMe'],
-    ['/', '/opengraph-image', 'TipMe. A little thanks goes a long way.'],
+    ['/', '/opengraph-image', 'TipMe. A little tip goes a long way.'],
   ] as const) {
     await page.goto(path);
     const ogImage = await page
@@ -219,16 +220,46 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
-test('the terms set out the 10% fee and the NGN 2,000 minimums', async ({
+test('the terms set out Free 7%, Pro 5% and the NGN 2,000 minimums', async ({
   page,
 }) => {
   await page.goto('/legal/terms');
   const fees = page.getByRole('region', { name: 'Fees' });
   await expect(fees).toContainText('you pay exactly the amount you choose');
-  await expect(fees).toContainText('TipMe keeps 10% of each tip');
-  await expect(fees).toContainText('you receive ₦4,500');
+  await expect(fees).toContainText(
+    'TipMe keeps 7% of each tip on the Free plan, or 5% on TipMe Pro',
+  );
+  await expect(fees).toContainText(
+    'From a ₦5,000 tip, you receive ₦4,650 on Free, or ₦4,750 on Pro.',
+  );
+  await expect(fees).not.toContainText('10%');
+  await expect(fees).not.toContainText('₦4,500');
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
+});
+
+// The owner, 14 Nov 2026: TipMe keeps its fee on a refund; on a chargeback TipMe bears its fee.
+test('the terms say a refund gives back the tip minus TipMe’s fee, and a chargeback costs you only what you received', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const refunds = page.getByRole('region', { name: 'Refunds and chargebacks' });
+  await expect(refunds).toContainText(
+    'the supporter gets back the tip minus TipMe’s fee. TipMe keeps its fee.',
+  );
+  await expect(refunds).toContainText(
+    'From a ₦10,000 tip, the supporter gets back ₦9,300 on Free, or ₦9,500 on Pro, and you give back what you received.',
+  );
+  await expect(refunds).toContainText(
+    'you give back only what you received from the tip. TipMe bears its own fee.',
+  );
+  await expect(refunds).toContainText(
+    'you and the business each give back what you received',
+  );
+  await expect(page.locator('main')).not.toContainText(
+    'each in proportion to the amount refunded',
+  );
+  await expect(page.locator('main')).not.toContainText(/bachs/i);
 });
 
 // The owner, 3 Nov 2026: TipMe can take a username back, with notice, days before.
@@ -330,7 +361,7 @@ test('the creator page exists as a PRD marketing route', async ({ page }) => {
   await page.goto('/for-creators');
   await expect(page).toHaveTitle(/For individuals/);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
-    'People already want to thank you.',
+    'People already want to tip you.',
   );
 });
 
@@ -395,14 +426,14 @@ test('How it works in the header glides down Home to the steps', async ({
   expect(between.size).toBeGreaterThanOrEqual(3);
 });
 
-// The ScreenSmall board. A path under a handle matches no page, so it reaches the site's own
-// "not found" screen. (/@handle itself shows the one "isn't available" screen for every page that
-// cannot be shown, so it never says whether a handle exists.)
+// The ScreenSmall board. A deeper path under a handle matches no page, so it reaches the site's own
+// "not found" screen. (/@handle, and a campaign link /@handle/<ending>, show the one "isn't
+// available" screen for every page that cannot be shown, so they never say whether a handle exists.)
 test(
   'a missing page names the handle and offers a way on',
   { tag: '@mobile' },
   async ({ page }) => {
-    await page.goto('/@tobi_s/tips');
+    await page.goto('/@tobi_s/tips/more');
     await expect(
       page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
     ).toBeVisible();
@@ -421,14 +452,14 @@ test(
 test('a missing page normalises the handle, and never echoes anything else', async ({
   page,
 }) => {
-  await page.goto('/@Tobi_S/tips');
+  await page.goto('/@Tobi_S/tips/more');
   await expect(
     page.getByRole('heading', { name: /^We can.t find @tobi_s\.$/ }),
   ).toBeVisible();
   for (const odd of [
-    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips',
-    `/@${'a'.repeat(60)}/tips`,
-    '/@ab/tips',
+    '/@%3Cscript%3Ealert(1)%3C%2Fscript%3E/tips/more',
+    `/@${'a'.repeat(60)}/tips/more`,
+    '/@ab/tips/more',
     '/nothing-here/at-all',
   ]) {
     await page.goto(odd);
@@ -438,6 +469,18 @@ test('a missing page normalises the handle, and never echoes anything else', asy
     await expect(page.locator('main')).not.toContainText('script');
     await expect(page.locator('main')).not.toContainText('aaaaaaaa');
   }
+});
+
+test('a campaign link for a page that cannot be shown looks exactly like its /@handle', async ({
+  page,
+}) => {
+  await page.goto('/@tobi_s');
+  const heading = page.getByRole('main').getByRole('heading', { level: 1 });
+  await expect(heading).toBeVisible();
+  const unavailable = await heading.textContent();
+  await page.goto('/@tobi_s/tips');
+  await expect(heading).toHaveText(unavailable ?? '');
+  await expect(page.getByRole('main')).not.toContainText('tips');
 });
 
 test('an error says it is on our side and gives a reference', async ({

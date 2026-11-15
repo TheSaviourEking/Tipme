@@ -64,10 +64,16 @@ export function Footer() {
           </nav>
         </div>
         <div className="footer-bottom">
-          <span>© 2026 TipMe. A little thanks goes a long way.</span>
+          <span>© 2026 TipMe. A little tip goes a long way.</span>
           <PaymentModeSlot>
             {(_mode, copy) => copy.footerNote && <span>{copy.footerNote}</span>}
           </PaymentModeSlot>
+          {/* Shown only in the signed-in app's slim footer (X1), where the full card is hidden;
+              elsewhere the card lists them, so this stays out of view and out of the a11y tree. */}
+          <nav aria-label="Legal" className="footer-legal">
+            <Link href="/legal/privacy">Privacy</Link>
+            <Link href="/legal/terms">Terms</Link>
+          </nav>
         </div>
       </Container>
     </footer>

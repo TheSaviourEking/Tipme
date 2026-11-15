@@ -17,7 +17,12 @@ const env = (extra: Record<string, string>) => ({
 
 export default defineConfig({
   testDir: './tests/e2e',
-  outputDir: `./${LANE.outputDir}`,
+  // The @alone stage runs after the suite in the same job (scripts/run-e2e.mjs), and Playwright
+  // empties its output folder when it starts: in a folder of its own, it leaves the suite's failure
+  // screenshots for CI to upload.
+  outputDir: process.env.E2E_ALONE
+    ? `./${LANE.outputDir}/alone`
+    : `./${LANE.outputDir}`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
@@ -107,12 +112,33 @@ export default defineConfig({
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
+        // Every photo, cover and logo upload and every cover-design save comes from 127.0.0.1, and CI
+        // runs a changed spec five times; both limits are covered by
+        // tests/integration/avatars-limit.test.mjs.
+        RATE_LIMIT_AVATARS_PER_HOUR: '10000',
+        RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '10000',
         LIVE_UPDATES_ENABLED: 'true',
         // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
         BUSINESS_ENABLED: 'true',
         // Business release 2 (R2-C1's share agreement, R2-B's Money section: only shares fill a
         // business's own balance), also off by default everywhere else.
         BUSINESS_SHARES_ENABLED: 'true',
+        // Business sign-up (Phase D): the "Get tipped" / "For businesses" fork, a business with no
+        // page, and the account-menu switcher. Seeds the business_signup switch on the lane's fresh
+        // database, as the lines above seed theirs; off by default everywhere else.
+        BUSINESS_SIGNUP_ENABLED: 'true',
+        // Paid Pro (ADR-0015): buying a month on pretend money, off by default everywhere else.
+        // tests/e2e/pro-buy.spec.ts answers the price read itself to show the "off" state.
+        PRO_BILLING_ENABLED: 'true',
+        // Campaign pages (Pro): seeds the campaign_pages switch on the lane's fresh database; off by
+        // default everywhere else.
+        CAMPAIGN_PAGES_ENABLED: 'true',
+        // Page Studio (Pro): seeds the page_studio switch on the lane's fresh database, so the Studio
+        // routes answer in the e2e stack; off by default everywhere else, and in no deploy file.
+        PAGE_STUDIO_ENABLED: 'true',
+        // Staff "Refund tip" (owner, 14 Nov 2026): seeds the tip_refunds switch on the lane's fresh
+        // database; off by default everywhere else, and in no deploy file.
+        TIP_REFUNDS: 'on',
         RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: '10000',
         RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: '10000',
         // Every page opens a stream from 127.0.0.1.

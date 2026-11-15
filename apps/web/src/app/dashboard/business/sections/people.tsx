@@ -19,6 +19,7 @@ import {
   revokeInvitation,
   searchInvitees,
 } from '@/lib/business/members-api';
+import { useBusinessLive } from '@/lib/business/use-business-live';
 
 // Business PR B3: the Business page's People section: the team per location, Remove, the open
 // invitations with Revoke, and Invite by email, one-time link or TipMe username. A business never
@@ -403,6 +404,7 @@ export function PeopleCard({ business }: { business: BusinessDetail }) {
     );
   }, [business.id]);
   useEffect(reload, [reload]);
+  useBusinessLive(reload);
 
   const locationName = (locationId?: string) =>
     business.locations.find((location) => location.id === locationId)?.name ??

@@ -3,10 +3,11 @@ import { MockWebhookController } from './mock-webhook.controller.js';
 import { WebhookService } from './webhook.service.js';
 import { BachsWebhookController } from './bachs-webhook.controller.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
+import { ProfilesModule } from '../profiles/profiles.module.js';
 import { MailModule } from '../mail/mail.module.js';
 
 @Module({
-  imports: [CheckoutModule, MailModule],
+  imports: [CheckoutModule, MailModule, ProfilesModule],
   controllers: [MockWebhookController, BachsWebhookController],
   providers: [WebhookService],
 })

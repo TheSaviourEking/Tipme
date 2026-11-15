@@ -51,6 +51,8 @@ export default async function BusinessLocationPage({
           name={page.business.name}
           location={page.location.name}
           titleLevel="h1"
+          onToday={page.people.some((person) => person.onShift)}
+          logoPath={page.business.logoPath}
         />
         <p className="business-public__ask">
           Who served you? Tap their name to tip them. The tip goes to them.

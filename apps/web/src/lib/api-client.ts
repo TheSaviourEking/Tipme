@@ -1,5 +1,6 @@
 import type {
   ProfileReportReason,
+  PublicProPrice,
   TipIntentCreated,
   TipQuote,
   TipStatusView,
@@ -50,10 +51,20 @@ const json = (body: unknown, headers: Record<string, string> = {}) => ({
   body: JSON.stringify(body),
 });
 
-export const quoteTip = (handle: string, amountMinor: number) =>
+export const quoteTip = (
+  handle: string,
+  amountMinor: number,
+  businessMemberId?: string,
+) =>
   call<TipQuote>(
     '/v1/tip-quotes',
-    json({ handle, amountMinor: String(amountMinor), currency: 'NGN' }),
+    json({
+      handle,
+      amountMinor: String(amountMinor),
+      currency: 'NGN',
+      // A tip at a business: its share, if one is agreed, comes back on the quote.
+      ...(businessMemberId ? { businessMemberId } : {}),
+    }),
   );
 
 /** One idempotency key per draft: a retry or double tap with it can never create a second tip. */
@@ -116,11 +127,18 @@ export const mockCheckoutSummary = (reference: string) =>
     {},
   );
 
-export const mockCheckoutPay = (reference: string, outcome: string) =>
+export const mockCheckoutPay = (
+  reference: string,
+  outcome: string,
+  method?: 'card' | 'bank_transfer',
+) =>
   call<{ returnUrl: string }>(
     `/v1/mock-provider/checkout/${encodeURIComponent(reference)}`,
-    json({ outcome }),
+    json(method ? { outcome, method } : { outcome }),
   );
+
+/** Paid Pro: the price staff set, and whether buying is open on this copy. 404: no price yet. */
+export const proPrice = () => call<PublicProPrice>('/v1/pro/price', {});
 
 /** Reporting a page (PR-013): a reason from the list only. The API answers the same either way. */
 export const reportPage = (handle: string, reason: ProfileReportReason) =>

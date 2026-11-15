@@ -6,6 +6,11 @@ import { API_ORIGIN, WEB_ORIGIN } from './stack';
 // Free and Pro (PR-012): staff make a page Pro, the recipient chooses their own amounts and
 // minimum, and supporters see the exact amount they will pay.
 
+// A route handler still running when a test ends (a live re-read mid route.fetch()) must not fail it.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test('staff make a page Pro, the recipient chooses amounts, and supporters see them', async ({
   page,
   browser,
@@ -21,7 +26,7 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
   const staff = await (await browser.newContext()).newPage();
   await enrolOwner(staff, testInfo);
   await staff.getByRole('link', { name: 'Pages' }).click();
-  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await staff.getByRole('button', { name: 'Make Pro…' }).click();
   await staff
@@ -67,7 +72,7 @@ test('staff make a page Pro, the recipient chooses amounts, and supporters see t
   await visitor.getByRole('radio', { name: '2,000 NGN' }).click();
   await expect(visitor.locator('.tip-breakdown')).toHaveCount(0);
   await visitor.getByLabel(/^Other amount/).fill('1500');
-  await visitor.getByRole('button', { name: /^Tip/ }).click();
+  await visitor.getByRole('button', { name: /^Tip\b/ }).click();
   await expect(
     visitor.getByText(/Enter an amount of NGN 2,000 or more/),
   ).toBeVisible();
@@ -81,12 +86,12 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
   const { handle } = await signUpRecipient(page, testInfo);
   await page.goto('/dashboard/settings');
   await expect(
-    page.getByText('Handle changes are part of TipMe Pro'),
+    page.getByText('Username changes are part of TipMe Pro'),
   ).toBeVisible();
-  await expect(page.getByLabel('Handle')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Change handle' })).toHaveCount(
-    0,
-  );
+  await expect(page.getByLabel('Username')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'Change username' }),
+  ).toHaveCount(0);
 
   const staff = await makePagePro(browser, handle, testInfo);
   await page.reload();
@@ -94,8 +99,8 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
 
   // Cancelling changes nothing, and focus goes back where it was.
   const first = `${handle}_a`;
-  await page.getByLabel('Handle').fill(`@${first.toUpperCase()}`);
-  const change = page.getByRole('button', { name: 'Change handle' });
+  await page.getByLabel('Username').fill(`@${first.toUpperCase()}`);
+  const change = page.getByRole('button', { name: 'Change username' });
   await change.click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`@${first}`);
@@ -110,10 +115,10 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
   await expect(change).toBeFocused();
   await expect(page.getByText('3 changes left')).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel('Handle')).toHaveValue(handle);
+  await expect(page.getByLabel('Username')).toHaveValue(handle);
 
   // Escape cancels too, and the page stays where it was scrolled to.
-  await page.getByLabel('Handle').fill(first);
+  await page.getByLabel('Username').fill(first);
   // Bring the button into view first: with the cards above it the click would scroll the page itself.
   await change.scrollIntoViewIfNeeded();
   const scrolled = await page.evaluate(() => scrollY);
@@ -149,14 +154,14 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
 
   // The next two, the last one saying so.
   const second = `${handle}_b`;
-  await page.getByLabel('Handle').fill(second);
+  await page.getByLabel('Username').fill(second);
   await change.click();
   await expect(dialog).toContainText('1 change left');
   await dialog.getByRole('button', { name: 'Yes, change it' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByText('1 change left')).toBeVisible();
   // Switching back to an old handle counts.
-  await page.getByLabel('Handle').fill(first);
+  await page.getByLabel('Username').fill(first);
   await change.click();
   await expect(dialog).toContainText('no changes left');
   await dialog.getByRole('button', { name: 'Yes, change it' }).click();
@@ -167,13 +172,13 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
   // At the limit the form is replaced by how to reach the team.
   await expect(
     page.getByText(
-      'You’ve used all your handle changes. Contact the TipMe team to change it again.',
+      'You’ve used all your username changes. Contact the TipMe team to change it again.',
     ),
   ).toBeVisible();
   await expect(
     page.getByRole('link', { name: 'Contact the TipMe team' }),
   ).toHaveAttribute('href', 'mailto:support@usetipme.xyz');
-  await expect(page.getByLabel('Handle')).toHaveCount(0);
+  await expect(page.getByLabel('Username')).toHaveCount(0);
   // The Saved line fades in (motion is allowed here): check contrast once it has settled, not
   // part-way through the fade.
   await page
@@ -184,16 +189,16 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
   await expectAccessible(page);
 
   // Staff allow one more, with a reason.
-  await staff.getByLabel('Handle').fill(first);
+  await staff.getByLabel('Username').fill(first);
   await staff.getByRole('button', { name: 'Find page' }).click();
-  await expect(staff.getByText('Handle changes: 3 of 3 used')).toBeVisible();
+  await expect(staff.getByText('Username changes: 3 of 3 used')).toBeVisible();
   await staff.getByLabel('More changes to allow').fill('1');
   await staff
     .locator('form', { has: staff.getByLabel('More changes to allow') })
     .getByLabel('Reason')
     .fill('Changed their business name, confirmed by support');
   await staff.getByRole('button', { name: 'Allow more changes' }).click();
-  await expect(staff.getByText('Handle changes: 3 of 4 used')).toBeVisible();
+  await expect(staff.getByText('Username changes: 3 of 4 used')).toBeVisible();
   await expectAccessible(staff);
   await page.reload();
   await expect(page.getByText('1 change left')).toBeVisible();
@@ -207,8 +212,8 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   const { handle } = await signUpRecipient(page, testInfo);
   await makePagePro(browser, handle, testInfo);
   await page.goto('/dashboard/settings');
-  const field = page.getByLabel('Handle');
-  const change = page.getByRole('button', { name: 'Change handle' });
+  const field = page.getByLabel('Username');
+  const change = page.getByRole('button', { name: 'Change username' });
   const dialog = page.getByRole('dialog');
   const confirm = dialog.getByRole('button', { name: 'Yes, change it' });
   const wanted = `${handle}_x`;
@@ -248,7 +253,7 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await refuse('HANDLE_TAKEN', 409);
   await attempt();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByText('That handle is taken.')).toBeVisible();
+  await expect(page.getByText('That username is taken.')).toBeVisible();
   await expect(field).toBeFocused();
   await expect(page.getByText('3 changes left')).toBeVisible();
   await page.unroute(handleUrl);
@@ -302,7 +307,7 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await page.unroute(handleUrl);
 
   // Used up elsewhere: the card swaps, says why, and focus lands on its heading.
-  const heading = page.getByRole('heading', { name: 'Your handle' });
+  const heading = page.getByRole('heading', { name: 'Your username' });
   const profileWith = (changes: Record<string, unknown>) =>
     page.route(profileUrl, async (route) => {
       const response = await route.fetch();
@@ -353,12 +358,14 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await expect(dialog).toHaveCount(0);
   await expect(
     page.getByRole('alert').filter({
-      hasText: 'You’ve used all your handle changes.',
+      hasText: 'You’ve used all your username changes.',
     }),
   ).toBeVisible();
   await expect(heading).toBeFocused();
-  await page.unroute(profileUrl);
-  await page.unroute(handleUrl);
+  // A late re-read can still be inside the profile handler, between route.fetch() and fulfill.
+  // unroute() would let that request go to the network under it, and the handler's fulfill would
+  // throw "Route is already handled!": so wait for handlers in flight, then drop both routes.
+  await page.unrouteAll({ behavior: 'wait' });
 
   // Pro ended elsewhere, likewise.
   // The dashboard reads the profile on load and again when its live stream connects (the
@@ -383,7 +390,7 @@ test('changing a handle fails honestly: the screen shows what is true, and focus
   await expect(dialog).toHaveCount(0);
   await expect(
     page.getByRole('alert').filter({
-      hasText: 'Handle changes are part of TipMe Pro',
+      hasText: 'Username changes are part of TipMe Pro',
     }),
   ).toBeVisible();
   await expect(heading).toBeFocused();
@@ -398,7 +405,21 @@ test('the Plan section lists card styles and a signature among Pro features', as
   await expect(pro.getByRole('listitem')).toContainText([
     'Card styles and your signature on your thank-you',
   ]);
-  await expect(pro).not.toContainText('₦');
+  // Built in the Pro train (#188), so the plan names them.
+  for (const built of [
+    /Earnings analytics/,
+    /Campaigns/,
+    /monthly recap/i,
+    /Priority support/,
+  ])
+    await expect(
+      pro.getByRole('listitem').filter({ hasText: built }),
+      String(built),
+    ).toHaveCount(1);
+  await expect(pro).not.toContainText(/Repeat supporters|Early access/i);
+  await expect(pro).not.toContainText(/Coming(?! soon to buy)/);
+  // The only amount is the server's price (paid Pro, ADR-0015), never a number of the page's own.
+  await expect(pro).toContainText('₦5,000 a month');
 });
 
 // Live updates, PR 2 (plan Task 13): an open dashboard follows a change made elsewhere. 5 s is

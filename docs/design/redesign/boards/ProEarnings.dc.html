@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Earnings analytics</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&amp;family=Manrope:wght@400;500;600;700;800&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#000}a:hover{color:#4d16a8}
+.board{width:1840px;min-height:2700px;box-sizing:border-box;background:#e9e6df;font-family:Manrope,Arial,sans-serif;color:#000;padding:48px 56px}
+.bh1{margin:0 0 6px;font:400 40px/1.08 'DM Serif Display',Georgia,serif}
+.lead{margin:0 0 28px;font-size:15px;line-height:1.55;color:#3b3934;max-width:1300px}
+.tag{display:inline-block;margin:0 6px 6px 0;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;vertical-align:middle}
+.ex{background:#dfeee0;color:#1d4d22}.pr{background:#f1e9ff;color:#4d16a8}.ow{background:#fde9c8;color:#6b3d00}
+.serif{font-family:'DM Serif Display',Georgia,serif;font-weight:400;font-variant-numeric:lining-nums}
+.frame{background:#f3f2ee;border-radius:18px;overflow:hidden;box-shadow:0 1px 1px rgba(20,18,16,.1),0 30px 50px -30px rgba(20,18,16,.5)}
+.cap{margin:0 0 10px;font-size:13px;font-weight:800;color:#3b3934}
+.side a{height:44px;padding:0 12px;display:flex;align-items:center;font-weight:600;font-size:15px;color:#5d5a54;text-decoration:none;border-radius:10px}
+.side a.on{background:#fffefa;color:#000;font-weight:700;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07)}
+.tile{background:#eeede8;border-radius:16px;padding:16px 18px;box-shadow:inset 0 1px 2px rgba(20,18,16,.08)}
+.tile .k{margin:0;font-size:13.5px;color:#5d5a54;font-weight:600}
+.tile .v{margin:6px 0 2px;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.tile .d{margin:0;font-size:13px;color:#3b3934}
+.up{color:#23623b;font-weight:700}
+.card{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;padding:22px 24px;box-shadow:0 1px 1px rgba(20,18,16,.08)}
+.seg{display:inline-flex;padding:4px;background:#eeede8;border-radius:12px}
+.seg button{height:40px;padding:0 16px;border:0;border-radius:9px;background:none;font:600 14px Manrope,Arial,sans-serif;color:#5d5a54;cursor:pointer}
+.seg button[aria-pressed="true"]{background:#fffefa;color:#000;font-weight:700;box-shadow:0 1px 2px rgba(20,18,16,.14)}
+.stat{padding:12px 0;border-top:1px solid rgba(20,18,16,.1)}
+.stat p{margin:0}
+.ins{display:flex;gap:12px;padding:14px 0;border-top:1px solid rgba(20,18,16,.1);font-size:15.5px;line-height:1.45}
+.ins svg{flex:none;margin-top:3px}
+.foot{font-size:12.5px;color:#5d5a54;line-height:1.45;margin:4px 0 0}
+.paper{background:#fffefa;border:1px solid rgba(20,18,16,.09);border-radius:22px;box-shadow:0 1px 1px rgba(20,18,16,.08),0 18px 30px -24px rgba(20,18,16,.4);padding:20px 22px}
+.paper h3{margin:0 0 6px;font:400 22px/1.15 'DM Serif Display',Georgia,serif}
+.paper li,.paper p{font-size:13.5px;line-height:1.5;color:#2c2a26}
+.paper ul{margin:6px 0 0;padding-left:18px}
+.tip{position:absolute;padding:8px 10px;border-radius:10px;background:#000;color:#fff;font-size:12.5px;line-height:1.35;white-space:nowrap;box-shadow:0 6px 14px rgba(0,0,0,.25)}
+.link{font-size:14px;font-weight:700}
+.soft{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 20px;border:1px solid rgba(20,18,16,.14);border-radius:12px;background:#fffefa;box-shadow:0 1px 1px rgba(20,18,16,.1),0 5px 14px rgba(20,18,16,.07);font:700 15px Manrope,Arial,sans-serif;color:#000;text-decoration:none}
+.pill{display:inline-flex;align-items:center;gap:.3em;padding:.3em .65em .32em .5em;border:1px solid #5d1fd0;border-radius:999px;background:linear-gradient(rgba(255,255,255,.26),transparent 48%),linear-gradient(135deg,#7a32f9,#4d16a8);color:#fff;font:800 12px/1 Manrope,Arial,sans-serif;vertical-align:middle}
+.pill svg{width:.9em;height:.9em;fill:#e6d6ff}
+</style>
+</helmet>
+<div class="board">
+  <h1 class="bh1">Earnings analytics (Pro), in the dashboard</h1>
+  <p class="lead">A new <b>Earnings</b> item in the dashboard. Everything is counted from what TipMe already holds about each confirmed tip: its amount and when it arrived. Repeat supporters come only from supporters who ticked “Let Ada recognise me next time” (built: packages/database/drizzle/0080_supporters.sql). No visitor data, so it doesn’t wait on D-07. Amounts are what the person received, after TipMe’s 10%. The chart follows today’s dashboard convention (apps/web/src/components/dashboard/trend-chart.tsx): plain bars with a text table for screen readers, here in TipMe purple, one series, one axis. Sample date Sunday 8 Nov 2026; sample numbers. <span class="tag pr">Proposed</span></p>
+
+  <div style="display:grid;grid-template-columns:1280px 390px;gap:56px;align-items:start">
+    <!-- DESKTOP PRO -->
+    <div>
+      <p class="cap">Desktop · Pro</p>
+      <div class="frame" style="display:grid;grid-template-columns:216px minmax(0,1fr)">
+        <nav aria-label="Dashboard" class="side" style="padding:26px 16px;display:flex;flex-direction:column;gap:4px;border-right:1px solid rgba(20,18,16,.09)">
+          <img src="/_blob/d918fe3c625ead77bf5c64c01378cec2" alt="TipMe" style="height:28px;width:80px;object-fit:contain;object-position:left;margin:0 0 22px 10px">
+          <a href="#">Home</a><a href="#">Tips</a><a href="#" class="on" aria-current="page">Earnings</a><a href="#">Campaigns</a><a href="#">My page</a><a href="#">My QR</a><a href="#">Settings</a>
+        </nav>
+        <main style="padding:30px 36px 36px;display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><h2 class="serif" style="margin:0;font-size:44px;line-height:1;display:flex;align-items:center;gap:12px">Earnings <span class="pill"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c.5 4.2 3.8 7.5 8 8-4.2.5-7.5 3.8-8 8-.5-4.2-3.8-7.5-8-8 4.2-.5 7.5-3.8 8-8Z"></path></svg>Pro</span></h2><a href="#" class="link">Download as CSV</a></div>
+
+          <section aria-label="So far" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+            <div class="tile"><p class="k">This week</p><p class="v">₦27,900</p><p class="d">7 tips · <span class="up">up from ₦19,800</span> last week</p></div>
+            <div class="tile"><p class="k">This month, 1–8 Nov</p><p class="v">₦31,500</p><p class="d">8 tips · <span class="up">up from ₦24,300</span> on 1–8 Oct</p></div>
+            <div class="tile"><p class="k">This year</p><p class="v">₦1,284,600</p><p class="d">298 tips · since you joined in March</p></div>
+          </section>
+
+          <section aria-labelledby="wk" class="card">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:16px"><h3 id="wk" class="serif" style="margin:0;font-size:26px">Week by week</h3><div class="seg" role="group" aria-label="Show"><button type="button" aria-pressed="true">12 weeks</button><button type="button" aria-pressed="false">12 months</button></div></div>
+            <figure style="margin:14px 0 0;position:relative">
+              <svg viewBox="0 0 720 220" width="100%" role="img" aria-label="What you received each week for the last 12 weeks. Highest: week of 19 Oct, ₦38,600. This week so far: ₦27,900." style="display:block">
+                <g font-family="Manrope, Arial, sans-serif" font-size="12" fill="#5d5a54">
+                  <line x1="56" y1="180" x2="712" y2="180" stroke="#b8b5ab" stroke-width="1"></line>
+                  <line x1="56" y1="100" x2="712" y2="100" stroke="rgba(20,18,16,.1)" stroke-width="1"></line>
+                  <line x1="56" y1="20" x2="712" y2="20" stroke="rgba(20,18,16,.1)" stroke-width="1"></line>
+                  <text x="48" y="184" text-anchor="end">₦0</text><text x="48" y="104" text-anchor="end">₦20k</text><text x="48" y="24" text-anchor="end">₦40k</text>
+                </g>
+                <g fill="#7a32f9">
+                  <path d="M66 180V111.2a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M120 180V94.4a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M174 180V105.6a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M228 180V83.6a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M282 180V100a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M336 180V62.4a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M390 180V76.8a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M444 180V47.2a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M498 180V66a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M552 180V29.6a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z" fill="#4d16a8"></path>
+                  <path d="M606 180V104.8a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z"></path>
+                  <path d="M660 180V72.4a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4V180Z" fill="#c9adff" stroke="#7a32f9" stroke-width="2" stroke-dasharray="4 3"></path>
+                </g>
+                <g font-family="Manrope, Arial, sans-serif" font-size="12" fill="#5d5a54" text-anchor="middle">
+                  <text x="84" y="200">17 Aug</text><text x="300" y="200">14 Sep</text><text x="516" y="200">12 Oct</text><text x="678" y="200" fill="#000" font-weight="700">This week</text><text x="678" y="214">so far</text>
+                </g>
+              </svg>
+              <div class="tip" style="left:480px;top:-6px">Week of 19 Oct · <b>₦38,600</b> · 9 tips</div>
+            </figure>
+            <p class="foot">Pointing at or tapping a bar shows its week (drawn on the week of 19 Oct). “Show as a table” lists every week, and screen readers get the same table. This week is drawn open, because it isn’t over.</p>
+            <a href="#" class="link" style="display:inline-block;margin-top:6px">Show as a table</a>
+          </section>
+
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start">
+            <section aria-labelledby="mo" class="card">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><h3 id="mo" class="serif" style="margin:0;font-size:26px">October 2026</h3><div style="display:flex;gap:6px"><button type="button" aria-label="September" class="soft" style="min-height:44px;width:44px;padding:0">‹</button><button type="button" aria-label="November" class="soft" style="min-height:44px;width:44px;padding:0">›</button></div></div>
+              <div class="seg" role="group" aria-label="Period" style="margin:4px 0 10px"><button type="button" aria-pressed="false">Week</button><button type="button" aria-pressed="true">Month</button><button type="button" aria-pressed="false">Year</button></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:24px">
+                <div class="stat"><p style="font-size:13.5px;color:#5d5a54;font-weight:600">Received</p><p class="serif" style="font-size:40px;line-height:1.05">₦186,300</p><p style="font-size:13px"><span class="up">Up 22%</span> on September (₦152,100)</p></div>
+                <div class="stat"><p style="font-size:13.5px;color:#5d5a54;font-weight:600">Tips</p><p class="serif" style="font-size:40px;line-height:1.05">41</p><p style="font-size:13px">37 in September</p></div>
+                <div class="stat"><p style="font-size:13.5px;color:#5d5a54;font-weight:600">Average tip</p><p style="font-size:24px;font-weight:700">₦4,544</p><p style="font-size:13px">₦4,111 in September</p></div>
+                <div class="stat"><p style="font-size:13.5px;color:#5d5a54;font-weight:600">Best day of the week</p><p style="font-size:24px;font-weight:700">Saturday</p><p style="font-size:13px">13 of 41 tips</p></div>
+              </div>
+              <p style="margin:14px 0 6px;font-size:13.5px;font-weight:700">Tips by day of the week</p>
+              <svg viewBox="0 0 420 110" width="100%" role="img" aria-label="Tips in October by day of the week: Monday 4, Tuesday 3, Wednesday 5, Thursday 4, Friday 7, Saturday 13, Sunday 5." style="display:block">
+                <line x1="0" y1="86" x2="420" y2="86" stroke="#b8b5ab"></line>
+                <g fill="#c9adff">
+                  <path d="M10 86V62.4a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                  <path d="M70 86V69.3a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                  <path d="M130 86V55.5a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                  <path d="M190 86V62.4a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                  <path d="M250 86V41.7a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                  <path d="M310 86V14.1a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z" fill="#7a32f9"></path>
+                  <path d="M370 86V55.5a4 4 0 0 1 4-4h32a4 4 0 0 1 4 4V86Z"></path>
+                </g>
+                <g font-family="Manrope, Arial, sans-serif" font-size="12" fill="#5d5a54" text-anchor="middle"><text x="30" y="104">Mon</text><text x="90" y="104">Tue</text><text x="150" y="104">Wed</text><text x="210" y="104">Thu</text><text x="270" y="104">Fri</text><text x="330" y="104" fill="#000" font-weight="700">Sat</text><text x="390" y="104">Sun</text><text x="330" y="6" fill="#000" font-weight="700">13</text></g>
+              </svg>
+            </section>
+
+            <section aria-labelledby="no" class="card">
+              <h3 id="no" class="serif" style="margin:0 0 4px;font-size:26px">In October</h3>
+              <p class="foot" style="margin:0 0 8px">Plain facts from your tips.</p>
+              <p class="ins"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="#7a32f9"></circle></svg><span>Most of your tips came on Saturdays: 13 of 41.</span></p>
+              <p class="ins"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="#7a32f9"></circle></svg><span>9 people tipped you more than once.<span class="foot" style="display:block">Counts only supporters who chose to be recognised. Others aren’t counted, so the real number may be higher.</span></span></p>
+              <p class="ins" style="border-bottom:1px solid rgba(20,18,16,.1)"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="#7a32f9"></circle></svg><span>Your average tip went from ₦4,111 in September to ₦4,544.</span></p>
+              <a href="#" class="link" style="display:inline-block;margin-top:14px">Make your October recap</a> <span class="tag pr" style="margin-left:6px">Monthly recap, ProAdditions §4</span>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- PHONE PRO -->
+    <div>
+      <p class="cap">Phone · Pro</p>
+      <div class="frame" style="width:390px;padding:20px 16px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px">
+        <h2 class="serif" style="margin:0;font-size:36px;line-height:1">Earnings</h2>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="tile" style="padding:14px"><p class="k">This week</p><p class="v" style="font-size:21px">₦27,900</p><p class="d">7 tips · <span class="up">up</span></p></div>
+          <div class="tile" style="padding:14px"><p class="k">1–8 Nov</p><p class="v" style="font-size:21px">₦31,500</p><p class="d">8 tips · <span class="up">up</span></p></div>
+          <div class="tile" style="padding:14px;grid-column:span 2"><p class="k">This year</p><p class="v" style="font-size:21px">₦1,284,600</p><p class="d">298 tips since March</p></div>
+        </div>
+        <div class="card" style="padding:16px">
+          <h3 class="serif" style="margin:0 0 8px;font-size:22px">Week by week</h3>
+          <svg viewBox="0 0 340 120" width="100%" role="img" aria-label="What you received each week for the last 12 weeks. Highest: week of 19 Oct, ₦38,600." style="display:block">
+            <line x1="0" y1="100" x2="340" y2="100" stroke="#b8b5ab"></line>
+            <g fill="#7a32f9">
+              <rect x="4" y="63.6" width="20" height="36.4" rx="4"></rect><rect x="32" y="55.2" width="20" height="44.8" rx="4"></rect><rect x="60" y="60.8" width="20" height="39.2" rx="4"></rect><rect x="88" y="49.8" width="20" height="50.2" rx="4"></rect><rect x="116" y="58" width="20" height="42" rx="4"></rect><rect x="144" y="39.2" width="20" height="60.8" rx="4"></rect><rect x="172" y="46.4" width="20" height="53.6" rx="4"></rect><rect x="200" y="31.6" width="20" height="68.4" rx="4"></rect><rect x="228" y="41" width="20" height="59" rx="4"></rect><rect x="256" y="22.8" width="20" height="77.2" rx="4" fill="#4d16a8"></rect><rect x="284" y="60.4" width="20" height="39.6" rx="4"></rect><rect x="312" y="44.2" width="20" height="55.8" rx="4" fill="#c9adff" stroke="#7a32f9" stroke-width="2" stroke-dasharray="4 3"></rect>
+            </g>
+            <g font-family="Manrope, Arial, sans-serif" font-size="11" fill="#5d5a54"><text x="4" y="116">17 Aug</text><text x="290" y="116">This week</text></g>
+          </svg>
+        </div>
+        <div class="card" style="padding:16px">
+          <h3 class="serif" style="margin:0;font-size:22px">October</h3>
+          <div style="display:grid;grid-template-columns:1fr 1fr;column-gap:14px">
+            <div class="stat"><p style="font-size:12.5px;color:#5d5a54">Received</p><p style="font-size:19px;font-weight:700">₦186,300</p><p style="font-size:12px" class="up">Up 22%</p></div>
+            <div class="stat"><p style="font-size:12.5px;color:#5d5a54">Tips</p><p style="font-size:19px;font-weight:700">41</p></div>
+            <div class="stat"><p style="font-size:12.5px;color:#5d5a54">Average tip</p><p style="font-size:19px;font-weight:700">₦4,544</p></div>
+            <div class="stat"><p style="font-size:12.5px;color:#5d5a54">Best day</p><p style="font-size:19px;font-weight:700">Saturday</p></div>
+          </div>
+          <p class="ins" style="font-size:14.5px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="#7a32f9"></circle></svg><span>Most of your tips came on Saturdays: 13 of 41.</span></p>
+          <p class="ins" style="font-size:14.5px"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="4" fill="#7a32f9"></circle></svg><span>9 people tipped you more than once.</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FREE -->
+  <h2 class="serif" style="margin:52px 0 12px;font-size:30px">On Free: the basics, and a gentle preview</h2>
+  <div style="display:grid;grid-template-columns:1000px minmax(0,1fr);gap:40px;align-items:start">
+    <div>
+      <p class="cap">Desktop · Free</p>
+      <div class="frame" style="padding:30px 36px 32px;display:flex;flex-direction:column;gap:18px">
+        <h2 class="serif" style="margin:0;font-size:44px;line-height:1">Earnings</h2>
+        <section aria-label="So far" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+          <div class="tile"><p class="k">This week</p><p class="v">₦27,900</p><p class="d">7 tips · <span class="up">up from ₦19,800</span></p></div>
+          <div class="tile"><p class="k">This month, 1–8 Nov</p><p class="v">₦31,500</p><p class="d">8 tips</p></div>
+          <div class="tile"><p class="k">All time</p><p class="v">₦1,284,600</p><p class="d">298 tips</p></div>
+        </section>
+        <section aria-labelledby="pv" class="card" style="display:grid;grid-template-columns:360px minmax(0,1fr);gap:28px;align-items:center">
+          <div style="position:relative">
+            <span style="position:absolute;top:0;left:0;padding:3px 8px;border-radius:6px;background:#eeede8;font-size:11.5px;font-weight:800;color:#3b3934">Example</span>
+            <svg viewBox="0 0 360 140" width="100%" aria-hidden="true" style="display:block">
+              <line x1="0" y1="130" x2="360" y2="130" stroke="#b8b5ab"></line>
+              <g fill="#d9d6ce"><rect x="8" y="88" width="20" height="42" rx="4"></rect><rect x="38" y="76" width="20" height="54" rx="4"></rect><rect x="68" y="84" width="20" height="46" rx="4"></rect><rect x="98" y="70" width="20" height="60" rx="4"></rect><rect x="128" y="80" width="20" height="50" rx="4"></rect><rect x="158" y="56" width="20" height="74" rx="4"></rect><rect x="188" y="64" width="20" height="66" rx="4"></rect><rect x="218" y="46" width="20" height="84" rx="4"></rect><rect x="248" y="58" width="20" height="72" rx="4"></rect><rect x="278" y="34" width="20" height="96" rx="4"></rect><rect x="308" y="82" width="20" height="48" rx="4"></rect><rect x="338" y="62" width="20" height="68" rx="4"></rect></g>
+            </svg>
+          </div>
+          <div>
+            <h3 id="pv" class="serif" style="margin:0 0 6px;font-size:26px">See how your appreciation grows</h3>
+            <p style="margin:0 0 12px;font-size:15px;line-height:1.5;color:#3b3934">With TipMe Pro: 12 weeks or 12 months at a glance, your average tip, your best day, the change on last month, and plain notes like “Most of your tips came on Saturdays.”</p>
+            <div style="display:flex;align-items:center;gap:16px"><a href="#" class="soft">See TipMe Pro</a><span style="font-size:13.5px;color:#5d5a54">₦2,500 a month</span></div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:20px">
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Free vs Pro here</h3>
+        <ul>
+          <li><b>Free:</b> this week (with the change on last week, as the dashboard shows today), this month, all time, and tip counts. Nothing taken away from today.</li>
+          <li><b>Pro:</b> the 12-week and 12-month chart, any past week, month or year, average tip, best day, change on the previous period, and the notes.</li>
+          <li>The preview is an <b>example</b> picture, never the person’s own numbers blurred: no teasing with their own data.</li>
+          <li>One preview, once per page. No pop-ups, no red dots.</li>
+        </ul>
+      </div>
+      <div class="paper">
+        <span class="tag pr">Proposed</span>
+        <h3>Rules for the numbers and notes</h3>
+        <ul>
+          <li>Only confirmed tips count. “Being confirmed” tips join when confirmed.</li>
+          <li>A period that isn’t over is compared with the <b>same days</b> of the one before (1–8 Nov against 1–8 Oct), never with a whole month.</li>
+          <li>Notes state facts and counts only: no “because”, no advice, no guesses about why. Words such as “AI”, “smart” or “predict” are never used.</li>
+          <li>A note shows only with enough tips behind it: at least 10 in the period, and the best day at least 5 tips and a quarter of them. Otherwise it is left out, not softened.</li>
+          <li>Repeat supporters count only opted-in supporters, and never name them here.</li>
+          <li>Days and weeks use Lagos time; weeks start on Monday, as the weekly report does.</li>
+          <li>When Pro ends this page shows the Free view. Nothing is deleted; it is all counted from the tips.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":2700}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

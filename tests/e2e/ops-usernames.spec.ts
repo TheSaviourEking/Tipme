@@ -63,9 +63,9 @@ test('staff reserve a name, sign-up refuses it, and staff release it', async ({
   const them = await theirs.newPage();
   const { email } = identity({ ...testInfo, workerIndex: 8 });
   await signInWithEmail(them, email, '/sign-up');
-  await them.getByLabel('Handle').fill(name);
+  await them.getByLabel('Username').fill(name);
   await expect(
-    them.getByText('That handle is reserved. Try another.'),
+    them.getByText('That username is reserved. Try another.'),
   ).toBeVisible();
 
   await checkCard(page).getByRole('button', { name: 'Release…' }).click();
@@ -81,8 +81,8 @@ test('staff reserve a name, sign-up refuses it, and staff release it', async ({
   await expect(checkCard(page).getByText('Free.')).toBeVisible();
   await expect(row).toHaveCount(0);
 
-  await them.getByLabel('Handle').fill('');
-  await them.getByLabel('Handle').fill(name);
+  await them.getByLabel('Username').fill('');
+  await them.getByLabel('Username').fill(name);
   await expect(them.getByText(`@${name} is available`)).toBeVisible();
   await theirs.close();
 });
@@ -277,7 +277,7 @@ test('two staff request and approve a take-back; the user sees the banner, choos
     has: owner.getByRole('heading', { name: 'Choose a new username' }),
   });
   const chosen = `${handle}n`;
-  await form.getByLabel('Handle').fill(chosen);
+  await form.getByLabel('Username').fill(chosen);
   await form.getByRole('button', { name: 'Choose this username' }).click();
   await expect(
     owner.getByText(`will stop working now`, { exact: false }),

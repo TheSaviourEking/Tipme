@@ -16,6 +16,7 @@ import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
 // and the worst-case pages run the same built web app against a stand-in API (profile-fixtures).
 
 const TRUST = 'No account needed. You pay exactly this amount.';
+const LIVE_LINE = 'You pay exactly this. You’ll confirm on our partner’s page.';
 const openDetails = (page: Page) =>
   page.getByText('Add a message, reason or your name').click();
 const tipButton = (page: Page) => page.getByRole('button', { name: /^Tip\b/ });
@@ -615,11 +616,16 @@ test.describe('the page in each payment state', () => {
       'position',
       'sticky',
     );
-    await expect(page.getByText(TRUST)).toBeVisible();
+    // Live mode says it in one line beside the Tip key (public-boards PR 9).
+    const line = page
+      .locator('[data-tip-panel] .composer-action__partner')
+      .getByText(LIVE_LINE);
+    await expect(line).toBeVisible();
+    await expect(page.getByText(TRUST)).toHaveCount(0);
     await expect(tipButton(page)).toHaveCSS('background-color', 'rgb(0, 0, 0)');
     // Space for the live pilot notice: the wording stays directly under the button.
     const button = await tipButton(page).boundingBox();
-    const trust = await page.getByText(TRUST).boundingBox();
+    const trust = await line.boundingBox();
     expect(trust?.y).toBeGreaterThanOrEqual(
       (button?.y ?? 0) + (button?.height ?? 0),
     );
@@ -1237,4 +1243,129 @@ test('on a short screen the footer keeps its gap below the content', async ({
     return parseFloat(style.paddingTop) + parseFloat(style.marginTop);
   });
   expect(padding).toBeGreaterThanOrEqual(40);
+});
+
+/** Computed styles of the tip panel's parts (TipForm board materials). */
+const panelLook = (page: Page) =>
+  page.evaluate(() => {
+    const css = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (!element) throw new Error(`missing ${selector}`);
+      return getComputedStyle(element);
+    };
+    const probe = document.createElement('i');
+    probe.style.backgroundColor = 'var(--surface-recessed)';
+    document.body.append(probe);
+    const recessed = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const key = document.querySelector(
+      '.profile-composer .tm-amount-choice input:not(:checked) + span',
+    );
+    const summary = document.querySelector(
+      '.profile-composer .composer-extras summary',
+    );
+    if (!key || !summary) throw new Error('missing key or summary');
+    return {
+      panelImage: css('.profile-composer .appreciation-card').backgroundImage,
+      panelShadow: css('.profile-composer .appreciation-card').boxShadow,
+      headingFont: css('.profile-composer h2').fontFamily,
+      headingWeight: css('.profile-composer h2').fontWeight,
+      keyShadow: getComputedStyle(key).boxShadow,
+      keyImage: getComputedStyle(key).backgroundImage,
+      fieldBackground: css('.profile-composer input[inputmode="decimal"]')
+        .backgroundColor,
+      fieldShadow: css('.profile-composer input[inputmode="decimal"]')
+        .boxShadow,
+      recessed,
+      submitHeight: css('.profile-composer .composer-submit').minHeight,
+      submitColour: css('.profile-composer .composer-submit').backgroundColor,
+      summaryBorder: getComputedStyle(summary).borderTopStyle,
+      chevron: getComputedStyle(summary, '::after').transform,
+    };
+  });
+
+both(
+  'the tip panel is paper, the heading DM Serif, the keys raised, the fields recessed, the Tip key black',
+  async ({ page }) => {
+    await page.goto('/@ada');
+    const panel = page.locator('.profile-composer');
+    await expect(
+      panel.getByRole('heading', { level: 2, name: 'Tip Ada' }),
+    ).toBeVisible();
+    const closed = await panelLook(page);
+    expect(closed.panelImage).toContain('linear-gradient');
+    expect(closed.panelShadow).not.toBe('none');
+    expect(closed.headingFont).toMatch(/dmSerif|DM Serif/);
+    expect(closed.headingWeight).toBe('400');
+    expect(closed.keyShadow).not.toBe('none');
+    expect(closed.keyImage).toContain('linear-gradient');
+    expect(closed.fieldBackground).toBe(closed.recessed);
+    expect(closed.fieldShadow).toContain('inset');
+    expect(Number.parseFloat(closed.submitHeight)).toBeGreaterThanOrEqual(56);
+    expect(closed.submitColour).toBe('rgb(0, 0, 0)');
+    expect(closed.summaryBorder).toBe('solid');
+    await openDetails(page);
+    await expect(panel.locator('.composer-extras')).toHaveAttribute('open', '');
+    const open = await panelLook(page);
+    // The chevron after the words turns when the drawer opens.
+    expect(open.chevron).not.toBe(closed.chevron);
+  },
+);
+
+test('the red edge still wins over the well on a refused amount', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  const field = page.locator('.profile-composer input[inputmode="decimal"]');
+  const well = await field.evaluate((el) => getComputedStyle(el).borderColor);
+  await field.fill('1500');
+  await tipButton(page).click();
+  await expect(field).toHaveAttribute('aria-invalid', 'true');
+  const refused = await field.evaluate(
+    (el) => getComputedStyle(el).borderColor,
+  );
+  expect(refused).not.toBe(well);
+});
+
+test('the checkboxes keep their keyboard behaviour and a visible focus ring', async ({
+  page,
+}) => {
+  await page.goto('/@ada');
+  await openDetails(page);
+  const remember = page.getByRole('checkbox', {
+    name: /Remember my tips on this phone/,
+  });
+  await expect(remember).not.toBeChecked();
+  // Reached by keyboard: back one stop from the Tip key.
+  await tipButton(page).focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(remember).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(remember).toBeChecked();
+  const ring = await remember.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return `${style.outlineStyle} ${style.outlineWidth}`;
+  });
+  expect(ring).not.toMatch(/^none/);
+  await page.keyboard.press('Space');
+  await expect(remember).not.toBeChecked();
+});
+
+test('forced colours: the panel, keys and wells keep an edge', async ({
+  page,
+}) => {
+  await page.emulateMedia({ forcedColors: 'active' });
+  await page.goto('/@ada');
+  const edges = await page.evaluate(() =>
+    [
+      '.profile-composer .appreciation-card',
+      '.profile-composer .tm-amount-choice span',
+      '.profile-composer input[inputmode="decimal"]',
+    ].map((selector) => {
+      const style = getComputedStyle(document.querySelector(selector)!);
+      return `${style.borderTopStyle} ${style.borderTopWidth}`;
+    }),
+  );
+  for (const edge of edges) expect(edge).toMatch(/^solid [1-9]/);
+  await expectAccessible(page, 'forced colours');
 });

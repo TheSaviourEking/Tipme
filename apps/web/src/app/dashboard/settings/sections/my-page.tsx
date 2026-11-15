@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile } from '@tipme/contracts';
-import { FEE_POLICY_V1 } from '@tipme/domain';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
@@ -16,6 +16,12 @@ import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { STANDARD_TIP_AMOUNTS } from '@/lib/tip-amounts';
 import { PHOTO_LIMIT_BYTES, photoErrors } from '@/lib/photo-errors';
+import {
+  ImagePicker,
+  PickerInitials,
+  pickerFailure,
+  type PickerOutcome,
+} from '@/components/image-picker/image-picker';
 import { shrinkPhoto } from '@/lib/shrink-photo';
 import { useSiteHost } from '@/lib/site-host';
 import { PagePreview } from './page-preview';
@@ -83,104 +89,82 @@ export function PageState() {
 
 /** The page's photo (PR-013): resized to a square and stripped of location data by TipMe. */
 export function PhotoSettings() {
-  const id = useId();
   const { profile, setProfile } = useRecipient();
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState('');
-  const chooser = useRef<HTMLInputElement>(null);
-  const refocusChooser = useRef(false);
-  // After Remove photo the button is gone, and focus would fall to the page body: it goes to the
-  // chooser instead, once that is enabled again.
-  useEffect(() => {
-    if (busy || !refocusChooser.current) return;
-    refocusChooser.current = false;
-    chooser.current?.focus();
-  }, [busy]);
-  const send = async (method: 'PUT' | 'DELETE', file?: File) => {
+  /** The chosen and positioned square, shrunk and sent; nothing is sent before Save. */
+  const save = async (picture: Blob): Promise<PickerOutcome> => {
     setBusy(true);
     setError('');
     setDone('');
     // Shrunk here first: a phone photo uploads in seconds instead of timing out.
-    const photoFile = file ? await shrinkPhoto(file) : undefined;
-    if (photoFile && photoFile.size > PHOTO_LIMIT_BYTES) {
+    const photoFile = await shrinkPhoto(picture);
+    if (photoFile.size > PHOTO_LIMIT_BYTES) {
       setBusy(false);
-      setError(photoErrors['PAYLOAD_TOO_LARGE']!);
-      return;
+      return { ok: false, message: photoErrors['PAYLOAD_TOO_LARGE']! };
     }
     const result = await apiFetch<MyProfile>('/v1/me/avatar', {
-      method,
-      ...(photoFile ? { file: photoFile } : {}),
+      method: 'PUT',
+      file: photoFile,
+    });
+    setBusy(false);
+    if (!result.ok) return pickerFailure(result.code);
+    setProfile(result.data);
+    setDone('Photo saved.');
+    return { ok: true };
+  };
+  const removePhoto = async () => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    const result = await apiFetch<MyProfile>('/v1/me/avatar', {
+      method: 'DELETE',
     });
     setBusy(false);
     if (result.ok) {
       setProfile(result.data);
-      setDone(method === 'PUT' ? 'Photo saved.' : 'Photo removed.');
-      if (method === 'DELETE') refocusChooser.current = true;
-    } else
-      setError(
-        photoErrors[result.code] ?? 'We couldn’t save that. Please try again.',
-      );
+      setDone('Photo removed.');
+    } else setError('We couldn’t remove that. Please try again.');
   };
   // An API older than PR-013 has no photos: say nothing rather than show a form that fails.
   if (!('avatarPath' in profile)) return null;
   const photo = profile.avatarPath ?? null;
+  const shown = hasAvatar(photo);
   return (
     <Card id="photo" className="settings-section">
       <h3>Your photo</h3>
       <p className="tm-hint">
-        Optional. TipMe crops it to a square and removes hidden details such as
-        where it was taken. JPEG, PNG or WebP, up to 5 MB.
+        Optional.{' '}
+        {shown
+          ? 'It shows on your page and dashboard.'
+          : 'Until you add one, your page shows your initials.'}
       </p>
-      {hasAvatar(photo) ? (
-        <Avatar src={photo} name={profile.displayName} size={96} />
-      ) : (
-        <p className="tm-hint">No photo yet: your page shows your initials.</p>
-      )}
-      <div className="tm-field">
-        <label htmlFor={`${id}-photo`}>
-          {photo ? 'Choose a new photo' : 'Choose a photo'}
-        </label>
-        <input
-          ref={chooser}
-          id={`${id}-photo`}
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={busy}
-          aria-describedby={error ? `${id}-photo-error` : undefined}
-          onChange={(event) => {
-            const file = event.target.files?.[0];
-            if (file) void send('PUT', file);
-            event.target.value = '';
-          }}
-        />
-      </div>
-      {error && (
-        <p className="tm-field-error" role="alert" id={`${id}-photo-error`}>
-          {error}
-        </p>
-      )}
-      {/* Always present, so screen readers announce what is written into it. */}
-      <p role="status" className="tm-hint">
-        {done}
-      </p>
-      {photo && (
-        <Button
-          variant="quiet"
-          disabled={busy}
-          onClick={() => void send('DELETE')}
-        >
-          Remove photo
-        </Button>
-      )}
+      <ImagePicker
+        kind="photo"
+        hasImage={Boolean(photo)}
+        tile={
+          shown ? (
+            <Avatar src={photo} name={profile.displayName} size={104} />
+          ) : (
+            <PickerInitials name={profile.displayName} />
+          )
+        }
+        limits="JPEG, PNG or WebP, up to 5 MB. TipMe crops it to a square and removes hidden details such as where it was taken."
+        onSave={save}
+        remove={{ label: 'Remove photo', onRemove: () => void removePhoto() }}
+        status={done}
+        error={error}
+        disabled={busy}
+      />
     </Card>
   );
 }
 
 const renameErrors: Record<string, string> = {
-  HANDLE_TAKEN: 'That handle is taken. Please choose another.',
-  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
-  HANDLE_CHANGE_LIMIT: 'You’ve used all your handle changes.',
+  HANDLE_TAKEN: 'That username is taken. Please choose another.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Username changes are part of TipMe Pro.',
+  HANDLE_CHANGE_LIMIT: 'You’ve used all your username changes.',
   VALIDATION_FAILED:
     'Use 3 to 30 letters, numbers or underscores, with no spaces.',
 };
@@ -301,13 +285,14 @@ export function HandleChange() {
       renameErrors[result.code] ??
         (fresh?.ok
           ? 'We couldn’t change that. Please try again.'
-          : 'We couldn’t tell whether that went through. Reload this page to see your handle.'),
+          : 'We couldn’t tell whether that went through. Reload this page to see your username.'),
     );
   };
 
   const oldHandles = previous.length > 0 && (
     <p className="tm-hint">
-      Old handles that lead here: {previous.map((old) => `@${old}`).join(', ')}
+      Old usernames that lead here:{' '}
+      {previous.map((old) => `@${old}`).join(', ')}
     </p>
   );
   const savedNotice = saved && (
@@ -326,14 +311,16 @@ export function HandleChange() {
     return (
       <Card id="handle" className="settings-section settings-handle-row">
         <h3 ref={heading} tabIndex={-1} className="sr-only">
-          Your handle
+          Your username
         </h3>
         <div>
-          <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          <p className="settings-handle-row__name">
+            Username: @{profile.handle}
+          </p>
           {/* A Free page lands here right after choosing during a take-back. */}
           {savedNotice}
           <p className="tm-hint" role={error ? 'alert' : undefined}>
-            Handle changes are part of TipMe Pro.
+            Username changes are part of TipMe Pro.
           </p>
           {oldHandles}
         </div>
@@ -345,11 +332,11 @@ export function HandleChange() {
     return (
       <Card id="handle" className="settings-section">
         <h3 ref={heading} tabIndex={-1}>
-          Your handle
+          Your username
         </h3>
         {savedNotice}
         <p role={error ? 'alert' : undefined}>
-          You’ve used all your handle changes.{' '}
+          You’ve used all your username changes.{' '}
           <a href="mailto:support@usetipme.xyz">Contact the TipMe team</a> to
           change it again.
         </p>
@@ -359,7 +346,7 @@ export function HandleChange() {
 
   return (
     <Card id="handle" className="settings-section">
-      <h3>{takeBack ? 'Choose a new username' : 'Your handle'}</h3>
+      <h3>{takeBack ? 'Choose a new username' : 'Your username'}</h3>
       {takeBack ? (
         <p className="tm-hint">
           TipMe needs @{takeBack.handle} back. Choosing a new username won’t use
@@ -372,8 +359,8 @@ export function HandleChange() {
       ) : (
         <p className="tm-hint">
           {left !== null && <strong>{changesLeft(left)}. </strong>}
-          Switching back to an old handle counts as a change. Your old links and
-          printed QR codes keep working: they lead to your new handle, and
+          Switching back to an old username counts as a change. Your old links
+          and printed QR codes keep working: they lead to your new username, and
           nobody else can take them.
         </p>
       )}
@@ -384,7 +371,7 @@ export function HandleChange() {
       >
         <InputField
           id={`${id}-handle`}
-          label="Handle"
+          label="Username"
           maxLength={31}
           autoComplete="off"
           spellCheck={false}
@@ -404,7 +391,7 @@ export function HandleChange() {
           disabled={wanted === profile.handle}
           aria-busy={busy}
         >
-          {takeBack ? 'Choose this username' : 'Change handle'}
+          {takeBack ? 'Choose this username' : 'Change username'}
         </Button>
       </form>
       {confirming && (
@@ -412,7 +399,7 @@ export function HandleChange() {
           title={
             takeBack
               ? `Make @${confirming} your new username?`
-              : `Change your handle to @${confirming}?`
+              : `Change your username to @${confirming}?`
           }
           confirm="Yes, change it"
           busy={busy}
@@ -576,7 +563,7 @@ export function TipAmountsSettings() {
     else if (result.fields?.includes('minMinor'))
       setError({
         field: 'minimum',
-        text: `The smallest tip must be at least ${formatNaira(FEE_POLICY_V1.minTipMinor)}, in whole naira.`,
+        text: `The smallest tip must be at least ${formatNaira(CURRENT_FEE_POLICY.minTipMinor)}, in whole naira.`,
       });
     else
       setError({
@@ -627,7 +614,7 @@ export function TipAmountsSettings() {
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
-          hint={`At least ${formatNaira(FEE_POLICY_V1.minTipMinor)}.`}
+          hint={`At least ${formatNaira(CURRENT_FEE_POLICY.minTipMinor)}.`}
           value={minimum}
           onChange={(e) => {
             setMinimum(e.target.value);

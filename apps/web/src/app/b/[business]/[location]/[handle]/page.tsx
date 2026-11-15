@@ -9,6 +9,7 @@ import { PageRetry } from '@/components/profile/page-retry';
 import { TipsNotReady } from '@/components/profile/tips-not-ready';
 import { TippingOpensSoon } from '@/components/tipping-opens-soon';
 import { loadStaffTipPage, withQrSource } from '@/lib/business/public-api';
+import { getDisplaySettings } from '@/lib/display-settings-api';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -64,7 +65,11 @@ export default async function BusinessStaffPage({
   const { profile, person } = page;
   const mode = await getPaymentMode();
   const copy = paymentModeCopy(mode);
-  const pilotShown = pilotNoticeShown(process.env, mode);
+  const pilotShown = pilotNoticeShown(
+    await getDisplaySettings(),
+    process.env,
+    mode,
+  );
   const opensSoon = !copy.payable || profileTippingClosed(mode, profile);
   const firstName = person.shownName;
   return (
@@ -74,6 +79,8 @@ export default async function BusinessStaffPage({
           name={page.business.name}
           location={page.location.name}
           titleLevel="p"
+          onToday={page.person.onShift}
+          logoPath={page.business.logoPath}
         />
         <h1 className="business-staff__title">
           {firstName} <span>at {page.business.name}</span>
@@ -113,6 +120,14 @@ export default async function BusinessStaffPage({
                 memberId: person.memberId,
                 name: page.business.name,
                 slug: page.business.slug,
+                ...(page.share
+                  ? {
+                      share: {
+                        personKeepsPercent: page.share.personKeepsPercent,
+                        businessPercent: page.share.businessPercent,
+                      },
+                    }
+                  : {}),
               }}
             />
           )}

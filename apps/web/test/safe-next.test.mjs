@@ -37,3 +37,9 @@ test('staff can be sent back into the admin area, and only there besides the das
   ])
     assert.equal(safeNext(other, origin), '/dashboard', other);
 });
+
+test('the Pro page sends a signed-out buyer to sign in and back to /pro, and only /pro', () => {
+  assert.equal(safeNext('/pro', origin), '/pro');
+  for (const other of ['/pro/x', '/proper', '/pro.evil', '//pro'])
+    assert.equal(safeNext(other, origin), '/dashboard', other);
+});

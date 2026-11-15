@@ -16,7 +16,11 @@ import {
   withExtractedContext,
   type DestinationStream,
 } from '@tipme/observability';
-import { configuredMailProviders, type MailProviderName } from '@tipme/mail';
+import {
+  announcementMailProvider,
+  configuredMailProviders,
+  type MailProviderName,
+} from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
 import {
   adaptPoolToServer,
@@ -33,8 +37,15 @@ import {
   mailSealing,
   pretendMailSink,
   runWeeklyReports,
+  runMonthlyRecaps,
   reconcileAttempts,
   reconcilePayouts,
+  reconcileProPurchases,
+  reconcileProCollections,
+  runShareTransfers,
+  renewProAutomatically,
+  sendProRefunds,
+  sendTipRefunds,
   sweepPayoutSetup,
   runIssueDetectors,
   lagosDaysBefore,
@@ -43,6 +54,10 @@ import {
   sweepRehearsals,
   rollupAnalytics,
   registerRealSeriousActions,
+  businessLiveAudience,
+  featureOn,
+  onFeatureSwitchReadError,
+  seedFeatureSwitches,
 } from '@tipme/database';
 import {
   createBachsProvider,
@@ -75,20 +90,41 @@ import {
   jobSignalsFor,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
+  businessTipSignals,
 } from './live-signals.js';
 import { handleWithdrawalsSwitchChanged } from './handlers/withdrawals-switch.js';
 import { handleUsernameTakeBacks } from './handlers/username-take-backs.js';
+import {
+  ANNOUNCEMENTS_TICK_MS,
+  handleAnnouncements,
+} from './handlers/announcements.js';
+import { handleProExpire, handleProReminders } from './handlers/pro.js';
 import { workerRevalidator } from './revalidate.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
+import { shareTransferKinds } from './share-transfer-kinds.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
+/**
+ * Option B: how long after a shared tip is paid before its share is first tried (a ruling: partner
+ * question (e), the settlement delay for naira charges, is still open); then it also waits until the
+ * staff member's available balance holds it. A code value, not a variable (owner, 14 Nov 2026: fewer).
+ */
+const BUSINESS_SHARE_SETTLE_MS = 48 * 3_600_000;
 const WEEKLY_REPORTS_JOB = WEEKLY_REPORTS_JOB_NAME;
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
 const REHEARSAL_SWEEP_JOB = 'rehearsals.sweep';
 const APPROVALS_EXPIRE_JOB = 'approvals.expire';
 const USERNAME_TAKE_BACKS_JOB = 'usernames.take-backs';
+// Staff announcements (14 Nov 2026): the next batch, at the configured rate.
+const ANNOUNCEMENTS_JOB = 'announcements.send';
+// Paid Pro (ADR-0015): months move on every minute; reminders every 15 minutes.
+const PRO_EXPIRE_JOB = 'pro.expire';
+const PRO_REMINDERS_JOB = 'pro.reminders';
+// Auto-renew (plan Task 10): a day before a month ends, every 15 minutes; it charges only while the
+// `pro_auto_renew` switch is on.
+const PRO_RENEW_JOB = 'pro.renew';
 const PAYOUT_SETUP_JOB = PAYOUT_SETUP_JOB_NAME;
 const PAYOUT_SETUP_INTERVAL_MS = 15 * 60_000;
 // A long sweep (a backlog, or a slow provider) must not run beside the next one. Under the interval
@@ -248,8 +284,28 @@ export async function startJobWorker(
       (config.DEPLOYMENT_MODE === 'preview' ? 'staging' : config.NODE_ENV),
     release: config.GIT_SHA,
   });
-  const analyticsEnabled =
-    config.ANALYTICS_ENABLED ?? config.NODE_ENV !== 'production';
+  // Feature switches (owner, 14 Nov 2026): set in admin. Any switch without a row is written from
+  // the old variable, as the API does, so nothing changes on release day; a variable still set after
+  // that is ignored and named.
+  const stopSwitchErrors = onFeatureSwitchReadError((error) =>
+    logger.warn({
+      event: 'feature_switch.read_failed',
+      error: error instanceof Error ? error.name : 'unknown',
+    }),
+  );
+  // As in the API: a failed write (the database away) never stops the start; reads fall back.
+  try {
+    const seeded = await seedFeatureSwitches(database.db, config.switchSeeds);
+    for (const { key, source } of seeded.written)
+      logger.info({ event: 'feature_switch.seeded', key, source });
+    for (const name of seeded.ignored)
+      logger.warn({ event: 'feature_switch.env_ignored', setting: name });
+  } catch (error) {
+    logger.warn({
+      event: 'feature_switch.seed_failed',
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+  }
   // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
   // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
   const mockProvider = createMockProvider({
@@ -266,6 +322,76 @@ export async function startJobWorker(
   };
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
+  /** Pro purchases per provider this copy can read (rows record 'mock' or 'bachs'). */
+  const reconcileProEverywhere = async (now: Date) => {
+    const totals = { checked: 0, paid: 0, failed: 0 };
+    const providers: [string, MockProvider | BachsProvider | null][] = [
+      ['mock', mockProvider],
+      ['bachs', bachsProvider],
+    ];
+    // Staff tip refunds (owner, 14 Nov 2026): approved ones are sent once, as the recipient's
+    // account; refund.paid settles them. Only the `tip_refunds` switch lets anyone ask or approve one,
+    // as with Pro refunds: one already approved is still sent.
+    for (const [providerName, provider] of providers) {
+      if (!provider?.refundAccountCharge) continue;
+      const tipRefunds = await sendTipRefunds(database.db, {
+        provider,
+        providerName,
+        now,
+      });
+      totals.failed += tipRefunds.failed;
+    }
+    for (const [providerName, provider] of providers) {
+      if (!provider?.initializePlatformCheckout) continue;
+      const result = await reconcileProPurchases(database.db, {
+        provider: {
+          initializePlatformCheckout: (input) =>
+            provider.initializePlatformCheckout!(input),
+          verifyTransaction: (reference) =>
+            provider.verifyTransaction(reference),
+        },
+        providerName,
+        now,
+        sealing,
+        successUrl: `${new URL(config.WEB_ORIGIN).origin}/dashboard/settings#plan`,
+        cancelUrl: `${new URL(config.WEB_ORIGIN).origin}/dashboard/settings#plan`,
+        minAgeMs: config.RECONCILE_MIN_AGE_MS,
+      });
+      totals.checked += result.checked;
+      totals.paid += result.paid.length;
+      totals.failed += result.failed;
+      // Pro paid from the balance (plan Task 8): read back, never re-sent.
+      const collected = await reconcileProCollections(database.db, {
+        provider,
+        providerName,
+        now,
+        sealing,
+        minAgeMs: config.RECONCILE_MIN_AGE_MS,
+      });
+      totals.checked += collected.checked;
+      totals.paid += collected.paid.length;
+      totals.failed += collected.failed;
+      // Approved Pro refunds (plan Task 9): sent once; refund.paid settles them.
+      const refunds = await sendProRefunds(database.db, {
+        provider,
+        providerName,
+        now,
+      });
+      totals.failed += refunds.failed;
+      for (const page of [...result.paid, ...collected.paid].filter(
+        (p) => p.planChanged,
+      )) {
+        // A business's month (Business Pro) changes no page; its signals come with Phase B.
+        if (page.profileId === null) continue;
+        void publishLive([
+          { to: { profile: page.profileId }, type: 'profile.changed' },
+        ]);
+        if (page.handleLower && takeBackRevalidate)
+          void takeBackRevalidate(page.handleLower);
+      }
+    }
+    return totals;
+  };
   const schedule = ensureSchedule({
     queue,
     id: RECONCILE_JOB,
@@ -305,6 +431,31 @@ export async function startJobWorker(
     queue,
     id: USERNAME_TAKE_BACKS_JOB,
     every: 60_000,
+    logger,
+  });
+  const announcementsSchedule = ensureSchedule({
+    queue,
+    id: ANNOUNCEMENTS_JOB,
+    every: ANNOUNCEMENTS_TICK_MS,
+    logger,
+  });
+  const proExpireSchedule = ensureSchedule({
+    queue,
+    id: PRO_EXPIRE_JOB,
+    every: 60_000,
+    logger,
+  });
+  const proRemindersSchedule = ensureSchedule({
+    queue,
+    id: PRO_REMINDERS_JOB,
+    every: 15 * 60_000,
+    logger,
+  });
+  // Always scheduled: the switch can change while the worker runs, and the job checks it each time.
+  const proRenewSchedule = ensureSchedule({
+    queue,
+    id: PRO_RENEW_JOB,
+    every: 15 * 60_000,
     logger,
   });
   // Test copies only (RELEASE_KIND=test): every hour, erase what crashed release checks left.
@@ -410,6 +561,32 @@ export async function startJobWorker(
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
+            // Paid Pro (ADR-0015): open purchases on TipMe's own account, read back from the same
+            // provider that made them. A page whose plan changed is revalidated and signalled.
+            const pro = await reconcileProEverywhere(now);
+            // Option B: business shares between partner accounts, each leg once and read back.
+            // Shares move with the `business` and `business_shares` switches (admin); a chargeback's
+            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee).
+            const shares = { checked: 0, failed: 0 };
+            const [businessOn, sharesSwitchOn] = await Promise.all([
+              featureOn(database.db, 'business'),
+              featureOn(database.db, 'business_shares'),
+            ]);
+            const kinds = shareTransferKinds({
+              sharesOn: businessOn && sharesSwitchOn,
+            });
+            for (const provider of [mockProvider, bachsProvider]) {
+              if (!provider?.collectToPlatform || !provider.transferToAccount)
+                continue;
+              const result = await runShareTransfers(database.db, {
+                provider,
+                now,
+                settleWaitMs: BUSINESS_SHARE_SETTLE_MS,
+                ...(kinds ? { kinds } : {}),
+              });
+              shares.checked += result.checked;
+              shares.failed += result.failed;
+            }
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,
@@ -437,6 +614,11 @@ export async function startJobWorker(
               expired: expiry.expired,
               expired_paid: expiry.paid,
               expire_errors: expiry.errors,
+              pro_checked: pro.checked,
+              pro_paid: pro.paid,
+              pro_errors: pro.failed,
+              shares_checked: shares.checked,
+              shares_errors: shares.failed,
             });
             processed.add(1, { outcome: 'reconciled' });
             return 'reconciled';
@@ -477,6 +659,15 @@ export async function startJobWorker(
               sealing,
             });
             logger.info({ event: 'moments.monthly.completed', created });
+            // After the moments, so the month is whole: Pro pages' recaps (and their emails).
+            const recaps = await runMonthlyRecaps(database.db, {
+              sealing,
+              month: previousMonth(now),
+            });
+            logger.info({
+              event: 'recaps.monthly.completed',
+              created: recaps.created,
+            });
             processed.add(1, { outcome: 'celebrated' });
             return 'celebrated';
           }
@@ -494,6 +685,63 @@ export async function startJobWorker(
               sealing,
               now: () => new Date(),
               revalidate: takeBackRevalidate,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === ANNOUNCEMENTS_JOB) {
+            const outcome = await handleAnnouncements({
+              db: database.db,
+              sealing,
+              sendsPerMinute: config.ANNOUNCEMENT_SENDS_PER_MINUTE,
+              now: () => new Date(),
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === PRO_EXPIRE_JOB) {
+            const outcome = await handleProExpire({
+              db: database.db,
+              sealing,
+              now: () => new Date(),
+              revalidate: takeBackRevalidate,
+              publishLive,
+              log: (entry) => logger.info({ ...entry, ...fields }),
+            });
+            processed.add(1, { outcome });
+            return outcome;
+          }
+          if (job.name === PRO_RENEW_JOB) {
+            // Switched off (or queued before it went off): nothing is charged.
+            if (!(await featureOn(database.db, 'pro_auto_renew')))
+              return 'skipped';
+            const totals = { charged: 0, retried: 0 };
+            for (const [providerName, provider] of [
+              ['mock', mockProvider],
+              ['bachs', bachsProvider],
+            ] as const) {
+              if (!provider?.chargeSavedCard) continue;
+              const result = await renewProAutomatically(database.db, {
+                provider,
+                providerName,
+                now: new Date(),
+                sealing,
+              });
+              totals.charged += result.charged;
+              totals.retried += result.retried;
+            }
+            logger.info({ event: 'pro.renew_swept', ...totals, ...fields });
+            processed.add(1, { outcome: 'renewed' });
+            return 'renewed';
+          }
+          if (job.name === PRO_REMINDERS_JOB) {
+            const outcome = await handleProReminders({
+              db: database.db,
+              sealing,
+              autoRenewOn: await featureOn(database.db, 'pro_auto_renew'),
+              now: () => new Date(),
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
             processed.add(1, { outcome });
@@ -637,7 +885,7 @@ export async function startJobWorker(
               rewardBudgetPerMonthMinor:
                 config.REWARD_CASH_BUDGET_MINOR_PER_MONTH,
               dedupeKey: job.id,
-              analyticsEnabled,
+              analyticsEnabled: await featureOn(database.db, 'analytics'),
               sealing,
               pretendPayment: config.PAYMENT_PROVIDER === 'mock',
               postStaffAlert: staffAlertPoster({
@@ -648,6 +896,14 @@ export async function startJobWorker(
             // After the handler's own writes committed (notifications, moments). Not awaited
             // and never thrown: a lost signal is caught by the page's next refresh.
             void publishLive(jobSignalsFor(job.name, outcome, job.data));
+            // A tip made at a business: its managers' and team's pages re-read (plan B9 Task 23).
+            if (
+              job.name === 'tip.succeeded' &&
+              (outcome === 'notified' || outcome === 'duplicate')
+            )
+              void businessTipSignals(job.data, (ref) =>
+                businessLiveAudience(database.db, ref),
+              ).then(publishLive);
             processed.add(1, { outcome });
             return outcome;
           }
@@ -717,6 +973,11 @@ export async function startJobWorker(
     publishLive,
   });
   // Configured providers; the pretend one "delivers" to the development-only pretend inbox.
+  // Announcements go through their own provider (Brevo), never the ones below (owner, 14 Nov 2026).
+  const announcementProvider = announcementMailProvider(
+    config,
+    pretendMailSink(database.db),
+  );
   const mailProviders = configuredMailProviders(
     config,
     pretendMailSink(database.db),
@@ -742,6 +1003,7 @@ export async function startJobWorker(
       db: database.db,
       sealing,
       providers: mailProviders,
+      announcementProvider,
       activeProvider: () => activeProvider(),
       overrideFor: async (userId) => {
         const override = await mailOverrideFor(database.db, userId);
@@ -779,6 +1041,11 @@ export async function startJobWorker(
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();
+      await announcementsSchedule.stop();
+      await proExpireSchedule.stop();
+      await proRemindersSchedule.stop();
+      await proRenewSchedule.stop();
+      stopSwitchErrors();
       await relay.stop();
       await mailDelivery.stop();
       // Let in-flight jobs finish, but never wait forever: a hung close is abandoned.

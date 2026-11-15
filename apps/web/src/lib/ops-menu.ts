@@ -44,12 +44,27 @@ const LINKS: {
     group: 'Work',
     needs: ['search.view'],
   },
+  {
+    // Every account, as a list or a grid (owner's ask, 14 Nov 2026).
+    href: '/ops/users',
+    label: 'People',
+    group: 'Work',
+    needs: ['search.view'],
+  },
   { href: '/ops/pages', label: 'Pages', group: 'Work', needs: [...PAGE_CARDS] },
   {
     href: '/ops/usernames',
     label: 'Usernames',
     group: 'Work',
     needs: ['usernames.manage'],
+  },
+  {
+    // Paid Pro (ADR-0015): the monthly prices, personal and (with the business_pro switch) Business
+    // Pro, for new months only.
+    href: '/ops/pro-price',
+    label: 'Prices',
+    group: 'Work',
+    needs: ['pro.price'],
   },
   {
     href: '/ops/businesses',
@@ -77,6 +92,13 @@ const LINKS: {
     needs: ['issues.view', 'providers.manage'],
   },
   {
+    // Feature switches (owner, 14 Nov 2026): on and off for features, set here, not in settings files.
+    href: '/ops/switches',
+    label: 'Switches',
+    group: 'Email and records',
+    needs: ['switches.manage'],
+  },
+  {
     href: '/ops/email',
     label: 'Email',
     group: 'Email and records',
@@ -96,8 +118,16 @@ const LINKS: {
     needs: ['changelog.edit', 'changelog.publish'],
   },
   {
+    // Staff announcements (14 Nov 2026): one email to many people, sent with a second person.
+    href: '/ops/announcements',
+    label: 'Announcements',
+    group: 'Email and records',
+    needs: ['announcements.send'],
+  },
+  {
+    // "Staff members", so the menu has one "People": every account, under Work.
     href: '/ops/staff/people',
-    label: 'People',
+    label: 'Staff members',
     group: 'Staff',
     needs: ['staff.manage'],
   },

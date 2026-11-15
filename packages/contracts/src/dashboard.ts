@@ -15,6 +15,14 @@ export interface DashboardSummary {
   withdrawalsAvailable: boolean;
 }
 
+/**
+ * Browsing sessions that opened the owner's page today (Lagos day), from the anonymous analytics
+ * events only; null while analytics are off, so no misleading zero is shown.
+ */
+export interface VisitsToday {
+  visits: number | null;
+}
+
 export type TipState = 'paid' | 'confirming' | 'failed' | 'cancelled';
 
 export interface MyTipRow {
@@ -105,7 +113,7 @@ export const myTipsNoteSchema = z.enum(['with']);
 /** Every tip ever paid to the recipient. Tips still being confirmed are not counted. */
 export interface TipTotals {
   currency: string;
-  /** Sum of what the recipient received (net of TipMe's 10%) from paid tips. */
+  /** Sum of what the recipient received (net of the TipMe fee each tip recorded) from paid tips. */
   receivedNetMinor: string;
   /** Number of paid tips. TipMe keeps no supporter identity, so this is not a count of people. */
   paidTipCount: number;
@@ -122,7 +130,13 @@ export type WithdrawalQuote =
       withdrawableMinor: string;
       ledgerMinor: string;
       providerMinor: string;
+      /** The partner's transfer fee on a withdrawal. */
       feeMinor: string;
+      /**
+       * Who pays it (owner, 12 Nov 2026): 'user' takes it from the amount chosen (withdraw ₦10,000,
+       * receive ₦9,950); 'tipme' while an unused top-up TipMe already sent can pay it.
+       */
+      feePaidBy: 'user' | 'tipme';
       destination: { bankName: string; last4: string };
     }
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }

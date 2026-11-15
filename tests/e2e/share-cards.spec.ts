@@ -13,7 +13,7 @@ import { WEB_ORIGIN } from './stack';
 // Public boards PR 2: a person's link shows their own card (name, role, handle and cover colour
 // only); everything else, and every page that isn't live, shows the general card.
 
-const GENERAL_ALT = 'TipMe. A little thanks goes a long way.';
+const GENERAL_ALT = 'TipMe. A little tip goes a long way.';
 
 /** Width and height from a PNG's IHDR chunk. */
 function pngSize(bytes: Buffer) {
@@ -119,14 +119,14 @@ test('an unknown, offline or moved handle gets the general card, not an error', 
   const renamed = `${handle}_n`;
   await makePagePro(browser, handle, testInfo);
   await page.goto('/dashboard/settings');
-  await page.getByLabel('Handle').fill(renamed);
-  await page.getByRole('button', { name: 'Change handle' }).click();
+  await page.getByLabel('Username').fill(renamed);
+  await page.getByRole('button', { name: 'Change username' }).click();
   await page
     .getByRole('dialog')
     .getByRole('button', { name: 'Yes, change it' })
     .click();
   await expect(
-    page.getByText(`Old handles that lead here: @${handle}`),
+    page.getByText(`Old usernames that lead here: @${handle}`),
   ).toBeVisible();
   await expect(async () => {
     const old = await card(request, `/people/${handle}/share-card`);

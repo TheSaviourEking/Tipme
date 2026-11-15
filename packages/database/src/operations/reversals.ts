@@ -1,5 +1,7 @@
 import {
+  buildRefundReversalPosting,
   buildReversalPosting,
+  refundMoves,
   type AccountCode,
   type LedgerLine,
 } from '@tipme/domain';
@@ -19,6 +21,7 @@ import { guarded, OperationError } from './errors.js';
 import { activeTraceId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
+import { planRefundTransfers, scheduleFeeReturn } from './share-transfers.js';
 
 /** Whose balance a reversal left below zero (Q8). */
 export type BelowZero = { profileId: string } | { businessId: string };
@@ -28,7 +31,23 @@ export interface ReversalResult {
   /** False for a repeat of the same provider event: nothing new was posted. */
   created: boolean;
   belowZero: BelowZero[];
+  /**
+   * A refund for more than the person (and business) had left to give back from this tip (a full
+   * refund made at the partner): taken from nobody here, reported to staff (owner, 14 Nov 2026).
+   */
+  excessMinor?: bigint;
 }
+
+/**
+ * Owner, 14 Nov 2026: a refund (`refund.<id>`) gives the supporter back the tip minus TipMe's fee,
+ * and TipMe keeps its fee. A chargeback (`dispute.<id>`, or any other reversal) is the network's:
+ * the person gives back what they received and TipMe bears its fee.
+ */
+export const isRefund = (partnerReversalId: string) =>
+  partnerReversalId.startsWith('refund.');
+
+const naira = (minor: bigint) =>
+  `₦${minor / 100n}${minor % 100n ? `.${String(minor % 100n).padStart(2, '0')}` : ''}`;
 
 /** The ledger key of the reversal for one provider refund or chargeback event. */
 /**
@@ -48,9 +67,12 @@ const ownerKey = (line: LedgerLine) =>
   `${line.account}|${line.profileId ?? ''}|${line.businessId ?? ''}`;
 
 /**
- * Business release 2 (Q7, Q8): takes back a refunded or charged-back tip: everything its payment owed
- * (the person's part, the business's part, TipMe's fee and the provider fee it recovered), while the
- * partner balance drops by the whole refund plus any refund fee. The partner's refund guide says
+ * Business release 2 (Q7, Q8): takes back a refunded or charged-back tip. A refund (owner, 14 Nov
+ * 2026) takes back only what the payment owed the person and the business, each its own part, and
+ * TipMe keeps its fee; more than that is reported to staff (`excessMinor`). A chargeback takes back
+ * everything its payment owed (the person's part, the business's part, TipMe's fee and the provider
+ * fee it recovered), and TipMe sends its fee back to the person, so it bears it. Either way the
+ * partner balance drops by what is taken back plus any refund fee. The partner's refund guide says
  * "Fees already charged are not returned", so the provider fee stays TipMe's expense, as does the
  * refund's own fee: nobody's balance loses more than they received. One balanced `reversal`
  * transaction keyed by the partner's refund or dispute (never by a webhook event). TipMe only
@@ -171,6 +193,9 @@ export async function reverseTip(
   const left = owed.reduce((sum, line) => sum + line.amountMinor, 0n);
   if (left === 0n)
     throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed');
+  const refund = isRefund(input.partnerReversalId);
+  // Never more than is left of the payment. Within that, a refund takes what the person and the
+  // business have left to give and reports the rest (below).
   if (input.refundedMinor > left)
     throw new OperationError('TIP_NOT_REVERSIBLE', 'more_than_left');
   const refundFeeMinor = input.refundFeeMinor ?? 0n;
@@ -203,10 +228,24 @@ export async function reverseTip(
       .orderBy(businesses.id)
       .for('update');
 
-  const lines = buildReversalPosting(remaining, {
-    refundedMinor: input.refundedMinor,
-    refundFeeMinor,
-  });
+  let lines: LedgerLine[];
+  let excessMinor = 0n;
+  if (refund) {
+    // TipMe keeps its fee: only the person's and the business's parts come back.
+    try {
+      ({ lines, excessMinor } = buildRefundReversalPosting(owed, {
+        refundedMinor: input.refundedMinor,
+        refundFeeMinor,
+      }));
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      throw new OperationError('TIP_NOT_REVERSIBLE', 'already_reversed');
+    }
+  } else
+    lines = buildReversalPosting(remaining, {
+      refundedMinor: input.refundedMinor,
+      refundFeeMinor,
+    });
   const posted = await postLedgerTransaction(tx, {
     operationType: 'reversal',
     operationKey,
@@ -218,6 +257,41 @@ export async function reverseTip(
   });
 
   const now = input.now ?? new Date();
+  // Option B: a shared tip's money is put right between the partner accounts too (on a chargeback, TipMe's fee back
+  // to the staff member; the business's share back from it, or held back from its next shares).
+  // Only a tip with a share has anything to move, so every other reversal is exactly as before.
+  if (posted.created) {
+    await planRefundTransfers(tx, {
+      tipId: tip.id,
+      reversalTransactionId: posted.transactionId,
+      lines,
+      now,
+    });
+    // A chargeback only (owner, 14 Nov 2026): the network took the whole tip from the person's
+    // account, so TipMe sends its fee back and bears it; they lose only what they received. Always,
+    // for every tip: no switch decides it (`refund_fee_return` only records final refunds at once).
+    // A refund returns nothing of TipMe's fee.
+    if (!refund)
+      await scheduleFeeReturn(tx, {
+        tipId: tip.id,
+        partnerReversalId: input.partnerReversalId,
+        refundedMinor: input.refundedMinor,
+        // The reversal's own figure for TipMe's fee, so the partner balance meets the ledger.
+        amountMinor: refundMoves(lines, { businessId: '' }).feeReturnMinor,
+      });
+  }
+  if (posted.created && excessMinor > 0n) {
+    const person = lines.find(
+      (l) => l.account === 'recipient_payable' && l.profileId,
+    )?.profileId;
+    await openIssue(tx, {
+      dedupeKey: `refund_over_net.${operationKey}`,
+      kind: 'payment_reversed',
+      subject: { tipId: tip.id, ...(person ? { profileId: person } : {}) },
+      now,
+      note: `Our payment partner refunded ${naira(excessMinor)} more than this tip's recipients received (${input.partnerReversalId}). TipMe keeps its fee (owner, 14 Nov 2026), so only what they received was taken back in TipMe; their partner account is short by ${naira(excessMinor)}. Settle it with the partner; nothing more is charged to them here.`,
+    });
+  }
   const belowZero: BelowZero[] = [];
   const touched = new Set(lines.map(ownerKey));
   for (const profileId of people) {
@@ -243,7 +317,7 @@ export async function reverseTip(
       now,
     });
   }
-  return { ...posted, belowZero };
+  return { ...posted, belowZero, ...(excessMinor > 0n ? { excessMinor } : {}) };
 }
 
 /**

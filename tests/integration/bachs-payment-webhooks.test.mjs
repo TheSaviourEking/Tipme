@@ -85,7 +85,7 @@ test('a Bachs payment webhook confirms the tip at once, against the quoted share
     async verifyTransaction(reference, expectation) {
       assert.equal(reference, REFERENCE);
       expectations.push(expectation);
-      return expectation?.platformFeeMinor === 20000n
+      return expectation?.platformFeeMinor === 14000n
         ? {
             status: 'succeeded',
             amountMinor: 200000n,
@@ -101,7 +101,7 @@ test('a Bachs payment webhook confirms the tip at once, against the quoted share
     },
   };
   await new WebhookService({ db }).applyBachs(event, bachs);
-  assert.deepEqual(expectations, [{ platformFeeMinor: 20000n }]);
+  assert.deepEqual(expectations, [{ platformFeeMinor: 14000n }]);
   assert.equal(await tipStatus(), 'SUCCEEDED');
 });
 

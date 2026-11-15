@@ -304,7 +304,7 @@ export function YourLinks({
     <Card className="settings-section">
       <h3>Your links</h3>
       <p className="tm-hint">
-        Where else supporters can find you. Each link shows the handle we read
+        Where else supporters can find you. Each link shows the username we read
         from it, so they can check it’s really you.
       </p>
       <form className="settings-form" onSubmit={save} noValidate>
