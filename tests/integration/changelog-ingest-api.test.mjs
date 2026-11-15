@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { after, before, test } from 'node:test';
+import { draftFromPullRequest } from '../../packages/contracts/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
+import {
+  draftPayload,
+  post as clientPost,
+} from '../../scripts/changelog-client.mjs';
 import { CHANGELOG_SECRET, startStack } from './helpers.mjs';
 
 // Changelog plan, Task 2.3: the three signed routes CI calls. The signature is checked before the
@@ -249,4 +254,67 @@ test('a draft with a 64 KiB body is accepted; a body over 128 KiB is refused bef
   });
   assert.equal(huge.status, 413);
   assert.deepEqual(await entries(), before);
+});
+
+// #226 (about 31 400 characters) was refused with 413 by a production API older than the changelog
+// routes: there, the 16 KB JSON parser runs first on every path. These pin that the changelog
+// routes take a big body while every other route keeps the 16 KB limit.
+test('a 40 KB draft is accepted, raw or as CI sends it; over 65 536 characters is refused; other routes keep 16 KB', async () => {
+  const body = [
+    'Page Studio phases 2–4, behind page_studio.',
+    '',
+    '## Notes',
+    ...Array.from(
+      { length: 420 },
+      (_, i) => `- note ${i}: ${'détail ₦ '.repeat(9)}`,
+    ),
+    '',
+    '## For users',
+    'You can now design your page in Page Studio.',
+  ].join('\n');
+  const raw = draft(350, { body });
+  assert.ok(Buffer.byteLength(JSON.stringify(raw)) > 40 * 1024);
+  const accepted = await post(stack.api, 'drafts', raw);
+  assert.equal(accepted.status, 200);
+  assert.deepEqual(await accepted.json(), { data: { created: true } });
+
+  // The script's own payload and signing, against the real app.
+  const answer = await clientPost(
+    stack.api,
+    'drafts',
+    draftPayload({ ...draft(351), body }),
+    CHANGELOG_SECRET,
+  );
+  assert.deepEqual(answer, { data: { created: true } });
+  const { rows } = await database.pool.query(
+    'SELECT pr_number, staff_text, user_text FROM changelog_entries WHERE pr_number IN (350, 351) ORDER BY pr_number',
+  );
+  for (const [i, number] of [350, 351].entries()) {
+    const expected = draftFromPullRequest({
+      title: `feat: change ${number}`,
+      body,
+    });
+    assert.deepEqual(rows[i], {
+      pr_number: number,
+      staff_text: expected.staffText,
+      user_text: expected.userText,
+    });
+  }
+
+  // Under 128 KiB but over the schema's 65 536 characters: signed, so refused for the schema.
+  const before = await entries();
+  const over = await post(stack.api, 'drafts', {
+    ...draft(352),
+    body: 'z'.repeat(65_537),
+  });
+  assert.equal(over.status, 400);
+  assert.deepEqual(await entries(), before);
+
+  // Everything else keeps the 16 KB limit (what production answered #226, on every path).
+  const elsewhere = await fetch(`${stack.api}/v1/no-such-route`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  assert.equal(elsewhere.status, 413);
 });
