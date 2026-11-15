@@ -182,6 +182,22 @@
 >     - **The stop route has no rate limit:** it needs the receipt's own status token and does nothing without it.
 >     - **The "Your choices" group** on the receipt holds only this line until make-it-yours PR D adds its note-consent withdrawal beside it.
 
+> **Campaign pages, tip goals, thank-yous and statements: the owner's decision, 13–14 Nov 2026.** The owner approved four Pro features and every default on the `ProCampaignPages` board (14 Nov 2026; plan `docs/superpowers/plans/2026-11-14-pro-campaign-pages-goals-thankyous-statements.md`): a page for each Campaign Studio campaign, tip goals worded "tips toward…", custom thank-yous on the receipt and by email, and monthly statements with range exports. It is always the same person: one handle, one balance, one set of withdrawals, the same tip area. This is a product decision. It is not legal advice, and it is not a regulatory, data-protection or payment-partner approval: **D-02, D-03 and D-07 stay OPEN, D-05 stays PARTLY DECIDED.** No fee, minimum, checkout amount, ledger posting or payout changes; statements only read the ledger. Each feature is behind its own switch, off in production until the owner turns it on (admin switches at `/ops/switches`; campaign pages is the `campaign_pages` switch since merge train 2). The owner's rulings:
+>
+> 1. Active goals: 1 on the main page and 1 per campaign.
+> 2. Amounts or percentage: the creator chooses; the default is a percentage.
+> 3. Email: once per tip, from TipMe's address, From name "‹Display name› via TipMe".
+> 4. Statement: made on the 1st (06:00 Lagos) for the month before, emailed as a link; the PDF is never attached.
+> 5. Campaign covers and Page Studio: they count toward Page Studio later (stored as cover choices now).
+> 6. Free keeps its one-line thank-you on the receipt; per-campaign thank-yous, card styles and the email are Pro.
+> 7. "Goal reached" shows for 14 days, or until a new goal is set.
+> 8. Goal target: ₦5,000 to ₦10,000,000, whole naira.
+> 9. The supporter's email is never shown to the creator (not in any of their screens, exports or statements).
+> 10. Campaign pages and search: `noindex, follow`; the canonical address stays `/@handle`.
+> 11. The main goal counts tips to the main page plus tips through campaigns with no goal of their own at the time of the tip.
+>
+> - **G23, "tips toward" and the law (beside D-02):** goals are the owner's product framing, not a legal opinion. The tip goals switch stays off in production until the owner says so. Goal wording refuses "fundraising", "donation", "charity", "crowdfund" and "refund".
+
 ## DEFERRED
 Native apps, multi-currency routing, stored-value wallets, internal custody, crypto, memberships, NFC and team tipping. Propose separately with evidence.
 
@@ -230,6 +246,12 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **When a person leaves:** their row, name and notes disappear from the business's view; the location's totals keep their tips (M6). A reported note is hidden from the business until TipMe staff review it (Q4).
 > - **The person's own copy:** the tips file (`/v1/me/exports/tips.csv`) names the business and location a tip was made at and carries the note written about them (a note TipMe removed reads "Removed by TipMe"); the work file (`/v1/me/exports/work.csv`) lists every membership, left ones included.
 
+> **Business Pro (owner, 14 Nov 2026).** The owner's product decision, not legal or regulatory approval: no D-item changes, and nothing here touches tips, fees, checkout or payouts. Board `BusinessPro.dc.html`, plan `docs/superpowers/plans/2026-11-14-business-pro-and-signup.md`, behind the `business_pro` switch on top of `business` (admin, `/ops/switches`; it replaced `BUSINESS_PRO_ENABLED` in merge train 2), off by default.
+> - **Prices:** personal Pro stays ₦5,000 a month. **Business Pro is ₦7,000 a month**, set by staff with `pro.price` exactly like personal Pro (₦100 to ₦1,000,000, whole naira, with a reason; a second person approves, a lone admin acts alone with an alert; history kept; a change applies to new months only, and a shown price is honoured).
+> - **Limits:** Business Free has 3 staff and 1 location; Business Pro has 25 staff and 25 locations, and above that "Talk to us". Owners never count toward the staff limit. A business already above a limit keeps everyone and everything it has and can't add more; a limit never removes or blocks anyone already there, and never stops a tip.
+> - **Fees:** each staff member's tip fee stays their own plan rate (Free 7%, Pro 5%). Business Pro does not give the owner personal Pro.
+> - **Built so far (Phase A):** the plan, the price and the limits. Buying Business Pro, its mail and its features come in later phases. `subscription_revenue` and `platform_clearing` still need finance sign-off (ADR-0006, ADR-0015).
+
 > **Business release 2 (owner's report, 6 Nov 2026).** The owner reported that our payment partner and a legal check said yes to a business sharing staff tips and to team tips. The options are 100/0, 90/10, 80/20, 70/30 and 50/50, with a cap of 50%. This records the owner's report. It is not a regulatory approval, a licence, or written provider confirmation held in this repository. D-03, D-04 and D-05 keep their status (OPEN, OPEN, PARTLY DECIDED), and `AGENTS.md`'s hard stop on real payments is unchanged. Spec `docs/superpowers/specs/2026-11-06-business-design.md` ("Release 2"), plan `docs/superpowers/plans/2026-11-06-business.md` (PRs R2-0 to R2-E). Each part sits behind its own flag on top of `BUSINESS_ENABLED`, off by default: `BUSINESS_SHARES_ENABLED` and `TEAM_TIPS_ENABLED`. The owner turns them on only after the share and team-tip PRs are on dev and the terms and privacy text below is live.
 > - **Safeguards (spec item 11):**
 >   - The split is "staff keeps / business takes", one of the five options; the business never takes more than 50%, so staff always keep at least half. The database refuses any other value.
@@ -263,6 +285,8 @@ Native apps, multi-currency routing, stored-value wallets, internal custody, cry
 > - **A chargeback** (the supporter's bank takes the payment back; the network takes the whole tip from the person's account): the person gives back only what they received; TipMe bears its fee, sending its whole fee (its share with the processing part) to the person's account once per dispute (`fee_return`, kept for chargebacks only).
 > - **Still open:** whether a final refund is recorded automatically (`REFUND_FEE_RETURN`, which keeps its name and now only gates that) rather than needing two staff.
 > - **Next:** a staff "Refund tip" tool that asks the partner for exactly the tip minus TipMe's fee (approved 14 Nov 2026, after a sandbox test).
+>
+> **Builder's note (15 Nov 2026, #193 updated from dev):** the decisions above are unchanged. Only where the settings live changed (owner, 14 Nov 2026: fewer variables): `REFUND_FEE_RETURN` and `BUSINESS_SHARES_ENABLED` are now the admin switches `refund_fee_return` and `business_shares` at `/ops/switches` (`docs/runbooks/settings-and-switches.md`), read by the API and the worker alike, both money switches and off by default; `BUSINESS_SHARE_SETTLE_HOURS` is a code value (48 hours). A final refund still needs two staff while `refund_fee_return` is off (the open question above).
 
 > **Pricing: Free 7%, Pro 5%, Pro ₦5,000 a month (owner, 12 Nov 2026).** The owner's pricing decision. It is not legal advice, and it is not regulatory or payment-partner approval (D-02, D-03 and D-05 stay as listed).
 > - **TipMe Free:** 7% of each successful tip, no subscription. **TipMe Pro:** ₦5,000 a month plus 5% of each successful tip. Both rates include processing (TipMe pays processing out of its share; the supporter still pays exactly the tip). This replaces the flat 10% (D-05, ADR-0014) and an earlier "flat 5%" instruction the same day.

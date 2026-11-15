@@ -101,7 +101,7 @@ export async function reverseTip(
     /** A fee the refund itself carried: TipMe's expense, out of the partner balance. */
     refundFeeMinor?: bigint;
     /**
-     * REFUND_FEE_RETURN (owner, 12 Nov 2026; since 14 Nov for chargebacks only): TipMe's fee goes
+     * The `refund_fee_return` switch (owner, 12 Nov 2026; since 14 Nov for chargebacks only): TipMe's fee goes
      * back to the person by transfer when the network charged the tip back. A
      * shared tip gets it whatever the flag (option B). For a refund it was usually already asked
      * for at refund.paid; the same partner refund never gets it twice.

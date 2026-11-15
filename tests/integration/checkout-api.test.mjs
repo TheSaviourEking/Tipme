@@ -241,6 +241,8 @@ test('tip status needs the tip’s own token and never shows the message', async
   const view = JSON.parse(text).data;
   assert.equal(view.state, 'waiting');
   assert.equal(view.recipient.handle, 'ada');
+  // The photo her public page shows (the seeded demo portrait).
+  assert.equal(view.recipient.avatarPath, '/portraits/ada.webp');
   for (const token of ['wrong', undefined, other.data.statusToken]) {
     const refused = await statusOf(stack.api, a.data.tipId, token);
     assert.equal(refused.status, 404);

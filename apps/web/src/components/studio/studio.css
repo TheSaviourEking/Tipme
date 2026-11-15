@@ -1,0 +1,845 @@
+/*
+ * Page Studio (plan 2026-11-12-page-studio, Task 5). Every value here is fixed by TipMe or comes
+ * from custom properties the theme derives (studio-theme.ts): nothing a person types becomes CSS.
+ * The grid numbers are STUDIO_GRID in @tipme/contracts, the design check's layout model; a source
+ * test (scripts/studio-source.test.mjs) keeps the two the same. Nothing here styles the tip block.
+ */
+
+.studio {
+  --studio-grid-max: 1440px;
+  --studio-grid-rail: 340px;
+  --studio-grid-rail-gap: 32px;
+  --studio-grid-pad-phone: 16px;
+  --studio-grid-pad-tablet: 24px;
+  --studio-grid-pad-desktop: 24px;
+  --studio-grid-gap-phone: 16px;
+  --studio-grid-gap-tablet: 20px;
+  --studio-grid-gap-desktop: 24px;
+  --studio-grid-inset-phone: 16px;
+  --studio-grid-inset-wide: 24px;
+  --studio-grid-tile-gap: 8px;
+  --studio-pad: var(--studio-grid-pad-phone);
+  --studio-gap: var(--studio-grid-gap-phone);
+  --studio-inset: var(--studio-grid-inset-phone);
+
+  /* The colours of the page's mode (light, or auto in a light browser). */
+  --studio-c-page: var(--studio-l-page);
+  --studio-c-card: var(--studio-l-card);
+  --studio-c-tint: var(--studio-l-tint);
+  --studio-c-line: var(--studio-l-line);
+  --studio-c-control: var(--studio-l-control);
+  --studio-c-text: var(--studio-l-text);
+  --studio-c-muted: var(--studio-l-muted);
+  --studio-c-heading: var(--studio-l-heading);
+  --studio-c-link: var(--studio-l-link);
+  --studio-c-accent: var(--studio-l-accent);
+  --studio-c-button: var(--studio-l-button);
+  --studio-c-button-text: var(--studio-l-button-text);
+  --studio-c-button-edge: var(--studio-l-button-edge);
+  --studio-c-focus: var(--studio-l-focus);
+  --studio-c-band: var(--studio-l-band);
+  --studio-c-band-text: var(--studio-l-band-text);
+  --studio-c-second-fill: var(--studio-l-second-fill);
+  --studio-c-second-on-fill: var(--studio-l-second-on-fill);
+  --studio-c-second-text: var(--studio-l-second-text);
+  --studio-t-page: var(--studio-c-page);
+  --studio-t-card: var(--studio-c-card);
+  --studio-t-tint: var(--studio-c-tint);
+  --studio-t-line: var(--studio-c-line);
+  --studio-t-control: var(--studio-c-control);
+  --studio-t-text: var(--studio-c-text);
+  --studio-t-muted: var(--studio-c-muted);
+  --studio-t-heading: var(--studio-c-heading);
+  --studio-t-link: var(--studio-c-link);
+  --studio-t-accent: var(--studio-c-accent);
+  --studio-t-button: var(--studio-c-button);
+  --studio-t-button-text: var(--studio-c-button-text);
+  --studio-t-button-edge: var(--studio-c-button-edge);
+  --studio-t-focus: var(--studio-c-focus);
+  --studio-t-band: var(--studio-c-band);
+  --studio-t-band-text: var(--studio-c-band-text);
+  --studio-t-second-fill: var(--studio-c-second-fill);
+  --studio-t-second-on-fill: var(--studio-c-second-on-fill);
+  --studio-t-second-text: var(--studio-c-second-text);
+
+  color-scheme: light;
+  background: var(--studio-c-page);
+  color: var(--studio-c-text);
+}
+
+.studio[data-mode='dark'] {
+  --studio-c-page: var(--studio-d-page);
+  --studio-c-card: var(--studio-d-card);
+  --studio-c-tint: var(--studio-d-tint);
+  --studio-c-line: var(--studio-d-line);
+  --studio-c-control: var(--studio-d-control);
+  --studio-c-text: var(--studio-d-text);
+  --studio-c-muted: var(--studio-d-muted);
+  --studio-c-heading: var(--studio-d-heading);
+  --studio-c-link: var(--studio-d-link);
+  --studio-c-accent: var(--studio-d-accent);
+  --studio-c-button: var(--studio-d-button);
+  --studio-c-button-text: var(--studio-d-button-text);
+  --studio-c-button-edge: var(--studio-d-button-edge);
+  --studio-c-focus: var(--studio-d-focus);
+  --studio-c-band: var(--studio-d-band);
+  --studio-c-band-text: var(--studio-d-band-text);
+  --studio-c-second-fill: var(--studio-d-second-fill);
+  --studio-c-second-on-fill: var(--studio-d-second-on-fill);
+  --studio-c-second-text: var(--studio-d-second-text);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  .studio[data-mode='auto'] {
+    --studio-c-page: var(--studio-d-page);
+    --studio-c-card: var(--studio-d-card);
+    --studio-c-tint: var(--studio-d-tint);
+    --studio-c-line: var(--studio-d-line);
+    --studio-c-control: var(--studio-d-control);
+    --studio-c-text: var(--studio-d-text);
+    --studio-c-muted: var(--studio-d-muted);
+    --studio-c-heading: var(--studio-d-heading);
+    --studio-c-link: var(--studio-d-link);
+    --studio-c-accent: var(--studio-d-accent);
+    --studio-c-button: var(--studio-d-button);
+    --studio-c-button-text: var(--studio-d-button-text);
+    --studio-c-button-edge: var(--studio-d-button-edge);
+    --studio-c-focus: var(--studio-d-focus);
+    --studio-c-band: var(--studio-d-band);
+    --studio-c-band-text: var(--studio-d-band-text);
+    --studio-c-second-fill: var(--studio-d-second-fill);
+    --studio-c-second-on-fill: var(--studio-d-second-on-fill);
+    --studio-c-second-text: var(--studio-d-second-text);
+    color-scheme: dark;
+  }
+}
+
+/* TipMe's own parts: none of the page's tokens, colours or fonts reach them. */
+.studio-fixed {
+  --studio-c-page: initial;
+  --studio-c-card: initial;
+  --studio-c-tint: initial;
+  --studio-c-line: initial;
+  --studio-c-control: initial;
+  --studio-c-text: initial;
+  --studio-c-muted: initial;
+  --studio-c-heading: initial;
+  --studio-c-link: initial;
+  --studio-c-accent: initial;
+  --studio-c-button: initial;
+  --studio-c-button-text: initial;
+  --studio-c-button-edge: initial;
+  --studio-c-focus: initial;
+  --studio-c-band: initial;
+  --studio-c-band-text: initial;
+  --studio-c-second-fill: initial;
+  --studio-c-second-on-fill: initial;
+  --studio-c-second-text: initial;
+  --studio-t-page: initial;
+  --studio-t-card: initial;
+  --studio-t-tint: initial;
+  --studio-t-line: initial;
+  --studio-t-control: initial;
+  --studio-t-text: initial;
+  --studio-t-muted: initial;
+  --studio-t-heading: initial;
+  --studio-t-link: initial;
+  --studio-t-accent: initial;
+  --studio-t-button: initial;
+  --studio-t-button-text: initial;
+  --studio-t-button-edge: initial;
+  --studio-t-focus: initial;
+  --studio-t-band: initial;
+  --studio-t-band-text: initial;
+  --studio-t-second-fill: initial;
+  --studio-t-second-on-fill: initial;
+  --studio-t-second-text: initial;
+  --studio-l-page: initial;
+  --studio-l-card: initial;
+  --studio-l-tint: initial;
+  --studio-l-line: initial;
+  --studio-l-control: initial;
+  --studio-l-text: initial;
+  --studio-l-muted: initial;
+  --studio-l-heading: initial;
+  --studio-l-link: initial;
+  --studio-l-accent: initial;
+  --studio-l-button: initial;
+  --studio-l-button-text: initial;
+  --studio-l-button-edge: initial;
+  --studio-l-focus: initial;
+  --studio-l-band: initial;
+  --studio-l-band-text: initial;
+  --studio-l-second-fill: initial;
+  --studio-l-second-on-fill: initial;
+  --studio-l-second-text: initial;
+  --studio-d-page: initial;
+  --studio-d-card: initial;
+  --studio-d-tint: initial;
+  --studio-d-line: initial;
+  --studio-d-control: initial;
+  --studio-d-text: initial;
+  --studio-d-muted: initial;
+  --studio-d-heading: initial;
+  --studio-d-link: initial;
+  --studio-d-accent: initial;
+  --studio-d-button: initial;
+  --studio-d-button-text: initial;
+  --studio-d-button-edge: initial;
+  --studio-d-focus: initial;
+  --studio-d-band: initial;
+  --studio-d-band-text: initial;
+  --studio-d-second-fill: initial;
+  --studio-d-second-on-fill: initial;
+  --studio-d-second-text: initial;
+  --studio-size-display: initial;
+  --studio-size-h2: initial;
+  --studio-size-h3: initial;
+  --studio-size-body: initial;
+  --studio-size-small: initial;
+  --studio-lh-display: initial;
+  --studio-lh-h2: initial;
+  --studio-lh-h3: initial;
+  --studio-lh-body: initial;
+  --studio-lh-small: initial;
+  --studio-space-s: initial;
+  --studio-space-m: initial;
+  --studio-space-l: initial;
+  --studio-radius: initial;
+  --studio-radius-button: initial;
+  --studio-font-heading: initial;
+  --studio-font-body: initial;
+  --studio-weight-heading: initial;
+  --studio-weight-body: initial;
+  --studio-pad: initial;
+  --studio-gap: initial;
+  --studio-inset: initial;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* Page frame: rows in the main column, the tip block in a rail beside them from 1024px. */
+.studio-frame {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'cover' 'identity' 'tip' 'rows' 'foot';
+  width: min(100%, var(--studio-grid-max));
+  margin-inline: auto;
+  padding-inline: var(--studio-pad);
+}
+
+.studio-cover {
+  grid-area: cover;
+  min-width: 0;
+  margin-inline: calc(-1 * var(--studio-pad));
+}
+
+.studio-identity {
+  grid-area: identity;
+  min-width: 0;
+  color: var(--studio-c-text);
+}
+
+.studio-identity h1 {
+  color: var(--studio-c-heading);
+  font-family: var(--studio-font-heading);
+  font-weight: var(--studio-weight-heading);
+}
+
+.studio-identity--text-font h1 {
+  font-family: var(--studio-font-body);
+}
+
+.studio-identity .profile-identity__handle,
+.studio-identity .profile-role,
+.studio-identity .profile-bio {
+  color: var(--studio-c-muted);
+}
+
+.studio-rail {
+  grid-area: tip;
+  min-width: 0;
+  margin-block: var(--space-6, 1.5rem);
+}
+
+.studio-rows {
+  grid-area: rows;
+  min-width: 0;
+  padding-block: var(--studio-space-s);
+  color: var(--studio-t-text);
+  font-family: var(--studio-font-body);
+  font-size: var(--studio-size-body);
+  font-weight: var(--studio-weight-body);
+  line-height: var(--studio-lh-body);
+}
+
+.studio-foot {
+  grid-area: foot;
+  margin-inline: calc(-1 * var(--studio-pad));
+  margin-top: var(--studio-space-l);
+  padding: 0 var(--studio-pad) var(--studio-space-m);
+  background: var(--canvas);
+}
+
+@media (min-width: 768px) {
+  .studio {
+    --studio-pad: var(--studio-grid-pad-tablet);
+    --studio-gap: var(--studio-grid-gap-tablet);
+    --studio-inset: var(--studio-grid-inset-wide);
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio {
+    --studio-pad: var(--studio-grid-pad-desktop);
+    --studio-gap: var(--studio-grid-gap-desktop);
+  }
+
+  .studio-frame {
+    grid-template-columns: minmax(0, 1fr) var(--studio-grid-rail);
+    grid-template-areas: 'cover cover' 'identity tip' 'rows tip' 'foot foot';
+    grid-template-rows: auto auto 1fr auto;
+    column-gap: var(--studio-grid-rail-gap);
+    align-items: start;
+  }
+
+  .studio-rail {
+    position: sticky;
+    top: var(--space-4, 1rem);
+  }
+}
+
+/* Rows */
+.studio-row {
+  box-sizing: border-box;
+  padding-block: var(--studio-space-m);
+  /* Resolved here, inside the row's own colour context (a colour, second-colour or photo row
+     swaps the --studio-t-* tokens), so its text inherits the right colour. */
+  color: var(--studio-t-text);
+}
+
+.studio-row[data-spacing='s'] {
+  padding-block: var(--studio-space-s);
+}
+
+.studio-row[data-spacing='l'] {
+  padding-block: var(--studio-space-l);
+}
+
+.studio-row:not([data-bg='page']) {
+  padding-inline: var(--studio-inset);
+  border-radius: var(--studio-radius);
+}
+
+.studio-row[data-bg='card'] {
+  background: var(--studio-c-card);
+}
+
+.studio-row[data-bg='colour'] {
+  background: var(--studio-c-band);
+  --studio-t-line: var(--studio-c-band-text);
+  --studio-t-control: var(--studio-c-band-text);
+  --studio-t-text: var(--studio-c-band-text);
+  --studio-t-muted: var(--studio-c-band-text);
+  --studio-t-heading: var(--studio-c-band-text);
+  --studio-t-link: var(--studio-c-band-text);
+  --studio-t-accent: var(--studio-c-band-text);
+  --studio-t-button: var(--studio-c-band-text);
+  --studio-t-button-text: var(--studio-c-band);
+  --studio-t-button-edge: var(--studio-c-band-text);
+  --studio-t-focus: var(--studio-c-band-text);
+}
+
+.studio-row[data-bg='second'] {
+  background: var(--studio-c-second-fill);
+  --studio-t-line: var(--studio-c-second-on-fill);
+  --studio-t-control: var(--studio-c-second-on-fill);
+  --studio-t-text: var(--studio-c-second-on-fill);
+  --studio-t-muted: var(--studio-c-second-on-fill);
+  --studio-t-heading: var(--studio-c-second-on-fill);
+  --studio-t-link: var(--studio-c-second-on-fill);
+  --studio-t-accent: var(--studio-c-second-on-fill);
+  --studio-t-button: var(--studio-c-second-on-fill);
+  --studio-t-button-text: var(--studio-c-second-fill);
+  --studio-t-button-edge: var(--studio-c-second-on-fill);
+  --studio-t-focus: var(--studio-c-second-on-fill);
+}
+
+/* A photo behind words: the photo, then the scrim over all of it, then the words. */
+.studio-row[data-bg='photo'] {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  --studio-t-text: #ffffff;
+  --studio-t-muted: #ffffff;
+  --studio-t-heading: #ffffff;
+  --studio-t-link: #ffffff;
+  --studio-t-accent: #ffffff;
+  --studio-t-focus: #ffffff;
+  --studio-t-control: #ffffff;
+  --studio-t-line: #ffffff;
+  --studio-t-button: #ffffff;
+  --studio-t-button-edge: #ffffff;
+  --studio-t-button-text: #000000;
+}
+
+.studio-row__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-scrim {
+  position: relative;
+  background: rgb(0 0 0 / 0.62);
+  color: #ffffff;
+}
+
+.studio-row[data-bg='photo'] > .studio-scrim {
+  padding: var(--studio-space-m) var(--studio-inset);
+}
+
+.studio-row[data-bg='photo'][data-spacing='s'] > .studio-scrim {
+  padding-block: var(--studio-space-s);
+}
+
+.studio-row[data-bg='photo'][data-spacing='l'] > .studio-scrim {
+  padding-block: var(--studio-space-l);
+}
+
+/* The 12-column grid. Below 768px every row is one column, left column first. */
+.studio-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--studio-gap);
+}
+
+.studio-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--studio-space-s);
+  grid-column: 1 / -1;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+@media (min-width: 768px) {
+  .studio-row[data-columns='1-1'] .studio-cell,
+  .studio-row[data-columns='1-1-1'] .studio-cell {
+    grid-column: span 6;
+  }
+
+  .studio-row[data-columns='2-1'] .studio-cell:first-child,
+  .studio-row[data-columns='1-2'] .studio-cell:last-child {
+    grid-column: span 8;
+  }
+
+  .studio-row[data-columns='2-1'] .studio-cell:last-child,
+  .studio-row[data-columns='1-2'] .studio-cell:first-child {
+    grid-column: span 4;
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio-row[data-columns='1-1-1'] .studio-cell {
+    grid-column: span 4;
+  }
+}
+
+/* Text */
+.studio-text {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+.studio-heading {
+  margin: 0;
+  color: var(--studio-t-heading);
+  font-family: var(--studio-font-heading);
+  font-weight: var(--studio-weight-heading);
+}
+
+.studio-heading[data-level='2'] {
+  font-size: var(--studio-size-h2);
+  line-height: var(--studio-lh-h2);
+}
+
+.studio-heading[data-level='3'] {
+  font-size: var(--studio-size-h3);
+  line-height: var(--studio-lh-h3);
+}
+
+.studio-rows .studio-text-font {
+  font-family: var(--studio-font-body);
+}
+
+.studio-lead {
+  margin: 0;
+  max-inline-size: 68ch;
+  font-size: var(--studio-size-h3);
+  line-height: var(--studio-lh-h3);
+}
+
+.studio-paragraph p,
+.studio-about {
+  margin: 0 0 0.75em;
+  max-inline-size: 68ch;
+}
+
+.studio-paragraph p:last-child,
+.studio-about {
+  margin-bottom: 0;
+}
+
+.studio-fine {
+  margin: 0;
+  color: var(--studio-t-muted);
+  font-size: var(--studio-size-small);
+  line-height: var(--studio-lh-small);
+}
+
+.studio-rows a:not(.studio-button) {
+  color: var(--studio-t-link);
+}
+
+/* Focus: a ring on the surface, and inside a button an inner edge in the button's own text colour. */
+.studio-rows :focus-visible {
+  outline: 3px solid var(--studio-t-focus);
+  outline-offset: 2px;
+}
+
+.studio-button:focus-visible,
+.studio-video__still:focus-visible {
+  box-shadow: inset 0 0 0 3px var(--studio-t-button-text);
+}
+
+/* Buttons: the brand fill, with an edge when the fill alone is too faint against the page. */
+.studio-button {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border: 2px solid var(--studio-t-button-edge);
+  border-radius: var(--studio-radius-button);
+  background: var(--studio-t-button);
+  color: var(--studio-t-button-text);
+  font-weight: 600;
+  text-decoration: none;
+  max-width: 100%;
+}
+
+/* Photos */
+.studio-photo {
+  position: relative;
+  margin: 0;
+  overflow: hidden;
+  border-radius: var(--studio-radius);
+}
+
+.studio-photo img,
+.studio-gallery img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.studio-photo[data-shape='square'] {
+  aspect-ratio: 1;
+}
+
+.studio-photo[data-shape='circle'] {
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+
+.studio-photo[data-shape='wide'] {
+  aspect-ratio: 16 / 9;
+}
+
+.studio-photo[data-shape='tall'] {
+  aspect-ratio: 4 / 5;
+}
+
+.studio-photo__caption {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--studio-size-small);
+  line-height: var(--studio-lh-small);
+}
+
+.studio-photo[data-shape='circle'] .studio-photo__caption {
+  padding-inline: 20%;
+  text-align: center;
+}
+
+/* Galleries: 2 across, 3 in a cell of 480px or more; a strip one more; a mosaic leads big. */
+.studio-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--studio-grid-tile-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-gallery li {
+  aspect-ratio: 1;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: var(--studio-radius);
+}
+
+.studio-gallery[data-variant='strip'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.studio-gallery[data-variant='mosaic'] li:first-child {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+@container (min-width: 480px) {
+  .studio-gallery {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .studio-gallery[data-variant='strip'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Videos: a TipMe-drawn still until the visitor taps play. */
+.studio-video {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--studio-radius);
+}
+
+.studio-video__still,
+.studio-video__frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.studio-video__still {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--studio-t-button);
+  color: var(--studio-t-button-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.studio-video__words {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+.studio-video__title {
+  font-weight: 600;
+}
+
+.studio-video__note {
+  font-size: var(--studio-size-small);
+  line-height: var(--studio-lh-small);
+}
+
+/* Cards (services, events): back on the card surface, whatever the row's background. */
+.studio-card {
+  --studio-t-page: var(--studio-c-page);
+  --studio-t-card: var(--studio-c-card);
+  --studio-t-tint: var(--studio-c-tint);
+  --studio-t-line: var(--studio-c-line);
+  --studio-t-control: var(--studio-c-control);
+  --studio-t-text: var(--studio-c-text);
+  --studio-t-muted: var(--studio-c-muted);
+  --studio-t-heading: var(--studio-c-heading);
+  --studio-t-link: var(--studio-c-link);
+  --studio-t-accent: var(--studio-c-accent);
+  --studio-t-button: var(--studio-c-button);
+  --studio-t-button-text: var(--studio-c-button-text);
+  --studio-t-button-edge: var(--studio-c-button-edge);
+  --studio-t-focus: var(--studio-c-focus);
+  --studio-t-band: var(--studio-c-band);
+  --studio-t-band-text: var(--studio-c-band-text);
+  --studio-t-second-fill: var(--studio-c-second-fill);
+  --studio-t-second-on-fill: var(--studio-c-second-on-fill);
+  --studio-t-second-text: var(--studio-c-second-text);
+  box-sizing: border-box;
+  padding: 1rem;
+  border: 1px solid var(--studio-c-line);
+  border-radius: var(--studio-radius);
+  background: var(--studio-c-card);
+  color: var(--studio-c-text);
+}
+
+.studio-services ul,
+.studio-events,
+.studio-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.studio-services ul > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name price' 'detail price';
+  align-items: center;
+  column-gap: 1rem;
+}
+
+.studio-services[data-variant='cards'] ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+}
+
+.studio-services[data-variant='cards'] ul > li {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'name' 'detail' 'price';
+  align-items: start;
+  row-gap: 0.25rem;
+}
+
+.studio-services__name {
+  grid-area: name;
+  font-weight: 600;
+}
+
+.studio-services__detail {
+  grid-area: detail;
+  color: var(--studio-t-muted);
+  font-size: var(--studio-size-small);
+}
+
+.studio-price {
+  grid-area: price;
+  justify-self: start;
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--studio-radius-button);
+  background: var(--studio-t-button);
+  color: var(--studio-t-button-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.studio-services .studio-fine {
+  margin-top: 0.75rem;
+}
+
+.studio-events > li {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.studio-events[data-variant='cards'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+}
+
+.studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  min-width: 3.5rem;
+  padding: 0.25rem;
+  border: 2px solid var(--studio-t-control);
+  border-radius: var(--studio-radius);
+  color: var(--studio-t-heading);
+  font-size: var(--studio-size-small);
+  line-height: 1.2;
+}
+
+.studio-date__day {
+  font-size: var(--studio-size-h3);
+  font-weight: 700;
+}
+
+.studio-events__words {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio-events__title {
+  font-weight: 600;
+}
+
+.studio-events__line {
+  color: var(--studio-t-muted);
+  font-size: var(--studio-size-small);
+}
+
+.studio-links[data-variant='icons'] {
+  flex-flow: row wrap;
+}
+
+.studio-links .studio-button {
+  width: 100%;
+}
+
+.studio-links[data-variant='icons'] .studio-button {
+  width: auto;
+}
+
+.studio-links__handle {
+  font-weight: 400;
+}
+
+.studio-quote {
+  margin: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 4px solid var(--studio-t-accent);
+  color: var(--studio-t-heading);
+  font-family: var(--studio-font-heading);
+  font-size: var(--studio-size-h3);
+  font-weight: var(--studio-weight-heading);
+  line-height: var(--studio-lh-h3);
+}
+
+.studio-quote p {
+  margin: 0;
+}
+
+.studio-quote[data-variant='band'] {
+  padding: 1rem;
+  border: 0;
+  border-radius: var(--studio-radius);
+  background: var(--studio-c-band);
+  color: var(--studio-c-band-text);
+}
+
+@media (forced-colors: active) {
+  .studio-button,
+  .studio-price,
+  .studio-video__still {
+    border: 2px solid ButtonText;
+  }
+}

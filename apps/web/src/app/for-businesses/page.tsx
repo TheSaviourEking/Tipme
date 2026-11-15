@@ -1,12 +1,12 @@
 import { Container } from '@tipme/ui';
-import { BusinessAvailableSlot } from '@/components/business/business-available-slot';
+import { ReleaseFlagsSlot } from '@/components/release-flags-slot';
 import { marketingMetadata } from '@/lib/metadata';
 import { BusinessInterestForm } from './business-interest-form';
 import { CreateBusiness } from './create-business';
 
 export const metadata = marketingMetadata(
   'For businesses',
-  'TipMe for businesses: customers thank the people who served them, and every tip goes to that person.',
+  'TipMe for businesses: customers tip the people who served them, and every tip goes to that person.',
   '/for-businesses',
 );
 
@@ -29,19 +29,19 @@ function ComingSoon() {
 }
 
 /** On (BUSINESS_ENABLED): an invitation to create a business (owner's answer Q3, 6 Nov 2026). */
-function Open() {
+function Open({ signup }: { signup: boolean }) {
   return (
     <>
       <div>
         <h1 id="businesses-title" className="creators-title">
-          Let your customers thank your team.
+          Let your customers tip your team.
         </h1>
         <p className="creators-lede business-hero__lede">
           Customers scan one code at your place, find the person who served
-          them, and thank them with a tip.
+          them, and tip them.
         </p>
       </div>
-      <CreateBusiness />
+      <CreateBusiness signup={signup} />
     </>
   );
 }
@@ -52,9 +52,15 @@ export default function ForBusinesses() {
     <main id="main" tabIndex={-1} className="marketing-page">
       <Container>
         <section className="business-hero" aria-labelledby="businesses-title">
-          <BusinessAvailableSlot fallback={<ComingSoon />}>
-            {(on) => (on ? <Open /> : <ComingSoon />)}
-          </BusinessAvailableSlot>
+          <ReleaseFlagsSlot fallback={<ComingSoon />}>
+            {(flags) =>
+              flags.business ? (
+                <Open signup={flags.businessSignup} />
+              ) : (
+                <ComingSoon />
+              )
+            }
+          </ReleaseFlagsSlot>
         </section>
       </Container>
     </main>

@@ -31,7 +31,7 @@ export interface TipQuote {
   feeFree: boolean;
   /**
    * Business release 2: the share agreed with the business the tip is made at, shown before
-   * paying. Only with BUSINESS_SHARES_ENABLED, and only for a tip made at that business.
+   * paying. Only with the `business_shares` switch on, and only for a tip made at that business.
    */
   share?: ShareDisclosure;
 }
@@ -132,7 +132,16 @@ export type TipStatusState = (typeof tipStatusStates)[number];
 /** What the status screen may show. Never includes the supporter's message. */
 export interface TipStatusView {
   state: TipStatusState;
-  recipient: { handle: string; displayName: string };
+  recipient: {
+    handle: string;
+    displayName: string;
+    /**
+     * The recipient's photo, as their public page shows it (an API path or a demo picture). Absent
+     * when they have none, or while it is not public: the page is not live, TipMe paused it, or, for
+     * a tip made at a business, they hid their photo there. Older APIs send none.
+     */
+    avatarPath?: string;
+  };
   amountMinor: string;
   currency: string;
   completedAt: string | null;

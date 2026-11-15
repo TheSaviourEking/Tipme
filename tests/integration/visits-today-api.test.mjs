@@ -25,7 +25,12 @@ test('the owner sees today’s visits only while analytics are collected', async
     device: 'mobile',
   });
   const visits = (enabled) =>
-    new DashboardController({ db: database.db }, {}, { enabled }).visits({
+    new DashboardController(
+      { db: database.db },
+      {},
+      // Collection is the `analytics` switch now, read per request.
+      { enabled: async () => enabled },
+    ).visits({
       userId: TOBI_USER,
     });
   assert.deepEqual((await visits(true)).data, { visits: 1 });

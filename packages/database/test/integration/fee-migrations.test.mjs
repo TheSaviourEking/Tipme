@@ -21,7 +21,7 @@ test('a freshly migrated database charges ₦5,000 for Pro, with ₦2,500 kept a
   assert.equal(price.setBy, null);
   assert.match(price.reason, /12 Nov 2026/);
   const { rows: history } = await database.pool.query(
-    `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from, created_at`,
+    `SELECT amount_minor::text AS amount FROM pro_prices WHERE plan = 'personal' ORDER BY effective_from, created_at`,
   );
   assert.deepEqual(
     history.map((row) => row.amount),
@@ -40,8 +40,12 @@ test('a freshly migrated database charges ₦5,000 for Pro, with ₦2,500 kept a
   for (const statement of await migration('0093_pro_price_5000'))
     await database.pool.query(statement);
   assert.equal(
-    (await database.pool.query(`SELECT count(*)::int AS n FROM pro_prices`))
-      .rows[0].n,
+    // Personal prices only: Business Pro's own ₦7,000 row (0102, merge train 2) is not Pro's.
+    (
+      await database.pool.query(
+        `SELECT count(*)::int AS n FROM pro_prices WHERE plan = 'personal'`,
+      )
+    ).rows[0].n,
     2,
   );
 });

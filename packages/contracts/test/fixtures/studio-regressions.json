@@ -1,0 +1,53 @@
+{
+  "colour": [],
+  "resolve": [],
+  "fixes": [],
+  "render": [
+    {
+      "note": "14 Nov 2026: a price tag on a photo row; the contrast probe must use the tag's own fill, not the scrim",
+      "doc": {
+        "v": 1,
+        "brand": ["#000000", "#000000"],
+        "mode": "light",
+        "fonts": {
+          "heading": "manrope",
+          "body": "inter"
+        },
+        "scale": "compact",
+        "corners": "square",
+        "rows": [
+          {
+            "id": "aa000a00",
+            "columns": "1-1",
+            "spacing": "s",
+            "background": {
+              "photo": "00000000-0000-4000-8000-000000000000"
+            },
+            "cells": [
+              [],
+              [
+                {
+                  "id": "00aaa000",
+                  "kind": "services",
+                  "variant": "list",
+                  "items": [
+                    {
+                      "name": "!",
+                      "priceMinor": "100"
+                    }
+                  ]
+                }
+              ]
+            ]
+          }
+        ]
+      },
+      "ctx": {
+        "profile": {
+          "bio": false,
+          "links": 0
+        }
+      }
+    }
+  ]
+}

@@ -11,12 +11,17 @@ import {
   TippingSteps,
 } from '@/components/marketing';
 import { PaymentModeSlot } from '@/components/payment-mode-slot';
+import {
+  GetTippedWords,
+  ReleaseFlagsSlot,
+} from '@/components/release-flags-slot';
+import Link from 'next/link';
 import { ViewTracker } from '@/components/view-tracker';
 import { HOME_DESCRIPTION } from '@/lib/payment-mode-copy';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
-  'TipMe — A little thanks goes a long way',
+  'TipMe — A little tip goes a long way',
   HOME_DESCRIPTION,
   '/',
 );
@@ -40,7 +45,7 @@ export default function Home() {
               (USD, EUR, GBP, NGN, Stablecoins), so people can tip you in a few
               taps. They don’t need an account.
             </p>
-            <HomeClaim />
+            <HomeClaim label={<GetTippedWords />} />
             <p className="home-note">
               {/* Whether tipping is open follows the payment mode, not a fixed promise. */}
               <PaymentModeSlot fallback="Free to start.">
@@ -51,6 +56,21 @@ export default function Home() {
                 }
               </PaymentModeSlot>
             </p>
+            {/* Business sign-up (owner, 14 Nov 2026): one quiet line to the business path. */}
+            <ReleaseFlagsSlot>
+              {(flags) =>
+                flags.businessSignup && (
+                  <p className="home-business-line">
+                    Signing up a business? Get one QR code for each place, and
+                    tips reach your staff.{' '}
+                    <Link href="/sign-up?for=business">
+                      Start with your business
+                      <span aria-hidden="true"> →</span>
+                    </Link>
+                  </p>
+                )
+              }
+            </ReleaseFlagsSlot>
           </div>
           <HomeDemo />
         </section>
@@ -76,7 +96,7 @@ export default function Home() {
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">
-            Claim your username
+            <GetTippedWords />
           </ActionLink>
         </section>
       </Container>

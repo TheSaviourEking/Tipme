@@ -10,7 +10,10 @@ import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import { handleDomainEvent } from '../../apps/worker/dist/handlers/domain-events.js';
 import { staffAlertPoster } from '../../apps/worker/dist/handlers/domain-events.js';
 import * as contracts from '../../packages/contracts/dist/index.js';
-import { seedBusiness } from '../../packages/database/test/integration/business-fixtures.mjs';
+import {
+  seedBusiness,
+  seedManager,
+} from '../../packages/database/test/integration/business-fixtures.mjs';
 import { GROSS, reportedReversal } from './reversal-fixtures.mjs';
 import {
   MAIL_SEAL_KEY,
@@ -20,6 +23,7 @@ import {
   WEBHOOK_SECRET,
   browserHeaders,
   opsSignIn,
+  setSwitch,
   startStack,
 } from './helpers.mjs';
 
@@ -58,8 +62,6 @@ const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
-  // tip.reverse runs only while business shares are on (R2-A review finding 3).
-  businessSharesEnabled: true,
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -78,6 +80,9 @@ before(async () => {
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();
   ops.registerRealSeriousActions();
+  // tip.reverse runs only while business shares are on (R2-A review finding 3): stored switches now.
+  await setSwitch(database.pool, 'business', true);
+  await setSwitch(database.pool, 'business_shares', true);
   ops.registerSeriousAction({
     name: 'test.overstays',
     permission: SENSITIVE,
@@ -266,6 +271,23 @@ async function unresolvedPayoutIssue() {
 }
 
 /** Every serious action: what to ask, and whether it has happened. */
+/** A price change for one plan: the next price up, and whether it is now that plan's latest. */
+async function priceFixture(plan) {
+  const latest = async () =>
+    (
+      await q(
+        `SELECT amount_minor::text AS amount FROM pro_prices WHERE plan = $1
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+        [plan],
+      )
+    )[0].amount;
+  const next = String(BigInt(await latest()) + 10000n);
+  return {
+    payload: { amountMinor: next },
+    happened: async () => (await latest()) === next,
+  };
+}
+
 const wired = {
   'email_recovery.start': async () => {
     const userId = await ownerOf();
@@ -320,21 +342,9 @@ const wired = {
     happened: async () => (await feeOf()) === 250,
   }),
   // Paid Pro (ADR-0015): a price one naira-step away from whatever is current, each time.
-  'pro_price.change': async () => {
-    const [{ amount }] = await q(
-      `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
-    );
-    const next = String(BigInt(amount) + 10000n);
-    return {
-      payload: { amountMinor: next },
-      happened: async () =>
-        (
-          await q(
-            `SELECT amount_minor::text AS amount FROM pro_prices ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
-          )
-        )[0].amount === next,
-    };
-  },
+  'pro_price.change': async () => priceFixture('personal'),
+  // Business Pro (plan Task A5): its own price, changed the same way.
+  'business_pro_price.change': async () => priceFixture('business'),
   // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
   'pro.refund': async () => {
     const [{ id: userId }] = await q(
@@ -395,6 +405,32 @@ const wired = {
           await q(
             `SELECT 1 FROM handle_take_backs WHERE handle_lower = $1 AND state = 'approved'`,
             [handle],
+          )
+        ).length > 0,
+    };
+  },
+  // Staff announcements (14 Nov 2026): one person who takes news, and a draft to send them.
+  'announcement.send': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+      [`news.${randomUUID().slice(0, 8)}@example.com`],
+    );
+    await q(
+      `INSERT INTO mail_preferences (user_id, marketing) VALUES ($1, true)`,
+      [userId],
+    );
+    const [{ id }] = await q(
+      `INSERT INTO announcements (id, subject, preheader, text, audience, created_by)
+       VALUES (gen_random_uuid(), 'Lower fees', '', 'Fees are going down.', 'everyone', $1) RETURNING id`,
+      [userId],
+    );
+    return {
+      payload: { id, revision: 1, countWhenAsked: 1 },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM announcements WHERE id = $1 AND status = 'sending'`,
+            [id],
           )
         ).length > 0,
     };
@@ -483,6 +519,23 @@ const wired = {
         )[0].status === 'verified',
     };
   },
+  'business.owner_remove': async () => {
+    const { businessId } = await seedBusiness(database);
+    const second = await seedManager(database, {
+      businessId,
+      userId: await ownerOf(),
+    });
+    return {
+      payload: { businessId, managerId: second.managerId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM business_managers WHERE id = $1 AND removed_at IS NOT NULL`,
+            [second.managerId],
+          )
+        ).length > 0,
+    };
+  },
   'tip.reverse': async () => {
     // No hold: beforeEach deletes payment_reversed issues, which a hold would still name.
     const { tipId, issueId, partnerReversalId, reversals } =
@@ -495,6 +548,20 @@ const wired = {
         refundedMinor: GROSS.toString(),
       },
       happened: async () => (await reversals()) === 1,
+    };
+  },
+  // Feature switches (owner, 14 Nov 2026): a money switch, turned the other way each time.
+  'feature_switch.set': async () => {
+    const now = async () =>
+      (
+        await q(
+          `SELECT enabled FROM feature_switches WHERE key = 'pro_refunds'`,
+        )
+      )[0]?.enabled ?? false;
+    const to = !(await now());
+    return {
+      payload: { key: 'pro_refunds', on: to },
+      happened: async () => (await now()) === to,
     };
   },
   'mail_provider.switch': async () => {

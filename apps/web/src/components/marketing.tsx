@@ -21,8 +21,15 @@ const [SMALL_TIP, DEFAULT_TIP, LARGE_TIP] = STANDARD_TIP_PRESETS_MINOR;
 /** The smallest tip, from the fee policy, for the sentence that states it. */
 export const MINIMUM_TIP_TEXT = naira(CURRENT_FEE_POLICY.minTipMinor);
 
-/** The claim field: a plain GET form, so it works before (and without) JavaScript. */
-export function HomeClaim() {
+/**
+ * The claim field: a plain GET form, so it works before (and without) JavaScript. `label` is the
+ * button's words: "Get tipped" with business sign-up on (owner, 14 Nov 2026), else today's.
+ */
+export function HomeClaim({
+  label = 'Claim your username',
+}: {
+  label?: ReactNode;
+}) {
   return (
     <form
       className="home-claim"
@@ -45,7 +52,7 @@ export function HomeClaim() {
         />
       </label>
       <Button type="submit" variant="continue" className="home-claim__go">
-        Claim your username
+        {label}
       </Button>
     </form>
   );
@@ -304,7 +311,7 @@ export function TippedSteps() {
         Put your QR on the counter, or your link in your bio.
       </Step>
       <Step
-        title="Get your thanks"
+        title="Get your tips"
         tone="well"
         media={
           <ul className="home-step__tips">
@@ -343,7 +350,7 @@ export function TippingSteps() {
         Add a note if you like. You pay exactly the amount you choose.
       </Step>
       <Step
-        title="Say your thanks"
+        title="Send your tip"
         tone="signature"
         media={<Heart className="home-step__heart" />}
       >

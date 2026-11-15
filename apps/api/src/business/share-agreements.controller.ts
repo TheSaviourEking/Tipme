@@ -48,7 +48,7 @@ import { SharesEnabledGuard } from './release2-flags.guard.js';
 /**
  * Lane R2-C1: the share agreement. A business (an owner, or the manager of that location) proposes
  * a split; the staff member accepts, declines or suggests another on their Work page; they can
- * report the business to TipMe. Off (404) unless BUSINESS_ENABLED and BUSINESS_SHARES_ENABLED.
+ * report the business to TipMe. Off (404) unless the `business` and `business_shares` switches are on.
  * The business never learns how the staff member answered its own proposal before the start date
  * (see the operations file); a report never reaches the business.
  */

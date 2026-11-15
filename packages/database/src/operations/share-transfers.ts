@@ -733,7 +733,7 @@ async function readBack(
 }
 
 /**
- * The worker's run (every reconcile, with BUSINESS_SHARES_ENABLED): each share movement due now is
+ * The worker's run (every reconcile, with the `business` and `business_shares` switches on): each share movement due now is
  * taken one step further. A sweep waits `settleWaitMs` after its tip was paid before it is even
  * tried (partner question (e): the settlement delay for naira charges), and then until the staff
  * member's available balance holds it. One row's trouble never stops the others.

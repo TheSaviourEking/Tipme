@@ -17,7 +17,8 @@
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
-    "@tipme/config": "workspace:*"
+    "@tipme/config": "workspace:*",
+    "fast-check": "4.10.2"
   },
   "dependencies": {
     "zod": "4.6.7"

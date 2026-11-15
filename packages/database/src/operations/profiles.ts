@@ -98,6 +98,11 @@ import {
 } from './username-take-backs.js';
 import { publicCelebration } from './moments.js';
 import {
+  deleteStudioData,
+  publicStudioFor,
+  studioPageFacts,
+} from './studio.js';
+import {
   getReadyPaymentAccount,
   type PaymentAccountEnvironment,
 } from './payment-accounts.js';
@@ -969,6 +974,8 @@ export function publicProfile(
     adultLinks?: boolean;
     /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
     recognition?: boolean;
+    /** True while Page Studio is on: a Pro page's published design comes with the page. */
+    studio?: boolean;
   } = {},
 ): Promise<PublicProfile | null> {
   const handle = normaliseHandle(raw);
@@ -1002,6 +1009,9 @@ export function publicProfile(
           ...options.requiredAccount,
         })) !== null
       : true;
+    const studio = options.studio
+      ? await publicStudioFor(db, studioPageFacts(profile))
+      : undefined;
     return {
       handle: profile.handle,
       displayName: profile.displayName,
@@ -1023,6 +1033,7 @@ export function publicProfile(
       ...(options.recognition === true && profile.plan === 'pro'
         ? { recognition: true as const }
         : {}),
+      ...(studio ? { studio } : {}),
     };
   });
 }
@@ -1163,6 +1174,8 @@ export function deleteAccount(
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
           });
+        // Page Studio: the designs and their photos are the person's own too.
+        photoKeys.push(...(await deleteStudioData(tx, row.id)));
         await tx
           .insert(handleHolds)
           .values({
@@ -1341,7 +1354,7 @@ export function getNotificationPrefs(
   userId: string,
 ): Promise<NotificationPrefsView> {
   return guarded(async () =>
-    prefsOf((await myRow(db, userId)).profile, await guidesOn(db, userId)),
+    prefsOf((await myRow(db, userId)).profile, await switchesOf(db, userId)),
   );
 }
 
@@ -1366,23 +1379,36 @@ export function setNotificationPrefs(
       })
       .where(eq(profiles.id, row.profile.id))
       .returning();
+    // "News and announcements" is the marketing switch: set only when sent (older clients).
+    const news =
+      prefs.newsEmails === undefined ? {} : { marketing: prefs.newsEmails };
     await db
       .insert(mailPreferences)
-      .values({ userId, engagement: prefs.guideEmails })
+      .values({ userId, engagement: prefs.guideEmails, ...news })
       .onConflictDoUpdate({
         target: mailPreferences.userId,
-        set: { engagement: prefs.guideEmails, updatedAt: new Date() },
+        set: { engagement: prefs.guideEmails, ...news, updatedAt: new Date() },
       });
-    return prefsOf(updated!, prefs.guideEmails);
+    return prefsOf(updated!, await switchesOf(db, userId));
   });
 }
 
-async function guidesOn(db: Database, userId: string): Promise<boolean> {
+/** The guides switch (on unless turned off) and the news switch (off unless turned on). */
+async function switchesOf(
+  db: Database,
+  userId: string,
+): Promise<{ guideEmails: boolean; newsEmails: boolean }> {
   const [row] = await db
-    .select({ on: mailPreferences.engagement })
+    .select({
+      engagement: mailPreferences.engagement,
+      marketing: mailPreferences.marketing,
+    })
     .from(mailPreferences)
     .where(eq(mailPreferences.userId, userId));
-  return row?.on ?? true;
+  return {
+    guideEmails: row?.engagement ?? true,
+    newsEmails: row?.marketing ?? false,
+  };
 }
 
 const prefsOf = (
@@ -1393,12 +1419,13 @@ const prefsOf = (
     popupHideTipDetails: boolean;
     tipSound: boolean;
   },
-  guideEmails: boolean,
+  switches: { guideEmails: boolean; newsEmails: boolean },
 ): NotificationPrefsView => ({
   tipEmails: profile.notifyTipEmails,
   weeklyReports: profile.notifyWeeklyReports,
   milestones: profile.notifyMilestones,
-  guideEmails,
+  guideEmails: switches.guideEmails,
+  newsEmails: switches.newsEmails,
   hideTipDetailsInPopups: profile.popupHideTipDetails,
   tipSound: profile.tipSound,
 });

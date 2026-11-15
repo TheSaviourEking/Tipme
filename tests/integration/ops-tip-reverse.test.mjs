@@ -6,7 +6,13 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { totpAt } from '../../packages/domain/dist/index.js';
-import { WEB, browserHeaders, opsSignIn, startStack } from './helpers.mjs';
+import {
+  WEB,
+  browserHeaders,
+  opsSignIn,
+  startStack,
+  setSwitch,
+} from './helpers.mjs';
 import { GROSS, NET, reportedReversal } from './reversal-fixtures.mjs';
 
 /*
@@ -26,7 +32,6 @@ startTelemetry({
 
 let database;
 let stack;
-let off;
 let owner;
 let ownerId;
 
@@ -51,14 +56,12 @@ before(async () => {
       BUSINESS_SHARES_ENABLED: 'true',
     },
   });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env });
   owner = await opsSignIn(stack.api, database.db, '+2348037770101');
   [{ id: ownerId }] = await q(`SELECT id FROM users WHERE phone_e164 = $1`, [
     '+2348037770101',
   ]);
 });
 after(async () => {
-  await off?.stop();
   await stack?.stop();
   await database?.close();
 });
@@ -174,7 +177,7 @@ test('two webhook events for one ₦500 refund reverse exactly ₦500', async ()
   assert.equal(reversed, '50000');
 });
 
-test('the approver sees earlier reversals, and an approval on a copy with the flags off still posts', async () => {
+test('the approver sees earlier reversals, and an approval after the switches went off still posts', async () => {
   const target = await reportedReversal(database, { refundedMinor: 100000n });
   // An earlier refund of this tip, already reversed (another partner refund).
   const earlierId = `refund.re_${randomUUID().replaceAll('-', '')}`;
@@ -217,13 +220,15 @@ test('the approver sees earlier reversals, and an approval on a copy with the fl
       summary,
       /Already taken back from this tip: NGN 500\.00 in 1 reversal/,
     );
-    // The flags go off before the second person approves: it still posts (owner, 12 Nov 2026:
-    // money the partner moved is never left without its posting; the flags gate shares only).
+    // The switches go off before the second person approves: it still posts (owner, 12 Nov 2026:
+    // money the partner moved is never left without its posting; the switches gate shares only).
+    await setSwitch(database.pool, 'business', false);
+    await setSwitch(database.pool, 'business_shares', false);
     await q(`UPDATE staff_totp SET last_step = NULL WHERE user_id = $1`, [
       secondId,
     ]);
     const approved = await fetch(
-      `${off.api}/v1/ops/approvals/${requestId}/approve`,
+      `${stack.api}/v1/ops/approvals/${requestId}/approve`,
       {
         method: 'POST',
         headers: browserHeaders(second.cookie),
@@ -241,6 +246,8 @@ test('the approver sees earlier reversals, and an approval on a copy with the fl
     );
     assert.equal(status, 'approved');
   } finally {
+    await setSwitch(database.pool, 'business', true);
+    await setSwitch(database.pool, 'business_shares', true);
     await q(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
       secondId,
     ]);
@@ -337,9 +344,16 @@ test('only from an open payment_reversed issue, and with or without the release 
   assert.equal((await reverse(other.id, full)).status, 404);
   assert.equal((await reverse(randomUUID(), full)).status, 404);
   assert.equal(await target.reversals(), 0);
-  // Owner, 12 Nov 2026: a refunded tip is reversed whatever the release 2 flags.
-  const flagsOff = await reverse(target.issueId, full, off.api);
-  assert.equal(flagsOff.status, 200, await flagsOff.clone().text());
+  // Owner, 12 Nov 2026: a refunded tip is reversed whatever the release 2 switches.
+  await setSwitch(database.pool, 'business', false);
+  await setSwitch(database.pool, 'business_shares', false);
+  try {
+    const flagsOff = await reverse(target.issueId, full);
+    assert.equal(flagsOff.status, 200, await flagsOff.clone().text());
+  } finally {
+    await setSwitch(database.pool, 'business', true);
+    await setSwitch(database.pool, 'business_shares', true);
+  }
   assert.equal(await target.reversals(), 1);
 });
 
@@ -384,4 +398,56 @@ test("only a paid refund is reversed, for exactly what the partner gave back, an
   // The whole refund and its ₦15 fee leave the partner balance; the fee is TipMe's expense.
   assert.equal(clearing, '121500');
   assert.equal(fee, '1500');
+});
+
+// Owner, 14 Nov 2026: a chargeback costs TipMe its fee, sent back to the person once per dispute
+// (`fee_return`). For a tip with no business share that rides the `refund_fee_return` admin switch,
+// which replaced the REFUND_FEE_RETURN variable: off, nothing goes back; on, one fee return.
+test('a lost dispute sends TipMe’s fee back only while the refund_fee_return switch is on', async () => {
+  const chargedBack = async () => {
+    const tip = await reportedReversal(database);
+    const [{ attempt_id: attemptId }] = await q(
+      `SELECT a.id AS attempt_id FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
+        WHERE t.id = $1`,
+      [tip.tipId],
+    );
+    const disputeId = `dispute.dp_${randomUUID().replaceAll('-', '')}`;
+    await ops.flagPaymentReversal(database.db, {
+      attemptId,
+      eventId: `evt_chargeback_${randomUUID()}`,
+      eventType: 'dispute.created',
+      partnerReversalId: disputeId,
+      disputeWon: false,
+    });
+    const [{ id: issueId }] = await q(
+      `SELECT id FROM issues WHERE dedupe_key = $1`,
+      [`event.payment.reversed.${attemptId}.${disputeId}`],
+    );
+    return { ...tip, disputeId, chargebackIssue: issueId };
+  };
+  const feeReturns = async (disputeId) =>
+    (
+      await q(
+        `SELECT count(*)::int AS n FROM share_transfers
+          WHERE kind = 'fee_return' AND partner_reversal_id = $1`,
+        [disputeId],
+      )
+    )[0].n;
+
+  const off = await chargedBack();
+  const offAnswer = await reverse(off.chargebackIssue, full);
+  assert.equal(offAnswer.status, 200, await offAnswer.clone().text());
+  assert.equal(await off.reversals(), 1);
+  assert.equal(await feeReturns(off.disputeId), 0);
+
+  await setSwitch(database.pool, 'refund_fee_return', true);
+  try {
+    const on = await chargedBack();
+    const onAnswer = await reverse(on.chargebackIssue, full);
+    assert.equal(onAnswer.status, 200, await onAnswer.clone().text());
+    assert.equal(await on.reversals(), 1);
+    assert.equal(await feeReturns(on.disputeId), 1);
+  } finally {
+    await setSwitch(database.pool, 'refund_fee_return', false);
+  }
 });

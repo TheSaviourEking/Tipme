@@ -14,8 +14,7 @@ import {
   type ApiDataResponse,
   type WebVital,
 } from '@tipme/contracts';
-import { recordClientEvent, recordWebVital } from '@tipme/database';
-import { API_CONFIG, type ApiConfig } from '../config.js';
+import { recordClientEvent, recordWebVital, featureOn } from '@tipme/database';
 import { RateLimit, RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -29,12 +28,15 @@ const MOBILE = /Mobi|Android|iPhone|iPad|iPod/i;
  */
 @Controller('v1')
 export class EventsController {
-  private readonly enabled: boolean;
   constructor(
-    @Inject(API_CONFIG) config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-  ) {
-    this.enabled = config.ANALYTICS_ENABLED;
+  ) {}
+
+  /** The browser said "don't track me": honoured here too, not only in our own script. */
+  private async collecting(gpc?: string, dnt?: string): Promise<boolean> {
+    return (
+      gpc !== '1' && dnt !== '1' && featureOn(this.database.db, 'analytics')
+    );
   }
 
   @Post('events')
@@ -46,8 +48,7 @@ export class EventsController {
     @Headers('sec-gpc') gpc: string | undefined,
     @Headers('dnt') dnt: string | undefined,
   ): Promise<ApiDataResponse<{ accepted: true }>> {
-    // The browser said "don't track me": honoured here too, not only in our own script.
-    if (this.enabled && gpc !== '1' && dnt !== '1')
+    if (await this.collecting(gpc, dnt))
       await recordClientEvent(this.database.db, {
         event,
         device: MOBILE.test(userAgent ?? '') ? 'mobile' : 'desktop',
@@ -65,7 +66,7 @@ export class EventsController {
     @Headers('sec-gpc') gpc: string | undefined,
     @Headers('dnt') dnt: string | undefined,
   ): Promise<ApiDataResponse<{ accepted: true }>> {
-    if (this.enabled && gpc !== '1' && dnt !== '1')
+    if (await this.collecting(gpc, dnt))
       await recordWebVital(this.database.db, {
         vital,
         device: MOBILE.test(userAgent ?? '') ? 'mobile' : 'desktop',

@@ -200,7 +200,7 @@ export function ThanksSettings({ title }: { title: string }) {
             The supporter’s receipt
           </p>
           <p className="miy-receipt__heading">
-            {profile.displayName} got your thanks.
+            {profile.displayName} got your tip.
           </p>
           {slip ? (
             <ThanksSlip slip={slip} />

@@ -1,6 +1,11 @@
 'use client';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 import { ActionLink } from '@tipme/ui';
 import { Arrow } from './brand';
 import { apiFetch } from '@/lib/session-client';
@@ -8,10 +13,26 @@ import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { BUSINESS_ROLES_CHANGED } from '@/lib/business/setup-api';
 import { readSignedInHint, SIGNED_IN_HINT_CHANGED } from '@/lib/signed-in-hint';
 
-/** Signed out: "Sign in" and the one primary action, "Claim your username". */
-export function GuestActions({ onClick }: { onClick(): void }) {
+/**
+ * Signed out: "Sign in" and the one primary action, "Claim your username" ("Get tipped" with
+ * business sign-up on, owner 14 Nov 2026).
+ */
+export function GuestActions({
+  onClick,
+  claimWords = 'Claim your username',
+  businessStart = null,
+}: {
+  onClick(): void;
+  /** The primary action's words, rendered on the server per request (GetTippedWords). */
+  claimWords?: ReactNode;
+  /** The header's "For businesses" with business sign-up on (HeaderBusinessStart). */
+  businessStart?: ReactNode;
+}) {
   return (
     <>
+      {/* Business sign-up (owner, 14 Nov 2026): the header's "For businesses" opens the business
+          path of sign-up. A plain link, so "Get tipped" stays the one purple action. */}
+      {businessStart}
       {/* Hidden in the dashboard, where someone already has a page (CSS). */}
       <ActionLink
         className="nav-guest"
@@ -26,7 +47,7 @@ export function GuestActions({ onClick }: { onClick(): void }) {
         href="/sign-up"
         onClick={onClick}
       >
-        Claim your username <Arrow />
+        {claimWords} <Arrow />
       </ActionLink>
     </>
   );
@@ -54,7 +75,15 @@ const BUSINESS = '/dashboard/business';
  * extra request. Outside the dashboard a hint is checked once against the API: an ended session
  * turns the header back to Sign in. Inside it the dashboard's own reads keep the hint right.
  */
-export function NavAccount({ onClick }: { onClick(): void }) {
+export function NavAccount({
+  onClick,
+  claimWords,
+  businessStart,
+}: {
+  onClick(): void;
+  claimWords?: ReactNode;
+  businessStart?: ReactNode;
+}) {
   const pathname = usePathname();
   const inDashboard =
     pathname === DASHBOARD || pathname.startsWith(`${DASHBOARD}/`);
@@ -87,7 +116,14 @@ export function NavAccount({ onClick }: { onClick(): void }) {
     return () => window.removeEventListener(BUSINESS_ROLES_CHANGED, refresh);
   }, [member]);
 
-  if (!member) return <GuestActions onClick={onClick} />;
+  if (!member)
+    return (
+      <GuestActions
+        onClick={onClick}
+        claimWords={claimWords}
+        businessStart={businessStart}
+      />
+    );
   // A Business answer from before a sign-out is never shown: `member` gates it.
   const onBusiness =
     pathname === BUSINESS || pathname.startsWith(`${BUSINESS}/`);

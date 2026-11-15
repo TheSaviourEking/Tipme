@@ -18,6 +18,7 @@ import {
   type ProVerified,
   findBachsAttemptByOperationReference,
   ensurePayoutSetup,
+  featureOn,
   findPaymentAccountByReference,
   updatePaymentAccountStatus,
   findBachsAttemptByReference,
@@ -30,7 +31,6 @@ import {
   recordUnmatchedEvent,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
-import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LOGGER } from '../tokens.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
@@ -68,19 +68,16 @@ export class WebhookService {
     private readonly mockProvider: {
       verifyTransaction(reference: string): Promise<ProVerified>;
     } | null = null,
-    // REFUND_FEE_RETURN (owner, 12 Nov 2026). Optional, as above: without it nothing is returned.
-    @Optional()
-    @Inject(API_CONFIG)
-    private readonly config: Pick<ApiConfig, 'REFUND_FEE_RETURN'> | null = null,
   ) {}
 
   /** After a Pro payment changed a page's plan: its public page and open tabs re-read. */
   private signalPlan(result: {
     planChanged: boolean;
-    profileId: string;
+    /** Null for a business's purchase (Business Pro): no page changed. */
+    profileId: string | null;
     handleLower: string | null;
   }): void {
-    if (!result.planChanged) return;
+    if (!result.planChanged || result.profileId === null) return;
     if (result.handleLower) this.revalidator?.revalidate(result.handleLower);
     void this.publishLive({
       to: { profile: result.profileId },
@@ -440,6 +437,9 @@ export class WebhookService {
   ): Promise<string> {
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
+    // The `refund_fee_return` switch (owner, 12 and 14 Nov 2026): with it on, a final refund is
+    // recorded in the ledger at once instead of waiting for two staff.
+    const feeReturnOn = await featureOn(this.database.db, 'refund_fee_return');
     const flagged = await flagPaymentReversal(this.database.db, {
       attemptId,
       eventId: event.eventId,
@@ -449,7 +449,7 @@ export class WebhookService {
       refundState: event.refundState,
       refundedMinor: event.refundedMinor,
       refundFeeMinor: event.refundFeeMinor,
-      ...(this.config?.REFUND_FEE_RETURN ? { feeReturnOn: true } : {}),
+      ...(feeReturnOn ? { feeReturnOn: true } : {}),
     });
     return flagged === 'dispute_won' ? 'dispute_won' : 'reversal_flagged';
   }

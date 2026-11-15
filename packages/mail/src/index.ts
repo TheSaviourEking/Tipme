@@ -12,7 +12,13 @@ export {
   type RenderedMail,
 } from './templates/define.js';
 export { escapeHtml } from './templates/escape.js';
-export type { Block, Letter } from './templates/layout.js';
+export type { Block, Letter, Span } from './templates/layout.js';
+export {
+  ANNOUNCEMENT_LIMITS,
+  announcementBlocks,
+  announcementSchema,
+  type AnnouncementData,
+} from './templates/types/announcement.js';
 export { MAIL_TYPES, renderMail } from './templates/registry.js';
 export {
   MAIL_SENDERS,
@@ -20,12 +26,14 @@ export {
   type MailSender,
 } from './templates/define.js';
 export { isPretendRecipient, resolveMailProvider } from './routing.js';
+export { createBrevoProvider, type BrevoConfig } from './brevo/provider.js';
 export {
   createZeptoMailProvider,
   type ZeptoMailConfig,
 } from './zeptomail/provider.js';
 export { createSesProvider, type SesConfig } from './ses/provider.js';
 export {
+  announcementMailProvider,
   checkMailSettings,
   configuredMailProviderNames,
   configuredMailProviders,

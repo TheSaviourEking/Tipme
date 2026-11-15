@@ -27,7 +27,12 @@ export const LIVE_STAFF_TYPES = [
 ] as const;
 
 /** Handled by the hub, never forwarded. */
-export const LIVE_SERVER_TYPES = ['sessions.changed', 'staff.changed'] as const;
+export const LIVE_SERVER_TYPES = [
+  'sessions.changed',
+  'staff.changed',
+  // A feature switch changed in admin: each API copy forgets its switches (docs/runbooks/settings-and-switches.md).
+  'switches.changed',
+] as const;
 
 /** Written by the hub itself, never published on the channel. */
 export const LIVE_CONTROL_TYPES = [
@@ -93,6 +98,12 @@ export const sessionsChanged = (userId: string): LiveMessage => ({
  * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
  * the browser's own client uses the same range. One constant, so the two can't drift apart.
  */
+/** Published after a feature switch changes, once the change has committed. */
+export const switchesChanged: LiveMessage = {
+  to: { all: true },
+  type: 'switches.changed',
+};
+
 export const LIVE_DRAIN_RETRY_MS = { min: 1000, max: 10_000 } as const;
 
 export const liveChannel = (queuePrefix: string): string =>

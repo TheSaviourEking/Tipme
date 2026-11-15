@@ -63,7 +63,7 @@ export interface CreatePaymentIntentInput {
    */
   businessMemberId?: string;
   /**
-   * The API's BUSINESS_SHARES_ENABLED (business release 2, R2-C2). Only with it is a share fixed on
+   * The `business` and `business_shares` switches (business release 2, R2-C2). Only with it is a share fixed on
    * a tip made at a membership whose agreement is in force; off, nothing about shares is read.
    */
   sharesOn?: boolean;

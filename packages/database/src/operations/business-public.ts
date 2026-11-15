@@ -37,7 +37,7 @@ export interface PublicReadOptions {
     provider: string;
     environment: PaymentAccountEnvironment;
   };
-  /** BUSINESS_SHARES_ENABLED: the staff page then tells the agreed split before any amount. */
+  /** The `business_shares` switch: the staff page then tells the agreed split before any amount. */
   sharesOn?: boolean;
 }
 

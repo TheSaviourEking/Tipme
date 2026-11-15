@@ -1,10 +1,11 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useContext, useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type { BusinessDetail } from '@tipme/contracts';
 import { Button, InputField, Slip, StateLine } from '@tipme/ui';
-import { useRecipient } from '@/components/account/recipient-context';
+import { RecipientContext } from '@/components/account/recipient-context';
+import { useAccount } from '@/components/account/account-context';
 import {
   announceRolesChanged,
   applyForBusiness,
@@ -22,7 +23,11 @@ import {
  */
 export function ApplyForm() {
   const id = useId();
-  const { profile } = useRecipient();
+  // The login's own email (business sign-up: a login with no page applies too); the page's name
+  // when there is one.
+  const profile = useContext(RecipientContext)?.profile ?? null;
+  const { account } = useAccount();
+  const emailVerified = account?.emailVerified ?? false;
   // Drawn in the browser only (the dashboard waits for the signed-in profile), so this is safe.
   const [host] = useState(() =>
     typeof window === 'undefined' ? 'usetipme.xyz' : window.location.host,
@@ -33,8 +38,8 @@ export function ApplyForm() {
     locationName: '',
     locationSlug: '',
     address: '',
-    contactName: profile.displayName,
-    contactEmail: profile.emailVerified ? (profile.email ?? '') : '',
+    contactName: profile?.displayName ?? '',
+    contactEmail: emailVerified ? (account?.email ?? '') : '',
     contactPhone: '',
   });
   // Suggested from the names until the person types an address of their own.
@@ -71,7 +76,7 @@ export function ApplyForm() {
       return next;
     });
 
-  if (!profile.emailVerified)
+  if (!emailVerified)
     return (
       <div className="dashboard-section business-apply">
         <h1>Create your business</h1>

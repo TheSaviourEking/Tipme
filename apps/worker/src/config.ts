@@ -1,5 +1,8 @@
 import { isProductionCopy, parseConfig } from '@tipme/observability';
-import { databaseBudgetSettingsShape } from '@tipme/contracts';
+import {
+  databaseBudgetSettingsShape,
+  featureSwitchSeedsFrom,
+} from '@tipme/contracts';
 import { productionDatabaseUrlProblem } from '@tipme/database';
 import { checkMailSettings, mailSettingsShape } from '@tipme/mail';
 import { checkPaymentSettings, paymentSettingsShape } from '@tipme/payments';
@@ -70,6 +73,16 @@ export const workerConfigSchema = z
           .map((d) => d.trim().toLowerCase())
           .filter(Boolean),
       ),
+    // Staff announcements (14 Nov 2026): emails queued per minute, at most, through Brevo. Brevo's
+    // API allows far more; its plan's daily quota and sending reputation are the real limits, and 60
+    // a minute keeps a send a slow trickle behind every other email. A code default, not a deploy
+    // setting (owner, 14 Nov 2026): an override for tests and emergencies only.
+    ANNOUNCEMENT_SENDS_PER_MINUTE: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(600)
+      .default(60),
     // Links in emails point here.
     WEB_ORIGIN: z
       .url({ protocol: /^https?$/ })
@@ -80,34 +93,6 @@ export const workerConfigSchema = z
     WEB_REVALIDATE_SECRET: z.string().min(32).optional(),
     // Provider, live switch and Bachs API keys: one definition with the API (no webhook secrets).
     ...paymentSettingsShape,
-    // Anonymous analytics. On unless set to false (owner's decision, 9 Nov 2026; D-07 stays open).
-    ANALYTICS_ENABLED: z
-      .enum(['true', 'false'])
-      .default('true')
-      .transform((value) => value === 'true'),
-    // Auto-renew on a saved naira card (plan Task 10; ruling 9): the `pro.renew` sweep charges only
-    // with this on. Off by default, until the sandbox proof (evidence E8 to E10).
-    PRO_AUTO_RENEW: z
-      .enum(['on', 'off'])
-      .default('off')
-      .transform((value) => value === 'on'),
-    // Business release 2, option B: move each shared tip's money staff -> TipMe -> business once
-    // it is available, and put refunds right. Off by default; on with the API's flag of the same
-    // name (both BUSINESS_ENABLED and it on there), never alone.
-    BUSINESS_SHARES_ENABLED: z
-      .enum(['true', 'false'])
-      .default('false')
-      .transform((value) => value === 'true'),
-    // How long after a shared tip is paid before its share is first tried (a ruling: partner
-    // question (e), the settlement delay for naira charges, is still open). Then it also waits
-    // until the staff member's available balance holds it.
-    BUSINESS_SHARE_SETTLE_HOURS: z.coerce.number().min(0).max(240).default(48),
-    // Owner, 12 Nov 2026: TipMe returns its platform fee on every refunded tip (once refund.paid
-    // is final) and on a lost dispute staff reverse, by transfer to the person's account. Unset:
-    // on with the pretend provider (and e2e), off with our real partner until the owner turns it
-    // on. The worker sends what the API asked for while this is on.
-    REFUND_FEE_RETURN: z.enum(['true', 'false']).optional(),
-
     // Error reporting (PR-011): Sentry-compatible DSN; unset = off. Never logged.
     SENTRY_DSN: z.url({ protocol: /^https?$/ }).optional(),
     SENTRY_ENVIRONMENT: z
@@ -232,12 +217,11 @@ export const workerConfigSchema = z
     REWARD_CASH_BUDGET_MINOR_PER_MONTH:
       config.REWARD_CASH_BUDGET_MINOR_PER_MONTH ??
       (isProductionCopy(config) ? 0n : PRETEND_REWARD_CASH_BUDGET_MINOR),
-    REFUND_FEE_RETURN:
-      config.REFUND_FEE_RETURN === undefined
-        ? config.PAYMENT_PROVIDER === 'mock'
-        : config.REFUND_FEE_RETURN === 'true',
   }));
-export type WorkerConfig = z.infer<typeof workerConfigSchema>;
+export type WorkerConfig = z.infer<typeof workerConfigSchema> & {
+  /** As the API's: old switch variables, kept only to seed the switches on the first start. */
+  switchSeeds: Record<string, string>;
+};
 
 export const SERVICE_NAME = 'tipme-worker';
 
@@ -248,5 +232,8 @@ export function loadWorkerConfig(
   const present = Object.fromEntries(
     Object.entries(env).filter(([, value]) => value !== ''),
   );
-  return parseConfig(workerConfigSchema, present);
+  return {
+    ...parseConfig(workerConfigSchema, present),
+    switchSeeds: featureSwitchSeedsFrom(present),
+  };
 }

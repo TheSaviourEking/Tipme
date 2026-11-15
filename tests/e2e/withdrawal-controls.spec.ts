@@ -117,3 +117,57 @@ test('with withdrawals switched off the Withdraw page says so plainly, before an
   await expect(page.getByLabel(/amount/i)).toHaveCount(0);
   await expectAccessible(page);
 });
+
+// The cards under a page share one parent, so each needs its own key: with the same key on two
+// siblings, looking up a second page left a stale copy of the freeze card stuck loading.
+test('looking up a second page from Pages leaves exactly one of each card', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const context = await browser.newContext();
+  const recipient = await context.newPage();
+  const first = await signUpRecipient(recipient, {
+    ...testInfo,
+    workerIndex: testInfo.workerIndex + 1000,
+  } as typeof testInfo);
+  const otherContext = await browser.newContext();
+  const second = await signUpRecipient(await otherContext.newPage(), {
+    ...testInfo,
+    workerIndex: testInfo.workerIndex + 2000,
+  } as typeof testInfo);
+  await enrolOwner(page, testInfo);
+  const main = page.getByRole('main');
+  const oneOfEach = async () => {
+    for (const name of [
+      'Reported account takeover',
+      'Sign-in email',
+      'Username',
+    ])
+      await expect(
+        main.getByRole('heading', { level: 2, name, exact: true }),
+      ).toHaveCount(1);
+    await expect(
+      main.getByRole('button', { name: 'Freeze withdrawals…' }),
+    ).toHaveCount(1);
+    await expect(
+      main.getByRole('button', { name: /Freeze or record a report/ }),
+    ).toHaveCount(0);
+  };
+
+  await page.goto(`/ops/pages?handle=${first.handle}`);
+  await expect(
+    main.getByRole('heading', { level: 2, name: `@${first.handle}` }),
+  ).toBeVisible();
+  await oneOfEach();
+
+  for (const handle of [second.handle, first.handle, second.handle]) {
+    await page.getByLabel('Handle', { exact: true }).fill(handle);
+    await page.getByRole('button', { name: 'Find page' }).click();
+    await expect(
+      main.getByRole('heading', { level: 2, name: new RegExp(`@${handle}$`) }),
+    ).toBeVisible();
+    await oneOfEach();
+  }
+  await context.close();
+  await otherContext.close();
+});

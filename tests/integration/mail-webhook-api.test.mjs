@@ -8,6 +8,7 @@ import {
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
+  createBrevoProvider,
   createSesProvider,
   createZeptoMailProvider,
 } from '../../packages/mail/dist/index.js';
@@ -225,4 +226,76 @@ test('a certificate fetch that fails is 503, so SNS retries instead of the event
     ),
     503,
   );
+});
+
+// Announcements (owner, 14 Nov 2026): Brevo's bounces and spam reports feed the same suppression
+// list. Brevo doesn't sign webhooks; it sends the bearer token set on the webhook.
+const BREVO_TOKEN = 'brevo-webhook-token-0123456789';
+function brevoController(db) {
+  return new MailWebhookController(
+    new Map(),
+    { db: db.db },
+    sealing,
+    logger,
+    async () => {},
+    createBrevoProvider({
+      apiKey: 'brevo-placeholder-test',
+      apiBase: 'https://api.brevo.example',
+      fromAddress: 'news@usetipme.xyz',
+      webhookToken: BREVO_TOKEN,
+      sandbox: true,
+    }),
+  );
+}
+const brevoEvent = (event, email, token = BREVO_TOKEN) => ({
+  rawBody: Buffer.from(
+    JSON.stringify({
+      event,
+      email,
+      'message-id': `<${Math.random()}@smtp-relay.mailin.fr>`,
+      ts_event: Math.floor(Date.now() / 1000),
+    }),
+  ),
+  headers: { authorization: `Bearer ${token}` },
+});
+
+test('a Brevo bounce or spam report suppresses its address', async (t) => {
+  const db = await database(t);
+  const brevo = brevoController(db);
+  await brevo.receive('brevo', brevoEvent('hard_bounce', 'gone@example.com'));
+  await brevo.receive('brevo', brevoEvent('spam', 'annoyed@example.com'));
+  const rows = await db.pool.query(
+    `SELECT address_hmac, reason FROM mail_suppressions ORDER BY reason`,
+  );
+  assert.deepEqual(
+    rows.rows.map((row) => [row.address_hmac, row.reason]),
+    [
+      [addressHmac(sealing, 'annoyed@example.com'), 'complaint'],
+      [addressHmac(sealing, 'gone@example.com'), 'hard_bounce'],
+    ],
+  );
+});
+
+test('a Brevo webhook without its token is 401; Brevo is unknown where it isn’t set up', async (t) => {
+  const db = await database(t);
+  assert.equal(
+    await status(
+      brevoController(db).receive(
+        'brevo',
+        brevoEvent('hard_bounce', 'gone@example.com', 'wrong-token-0123456789'),
+      ),
+    ),
+    401,
+  );
+  assert.equal(
+    await status(
+      controller(db).receive(
+        'brevo',
+        brevoEvent('hard_bounce', 'x@example.com'),
+      ),
+    ),
+    404,
+  );
+  const rows = await db.pool.query(`SELECT 1 FROM mail_suppressions`);
+  assert.equal(rows.rows.length, 0);
 });

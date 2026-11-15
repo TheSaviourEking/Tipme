@@ -1,7 +1,7 @@
 import { isAllowedProPrice } from '@tipme/contracts';
 import { and, desc, eq, lte } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { approvalRequests, proPrices } from '../schema.js';
+import { approvalRequests, PRO_PRICE_PLANS, proPrices } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -16,37 +16,49 @@ export interface ProPriceRow {
   setBy: string | null;
   approvedBy: string | null;
   reason: string;
+  /** Which Pro the price is for (Business Pro, plan Task A3). */
+  plan: ProPricePlan;
   createdAt: Date;
 }
 
+/** A person's page Pro, or Business Pro. */
+export type ProPricePlan = (typeof PRO_PRICE_PLANS)[number];
+
 const asRow = (row: typeof proPrices.$inferSelect): ProPriceRow => ({
   ...row,
-  // The table only holds NGN (pro_prices_currency_ngn).
+  // The table only holds NGN (pro_prices_currency_ngn) and these plans (pro_prices_plan).
   currency: 'NGN',
+  plan: row.plan as ProPricePlan,
 });
 
-/** The latest price whose `effective_from` has passed; null only if none was ever set. */
+/**
+ * The latest price for `plan` whose `effective_from` has passed; null only if none was ever set.
+ * Personal and business prices move separately.
+ */
 export async function currentProPrice(
   db: Database | Tx,
   now: Date = new Date(),
+  plan: ProPricePlan = 'personal',
 ): Promise<ProPriceRow | null> {
   const [row] = await db
     .select()
     .from(proPrices)
-    .where(and(lte(proPrices.effectiveFrom, now)))
+    .where(and(lte(proPrices.effectiveFrom, now), eq(proPrices.plan, plan)))
     .orderBy(desc(proPrices.effectiveFrom), desc(proPrices.createdAt))
     .limit(1);
   return row ? asRow(row) : null;
 }
 
-/** Every price, newest first, for staff. */
+/** Every price for one plan, newest first, for staff. */
 export async function proPriceHistory(
   db: Database | Tx,
   limit = 50,
+  plan: ProPricePlan = 'personal',
 ): Promise<ProPriceRow[]> {
   const rows = await db
     .select()
     .from(proPrices)
+    .where(eq(proPrices.plan, plan))
     .orderBy(desc(proPrices.effectiveFrom), desc(proPrices.createdAt))
     .limit(limit);
   return rows.map(asRow);
@@ -80,11 +92,14 @@ export async function setProPrice(
     approvedBy: string | null;
     reason: string;
     now: Date;
+    /** Business Pro's price (plan Task A3); personal when left out. */
+    plan?: ProPricePlan;
   },
 ): Promise<{ id: string; amountMinor: bigint; previousMinor: bigint | null }> {
+  const plan = input.plan ?? 'personal';
   if (!isAllowedProPrice(input.amountMinor))
     throw new OperationError('INVALID_INPUT');
-  const previous = await currentProPrice(tx, input.now);
+  const previous = await currentProPrice(tx, input.now, plan);
   if (previous?.amountMinor === input.amountMinor)
     throw new OperationError('INVALID_INPUT');
   const id = newId();
@@ -96,11 +111,13 @@ export async function setProPrice(
     setBy: input.staffUserId,
     approvedBy: input.approvedBy,
     reason: input.reason,
+    plan,
     createdAt: input.now,
   });
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
-    action: 'pro.price_changed',
+    action:
+      plan === 'business' ? 'business_pro.price_changed' : 'pro.price_changed',
     permission: 'pro.price',
     subjectType: 'pro_price',
     subjectId: id,
@@ -118,16 +135,17 @@ export async function setProPrice(
   };
 }
 
-/** A `pro_price.change` still waiting for a second person, so the screen says so. */
+/** A price change still waiting for a second person, so the screen says so. */
 export async function waitingProPriceRequest(
   db: Database | Tx,
+  action: 'pro_price.change' | 'business_pro_price.change' = 'pro_price.change',
 ): Promise<string | null> {
   const [row] = await db
     .select({ id: approvalRequests.id })
     .from(approvalRequests)
     .where(
       and(
-        eq(approvalRequests.action, 'pro_price.change'),
+        eq(approvalRequests.action, action),
         eq(approvalRequests.status, 'pending'),
       ),
     )

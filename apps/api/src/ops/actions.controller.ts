@@ -191,8 +191,8 @@ export class OpsActionsController {
    * Business release 2 (Q7): from the partner's `payment_reversed` issue, staff take back the tip
    * the partner refunded or charged back, every line of it, after checking the partner's dashboard.
    * A second person approves it when there is one (`tip.reverse`). For every tip, whatever the
-   * release 2 flags (owner, 12 Nov 2026: money never moves without its posting); a final refund is
-   * already reversed at refund.paid while REFUND_FEE_RETURN is on, and asking again is refused.
+   * release 2 switches (owner, 12 Nov 2026: money never moves without its posting); a final refund is
+   * already reversed at refund.paid while the `refund_fee_return` switch is on, and asking again is refused.
    */
   @Post('issues/:id/reverse-tip')
   @HttpCode(200)
