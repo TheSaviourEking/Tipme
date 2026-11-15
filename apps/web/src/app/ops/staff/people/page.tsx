@@ -23,13 +23,16 @@ import {
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
 import { PermissionPicker } from '@/components/ops/permission-picker';
+import { ReadFailureNotice } from '@/components/ops/read-failure-notice';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
 import {
   accessAdjustments,
   outcomeIsUnknown,
+  readFailure,
   refusalWords,
+  type ReadFailure,
 } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
@@ -514,7 +517,7 @@ export default function PeoplePage() {
   const access = useOpsAccess();
   const [people, setPeople] = useState<OpsStaffPerson[] | null>(null);
   const [roles, setRoles] = useState<OpsRole[] | null>(null);
-  const [problem, setProblem] = useState('');
+  const [problem, setProblem] = useState<ReadFailure | null>(null);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const [refresh, setRefresh] = useState(0);
   const allowed = can(access, 'staff.manage');
@@ -527,8 +530,8 @@ export default function PeoplePage() {
     setRoles(roleList.ok ? roleList.data : null);
     if (list.ok) {
       setPeople(list.data);
-      setProblem('');
-    } else setProblem(refusalWords(list));
+      setProblem(null);
+    } else setProblem(readFailure(list, 'the staff list'));
     setRefresh((n) => n + 1);
   }, []);
   useEffect(() => {
@@ -565,12 +568,11 @@ export default function PeoplePage() {
         />
       )}
       {problem && (
-        <Notice tone="error" title="Couldn’t load the people">
-          {problem}{' '}
-          <Button variant="quiet" onClick={() => void load()}>
-            Try again
-          </Button>
-        </Notice>
+        <ReadFailureNotice
+          failure={problem}
+          title="Couldn’t load the people"
+          onRetry={() => void load()}
+        />
       )}
       {!people && !problem && <Skeleton label="Loading the people" />}
       {people && (

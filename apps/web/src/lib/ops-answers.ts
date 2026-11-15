@@ -68,6 +68,40 @@ export async function withFreshCode<R extends { ok: boolean; code?: string }>(
   return (await ask()) ? send() : first;
 }
 
+/** Why a read of an admin screen didn't load: each kind needs different words and a different button. */
+export interface ReadFailure {
+  kind: 'needs_code' | 'forbidden' | 'no_answer' | 'other';
+  words: string;
+}
+
+/**
+ * The words for a screen that couldn't read its list. `what` completes "Your role doesn’t include …".
+ * A missing code is not a role problem (the screen offers the code again), and a genuine refusal is
+ * not a connection problem; the two must never share a message.
+ */
+export function readFailure(
+  answer: { status: number; code: string; message?: string },
+  what: string,
+): ReadFailure {
+  if (answer.code === 'FRESH_CODE_REQUIRED')
+    return {
+      kind: 'needs_code',
+      words:
+        'This needs a fresh authenticator code. Nothing has been shown yet.',
+    };
+  if (answer.code === 'FORBIDDEN' || answer.code === 'PERMISSION_NOT_HELD')
+    return { kind: 'forbidden', words: `Your role doesn’t include ${what}.` };
+  if (answer.status === 0)
+    return {
+      kind: 'no_answer',
+      words: 'We got no answer. Check your connection and try again.',
+    };
+  return {
+    kind: 'other',
+    words: answer.message ?? 'That didn’t load. Please try again.',
+  };
+}
+
 export const STALE_WORDS: Record<string, string> = {
   requester_lost_access:
     'It did not run: the person who asked no longer holds the permission.',
