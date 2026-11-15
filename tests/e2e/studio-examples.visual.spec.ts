@@ -6,7 +6,9 @@ for (const name of ['kemi', 'sule', 'ify'])
   for (const width of [390, 1440])
     test(`Page Studio ${name} at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/dev/studio-lab?example=${name}`);
+      // A fixed day (the property tests' TODAY): Kemi's events are dated, and a dropped past
+      // event would change the image.
+      await page.goto(`/dev/studio-lab?example=${name}&today=2026-11-14`);
       await page.locator('.studio').waitFor();
       await page.evaluate(() => document.fonts.ready);
       // Photos are generated SVGs; wait for every one in view so the capture is stable.

@@ -55,7 +55,7 @@ const today = () =>
  * real tip block, for the render property tests and the curated examples. Test copies only.
  *   ?example=kemi|sule|ify|max|min|empty|hostile, or ?example=fonts&font=<id>
  *   ?doc=<base64url deflate-raw JSON, at most 12 KB>
- *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8
+ *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8, &today=YYYY-MM-DD
  */
 export default async function StudioLabPage({ searchParams }: Props) {
   // Rendered per request: the lab reads today's Lagos date (to keep today's events), which
@@ -86,7 +86,12 @@ export default async function StudioLabPage({ searchParams }: Props) {
       notFound();
     }
   }
-  const document = resolveStudio(raw, today());
+  // &today=YYYY-MM-DD pins the date events are kept against, so a screenshot never ages.
+  const day = one('today');
+  const document = resolveStudio(
+    raw,
+    day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : today(),
+  );
   const mode = one('mode');
   if (mode === 'light' || mode === 'dark') document.mode = mode;
   const bio = one('bio') !== '0';

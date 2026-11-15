@@ -99,6 +99,13 @@ test.describe('a published Studio page', () => {
       await expect(
         page.locator('.studio-rows .studio-row').first(),
       ).toBeVisible();
+      // A services block always ends with the fixed line (owner, 16 Nov 2026).
+      for (const services of await page.locator('.studio-services').all())
+        await expect(services.locator('.studio-fine')).toHaveText(
+          'Prices are for information. Tips here are a gift, not a payment for a service.',
+        );
+      if (handle === 'studiosule')
+        await expect(page.locator('.studio-services')).toHaveCount(1);
       // The site's own navigation steps aside, as on every public page.
       await expect(page.locator('.site-nav')).toBeHidden();
       // On a phone the tip block comes straight after the identity, before the rows.
