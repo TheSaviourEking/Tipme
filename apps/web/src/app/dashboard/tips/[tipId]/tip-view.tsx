@@ -98,7 +98,8 @@ export default function TipDetailPage() {
           {tip.proof.verified
             ? `Confirmed by our payment partner${tip.proof.verifiedAt ? ` on ${lagos(tip.proof.verifiedAt, { dateStyle: 'medium', timeStyle: 'short' })}` : ''}. `
             : 'Still being confirmed by our payment partner. It is not in your balance yet. '}
-          {copy.tipFeesPrefix} {tip.feePolicyVersion}.
+          {/* Never the fee policy's id: the fee row above names the share in words. */}
+          {copy.tipFineNote}
         </p>
         {error === 'refresh' && (
           <p className="receipt__fine">Couldn’t refresh</p>

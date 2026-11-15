@@ -32,7 +32,8 @@ export type PaymentModeCopy = {
   qrHint: string;
   withdrawNotice: string | null;
   withdrawDoneSuffix: string;
-  tipFeesPrefix: string;
+  /** The last line of a tip's receipt in the dashboard, when the mode has one. */
+  tipFineNote: string | null;
   receiptBanner: string | null;
   footerNote: string | null;
   weekCardSuffix: string;
@@ -80,7 +81,7 @@ const TEST: PaymentModeCopy = {
   formPartner: 'A test page stands in for our payment partner. Confirm there.',
   profileMetaSuffix: ' Test mode.',
   homeRecipientNotice:
-    'Payments are in test mode. Real payments and payout setup are not available until provider and funds-flow approvals are complete.',
+    'Payments are in test mode. Real payments and payout setup aren’t available yet.',
   homeClarity: `${CLARITY} Payments are still in test mode; real payments are not available yet.`,
   signUpLede: `${SIGN_UP} Payments are in test mode.`,
   dashboardBadge: 'Test mode',
@@ -91,7 +92,7 @@ const TEST: PaymentModeCopy = {
   withdrawNotice:
     'No real money moves in test mode. The test bank pays straight away.',
   withdrawDoneSuffix: ' is on its way to your test bank.',
-  tipFeesPrefix: 'Test mode · fees from policy',
+  tipFineNote: 'Test mode: no real money moved.',
   receiptBanner: 'Test payment · no real money moved',
   footerNote: 'Development preview · Test mode',
   weekCardSuffix: ' · test mode',
@@ -122,7 +123,7 @@ const LIVE: PaymentModeCopy = {
   qrHint: 'Anyone who scans it lands on your page.',
   withdrawNotice: null,
   withdrawDoneSuffix: ' is on its way to your bank.',
-  tipFeesPrefix: 'Fees from policy',
+  tipFineNote: null,
   receiptBanner: null,
   footerNote: null,
   weekCardSuffix: '',

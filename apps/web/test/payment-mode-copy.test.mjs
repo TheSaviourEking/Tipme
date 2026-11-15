@@ -154,3 +154,36 @@ test('test mode keeps its two lines; closed mode has none', () => {
   assert.equal(closed.formPartner, null);
   assert.equal(closed.formTrust, null);
 });
+
+// UI audit (15 Nov 2026), item 12: no internal ids (a fee policy's version) and no jargon
+// ("provider", "funds-flow approvals") in words people read.
+test('no copy shows a fee policy id or approval jargon', () => {
+  for (const mode of ['test', 'live', 'closed']) {
+    const copy = paymentModeCopy(mode);
+    assert.equal('tipFeesPrefix' in copy, false, `${mode}.tipFeesPrefix`);
+    for (const [key, text] of Object.entries(copy))
+      if (typeof text === 'string')
+        assert.doesNotMatch(
+          text,
+          /polic(y|ies)|provider|funds-flow|approval/i,
+          `${mode}.${key}`,
+        );
+  }
+});
+
+test('the tip detail never prints the fee policy version', () => {
+  const view = readFileSync(
+    new URL('../src/app/dashboard/tips/[tipId]/tip-view.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(view, /\{tip\.feePolicyVersion\}/);
+});
+
+test('the first-day checklist and the activity list use plain words', () => {
+  const read = (path) =>
+    readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8');
+  assert.doesNotMatch(read('app/dashboard/home-view.tsx'), /funds-flow/);
+  const activity = read('components/dashboard/activity-list.tsx');
+  assert.doesNotMatch(activity, /payment provider/);
+  assert.match(activity, /our payment partner/);
+});

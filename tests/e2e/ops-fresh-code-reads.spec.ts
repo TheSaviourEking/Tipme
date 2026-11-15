@@ -15,7 +15,7 @@ const SCREENS = [
   },
   {
     path: '/ops/staff/people',
-    heading: 'People',
+    heading: 'Staff members',
     loaded: (page: import('@playwright/test').Page) =>
       page.getByRole('main').locator('.ops-list article').first(),
     problem: 'Couldn’t load the people',

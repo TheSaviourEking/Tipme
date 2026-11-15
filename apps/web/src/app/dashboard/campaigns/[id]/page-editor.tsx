@@ -342,13 +342,15 @@ export function CampaignPageEditor({
             aria-describedby={`${id}-on-hint`}
             onChange={(event) => setOn(event.target.checked)}
           />
-          <span>
+          {/* The hint on its own line under the label (a block, as `.tip-remember small` is),
+              never run on into it ("Its own pagePeople who…", UI audit 15 Nov 2026). */}
+          <div>
             <label htmlFor={`${id}-on`}>Its own page</label>
-            <span className="tm-hint" id={`${id}-on-hint`}>
+            <small className="tm-hint" id={`${id}-on-hint`}>
               People who open this link or scan its QR see this page. Off: they
               see your normal page.
-            </span>
-          </span>
+            </small>
+          </div>
         </div>
         <InputField
           id={`${id}-headline`}

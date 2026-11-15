@@ -1,3 +1,8 @@
+# Current task: UI audit fixes, behaviour and words (15 November 2026)
+
+- Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.
+- No CSS, no migration, no API change. Tests: `apps/web/test/dashboard-load.test.mjs`, `panel-read.test.mjs`, `payment-mode-copy.test.mjs`; e2e `tests/e2e/dashboard-read-failures.spec.ts` plus copy assertions in touched specs. Next: CI, owner review and merge into `dev`.
+
 # Current task: the production migration deadlock fix (15 November 2026)
 
 - Branch `fix/deploy-migration-deadlock` from `origin/dev`. Deploy production (main @ `05231073`) failed twice at Migrations with 40P01: drizzle runs migrations 0071–0112 in one transaction, which deadlocked with the old workers' jobs. Each attempt rolled back; production is unchanged.

@@ -1,7 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type {
   BachsPaymentAccountStatus,
   MyAccount,
@@ -33,6 +39,11 @@ import {
   RECOVERY_EMAIL_CHANGED,
 } from '@/lib/owner-attention';
 import { apiFetch } from '@/lib/session-client';
+import { LoadFailed } from '@/components/dashboard/load-failed';
+import {
+  dashboardLoadFailedBody,
+  profileReadOutcome,
+} from '@/lib/dashboard-load';
 import { businessLinks, loadBusinessRoles } from '@/lib/business/roles-api';
 import { BUSINESS_ROLES_CHANGED } from '@/lib/business/setup-api';
 import { keepJoinLink, takeJoinCode } from '@/lib/business/join-link';
@@ -106,7 +117,7 @@ const isCurrent = (pathname: string, href: string) =>
 
 /**
  * Loads the signed-in recipient's page. Signed out → sign in (and come back here); signed in
- * without a page → choose a handle.
+ * without a page → choose a handle; a read that failed → the error slip with Try again.
  */
 export function DashboardShell({
   children,
@@ -126,22 +137,40 @@ export function DashboardShell({
   // Business sign-up (Task D4): a login with a business and no page uses the dashboard as itself.
   const [accountOnly, setAccountOnly] = useState<MyAccount | null>(null);
   const [accountRead, setAccountRead] = useState(0);
+  // The first profile read failed for a reason that isn't the session (UI audit, 15 Nov 2026).
+  const [loadFailed, setLoadFailed] = useState<'unreachable' | 'failed' | null>(
+    null,
+  );
+  // Try again settles once the read it started has answered.
+  const settleRetry = useRef<(() => void) | null>(null);
   const flags = useReleaseFlags();
 
   useEffect(() => {
     let live = true;
     void apiFetch<MyProfile>('/v1/me/profile').then(async (result) => {
       if (!live) return;
+      const outcome = profileReadOutcome(result);
+      if (outcome !== 'failed' && outcome !== 'unreachable')
+        setLoadFailed(null);
+      settleRetry.current?.();
+      settleRetry.current = null;
       if (result.ok) {
         setProfile(result.data);
         setLiveUpdates(result.data.liveUpdates === true);
         setAccountOnly(null);
         return;
       }
+      // Only a signed-out answer is "signed out". A server or network failure keeps the person
+      // here, with Try again: sending them to Sign in would loop ("Go to my dashboard").
+      if (outcome === 'failed' || outcome === 'unreachable') {
+        // A page already on screen stays: this is only the first read's failure.
+        setLoadFailed((prev) => prev ?? outcome);
+        return;
+      }
       // A business invitation's link (`#join=`) is a fragment: it survives sign-in only in
       // this tab's storage, and never in `next`.
       keepJoinLink();
-      if (result.status !== 404) {
+      if (outcome === 'signed_out') {
         router.replace(`/sign-in?next=${encodeURIComponent(pathname)}`);
         return;
       }
@@ -427,6 +456,18 @@ export function DashboardShell({
                 )}
               </WhatsNewContext.Provider>
             </AccountContext.Provider>
+          ) : loadFailed ? (
+            <LoadFailed
+              title="We couldn’t load your dashboard"
+              onRetry={() =>
+                new Promise<void>((resolve) => {
+                  settleRetry.current = resolve;
+                  setAccountRead((n) => n + 1);
+                })
+              }
+            >
+              {dashboardLoadFailedBody(loadFailed)}
+            </LoadFailed>
           ) : (
             <Skeleton label="Loading your dashboard" />
           )}
