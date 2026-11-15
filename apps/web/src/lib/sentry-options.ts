@@ -1,4 +1,4 @@
-import { scrubEvent } from './sentry-scrub';
+import { scrubEvent } from './sentry-scrub.ts';
 
 /**
  * Sentry for the web app (ADR-0005): unexpected errors and a sample of traces, nothing else. No
@@ -15,6 +15,9 @@ export function sentryOptions(dsn: string | undefined) {
       process.env.NODE_ENV,
     sendDefaultPii: false,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
+    // @sentry/nextjs 11 defaults to span streaming ('stream'), which ignores beforeSendTransaction,
+    // so traces would skip the scrubber. 'static' keeps whole transactions and runs it.
+    traceLifecycle: 'static' as const,
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubEvent,
   };
