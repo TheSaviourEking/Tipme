@@ -279,7 +279,9 @@ test('a final refund is reversed at refund.paid only while the refund_fee_return
     ).rows[0].n;
   const webhooks = new WebhookService({ db });
 
-  // Off (the default): the refund opens its issue and waits for staff.
+  // Off (the default): the refund opens its issue and waits for staff (two people). The
+  // chargeback fee no longer rides this switch (owner, 14 Nov 2026); this stays as it was.
+  await setSwitch(database.pool, 'refund_fee_return', false);
   const off = await paidTip('acct_ada123:chk_off');
   assert.equal(
     await webhooks.applyBachs(
@@ -291,6 +293,14 @@ test('a final refund is reversed at refund.paid only while the refund_fee_return
     'reversal_flagged',
   );
   assert.equal(await reversals(off.tipId), 0);
+  const waiting = (
+    await database.pool.query(
+      `SELECT i.status, (SELECT count(*)::int FROM share_transfers r WHERE r.tip_id = $1::uuid) AS moves
+         FROM issues i WHERE i.kind = 'payment_reversed' AND i.subject->>'tipId' = $2`,
+      [off.tipId, off.tipId],
+    )
+  ).rows;
+  assert.deepEqual(waiting, [{ status: 'open', moves: 0 }]);
 
   // On: the same final refund is reversed in the ledger at once.
   await setSwitch(database.pool, 'refund_fee_return', true);

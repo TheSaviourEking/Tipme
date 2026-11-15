@@ -102,6 +102,7 @@ import { handleProExpire, handleProReminders } from './handlers/pro.js';
 import { workerRevalidator } from './revalidate.js';
 import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
+import { shareTransferKinds } from './share-transfer-kinds.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
 /**
@@ -564,30 +565,28 @@ export async function startJobWorker(
             // provider that made them. A page whose plan changed is revalidated and signalled.
             const pro = await reconcileProEverywhere(now);
             // Option B: business shares between partner accounts, each leg once and read back.
-            // The `business` and `business_shares` switches, or `refund_fee_return` alone (admin).
+            // Shares move with the `business` and `business_shares` switches (admin); a chargeback's
+            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee).
             const shares = { checked: 0, failed: 0 };
-            const [businessOn, sharesSwitchOn, feeReturnOn] = await Promise.all(
-              [
-                featureOn(database.db, 'business'),
-                featureOn(database.db, 'business_shares'),
-                featureOn(database.db, 'refund_fee_return'),
-              ],
-            );
-            const sharesOn = businessOn && sharesSwitchOn;
-            if (sharesOn || feeReturnOn)
-              for (const provider of [mockProvider, bachsProvider]) {
-                if (!provider?.collectToPlatform || !provider.transferToAccount)
-                  continue;
-                const result = await runShareTransfers(database.db, {
-                  provider,
-                  now,
-                  settleWaitMs: BUSINESS_SHARE_SETTLE_MS,
-                  // With only refund_fee_return on, only fees move back.
-                  ...(sharesOn ? {} : { kinds: ['fee_return' as const] }),
-                });
-                shares.checked += result.checked;
-                shares.failed += result.failed;
-              }
+            const [businessOn, sharesSwitchOn] = await Promise.all([
+              featureOn(database.db, 'business'),
+              featureOn(database.db, 'business_shares'),
+            ]);
+            const kinds = shareTransferKinds({
+              sharesOn: businessOn && sharesSwitchOn,
+            });
+            for (const provider of [mockProvider, bachsProvider]) {
+              if (!provider?.collectToPlatform || !provider.transferToAccount)
+                continue;
+              const result = await runShareTransfers(database.db, {
+                provider,
+                now,
+                settleWaitMs: BUSINESS_SHARE_SETTLE_MS,
+                ...(kinds ? { kinds } : {}),
+              });
+              shares.checked += result.checked;
+              shares.failed += result.failed;
+            }
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,

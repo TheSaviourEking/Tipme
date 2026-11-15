@@ -877,10 +877,6 @@ const tipReverse = acting<TipReversePayload>({
       partnerReversalId: payload.partnerReversalId,
       refundFeeMinor: BigInt(refundFeeMinor ?? '0'),
       refundedMinor: BigInt(payload.refundedMinor),
-      // A lost dispute's fee goes back here (owner, 14 Nov 2026: chargebacks only; a refund keeps it).
-      ...((await readFeatureSwitch(tx, 'refund_fee_return'))
-        ? { feeReturnOn: true }
-        : {}),
       now: context.now,
     });
     return {

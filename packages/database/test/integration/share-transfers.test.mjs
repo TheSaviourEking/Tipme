@@ -768,7 +768,6 @@ test('option B: shares and their money', async (t) => {
           tipId: tip.tipId,
           partnerReversalId: `refund.${refundId}`,
           refundedMinor: NET,
-          feeReturnOn: true,
         }),
       );
       assert.equal(again.created, false);
@@ -915,8 +914,9 @@ test('option B: shares and their money', async (t) => {
     },
   );
 
+  // Owner, 14 Nov 2026: TipMe always bears its fee on a chargeback; no switch decides it.
   await t.test(
-    'a lost dispute reversed by staff returns the fee once, keyed on the dispute',
+    'a lost dispute reversed by staff returns the fee once, keyed on the dispute, with no switch',
     async () => {
       await database.fresh();
       const partner = pretendPartner();
@@ -928,7 +928,6 @@ test('option B: shares and their money', async (t) => {
             tipId: tip.tipId,
             partnerReversalId: dispute,
             refundedMinor: GROSS,
-            feeReturnOn: true,
           }),
         );
       await reverse();

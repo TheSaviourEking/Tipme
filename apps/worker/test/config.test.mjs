@@ -517,9 +517,9 @@ test('the worker no longer parses ANALYTICS_ENABLED or PRO_AUTO_RENEW; it keeps 
   );
 });
 
-// Business release 2, option B (#193): the worker reads the `business`, `business_shares` and
-// `refund_fee_return` admin switches, not variables of its own; the share's settle wait is a code
-// value. The old switch variables only seed a switch on a database with no row yet.
+// Business release 2, option B (#193): the worker reads the `business` and `business_shares`
+// admin switches, not variables of its own (a chargeback's fee return moves whatever the switches,
+// owner 14 Nov 2026); the share's settle wait is a code value. The old switch variables only seed a switch on a database with no row yet.
 test('the worker has no business-share or refund variables; the switch ones only seed', async () => {
   const { readFileSync } = await import('node:fs');
   const declared = [
