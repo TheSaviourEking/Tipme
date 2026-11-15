@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { DependencyUnavailableError } from '../../apps/api/dist/http/api-exception.filter.js';
 import { PaymentAccountsController } from '../../apps/api/dist/profiles/payment-accounts.controller.js';
+import { BachsWebhookController } from '../../apps/api/dist/webhooks/bachs-webhook.controller.js';
+import { AccountSetupInFlightError } from '../../apps/api/dist/webhooks/retryable.js';
 import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
 import {
   beginPaymentAccountCreation,
   mailSealing,
+  runIssueDetectors,
   seedDemoProfiles,
   updatePaymentAccountStatus,
 } from '../../packages/database/dist/index.js';
@@ -243,4 +247,157 @@ test('an account page fails closed when the adapter is not the configured enviro
     controller.status({ userId: TOBI_USER }),
     /does not match PAYMENT_PROVIDER/,
   );
+});
+
+// Setup in flight: the onboarding request claims the row (CREATING, no reference) and saves the
+// partner's reference only after its calls return, while the partner already sends account events.
+
+async function setupInFlight(t, environment = 'sandbox') {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  await beginPaymentAccountCreation(database.db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment,
+  });
+  return database;
+}
+
+async function unmatchedRows(database) {
+  return (
+    await database.pool.query(
+      `SELECT provider_event_id, reason FROM unmatched_provider_events ORDER BY provider_event_id`,
+    )
+  ).rows;
+}
+
+async function unmatchedIssues(database) {
+  await runIssueDetectors(database.db, new Date());
+  return (
+    await database.pool.query(
+      `SELECT id FROM issues WHERE kind = 'unmatched_event'`,
+    )
+  ).rows.length;
+}
+
+test('an account event during account setup asks for a redelivery, then matches once the reference is saved', async (t) => {
+  const database = await setupInFlight(t);
+  const webhooks = new WebhookService({ db: database.db });
+  await assert.rejects(
+    webhooks.applyBachs(event('evt_setup_1'), restricted),
+    (error) => error instanceof AccountSetupInFlightError,
+  );
+  assert.deepEqual(await unmatchedRows(database), []);
+  assert.equal(await unmatchedIssues(database), 0);
+
+  // The onboarding request finishes and saves the partner's reference; the redelivery matches.
+  await updatePaymentAccountStatus(database.db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_ada123',
+    status: 'ONBOARDING',
+    chargesEnabled: false,
+    payoutsEnabled: false,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  assert.equal(
+    await webhooks.applyBachs(event('evt_setup_1'), restricted),
+    'account_refreshed',
+  );
+  assert.deepEqual(await unmatchedRows(database), []);
+});
+
+test('the webhook endpoint answers 503 for an account event during account setup, so the partner retries', async (t) => {
+  const database = await setupInFlight(t);
+  const webhooks = new WebhookService({ db: database.db });
+  const logs = [];
+  const controller = new BachsWebhookController(
+    {
+      environment: 'sandbox',
+      verifyWebhook: () => ({ ok: true, event: event('evt_setup_http') }),
+      getRecipientAccount: restricted.getRecipientAccount,
+    },
+    { info: (entry) => logs.push(entry), warn: (entry) => logs.push(entry) },
+    webhooks,
+  );
+  await assert.rejects(
+    controller.receive({ rawBody: Buffer.from('{}'), headers: {} }),
+    (error) => error instanceof DependencyUnavailableError,
+  );
+  assert.ok(logs.some((entry) => entry.event === 'webhook.deferred'));
+  assert.deepEqual(await unmatchedRows(database), []);
+});
+
+test('a setup in the other environment does not hold back an event for an unknown account', async (t) => {
+  const database = await setupInFlight(t, 'live');
+  const webhooks = new WebhookService({ db: database.db });
+  assert.equal(
+    await webhooks.applyBachs(
+      event('evt_setup_2', 'acct_stranger'),
+      restricted,
+    ),
+    'unmatched',
+  );
+});
+
+test('a setup claimed more than ten minutes ago no longer holds events back', async (t) => {
+  const database = await setupInFlight(t);
+  await database.pool.query(
+    `UPDATE payment_accounts SET updated_at = now() - interval '11 minutes' WHERE profile_id = $1`,
+    [ADA],
+  );
+  const webhooks = new WebhookService({ db: database.db });
+  assert.equal(
+    await webhooks.applyBachs(event('evt_setup_3'), restricted),
+    'unmatched',
+  );
+  assert.deepEqual(await unmatchedRows(database), [
+    { provider_event_id: 'evt_setup_3', reason: 'unknown_account' },
+  ]);
+  assert.equal(await unmatchedIssues(database), 0);
+});
+
+test('an account event for an account TipMe never had is kept for audit but is not a staff issue', async (t) => {
+  const database = await activeAccount(t);
+  const webhooks = new WebhookService({ db: database.db });
+  assert.equal(
+    await webhooks.applyBachs(
+      event('evt_foreign_1', 'acct_stranger'),
+      restricted,
+    ),
+    'unmatched',
+  );
+  assert.deepEqual(await unmatchedRows(database), [
+    { provider_event_id: 'evt_foreign_1', reason: 'unknown_account' },
+  ]);
+  assert.equal(await unmatchedIssues(database), 0);
+});
+
+test('an unmatched payment event still raises a staff issue', async (t) => {
+  const database = await activeAccount(t);
+  const webhooks = new WebhookService({ db: database.db });
+  assert.equal(
+    await webhooks.applyBachs(
+      {
+        kind: 'payment',
+        eventId: 'evt_pay_unknown',
+        eventType: 'charge.succeeded',
+        accountReference: 'acct_ada123',
+        operationReference: '00000000-0000-7000-8000-00000000dead',
+        providerReference: 'ch_unknown',
+        status: 'succeeded',
+        feePaidBy: 'unknown',
+      },
+      restricted,
+    ),
+    'unmatched',
+  );
+  assert.deepEqual(await unmatchedRows(database), [
+    { provider_event_id: 'evt_pay_unknown', reason: 'unknown_attempt' },
+  ]);
+  assert.equal(await unmatchedIssues(database), 1);
 });

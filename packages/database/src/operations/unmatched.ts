@@ -14,7 +14,8 @@ export function recordUnmatchedEvent(
     providerEventId: string;
     eventType: string;
     payload: unknown;
-    reason: 'unknown_attempt' | 'unknown_payout';
+    /** `unknown_account`: an account event for an account TipMe does not have (not an issue). */
+    reason: 'unknown_attempt' | 'unknown_payout' | 'unknown_account';
   },
 ): Promise<'stored' | 'duplicate' | 'conflict'> {
   return guarded(async () => {

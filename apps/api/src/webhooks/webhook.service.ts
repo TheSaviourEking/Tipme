@@ -23,6 +23,7 @@ import {
   ensurePayoutSetup,
   featureOn,
   findPaymentAccountByReference,
+  paymentAccountSetupInFlight,
   updatePaymentAccountStatus,
   findBachsAttemptByReference,
   findAttemptByReference,
@@ -41,8 +42,19 @@ import type { EventResult, MailSealing } from '@tipme/database';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { PAYMENT_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { AccountSetupInFlightError } from './retryable.js';
 
 const PROVIDER = 'mock';
+
+/**
+ * How long after its claim an account setup still holds back account events for unknown
+ * references. A setup is two partner calls of at most 10 s each (the client's timeout) before
+ * the reference is saved, so a real one is over in well under a minute; 10 minutes leaves room
+ * for a slow one and covers the partner's first two retries (about 1 and 6 minutes after the
+ * first try). A claim left CREATING longer (a crash mid-setup, which the worker's sweep marks
+ * UNKNOWN for staff) stops holding events back, so its events are recorded, not retried for ever.
+ */
+const ACCOUNT_SETUP_WINDOW_MS = 10 * 60_000;
 
 /**
  * Applies a verified provider message through the PR-005 operations. Matching is by the provider's
@@ -499,8 +511,8 @@ export class WebhookService {
       environment,
       providerAccountReference: event.accountReference,
     });
-    if (!known || !accounts.getRecipientAccount)
-      return this.unmatchedBachs(event);
+    if (!known) return this.unknownBachsAccount(event, environment);
+    if (!accounts.getRecipientAccount) return this.unmatchedBachs(event);
     // A business's receive-only account: re-read when its owner opens the Money section.
     if (known.profileId === null) return 'ignored';
     // A failed read throws, so Bachs retries the delivery later.
@@ -544,6 +556,45 @@ export class WebhookService {
       type: 'payments.changed',
     });
     return 'account_refreshed';
+  }
+
+  /**
+   * An account event for a reference TipMe has no account for. The partner sends account events
+   * while an account is still being created, before the onboarding request has saved its
+   * reference; while any setup in this environment is in flight the event is refused as
+   * retryable, so it comes back once the reference is saved and then matches normally.
+   *
+   * The partner's webhook docs (https://docs.bachs.io/guides/webhooks, read 15 Nov 2026): a
+   * delivery succeeds only on a 2xx within 10 seconds; timeouts, 5xx, 408 and 429 are retried,
+   * other 4xx are not. Up to 5 tries: retries about 1, 5, 15 and 60 minutes after each failed
+   * one (the last about 80 minutes after the first), then it stops. So the controller answers
+   * 503 (the same as a database outage).
+   *
+   * Otherwise the account is not one of ours (or its setup ended without one): the event is kept
+   * for audit as `unknown_account`, which is not raised to staff, since it only ever triggers a
+   * read-back and there is nothing for a person to do.
+   */
+  private async unknownBachsAccount(
+    event: Extract<NormalizedProviderEvent, { kind: 'account' }>,
+    environment: BachsProvider['environment'],
+  ): Promise<string> {
+    const { db } = this.database;
+    if (
+      await paymentAccountSetupInFlight(db, {
+        provider: 'bachs',
+        environment,
+        claimedSince: new Date(Date.now() - ACCOUNT_SETUP_WINDOW_MS),
+      })
+    )
+      throw new AccountSetupInFlightError();
+    await recordUnmatchedEvent(db, {
+      provider: 'bachs',
+      providerEventId: event.eventId,
+      eventType: event.eventType,
+      payload: event,
+      reason: 'unknown_account',
+    });
+    return 'unmatched';
   }
 
   private async unmatchedBachs(
