@@ -39,9 +39,13 @@ export function madeOn(iso: string): string {
 export function ResultCells({ results }: { results: CampaignResults }) {
   return (
     <>
-      <td className="n">{results.visits ?? 'Not counted yet'}</td>
-      <td className="n">{results.tips ?? 'Fewer than 3'}</td>
-      <td className="n">
+      <td className="n" data-label="Visits">
+        {results.visits ?? 'Not counted yet'}
+      </td>
+      <td className="n" data-label="Tips">
+        {results.tips ?? 'Fewer than 3'}
+      </td>
+      <td className="n" data-label="Received">
         {results.receivedNetMinor === null ? (
           <span className="tm-hint">Hidden</span>
         ) : (

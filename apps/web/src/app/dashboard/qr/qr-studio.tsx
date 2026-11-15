@@ -48,6 +48,10 @@ export function QrStudio() {
   const pro = profile.plan === 'pro';
   const [designs, setDesigns] = useState<QrArtItem[] | null>(null);
   const [designsFailed, setDesignsFailed] = useState(false);
+  // A thumbnail whose picture didn't load is left out, never shown as a broken image (UI audit).
+  const [brokenThumbs, setBrokenThumbs] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   // A design a Free page is only looking at: it is never saved, and never printed.
   const [looking, setLooking] = useState<string | null>(null);
   const current = chosen ?? profile.qrStyle;
@@ -386,15 +390,22 @@ export function QrStudio() {
                       checked={viewing === option.id}
                       onChange={() => pick(option.id)}
                     />
-                    {/* eslint-disable-next-line @next/next/no-img-element -- a private image from the API */}
-                    <img
-                      className="qr-style__thumb"
-                      src={artSrc(option.thumb)}
-                      alt=""
-                      loading="lazy"
-                      width={40}
-                      height={40}
-                    />
+                    {brokenThumbs.has(option.id) ? (
+                      <span className="qr-style__thumb" aria-hidden="true" />
+                    ) : (
+                      // eslint-disable-next-line @next/next/no-img-element -- a private image from the API
+                      <img
+                        className="qr-style__thumb"
+                        src={artSrc(option.thumb)}
+                        alt=""
+                        loading="lazy"
+                        width={40}
+                        height={40}
+                        onError={() =>
+                          setBrokenThumbs((now) => new Set(now).add(option.id))
+                        }
+                      />
+                    )}
                     <span>
                       {option.name}
                       {option.locked && (

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { MonthlyRecapData } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton, Slip } from '@tipme/ui';
+import { Button, Card, Skeleton, Slip } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -81,9 +81,11 @@ export default function MonthlyRecapPage() {
 
   if (!pro)
     return (
-      <Notice tone="neutral" title="The monthly recap is part of TipMe Pro">
-        <Link href="/dashboard/earnings">See your earnings</Link>
-      </Notice>
+      <Slip tone="neutral" title="The monthly recap is part of TipMe Pro">
+        <p>
+          <Link href="/dashboard/earnings">See your earnings</Link>
+        </p>
+      </Slip>
     );
   // No recap for the month (404) is not a fault: it isn't made yet, so it is said neutrally
   // (DECISION-LOG 2026-10-27). Only a failed read is an error, with Try again (UI audit, 15 Nov 2026).

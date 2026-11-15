@@ -3,6 +3,12 @@
 - Branch `fix/ui-audit-ops` from `origin/dev` (with #241). The admin findings F1–F26 of the UI audit, built from the OpsShell/OpsPages boards: one page root (`.ops-page-body`), recessed tiles, purple never a state colour (state badges, green switch lamp, black save/continue and reasoned actions), Switches as hairline rows, phone tables as stacked cards, `EmptyWell`, pricing behind "…" openers, `.tm-choice > span`, an in-frame missing page. Rulings in DECISION-LOG 2026-11-15.
 - Must merge after the release PR #242. Left: F12, F18, F19 (another PR's copy), F20 (status wording), the six-box code input (F17).
 
+# Current task: dashboard UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-dashboard` from `origin/dev` (after #241). One PR into `dev`, not merged; it must merge after release PR #242. CSS (dashboard.css only; the route-css test stays green), small TSX changes (nav-account, earnings, bar chart, tips empty state, QR thumbnails, recap slip, campaigns stacked rows), one new spec (`dashboard-layout.spec.ts`), `nav-account.spec.ts` updated. No migration, no API change.
+- Left for others or the owner: the profile-error redirect and endless data skeletons (behaviour agent), copy strings, the campaign editor form, the claim moment, a one-row bar at 1440 (tabs or sidebar), page-shaped skeletons, the remaining generic `Notice`s, avatars, money/date formats.
+- Next: CI, then the owner merges after #242.
+
 # Current task: UI audit fixes, behaviour and words (15 November 2026)
 
 - Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.

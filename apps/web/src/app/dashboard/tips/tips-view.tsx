@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { LiveEventType, MyTipRow, TipTotals } from '@tipme/contracts';
-import { Button, InputField, Skeleton, Stamp } from '@tipme/ui';
+import { Button, EmptySlip, InputField, Skeleton, Stamp } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { formatNaira } from '@/lib/demo-amount';
 import { dayKey, timeOf } from '@/lib/lagos-time';
@@ -138,6 +138,11 @@ export default function TipsPage() {
   if (error === 'load' && !data)
     return <LoadFailed title="We couldn’t load your tips" onRetry={reload} />;
 
+  // No tip at all yet (not a filter or a search that found none): the shared empty state, with no
+  // CSV, search or filters for a list that has nothing in it (DECISION-LOG: EmptySlip).
+  const none =
+    items !== null && items.length === 0 && filter === 'all' && !searched;
+
   return (
     <div className="dashboard-section tips-page">
       <header className="tips-head">
@@ -145,66 +150,68 @@ export default function TipsPage() {
       </header>
       {/* D1: on a desktop this column stands beside the list and stays in view: the totals as a
           small instrument, the CSV and the controls. On a phone it keeps today's place, above. */}
-      <div className="tips-aside">
-        {totals.data && totals.data.paidTipCount > 0 && (
-          <p className="tips-total">
-            <strong>{formatNaira(totals.data.receivedNetMinor)}</strong> from{' '}
-            {totals.data.paidTipCount}{' '}
-            {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
-          </p>
-        )}
-        <Button
-          variant="quiet"
-          onClick={async () => {
-            setDownload('Preparing your file…');
-            const day = new Date().toISOString().slice(0, 10);
-            const result = await apiDownload(
-              '/v1/me/exports/tips.csv',
-              `tipme-tips-${day}.csv`,
-            );
-            setDownload(
-              result.ok
-                ? 'Downloaded. It has the date, supporter name, amounts, status and the last 6 characters of each reference. Messages stay private.'
-                : 'We couldn’t prepare the file. Please try again.',
-            );
-          }}
-        >
-          Download as CSV
-        </Button>
-        <p role="status" className="tm-hint tips-status">
-          {download}
-        </p>
-        <div className="tips-controls">
-          {canSearch && (
-            <InputField
-              id={`${id}-search`}
-              label="Search"
-              type="search"
-              autoComplete="off"
-              hint="A supporter’s name, an amount like 2,000, or the end of a reference."
-              maxLength={100}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
+      {!none && (
+        <div className="tips-aside">
+          {totals.data && totals.data.paidTipCount > 0 && (
+            <p className="tips-total">
+              <strong>{formatNaira(totals.data.receivedNetMinor)}</strong> from{' '}
+              {totals.data.paidTipCount}{' '}
+              {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
+            </p>
           )}
-          <div className="filter-row" role="group" aria-label="Show">
-            {filters.map((option) => (
-              <Button
-                key={option.value}
-                variant={filter === option.value ? 'primary' : 'secondary'}
-                aria-pressed={filter === option.value}
-                onClick={() => {
-                  setFilter(option.value);
-                  // New tips may have arrived since the header was read.
-                  void totals.reload();
-                }}
-              >
-                {option.label}
-              </Button>
-            ))}
+          <Button
+            variant="quiet"
+            onClick={async () => {
+              setDownload('Preparing your file…');
+              const day = new Date().toISOString().slice(0, 10);
+              const result = await apiDownload(
+                '/v1/me/exports/tips.csv',
+                `tipme-tips-${day}.csv`,
+              );
+              setDownload(
+                result.ok
+                  ? 'Downloaded. It has the date, supporter name, amounts, status and the last 6 characters of each reference. Messages stay private.'
+                  : 'We couldn’t prepare the file. Please try again.',
+              );
+            }}
+          >
+            Download as CSV
+          </Button>
+          <p role="status" className="tm-hint tips-status">
+            {download}
+          </p>
+          <div className="tips-controls">
+            {canSearch && (
+              <InputField
+                id={`${id}-search`}
+                label="Search"
+                type="search"
+                autoComplete="off"
+                hint="A supporter’s name, an amount like 2,000, or the end of a reference."
+                maxLength={100}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            )}
+            <div className="filter-row" role="group" aria-label="Show">
+              {filters.map((option) => (
+                <Button
+                  key={option.value}
+                  variant={filter === option.value ? 'primary' : 'secondary'}
+                  aria-pressed={filter === option.value}
+                  onClick={() => {
+                    setFilter(option.value);
+                    // New tips may have arrived since the header was read.
+                    void totals.reload();
+                  }}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <div className="tips-main">
         {/* Always present, so screen readers announce a search with no results. */}
         <p role="status" className="tm-hint">
@@ -223,7 +230,11 @@ export default function TipsPage() {
         {!items ? (
           <Skeleton label="Loading your tips" />
         ) : items.length === 0 ? (
-          searched ? null : (
+          searched ? null : none ? (
+            <EmptySlip title="No tips here yet.">
+              <p>Each tip shows here once it’s paid, with any note.</p>
+            </EmptySlip>
+          ) : (
             <p>No tips here yet.</p>
           )
         ) : (

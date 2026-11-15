@@ -476,3 +476,13 @@ the appreciation moment) is unchanged.
 - **Choices that aren't amounts** (announcement kinds, who sees a changelog entry) are plain radio rows with the brand accent; `.tm-choice` styles only its own key face (`> span`).
 - **Pricing on Pages**: setting a page's fee, granting fee-free tips and allowing more username changes each open from a "…" button.
 - **Not built (open):** the six-box code input (board Pattern 4) needs a decision on paste and autofill; plain-word status badges for raw codes (OpsPages board, marked proposed) need their wording.
+
+## 2026-11-15 — Dashboard UI audit fixes (`fix/ui-audit-dashboard`)
+
+- Applies existing rulings to screens that had drifted (audit of `/dashboard/**`, 15 Nov 2026). A visual decision, not a regulatory approval; nothing about payments, fees or the ledger changes.
+- **One primary key in the dashboard.** Slice 3's "saving or continuing inside a card is black" now holds outside cards too, so a page never shows a black and a purple primary for the same role. Segmented controls keep their own selected state, and the QR print key stays purple (11 Nov).
+- **The header leaves the dashboard alone.** Signed in, "Go to my dashboard" (and "Business") show on public pages only; inside `/dashboard/**` the dashboard bar already leads there and the page's own action is the one primary. This narrows the 6 Nov header change, which hid the link only on `/dashboard` itself.
+- **Section titles outside a card** (Business, Work, Get help) use Home's editorial section title (DM Serif 1.75rem); a section's parts use quiet interface type, each opened by a hairline as in Settings.
+- **Charts** use Home's neutral bars with only the latest (or the pointed-out) bar purple; the open period is filled, not a dashed box. Earnings' switches are the dashboard's segmented control (`filter-row`).
+- **Tips with none yet** use `EmptySlip`, without the CSV, search and filters. A month recap that isn't found uses the neutral `Slip`, not the error tone.
+- **Still open for the owner:** a one-row dashboard bar at 1440 (the tabs-or-sidebar question); page-shaped skeletons; replacing the remaining generic `Notice`s per StatesMap.
