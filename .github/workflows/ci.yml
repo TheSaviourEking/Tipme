@@ -295,6 +295,8 @@ jobs:
       - id: plan
         env:
           SPECS: ${{ steps.specs.outputs.files }}
+          # A release PR into main plans 0 shards: its specs were burnt in on the way into dev.
+          BASE_REF: ${{ github.base_ref }}
         run: node scripts/ci-burn-in.mjs plan
 
   e2e-burn-in-shard:

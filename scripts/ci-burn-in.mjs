@@ -7,7 +7,9 @@
 //   node scripts/ci-burn-in.mjs plan            prints count=N and shards=[1..N] for GITHUB_OUTPUT
 //   node scripts/ci-burn-in.mjs files <i> <N>   prints shard i's files, one per line
 //
-// Both read the space-separated changed spec files from SPECS.
+// Both read the space-separated changed spec files from SPECS. `plan` also reads BASE_REF, the
+// pull request's target branch: a release PR into main plans 0 shards, as every spec in it was
+// already burnt in on its way into dev (owner decision, 15 Nov 2026).
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
@@ -15,6 +17,10 @@ import { pathToFileURL } from 'node:url';
 export const MAX_SHARDS = 6;
 /** Files per shard before another is added: 8 files × 5 runs fit well inside one job's limit. */
 export const FILES_PER_SHARD = 8;
+
+/** The summary line for a release PR into main. */
+export const RELEASE_SKIP_NOTE =
+  'Release PR into main: burn-in skipped; specs were burnt in on dev';
 
 /** The fewest shards for `n` changed spec files: 0 for none, then one per 8 files, at most 6. */
 export function shardCount(n) {
@@ -32,7 +38,16 @@ function specs() {
 
 function main([command, index, count]) {
   if (command === 'plan') {
-    const n = shardCount(specs().length);
+    const release = process.env.BASE_REF === 'main';
+    const n = release ? 0 : shardCount(specs().length);
+    if (release) {
+      if (process.env.GITHUB_STEP_SUMMARY)
+        appendFileSync(
+          process.env.GITHUB_STEP_SUMMARY,
+          `${RELEASE_SKIP_NOTE}\n`,
+        );
+      console.error(RELEASE_SKIP_NOTE);
+    }
     const lines = `count=${n}\nshards=${JSON.stringify(Array.from({ length: n }, (_, i) => i + 1))}\n`;
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, lines);
