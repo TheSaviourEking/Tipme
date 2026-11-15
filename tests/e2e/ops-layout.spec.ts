@@ -25,6 +25,16 @@ test('admin pages fit 320, 390 and 1440 with one page root, and tables stack on 
 }, testInfo) => {
   test.setTimeout(180_000);
   await enrolOwner(page, testInfo);
+  // A long unbroken audit reason (as staff.owner_granted writes raw JSON), so the audit table has
+  // something to wrap whatever else the shared database holds.
+  await sql(
+    `INSERT INTO audit_events (id, action, subject_type, subject_id, reason, created_at)
+     VALUES (gen_random_uuid(), 'staff.owner_granted_with_a_rather_long_action_name', 'ops_session_subject',
+             gen_random_uuid()::text, $1, now() + interval '1 day')`,
+    [
+      `Granted from the server [change:${JSON.stringify({ from: null, to: 'owner', restored: false, clearedAdditions: [], clearedRemovals: [] }).repeat(4)}]`,
+    ],
+  );
   // A long name and address, so the People table has something to wrap.
   const token = `w${randomBytes(3).toString('hex')}`;
   await sql(

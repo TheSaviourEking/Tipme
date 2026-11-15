@@ -313,6 +313,12 @@
   vertical-align: top;
 }
 
+/* Long unbroken values (a reason holding raw JSON, a long action name) wrap inside their cell, so
+   a table never scrolls sideways at a desktop width (UI audit F2/F3). People keeps its own rules. */
+.ops-table td {
+  overflow-wrap: anywhere;
+}
+
 .ops-permissions {
   list-style: none;
   margin: 0;
