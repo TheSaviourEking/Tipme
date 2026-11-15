@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { expectAccessible } from '../e2e/helpers';
-import { apiCall, env, newVisitor, throttledLcp } from './client';
+import { apiCall, coldVisitor, env, newVisitor, throttledLcp } from './client';
 
 // Read-only: safe on any copy, including one with real people. It creates nothing.
 
@@ -74,11 +74,17 @@ test('public pages load fast on a throttled phone and pass accessibility checks'
   for (const path of paths) {
     // One load can land on either of two speeds about 700 ms apart with the same response time,
     // so a single number passes or fails by chance. Three fresh visitors, and the middle one counts.
+    // Each is a first visit (coldVisitor): on a staging copy too, nothing comes from the cache.
     const loads: number[] = [];
     for (let visit = 0; visit < 3; visit += 1) {
-      const visitor = await newVisitor(browser);
-      loads.push(await throttledLcp(await visitor.newPage(), path));
+      const visitor = await coldVisitor(browser);
+      const { ms, fromCache } = await throttledLcp(
+        await visitor.newPage(),
+        path,
+      );
       await visitor.close();
+      expect(fromCache, `LCP ${path} measured a warm cache`).toEqual([]);
+      loads.push(ms);
     }
     console.log(`LCP ${path}: ${loads.map(Math.round).join(', ')} ms`);
     const lcp = [...loads].sort((a, b) => a - b)[1]!;

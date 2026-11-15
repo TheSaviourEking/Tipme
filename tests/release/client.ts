@@ -3,6 +3,7 @@ import {
   type APIRequestContext,
   type Browser,
   type BrowserContext,
+  type Cookie,
   type Page,
 } from '@playwright/test';
 
@@ -35,6 +36,33 @@ export async function newVisitor(browser: Browser): Promise<BrowserContext> {
     await page.waitForURL((url) => !url.pathname.startsWith('/preview-login'));
     await page.close();
   }
+  return context;
+}
+
+// The staging password's ticket (apps/web/src/lib/preview-gate.ts, PREVIEW_COOKIE).
+const PREVIEW_COOKIE = '__Secure-tipme_preview';
+let previewTicket: Cookie[] | undefined;
+
+/**
+ * A first-time visitor for a speed measurement: a new context with an empty cache. On a copy with
+ * a staging password it carries only the password's ticket, taken once from a separate context.
+ * newVisitor would load /preview-login in the same context first, and that page's stylesheet and
+ * fonts are the home page's, so a staging copy measured a warm cache (about 350 ms) while
+ * production, with no password, measured a true first visit (15 Nov 2026).
+ */
+export async function coldVisitor(browser: Browser): Promise<BrowserContext> {
+  if (env.previewPassword && !previewTicket) {
+    const gate = await newVisitor(browser);
+    previewTicket = (await gate.cookies()).filter(
+      (cookie) => cookie.name === PREVIEW_COOKIE,
+    );
+    await gate.close();
+    expect(previewTicket, 'the staging password gave no ticket').toHaveLength(
+      1,
+    );
+  }
+  const context = await browser.newContext({ ignoreHTTPSErrors: env.insecure });
+  if (previewTicket) await context.addCookies(previewTicket);
   return context;
 }
 
@@ -125,9 +153,27 @@ export async function signIn(page: Page, email: string, start = '/sign-in') {
   await page.getByRole('button', { name: 'Continue' }).click();
 }
 
-/** Largest Contentful Paint on a throttled mid-range phone (lab measure, like `pnpm perf:lab`). */
-export async function throttledLcp(page: Page, url: string): Promise<number> {
+/**
+ * Largest Contentful Paint on a throttled mid-range phone (lab measure, like `pnpm perf:lab`), and
+ * the requests the browser answered from its cache instead of the network: none on a first visit.
+ */
+export async function throttledLcp(
+  page: Page,
+  url: string,
+): Promise<{ ms: number; fromCache: string[] }> {
   const cdp = await page.context().newCDPSession(page);
+  const fromCache: string[] = [];
+  const urls = new Map<string, string>();
+  cdp.on('Network.requestWillBeSent', (event) =>
+    urls.set(event.requestId, event.request.url),
+  );
+  cdp.on('Network.requestServedFromCache', (event) =>
+    fromCache.push(urls.get(event.requestId) ?? event.requestId),
+  );
+  cdp.on('Network.responseReceived', (event) => {
+    if (event.response.fromDiskCache || event.response.fromPrefetchCache)
+      fromCache.push(event.response.url);
+  });
   await cdp.send('Network.enable');
   await cdp.send('Network.emulateNetworkConditions', {
     offline: false,
@@ -154,5 +200,5 @@ export async function throttledLcp(page: Page, url: string): Promise<number> {
     downloadThroughput: -1,
     uploadThroughput: -1,
   });
-  return value;
+  return { ms: value, fromCache: [...new Set(fromCache)] };
 }

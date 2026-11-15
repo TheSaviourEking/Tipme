@@ -1,0 +1,104 @@
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import { test } from 'node:test';
+import { gzipSync } from 'node:zlib';
+
+// The home page's first paint waits for its whole stylesheet. Dashboard and admin styles live in
+// their own stylesheets (app/dashboard/dashboard.css, app/ops/ops.css), loaded only there (15 Nov
+// 2026: globals.css had grown to 300 KB and the home page missed its 2000 ms LCP budget).
+
+const read = (path) =>
+  readFileSync(new URL(`../src/app/${path}`, import.meta.url), 'utf8');
+
+/** Every rule with its at-rule and nesting context, comments removed: [{ key, body }]. */
+function rules(css) {
+  const text = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const found = [];
+  const stack = [];
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] === '{') {
+      stack.push({ head: text.slice(start, i).trim().replace(/\s+/g, ' ') });
+      stack.at(-1).bodyStart = i + 1;
+      start = i + 1;
+    } else if (text[i] === '}') {
+      const open = stack.pop();
+      // The rule's own declarations: its text without nested blocks.
+      let body = '';
+      let depth = 0;
+      for (const ch of text.slice(open.bodyStart, i)) {
+        if (ch === '{') depth += 1;
+        if (depth === 0) body += ch;
+        if (ch === '}') depth -= 1;
+      }
+      const declarations = body
+        .split(';')
+        .map((d) => d.trim().replace(/\s+/g, ' '))
+        .filter((d) => d.includes(':') && !d.includes('}'));
+      if (!open.head.startsWith('@'))
+        found.push({
+          key: [...stack.map((s) => s.head), open.head].join(' / '),
+          body: declarations.join('; '),
+        });
+      start = i + 1;
+    }
+  }
+  return found;
+}
+
+const globals = rules(read('globals.css'));
+const globalBodies = new Map();
+for (const { key, body } of globals)
+  globalBodies.set(key, [...(globalBodies.get(key) ?? []), body]);
+
+for (const area of ['dashboard/dashboard.css', 'ops/ops.css']) {
+  test(`${area}: a rule repeated from globals.css (to keep its order) is word for word the same`, () => {
+    const own = rules(read(area));
+    assert.ok(own.length > 50, `${area} has its rules`);
+    let repeated = 0;
+    for (const { key, body } of own) {
+      const there = globalBodies.get(key);
+      if (!there) continue;
+      repeated += 1;
+      assert.ok(
+        there.includes(body),
+        `${area}: "${key}" differs from globals.css. Change both copies, or move the rule out of globals.css if only this area uses it.`,
+      );
+    }
+    assert.ok(repeated > 0, `${area} repeats rules of globals.css`);
+  });
+}
+
+test('the area stylesheets load only in their own areas', () => {
+  assert.match(read('dashboard/layout.tsx'), /import '\.\/dashboard\.css';/);
+  assert.match(read('ops/layout.tsx'), /import '\.\/ops\.css';/);
+  assert.doesNotMatch(read('layout.tsx'), /dashboard\.css|ops\.css/);
+});
+
+// The home page's stylesheets, as the production build serves them (`pnpm build` runs first in CI).
+const built = new URL('../.next/', import.meta.url);
+const homeHtml = new URL('server/app/index.html', built);
+// 27.9 KB when this was set (15 Nov 2026); 46.5 KB before the split.
+const HOME_CSS_BUDGET = 32 * 1024;
+
+test(
+  'the home page downloads at most 32 KB of stylesheet (gzip) before it can paint',
+  { skip: !existsSync(homeHtml) && 'no production build (run pnpm build)' },
+  () => {
+    const html = readFileSync(homeHtml, 'utf8');
+    const sheets = [
+      ...html.matchAll(/<link rel="stylesheet" href="\/_next\/([^"]+\.css)"/g),
+    ].map((m) => m[1]);
+    assert.ok(sheets.length > 0, 'the home page links its stylesheets');
+    const bytes = sheets.reduce(
+      (sum, sheet) =>
+        sum +
+        gzipSync(readFileSync(new URL(sheet, built)), { level: 9 }).length,
+      0,
+    );
+    assert.ok(
+      bytes <= HOME_CSS_BUDGET,
+      `the home page's stylesheets are ${(bytes / 1024).toFixed(1)} KB gzip (budget 32 KB). Styles used only in the dashboard or admin go in app/dashboard/dashboard.css or app/ops/ops.css, not globals.css.`,
+    );
+  },
+);

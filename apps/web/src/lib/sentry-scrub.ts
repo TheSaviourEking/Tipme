@@ -9,6 +9,8 @@ type Breadcrumb = {
 };
 
 type ScrubbableEvent = {
+  type?: string;
+  spans?: { description?: string; data?: Record<string, unknown> }[];
   request?: {
     url?: string;
     query_string?: unknown;
@@ -44,6 +46,59 @@ export function withoutQuery(url: string): string {
   return end === -1 ? url : url.slice(0, end);
 }
 
+/** Span attributes that only ever hold a query string or fragment: dropped whole. */
+const QUERY_KEYS = new Set([
+  'url.query',
+  'http.query',
+  'url.fragment',
+  'http.fragment',
+  'query_string',
+]);
+
+const EMAIL = /[^\s@/<>"']+@[^\s@/<>"']+\.[^\s@/<>"']+/g;
+const PHONE = /\+?\d[\d\s().-]{7,}\d/g;
+
+/**
+ * Free text from a span (a description, an attribute): URL-like words lose their query and
+ * fragment, then emails and phone numbers are replaced.
+ */
+export function scrubText(text: string): string {
+  return text
+    .split(/(\s+)/)
+    .map((word) => (/^(https?:\/\/|\/)/.test(word) ? withoutQuery(word) : word))
+    .join('')
+    .replace(EMAIL, '[email]')
+    .replace(PHONE, '[phone]');
+}
+
+type SpanLike = {
+  description?: string;
+  data?: Record<string, unknown>;
+};
+
+/** Same rules as the rest of the event, for one span (also a standalone span or the root span). */
+export function scrubSpan<T extends SpanLike>(span: T): T {
+  const out: T = { ...span };
+  if (typeof out.description === 'string')
+    out.description = scrubText(out.description);
+  if (out.data)
+    out.data = Object.fromEntries(
+      Object.entries(out.data)
+        .filter(([key]) => !NEVER_SENT.has(key) && !QUERY_KEYS.has(key))
+        .map(([key, value]) => [
+          key,
+          typeof value === 'string'
+            ? scrubText(value)
+            : Array.isArray(value)
+              ? value.map((item) =>
+                  typeof item === 'string' ? scrubText(item) : item,
+                )
+              : value,
+        ]),
+    );
+  return out;
+}
+
 export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
   if (event.request) {
     const { url, ...rest } = event.request;
@@ -59,6 +114,13 @@ export function scrubEvent<T extends ScrubbableEvent>(event: T): T {
   if (event.extra !== undefined) event.extra = withoutSecrets(event.extra);
   if (event.contexts !== undefined)
     event.contexts = withoutSecrets(event.contexts);
+  if (event.type === 'transaction') {
+    // The root span sits in contexts.trace; the rest in spans.
+    const contexts = event.contexts as { trace?: SpanLike } | undefined;
+    if (contexts?.trace)
+      event.contexts = { ...contexts, trace: scrubSpan(contexts.trace) };
+    if (event.spans) event.spans = event.spans.map(scrubSpan);
+  }
   if (event.breadcrumbs)
     event.breadcrumbs = event.breadcrumbs
       .filter((crumb) => !TYPED_TEXT.has(crumb.category ?? ''))

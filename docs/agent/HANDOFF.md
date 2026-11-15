@@ -1,3 +1,10 @@
+# Current handoff: the home page's first paint (15 November 2026)
+
+- Branch `perf/home-first-paint` from `origin/dev`; PR into `dev`, not merged. Web CSS split, one unit test, release-check change, `dialogs.spec.ts` opens the dashboard/admin dialogs where their styles now load. No migration, no API change.
+- Measured (production build, release-check throttling, cold contexts, lane 6 stack): `/` LCP median 1292 ms before, 1000 after; perf lab `/` 1268-1276 to 964-976, `/@tobi` ~1316 to ~972, `/ops` ~1628 to ~1000, `/dashboard` unchanged (~3530).
+- Proved unchanged look: computed styles of every element on 54 page states (public, 15 dashboard, 20 admin pages, and client navigation across areas), desktop and 360 px, before vs after: only handle-dependent differences (automatic cover colour, auto margins).
+- Not proven: production numbers (needs a deploy); the dashboard's first visit downloads about 6 KB gzip more CSS (repeated rules), its LCP did not move in the lab.
+
 # Current handoff: the production migration deadlock fix (15 November 2026)
 
 - Branch `fix/deploy-migration-deadlock` from `origin/dev`. Deploy production (main @ `05231073`) failed twice at Migrations with 40P01: drizzle runs migrations 0071–0112 in one transaction, which deadlocked with the old workers' jobs. Each attempt rolled back; production is unchanged.

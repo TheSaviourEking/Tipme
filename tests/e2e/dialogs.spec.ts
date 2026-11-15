@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import { signUpRecipient } from './helpers';
+import { enrolOwner } from './ops-helpers';
 
 // The owner, 6 Nov 2026: the admin's "Enter a fresh code" opened in the top-left corner. The site's
 // CSS reset takes away the margin a browser centres a modal dialog with, so every pop-up dialog must
@@ -68,11 +70,14 @@ for (const [className, size] of [
 // page behind doesn't shift. On a classic scrollbar (Linux, 15px) that gutter is an empty strip at
 // the right edge, and the dialog sat half of it, 7.5px, left of the middle of the window (#174).
 // Measured against the whole window, which is what a person sees.
+// The confirm dialog and the admin's sheet are styled only where they are used (the dashboard's and
+// the admin's own stylesheets, 15 Nov 2026), so they are opened there.
 test('the confirm dialog sits in the middle of the whole window at 1440px', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize(WIDE);
-  await page.goto('/');
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings');
   const { left, right, top, bottom } = await openDialog(
     page,
     'confirm-dialog',
@@ -84,12 +89,17 @@ test('the confirm dialog sits in the middle of the whole window at 1440px', asyn
 });
 
 // Sheets place themselves and keep doing so: they rest on the bottom edge of a phone.
-for (const className of ['ops-frame__sheet', 'confirm-dialog']) {
+for (const [className, area] of [
+  ['ops-frame__sheet', '/ops'],
+  ['confirm-dialog', '/dashboard/settings'],
+] as const) {
   test(`on a phone the ${className} sheet still rests on the bottom edge`, async ({
     page,
-  }) => {
+  }, testInfo) => {
     await page.setViewportSize(PHONE);
-    await page.goto('/');
+    if (area === '/ops') await enrolOwner(page, testInfo);
+    else await signUpRecipient(page, testInfo, { live: false });
+    await page.goto(area);
     const { bottom } = await openDialog(page, className);
     expect(Math.abs(bottom)).toBeLessThan(1);
   });

@@ -1,7 +1,11 @@
 'use client';
 import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
 import { answerOf, withFreshCode, type OpsAnswer } from '@/lib/ops-answers';
-import { apiFetch, type SessionResult } from '@/lib/session-client';
+import {
+  apiDownload,
+  apiFetch,
+  type SessionResult,
+} from '@/lib/session-client';
 
 type Init = Parameters<typeof apiFetch>[1];
 
@@ -44,4 +48,12 @@ export async function opsAct<T>(
   init?: Init,
 ): Promise<OpsAnswer<T>> {
   return answerOf(await opsFetch<T>(path, init));
+}
+
+/** A file download from a code-protected route: asks for a fresh code, then downloads once more. */
+export function opsDownload(path: string, filename: string) {
+  return withFreshCode(
+    () => apiDownload(path, filename),
+    () => askForCode?.() ?? Promise.resolve(false),
+  );
 }
