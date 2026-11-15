@@ -8,6 +8,9 @@ import { sql } from './ops-helpers';
  * The failures are route stubs; the account itself is real.
  */
 
+// Each test signs up a real account first, then visits two or three dashboard pages.
+test.describe.configure({ timeout: 60_000 });
+
 const fail = (route: Route, status = 500) =>
   route.fulfill({
     status,
