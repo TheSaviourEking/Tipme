@@ -152,9 +152,18 @@ test('tips: each amount is set in the editorial face, and a desktop shows the to
   ).toBe('solid');
   // A phone keeps today's order: the header, the controls, then the list.
   await page.setViewportSize({ width: 390, height: 844 });
-  const asidePhone = (await page.locator('.tips-aside').boundingBox())!;
-  const dayPhone = (await page.locator('.tips-day').first().boundingBox())!;
-  expect(asidePhone.y + asidePhone.height).toBeLessThanOrEqual(dayPhone.y);
+  // The resize from 1280 re-lays out the page (the sticky aside becomes a plain block, the scroll position
+  // is clamped), so read both boxes in one step and wait until they settle, rather than once right after.
+  await expect(async () => {
+    const { asideBottom, dayTop } = await page.evaluate(() => {
+      const aside = document
+        .querySelector('.tips-aside')!
+        .getBoundingClientRect();
+      const day = document.querySelector('.tips-day')!.getBoundingClientRect();
+      return { asideBottom: aside.bottom, dayTop: day.top };
+    });
+    expect(asideBottom).toBeLessThanOrEqual(dayTop);
+  }).toPass();
   expect(await fitsViewport(page)).toBe(true);
   await expectAccessible(page);
 });
