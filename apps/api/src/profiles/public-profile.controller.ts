@@ -59,6 +59,7 @@ export class PublicProfileController {
     const page = await publicProfile(this.database.db, handle, {
       adultLinks: await featureOn(this.database.db, 'adult_platform_links'),
       recognition: await featureOn(this.database.db, 'supporter_recognition'),
+      studio: await featureOn(this.database.db, 'page_studio'),
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
         : {}),

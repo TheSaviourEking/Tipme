@@ -35,3 +35,8 @@ export * from './launch.js';
 export * from './announcements.js';
 export * from './studio-colour.js';
 export * from './studio-type.js';
+export * from './studio-limits.js';
+export * from './studio-document.js';
+export * from './studio-layout.js';
+export * from './studio-check.js';
+export * from './studio-api.js';

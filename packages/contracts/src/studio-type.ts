@@ -59,6 +59,8 @@ export interface StudioFont {
    * one is set wholly in the page's text font, never letter by letter in a stranger font.
    */
   wordFallback: boolean;
+  /** The required characters this font can't draw (empty for a text font). */
+  missing: readonly number[];
 }
 
 const range = (from: number, to: number) =>
@@ -160,6 +162,11 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '26.80%',
     },
     wordFallback: true,
+    missing: [
+      0x114, 0x115, 0x13f, 0x140, 0x14e, 0x14f, 0x1e44, 0x1e45, 0x1e62, 0x1e63,
+      0x300, 0x301, 0x302, 0x303, 0x304, 0x306, 0x307, 0x308, 0x30a, 0x30c,
+      0x323, 0x327, 0x328, 0x20a6,
+    ],
   },
   {
     id: 'dm-serif-display',
@@ -191,6 +198,13 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '32.55%',
     },
     wordFallback: true,
+    missing: [
+      0x108, 0x109, 0x10a, 0x10b, 0x114, 0x115, 0x11c, 0x11d, 0x120, 0x121,
+      0x124, 0x125, 0x126, 0x127, 0x128, 0x129, 0x134, 0x135, 0x14a, 0x14b,
+      0x14e, 0x14f, 0x15c, 0x15d, 0x168, 0x169, 0x16c, 0x16d, 0x174, 0x175,
+      0x176, 0x177, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
+      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
+    ],
   },
   {
     id: 'inter',
@@ -223,6 +237,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '22.06%',
     },
     wordFallback: false,
+    missing: [],
   },
   {
     id: 'work-sans',
@@ -255,6 +270,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '21.69%',
     },
     wordFallback: false,
+    missing: [],
   },
   {
     id: 'space-grotesk',
@@ -286,6 +302,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '25.82%',
     },
     wordFallback: false,
+    missing: [],
   },
   {
     id: 'bricolage-grotesque',
@@ -317,6 +334,11 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '26.29%',
     },
     wordFallback: true,
+    missing: [
+      0xa4, 0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x134,
+      0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163, 0x1e44,
+      0x1e45, 0x1e62, 0x1e63,
+    ],
   },
   {
     id: 'outfit',
@@ -348,6 +370,12 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '24.86%',
     },
     wordFallback: true,
+    missing: [
+      0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x128, 0x129,
+      0x134, 0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163,
+      0x168, 0x169, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
+      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
+    ],
   },
   {
     id: 'nunito',
@@ -380,6 +408,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '34.16%',
     },
     wordFallback: false,
+    missing: [],
   },
   {
     id: 'fraunces',
@@ -411,6 +440,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '22.87%',
     },
     wordFallback: true,
+    missing: [0x1e44, 0x1e45, 0x30a, 0x323],
   },
   {
     id: 'source-serif-4',
@@ -443,6 +473,7 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '32.81%',
     },
     wordFallback: false,
+    missing: [],
   },
 ];
 

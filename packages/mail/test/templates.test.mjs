@@ -1251,6 +1251,18 @@ test('the monthly recap email names no amount in its subject, preview or body', 
   assert.match(out.html, /\/dashboard\/reports\/month\/2026-10/);
 });
 
+test('a removed Page Studio photo is named plainly, and nothing else about it is said', () => {
+  const mail = renderMail('page_image_removed', { image: 'studio_photo' }, ctx);
+  assert.equal(mail.subject, 'We removed your page’s Page Studio photo');
+  assert.match(
+    mail.text,
+    /TipMe staff removed the Page Studio photo from your page\./,
+  );
+  assert.throws(() =>
+    renderMail('page_image_removed', { image: 'gallery' }, ctx),
+  );
+});
+
 test('the owner-change email tells every owner what happened, in plain words, from security@', () => {
   const type = MAIL_TYPES.business_owner_change;
   assert.ok(type, 'business_owner_change is registered');

@@ -2147,6 +2147,100 @@ export const profileCovers = pgTable(
 );
 
 /**
+ * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
+ * `published` are StudioDocument JSON, written only after the strict schema accepted them; a
+ * read always goes through `resolveStudio`. `rev` counts saves, so two tabs can't overwrite each
+ * other. Kept when Pro lapses (owner ruling): the standard page shows until Pro returns.
+ */
+export const pageStudios = pgTable('page_studios', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  publishedCheckVersion: integer('published_check_version'),
+  rev: integer('rev').notNull().default(0),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * A Page Studio photo: the size of its re-encoded master and the focal point every crop keeps.
+ * `version` changes whenever the crops do, so each version has its own never-reused address.
+ */
+export const studioImages = pgTable(
+  'studio_images',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    version: integer('version').notNull().default(1),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    focalX: integer('focal_x').notNull().default(50),
+    focalY: integer('focal_y').notNull().default(50),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('studio_images_profile').on(table.profileId),
+    check(
+      'studio_images_focal',
+      sql`focal_x BETWEEN 0 AND 100 AND focal_y BETWEEN 0 AND 100`,
+    ),
+  ],
+);
+
+/**
+ * The files of a Studio photo: `master` and its crops (`square-960`…), each already re-encoded on
+ * the server with no metadata. Kept like `profile_covers`: in Postgres or in R2, never both.
+ */
+export const studioImageFiles = pgTable(
+  'studio_image_files',
+  {
+    imageId: uuid('image_id')
+      .notNull()
+      .references(() => studioImages.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    size: integer('size').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.imageId, table.name] }),
+    check(
+      'studio_image_files_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+    check(
+      'studio_image_files_name',
+      sql`name ~ '^(master|(square|wide|tall|strip)-(480|960|1440))$'`,
+    ),
+  ],
+);
+
+/**
+ * What the video sites last said about a Studio video link (owner ruling 5), kept a day. The link
+ * is what the person pasted; nothing about who asked is stored.
+ */
+export const studioVideoChecks = pgTable(
+  'studio_video_checks',
+  {
+    url: text('url').primaryKey(),
+    status: text('status').notNull(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+  },
+  () => [
+    check(
+      'studio_video_checks_status',
+      sql`status IN ('ok', 'gone', 'unknown')`,
+    ),
+  ],
+);
+
+/**
  * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.
  * No IP, user agent or free text.
  */

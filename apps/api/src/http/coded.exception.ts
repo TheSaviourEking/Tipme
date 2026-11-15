@@ -1,5 +1,5 @@
 import { HttpException } from '@nestjs/common';
-import type { ApiErrorCode } from '@tipme/contracts';
+import type { ApiErrorCode, StudioIssue } from '@tipme/contracts';
 
 /** An HTTP error with a specific public code (the filter keeps its fixed message). */
 export class CodedHttpException extends HttpException {
@@ -12,5 +12,12 @@ export class CodedHttpException extends HttpException {
     readonly retryAfterSeconds?: number,
   ) {
     super(code, status);
+  }
+}
+
+/** 422 STUDIO_DESIGN_CHECK_FAILED, carrying the server's design check issues to the editor. */
+export class StudioCheckFailedException extends CodedHttpException {
+  constructor(readonly issues: StudioIssue[]) {
+    super(422, 'STUDIO_DESIGN_CHECK_FAILED');
   }
 }

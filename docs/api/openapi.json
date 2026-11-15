@@ -7324,6 +7324,945 @@
         ]
       }
     },
+    "/v1/me/studio": {
+      "get": {
+        "operationId": "Studio.get",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio-images/{imageId}/{version}/{file}": {
+      "get": {
+        "operationId": "Studio.own",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/draft": {
+      "delete": {
+        "operationId": "Studio.discard",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "Studio.save",
+        "tags": [
+          "Studio"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rev": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "draft": {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "brand": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "items": false,
+                            "minItems": 1,
+                            "maxItems": 1
+                          },
+                          {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "items": false,
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "light",
+                          "dark",
+                          "auto"
+                        ]
+                      },
+                      "fonts": {
+                        "type": "object",
+                        "properties": {
+                          "heading": {
+                            "type": "string",
+                            "enum": [
+                              "manrope",
+                              "dm-serif-display",
+                              "inter",
+                              "work-sans",
+                              "space-grotesk",
+                              "bricolage-grotesque",
+                              "outfit",
+                              "nunito",
+                              "fraunces",
+                              "source-serif-4"
+                            ]
+                          },
+                          "body": {
+                            "type": "string",
+                            "enum": [
+                              "manrope",
+                              "dm-serif-display",
+                              "inter",
+                              "work-sans",
+                              "space-grotesk",
+                              "bricolage-grotesque",
+                              "outfit",
+                              "nunito",
+                              "fraunces",
+                              "source-serif-4"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "heading",
+                          "body"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "scale": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "compact",
+                          "roomy"
+                        ]
+                      },
+                      "corners": {
+                        "type": "string",
+                        "enum": [
+                          "soft",
+                          "square",
+                          "round"
+                        ]
+                      },
+                      "rows": {
+                        "maxItems": 12,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]{8}$"
+                            },
+                            "columns": {
+                              "type": "string",
+                              "enum": [
+                                "1",
+                                "1-1",
+                                "2-1",
+                                "1-2",
+                                "1-1-1"
+                              ]
+                            },
+                            "spacing": {
+                              "type": "string",
+                              "enum": [
+                                "m",
+                                "s",
+                                "l"
+                              ]
+                            },
+                            "background": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "page",
+                                    "card",
+                                    "colour",
+                                    "second"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "photo": {
+                                      "type": "string",
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "photo"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "cells": {
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "text"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "paragraph",
+                                            "heading",
+                                            "lead"
+                                          ]
+                                        },
+                                        "level": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number",
+                                              "const": 2
+                                            },
+                                            {
+                                              "type": "number",
+                                              "const": 3
+                                            }
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "photo"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "square",
+                                            "wide",
+                                            "tall",
+                                            "circle"
+                                          ]
+                                        },
+                                        "imageId": {
+                                          "type": "string",
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                        },
+                                        "alt": {
+                                          "type": "string"
+                                        },
+                                        "decorative": {
+                                          "type": "boolean",
+                                          "const": true
+                                        },
+                                        "caption": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "imageId",
+                                        "alt"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "gallery"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "grid",
+                                            "strip",
+                                            "mosaic"
+                                          ]
+                                        },
+                                        "images": {
+                                          "maxItems": 9,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "imageId": {
+                                                "type": "string",
+                                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                              },
+                                              "alt": {
+                                                "type": "string"
+                                              },
+                                              "decorative": {
+                                                "type": "boolean",
+                                                "const": true
+                                              }
+                                            },
+                                            "required": [
+                                              "imageId",
+                                              "alt"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "images"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "video"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "still"
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        },
+                                        "caption": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "url"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "services"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "list",
+                                            "cards"
+                                          ]
+                                        },
+                                        "items": {
+                                          "maxItems": 12,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "detail": {
+                                                "type": "string"
+                                              },
+                                              "priceMinor": {
+                                                "type": "string"
+                                              },
+                                              "from": {
+                                                "type": "boolean",
+                                                "const": true
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "priceMinor"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "items"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "events"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "list",
+                                            "cards"
+                                          ]
+                                        },
+                                        "items": {
+                                          "maxItems": 6,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "date": {
+                                                "type": "string"
+                                              },
+                                              "time": {
+                                                "type": "string",
+                                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                              },
+                                              "title": {
+                                                "type": "string"
+                                              },
+                                              "place": {
+                                                "type": "string"
+                                              },
+                                              "note": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "date",
+                                              "title"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "items"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "links"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "buttons",
+                                            "icons"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "quote"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "plain",
+                                            "band"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "about"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "plain"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "supporters"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "names"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "columns",
+                            "spacing",
+                            "background",
+                            "cells"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "brand",
+                      "mode",
+                      "fonts",
+                      "scale",
+                      "corners",
+                      "rows"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rev",
+                  "draft"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "studio_drafts",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/images": {
+      "post": {
+        "operationId": "Studio.upload",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/images/{imageId}/focus": {
+      "put": {
+        "operationId": "Studio.focus",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "focalX": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "focalY": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "focalX",
+                  "focalY"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/publish": {
+      "post": {
+        "operationId": "Studio.publish",
+        "tags": [
+          "Studio"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rev": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "rev"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "studio_drafts",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/support": {
       "get": {
         "operationId": "Insights.mySupport",
@@ -14376,6 +15315,138 @@
         "x-tipme-permission": "pages.plan"
       }
     },
+    "/v1/ops/pages/{profileId}/studio-images/{imageId}": {
+      "get": {
+        "operationId": "OpsPages.studioImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
+    "/v1/ops/pages/{profileId}/studio-images/{imageId}/remove": {
+      "post": {
+        "operationId": "OpsPages.removeStudioImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
     "/v1/ops/pages/{profileId}/suspend": {
       "post": {
         "operationId": "OpsActions.suspend",
@@ -17855,6 +18926,71 @@
         "x-tipme-access": "release-token"
       }
     },
+    "/v1/studio-images/{profileId}/{imageId}/{version}/{file}": {
+      "get": {
+        "operationId": "Studio.serve",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/tip-intents": {
       "post": {
         "operationId": "Checkout.intent",
@@ -18591,6 +19727,11 @@
                   "CAMPAIGN_STOPPED",
                   "CAMPAIGN_HEADLINE_NAME",
                   "SUPPORT_TOO_MANY_OPEN",
+                  "STUDIO_DRAFT_STALE",
+                  "STUDIO_DESIGN_CHECK_FAILED",
+                  "STUDIO_PRO_REQUIRED",
+                  "IMAGE_TOO_SMALL",
+                  "STUDIO_IMAGE_LIMIT",
                   "INTERNAL_ERROR"
                 ]
               },

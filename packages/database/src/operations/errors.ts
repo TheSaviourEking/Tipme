@@ -1,6 +1,12 @@
 import { connectionErrors } from '../client.js';
 export type OperationErrorCode =
   | 'PROFILE_NOT_FOUND'
+  // Page Studio.
+  | 'STUDIO_DRAFT_STALE'
+  | 'STUDIO_DRAFT_INVALID'
+  | 'STUDIO_PRO_REQUIRED'
+  | 'STUDIO_IMAGE_LIMIT'
+  | 'STUDIO_IMAGE_NOT_FOUND'
   | 'AMOUNT_OUT_OF_RANGE'
   | 'QUOTE_NOT_FOUND'
   | 'QUOTE_EXPIRED'

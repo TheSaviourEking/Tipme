@@ -20,7 +20,10 @@ import {
 } from '@tipme/database';
 import type { ErrorReporter, Logger } from '@tipme/observability';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
-import { CodedHttpException } from './coded.exception.js';
+import {
+  CodedHttpException,
+  StudioCheckFailedException,
+} from './coded.exception.js';
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
 import { referenceOf } from './reference.js';
 import { ValidationFailedException } from './zod-validation.pipe.js';
@@ -36,6 +39,16 @@ const messages: Record<ApiErrorCode, string> = {
   EARNINGS_PRO_REQUIRED:
     'Past periods, your average tip, best day and notes are part of TipMe Pro.',
   RECAP_PRO_REQUIRED: 'The monthly recap is part of TipMe Pro.',
+  // Page Studio (plan 2026-11-12-page-studio).
+  STUDIO_DRAFT_STALE:
+    'Your page was changed somewhere else. Load the latest version, then save again.',
+  STUDIO_DESIGN_CHECK_FAILED:
+    'Your page can’t be published yet. Fix what the design check lists first; your draft is saved.',
+  STUDIO_PRO_REQUIRED: 'Page Studio is part of TipMe Pro.',
+  IMAGE_TOO_SMALL:
+    'This photo is too small. Choose one at least 600 pixels on its shortest side, so it looks sharp on every screen.',
+  STUDIO_IMAGE_LIMIT:
+    'Page Studio keeps up to 48 photos. Remove one you no longer use, then try again.',
   CAMPAIGN_LIMIT:
     'You’ve used all your campaign links. Stop one to make another.',
   CAMPAIGN_SLUG_TAKEN:
@@ -292,6 +305,15 @@ const operationErrors: Partial<
   >
 > = {
   IDEMPOTENCY_CONFLICT: { status: 409, code: 'IDEMPOTENCY_CONFLICT' },
+  STUDIO_DRAFT_STALE: { status: 409, code: 'STUDIO_DRAFT_STALE' },
+  STUDIO_DRAFT_INVALID: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['draft'],
+  },
+  STUDIO_PRO_REQUIRED: { status: 403, code: 'STUDIO_PRO_REQUIRED' },
+  STUDIO_IMAGE_LIMIT: { status: 409, code: 'STUDIO_IMAGE_LIMIT' },
+  STUDIO_IMAGE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   QUOTE_EXPIRED: { status: 409, code: 'QUOTE_EXPIRED' },
   QUOTE_ALREADY_USED: { status: 409, code: 'QUOTE_ALREADY_USED' },
   TIP_NOT_PAYABLE: { status: 409, code: 'TIP_NOT_PAYABLE' },
@@ -640,6 +662,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
+    // The person's own draft, checked by the server: what the editor lists with its fixes.
+    if (exception instanceof StudioCheckFailedException)
+      body.error.issues = exception.issues;
     const problems = changelogProblemsOf(exception);
     if (problems) body.error.reason = problems;
     if (
