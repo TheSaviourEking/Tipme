@@ -15,8 +15,8 @@ export interface Bar {
 }
 
 /**
- * The dashboard's bar chart (the trend-chart convention, ProEarnings board): plain bars in TipMe
- * purple, one series, one axis. The bars are decoration for sighted readers; every value is in a
+ * The dashboard's bar chart (the trend-chart convention, ProEarnings board): neutral bars with only
+ * the latest (`latest`) or the pointed-out (`highlight`) one in TipMe purple, one series, one axis. The bars are decoration for sighted readers; every value is in a
  * table, which screen readers always get and anyone can show with "Show as a table". Labels are
  * HTML, never text in a stretched SVG (design decision log, 25 Oct 2026).
  */
@@ -24,11 +24,14 @@ export function BarChart({
   bars,
   caption,
   highlight,
+  latest = false,
 }: {
   bars: Bar[];
   caption: string;
-  /** The bar to point out (a best day); others are drawn quieter. */
+  /** The bar to point out (a best day); it alone is purple. */
   highlight?: string;
+  /** A timeline: with no highlight, the last (newest) bar is purple, as on Home's 7 days. */
+  latest?: boolean;
 }) {
   const id = useId();
   const [table, setTable] = useState(false);
@@ -41,7 +44,7 @@ export function BarChart({
         {caption}
       </figcaption>
       <div className="bar-chart__plot" aria-hidden="true">
-        {bars.map((bar) => (
+        {bars.map((bar, index) => (
           <button
             type="button"
             tabIndex={-1}
@@ -49,7 +52,13 @@ export function BarChart({
             className={[
               'bar-chart__bar',
               bar.open ? 'bar-chart__bar--open' : '',
-              highlight && bar.key !== highlight ? 'bar-chart__bar--quiet' : '',
+              (
+                highlight
+                  ? bar.key === highlight
+                  : latest && index === bars.length - 1
+              )
+                ? 'bar-chart__bar--lit'
+                : '',
               picked === bar.key ? 'bar-chart__bar--picked' : '',
             ]
               .filter(Boolean)

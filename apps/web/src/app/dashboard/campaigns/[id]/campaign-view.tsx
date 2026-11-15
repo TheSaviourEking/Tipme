@@ -280,6 +280,7 @@ export default function CampaignPage() {
                 ? 'Fewer than 3'
                 : `${week.tips} ${week.tips === 1 ? 'tip' : 'tips'}`,
           }))}
+          latest
         />
       </Card>
       <p className="tm-hint">

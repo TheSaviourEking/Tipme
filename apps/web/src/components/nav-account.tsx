@@ -124,12 +124,15 @@ export function NavAccount({
         businessStart={businessStart}
       />
     );
+  // Inside the dashboard its own bar already leads everywhere (Business included), and the page's
+  // one action is the only primary (REFERENCE-ANATOMY: one unmistakable action; UI audit, 15 Nov
+  // 2026). The header keeps only the menu there.
+  if (pathname === DASHBOARD || pathname.startsWith(`${DASHBOARD}/`))
+    return null;
   // A Business answer from before a sign-out is never shown: `member` gates it.
-  const onBusiness =
-    pathname === BUSINESS || pathname.startsWith(`${BUSINESS}/`);
   return (
     <>
-      {business && !onBusiness ? (
+      {business ? (
         <ActionLink
           className="nav-member"
           variant="secondary"
@@ -139,11 +142,9 @@ export function NavAccount({
           Business
         </ActionLink>
       ) : null}
-      {pathname !== DASHBOARD ? (
-        <ActionLink className="nav-member" href={DASHBOARD} onClick={onClick}>
-          Go to my dashboard <Arrow />
-        </ActionLink>
-      ) : null}
+      <ActionLink className="nav-member" href={DASHBOARD} onClick={onClick}>
+        Go to my dashboard <Arrow />
+      </ActionLink>
     </>
   );
 }

@@ -1,3 +1,8 @@
+# Current handoff: dashboard UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-dashboard`; PR into `dev`, not merged (after #242). Before/after screenshots at 320, 390 and 1440 were taken on e2e lane 7 against throwaway containers (removed). The PR body maps every audit item to fixed or left, with the reason.
+- Verified: web unit tests, typecheck, lint, format, `route-css.test.mjs`, the new and changed e2e specs (burn-in flakes only in sign-up/loading timing while the machine's load average was ~80), and the related dashboard specs.
+
 # Current handoff: the home page's first paint (15 November 2026)
 
 - Branch `perf/home-first-paint` from `origin/dev`; PR into `dev`, not merged. Web CSS split, one unit test, release-check change, `dialogs.spec.ts` opens the dashboard/admin dialogs where their styles now load. No migration, no API change.

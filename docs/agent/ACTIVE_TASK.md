@@ -1,3 +1,9 @@
+# Current task: dashboard UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-dashboard` from `origin/dev` (after #241). One PR into `dev`, not merged; it must merge after release PR #242. CSS (dashboard.css only; the route-css test stays green), small TSX changes (nav-account, earnings, bar chart, tips empty state, QR thumbnails, recap slip, campaigns stacked rows), one new spec (`dashboard-layout.spec.ts`), `nav-account.spec.ts` updated. No migration, no API change.
+- Left for others or the owner: the profile-error redirect and endless data skeletons (behaviour agent), copy strings, the campaign editor form, the claim moment, a one-row bar at 1440 (tabs or sidebar), page-shaped skeletons, the remaining generic `Notice`s, avatars, money/date formats.
+- Next: CI, then the owner merges after #242.
+
 # Current task: the home page's first paint (15 November 2026)
 
 - Branch `perf/home-first-paint` from `origin/dev`. Production (be8d4167) failed the release check's speed budget: `/` LCP 2876 and 2136 ms (budget 2000). The LCP is the headline and equals FCP: the whole first paint waited for one render-blocking stylesheet, `globals.css`, which grew from 175 KB to 299 KB source (26.8 to 41.9 KB gzip served) between the 4 Nov release (ffb3485d) and now, mostly dashboard and admin styles that every public page downloaded.

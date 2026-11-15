@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { MonthlyRecapData } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -77,16 +77,22 @@ export default function MonthlyRecapPage() {
 
   if (!pro)
     return (
-      <Notice tone="neutral" title="The monthly recap is part of TipMe Pro">
-        <Link href="/dashboard/earnings">See your earnings</Link>
-      </Notice>
+      <Slip tone="neutral" title="The monthly recap is part of TipMe Pro">
+        <p>
+          <Link href="/dashboard/earnings">See your earnings</Link>
+        </p>
+      </Slip>
     );
   if (error === 'load' && !recap)
     return (
-      <Notice tone="error" title="We couldn’t find that month’s recap">
-        Recaps are made on the 1st for the month before.{' '}
-        <Link href="/dashboard/earnings">See your earnings</Link>
-      </Notice>
+      // Usually a month whose recap isn't due yet: nothing has gone wrong, so the neutral slip, not
+      // the error tone (ScreenAudit; DECISION-LOG 2026-10-27).
+      <Slip tone="neutral" title="We couldn’t find that month’s recap">
+        <p>
+          Recaps are made on the 1st for the month before.{' '}
+          <Link href="/dashboard/earnings">See your earnings</Link>
+        </p>
+      </Slip>
     );
   if (!recap) return <Skeleton label="Loading your recap" />;
   const shareable = recapShareable(recap, profile, { showTotal: true });
