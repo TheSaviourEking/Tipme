@@ -1,6 +1,9 @@
+import { appendFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { expectAccessible } from '../e2e/helpers';
 import { apiCall, coldVisitor, env, newVisitor, throttledLcp } from './client';
+
+const LCP_BUDGET_MS = 2000;
 
 // Read-only: safe on any copy, including one with real people. It creates nothing.
 
@@ -86,11 +89,30 @@ test('public pages load fast on a throttled phone and pass accessibility checks'
       expect(fromCache, `LCP ${path} measured a warm cache`).toEqual([]);
       loads.push(ms);
     }
-    console.log(`LCP ${path}: ${loads.map(Math.round).join(', ')} ms`);
     const lcp = [...loads].sort((a, b) => a - b)[1]!;
+    const line = `LCP ${path}: ${loads.map(Math.round).join(', ')} ms, median ${Math.round(lcp)} ms`;
+    console.log(line);
     await page.goto(path, { waitUntil: 'load' });
     expect(lcp, `LCP ${path}`).toBeGreaterThan(0);
-    expect(lcp, `LCP ${path}`).toBeLessThanOrEqual(2000);
+    if (env.speedReportOnly) {
+      // Production: report, never fail (see --speed in scripts/release-check.mjs).
+      const over = lcp > LCP_BUDGET_MS;
+      test.info().annotations.push({
+        type: over ? 'warning' : 'lcp',
+        description: `${line} (budget ${LCP_BUDGET_MS} ms, report only)`,
+      });
+      if (over)
+        console.warn(
+          `::warning::${line} is over ${LCP_BUDGET_MS} ms (report only)`,
+        );
+      if (process.env.GITHUB_STEP_SUMMARY)
+        appendFileSync(
+          process.env.GITHUB_STEP_SUMMARY,
+          `- ${over ? 'Over budget (report only)' : 'Within budget'}: ${line}\n`,
+        );
+    } else {
+      expect(lcp, `LCP ${path}`).toBeLessThanOrEqual(LCP_BUDGET_MS);
+    }
     await expectAccessible(page);
   }
   await context.close();
