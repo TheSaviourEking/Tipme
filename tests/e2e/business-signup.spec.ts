@@ -70,16 +70,16 @@ test('home’s “Get tipped” runs today’s three steps to the welcome', asyn
   const who = identity(testInfo);
   await page.goto('/');
   const main = page.getByRole('main');
-  await main.getByLabel('Your handle').fill(who.handle);
+  await main.getByLabel('Your username').fill(who.handle);
   await main.getByRole('button', { name: 'Get tipped' }).click();
   await page.waitForURL(/\/sign-up\?handle=/);
   await expect(
     page
       .getByRole('list', { name: 'Creating your page' })
       .getByRole('listitem'),
-  ).toHaveText(['Your email', 'The code', 'Your handle']);
+  ).toHaveText(['Your email', 'The code', 'Your username']);
   await signInWithEmail(page, who.email, null);
-  await expect(page.getByLabel('Handle')).toHaveValue(who.handle);
+  await expect(page.getByLabel('Username')).toHaveValue(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -106,9 +106,9 @@ test('the fork asks first; “Get tipped” runs the same three steps', async ({
     page
       .getByRole('list', { name: 'Creating your page' })
       .getByRole('listitem'),
-  ).toHaveText(['Your email', 'The code', 'Your handle']);
+  ).toHaveText(['Your email', 'The code', 'Your username']);
   await signInWithEmail(page, who.email, null);
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);

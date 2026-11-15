@@ -60,9 +60,9 @@ export default function OpsSearchPage() {
     <div className="ops-dashboard">
       <h1>Search</h1>
       <p className="tm-hint">
-        A handle or name, or the id or end of the reference of a tip, withdrawal
-        or ledger entry. Searches are recorded in the audit log (without what
-        you typed).
+        A username or name, or the id or end of the reference of a tip,
+        withdrawal or ledger entry. Searches are recorded in the audit log
+        (without what you typed).
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

@@ -57,7 +57,7 @@ const messages: Record<ApiErrorCode, string> = {
   CAMPAIGN_PRO_REQUIRED: 'A page for each campaign is part of TipMe Pro.',
   CAMPAIGN_STOPPED: 'This campaign has stopped, so its page can’t change.',
   CAMPAIGN_HEADLINE_NAME:
-    'Use your own name in the headline, not someone else’s name or handle.',
+    'Use your own name in the headline, not someone else’s name or username.',
   SUPPORT_TOO_MANY_OPEN:
     'You have 3 requests waiting. We’ll answer those first.',
   BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
@@ -198,10 +198,10 @@ const messages: Record<ApiErrorCode, string> = {
   CODE_INVALID:
     'That code is not right or has expired. Please check it or ask for a new one.',
   SIGN_IN_LOCKED: 'Too many wrong codes. Please wait 15 minutes and try again.',
-  HANDLE_TAKEN: 'That handle is not available. Please choose another.',
-  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
+  HANDLE_TAKEN: 'That username is not available. Please choose another.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Username changes are part of TipMe Pro.',
   HANDLE_CHANGE_LIMIT:
-    'You’ve used all your handle changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
+    'You’ve used all your username changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',

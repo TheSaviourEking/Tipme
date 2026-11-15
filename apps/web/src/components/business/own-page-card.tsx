@@ -74,7 +74,7 @@ export function OwnPageCard({
             )}
           </div>
           <p className="tm-hint">
-            Choose a handle, that’s all.
+            Choose a username, that’s all.
             {businessName ? ` ${businessName} doesn’t change.` : ''}
           </p>
         </>

@@ -109,7 +109,8 @@ test('a title with $(rm -rf /) and backticks is sent verbatim as JSON', async ()
   assert.equal(result.code, 0, result.stderr);
   const sent = JSON.parse(received[0].raw.toString('utf8'));
   assert.equal(sent.title, title);
-  assert.equal(sent.body, body);
+  // The body is trimmed to what TipMe reads (here the first paragraph), the text kept verbatim.
+  assert.equal(sent.body, '`echo hi` $(id)');
 });
 
 test('an empty body is sent as null', async () => {
@@ -152,6 +153,65 @@ test('the merge event file is read, so a long body never travels through env', a
   assert.match(
     sent.body,
     /^Naira\.\n\n## For users\nYou can now see ₦ amounts\./,
+  );
+});
+
+test('a big PR body (#226 was about 31 400 characters) is sent as just the parts TipMe reads', async () => {
+  reset();
+  const body = [
+    '## Summary',
+    '<!-- Say what changed and why. -->',
+    'Page Studio phases 2–4, behind page_studio.',
+    '',
+    '## Notes',
+    ...Array.from(
+      { length: 400 },
+      (_, i) => `- note ${i}: ${'détail '.repeat(10)}`,
+    ),
+    '',
+    '## For users',
+    'You can now design your page in Page Studio.',
+    '',
+    '## Tests',
+    'x'.repeat(5000),
+  ].join('\n');
+  assert.ok(body.length > 30_000);
+  const file = join(
+    mkdtempSync(join(tmpdir(), 'changelog-event-')),
+    'event.json',
+  );
+  writeFileSync(
+    file,
+    JSON.stringify({
+      pull_request: {
+        number: 226,
+        title: 'Page Studio phases 2–4',
+        body,
+        merge_commit_sha: SHA,
+        merged_at: '2026-11-15T00:11:00Z',
+      },
+    }),
+  );
+  const result = await run({
+    CHANGELOG_API_URL: base,
+    CHANGELOG_SIGNING_SECRET: SECRET,
+    CHANGELOG_EVENT_FILE: file,
+  });
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  const [request] = received;
+  assert.ok(request.raw.length < 1024, `${request.raw.length} bytes sent`);
+  assert.equal(
+    JSON.parse(request.raw.toString('utf8')).body,
+    'Page Studio phases 2–4, behind page_studio.\n\n## For users\nYou can now design your page in Page Studio.',
+  );
+  // Signed over exactly the bytes sent.
+  assert.equal(
+    request.headers['x-tipme-signature'],
+    sign(
+      SECRET,
+      request.raw,
+      Number(request.headers['x-tipme-timestamp']) * 1000,
+    ).signature,
   );
 });
 

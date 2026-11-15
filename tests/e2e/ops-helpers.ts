@@ -235,7 +235,7 @@ export async function makePagePro(
   await enrolOwner(staff, testInfo);
   // Through the menu: at phone width the admin links sit in the Menu sheet.
   await openOpsLink(staff, 'Pages');
-  await staff.getByLabel('Handle').fill(handle);
+  await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await staff.getByRole('button', { name: 'Make Pro…' }).click();
   await staff

@@ -41,7 +41,7 @@ export function HomeClaim({
         <span className="home-claim__prefix">usetipme.xyz/@</span>
         <input
           name="handle"
-          aria-label="Your handle"
+          aria-label="Your username"
           placeholder="yourname"
           autoComplete="off"
           autoCapitalize="none"

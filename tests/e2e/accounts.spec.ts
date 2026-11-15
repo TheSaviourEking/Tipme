@@ -16,10 +16,10 @@ test('a new recipient signs up, claims a handle and controls whether the page is
   const { email, handle } = identity(testInfo);
   await signInWithEmail(page, email, '/sign-up');
   await expect(
-    page.getByRole('heading', { name: 'Choose your handle' }),
+    page.getByRole('heading', { name: 'Choose your username' }),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.getByLabel('Handle').fill(handle);
+  await page.getByLabel('Username').fill(handle);
   await expect(page.getByText(`@${handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -122,8 +122,8 @@ test('a session survives a reload and signing out ends it', async ({
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up');
   await page.waitForURL(/\/sign-up|\/dashboard/);
-  await page.getByLabel('Handle').waitFor();
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').waitFor();
+  await page.getByLabel('Username').fill(who.handle);
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   // A new page lands on the welcome, which has no toolbar.
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -226,7 +226,7 @@ test('the welcome preview follows what you type @mobile', async ({
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up');
   // The code was typed into the one field; the handle step has no code cells.
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
@@ -327,7 +327,7 @@ test('a dropped code check is retried once quietly and signs in', async ({
   });
   await signInWithEmail(page, email, '/sign-up');
   await expect(
-    page.getByRole('heading', { name: 'Choose your handle' }),
+    page.getByRole('heading', { name: 'Choose your username' }),
   ).toBeVisible();
   expect(checks).toBe(2);
 });

@@ -131,7 +131,7 @@ export async function signUpRecipient(
 ) {
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up');
-  await page.getByLabel('Handle').fill(who.handle);
+  await page.getByLabel('Username').fill(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   // A new page lands on the welcome; these helpers continue from Settings.

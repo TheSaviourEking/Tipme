@@ -44,9 +44,65 @@ function cutUnits(text, limit) {
 
 const bytesOf = (payload) => Buffer.byteLength(JSON.stringify(payload), 'utf8');
 
+// TipMe reads only two parts of a PR body (draftFromPullRequest in packages/contracts/src/changelog.ts):
+// the first paragraph and the "For users" section. These mirror firstParagraph and forUsersSection
+// there; scripts/changelog-client.test.mjs checks they agree with the built contracts.
+const HEADING = /^#{1,6}(\s|$)/;
+const FOR_USERS_HEADING = /^#{1,6}\s*for users\s*$/i;
+const withoutComments = (body) => body.replace(/<!--[\s\S]*?(-->|$)/g, '');
+const collapse = (text) => text.replace(/\s+/g, ' ').trim();
+
+export function firstParagraph(body) {
+  if (!body) return '';
+  const lines = [];
+  for (const line of withoutComments(body).split(/\r?\n/)) {
+    const blank = line.trim() === '';
+    const heading = HEADING.test(line.trim());
+    if (lines.length === 0) {
+      if (!blank && !heading) lines.push(line);
+      continue;
+    }
+    if (blank || heading) break;
+    lines.push(line);
+  }
+  return collapse(lines.join(' '));
+}
+
+export function forUsersSection(body) {
+  if (!body) return '';
+  const lines = withoutComments(body).split(/\r?\n/);
+  const start = lines.findIndex((line) => FOR_USERS_HEADING.test(line.trim()));
+  if (start === -1) return '';
+  const section = [];
+  for (const line of lines.slice(start + 1)) {
+    if (HEADING.test(line.trim())) break;
+    section.push(line);
+  }
+  return collapse(section.join(' '));
+}
+
 /**
- * The draft as it is sent: an empty body becomes null, the title fits the schema, and the body is
- * cut (keeping its start, whole characters only) so the request stays within the schema's
+ * The body cut down to what TipMe reads: the first paragraph and the "For users" section, so a
+ * long PR body (a big PR's notes run past 30 000 characters) is sent as a few hundred bytes. If
+ * the short body would not read the same as the full one (an odd comment, say), the full body is
+ * kept and only the size cut below applies.
+ */
+export function essentialBody(body) {
+  if (!body) return null;
+  const paragraph = firstParagraph(body);
+  const forUsers = forUsersSection(body);
+  const short =
+    [paragraph, forUsers && `## For users\n${forUsers}`]
+      .filter(Boolean)
+      .join('\n\n') || null;
+  const same =
+    firstParagraph(short) === paragraph && forUsersSection(short) === forUsers;
+  return same ? short : body;
+}
+
+/**
+ * The draft as it is sent: an empty body becomes null, the title fits the schema, the body is
+ * trimmed to the parts TipMe reads (essentialBody), and what is left is cut (keeping its start, whole characters only) so the request stays within the schema's
  * 65 536 characters and the API's 128 KiB. Characters outside ASCII take 2–4 bytes and JSON
  * escapes some to 6, so the cut is by the bytes actually sent, not by characters.
  */
@@ -60,7 +116,7 @@ export function draftPayload({
   const payload = {
     number,
     title: cutUnits(title ?? '', TITLE_LIMIT),
-    body: body ? cutUnits(body, BODY_LIMIT) : null,
+    body: body ? cutUnits(essentialBody(body) ?? '', BODY_LIMIT) || null : null,
     mergeCommitSha,
     mergedAt,
   };

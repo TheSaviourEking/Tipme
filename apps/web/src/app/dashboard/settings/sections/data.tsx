@@ -122,7 +122,7 @@ export function DeletePage() {
       <h3>Delete page</h3>
       <p>
         This removes your page and your details. Records of past tips are kept,
-        as the law requires, without your details. Your handle is held for 90
+        as the law requires, without your details. Your username is held for 90
         days.
       </p>
       <form onSubmit={remove} noValidate className="settings-form">

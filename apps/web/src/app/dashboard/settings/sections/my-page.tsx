@@ -162,9 +162,9 @@ export function PhotoSettings() {
 }
 
 const renameErrors: Record<string, string> = {
-  HANDLE_TAKEN: 'That handle is taken. Please choose another.',
-  HANDLE_CHANGE_PRO_REQUIRED: 'Handle changes are part of TipMe Pro.',
-  HANDLE_CHANGE_LIMIT: 'You’ve used all your handle changes.',
+  HANDLE_TAKEN: 'That username is taken. Please choose another.',
+  HANDLE_CHANGE_PRO_REQUIRED: 'Username changes are part of TipMe Pro.',
+  HANDLE_CHANGE_LIMIT: 'You’ve used all your username changes.',
   VALIDATION_FAILED:
     'Use 3 to 30 letters, numbers or underscores, with no spaces.',
 };
@@ -285,13 +285,14 @@ export function HandleChange() {
       renameErrors[result.code] ??
         (fresh?.ok
           ? 'We couldn’t change that. Please try again.'
-          : 'We couldn’t tell whether that went through. Reload this page to see your handle.'),
+          : 'We couldn’t tell whether that went through. Reload this page to see your username.'),
     );
   };
 
   const oldHandles = previous.length > 0 && (
     <p className="tm-hint">
-      Old handles that lead here: {previous.map((old) => `@${old}`).join(', ')}
+      Old usernames that lead here:{' '}
+      {previous.map((old) => `@${old}`).join(', ')}
     </p>
   );
   const savedNotice = saved && (
@@ -310,14 +311,16 @@ export function HandleChange() {
     return (
       <Card id="handle" className="settings-section settings-handle-row">
         <h3 ref={heading} tabIndex={-1} className="sr-only">
-          Your handle
+          Your username
         </h3>
         <div>
-          <p className="settings-handle-row__name">Handle: @{profile.handle}</p>
+          <p className="settings-handle-row__name">
+            Username: @{profile.handle}
+          </p>
           {/* A Free page lands here right after choosing during a take-back. */}
           {savedNotice}
           <p className="tm-hint" role={error ? 'alert' : undefined}>
-            Handle changes are part of TipMe Pro.
+            Username changes are part of TipMe Pro.
           </p>
           {oldHandles}
         </div>
@@ -329,11 +332,11 @@ export function HandleChange() {
     return (
       <Card id="handle" className="settings-section">
         <h3 ref={heading} tabIndex={-1}>
-          Your handle
+          Your username
         </h3>
         {savedNotice}
         <p role={error ? 'alert' : undefined}>
-          You’ve used all your handle changes.{' '}
+          You’ve used all your username changes.{' '}
           <a href="mailto:support@usetipme.xyz">Contact the TipMe team</a> to
           change it again.
         </p>
@@ -343,7 +346,7 @@ export function HandleChange() {
 
   return (
     <Card id="handle" className="settings-section">
-      <h3>{takeBack ? 'Choose a new username' : 'Your handle'}</h3>
+      <h3>{takeBack ? 'Choose a new username' : 'Your username'}</h3>
       {takeBack ? (
         <p className="tm-hint">
           TipMe needs @{takeBack.handle} back. Choosing a new username won’t use
@@ -356,8 +359,8 @@ export function HandleChange() {
       ) : (
         <p className="tm-hint">
           {left !== null && <strong>{changesLeft(left)}. </strong>}
-          Switching back to an old handle counts as a change. Your old links and
-          printed QR codes keep working: they lead to your new handle, and
+          Switching back to an old username counts as a change. Your old links
+          and printed QR codes keep working: they lead to your new username, and
           nobody else can take them.
         </p>
       )}
@@ -368,7 +371,7 @@ export function HandleChange() {
       >
         <InputField
           id={`${id}-handle`}
-          label="Handle"
+          label="Username"
           maxLength={31}
           autoComplete="off"
           spellCheck={false}
@@ -388,7 +391,7 @@ export function HandleChange() {
           disabled={wanted === profile.handle}
           aria-busy={busy}
         >
-          {takeBack ? 'Choose this username' : 'Change handle'}
+          {takeBack ? 'Choose this username' : 'Change username'}
         </Button>
       </form>
       {confirming && (
@@ -396,7 +399,7 @@ export function HandleChange() {
           title={
             takeBack
               ? `Make @${confirming} your new username?`
-              : `Change your handle to @${confirming}?`
+              : `Change your username to @${confirming}?`
           }
           confirm="Yes, change it"
           busy={busy}
