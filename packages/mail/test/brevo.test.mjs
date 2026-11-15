@@ -5,6 +5,7 @@ import {
   configuredMailProviderNames,
   createBrevoProvider,
   mailSettingsShape,
+  MailQuotaError,
   MailRejectedError,
   MailTemporaryError,
 } from '../dist/index.js';
@@ -127,6 +128,42 @@ test('a refusal is permanent; a rate limit, an outage or a timeout is temporary'
     assert.equal(error.code, 'timeout');
     return true;
   });
+});
+
+// Out of credits (Brevo's free plan: 300 emails a day). Brevo's reference for POST /v3/smtp/email
+// (read 15 Nov 2026) lists only 201, 202 and 400, and its 400 `code` list holds both
+// `not_enough_credits` and `Insufficient credits`. That is a pause until credits come back, never a
+// refusal: a quota error is a temporary error the outbox defers without using up attempts.
+test('out of credits is a quota pause, not a refusal; other 400s are still refused', async () => {
+  const quota = [
+    [400, { code: 'not_enough_credits', message: 'Not enough credits' }],
+    [400, { code: 'NOT_ENOUGH_CREDITS' }],
+    [400, { code: 'Insufficient credits' }],
+    [400, { code: 'bad_request', message: 'Insufficient credits to send' }],
+    [402, { code: 'not_enough_credits' }],
+  ];
+  for (const [status, body] of quota) {
+    const { brevo } = provider(() => Response.json(body, { status }));
+    await assert.rejects(brevo.send(mail), (error) => {
+      assert.ok(error instanceof MailQuotaError, JSON.stringify(body));
+      assert.ok(error instanceof MailTemporaryError);
+      assert.equal(error.code, 'not_enough_credits');
+      return true;
+    });
+  }
+  for (const body of [
+    { code: 'invalid_parameter', message: 'email is not valid' },
+    { code: 'permission_denied' },
+    { code: 'account_under_validation' },
+  ]) {
+    const { brevo } = provider(() => Response.json(body, { status: 400 }));
+    await assert.rejects(brevo.send(mail), (error) => {
+      assert.ok(error instanceof MailRejectedError, body.code);
+      assert.ok(!(error instanceof MailQuotaError));
+      assert.equal(error.code, body.code);
+      return true;
+    });
+  }
 });
 
 const hook = (payload, token = TOKEN) => ({

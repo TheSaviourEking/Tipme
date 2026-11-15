@@ -349,6 +349,8 @@ export const mailMessages = pgTable(
     ),
     index('mail_messages_created').on(table.createdAt),
     index('mail_messages_type_created').on(table.type, table.createdAt),
+    // The announcements daily limit counts each type's emails sent in the last 24 hours.
+    index('mail_messages_type_sent').on(table.type, table.sentAt),
     index('mail_messages_user_created').on(table.userId, table.createdAt),
     index('mail_messages_provider_id').on(
       table.provider,

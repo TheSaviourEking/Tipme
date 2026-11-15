@@ -98,6 +98,27 @@ test('nothing sending: nothing logged, nothing queued', async () => {
   assert.deepEqual(logs, []);
 });
 
+// The daily limit (owner, 15 Nov 2026): while it holds a send back, each tick is counted as paused
+// in the metrics, without a log line every 10 seconds for hours; staff see it on the screen.
+test('a send held back by the daily limit is counted as paused, not logged each tick', async () => {
+  const logs = [];
+  const outcome = await handleAnnouncements({
+    db: {},
+    sealing: { key: Buffer.alloc(32) },
+    sendsPerMinute: 60,
+    now: () => new Date(),
+    log: (entry) => logs.push(entry),
+    queueBatch: async () => ({
+      announcementId: 'a1',
+      queued: 0,
+      finished: false,
+      paused: true,
+    }),
+  });
+  assert.equal(outcome, 'announcements_paused');
+  assert.deepEqual(logs, []);
+});
+
 test('delivery gets the announcement provider of its own', () => {
   const source = readFileSync(
     new URL('../src/job-worker.ts', import.meta.url),

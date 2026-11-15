@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   createMockMailProvider,
   MAIL_TYPES,
+  MailQuotaError,
   MailRejectedError,
   MailTemporaryError,
 } from '@tipme/mail';
@@ -13,6 +14,7 @@ import {
   enqueueMail,
   listPretendOutbox,
   MAIL_BACKOFF_MS,
+  MAIL_QUOTA_RETRY_MS,
   mailSealing,
   requeueStuckMail,
   wipeExpiredMailContent,
@@ -582,4 +584,122 @@ test('mail to an address that can never receive it goes to the pretend inbox, no
     real.sent.map((m) => m.to),
     ['tobi@realmail.com'],
   );
+});
+
+// Announcements daily cap (owner, 15 Nov 2026): Brevo's free plan sends 300 a day and answers
+// "not enough credits" once they are used. That is a pause, not a failure: the email waits an hour
+// at a time, as long as it takes, without using up its attempts, and goes once credits are back.
+function announcementSender(outcomes) {
+  const sent = [];
+  let calls = 0;
+  return {
+    sent,
+    calls: () => calls,
+    provider: {
+      name: 'brevo',
+      capabilities: { marketing: true },
+      async send(mail) {
+        calls += 1;
+        const next = outcomes.shift() ?? { ok: true };
+        if (next.quota) throw new MailQuotaError('not_enough_credits');
+        sent.push(mail);
+        return { providerMessageId: `b-${sent.length}` };
+      },
+      verifyWebhook: () => ({ ok: false, reason: 'signature' }),
+      async status() {
+        return { sandbox: null, detail: null };
+      },
+    },
+  };
+}
+
+const notice = (key) => ({
+  type: 'service_notice',
+  to: `reader.${key}@example.com`,
+  userId: null,
+  data: { subject: 'Fees', preheader: '', text: 'Fees change' },
+  dedupeKey: `notice.quota.${key}`,
+});
+
+test('out of credits defers the email an hour at a time and never uses up its attempts', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { id } = await enqueueMail(db, sealing, notice('a'));
+  const zepto = scripted([]);
+  const brevo = announcementSender(
+    Array.from({ length: MAIL_BACKOFF_MS.length + 4 }, () => ({ quota: true })),
+  );
+  const both = {
+    ...deps(db, zepto.provider),
+    announcementProvider: brevo.provider,
+  };
+  let now = new Date();
+  for (let i = 0; i < MAIL_BACKOFF_MS.length + 4; i++) {
+    const result = await deliverDueMail(both, { now, limit: 20 });
+    assert.equal(result.failed, 0);
+    const [row] = await rows(
+      'SELECT status, attempts, next_attempt_at, last_error FROM mail_messages WHERE id = $1',
+      [id],
+    );
+    assert.equal(row.status, 'queued');
+    assert.equal(row.attempts, 0);
+    assert.equal(row.last_error, 'not_enough_credits');
+    assert.equal(
+      row.next_attempt_at.getTime(),
+      now.getTime() + MAIL_QUOTA_RETRY_MS,
+    );
+    // Not due again before the hour is up.
+    assert.equal(
+      (
+        await deliverDueMail(both, {
+          now: new Date(now.getTime() + 60_000),
+          limit: 20,
+        })
+      ).sent,
+      0,
+    );
+    now = new Date(now.getTime() + MAIL_QUOTA_RETRY_MS);
+  }
+  // Credits are back: it goes.
+  const result = await deliverDueMail(both, { now, limit: 20 });
+  assert.equal(result.sent, 1);
+  const [row] = await rows(
+    'SELECT status, attempts FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, { status: 'sent', attempts: 1 });
+  assert.equal(zepto.sent.length, 0);
+});
+
+test('once credits run out, the rest of the pass waits without asking again; other mail still goes', async (t) => {
+  const { db, rows } = await fresh(t);
+  for (const key of ['a', 'b', 'c'])
+    await enqueueMail(db, sealing, notice(key));
+  await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.beside_quota',
+  });
+  const zepto = scripted([]);
+  const brevo = announcementSender([{ quota: true }]);
+  const now = new Date();
+  const result = await deliverDueMail(
+    { ...deps(db, zepto.provider), announcementProvider: brevo.provider },
+    { now, limit: 20 },
+  );
+  assert.equal(brevo.calls(), 1);
+  assert.equal(result.failed, 0);
+  assert.equal(zepto.sent.length, 1);
+  const waiting = await rows(
+    `SELECT status, attempts, next_attempt_at FROM mail_messages WHERE type = 'service_notice'`,
+  );
+  assert.equal(waiting.length, 3);
+  for (const row of waiting) {
+    assert.equal(row.status, 'queued');
+    assert.equal(row.attempts, 0);
+    assert.equal(
+      row.next_attempt_at.getTime(),
+      now.getTime() + MAIL_QUOTA_RETRY_MS,
+    );
+  }
 });

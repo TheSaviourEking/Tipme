@@ -16,7 +16,8 @@ export function announcementBatchSize(sendsPerMinute: number): number {
  * The `announcements.send` job, every 10 seconds: queues the next batch of the oldest announcement
  * being sent (staff announcements, 14 Nov 2026). The batch and its progress commit together and
  * each email's dedupe key is per person, so a repeat after a restart, or two workers, mail nobody
- * twice. Missed ticks are not caught up: the rate is a ceiling, never a burst.
+ * twice. Missed ticks are not caught up: the rate is a ceiling, never a burst. Above the rate sits
+ * the daily limit staff set in Switches (default 300, the email service's free plan).
  */
 export async function handleAnnouncements(deps: {
   db: Database;
@@ -26,13 +27,18 @@ export async function handleAnnouncements(deps: {
   log?: (entry: Record<string, unknown>) => void;
   /** For tests: the batch itself has its own integration tests. */
   queueBatch?: typeof queueAnnouncementBatch;
-}): Promise<'announcements_queued' | 'announcements_idle'> {
+}): Promise<
+  'announcements_queued' | 'announcements_idle' | 'announcements_paused'
+> {
   const result = await (deps.queueBatch ?? queueAnnouncementBatch)(
     deps.db,
     deps.sealing,
     { now: deps.now(), limit: announcementBatchSize(deps.sendsPerMinute) },
   );
   if (!result.announcementId) return 'announcements_idle';
+  // Held back by the daily limit (15 Nov 2026): counted in the metrics, shown to staff on
+  // /ops/announcements, and not logged every 10 seconds while it waits.
+  if (result.paused) return 'announcements_paused';
   deps.log?.({
     event: 'announcements.batch',
     announcement_id: result.announcementId,

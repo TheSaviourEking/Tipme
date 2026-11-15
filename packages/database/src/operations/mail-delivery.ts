@@ -1,5 +1,6 @@
 import {
   MAIL_TYPES,
+  MailQuotaError,
   MailRejectedError,
   MailTemporaryError,
   isPretendRecipient,
@@ -34,6 +35,11 @@ export const MAIL_BACKOFF_MS = [
   30_000, 120_000, 600_000, 3_600_000, 21_600_000,
 ] as const;
 const MAX_ATTEMPTS = MAIL_BACKOFF_MS.length + 1;
+/**
+ * After the provider says its sending allowance is used up (MailQuotaError: Brevo out of credits),
+ * the mail waits this long and asks again, as many times as it takes, without using an attempt.
+ */
+export const MAIL_QUOTA_RETRY_MS = 3_600_000;
 const STUCK_AFTER_MS = 2 * 60_000;
 const CONTENT_KEPT_MS = 7 * 86_400_000;
 
@@ -324,6 +330,44 @@ export async function recordMailFailure(
   });
 }
 
+/**
+ * The provider's allowance is used up: the mail goes back to the queue for MAIL_QUOTA_RETRY_MS with
+ * its attempts unchanged, so running out of credits never fails it. The timeline records the try;
+ * the day's counts don't (no type), as for any retry.
+ */
+export async function recordMailDeferred(
+  db: Database,
+  input: {
+    id: string;
+    provider: MailProviderName | null;
+    code: string;
+    claimedAt: Date;
+    now: Date;
+  },
+): Promise<'deferred' | 'stale'> {
+  return db.transaction(async (tx) => {
+    const updated = await tx
+      .update(mailMessages)
+      .set({
+        status: 'queued',
+        ...(input.provider ? { provider: input.provider } : {}),
+        lastError: input.code.slice(0, 80),
+        claimedAt: null,
+        nextAttemptAt: new Date(input.now.getTime() + MAIL_QUOTA_RETRY_MS),
+      })
+      .where(ownsClaim(input.id, input.claimedAt))
+      .returning({ id: mailMessages.id });
+    if (updated.length === 0) return 'stale' as const;
+    await recordMailEvent(tx, {
+      messageId: input.id,
+      kind: 'send_failed',
+      provider: input.provider,
+      occurredAt: input.now,
+    });
+    return 'deferred' as const;
+  });
+}
+
 /** Mail left `sending` by a worker that died goes back to the queue after two minutes. */
 export async function requeueStuckMail(
   db: Database,
@@ -420,6 +464,9 @@ export async function deliverDueMail(
   if (claimed.length === 0) return result;
   const active = await deps.activeProvider();
   const configured = new Set(deps.providers.keys());
+  // Set once the announcement provider says its allowance is used up: the rest of this pass's
+  // announcements wait with it rather than each asking again.
+  let quotaCode: string | null = null;
   for (const mail of claimed) {
     const gate = await mailGate(deps.db, deps.sealing, mail, input.now);
     if (gate !== 'send') {
@@ -499,8 +546,31 @@ export async function deliverDueMail(
         code,
       });
     };
+    const defer = async (code: string) => {
+      const outcome = await recordMailDeferred(deps.db, {
+        id: mail.id,
+        provider: providerName,
+        code,
+        claimedAt: mail.claimedAt,
+        now: input.now,
+      });
+      if (outcome === 'stale') return;
+      result.retried += 1;
+      log({
+        event: 'mail.quota_wait',
+        message_id: mail.id,
+        type: mail.type,
+        provider: providerName,
+        code,
+      });
+    };
     if (!provider) {
       await fail('provider_not_configured', false);
+      continue;
+    }
+    const viaAnnouncementProvider = bulk && !pretend;
+    if (viaAnnouncementProvider && quotaCode !== null) {
+      await defer(quotaCode);
       continue;
     }
     // Security, account and money mail always go, so they carry no way to turn them off.
@@ -542,7 +612,12 @@ export async function deliverDueMail(
         tracking: MAIL_TYPES[mail.type]?.tracking ?? false,
       }));
     } catch (error) {
-      if (error instanceof MailRejectedError) await fail(error.code, true);
+      // A quota error is a temporary error too, so it is checked first.
+      if (error instanceof MailQuotaError) {
+        if (viaAnnouncementProvider) quotaCode = error.code;
+        await defer(error.code);
+      } else if (error instanceof MailRejectedError)
+        await fail(error.code, true);
       else if (error instanceof MailTemporaryError)
         await fail(error.code, false);
       else await fail('send_error', false);

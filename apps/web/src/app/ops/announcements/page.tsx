@@ -9,6 +9,7 @@ import {
   type AnnouncementAudience,
   type AnnouncementKind,
   type OpsAnnouncement,
+  type OpsAnnouncementDailyLimit,
   type OpsAnnouncementDraft,
   type OpsAnnouncementList,
   type OpsAnnouncementPreview,
@@ -70,7 +71,7 @@ const count = (n: number) =>
   `${n.toLocaleString('en-NG')} ${n === 1 ? 'person' : 'people'}`;
 
 /** One line for the list and the heading: never "sent" for a send still going. */
-function stateWords(a: OpsAnnouncement): string {
+function stateWords(a: OpsAnnouncement, paused = false): string {
   const progress = `${a.queuedCount.toLocaleString('en-NG')} of ${(a.recipientCount ?? 0).toLocaleString('en-NG')}`;
   switch (a.state) {
     case 'draft':
@@ -78,7 +79,9 @@ function stateWords(a: OpsAnnouncement): string {
     case 'waiting':
       return 'Waiting for approval';
     case 'sending':
-      return `Sending: ${progress}`;
+      return paused
+        ? `Paused for the daily limit: ${progress}`
+        : `Sending: ${progress}`;
     case 'sent':
       return `Sent: ${progress} queued`;
     case 'cancelled':
@@ -103,6 +106,42 @@ const same = (a: OpsAnnouncementDraft, b: OpsAnnouncementDraft) =>
 const darkened = (html: string) =>
   html.replace('@media (prefers-color-scheme: dark)', '@media all');
 
+/**
+ * The daily limit (owner, 15 Nov 2026): the email service sends a set number a day, so a send pauses
+ * at the limit and carries on by itself. Plain words; the service is never named.
+ */
+function DailyLimitNotice({
+  daily,
+  sending,
+}: {
+  daily: OpsAnnouncementDailyLimit;
+  sending: OpsAnnouncement | null;
+}) {
+  const limit = daily.limit.toLocaleString('en-NG');
+  if (sending && daily.remaining === 0) {
+    const total = sending.recipientCount ?? 0;
+    const left = Math.max(0, total - sending.queuedCount);
+    return (
+      <Notice tone="neutral" title="Paused for the daily limit">
+        <span data-testid="announcement-paused">
+          Paused: today’s limit of {limit} is used. Sending continues
+          automatically.
+        </span>{' '}
+        {sending.queuedCount.toLocaleString('en-NG')} of{' '}
+        {total.toLocaleString('en-NG')} queued, {count(left)} still to go.
+        {daily.freesAt && ` Room frees up from ${when(daily.freesAt)}.`}
+      </Notice>
+    );
+  }
+  return (
+    <p className="tm-hint" data-testid="announcement-daily-limit">
+      Announcement emails in the last 24 hours, tests included:{' '}
+      {daily.used.toLocaleString('en-NG')} of {limit}. Change the limit in
+      Switches.
+    </p>
+  );
+}
+
 function Preview({ preview }: { preview: OpsAnnouncementPreview }) {
   return (
     <div className="ops-announcement-previews">
@@ -126,6 +165,7 @@ export default function AnnouncementsPage() {
   const id = useId();
   const [list, setList] = useState<OpsAnnouncement[] | null>(null);
   const [setUp, setSetUp] = useState(true);
+  const [daily, setDaily] = useState<OpsAnnouncementDailyLimit | null>(null);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState<OpsAnnouncement | null>(null);
   const [draft, setDraft] = useState<OpsAnnouncementDraft>(EMPTY);
@@ -139,6 +179,7 @@ export default function AnnouncementsPage() {
     if (!result.ok) return setFailed(true);
     setList(result.data.rows);
     setSetUp(result.data.setUp);
+    setDaily(result.data.dailyLimit);
     setOpen((current) =>
       current
         ? (result.data.rows.find((row) => row.id === current.id) ?? current)
@@ -152,7 +193,11 @@ export default function AnnouncementsPage() {
   }, [apply]);
 
   // While one sends, its count moves: read it again every 5 seconds.
-  const sending = list?.some((row) => row.state === 'sending') ?? false;
+  // The list is newest first; the worker sends the oldest one first.
+  const sendingRow =
+    list?.filter((row) => row.state === 'sending').at(-1) ?? null;
+  const sending = sendingRow !== null;
+  const paused = sending && daily?.remaining === 0;
   useEffect(() => {
     if (!sending) return;
     const timer = setInterval(() => void load(), 5000);
@@ -328,6 +373,10 @@ export default function AnnouncementsPage() {
         </Notice>
       )}
 
+      {daily && (
+        <DailyLimitNotice daily={daily} sending={paused ? sendingRow : null} />
+      )}
+
       <Card className="settings-section">
         <h2 id={`${id}-list`}>Announcements</h2>
         {list.length === 0 ? (
@@ -340,7 +389,9 @@ export default function AnnouncementsPage() {
               <li key={row.id}>
                 <strong>{row.subject}</strong> ·{' '}
                 {ANNOUNCEMENT_KIND_WORDS[row.kind]} ·{' '}
-                <span data-testid="announcement-state">{stateWords(row)}</span>{' '}
+                <span data-testid="announcement-state">
+                  {stateWords(row, paused)}
+                </span>{' '}
                 · {when(row.createdAt)}{' '}
                 <Button
                   variant="quiet"
@@ -362,7 +413,7 @@ export default function AnnouncementsPage() {
         <h2 id={`${id}-editor`}>{open ? open.subject : 'New announcement'}</h2>
         {open && (
           <p data-testid="announcement-progress">
-            <strong>{stateWords(open)}</strong>
+            <strong>{stateWords(open, paused)}</strong>
             {open.sendStartedAt && ` · started ${when(open.sendStartedAt)}`}
           </p>
         )}
