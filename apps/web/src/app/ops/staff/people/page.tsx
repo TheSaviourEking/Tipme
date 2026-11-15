@@ -562,7 +562,8 @@ export default function PeoplePage() {
     );
   return (
     <div className="ops-dashboard ops-page-body">
-      <h1>People</h1>
+      {/* Matches its menu link; "People" is every account, under Work (UI audit, 15 Nov 2026). */}
+      <h1>Staff members</h1>
       <p className="tm-hint">
         Effective access is the role’s permissions, plus additions, minus
         removals. You can’t give what you don’t hold, or change your own access.

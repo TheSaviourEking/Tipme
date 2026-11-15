@@ -24,6 +24,11 @@ const { values } = parseArgs({
     // Whether this copy should take real money (true|false): production passes its
     // PRODUCTION_PAYMENTS_LIVE. Without it the suite expects false, which fails on a live copy.
     'expect-live': { type: 'string' },
+    // Largest Contentful Paint budget: `enforce` (default) fails the check over 2000 ms;
+    // `report` measures, prints and writes it to the job summary, but never fails on it.
+    // Production deploys pass `report`: CDP throttling stacks on the real internet path there,
+    // and the same warm page measured 1140 to 3484 ms. Accessibility checks fail in both modes.
+    speed: { type: 'string', default: 'enforce' },
     // Local copies only: accept a self-signed certificate.
     insecure: { type: 'boolean', default: false },
   },
@@ -47,6 +52,8 @@ if (!values.web || !values.api)
   stop('usage: pnpm release:check --web <url> --api <url> [--full]');
 const web = https(values.web, 'web');
 const api = https(values.api, 'api');
+if (!['enforce', 'report'].includes(values.speed))
+  stop('--speed must be enforce or report.');
 if (values.insecure) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 // What the copy says it is decides what may run: a full check never touches a live copy.
@@ -153,6 +160,7 @@ const result = spawnSync(
       RELEASE_HANDLE: values.handle ?? '',
       RELEASE_EXPECT_VERSION: values['expect-version'] ?? '',
       RELEASE_EXPECT_LIVE: expectLive ?? 'false',
+      RELEASE_SPEED: values.speed,
       RELEASE_INSECURE: values.insecure ? '1' : '0',
       RELEASE_PAYMENT_PROVIDER: paymentProvider,
       RELEASE_BACHS_HANDLE: bachsHandle,

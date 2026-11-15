@@ -21,6 +21,7 @@ import {
 } from '@tipme/ui';
 import type { StampTone } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -238,9 +239,10 @@ export default function WithdrawPage({
   const summary = balance.data;
   if (balance.error === 'load')
     return (
-      <Slip tone="error" title="We couldn’t load your balance">
-        Please reload the page.
-      </Slip>
+      <LoadFailed
+        title="We couldn’t load your balance"
+        onRetry={balance.reload}
+      />
     );
   // A quote that failed to refresh is no quote: it is never read as a yes.
   if (!summary || (!latest.data && !latest.error && !latest.needsCheck))

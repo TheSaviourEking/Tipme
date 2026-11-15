@@ -55,7 +55,7 @@ async function tip(
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\/mock_pay_/);
   await expect(
-    page.getByText('Test payment provider · no real money'),
+    page.getByText('Test payment page · no real money'),
   ).toBeVisible();
   await page.getByRole('button', { name: outcome }).click();
   await page.waitForURL(/\/tip\/[0-9a-f-]{36}/);
@@ -732,7 +732,7 @@ test('minor: the pretend provider page can retry loading', async ({ page }) => {
   await page.getByRole('button', { name: /^Tip ₦/ }).click();
   await page.waitForURL(/\/mock-checkout\//);
   await expect(
-    page.getByText('The test provider is unavailable. Please try again.'),
+    page.getByText('The test payment page is unavailable. Please try again.'),
   ).toBeVisible();
   // A page-level error slip: no stamp, announced as an alert.
   const slip = page

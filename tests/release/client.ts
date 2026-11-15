@@ -19,6 +19,8 @@ export const env = {
   expectVersion: process.env.RELEASE_EXPECT_VERSION ?? '',
   /** Whether this copy should take real money (--expect-live); false unless it was told so. */
   expectLive: process.env.RELEASE_EXPECT_LIVE === 'true',
+  /** `report`: the LCP budget is measured and printed but never fails (production deploys). */
+  speedReportOnly: process.env.RELEASE_SPEED === 'report',
   insecure: process.env.RELEASE_INSECURE === '1',
   paymentProvider: process.env.RELEASE_PAYMENT_PROVIDER ?? 'mock',
   /** On the Bachs sandbox: a standing page whose Bachs account was set up by hand. */

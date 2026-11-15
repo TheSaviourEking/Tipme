@@ -81,6 +81,10 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   // real in the fourth repeat, and two tests would share one person.
   const email = `invitee@e2e-${randomUUID().slice(0, 8)}.example`;
   await page.goto('/ops/staff/people');
+  // The heading matches its menu link (UI audit, 15 Nov 2026).
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Staff members' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Add a person…' }).click();
   await page.getByLabel('Their email').fill(email);
   await page

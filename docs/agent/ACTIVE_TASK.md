@@ -3,6 +3,11 @@
 - Branch `fix/ui-audit-ops` from `origin/dev` (with #241). The admin findings F1–F26 of the UI audit, built from the OpsShell/OpsPages boards: one page root (`.ops-page-body`), recessed tiles, purple never a state colour (state badges, green switch lamp, black save/continue and reasoned actions), Switches as hairline rows, phone tables as stacked cards, `EmptyWell`, pricing behind "…" openers, `.tm-choice > span`, an in-frame missing page. Rulings in DECISION-LOG 2026-11-15.
 - Must merge after the release PR #242. Left: F12, F18, F19 (another PR's copy), F20 (status wording), the six-box code input (F17).
 
+# Current task: UI audit fixes, behaviour and words (15 November 2026)
+
+- Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.
+- No CSS, no migration, no API change. Tests: `apps/web/test/dashboard-load.test.mjs`, `panel-read.test.mjs`, `payment-mode-copy.test.mjs`; e2e `tests/e2e/dashboard-read-failures.spec.ts` plus copy assertions in touched specs. Next: CI, owner review and merge into `dev`.
+
 # Current task: the home page's first paint (15 November 2026)
 
 - Branch `perf/home-first-paint` from `origin/dev`. Production (be8d4167) failed the release check's speed budget: `/` LCP 2876 and 2136 ms (budget 2000). The LCP is the headline and equals FCP: the whole first paint waited for one render-blocking stylesheet, `globals.css`, which grew from 175 KB to 299 KB source (26.8 to 41.9 KB gzip served) between the 4 Nov release (ffb3485d) and now, mostly dashboard and admin styles that every public page downloaded.

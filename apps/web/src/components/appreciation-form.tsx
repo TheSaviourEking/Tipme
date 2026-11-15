@@ -61,7 +61,7 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   if (failure.code === 'PROVIDER_OUTCOME_UNKNOWN')
     return 'We couldn’t confirm whether your payment started. Please don’t tip again yet: wait a few minutes, and TipMe will check. Nothing is shown as paid until it is confirmed.';
   if (failure.code === 'DEPENDENCY_UNAVAILABLE')
-    return 'The payment provider is unavailable right now. Nothing was charged. Please try again in a moment.';
+    return 'Our payment partner is unavailable right now. Nothing was charged. Please try again in a moment.';
   // TipMe's own fault, before any redirect to the payment partner: nothing was paid (Q2).
   return CONNECTION_COPY.ourSideTip;
 };

@@ -99,13 +99,15 @@ test('the signing secret is only ever passed as a GitHub secret through env, nev
   }
 });
 
-test('the production sync runs after the release check, only on success, and can never fail the deploy', () => {
+test('the production sync runs after the release check, once the deploy step succeeded (even if the release check failed), and can never fail the deploy', () => {
   const source = read('deploy-production.yml');
   const check = named(source, 'Release check (read-only)');
   const sync = named(source, 'Changelog: what is now live');
   assert.equal(sync.index, check.index + 1);
   assert.equal(sync.step.continueOnError, 'true');
-  assert.equal(sync.step.if, 'success()');
+  assert.equal(sync.step.if, "always() && steps.ship.outcome == 'success'");
+  // Production's speed check is report-only: network noise to the edge must not decide the deploy.
+  assert.match(check.step.run, /--speed report/);
   assert.match(
     sync.step.run,
     /^node scripts\/changelog-sync\.mjs --environment production --version "\$VERSION"\n$/,

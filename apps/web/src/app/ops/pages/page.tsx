@@ -478,8 +478,7 @@ export default function OpsPagesPage() {
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
         below NGN 2,000) and change their username. The fee and withdrawal
-        minimum are the same as Free.
-        {copy.opsBilling}
+        minimum are the same as Free. {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField
