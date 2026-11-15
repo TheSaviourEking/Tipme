@@ -296,7 +296,7 @@ function MarkFailed({
           {error}
         </Notice>
       )}
-      <Button type="submit" disabled={busy} aria-busy={busy}>
+      <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         Mark failed and release
       </Button>
     </form>

@@ -377,6 +377,14 @@ the appreciation moment) is unchanged.
 - **Manifest.** `/manifest.webmanifest`, name and short name "TipMe", `start_url` "/", `display: browser`, theme `#7A32F9`, background `#FFFFFF`. `browser` because the manifest adds no offline or app features, and it keeps the address bar, including on the payment partner's page.
 - **Gates.** The launch gate and the preview password leave exactly these four paths open, as they do `icon.svg`.
 
+## 2026-11-15 — The claim moment stays
+
+- **Owner's feedback and choice, 15 Nov 2026** ("it pops in and pops out"; it stays until they move on). A visual and interaction decision, not a regulatory approval; no D-item is affected. It replaces the hand-over rules in the 6 Nov entry below; the trigger, copy, hearts, vibration and one-time marker are unchanged.
+- **No timer.** The scene plays (fall, land, stamp, hearts, words; 0–1200ms) and stays. There is no rise-away and no `CLAIM_MOMENT_MS`.
+- **What ends it.** "Continue", Escape or Enter (not a held key's repeats). Tab moves focus round inside the moment (it is `aria-modal`); no other key ends it. A tap anywhere ends it only from 800ms (`CLAIM_TAP_ARMED_MS`: the card is down at 550ms, plus a guard), so the claim tap, or its late click on a phone, never dismisses it. Focus then goes to the hello heading, as before.
+- **No ring on the heading.** The heading takes focus so screen readers start there, but it is not a control, so it draws no focus ring, however the claim was made (as `main` and the settings chapters do). Keyboard focus on "Continue" keeps its ring.
+- **The stamp has its own row** between the link and the amounts, tilted 4°, so it never covers the amounts or the Tip button's words at any width; the longest username wraps to two balanced lines.
+
 ## 2026-11-06 — The claim moment
 
 - **Owner-approved board, 5 Nov 2026** (Sign-up celebration). A product and visual decision, not a regulatory approval; no D-item is affected and nothing about payments changes.
@@ -464,3 +472,25 @@ the appreciation moment) is unchanged.
 - **Materials (PR 8).** The panel is paper, the heading DM Serif, the amount keys raised, the fields and checkboxes recessed (still native inputs), the drawer a ruled row with a chevron, the Tip key a 56px black key. Scoped to `.profile-composer`: the home demo form keeps its look, and the selected key's fill stays with `AmountChoice` (and make-it-yours' accent).
 - **The minimum as a quiet hint (PR 9, Q1, built with the plan's default; needs the owner's yes).** The same words show as the Other field's hint (`tm-hint`, `aria-describedby`, no red edge, no alert) after 700 ms without typing. Not on blur, so the Tip key does not move while it is being clicked. Pressing Tip still shows the error and starts nothing.
 - **One line under the Tip key in live mode (PR 9, Q2, built with the default; needs the owner's yes).** "You pay exactly this. You’ll confirm on our partner’s page." replaces the two lines, dropping "No account needed." Test mode keeps its two lines. Proof: the form starts nothing unless the quote matches the key's amount, and the provider event must match `payerTotalMinor` or nothing is booked (`packages/database/src/operations/provider-events.ts`).
+
+## 2026-11-15 — Admin UI audit fixes: the OpsShell board's patterns (ops audit F1–F26)
+
+- **Built from the approved admin boards** (`redesign/boards/OpsShell.dc.html`, `OpsPages.dc.html`; 2026-11-05 entry above). A visual decision, not a regulatory approval; no permission, staff action, audit or money change.
+- **One page root.** Every `/ops` page sits in `.ops-page-body` (grid, `--space-6` gap; headings bring no margins). Email, Providers and the provider test no longer return bare fragments.
+- **Metric tiles are recessed wells** (board `.tile`), two across on a phone. This replaces the 2026-10-25 line "metric tiles inherit the card materials".
+- **Purple is never a state colour in the admin area.** Money issues use the danger state, Account the warning state, Info the recessed tag; a switch that is on shows a green lamp (`Lamp tone="green"`, `--state-success`). Saving, continuing and every reasoned action's final button are black; the button that opens a reason box is black only when it leads the card, otherwise secondary. The Approvals count and the funnel bars stay purple.
+- **Switches are hairline rows in one paper**, the words on the left and the action on the right; Overview pairs pending approvals and staff activity on two papers, with the withdrawals switch as one row.
+- **Tables on a phone** (Audit log, Usernames, Market) become stacked cards with the same fields, labelled from `data-label`.
+- **Choices that aren't amounts** (announcement kinds, who sees a changelog entry) are plain radio rows with the brand accent; `.tm-choice` styles only its own key face (`> span`).
+- **Pricing on Pages**: setting a page's fee, granting fee-free tips and allowing more username changes each open from a "…" button.
+- **Not built (open):** the six-box code input (board Pattern 4) needs a decision on paste and autofill; plain-word status badges for raw codes (OpsPages board, marked proposed) need their wording.
+
+## 2026-11-15 — Dashboard UI audit fixes (`fix/ui-audit-dashboard`)
+
+- Applies existing rulings to screens that had drifted (audit of `/dashboard/**`, 15 Nov 2026). A visual decision, not a regulatory approval; nothing about payments, fees or the ledger changes.
+- **One primary key in the dashboard.** Slice 3's "saving or continuing inside a card is black" now holds outside cards too, so a page never shows a black and a purple primary for the same role. Segmented controls keep their own selected state, and the QR print key stays purple (11 Nov).
+- **The header leaves the dashboard alone.** Signed in, "Go to my dashboard" (and "Business") show on public pages only; inside `/dashboard/**` the dashboard bar already leads there and the page's own action is the one primary. This narrows the 6 Nov header change, which hid the link only on `/dashboard` itself.
+- **Section titles outside a card** (Business, Work, Get help) use Home's editorial section title (DM Serif 1.75rem); a section's parts use quiet interface type, each opened by a hairline as in Settings.
+- **Charts** use Home's neutral bars with only the latest (or the pointed-out) bar purple; the open period is filled, not a dashed box. Earnings' switches are the dashboard's segmented control (`filter-row`).
+- **Tips with none yet** use `EmptySlip`, without the CSV, search and filters. A month recap that isn't found uses the neutral `Slip`, not the error tone.
+- **Still open for the owner:** a one-row dashboard bar at 1440 (the tabs-or-sidebar question); page-shaped skeletons; replacing the remaining generic `Notice`s per StatesMap.

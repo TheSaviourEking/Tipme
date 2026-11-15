@@ -12,7 +12,7 @@ import {
   Badge,
   Button,
   Card,
-  EmptyState,
+  EmptyWell,
   InputField,
   Notice,
   Skeleton,
@@ -87,7 +87,12 @@ function ApproveForm({
       form.querySelector<HTMLInputElement>('input[name=code]')?.select();
     else onDecided();
   };
-  if (!open) return <Button onClick={() => setOpen(true)}>Approve…</Button>;
+  if (!open)
+    return (
+      <Button variant="continue" onClick={() => setOpen(true)}>
+        Approve…
+      </Button>
+    );
   return (
     <form className="ops-reason" onSubmit={(e) => void submit(e)}>
       <InputField
@@ -111,7 +116,12 @@ function ApproveForm({
         maxLength={500}
       />
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Approve and run
         </Button>
         <Button variant="quiet" onClick={() => setOpen(false)}>
@@ -291,7 +301,7 @@ export default function ApprovalsPage() {
   const closed = all?.filter((row) => row.status !== 'pending') ?? [];
 
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Approvals</h1>
       <p className="tm-hint">
         Serious actions wait here until a second person who holds the same
@@ -317,9 +327,9 @@ export default function ApprovalsPage() {
         )}
         {!pending && !failed && <Skeleton label="Loading approvals" />}
         {pending?.length === 0 && (
-          <EmptyState title="Nothing is waiting">
-            No request needs a second person right now.
-          </EmptyState>
+          <EmptyWell title="Nothing is waiting" headingLevel={3}>
+            <p>No request needs a second person right now.</p>
+          </EmptyWell>
         )}
         {pending && pending.length > 0 && (
           <div className="ops-list">

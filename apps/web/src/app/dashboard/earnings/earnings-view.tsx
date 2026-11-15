@@ -7,7 +7,8 @@ import type {
   EarningsSummary,
   EarningsTrend,
 } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, Skeleton } from '@tipme/ui';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useRecipient } from '@/components/account/recipient-context';
 import { BarChart, type Bar } from '@/components/dashboard/bar-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -149,20 +150,21 @@ function Trend() {
         <h2 id="earnings-trend">
           {unit === 'week' ? 'Week by week' : 'Month by month'}
         </h2>
+        {/* The dashboard's segmented control (filter-row), as on Tips: the current one raised. */}
         <div
-          className="earnings-switch"
+          className="filter-row earnings-switch"
           role="group"
           aria-labelledby="earnings-trend"
         >
           {(['week', 'month'] as const).map((value) => (
-            <button
-              type="button"
+            <Button
               key={value}
+              variant="secondary"
               aria-pressed={unit === value}
               onClick={() => setUnit(value)}
             >
               {value === 'week' ? '12 weeks' : '12 months'}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -170,6 +172,7 @@ function Trend() {
         <BarChart
           bars={bars}
           caption={`What you received each ${unit}, the last 12 ${unit}s`}
+          latest
         />
       ) : trend.error === 'load' ? (
         <p className="tm-hint">We couldn’t load the chart. Please reload.</p>
@@ -191,6 +194,25 @@ function previousWords(view: EarningsPeriodView) {
     return monthNameOf(view.previous.from.slice(0, 7)).split(' ')[0] ?? '';
   if (view.period === 'year') return view.previous.from.slice(0, 4);
   return 'the week before';
+}
+
+/** Authored on the 24-unit grid (ICONOGRAPHY), not a Unicode glyph; the button carries the name. */
+function Chevron({ direction }: { direction: 'back' | 'next' }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={direction === 'back' ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} />
+    </svg>
+  );
 }
 
 function Period() {
@@ -224,7 +246,7 @@ function Period() {
             disabled={!view?.hasEarlier}
             onClick={() => step(-1)}
           >
-            ‹
+            <Chevron direction="back" />
           </button>
           <button
             type="button"
@@ -232,19 +254,19 @@ function Period() {
             disabled={!view || !view.complete}
             onClick={() => step(1)}
           >
-            ›
+            <Chevron direction="next" />
           </button>
         </div>
       </div>
       <div
-        className="earnings-switch"
+        className="filter-row earnings-switch"
         role="group"
         aria-label="Show a week, month or year"
       >
         {(['week', 'month', 'year'] as const).map((value) => (
-          <button
-            type="button"
+          <Button
             key={value}
+            variant="secondary"
             aria-pressed={period === value}
             onClick={() => {
               setPeriod(value);
@@ -252,7 +274,7 @@ function Period() {
             }}
           >
             {value === 'week' ? 'Week' : value === 'month' ? 'Month' : 'Year'}
-          </button>
+          </Button>
         ))}
       </div>
       {!view ? (
@@ -388,9 +410,10 @@ export default function EarningsPage() {
   });
   if (summary.error === 'load' && !summary.data)
     return (
-      <Notice tone="error" title="We couldn’t load your earnings">
-        Please reload the page.
-      </Notice>
+      <LoadFailed
+        title="We couldn’t load your earnings"
+        onRetry={summary.reload}
+      />
     );
   return (
     <div className="dashboard-section earnings">

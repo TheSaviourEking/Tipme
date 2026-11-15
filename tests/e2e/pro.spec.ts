@@ -192,6 +192,7 @@ test('a Free page sees no handle form; Pro changes it with a confirmation, up to
   await staff.getByLabel('Username').fill(first);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await expect(staff.getByText('Username changes: 3 of 3 used')).toBeVisible();
+  await staff.getByRole('button', { name: 'Allow more changes…' }).click();
   await staff.getByLabel('More changes to allow').fill('1');
   await staff
     .locator('form', { has: staff.getByLabel('More changes to allow') })

@@ -3,8 +3,33 @@
  * The claim leaves a marker in this tab's session storage; the welcome reads and deletes it. A
  * reload, another tab or another device finds nothing, so it never replays and needs no "seen"
  * record. The marker holds the handle only.
+ *
+ * It stays until the person moves on (owner, 15 Nov 2026): there is no timer. Continue, Escape,
+ * Enter or a tap once the card is down ends it.
  */
-export const CLAIM_MOMENT_MS = 1600;
+
+/** When the card has landed (the timeline is in globals.css, `.claim-moment`). */
+export const CLAIM_LANDED_MS = 550;
+
+/**
+ * Taps count only from here: the card is down, plus a short guard. Earlier, a tap is most likely
+ * the claim tap itself (or its late click on a phone) landing on the moment, not a choice to move on.
+ */
+export const CLAIM_TAP_ARMED_MS = CLAIM_LANDED_MS + 250;
+
+export type ClaimMomentInput =
+  | { kind: 'key'; key: string; repeat?: boolean }
+  | { kind: 'tap'; sinceShownMs: number };
+
+/**
+ * Whether this key or tap ends the moment. Escape and Enter do (a held key's repeats do not); Tab
+ * and every other key do nothing, so focus moves as usual. A tap does once the card is down.
+ */
+export function endsClaimMoment(input: ClaimMomentInput): boolean {
+  if (input.kind === 'key')
+    return !input.repeat && (input.key === 'Escape' || input.key === 'Enter');
+  return input.sinceShownMs >= CLAIM_TAP_ARMED_MS;
+}
 
 const KEY = 'tipme.claimed';
 

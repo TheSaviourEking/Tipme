@@ -137,7 +137,7 @@ export default function OpsBusinessPage() {
 
   if (missing === 'not_found')
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <p>
           <Link href="/ops/businesses">← All businesses</Link>
         </p>
@@ -148,7 +148,7 @@ export default function OpsBusinessPage() {
     );
   if (missing === 'failed')
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <Slip tone="error" title="Couldn’t load this business" dense>
           Check your connection and reload the page.
         </Slip>
@@ -175,7 +175,10 @@ export default function OpsBusinessPage() {
     return null;
   };
   return (
-    <section className="dashboard-section" aria-labelledby="business-title">
+    <section
+      className="dashboard-section ops-page-body"
+      aria-labelledby="business-title"
+    >
       <p>
         <Link href="/ops/businesses">← All businesses</Link>
       </p>

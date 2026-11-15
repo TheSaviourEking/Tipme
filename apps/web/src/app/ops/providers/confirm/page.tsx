@@ -35,7 +35,7 @@ export default function ConfirmProviderTestPage() {
     );
   }, []);
   return (
-    <>
+    <div className="ops-page-body">
       <h1>Provider test</h1>
       {state === 'working' && <Skeleton />}
       {state === 'confirmed' && (
@@ -52,6 +52,6 @@ export default function ConfirmProviderTestPage() {
       <p>
         <Link href="/ops/providers">Back to Providers</Link>
       </p>
-    </>
+    </div>
   );
 }

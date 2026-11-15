@@ -12,7 +12,7 @@ import { apiFetch } from '@/lib/session-client';
 
 const problems: Record<string, string> = {
   ENROLMENT_INVALID:
-    'That enrolment code is not right or has expired. Ask an owner for a new one, or run pnpm ops:grant-owner again.',
+    'That enrolment code is not right or has expired. Ask an owner for a new one.',
   CODE_INVALID:
     'That code didn’t work. Wait for the next code in your app and try again.',
   CODE_ALREADY_USED:
@@ -183,14 +183,19 @@ export function OpsEnrol({
               id={`${id}-enrolment`}
               name="enrolmentCode"
               label="Enrolment code"
-              hint="The 10-character code from your email link, or printed by pnpm ops:grant-owner."
+              hint="The 10-character code from your email link, or the code an owner gave you."
               defaultValue={linkedCode}
               autoComplete="off"
               autoCapitalize="characters"
               maxLength={10}
               required
             />
-            <Button type="submit" disabled={busy} aria-busy={busy}>
+            <Button
+              variant="continue"
+              type="submit"
+              disabled={busy}
+              aria-busy={busy}
+            >
               Continue
             </Button>
           </form>
@@ -256,7 +261,12 @@ export function OpsEnrol({
             </code>
           </p>
           <CodeField id={`${id}-code`} />
-          <Button type="submit" disabled={busy} aria-busy={busy}>
+          <Button
+            variant="continue"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
             Confirm
           </Button>
         </form>
@@ -297,7 +307,12 @@ export function OpsCode({ onDone }: { onDone: () => void }) {
       )}
       <form className="settings-form" onSubmit={(e) => void submit(e)}>
         <CodeField id={`${id}-code`} />
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Continue
         </Button>
       </form>

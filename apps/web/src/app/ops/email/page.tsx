@@ -7,7 +7,7 @@ import type {
   OpsMailSummary,
   OpsMailTimelineEvent,
 } from '@tipme/contracts';
-import { Button, Card, EmptyState, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, EmptyWell, Notice, Skeleton } from '@tipme/ui';
 import { LineChart, Tile } from '@/components/ops/charts';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
@@ -288,7 +288,7 @@ export default function EmailConsolePage() {
   const label = (date: string) => (hourly ? `${date.slice(11)}:00` : date);
 
   return (
-    <>
+    <div className="ops-page-body">
       <h1>Email</h1>
       <p>Every email TipMe sends, without going to the provider.</p>
       <div className="ops-filters">
@@ -480,9 +480,9 @@ export default function EmailConsolePage() {
       {rows === null ? (
         <Skeleton />
       ) : rows.length === 0 ? (
-        <EmptyState title="No emails">
-          Nothing matches this period and these filters.
-        </EmptyState>
+        <EmptyWell title="No emails" headingLevel={3}>
+          <p>Nothing matches this period and these filters.</p>
+        </EmptyWell>
       ) : (
         <ul className="ops-list">
           {rows.map((row) => (
@@ -507,6 +507,6 @@ export default function EmailConsolePage() {
           Show more
         </Button>
       )}
-    </>
+    </div>
   );
 }

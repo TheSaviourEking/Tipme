@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { OpsWithdrawalsSwitch } from '@tipme/contracts';
-import { Notice, Skeleton } from '@tipme/ui';
+import { Lamp, Notice, Skeleton } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
@@ -50,7 +50,12 @@ export function WithdrawalsSwitch() {
   const unknown = state === 'unknown';
   const paused = !unknown && state.paused;
   return (
-    <section aria-label="Withdrawals" data-testid="withdrawals-switch">
+    // One paper, the state on the left and the action on the right (OpsShell board `.switch`).
+    <section
+      aria-label="Withdrawals"
+      data-testid="withdrawals-switch"
+      className="ops-paper ops-switch"
+    >
       {unknown && (
         <Notice tone="error" title="We couldn’t read the withdrawals switch">
           They may be on or off. Switching off is safe either way.
@@ -64,7 +69,11 @@ export function WithdrawalsSwitch() {
           {state.changedAt ? ` Since ${when(state.changedAt)}.` : ''}
         </Notice>
       )}
-      {!unknown && !paused && <p>Withdrawals: on.</p>}
+      {!unknown && !paused && (
+        <p className="ops-switch__state">
+          <Lamp tone="green" /> <strong>Withdrawals: on.</strong>
+        </p>
+      )}
       <ReasonAction
         key={String(paused)}
         open={

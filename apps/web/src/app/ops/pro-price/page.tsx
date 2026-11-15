@@ -4,7 +4,7 @@ import type { OpsProPrice, OpsProPriceRow } from '@tipme/contracts';
 import {
   Button,
   Card,
-  EmptyState,
+  EmptyWell,
   Notice,
   Skeleton,
   TextareaField,
@@ -179,7 +179,12 @@ function PriceCard({
               {error}
             </Notice>
           )}
-          <Button type="submit" disabled={busy} aria-busy={busy}>
+          <Button
+            variant="continue"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
             Ask for approval
           </Button>
         </form>
@@ -246,7 +251,7 @@ export default function PricesPage() {
 
   if (failed)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Prices</h1>
         <Notice tone="error" title="Couldn’t load the prices">
           Your role may not include them, or the connection failed.
@@ -255,7 +260,7 @@ export default function PricesPage() {
     );
   if (!loaded || !states.personal)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Prices</h1>
         <Skeleton label="Loading the prices" />
       </section>
@@ -267,7 +272,7 @@ export default function PricesPage() {
   const history = mergedHistory(shownStates);
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Prices</h1>
       <p className="tm-hint">
         What one month costs, shown on the Pro page
@@ -294,9 +299,9 @@ export default function PricesPage() {
       <Card className="settings-section">
         <h2 id={`${id}-history`}>History</h2>
         {history.length === 0 ? (
-          <EmptyState title="No changes yet">
-            Prices appear here once set.
-          </EmptyState>
+          <EmptyWell title="No changes yet" headingLevel={3}>
+            <p>Prices appear here once set.</p>
+          </EmptyWell>
         ) : (
           <ol aria-labelledby={`${id}-history`} className="ops-list">
             {history.map(({ row, was }) => (

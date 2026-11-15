@@ -4,7 +4,7 @@ import type { MarketCategory, MarketEntry } from '@tipme/contracts';
 import {
   Button,
   Card,
-  EmptyState,
+  EmptyWell,
   InputField,
   Notice,
   Skeleton,
@@ -145,7 +145,12 @@ function AddObservation({ onSaved }: { onSaved: () => void }) {
             {saved}
           </p>
         )}
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Save observation
         </Button>
       </form>
@@ -199,7 +204,7 @@ export default function MarketPage() {
   };
 
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Market</h1>
       <p className="tm-hint">
         Outside observations recorded by hand, each with its source. Automatic
@@ -210,9 +215,9 @@ export default function MarketPage() {
       )}
       {!entries && <Skeleton label="Loading observations" />}
       {entries?.length === 0 && (
-        <EmptyState title="No observations yet">
-          Add the first one above, for example a competitor’s fee.
-        </EmptyState>
+        <EmptyWell title="No observations yet">
+          <p>Add the first one above, for example a competitor’s fee.</p>
+        </EmptyWell>
       )}
       {current && (
         <Card className="settings-section">
@@ -250,7 +255,7 @@ export default function MarketPage() {
             aria-label="Observations"
             tabIndex={0}
           >
-            <table className="ops-table">
+            <table className="ops-table ops-table--stack">
               <thead>
                 <tr>
                   <th scope="col">Date</th>
@@ -269,12 +274,14 @@ export default function MarketPage() {
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id}>
-                    <td>{entry.observedOn}</td>
-                    <td>{CATEGORIES[entry.category]}</td>
-                    <td>{entry.name}</td>
-                    <td>{entry.metric}</td>
-                    <td>{entry.value ?? entry.text ?? '—'}</td>
-                    <td>
+                    <td data-label="Date">{entry.observedOn}</td>
+                    <td data-label="Category">{CATEGORIES[entry.category]}</td>
+                    <td data-label="Name">{entry.name}</td>
+                    <td data-label="Measured">{entry.metric}</td>
+                    <td data-label="Value">
+                      {entry.value ?? entry.text ?? '—'}
+                    </td>
+                    <td data-label="Source">
                       <a
                         href={entry.sourceUrl}
                         target="_blank"
@@ -285,7 +292,7 @@ export default function MarketPage() {
                       </a>
                     </td>
                     {can(access, 'market.edit') && (
-                      <td>
+                      <td className="ops-table__action">
                         <Button
                           variant="quiet"
                           onClick={() => void archive(entry.id)}

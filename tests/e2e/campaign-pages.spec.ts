@@ -57,6 +57,18 @@ test('Pro edits a campaign page and a visitor sees it with the same tip area', a
   await expect(
     main.getByRole('tab', { name: 'Page', selected: true }),
   ).toBeVisible();
+  // The switch's label and hint are separate lines, never "Its own pagePeople who…" (UI audit).
+  const own = panel.getByRole('switch', { name: 'Its own page' });
+  await expect(own).toHaveAccessibleDescription(
+    /^People who open this link or scan its QR see this page\./,
+  );
+  const ownLabel = await panel
+    .locator('label', { hasText: 'Its own page' })
+    .boundingBox();
+  const ownHint = await panel
+    .getByText('People who open this link')
+    .boundingBox();
+  expect(ownHint!.y).toBeGreaterThanOrEqual(ownLabel!.y + ownLabel!.height - 1);
   const headline = 'Thank you for dancing with me at Lagos Live';
   await panel.getByLabel('Headline').fill(headline);
   await expect(panel.getByText('43 of 60.', { exact: false })).toBeVisible();

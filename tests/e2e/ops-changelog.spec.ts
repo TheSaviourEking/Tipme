@@ -207,7 +207,7 @@ test('the owner edits the user text, sees the exact user line ("On Pro, …" for
 
   await page.getByLabel('For users').fill('You can pick a starting amount.');
   await expect(page.getByText('31 of 280 characters')).toBeVisible();
-  await page.getByLabel(/^Pro pages \(/).check();
+  await page.getByRole('radio', { name: /^Pro pages Starts/ }).check();
   await expect(page.getByTestId('changelog-preview')).toHaveText(
     'On Pro, you can pick a starting amount.',
   );

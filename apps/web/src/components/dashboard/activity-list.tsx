@@ -8,7 +8,7 @@ const stateText: Record<string, string> = {
   confirming: 'Confirming',
   requested: 'Requested',
   processing: 'Processing',
-  in_review: 'Being checked by the payment provider',
+  in_review: 'Being checked by our payment partner',
   sent: 'Sent',
   failed: 'Failed',
   reversed: 'Reversed',

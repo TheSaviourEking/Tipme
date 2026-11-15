@@ -18,7 +18,7 @@ import {
 import {
   Button,
   Card,
-  EmptyState,
+  EmptyWell,
   InputField,
   Notice,
   Skeleton,
@@ -340,7 +340,7 @@ export default function AnnouncementsPage() {
 
   if (failed)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Announcements</h1>
         <Notice tone="error" title="Couldn’t load announcements">
           Your role may not include them, or the connection failed.
@@ -349,7 +349,7 @@ export default function AnnouncementsPage() {
     );
   if (!list)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Announcements</h1>
         <Skeleton label="Loading announcements" />
       </section>
@@ -358,7 +358,7 @@ export default function AnnouncementsPage() {
   const textHint = `Plain paragraphs, with a blank line between them. **Two stars** around words make them bold; a line starting “- ” is a bullet. Up to ${ANNOUNCEMENT_LIMITS.text.toLocaleString('en-NG')} characters.`;
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Announcements</h1>
       <p className="tm-hint">
         One email to many people, such as a change to fees. Sending needs a
@@ -380,9 +380,9 @@ export default function AnnouncementsPage() {
       <Card className="settings-section">
         <h2 id={`${id}-list`}>Announcements</h2>
         {list.length === 0 ? (
-          <EmptyState title="None yet">
-            Announcements appear here once you save one.
-          </EmptyState>
+          <EmptyWell title="None yet" headingLevel={3}>
+            <p>Announcements appear here once you save one.</p>
+          </EmptyWell>
         ) : (
           <ol aria-labelledby={`${id}-list`} className="ops-list">
             {list.map((row) => (
@@ -435,7 +435,7 @@ export default function AnnouncementsPage() {
             <fieldset className="ops-announcement-kinds">
               <legend>What kind of announcement?</legend>
               {KINDS.map((kind) => (
-                <label key={kind.value} className="ops-announcement-kind">
+                <label key={kind.value} className="ops-radio">
                   <input
                     type="radio"
                     name={`${id}-kind`}
@@ -556,6 +556,7 @@ export default function AnnouncementsPage() {
           <div className="ops-actions">
             {editable && (
               <Button
+                variant="continue"
                 type="submit"
                 disabled={busy || !unsaved}
                 aria-busy={busy}

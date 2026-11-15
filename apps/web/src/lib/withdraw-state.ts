@@ -66,7 +66,7 @@ export function withdrawState(input: {
   if (!input.withdrawalsAvailable)
     return blocked('collected_elsewhere', {
       title: 'Withdrawals aren’t available yet',
-      body: 'Some of your tips were paid through a payment provider TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
+      body: 'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
       tone: 'neutral',
     });
   if (input.needsCheck)

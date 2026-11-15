@@ -138,6 +138,11 @@ test('granting fee-free tips that waits reads as waiting, not as granted', async
     }),
   );
   await page.goto(`/ops/pages?handle=${handle}`);
+  // A space between the intro's two sentences (UI audit, 15 Nov 2026).
+  await expect(
+    page.getByRole('main').getByText(/the same as Free\. There is no billing/),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Grant fee-free tips…' }).click();
   await page.getByLabel('Fee-free tips to grant').fill('2');
   await page
     .locator('form')

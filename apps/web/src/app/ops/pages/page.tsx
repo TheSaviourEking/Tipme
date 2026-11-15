@@ -118,7 +118,9 @@ function MoveSignInEmail({ userId }: { userId: string }) {
               {error}
             </Notice>
           )}
-          <Button type="submit">Send code to new email</Button>
+          <Button variant="continue" type="submit">
+            Send code to new email
+          </Button>
         </form>
       ) : (
         <Button variant="secondary" onClick={() => setOpen(true)}>
@@ -172,6 +174,7 @@ function HandleChanges({
         </Notice>
       )}
       <ValueWithReason
+        open="Allow more changes…"
         label="More changes to allow"
         hint={`Whole number, 1 to ${MAX_HANDLE_CHANGE_GRANT}. Added to what the page has now, up to ${MAX_HANDLE_CHANGE_EXTRA} extra in total.`}
         submit="Allow more changes"
@@ -470,13 +473,12 @@ export default function OpsPagesPage() {
   };
 
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
         below NGN 2,000) and change their username. The fee and withdrawal
-        minimum are the same as Free.
-        {copy.opsBilling}
+        minimum are the same as Free. {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField
@@ -488,7 +490,12 @@ export default function OpsPagesPage() {
           onChange={(e) => setHandle(e.target.value)}
           error={error || undefined}
         />
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Find page
         </Button>
       </form>

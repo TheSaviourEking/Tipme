@@ -49,6 +49,7 @@ const feeForm = (page: Page) =>
 /** Fills the fee form on the Pages screen for this handle; nothing has happened until approved. */
 async function askForFee(page: Page, handle: string, percent = '6') {
   await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Set this page’s fee…' }).click();
   await page.getByLabel('New TipMe fee (%)').fill(percent);
   await feeForm(page).getByLabel('Reason').fill(REASON);
   await page.getByRole('button', { name: 'Set this page’s fee' }).click();
@@ -80,6 +81,10 @@ test('an owner adds a person; they sign in, enrol, and see only their menu', asy
   // real in the fourth repeat, and two tests would share one person.
   const email = `invitee@e2e-${randomUUID().slice(0, 8)}.example`;
   await page.goto('/ops/staff/people');
+  // The heading matches its menu link (UI audit, 15 Nov 2026).
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Staff members' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Add a person…' }).click();
   await page.getByLabel('Their email').fill(email);
   await page
@@ -904,6 +909,7 @@ test('the screens that gained an outcome fit 320px; focus lands on the outcome',
   await enrolOwner(page, testInfo);
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Set this page’s fee…' }).click();
   await page.getByLabel('New TipMe fee (%)').fill('7');
   await feeForm(page).getByLabel('Reason').fill(REASON);
   await page.getByRole('button', { name: 'Set this page’s fee' }).click();
@@ -950,7 +956,9 @@ test('a finance role with fees.manage only can find a page and change its fee', 
   await nav(page).getByRole('link', { name: 'Pages' }).click();
   await page.getByLabel('Username').fill(handle);
   await page.getByRole('button', { name: 'Find page' }).click();
-  await expect(page.getByLabel('New TipMe fee (%)')).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Set this page’s fee…' }),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Make Pro…' })).toHaveCount(0);
 });
 

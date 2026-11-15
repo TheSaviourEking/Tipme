@@ -9,7 +9,6 @@ import type {
 import {
   Badge,
   Button,
-  Card,
   InputField,
   Lamp,
   Notice,
@@ -75,18 +74,21 @@ function SwitchCard({
   };
 
   const last = item.history[0];
+  // A hairline row in one paper (OpsShell board `.switch`): the words on the left, the action on
+  // the right; the lamp is the success colour when on, never purple (UI audit F11).
   return (
-    <Card className="settings-section">
-      <section
-        aria-labelledby={`${id}-name`}
-        data-testid={`switch-${item.key}`}
-      >
-        <h2 id={`${id}-name`}>
+    <section
+      className="ops-switch-row"
+      aria-labelledby={`${id}-name`}
+      data-testid={`switch-${item.key}`}
+    >
+      <div className="ops-switch-row__words">
+        <h2 id={`${id}-name`} className="ops-switch-row__name">
           {item.label} {item.money && <Badge>Money</Badge>}
         </h2>
         <p>{item.description}</p>
-        <p data-testid="switch-state">
-          <Lamp tone={item.on ? 'purple' : 'off'} />{' '}
+        <p data-testid="switch-state" className="ops-switch-row__state">
+          <Lamp tone={item.on ? 'green' : 'off'} />{' '}
           <strong>{item.on ? 'On' : 'Off'}</strong>
           {item.on !== item.default && (
             <span className="tm-hint">
@@ -105,6 +107,8 @@ function SwitchCard({
         <p className="tm-hint">
           Replaces the <code>{item.envName}</code> setting.
         </p>
+      </div>
+      <div className="ops-switch-row__act">
         {outcome && <ActionOutcome outcome={outcome} />}
         {item.waitingRequestId && !outcome && (
           <Notice tone="neutral" title="Waiting for a second person">
@@ -124,23 +128,23 @@ function SwitchCard({
             changes it alone, with an alert.
           </p>
         )}
-        {item.history.length > 0 && (
-          <details>
-            <summary>History</summary>
-            <ol className="ops-list">
-              {item.history.map((change) => (
-                <li key={change.id}>
-                  <strong>{change.on ? 'On' : 'Off'}</strong> ·{' '}
-                  {when(change.createdAt)} · {who(change)}
-                  <br />
-                  <span className="tm-hint">{change.reason}</span>
-                </li>
-              ))}
-            </ol>
-          </details>
-        )}
-      </section>
-    </Card>
+      </div>
+      {item.history.length > 0 && (
+        <details className="ops-switch-row__history">
+          <summary>History</summary>
+          <ol className="ops-list">
+            {item.history.map((change) => (
+              <li key={change.id}>
+                <strong>{change.on ? 'On' : 'Off'}</strong> ·{' '}
+                {when(change.createdAt)} · {who(change)}
+                <br />
+                <span className="tm-hint">{change.reason}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </section>
   );
 }
 
@@ -227,12 +231,15 @@ function DisplayCard({
   };
 
   return (
-    <Card className="settings-section">
-      <section
-        aria-labelledby={`${id}-name`}
-        data-testid={`display-${item.key}`}
-      >
-        <h2 id={`${id}-name`}>{item.label}</h2>
+    <section
+      className="ops-switch-row"
+      aria-labelledby={`${id}-name`}
+      data-testid={`display-${item.key}`}
+    >
+      <div className="ops-switch-row__words">
+        <h2 id={`${id}-name`} className="ops-switch-row__name">
+          {item.label}
+        </h2>
         <p>{item.description}</p>
         <p data-testid="display-value">
           <strong>{displayValueWords(item)}</strong>
@@ -244,6 +251,14 @@ function DisplayCard({
             {item.reason}
           </p>
         )}
+      </div>
+      <div
+        className={
+          item.kind === 'on_off'
+            ? 'ops-switch-row__act'
+            : 'ops-switch-row__act ops-switch-row__act--wide'
+        }
+      >
         {done && (
           <Notice tone="neutral" title="Saved">
             {done}
@@ -302,30 +317,35 @@ function DisplayCard({
                 {error}
               </Notice>
             )}
-            <Button type="submit" disabled={busy} aria-busy={busy}>
+            <Button
+              variant="continue"
+              type="submit"
+              disabled={busy}
+              aria-busy={busy}
+            >
               {item.kind === 'count'
                 ? `Save ${item.label.toLowerCase()}`
                 : 'Save launch time'}
             </Button>
           </form>
         )}
-        {item.history.length > 0 && (
-          <details>
-            <summary>History</summary>
-            <ol className="ops-list">
-              {item.history.map((change) => (
-                <li key={change.id}>
-                  <strong>{historyValueWords(item, change.value)}</strong> ·{' '}
-                  {when(change.createdAt)} · {staffWord(change.changedBy)}
-                  <br />
-                  <span className="tm-hint">{change.reason}</span>
-                </li>
-              ))}
-            </ol>
-          </details>
-        )}
-      </section>
-    </Card>
+      </div>
+      {item.history.length > 0 && (
+        <details className="ops-switch-row__history">
+          <summary>History</summary>
+          <ol className="ops-list">
+            {item.history.map((change) => (
+              <li key={change.id}>
+                <strong>{historyValueWords(item, change.value)}</strong> ·{' '}
+                {when(change.createdAt)} · {staffWord(change.changedBy)}
+                <br />
+                <span className="tm-hint">{change.reason}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+    </section>
   );
 }
 
@@ -354,7 +374,7 @@ export default function SwitchesPage() {
 
   if (failed)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Switches</h1>
         <Notice tone="error" title="Couldn’t load the switches">
           Your role may not include them, or the connection failed.
@@ -363,40 +383,46 @@ export default function SwitchesPage() {
     );
   if (!state)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Switches</h1>
         <Skeleton label="Loading the switches" />
       </section>
     );
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Switches</h1>
       <p className="tm-hint">
         Each switch turns a feature on or off for everyone, without a deploy.
         Every copy of TipMe follows within 15 seconds.
       </p>
-      {state.switches.map((item) => (
-        <SwitchCard key={item.key} item={item} onChanged={read} />
-      ))}
+      <div className="ops-paper ops-switch-list">
+        {state.switches.map((item) => (
+          <SwitchCard key={item.key} item={item} onChanged={read} />
+        ))}
+      </div>
       <h2>What the web app shows</h2>
       <p className="tm-hint">
         These replace settings in the web app&apos;s hosting. Until one is set
         here, the web app keeps its own setting.
       </p>
-      {state.display
-        .filter((item) => item.group === 'web')
-        .map((item) => (
-          <DisplayCard key={item.key} item={item} onChanged={read} />
-        ))}
+      <div className="ops-paper ops-switch-list">
+        {state.display
+          .filter((item) => item.group === 'web')
+          .map((item) => (
+            <DisplayCard key={item.key} item={item} onChanged={read} />
+          ))}
+      </div>
       <h2>Limits</h2>
       <p className="tm-hint">
         Limits TipMe keeps itself. Until one is set here, its default applies.
       </p>
-      {state.display
-        .filter((item) => item.group === 'limits')
-        .map((item) => (
-          <DisplayCard key={item.key} item={item} onChanged={read} />
-        ))}
+      <div className="ops-paper ops-switch-list">
+        {state.display
+          .filter((item) => item.group === 'limits')
+          .map((item) => (
+            <DisplayCard key={item.key} item={item} onChanged={read} />
+          ))}
+      </div>
     </section>
   );
 }

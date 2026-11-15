@@ -68,9 +68,24 @@ async function sendOnce<T>(
   path: string,
   init: ApiFetchInit,
 ): Promise<SessionResult<T>> {
-  const method = init.method ?? 'GET';
   const abort = init.timeoutMs ? new AbortController() : undefined;
-  if (abort) setTimeout(() => abort.abort(), init.timeoutMs);
+  const timer = abort
+    ? setTimeout(() => abort.abort(), init.timeoutMs)
+    : undefined;
+  try {
+    return await sendWith<T>(path, init, abort);
+  } finally {
+    // An answered call no longer needs its time limit (and must not keep a timer alive).
+    clearTimeout(timer);
+  }
+}
+
+async function sendWith<T>(
+  path: string,
+  init: ApiFetchInit,
+  abort: AbortController | undefined,
+): Promise<SessionResult<T>> {
+  const method = init.method ?? 'GET';
   let response: Response;
   try {
     response = await fetch(`${API_ORIGIN}${path}`, {
