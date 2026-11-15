@@ -5,6 +5,7 @@ import {
   expectAccessible,
   fitsViewport,
   identity,
+  passClaimMoment,
   signInWithEmail,
 } from './helpers';
 import { CONNECTION_COPY } from '../../apps/web/src/lib/connection-copy';
@@ -34,11 +35,7 @@ async function claimNewPage(
   } else await claim.click();
   await page.waitForURL(/\/dashboard\/welcome$/);
   // The claim moment plays once; most tests here are about the steps after it.
-  if (skipMoment)
-    await page
-      .getByRole('dialog', { name: `@${who.handle} is yours.` })
-      .getByRole('button', { name: 'Continue' })
-      .click();
+  if (skipMoment) await passClaimMoment(page, who.handle);
   return who;
 }
 

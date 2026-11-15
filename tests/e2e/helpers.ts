@@ -123,6 +123,17 @@ export async function signInWithEmail(
     .not.toBe('checking');
 }
 
+/**
+ * After a claim from the screen lands on /dashboard/welcome: "@username is yours." stays until
+ * the person moves on (DECISION-LOG 2026-11-15), with the welcome inert behind it. Press Continue
+ * and wait for it to go. It always shows after a claim in this tab, so a missing moment fails here.
+ */
+export async function passClaimMoment(page: Page, handle: string) {
+  const moment = page.getByRole('dialog', { name: `@${handle} is yours.` });
+  await moment.getByRole('button', { name: 'Continue' }).click();
+  await expect(moment).toHaveCount(0);
+}
+
 /** Signs up a new recipient, claims a handle and (optionally) makes the page live. */
 export async function signUpRecipient(
   page: Page,
@@ -136,6 +147,7 @@ export async function signUpRecipient(
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   // A new page lands on the welcome; these helpers continue from Settings.
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, who.handle);
   await page.goto('/dashboard/settings');
   if (live) {
     await page.getByRole('button', { name: 'Make my page live' }).click();

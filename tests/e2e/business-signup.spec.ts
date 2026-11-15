@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import { expectAccessible, identity, signInWithEmail } from './helpers';
+import {
+  expectAccessible,
+  identity,
+  passClaimMoment,
+  signInWithEmail,
+} from './helpers';
 import { expectNoSignUp, recordNavigations } from './business-signup-fixtures';
 import { API_ORIGIN } from './stack';
 
@@ -83,6 +88,7 @@ test('home’s “Get tipped” runs today’s three steps to the welcome', asyn
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, who.handle);
 });
 
 test('the fork asks first; “Get tipped” runs the same three steps', async ({
@@ -112,4 +118,5 @@ test('the fork asks first; “Get tipped” runs the same three steps', async ({
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${who.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
+  await passClaimMoment(page, who.handle);
 });
