@@ -441,6 +441,10 @@ export function runIssueDetectors(
        WHERE NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'unmatched.' || u.id)
          -- Parked for reconciliation, which applies it or opens payout_unexpected.
          AND NOT (u.provider = 'bachs' AND u.reason = 'unknown_payout')
+         -- An account event (account.updated / capability.updated) for an account TipMe does not
+         -- have: kept for audit, but nothing for a person to do. It only ever triggers a read-back,
+         -- and one about a setup still in flight was answered 503 and redelivered instead.
+         AND u.reason <> 'unknown_account'
        LIMIT 500`);
     for (const row of unmatched.rows)
       if (

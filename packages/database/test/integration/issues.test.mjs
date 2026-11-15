@@ -288,6 +288,49 @@ test('issues', async (t) => {
   );
 
   await t.test(
+    'an account event for an unknown account is kept but is not an issue; payment, payout and reversal ones still are',
+    async () => {
+      await database.fresh();
+      await recordUnmatchedEvent(database.db, {
+        provider: 'bachs',
+        providerEventId: 'evt-account-foreign',
+        eventType: 'capability.updated',
+        payload: { kind: 'account', accountReference: 'acct_foreign' },
+        reason: 'unknown_account',
+      });
+      for (const [providerEventId, eventType] of [
+        ['evt-payment-unknown', 'charge.succeeded'],
+        ['evt-payout-unknown', 'payout.paid'],
+        ['evt-reversal-unknown', 'charge.refunded'],
+      ])
+        await recordUnmatchedEvent(database.db, {
+          provider: 'bachs',
+          providerEventId,
+          eventType,
+          payload: {},
+          reason: 'unknown_attempt',
+        });
+      assert.equal(
+        (await q('SELECT id FROM unmatched_provider_events')).length,
+        4,
+        'all kept for audit',
+      );
+      assert.deepEqual(await runIssueDetectors(database.db, new Date()), {
+        opened: 3,
+      });
+      const raised = await q(
+        `SELECT u.provider_event_id FROM issues i
+           JOIN unmatched_provider_events u ON i.dedupe_key = 'unmatched.' || u.id
+          ORDER BY 1`,
+      );
+      assert.deepEqual(
+        raised.map((row) => row.provider_event_id),
+        ['evt-payment-unknown', 'evt-payout-unknown', 'evt-reversal-unknown'],
+      );
+    },
+  );
+
+  await t.test(
     'lists filter by status and severity, newest first',
     async () => {
       await database.fresh();

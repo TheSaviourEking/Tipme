@@ -1,4 +1,4 @@
-import { and, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { issues, paymentAccounts, profiles, users } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
@@ -586,6 +586,38 @@ function summarize(account: typeof paymentAccounts.$inferSelect) {
     requirementsDue: account.requirementsDue,
     lastSyncedAt: account.lastSyncedAt,
   };
+}
+
+/**
+ * Whether an account (a person's or a business's) in this provider and environment is being set
+ * up right now: claimed (CREATING) since `claimedSince` and still without the provider's
+ * reference, which is saved only after the provider's create call returns. `updated_at` is the
+ * claim time: a restart after FAILED sets it, and nothing else touches a CREATING row.
+ */
+export function paymentAccountSetupInFlight(
+  db: Database,
+  input: {
+    provider: string;
+    environment: PaymentAccountEnvironment;
+    claimedSince: Date;
+  },
+): Promise<boolean> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({ id: paymentAccounts.id })
+      .from(paymentAccounts)
+      .where(
+        and(
+          eq(paymentAccounts.provider, input.provider),
+          eq(paymentAccounts.environment, input.environment),
+          eq(paymentAccounts.status, 'CREATING'),
+          isNull(paymentAccounts.providerAccountReference),
+          gte(paymentAccounts.updatedAt, input.claimedSince),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
+  });
 }
 
 /** Which page a provider account belongs to, for refreshing it from the provider. */

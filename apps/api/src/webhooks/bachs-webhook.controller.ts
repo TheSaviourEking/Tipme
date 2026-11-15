@@ -15,7 +15,10 @@ import type { BachsProvider } from '@tipme/payments';
 import type { Request } from 'express';
 import { DependencyUnavailableError } from '../http/api-exception.filter.js';
 import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
-import { isRetryablePersistenceError } from './retryable.js';
+import {
+  AccountSetupInFlightError,
+  isRetryablePersistenceError,
+} from './retryable.js';
 import { WebhookService } from './webhook.service.js';
 import { LOGGER } from '../tokens.js';
 
@@ -62,6 +65,15 @@ export class BachsWebhookController {
       });
       return { data: { outcome } };
     } catch (error) {
+      if (error instanceof AccountSetupInFlightError) {
+        this.logger.info({
+          event: 'webhook.deferred',
+          provider: 'bachs',
+          type: verification.event.eventType,
+          reason: 'account_setup_in_flight',
+        });
+        throw new DependencyUnavailableError(error.message, { cause: error });
+      }
       if (
         error instanceof Error &&
         isRetryablePersistenceError(error as Error & { sqlState?: string })
