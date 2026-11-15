@@ -138,6 +138,7 @@ test('granting fee-free tips that waits reads as waiting, not as granted', async
     }),
   );
   await page.goto(`/ops/pages?handle=${handle}`);
+  await page.getByRole('button', { name: 'Grant fee-free tips…' }).click();
   await page.getByLabel('Fee-free tips to grant').fill('2');
   await page
     .locator('form')

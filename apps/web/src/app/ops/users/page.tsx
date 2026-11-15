@@ -934,7 +934,7 @@ export default function OpsPeoplePage() {
   ];
 
   return (
-    <div className="ops-dashboard ops-people">
+    <div className="ops-dashboard ops-people ops-page-body">
       <div className="ops-people__top">
         <h1 id={`${id}-title`}>People</h1>
         <p className="ops-people__count" aria-live="polite">
@@ -1062,7 +1062,7 @@ export default function OpsPeoplePage() {
               unset="newest"
               onChange={(sort) => change({ sort: sort ?? 'newest' })}
             />
-            <Button onClick={() => sheet.current?.close()}>
+            <Button variant="continue" onClick={() => sheet.current?.close()}>
               {shown
                 ? `Show ${formatCount(shown.total)} ${shown.total === 1 ? 'account' : 'accounts'}`
                 : 'Show accounts'}

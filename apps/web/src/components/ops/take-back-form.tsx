@@ -200,7 +200,7 @@ export function TakeBackForm({
         </p>
       )}
       <div className="ops-actions">
-        <Button type="submit" aria-busy={busy}>
+        <Button variant="continue" type="submit" aria-busy={busy}>
           Ask to take it back
         </Button>
         <Button variant="quiet" type="button" onClick={() => setOpen(false)}>

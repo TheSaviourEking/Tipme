@@ -103,7 +103,7 @@ export default function ChangelogPage() {
   };
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Changelog</h1>
       <p className="tm-hint">
         Every pull request merged into dev, newest first. Staff text stays in

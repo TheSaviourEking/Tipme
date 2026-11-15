@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { OpsIssue } from '@tipme/contracts';
-import { Badge, Button, EmptyState, Notice, Skeleton } from '@tipme/ui';
+import { Badge, Button, EmptyWell, Notice, Skeleton } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 
@@ -55,7 +55,10 @@ export default function IssuesPage() {
   };
 
   return (
-    <section className="dashboard-section" aria-labelledby={`${id}-title`}>
+    <section
+      className="dashboard-section ops-page-body"
+      aria-labelledby={`${id}-title`}
+    >
       <h1 id={`${id}-title`}>Issues</h1>
       <div className="ops-filters">
         <div className="tm-field">
@@ -95,9 +98,9 @@ export default function IssuesPage() {
       )}
       {!issues && !failed && <Skeleton label="Loading issues" />}
       {issues?.length === 0 && (
-        <EmptyState title="Nothing needs you">
-          No issues match these filters.
-        </EmptyState>
+        <EmptyWell title="Nothing needs you">
+          <p>No issues match these filters.</p>
+        </EmptyWell>
       )}
       {issues && issues.length > 0 && (
         <ul className="ops-list">

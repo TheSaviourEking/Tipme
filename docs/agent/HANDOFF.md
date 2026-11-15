@@ -1,3 +1,8 @@
+# Current handoff: admin UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-ops`; PR into `dev`, not merged, merge after #242. Web and `packages/ui` CSS/markup only; no migration, no API change. New `tests/e2e/ops-layout.spec.ts`; pricing e2e tests click the new "…" openers.
+- Passed: web unit tests (incl. `route-css.test.mjs`), UI tests, typecheck, lint; affected e2e on lane 8 (desktop, mobile, @alone), `ops-layout.spec.ts` five times. Not run: the full suite (CI) and burn-in of the other changed specs.
+
 # Current handoff: the home page's first paint (15 November 2026)
 
 - Branch `perf/home-first-paint` from `origin/dev`; PR into `dev`, not merged. Web CSS split, one unit test, release-check change, `dialogs.spec.ts` opens the dashboard/admin dialogs where their styles now load. No migration, no API change.

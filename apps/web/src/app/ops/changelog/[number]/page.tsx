@@ -13,7 +13,6 @@ import {
   type OpsChangelogEdit,
 } from '@tipme/contracts';
 import {
-  Choice,
   ResultKey,
   Skeleton,
   Slip,
@@ -268,7 +267,7 @@ export default function ChangelogEntryPage() {
     );
   if (failed)
     return (
-      <section className="dashboard-section">
+      <section className="dashboard-section ops-page-body">
         <h1>Changelog entry</h1>
         <Slip tone="error" title="Couldn’t load this entry" dense>
           {failed}
@@ -304,7 +303,7 @@ export default function ChangelogEntryPage() {
     (!waiting || entry.editedSinceAsking === true);
 
   return (
-    <section className="dashboard-section ops-changelog">
+    <section className="dashboard-section ops-changelog ops-page-body">
       <p>
         <Link href="/ops/changelog">Changelog</Link>
       </p>
@@ -424,15 +423,21 @@ export default function ChangelogEntryPage() {
             <p className="tm-hint">Write a text for users to choose.</p>
           )}
           {AUDIENCES.map((option) => (
-            <Choice
-              key={option.value}
-              name={`${id}-audience`}
-              value={option.value}
-              checked={draft.audience === option.value}
-              onChange={() => setDraft({ ...draft, audience: option.value })}
-            >
-              {option.label} <span className="tm-hint">({option.hint})</span>
-            </Choice>
+            // A plain radio row, as Announcements' kinds: keys are for amounts, and a key's face
+            // has no room for the hint (the UI audit's F1).
+            <label key={option.value} className="ops-radio">
+              <input
+                type="radio"
+                name={`${id}-audience`}
+                value={option.value}
+                checked={draft.audience === option.value}
+                onChange={() => setDraft({ ...draft, audience: option.value })}
+              />
+              <span>
+                <strong>{option.label}</strong>
+                <span className="tm-hint">{option.hint}</span>
+              </span>
+            </label>
           ))}
         </fieldset>
         {userText && (
@@ -448,6 +453,7 @@ export default function ChangelogEntryPage() {
         <div className="ops-actions">
           <ResultKey
             type="submit"
+            variant="continue"
             result={save.result}
             pending={save.pending}
             disabled={!dirty || staffInvalid}
@@ -471,7 +477,6 @@ export default function ChangelogEntryPage() {
               open="Approve…"
               field="Why show this to users?"
               submit="Approve and show users"
-              variant="primary"
               onSubmit={onApprove}
             />
           )
@@ -481,7 +486,6 @@ export default function ChangelogEntryPage() {
               open={waiting ? 'Ask again…' : 'Ask for approval…'}
               field="Why should users see this?"
               submit="Ask for approval"
-              variant="primary"
               hint="A publisher reads this with the text in Approvals. Recorded in the audit log with your name and the time."
               onSubmit={onAsk}
             />

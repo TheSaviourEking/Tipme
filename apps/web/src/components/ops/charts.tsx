@@ -1,5 +1,4 @@
 import { useId } from 'react';
-import { Card } from '@tipme/ui';
 
 // Hand-made SVG charts for the admin area (no chart library). Every chart is a <figure> named
 // by its caption, with the numbers repeated in a visually hidden table for screen readers.
@@ -37,11 +36,37 @@ export function Tile({
   previous?: string;
 }) {
   return (
-    <Card className="ops-tile">
+    // A recessed well, as the OpsShell board draws it (`.tile`), not a raised card (UI audit F9).
+    <div className="ops-tile">
       <p className="ops-tile__label">{label}</p>
       <p className="ops-tile__value">{value}</p>
-      {previous && <p className="tm-hint">{previous}</p>}
-    </Card>
+      {previous && <p className="ops-tile__previous">{previous}</p>}
+    </div>
+  );
+}
+
+/**
+ * Loading, in the shape of the page (EXPERIENCE-AND-MOTION §5): rows of tile-shaped wells, aligned
+ * to the content edge, named once for screen readers.
+ */
+export function TilesSkeleton({
+  label,
+  rows = 2,
+}: {
+  label: string;
+  rows?: number;
+}) {
+  return (
+    <div className="ops-tiles-skeleton" role="status">
+      <span className="sr-only">{label}</span>
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="ops-tiles" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, tile) => (
+            <span key={tile} className="ops-tile ops-tile--skeleton" />
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -165,7 +190,7 @@ export function Funnel({ title, steps }: { title: string; steps: Row[] }) {
   return (
     <figure className="ops-chart" aria-labelledby={`${id}-caption`}>
       <figcaption id={`${id}-caption`}>{title}</figcaption>
-      <ol className="ops-funnel">
+      <ol className="ops-funnel ops-funnel--steps">
         {steps.map((step, index) => {
           const before = steps[index - 1]?.value;
           const share =
@@ -191,7 +216,7 @@ export function Funnel({ title, steps }: { title: string; steps: Row[] }) {
               </svg>
               <span className="ops-funnel__value">
                 {step.value}
-                {share && <span className="tm-hint"> · {share}</span>}
+                {share && <span className="ops-funnel__share">{share}</span>}
               </span>
             </li>
           );

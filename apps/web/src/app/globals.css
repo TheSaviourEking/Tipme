@@ -3417,7 +3417,7 @@ body:has(.profile-page) .brand__mark {
     gap: 0.35rem;
   }
 
-  .tm-choice span {
+  .tm-choice > span {
     font-size: 0.75rem;
   }
 

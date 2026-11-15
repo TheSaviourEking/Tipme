@@ -128,7 +128,9 @@ function ProviderCard({
                   {error}
                 </Notice>
               )}
-              <Button type="submit">Send the test email</Button>
+              <Button variant="continue" type="submit">
+                Send the test email
+              </Button>
             </form>
           ) : (
             <Button variant="secondary" onClick={() => setTesting(true)}>
@@ -400,7 +402,7 @@ export default function ProvidersPage() {
   }, [waiting]);
   const canManage = can(access, 'providers.manage');
   return (
-    <>
+    <div className="ops-page-body">
       <h1>Providers</h1>
       <p>
         Which service sends TipMe’s email. A provider must pass a test before it
@@ -434,6 +436,6 @@ export default function ProvidersPage() {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }

@@ -42,7 +42,7 @@ export function ResolveMoneyIssue({
   };
   if (!open)
     return (
-      <Button variant="primary" onClick={() => setOpen(true)}>
+      <Button variant="continue" onClick={() => setOpen(true)}>
         Resolve…
       </Button>
     );
@@ -103,7 +103,12 @@ export function ResolveMoneyIssue({
         </Notice>
       )}
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Resolve issue
         </Button>
         <Button variant="quiet" onClick={() => setOpen(false)}>

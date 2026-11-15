@@ -39,7 +39,10 @@ export default function OpsBusinessesPage() {
   }, [status, search]);
 
   return (
-    <section className="dashboard-section" aria-labelledby={`${id}-title`}>
+    <section
+      className="dashboard-section ops-page-body"
+      aria-labelledby={`${id}-title`}
+    >
       <h1 id={`${id}-title`}>Businesses</h1>
       <p className="tm-hint">
         Contacts are hidden. Open a business to reveal them, with a reason.

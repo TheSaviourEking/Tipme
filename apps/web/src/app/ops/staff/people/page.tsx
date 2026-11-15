@@ -107,7 +107,11 @@ function AddPerson({
     setOpen(false);
   };
   if (!open)
-    return <Button onClick={() => setOpen(true)}>Add a person…</Button>;
+    return (
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        Add a person…
+      </Button>
+    );
   return (
     <form className="settings-form" onSubmit={(e) => void submit(e)}>
       <InputField
@@ -162,7 +166,12 @@ function AddPerson({
         </Notice>
       )}
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Add person
         </Button>
         <Button variant="quiet" onClick={() => setOpen(false)}>
@@ -260,6 +269,7 @@ function ChangeRole({
       )}
       <div className="ops-actions">
         <Button
+          variant="continue"
           type="submit"
           disabled={busy || roleId === person.roleId}
           aria-busy={busy}
@@ -355,7 +365,12 @@ function AdjustAccess({
         </Notice>
       )}
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Save access
         </Button>
         <Button variant="quiet" onClick={() => setOpen(false)}>
@@ -546,7 +561,7 @@ export default function PeoplePage() {
       </Notice>
     );
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>People</h1>
       <p className="tm-hint">
         Effective access is the role’s permissions, plus additions, minus

@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import type { OpsAuditEntry } from '@tipme/contracts';
-import { Button, EmptyState, Skeleton } from '@tipme/ui';
+import { Button, EmptyWell, Skeleton } from '@tipme/ui';
 import { ReadFailureNotice } from '@/components/ops/read-failure-notice';
 import { readFailure, type ReadFailure } from '@/lib/ops-answers';
 import { when } from '@/lib/ops-client';
@@ -40,7 +40,7 @@ export default function AuditPage() {
   };
 
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Audit log</h1>
       <p className="tm-hint">
         Who did what, when and why. Entries cannot be changed or removed.
@@ -54,9 +54,9 @@ export default function AuditPage() {
       )}
       {!rows && !failed && <Skeleton label="Loading the audit log" />}
       {rows?.length === 0 && (
-        <EmptyState title="Nothing recorded yet">
-          Actions appear here as staff work.
-        </EmptyState>
+        <EmptyWell title="Nothing recorded yet">
+          <p>Actions appear here as staff work.</p>
+        </EmptyWell>
       )}
       {rows && rows.length > 0 && (
         <div
@@ -65,7 +65,7 @@ export default function AuditPage() {
           aria-label="Audit entries"
           tabIndex={0}
         >
-          <table className="ops-table">
+          <table className="ops-table ops-table--stack">
             <caption className="sr-only">Audit entries, newest first</caption>
             <thead>
               <tr>
@@ -79,19 +79,21 @@ export default function AuditPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.seq}>
-                  <td>{when(row.createdAt)}</td>
-                  <td>
+                  <td data-label="When">{when(row.createdAt)}</td>
+                  <td data-label="Who">
                     {row.staffUserId
                       ? `Staff …${row.staffUserId.slice(-6)}`
                       : 'System'}
                   </td>
-                  <td>{row.action}</td>
-                  <td>
+                  <td data-label="Action" className="ops-mono">
+                    {row.action}
+                  </td>
+                  <td data-label="Subject">
                     {row.subjectType
                       ? `${row.subjectType} …${(row.subjectId ?? '').slice(-6)}`
                       : '—'}
                   </td>
-                  <td>{row.reason ?? '—'}</td>
+                  <td data-label="Reason">{row.reason ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

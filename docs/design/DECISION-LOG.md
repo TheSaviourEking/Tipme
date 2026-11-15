@@ -464,3 +464,15 @@ the appreciation moment) is unchanged.
 - **Materials (PR 8).** The panel is paper, the heading DM Serif, the amount keys raised, the fields and checkboxes recessed (still native inputs), the drawer a ruled row with a chevron, the Tip key a 56px black key. Scoped to `.profile-composer`: the home demo form keeps its look, and the selected key's fill stays with `AmountChoice` (and make-it-yours' accent).
 - **The minimum as a quiet hint (PR 9, Q1, built with the plan's default; needs the owner's yes).** The same words show as the Other field's hint (`tm-hint`, `aria-describedby`, no red edge, no alert) after 700 ms without typing. Not on blur, so the Tip key does not move while it is being clicked. Pressing Tip still shows the error and starts nothing.
 - **One line under the Tip key in live mode (PR 9, Q2, built with the default; needs the owner's yes).** "You pay exactly this. You’ll confirm on our partner’s page." replaces the two lines, dropping "No account needed." Test mode keeps its two lines. Proof: the form starts nothing unless the quote matches the key's amount, and the provider event must match `payerTotalMinor` or nothing is booked (`packages/database/src/operations/provider-events.ts`).
+
+## 2026-11-15 — Admin UI audit fixes: the OpsShell board's patterns (ops audit F1–F26)
+
+- **Built from the approved admin boards** (`redesign/boards/OpsShell.dc.html`, `OpsPages.dc.html`; 2026-11-05 entry above). A visual decision, not a regulatory approval; no permission, staff action, audit or money change.
+- **One page root.** Every `/ops` page sits in `.ops-page-body` (grid, `--space-6` gap; headings bring no margins). Email, Providers and the provider test no longer return bare fragments.
+- **Metric tiles are recessed wells** (board `.tile`), two across on a phone. This replaces the 2026-10-25 line "metric tiles inherit the card materials".
+- **Purple is never a state colour in the admin area.** Money issues use the danger state, Account the warning state, Info the recessed tag; a switch that is on shows a green lamp (`Lamp tone="green"`, `--state-success`). Saving, continuing and every reasoned action's final button are black; the button that opens a reason box is black only when it leads the card, otherwise secondary. The Approvals count and the funnel bars stay purple.
+- **Switches are hairline rows in one paper**, the words on the left and the action on the right; Overview pairs pending approvals and staff activity on two papers, with the withdrawals switch as one row.
+- **Tables on a phone** (Audit log, Usernames, Market) become stacked cards with the same fields, labelled from `data-label`.
+- **Choices that aren't amounts** (announcement kinds, who sees a changelog entry) are plain radio rows with the brand accent; `.tm-choice` styles only its own key face (`> span`).
+- **Pricing on Pages**: setting a page's fee, granting fee-free tips and allowing more username changes each open from a "…" button.
+- **Not built (open):** the six-box code input (board Pattern 4) needs a decision on paste and autofill; plain-word status badges for raw codes (OpsPages board, marked proposed) need their wording.

@@ -8,7 +8,7 @@ import { can, useOpsAccess } from '@/lib/ops-client';
 export default function StaffPage() {
   const access = useOpsAccess();
   return (
-    <section className="dashboard-section">
+    <section className="dashboard-section ops-page-body">
       <h1>Your access</h1>
       {can(access, 'staff.manage') && (
         <p>

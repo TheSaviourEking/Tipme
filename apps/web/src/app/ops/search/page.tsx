@@ -57,7 +57,7 @@ export default function OpsSearchPage() {
     : 0;
 
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Search</h1>
       <p className="tm-hint">
         A username or name, or the id or end of the reference of a tip,
@@ -76,7 +76,12 @@ export default function OpsSearchPage() {
           onChange={(e) => setQuery(e.target.value)}
           error={error || undefined}
         />
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Search
         </Button>
       </form>

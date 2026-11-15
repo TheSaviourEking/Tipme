@@ -19,7 +19,7 @@ import {
   Badge,
   Button,
   Card,
-  EmptyState,
+  EmptyWell,
   InputField,
   Notice,
   Skeleton,
@@ -402,7 +402,7 @@ export default function UsernamesPage() {
   };
 
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Usernames</h1>
       <p className="tm-hint">
         A reserved username can’t be claimed at sign-up or taken by a username
@@ -436,7 +436,12 @@ export default function UsernamesPage() {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <Button type="submit" disabled={checking} aria-busy={checking}>
+          <Button
+            variant="continue"
+            type="submit"
+            disabled={checking}
+            aria-busy={checking}
+          >
             Check
           </Button>
         </form>
@@ -474,9 +479,9 @@ export default function UsernamesPage() {
         {list &&
           (list.takeBacks ?? []).length === 0 &&
           !list.pending?.length && (
-            <EmptyState title="No take-backs">
-              Check a name above to take it back from a page.
-            </EmptyState>
+            <EmptyWell title="No take-backs" headingLevel={3}>
+              <p>Check a name above to take it back from a page.</p>
+            </EmptyWell>
           )}
         {list && (list.takeBacks ?? []).length > 0 && (
           <div
@@ -485,7 +490,7 @@ export default function UsernamesPage() {
             aria-labelledby={`${id}-take-backs`}
             tabIndex={0}
           >
-            <table className="ops-table">
+            <table className="ops-table ops-table--stack">
               <caption className="sr-only">Take-backs, open ones first</caption>
               <thead>
                 <tr>
@@ -500,12 +505,16 @@ export default function UsernamesPage() {
               <tbody>
                 {(list.takeBacks ?? []).map((row) => (
                   <tr key={row.id}>
-                    <td>@{row.name}</td>
-                    <td>@{row.pageHandle}</td>
-                    <td>{TAKE_BACK_CATEGORY_WORDS[row.category]}</td>
-                    <td>{takeBackStateWords(row)}</td>
-                    <td>{row.requestedBy}</td>
-                    <td>{row.newHandle ? `@${row.newHandle}` : ''}</td>
+                    <td data-label="Name">@{row.name}</td>
+                    <td data-label="Page">@{row.pageHandle}</td>
+                    <td data-label="Category">
+                      {TAKE_BACK_CATEGORY_WORDS[row.category]}
+                    </td>
+                    <td data-label="State">{takeBackStateWords(row)}</td>
+                    <td data-label="Asked by">{row.requestedBy}</td>
+                    <td data-label="New username">
+                      {row.newHandle ? `@${row.newHandle}` : '—'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -558,9 +567,9 @@ export default function UsernamesPage() {
           <Skeleton label="Loading reserved usernames" />
         )}
         {list?.reservations.length === 0 && (
-          <EmptyState title="None reserved">
-            No staff reservation matches. TipMe’s own list is below.
-          </EmptyState>
+          <EmptyWell title="None reserved" headingLevel={3}>
+            <p>No staff reservation matches. TipMe’s own list is below.</p>
+          </EmptyWell>
         )}
         {list?.more && (
           <p className="tm-hint">
@@ -575,7 +584,7 @@ export default function UsernamesPage() {
             aria-labelledby={`${id}-reserved`}
             tabIndex={0}
           >
-            <table className="ops-table">
+            <table className="ops-table ops-table--stack">
               <caption className="sr-only">
                 Reserved usernames, newest first
               </caption>
@@ -592,20 +601,25 @@ export default function UsernamesPage() {
               <tbody>
                 {list.reservations.map((row) => (
                   <tr key={row.id}>
-                    <td>@{row.name}</td>
-                    <td>{row.reservedBy ?? 'TipMe'}</td>
-                    <td>
-                      {when(row.reservedAt)}
-                      {now > 0 && (
-                        <span className="tm-hint">
-                          {' '}
-                          ({age(row.reservedAt, now)})
-                        </span>
-                      )}
+                    <td data-label="Name">@{row.name}</td>
+                    <td data-label="Reserved by">
+                      {row.reservedBy ?? 'TipMe'}
                     </td>
-                    <td>{row.reason}</td>
-                    <td>{SOURCE_WORDS[row.source]}</td>
-                    <td>
+                    <td data-label="When">
+                      {/* One child, so a phone's stacked card keeps it beside its label. */}
+                      <span>
+                        {when(row.reservedAt)}
+                        {now > 0 && (
+                          <span className="tm-hint">
+                            {' '}
+                            ({age(row.reservedAt, now)})
+                          </span>
+                        )}
+                      </span>
+                    </td>
+                    <td data-label="Reason">{row.reason}</td>
+                    <td data-label="Source">{SOURCE_WORDS[row.source]}</td>
+                    <td className="ops-table__action">
                       <ReasonAction
                         open={`Release @${row.name}…`}
                         field={`Why release @${row.name}?`}
