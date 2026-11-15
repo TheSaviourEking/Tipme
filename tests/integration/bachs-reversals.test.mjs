@@ -16,6 +16,7 @@ import {
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { ADA } from '../../packages/database/test/integration/helpers.mjs';
+import { setSwitch } from './helpers.mjs';
 
 // Refunds and disputes are not modelled yet (ADR-0004 live blocker). Until they are, each one
 // Bachs reports raises a money issue for staff and never changes a balance.
@@ -199,4 +200,107 @@ test('a reversal opens its issue and pauses that recipient’s withdrawals', asy
   const after = await holds();
   assert.equal(after.length, 1);
   assert.ok(after[0].released_at);
+});
+
+// Owner, 12 and 14 Nov 2026: with the `refund_fee_return` admin switch on, a final refund is
+// recorded in the ledger at once; off (the default), it waits for staff (two people). The switch
+// replaced the REFUND_FEE_RETURN variable: nothing in the environment turns it on.
+test('a final refund is reversed at refund.paid only while the refund_fee_return switch is on', async (t) => {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  const { db } = database;
+  await beginPaymentAccountCreation(db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await updatePaymentAccountStatus(db, {
+    profileId: ADA,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_ada123',
+    status: 'ACTIVE',
+    chargesEnabled: true,
+    payoutsEnabled: false,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  const paidTip = async (reference) => {
+    const quote = await createQuote(db, {
+      handle: 'ada',
+      tipMinor: 200000n,
+      currency: 'NGN',
+    });
+    const { attemptId, tipId } = await createPaymentIntent(db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    await markAttemptInitiated(db, {
+      attemptId,
+      provider: 'bachs',
+      providerReference: reference,
+    });
+    await recordProviderEvent(db, {
+      provider: 'bachs',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId,
+      providerReference: reference,
+      amountMinor: 200000n,
+      currency: 'NGN',
+      providerFeeMinor: 1500n,
+      signatureVerified: true,
+      payload: {},
+    });
+    return { attemptId, tipId };
+  };
+  const refundPaid = (reference, attemptId) => ({
+    kind: 'reversal',
+    eventId: `evt_${randomUUID()}`,
+    eventType: 'refund.paid',
+    accountReference: 'acct_ada123',
+    providerReference: reference,
+    operationReference: attemptId,
+    partnerReversalId: `refund.re_${randomUUID().replaceAll('-', '')}`,
+    disputeWon: false,
+    refundState: 'paid',
+    refundedMinor: 100000n,
+    refundFeeMinor: 0n,
+  });
+  const reversals = async (tipId) =>
+    (
+      await database.pool.query(
+        `SELECT count(*)::int AS n FROM ledger_transactions
+          WHERE tip_id = $1 AND operation_type = 'reversal'`,
+        [tipId],
+      )
+    ).rows[0].n;
+  const webhooks = new WebhookService({ db });
+
+  // Off (the default): the refund opens its issue and waits for staff.
+  const off = await paidTip('acct_ada123:chk_off');
+  assert.equal(
+    await webhooks.applyBachs(
+      refundPaid('acct_ada123:chk_off', off.attemptId),
+      {
+        environment: 'sandbox',
+      },
+    ),
+    'reversal_flagged',
+  );
+  assert.equal(await reversals(off.tipId), 0);
+
+  // On: the same final refund is reversed in the ledger at once.
+  await setSwitch(database.pool, 'refund_fee_return', true);
+  const on = await paidTip('acct_ada123:chk_on');
+  assert.equal(
+    await webhooks.applyBachs(refundPaid('acct_ada123:chk_on', on.attemptId), {
+      environment: 'sandbox',
+    }),
+    'reversal_flagged',
+  );
+  assert.equal(await reversals(on.tipId), 1);
+  await setSwitch(database.pool, 'refund_fee_return', false);
 });

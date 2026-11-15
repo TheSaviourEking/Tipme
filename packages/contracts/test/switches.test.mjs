@@ -253,3 +253,16 @@ test('campaign_pages is a non-money switch, off by default, seeded from CAMPAIGN
   assert.equal(entry.default, false);
   assert.equal(entry.env.name, 'CAMPAIGN_PAGES_ENABLED');
 });
+
+// Owner, 14 Nov 2026: a refund keeps TipMe's fee; the switch only records a final refund at once
+// (instead of two staff) and, on a chargeback, sends TipMe's fee back. Staff read these words.
+test('refund_fee_return says what it does since 14 Nov: no fee back on a refund', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.refund_fee_return;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'REFUND_FEE_RETURN');
+  assert.doesNotMatch(entry.description, /gives back the fee/);
+  assert.match(entry.description, /without two staff/);
+  assert.match(entry.description, /chargeback/);
+  assert.match(entry.description, /keeps its fee on a refund/);
+});

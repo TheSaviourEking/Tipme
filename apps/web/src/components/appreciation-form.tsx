@@ -108,7 +108,13 @@ export function AppreciationForm({
    * carries the membership as a label the server checks (and ignores when it no longer holds), and
    * this tab remembers the business for "Tip {name} again", only with the supporter's opt-in.
    */
-  business?: { memberId: string; name: string; slug: string };
+  business?: {
+    memberId: string;
+    name: string;
+    slug: string;
+    /** The split agreed with the business (R2-C2), told before paying. */
+    share?: { personKeepsPercent: number; businessPercent: number };
+  };
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -193,7 +199,7 @@ export function AppreciationForm({
     setQuote({ kind: 'loading', amount: minor });
     // A read: a dropped connection is tried once more, quietly.
     const { result } = await sendWithOneRetry('tip-quote', () =>
-      quoteTip(handle, minor),
+      quoteTip(handle, minor, business?.memberId),
     );
     if (request !== latestQuote.current) return null;
     draftKey.current = null;
@@ -631,11 +637,26 @@ export function AppreciationForm({
   // focus and takes a live region with it. So the words are read from one hidden region outside
   // the bar, and the visible copies stay out of the accessibility tree. Try again stays in it.
   const shownOnly = onProfile ? ({ 'aria-hidden': true } as const) : {};
+  // The page's split first; a quote's own (the server's word at quote time) replaces it.
+  const disclosed =
+    shown.kind === 'ready' && shown.quote.share
+      ? shown.quote.share
+      : business?.share
+        ? { ...business.share, businessName: business.name }
+        : null;
   const quoteArea = (
     <div
       className="tip-quote"
       {...(onProfile ? {} : { 'aria-live': 'polite' })}
     >
+      {/* Business release 2 (Q9): the agreed share is told before paying, in words, never by
+          colour alone. Only the quote from the server says it. */}
+      {disclosed && (
+        <p className="tip-quote__share" data-testid="tip-share">
+          Of what {recipient} receives, they keep {disclosed.personKeepsPercent}
+          % and {disclosed.businessPercent}% goes to {disclosed.businessName}.
+        </p>
+      )}
       {shown.kind === 'failed' && (
         <div className="tip-quote__failed">
           <p className="tm-field-error" {...shownOnly}>

@@ -32,25 +32,25 @@ cleared at once in the process that changed it and, while live updates are on, i
 switch is a serious action (`feature_switch.set`: a reason, a fresh code and a second person when one exists); any
 other needs a reason and a fresh code. Every change is in the audit log and the switch's own history.
 
-| Variable                  | Switch key              | Money | Default | What it does                                                                                         | Where   |
-| ------------------------- | ----------------------- | ----- | ------- | ---------------------------------------------------------------------------------------------------- | ------- |
-| `PRO_BILLING_ENABLED`     | `pro_billing`           | yes   | off     | Recipients may buy a Pro month (live money also needs the live gates below)                          | A P S   |
-| `PRO_PAY_FROM_BALANCE`    | `pro_pay_from_balance`  | yes   | off     | Pay for Pro from the TipMe balance (waits on the partner's answer, plan Q1)                          | A P S   |
-| `PRO_REFUNDS`             | `pro_refunds`           | yes   | off     | Staff refunds of card-paid Pro months                                                                | A P S   |
-| `PRO_AUTO_RENEW`          | `pro_auto_renew`        | yes   | off     | Auto-renew on a saved card: the offer (API) and the `pro.renew` sweep (worker), now one switch       | A W P S |
-| `BUSINESS_SHARES_ENABLED` | `business_shares`       | yes   | off     | Business release 2 share agreements and a business's own balance; `tip.reverse` runs only with it on | A P S   |
-| `TEAM_TIPS_ENABLED`       | `team_tips`             | yes   | off     | Tipping a whole business team (release 2). Treated as money: it splits a tip between people          | A P S   |
-| `BUSINESS_ENABLED`        | `business`              | no    | off     | TipMe for businesses: every business route, and a tip's business member                              | A P S   |
-| `ANALYTICS_ENABLED`       | `analytics`             | no    | on      | Anonymous, cookieless visit counts and server outcomes (owner, 9 Nov 2026; D-07 stays open)          | A W P S |
-| `ADULT_PLATFORM_LINKS`    | `adult_platform_links`  | no    | on      | OnlyFans and Fansly links on Pro pages (`adult-platform-links.md`)                                   | A P S   |
-| `SUPPORTER_RECOGNITION`   | `supporter_recognition` | no    | on      | The repeat supporters' tick box on Pro pages (`supporter-recognition.md`)                            | A P S   |
+| Variable                  | Switch key              | Money | Default | What it does                                                                                           | Where   |
+| ------------------------- | ----------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------ | ------- |
+| `PRO_BILLING_ENABLED`     | `pro_billing`           | yes   | off     | Recipients may buy a Pro month (live money also needs the live gates below)                            | A P S   |
+| `PRO_PAY_FROM_BALANCE`    | `pro_pay_from_balance`  | yes   | off     | Pay for Pro from the TipMe balance (waits on the partner's answer, plan Q1)                            | A P S   |
+| `PRO_REFUNDS`             | `pro_refunds`           | yes   | off     | Staff refunds of card-paid Pro months                                                                  | A P S   |
+| `PRO_AUTO_RENEW`          | `pro_auto_renew`        | yes   | off     | Auto-renew on a saved card: the offer (API) and the `pro.renew` sweep (worker), now one switch         | A W P S |
+| `BUSINESS_SHARES_ENABLED` | `business_shares`       | yes   | off     | Business release 2 share agreements, a business's own balance, and the worker's share moves (option B) | A W P S |
+| `TEAM_TIPS_ENABLED`       | `team_tips`             | yes   | off     | Tipping a whole business team (release 2). Treated as money: it splits a tip between people            | A P S   |
+| `BUSINESS_ENABLED`        | `business`              | no    | off     | TipMe for businesses: every business route, and a tip's business member                                | A P S   |
+| `ANALYTICS_ENABLED`       | `analytics`             | no    | on      | Anonymous, cookieless visit counts and server outcomes (owner, 9 Nov 2026; D-07 stays open)            | A W P S |
+| `ADULT_PLATFORM_LINKS`    | `adult_platform_links`  | no    | on      | OnlyFans and Fansly links on Pro pages (`adult-platform-links.md`)                                     | A P S   |
+| `SUPPORTER_RECOGNITION`   | `supporter_recognition` | no    | on      | The repeat supporters' tick box on Pro pages (`supporter-recognition.md`)                              | A P S   |
 
 Registered for open pull requests, so they can read the switch instead of adding a variable:
 
-| Variable              | Switch key          | Money | Default | Pull request                                                                                                                                      |
-| --------------------- | ------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it                                                       |
-| `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`. Its variable defaults on with the pretend provider; the switch defaults off everywhere, as no money switch defaults on |
+| Variable              | Switch key          | Money | Default | Pull request                                                                                                                                                                                      |
+| --------------------- | ------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it                                                                                                       |
+| `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff, and a lost dispute returns TipMe's fee. No deploy file names the variable |
 
 Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of
 these variables was ever in a deploy file, so nothing needs deleting from the servers; each still seeds its

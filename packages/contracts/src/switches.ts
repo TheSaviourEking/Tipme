@@ -20,7 +20,7 @@ export const FEATURE_SWITCHES = [
   'supporter_recognition',
   // Page Studio, PR #210 (feat/page-studio-1): registered so it reads this switch, not a variable.
   'page_studio',
-  // Returning TipMe's fee on a refunded tip, PR #193 (feat/business-r2-b): registered likewise.
+  // Final refunds recorded at once, and TipMe's fee back on a chargeback, PR #193 (feat/business-r2-b).
   'refund_fee_return',
   // Merge train 2 (owner, 14 Nov 2026: fewer variables): each PR's flag became a switch.
   'business_pro',
@@ -137,9 +137,9 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     env: truthy('PAGE_STUDIO_ENABLED'),
   },
   refund_fee_return: {
-    label: 'Return the fee on refunds',
+    label: 'Record final refunds at once',
     description:
-      'When a tip is refunded, TipMe gives back the fee it kept for that tip.',
+      'A refund our payment partner says is final is taken back in TipMe’s books at once, without two staff, and a lost chargeback sends TipMe’s fee back to the person. TipMe keeps its fee on a refund.',
     money: true,
     default: false,
     env: truthy('REFUND_FEE_RETURN'),

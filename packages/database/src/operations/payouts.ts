@@ -58,6 +58,7 @@ import {
   withdrawalsSwitchState,
 } from './withdrawals-switch.js';
 import { openIssue } from './issues.js';
+import { reverseTip } from './reversals.js';
 import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
@@ -503,6 +504,12 @@ export function flagPaymentReversal(
     refundState?: 'pending' | 'paid' | 'failed' | null;
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
+    /**
+     * The `refund_fee_return` switch (owner, 12 Nov 2026): a final refund is recorded in the ledger at once. Since
+     * 14 Nov 2026 a refund returns nothing of TipMe's fee (the flag keeps its name; it still gates
+     * this automatic recording, an open question for the owner).
+     */
+    feeReturnOn?: boolean;
     now?: Date;
   },
 ): Promise<'flagged' | 'dispute_won'> {
@@ -597,6 +604,42 @@ export function flagPaymentReversal(
           ...(state === 'failed' ? { note: FAILED_NOTE } : {}),
         });
         issueId = issue.id;
+      }
+      // Owner, 12 Nov 2026 (the `refund_fee_return` switch): once a refund is final (refund.paid, for the
+      // amount it gave back; never after a final failure), it is reversed in the ledger here, in
+      // this transaction (`reverseTip`; TipMe keeps its fee on a refund, owner 14 Nov 2026). Money
+      // never moves without its posting, and both are keyed on the refund: a replayed event finds
+      // the reversal done and does nothing. Staff confirming it later is refused as done. If it
+      // can't be reversed here (more than is left), it waits for staff, as before.
+      if (
+        input.feeReturnOn &&
+        state === 'paid' &&
+        input.refundedMinor &&
+        partnerReversalId &&
+        tip &&
+        known?.subject.refundState !== 'failed'
+      ) {
+        try {
+          const reversed = await tx.transaction((savepoint) =>
+            reverseTip(savepoint, {
+              tipId: tip.id,
+              partnerReversalId,
+              refundedMinor: input.refundedMinor!,
+              refundFeeMinor: input.refundFeeMinor ?? 0n,
+              feeReturnOn: true,
+              now,
+            }),
+          );
+          if (reversed.created)
+            await tx
+              .update(issues)
+              .set({
+                summary: sql`${issues.summary} || ${' TipMe reversed it in the ledger when the refund was final, taking back what the tip gave its recipients; TipMe keeps its fee. Check it, then close this issue.'}`,
+              })
+              .where(eq(issues.id, issueId));
+        } catch (error) {
+          if (!(error instanceof OperationError)) throw error;
+        }
       }
       // A failed refund moved nothing: no hold for it.
       if (state === 'failed') return 'flagged' as const;
@@ -1776,8 +1819,9 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
-      // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), except to take all that
-      // can be taken: nobody is left with money they cannot withdraw, or an account they cannot close.
+      // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), for a person and a
+      // business alike, except to take all that can be taken: nobody is left with money they
+      // cannot withdraw, or an account they cannot close.
       if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
       // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and

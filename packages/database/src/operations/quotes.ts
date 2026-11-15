@@ -10,6 +10,7 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { feeFreeCredits, profiles, tipQuotes } from '../schema.js';
+import { shareInForce } from './share-at-tip.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { opsPageByHandle, tipAmountsOf } from './profiles.js';
@@ -28,20 +29,30 @@ export interface QuoteResult {
   /** TipMe's fee is waived on this quote (a fee-free reward). */
   feeFree: boolean;
   expiresAt: Date;
+  /** Business release 2 (R2-C2): the share in force at the business, shown before paying. */
+  share?: { businessBps: number; businessName: string };
 }
+
+type QuoteInput = {
+  handle: string;
+  tipMinor: bigint;
+  currency: string;
+  now?: Date;
+  /** The business membership the tip page is for (TipMe for businesses). */
+  businessMemberId?: string;
+  /** The `business` and `business_shares` switches. Off unless passed: no share is ever looked up. */
+  sharesOn?: boolean;
+};
 
 /** Server-side price for a tip. Hidden, suspended and unknown profiles are indistinguishable. */
 export function createQuote(
   db: Database,
-  input: { handle: string; tipMinor: bigint; currency: string; now?: Date },
+  input: QuoteInput,
 ): Promise<QuoteResult> {
   return guarded(() => quote(db, input));
 }
 
-async function quote(
-  db: Database,
-  input: { handle: string; tipMinor: bigint; currency: string; now?: Date },
-): Promise<QuoteResult> {
+async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
   try {
     assertCurrency(input.currency);
   } catch {
@@ -96,7 +107,7 @@ async function quote(
   // Fee-free tips are granted by staff (ADR-0014) and honoured while credits last. Open
   // fee-free quotes reserve their credit, under a lock on the credits row, so quotes made before
   // any of them is paid can never use more credits than were granted.
-  const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion } =
+  const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion, shared } =
     await db.transaction(async (tx) => {
       const [credits] = await tx
         .select({ remaining: feeFreeCredits.remaining })
@@ -123,8 +134,13 @@ async function quote(
           version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
         }
       }
+      // Fixed on the quote, so the intent can tell whether the supporter saw the split in force.
+      const shared = input.sharesOn
+        ? await shareInForce(tx, profile.id, input.businessMemberId)
+        : null;
       await tx.insert(tipQuotes).values({
         id: quoteId,
+        shareAgreementId: shared?.agreementId ?? null,
         profileId: profile.id,
         currency: input.currency,
         tipMinor: chosen.tipMinor,
@@ -140,6 +156,7 @@ async function quote(
         waivedPlatformFeeMinor: waived,
         finalBreakdown: chosen,
         feePolicyVersion: version,
+        shared,
       };
     });
   breakdown = finalBreakdown;
@@ -153,6 +170,14 @@ async function quote(
     feePolicyVersion,
     feeFree: waivedPlatformFeeMinor > 0n,
     expiresAt,
+    ...(shared
+      ? {
+          share: {
+            businessBps: shared.businessBps,
+            businessName: shared.businessName,
+          },
+        }
+      : {}),
   };
 }
 

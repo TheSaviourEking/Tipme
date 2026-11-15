@@ -558,6 +558,9 @@ test('account creation requests NGN methods and trusts returned fee responsibili
   assert.deepEqual(requestBody.responsibilities, {
     fees: { collector: 'platform' },
   });
+  // Owner, 14 Nov 2026: nobody refunds a tip from the partner's dashboard; TipMe says so explicitly
+  // (the partner's `refunds` dashboard switch, off by default).
+  assert.deepEqual(requestBody.dashboard_features, { refunds: false });
   assert.equal(
     requestHeaders['Idempotency-Key'],
     'tipme-account-recipient-123',

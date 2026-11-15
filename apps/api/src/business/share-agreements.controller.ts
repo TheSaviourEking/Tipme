@@ -15,6 +15,7 @@ import {
   shareReportSchema,
   type ApiDataResponse,
   type BusinessShareRow,
+  type MySharedTips,
   type ShareAgreementView,
   type ShareCounter,
   type ShareProposal,
@@ -27,6 +28,7 @@ import {
   declineShare,
   listBusinessShares,
   myShares,
+  mySharedTips,
   proposeShare,
   reportBusiness,
   type MailSealing,
@@ -46,7 +48,7 @@ import { SharesEnabledGuard } from './release2-flags.guard.js';
 /**
  * Lane R2-C1: the share agreement. A business (an owner, or the manager of that location) proposes
  * a split; the staff member accepts, declines or suggests another on their Work page; they can
- * report the business to TipMe. Off (404) unless BUSINESS_ENABLED and BUSINESS_SHARES_ENABLED.
+ * report the business to TipMe. Off (404) unless the `business` and `business_shares` switches are on.
  * The business never learns how the staff member answered its own proposal before the start date
  * (see the operations file); a report never reaches the business.
  */
@@ -131,6 +133,24 @@ export class ShareAgreementsController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<ShareAgreementView[]>> {
     return { data: await myShares(this.database.db, auth.userId) };
+  }
+
+  /** Option B: what this person has shared with each business they work at. Theirs alone. */
+  @Get('work/shared')
+  @Header('Cache-Control', 'private, no-store')
+  async shared(
+    @CurrentUser() auth: AuthContext,
+  ): Promise<ApiDataResponse<MySharedTips[]>> {
+    const rows = await mySharedTips(this.database.db, auth.userId);
+    return {
+      data: rows.map((row) => ({
+        memberId: row.memberId,
+        businessName: row.businessName,
+        monthMinor: row.monthMinor.toString(),
+        monthTips: row.monthTips,
+        totalMinor: row.totalMinor.toString(),
+      })),
+    };
   }
 
   @Post('work/shares/:agreementId/accept')

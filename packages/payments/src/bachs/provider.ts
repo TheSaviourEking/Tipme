@@ -28,6 +28,15 @@ import { decimalToMinor, minorToDecimal } from './money.js';
 import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
+/**
+ * Owner, 14 Nov 2026: a tip is refunded only by TipMe (the supporter gets back the tip minus TipMe's
+ * fee), never by the account holder from the partner's dashboard. Its `dashboard_features.refunds`
+ * switch starts off; TipMe sends it off explicitly on every account it creates, and never turns it on.
+ */
+const NO_DASHBOARD_REFUNDS = {
+  dashboard_features: { refunds: false },
+} as const;
+
 const checkoutCreatedSchema = z.object({
   checkout_id: z.string().min(1),
   checkout_url: z.string().url(),
@@ -163,6 +172,16 @@ export interface BachsProvider
     country: string;
     displayName?: string;
     entityType: 'individual' | 'company';
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
+  /**
+   * Business release 2, option B: a company account that only receives (the recipient persona:
+   * payouts and transfers, sandbox S1), never takes payments, so no selfie check or review.
+   */
+  createReceiveOnlyAccount(input: {
+    contactEmail: string;
+    country: string;
+    displayName?: string;
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
   createOnboardingLink(input: {
@@ -1043,6 +1062,31 @@ export function createBachsProvider(
           responsibilities: {
             fees: { collector: 'platform' },
           },
+          ...NO_DASHBOARD_REFUNDS,
+        },
+        schema: accountSchema,
+      });
+      return normalizedAccount(account);
+    },
+
+    async createReceiveOnlyAccount(input) {
+      const validInput = accountInputSchema.parse({
+        ...input,
+        entityType: 'company',
+      });
+      const account = await client.request({
+        method: 'POST',
+        path: '/v1/accounts',
+        idempotencyKey: validInput.idempotencyKey,
+        operationReference: validInput.idempotencyKey,
+        body: {
+          contact_email: validInput.contactEmail,
+          country: validInput.country,
+          display_name: validInput.displayName,
+          entity_type: 'company',
+          configuration: { ...PAYOUT_CONFIGURATION },
+          responsibilities: { fees: { collector: 'platform' } },
+          ...NO_DASHBOARD_REFUNDS,
         },
         schema: accountSchema,
       });

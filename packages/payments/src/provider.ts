@@ -296,6 +296,22 @@ export interface PayoutPort {
     amountMinor: bigint;
     currency: 'NGN';
     idempotencyKey: string;
+    /** What the transfer says it is for; 'TipMe Pro' unless given. */
+    description?: string;
+  }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
+  /**
+   * Business release 2, option B: TipMe's own balance to an account (`POST /v1/transfers` as the
+   * platform, `transfer_group` = the key, so `findPlatformCollection` reads it back). It can't be
+   * reversed. PlatformRefusalError (TipMe's balance or key) and PayoutRejectedError are definite;
+   * UncertainProviderOutcomeError is not. The partner refuses account-to-account transfers, so
+   * there is deliberately no such call: a move between two accounts is always two transfers.
+   */
+  transferToAccount?(input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+    description: string;
   }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
   /**
    * The read-back for a collect whose answer was lost: the account's transfer with this key as its

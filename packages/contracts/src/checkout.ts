@@ -9,6 +9,8 @@ export const tipQuoteRequestSchema = z
     handle: z.string().min(1).max(60),
     amountMinor: z.string().regex(/^\d{1,12}$/),
     currency: z.literal('NGN'),
+    /** The business membership the tip page is for: its share, if any, is shown before paying. */
+    businessMemberId: z.uuid().optional(),
   })
   .strict();
 export type TipQuoteRequest = z.infer<typeof tipQuoteRequestSchema>;
@@ -29,7 +31,7 @@ export interface TipQuote {
   feeFree: boolean;
   /**
    * Business release 2: the share agreed with the business the tip is made at, shown before
-   * paying. Only with BUSINESS_SHARES_ENABLED, and only for a tip made at that business.
+   * paying. Only with the `business_shares` switch on, and only for a tip made at that business.
    */
   share?: ShareDisclosure;
 }

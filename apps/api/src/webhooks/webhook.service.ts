@@ -18,6 +18,7 @@ import {
   type ProVerified,
   findBachsAttemptByOperationReference,
   ensurePayoutSetup,
+  featureOn,
   findPaymentAccountByReference,
   updatePaymentAccountStatus,
   findBachsAttemptByReference,
@@ -436,6 +437,9 @@ export class WebhookService {
   ): Promise<string> {
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
+    // The `refund_fee_return` switch (owner, 12 and 14 Nov 2026): with it on, a final refund is
+    // recorded in the ledger at once instead of waiting for two staff.
+    const feeReturnOn = await featureOn(this.database.db, 'refund_fee_return');
     const flagged = await flagPaymentReversal(this.database.db, {
       attemptId,
       eventId: event.eventId,
@@ -445,6 +449,7 @@ export class WebhookService {
       refundState: event.refundState,
       refundedMinor: event.refundedMinor,
       refundFeeMinor: event.refundFeeMinor,
+      ...(feeReturnOn ? { feeReturnOn: true } : {}),
     });
     return flagged === 'dispute_won' ? 'dispute_won' : 'reversal_flagged';
   }
@@ -477,6 +482,8 @@ export class WebhookService {
     });
     if (!known || !accounts.getRecipientAccount)
       return this.unmatchedBachs(event);
+    // A business's receive-only account: re-read when its owner opens the Money section.
+    if (known.profileId === null) return 'ignored';
     // A failed read throws, so Bachs retries the delivery later.
     const remote = await accounts.getRecipientAccount(event.accountReference);
     const { status, chargesEnabled } = bachsAccountReadiness(remote);

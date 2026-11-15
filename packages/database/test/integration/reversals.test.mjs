@@ -229,13 +229,14 @@ test('reversals and the business share', async (t) => {
       const tipId = await paidTip(shared);
       assert.equal(await person(), 297600n);
       assert.equal(await business(shared.businessId), 74400n);
-      // A refund of half: each line in proportion.
-      const half = await reverse(tipId, GROSS / 2n);
+      // Owner, 14 Nov 2026: a refund gives the supporter back the tip minus TipMe's fee (₦3,720), and
+      // each side gives back its own part. A refund of half of that: each part in proportion.
+      const half = await reverse(tipId, NET / 2n);
       assert.equal(half.created, true);
       assert.equal(await person(), 148800n);
       assert.equal(await business(shared.businessId), 37200n);
-      // The rest: everything is back to nothing, and every posting balanced.
-      await reverse(tipId, GROSS / 2n);
+      // The rest: what they received is back to nothing, and every posting balanced.
+      await reverse(tipId, NET / 2n);
       assert.equal(await person(), 0n);
       assert.equal(await business(shared.businessId), 0n);
       const [{ n }] = await q(
@@ -246,14 +247,14 @@ test('reversals and the business share', async (t) => {
         [tipId],
       );
       assert.equal(n, 2);
-      // Everything the payment owed is back to zero. The partner kept its ₦60 fee ("Fees already
-      // charged are not returned"): TipMe's expense, paid out of its partner balance.
+      // What the person and the business received is back to zero. TipMe keeps its ₦280 (₦220 fee,
+      // ₦60 processing recovered); the partner kept its ₦60 fee, TipMe's expense.
       assert.deepEqual(await accountsOf(tipId), {
         business_payable: '0',
-        platform_fee_revenue: '0',
-        provider_clearing: '-6000',
+        platform_fee_revenue: '-22000',
+        provider_clearing: '22000',
         provider_fee_expense: '6000',
-        provider_fee_recovered: '0',
+        provider_fee_recovered: '-6000',
         recipient_payable: '0',
       });
       // Nothing is left to take back.
@@ -447,17 +448,17 @@ test('reversals and the business share', async (t) => {
       await database.fresh();
       const shared = await atBusiness(1000);
       const tipId = await paidTip(shared);
-      const result = await reverse(tipId, GROSS, 'refund.rfnd_fee', 1500n);
+      const result = await reverse(tipId, NET, 'refund.rfnd_fee', 1500n);
       assert.equal(result.created, true);
       assert.equal(await person(), 0n);
       assert.equal(await business(shared.businessId), 0n);
       assert.deepEqual(await accountsOf(tipId), {
         business_payable: '0',
-        platform_fee_revenue: '0',
-        // ₦4,000 − ₦60 came in; ₦4,000 + ₦15 went back out.
-        provider_clearing: '-7500',
+        platform_fee_revenue: '-22000',
+        // ₦4,000 − ₦60 came in; ₦3,720 + ₦15 went back out. TipMe keeps its fee.
+        provider_clearing: '20500',
         provider_fee_expense: '7500',
-        provider_fee_recovered: '0',
+        provider_fee_recovered: '-6000',
         recipient_payable: '0',
       });
       await assertBalanced();

@@ -516,3 +516,40 @@ test('the worker no longer parses ANALYTICS_ENABLED or PRO_AUTO_RENEW; it keeps 
     /PRO_AUTO_RENEW/,
   );
 });
+
+// Business release 2, option B (#193): the worker reads the `business`, `business_shares` and
+// `refund_fee_return` admin switches, not variables of its own; the share's settle wait is a code
+// value. The old switch variables only seed a switch on a database with no row yet.
+test('the worker has no business-share or refund variables; the switch ones only seed', async () => {
+  const { readFileSync } = await import('node:fs');
+  const declared = [
+    ...readFileSync(
+      new URL('../src/config.ts', import.meta.url),
+      'utf8',
+    ).matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm),
+  ].map((m) => m[1]);
+  const base = {
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    NODE_ENV: 'test',
+  };
+  const config = loadWorkerConfig({
+    ...base,
+    BUSINESS_SHARES_ENABLED: 'true',
+    REFUND_FEE_RETURN: 'true',
+  });
+  for (const name of [
+    'BUSINESS_SHARES_ENABLED',
+    'REFUND_FEE_RETURN',
+    'BUSINESS_SHARE_SETTLE_HOURS',
+  ]) {
+    assert.ok(!declared.includes(name), `${name} is in the schema`);
+    assert.ok(!(name in config), `${name} is parsed`);
+  }
+  assert.deepEqual(config.switchSeeds, {
+    BUSINESS_SHARES_ENABLED: 'true',
+    REFUND_FEE_RETURN: 'true',
+  });
+});

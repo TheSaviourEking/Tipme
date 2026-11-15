@@ -42,6 +42,7 @@ import {
   reconcilePayouts,
   reconcileProPurchases,
   reconcileProCollections,
+  runShareTransfers,
   renewProAutomatically,
   sendProRefunds,
   sweepPayoutSetup,
@@ -102,6 +103,12 @@ import { databaseFailureFields, jobFailure } from './job-retry.js';
 import { runUnlessRunning } from './run-lock.js';
 
 const RECONCILE_JOB = 'reconcile.payments';
+/**
+ * Option B: how long after a shared tip is paid before its share is first tried (a ruling: partner
+ * question (e), the settlement delay for naira charges, is still open); then it also waits until the
+ * staff member's available balance holds it. A code value, not a variable (owner, 14 Nov 2026: fewer).
+ */
+const BUSINESS_SHARE_SETTLE_MS = 48 * 3_600_000;
 const WEEKLY_REPORTS_JOB = WEEKLY_REPORTS_JOB_NAME;
 const MONTHLY_MOMENTS_JOB = 'moments.monthly';
 const ANALYTICS_DAILY_JOB = 'analytics.daily';
@@ -543,6 +550,31 @@ export async function startJobWorker(
             // Paid Pro (ADR-0015): open purchases on TipMe's own account, read back from the same
             // provider that made them. A page whose plan changed is revalidated and signalled.
             const pro = await reconcileProEverywhere(now);
+            // Option B: business shares between partner accounts, each leg once and read back.
+            // The `business` and `business_shares` switches, or `refund_fee_return` alone (admin).
+            const shares = { checked: 0, failed: 0 };
+            const [businessOn, sharesSwitchOn, feeReturnOn] = await Promise.all(
+              [
+                featureOn(database.db, 'business'),
+                featureOn(database.db, 'business_shares'),
+                featureOn(database.db, 'refund_fee_return'),
+              ],
+            );
+            const sharesOn = businessOn && sharesSwitchOn;
+            if (sharesOn || feeReturnOn)
+              for (const provider of [mockProvider, bachsProvider]) {
+                if (!provider?.collectToPlatform || !provider.transferToAccount)
+                  continue;
+                const result = await runShareTransfers(database.db, {
+                  provider,
+                  now,
+                  settleWaitMs: BUSINESS_SHARE_SETTLE_MS,
+                  // With only refund_fee_return on, only fees move back.
+                  ...(sharesOn ? {} : { kinds: ['fee_return' as const] }),
+                });
+                shares.checked += result.checked;
+                shares.failed += result.failed;
+              }
             // Never-paid tips are cancelled, after the provider confirms they were not paid.
             const expiry = await expireStaleTips({
               db: database.db,
@@ -573,6 +605,8 @@ export async function startJobWorker(
               pro_checked: pro.checked,
               pro_paid: pro.paid,
               pro_errors: pro.failed,
+              shares_checked: shares.checked,
+              shares_errors: shares.failed,
             });
             processed.add(1, { outcome: 'reconciled' });
             return 'reconciled';

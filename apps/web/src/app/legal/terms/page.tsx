@@ -8,6 +8,10 @@ import { previewMetadata } from '@/lib/metadata';
 const EXAMPLE_TIP = BigInt(500000);
 const exampleNet = (policy: typeof FEE_POLICY_V2_FREE) =>
   formatNaira(Number(priceTip(EXAMPLE_TIP, policy).recipientNetMinor));
+// The refund example: a refund gives back the tip minus TipMe's fee, which is what the recipient got.
+const REFUND_TIP = BigInt(1000000);
+const refundBack = (policy: typeof FEE_POLICY_V2_FREE) =>
+  formatNaira(Number(priceTip(REFUND_TIP, policy).recipientNetMinor));
 
 export const metadata = previewMetadata(
   'Terms of use',
@@ -53,6 +57,29 @@ export default function TermsPlaceholder() {
           be withdrawn. If our payment partner charges a different fee for a
           withdrawal, the difference is taken from or added back to your
           balance.
+        </p>
+      </section>
+      {/* The owner's decisions, 14 Nov 2026: TipMe keeps its fee on a refund (the supporter gets back
+          the tip minus it); on a chargeback the recipient gives back only what they received and TipMe
+          bears its fee. A product decision, not a regulatory approval (D-05 stays open). */}
+      <section aria-labelledby="refunds">
+        <h2 id="refunds">Refunds and chargebacks</h2>
+        <p>
+          <strong>Refunds.</strong> If a tip is refunded, the supporter gets
+          back the tip minus TipMe’s fee. TipMe keeps its fee. From a{' '}
+          {formatNaira(Number(REFUND_TIP))} tip, the supporter gets back{' '}
+          {refundBack(FEE_POLICY_V2_FREE)} on Free, or{' '}
+          {refundBack(FEE_POLICY_V2_PRO)} on Pro, and you give back what you
+          received.
+        </p>
+        <p>
+          <strong>Chargebacks.</strong> If the supporter’s bank takes a payment
+          back, you give back only what you received from the tip. TipMe bears
+          its own fee.
+        </p>
+        <p>
+          At a business, you and the business each give back what you received
+          from the tip.
         </p>
       </section>
       {/* The owner's decision, 3 Nov 2026: a username can be taken back, with 7 days of notice. */}
@@ -105,8 +132,8 @@ export default function TermsPlaceholder() {
         </p>
         <p>
           <strong>Refunds and chargebacks.</strong> If a tip is refunded or
-          charged back, both the staff member’s part and the business’s part are
-          taken back, each in proportion to the amount refunded.
+          charged back, you and the business each give back what you received
+          from it (see Refunds and chargebacks above).
         </p>
       </section>
     </LegalPlaceholder>

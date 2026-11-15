@@ -61,6 +61,8 @@ test('operations carry ids, request schemas from the contracts, auth and permiss
   const body = quote.requestBody.content['application/json'].schema;
   assert.deepEqual(Object.keys(body.properties).sort(), [
     'amountMinor',
+    // Business release 2: the membership a tip page is for, so its share is told before paying.
+    'businessMemberId',
     'currency',
     'handle',
   ]);

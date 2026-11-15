@@ -238,6 +238,30 @@ test('the terms set out Free 7%, Pro 5% and the NGN 2,000 minimums', async ({
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
 });
 
+// The owner, 14 Nov 2026: TipMe keeps its fee on a refund; on a chargeback TipMe bears its fee.
+test('the terms say a refund gives back the tip minus TipMe’s fee, and a chargeback costs you only what you received', async ({
+  page,
+}) => {
+  await page.goto('/legal/terms');
+  const refunds = page.getByRole('region', { name: 'Refunds and chargebacks' });
+  await expect(refunds).toContainText(
+    'the supporter gets back the tip minus TipMe’s fee. TipMe keeps its fee.',
+  );
+  await expect(refunds).toContainText(
+    'From a ₦10,000 tip, the supporter gets back ₦9,300 on Free, or ₦9,500 on Pro, and you give back what you received.',
+  );
+  await expect(refunds).toContainText(
+    'you give back only what you received from the tip. TipMe bears its own fee.',
+  );
+  await expect(refunds).toContainText(
+    'you and the business each give back what you received',
+  );
+  await expect(page.locator('main')).not.toContainText(
+    'each in proportion to the amount refunded',
+  );
+  await expect(page.locator('main')).not.toContainText(/bachs/i);
+});
+
 // The owner, 3 Nov 2026: TipMe can take a username back, with notice, days before.
 test('the terms say TipMe can take back a username, with 7 days of notice', async ({
   page,

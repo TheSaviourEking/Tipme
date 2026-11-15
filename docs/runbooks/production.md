@@ -217,6 +217,10 @@ SELECT 'alias', handle_lower, NULL FROM handle_aliases
 
 Businesses (plan `docs/superpowers/plans/2026-11-06-business.md`, release 1) are off until staff turn on the **TipMe for businesses** switch at `/ops/switches` (it replaced `BUSINESS_ENABLED`, 14 Nov 2026; `settings-and-switches.md`). While off, every business route answers 404, the web shows no Business or Work link, `/b/*` shows as unavailable, and a tip ignores any business label. Release 2's own switches (**Business shares**, **Team tips**) stay off; this section does not turn them on.
 
+Shares (option B, `docs/00-DECISIONS.md`, 11 Nov 2026) need the **Business shares** switch (`business_shares`, a money switch) on, with **TipMe for businesses**. The API and the worker read the same switch: the API fixes a share on a tip and shows it before paying; the worker moves each share staff → TipMe → business once its tip's money is available (48 hours after the tip, a code value), and puts refunds right. With it off, nothing about a share moves. A `share_transfer_stuck` issue means TipMe may be holding a business's share: check the partner dashboard for the transfers with the keys in the issue before doing anything.
+
+The **Record final refunds at once** switch (`refund_fee_return`, a money switch, off by default; owner's call, 12 and 14 Nov 2026) records a final refund (`refund.paid`) in the ledger at once instead of waiting for two staff, and sends TipMe's fee back on a lost dispute staff reverse for a tip with no business share. A refund itself never returns TipMe's fee (owner, 14 Nov 2026). With only this switch on, the worker moves fee returns and nothing else.
+
 **Before turning it on:**
 
 1. The privacy page on production (`/legal/privacy`) shows "If you tip at a business" and "If you work at a business", and `docs/00-DECISIONS.md` has "What a business sees". Both describe what the code shows; neither claims any approval.
