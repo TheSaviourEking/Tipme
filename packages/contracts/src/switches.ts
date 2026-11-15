@@ -282,16 +282,46 @@ export function featureSwitchSeedsFrom(
 export const DISPLAY_SETTINGS = [
   'pilot_notice',
   'production_launch_at',
+  'announcement_daily_limit',
 ] as const;
 export type DisplaySetting = (typeof DISPLAY_SETTINGS)[number];
+
+/**
+ * The announcements daily limit (owner, 15 Nov 2026): no more announcement emails are queued in any
+ * 24 hours than this, because the email service's free plan sends 300 a day. Kept with the display
+ * settings (the same table, reason, fresh code, audit and history) rather than in a new store; it
+ * replaces no variable, and unset means the default.
+ */
+export const ANNOUNCEMENT_DAILY_LIMIT = {
+  default: 300,
+  min: 1,
+  max: 100_000,
+} as const;
+
+/** The limit in force for a stored value: the default when unset or unreadable. */
+export function announcementDailyLimitOf(
+  value: string | null | undefined,
+): number {
+  const n = Number(value);
+  return value != null &&
+    /^\d+$/.test(value) &&
+    n >= ANNOUNCEMENT_DAILY_LIMIT.min &&
+    n <= ANNOUNCEMENT_DAILY_LIMIT.max
+    ? n
+    : ANNOUNCEMENT_DAILY_LIMIT.default;
+}
 
 export interface DisplaySettingEntry {
   label: string;
   description: string;
-  /** `on_off`: "on" or "off". `instant`: an exact moment, or none. */
-  kind: 'on_off' | 'instant';
-  /** The web app's old (Vercel) setting it replaces. */
-  envName: string;
+  /** `on_off`: "on" or "off". `instant`: an exact moment, or none. `count`: a whole number. */
+  kind: 'on_off' | 'instant' | 'count';
+  /** `web`: what the web app shows. `limits`: a limit the API and worker keep. */
+  group: 'web' | 'limits';
+  /** The web app's old (Vercel) setting it replaces; null for one that replaced none. */
+  envName: string | null;
+  /** For `count`: the value in force while unset, and the bounds. */
+  count?: { default: number; min: number; max: number };
 }
 
 export const DISPLAY_SETTING_CATALOGUE: Record<
@@ -303,6 +333,7 @@ export const DISPLAY_SETTING_CATALOGUE: Record<
     description:
       '“TipMe is in a pilot. Payments are real. Need help?” where money moves. It shows only while payments are live.',
     kind: 'on_off',
+    group: 'web',
     envName: 'PILOT_NOTICE',
   },
   production_launch_at: {
@@ -310,7 +341,17 @@ export const DISPLAY_SETTING_CATALOGUE: Record<
     description:
       'Before this moment every page shows “coming soon” with a countdown. None: TipMe is open.',
     kind: 'instant',
+    group: 'web',
     envName: 'PRODUCTION_LAUNCH_AT',
+  },
+  announcement_daily_limit: {
+    label: 'Announcement emails a day',
+    description:
+      'The most announcement emails, tests included, sent in any 24 hours. The email service’s free plan sends 300 a day. At the limit, sending pauses and carries on by itself as the 24 hours free up.',
+    kind: 'count',
+    group: 'limits',
+    envName: null,
+    count: ANNOUNCEMENT_DAILY_LIMIT,
   },
 };
 
@@ -327,6 +368,20 @@ export function checkedDisplayValue(
   value: string | null,
 ): string | null {
   if (!isDisplaySetting(key)) throw new Error('unknown display setting');
+  const { count } = DISPLAY_SETTING_CATALOGUE[key];
+  if (count) {
+    const n = Number(value);
+    if (
+      value === null ||
+      !/^\d{1,9}$/.test(value) ||
+      n < count.min ||
+      n > count.max
+    )
+      throw new Error(
+        `${key} must be a whole number from ${count.min} to ${count.max}`,
+      );
+    return String(n);
+  }
   if (DISPLAY_SETTING_CATALOGUE[key].kind === 'on_off') {
     if (value !== 'on' && value !== 'off')
       throw new Error(`${key} must be on or off`);
@@ -355,8 +410,11 @@ export interface OpsDisplaySetting {
   label: string;
   description: string;
   kind: DisplaySettingEntry['kind'];
-  envName: string;
-  /** False until staff first set it here: the web uses its old setting until then. */
+  group: DisplaySettingEntry['group'];
+  envName: string | null;
+  /** For a `count`: the default while unset, and the bounds. */
+  count: DisplaySettingEntry['count'] | null;
+  /** False until staff first set it here: the web uses its old setting (or the default) until then. */
   set: boolean;
   value: string | null;
   changedBy: string | null;

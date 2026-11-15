@@ -13,3 +13,12 @@ export class MailTemporaryError extends Error {
     super(`Mail not sent yet: ${code}`);
   }
 }
+
+/**
+ * The provider's sending allowance is used up (Brevo's free plan: 300 a day). A temporary error the
+ * outbox treats as a pause: the mail waits for the allowance to come back and never uses up its
+ * attempts on it, so nothing fails for running out of credits.
+ */
+export class MailQuotaError extends MailTemporaryError {
+  override name = 'MailQuotaError';
+}

@@ -165,8 +165,22 @@ export interface OpsAnnouncement {
   waitingRequestId: string | null;
 }
 
+/**
+ * The daily limit (owner, 15 Nov 2026): announcement emails, tests included, waiting in the mail
+ * queue or sent in the last 24 hours, against the limit set in Switches. At the limit a send pauses
+ * and carries on by itself.
+ */
+export interface OpsAnnouncementDailyLimit {
+  limit: number;
+  used: number;
+  remaining: number;
+  /** When the oldest email counted leaves the 24 hours (room for more), if any was sent. */
+  freesAt: string | null;
+}
+
 export interface OpsAnnouncementList {
   rows: OpsAnnouncement[];
+  dailyLimit: OpsAnnouncementDailyLimit;
   /** False when no announcement provider is set up: nothing can be tested or sent. */
   setUp: boolean;
 }

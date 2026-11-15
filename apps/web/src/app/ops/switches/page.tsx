@@ -146,16 +146,34 @@ function SwitchCard({
 
 const DISPLAY_PATH = '/v1/ops/switches/display';
 
+const number = (value: string | number) =>
+  Number(value).toLocaleString('en-NG');
+
 function displayValueWords(item: OpsDisplaySetting): string {
+  if (item.kind === 'count')
+    return item.set && item.value
+      ? number(item.value)
+      : `${number(item.count?.default ?? 0)} (the default)`;
   if (!item.set)
     return `Not set here yet: the web app still uses its ${item.envName} setting.`;
   if (item.kind === 'on_off') return item.value === 'on' ? 'On' : 'Off';
   return item.value ? when(item.value) : 'None: TipMe is open';
 }
 
+function historyValueWords(
+  item: OpsDisplaySetting,
+  value: string | null,
+): string {
+  if (value === null) return 'None';
+  if (item.kind === 'instant') return when(value);
+  if (item.kind === 'count') return number(value);
+  return value === 'on' ? 'On' : 'Off';
+}
+
 /**
- * A display setting (owner, 14 Nov 2026, #216): the pilot notice or the launch time. Not money: a
- * reason and a fresh code. The web app picks it up within a minute.
+ * A display setting (owner, 14 Nov 2026, #216): the pilot notice or the launch time; and, with the
+ * same rules, the announcements daily limit (15 Nov 2026). Not money: a reason and a fresh code.
+ * The web app picks a display setting up within a minute; the worker reads the limit on each batch.
  */
 function DisplayCard({
   item,
@@ -179,24 +197,32 @@ function DisplayCard({
     setBusy(false);
     if (answer.kind === 'refused') {
       if (outcomeIsUnknown(answer)) await onChanged();
-      return answer.code === 'VALIDATION_FAILED' ||
-        answer.code === 'INVALID_INPUT'
-        ? 'Check the value: an exact time with its offset, such as 2026-12-01T00:00:00+01:00, or nothing. It must differ from the one in use.'
-        : refusalWords(answer);
+      if (
+        answer.code !== 'VALIDATION_FAILED' &&
+        answer.code !== 'INVALID_INPUT'
+      )
+        return refusalWords(answer);
+      return item.kind === 'count' && item.count
+        ? `Check the number: a whole number from ${number(item.count.min)} to ${number(item.count.max)}, different from the one in use.`
+        : 'Check the value: an exact time with its offset, such as 2026-12-01T00:00:00+01:00, or nothing. It must differ from the one in use.';
     }
-    setDone(`${item.label} saved. The web app shows it within a minute.`);
+    setDone(
+      item.kind === 'count'
+        ? `${item.label} saved. It applies from the next batch.`
+        : `${item.label} saved. The web app shows it within a minute.`,
+    );
     await onChanged();
     return null;
   };
 
-  const submitLaunch = async (event: FormEvent<HTMLFormElement>) => {
+  const submitValue = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const at = String(form.get('at') ?? '').trim();
+    const value = String(form.get('value') ?? '').trim();
     const reason = String(form.get('reason') ?? '').trim();
     if (reason.length < 10)
       return setError('Please write a reason of at least 10 characters.');
-    const problem = await send(at === '' ? null : at, reason);
+    const problem = await send(value === '' ? null : value, reason);
     if (problem) setError(problem);
   };
 
@@ -236,18 +262,34 @@ function DisplayCard({
         ) : (
           <form
             className="ops-reason"
-            onSubmit={(e) => void submitLaunch(e)}
+            onSubmit={(e) => void submitValue(e)}
             noValidate
           >
-            <InputField
-              id={`${id}-at`}
-              name="at"
-              label="Launch time"
-              hint="An exact time with its offset, such as 2026-12-01T00:00:00+01:00 for midnight in Lagos. Leave empty for none: TipMe is open."
-              defaultValue={item.value ?? ''}
-              autoComplete="off"
-              spellCheck={false}
-            />
+            {item.kind === 'count' && item.count ? (
+              <InputField
+                id={`${id}-value`}
+                name="value"
+                label={item.label}
+                hint={`A whole number from ${number(item.count.min)} to ${number(item.count.max)}.`}
+                type="number"
+                inputMode="numeric"
+                min={item.count.min}
+                max={item.count.max}
+                step={1}
+                defaultValue={item.value ?? String(item.count.default)}
+                autoComplete="off"
+              />
+            ) : (
+              <InputField
+                id={`${id}-value`}
+                name="value"
+                label="Launch time"
+                hint="An exact time with its offset, such as 2026-12-01T00:00:00+01:00 for midnight in Lagos. Leave empty for none: TipMe is open."
+                defaultValue={item.value ?? ''}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            )}
             <TextareaField
               id={`${id}-reason`}
               name="reason"
@@ -261,7 +303,9 @@ function DisplayCard({
               </Notice>
             )}
             <Button type="submit" disabled={busy} aria-busy={busy}>
-              Save launch time
+              {item.kind === 'count'
+                ? `Save ${item.label.toLowerCase()}`
+                : 'Save launch time'}
             </Button>
           </form>
         )}
@@ -271,16 +315,8 @@ function DisplayCard({
             <ol className="ops-list">
               {item.history.map((change) => (
                 <li key={change.id}>
-                  <strong>
-                    {change.value === null
-                      ? 'None'
-                      : item.kind === 'instant'
-                        ? when(change.value)
-                        : change.value === 'on'
-                          ? 'On'
-                          : 'Off'}
-                  </strong>{' '}
-                  · {when(change.createdAt)} · {staffWord(change.changedBy)}
+                  <strong>{historyValueWords(item, change.value)}</strong> ·{' '}
+                  {when(change.createdAt)} · {staffWord(change.changedBy)}
                   <br />
                   <span className="tm-hint">{change.reason}</span>
                 </li>
@@ -347,9 +383,20 @@ export default function SwitchesPage() {
         These replace settings in the web app&apos;s hosting. Until one is set
         here, the web app keeps its own setting.
       </p>
-      {state.display.map((item) => (
-        <DisplayCard key={item.key} item={item} onChanged={read} />
-      ))}
+      {state.display
+        .filter((item) => item.group === 'web')
+        .map((item) => (
+          <DisplayCard key={item.key} item={item} onChanged={read} />
+        ))}
+      <h2>Limits</h2>
+      <p className="tm-hint">
+        Limits TipMe keeps itself. Until one is set here, its default applies.
+      </p>
+      {state.display
+        .filter((item) => item.group === 'limits')
+        .map((item) => (
+          <DisplayCard key={item.key} item={item} onChanged={read} />
+        ))}
     </section>
   );
 }

@@ -1,5 +1,9 @@
 import { timingSafeEqual } from 'node:crypto';
-import { MailRejectedError, MailTemporaryError } from '../errors.js';
+import {
+  MailQuotaError,
+  MailRejectedError,
+  MailTemporaryError,
+} from '../errors.js';
 import type {
   MailEventKind,
   MailProvider,
@@ -31,6 +35,30 @@ export interface BrevoConfig {
 }
 
 const REFERENCE = 'tipme_ref:';
+
+/*
+ * Out of credits. Brevo's reference for POST /v3/smtp/email (read 15 Nov 2026) lists only 201, 202
+ * and 400; its 400 `code` list holds both `not_enough_credits` and `Insufficient credits`. Matched
+ * case-insensitively, on the code or the message, and on 402 (Payment Required) in case Brevo ever
+ * answers that way. It is a pause until credits come back, never a refusal.
+ */
+const CREDIT_WORDS = [
+  'not_enough_credits',
+  'insufficient credits',
+  'not enough credits',
+];
+
+function outOfCredits(
+  status: number,
+  body: { code?: unknown; message?: unknown } | null,
+): boolean {
+  if (status === 402) return true;
+  return [body?.code, body?.message].some(
+    (value) =>
+      typeof value === 'string' &&
+      CREDIT_WORDS.some((words) => value.toLowerCase().includes(words)),
+  );
+}
 
 const KINDS: Record<string, MailEventKind> = {
   delivered: 'delivered',
@@ -128,8 +156,11 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
       const body = (await response.json().catch(() => null)) as {
         messageId?: unknown;
         code?: unknown;
+        message?: unknown;
       } | null;
       if (!response.ok) {
+        if (outOfCredits(response.status, body))
+          throw new MailQuotaError('not_enough_credits');
         if (response.status === 429 || response.status >= 500)
           throw new MailTemporaryError(`http_${response.status}`);
         throw new MailRejectedError(

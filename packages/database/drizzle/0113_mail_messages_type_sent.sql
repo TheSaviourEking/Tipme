@@ -1,0 +1,1 @@
+CREATE INDEX "mail_messages_type_sent" ON "mail_messages" USING btree ("type","sent_at");

@@ -332,6 +332,8 @@ test('an owner sets the pilot notice and the launch time; /health/release serves
     [
       ['pilot_notice', false, 'PILOT_NOTICE'],
       ['production_launch_at', false, 'PRODUCTION_LAUNCH_AT'],
+      // The announcements daily limit (15 Nov 2026) is kept here too; it replaced no variable.
+      ['announcement_daily_limit', false, null],
     ],
   );
   const set = (key, value) =>
@@ -366,5 +368,32 @@ test('an owner sets the pilot notice and the launch time; /health/release serves
     audits.map((a) => a.subject_id),
     ['pilot_notice', 'production_launch_at', 'production_launch_at'],
   );
+  await database.pool.query('DELETE FROM display_settings');
+});
+
+// The announcements daily limit (owner, 15 Nov 2026): set in Switches like a display setting, a
+// whole number from 1 to 100,000; never served on /health/release.
+test('an owner sets the announcements daily limit; checked, and not public', async () => {
+  const session = await opsSignIn(stack.api, database.db, phone());
+  const set = (value) =>
+    opsCall(
+      session,
+      'POST',
+      '/v1/ops/switches/display/announcement_daily_limit',
+      { value, reason: REASON },
+    );
+  for (const bad of ['0', '100001', 'many', null])
+    assert.equal((await set(bad)).status, 400, String(bad));
+  const saved = await set('1200');
+  assert.equal(saved.status, 200);
+  const limit = (await saved.json()).data.display.find(
+    (d) => d.key === 'announcement_daily_limit',
+  );
+  assert.equal(limit.value, '1200');
+  assert.equal(limit.group, 'limits');
+  assert.deepEqual(limit.count, { default: 300, min: 1, max: 100_000 });
+  const release = (await (await fetch(`${stack.api}/health/release`)).json())
+    .data.display;
+  assert.deepEqual(Object.keys(release).sort(), ['launch', 'pilotNotice']);
   await database.pool.query('DELETE FROM display_settings');
 });
