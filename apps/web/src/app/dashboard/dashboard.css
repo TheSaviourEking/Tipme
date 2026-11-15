@@ -9270,6 +9270,22 @@ body:has(.business-public) > .site-footer {
   background: var(--brand-primary);
   color: #fff;
   font-weight: 600;
+  overflow: hidden;
+}
+
+/* The person's photo (or its initials, if it fails to load) fills the same round mark. */
+.hat-menu__initial .hat-menu__photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+.hat-menu__initial .avatar--initials {
+  font-size: 0.8125rem;
+  background: transparent;
+  color: inherit;
 }
 
 .hat-menu {
