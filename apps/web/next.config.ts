@@ -2,6 +2,10 @@ import { execSync } from 'node:child_process';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
+import {
+  PUBLIC_PAGE_SOURCE,
+  securityHeaders,
+} from './src/lib/security-headers';
 
 // Validate this at build/start time so a malformed production launch cannot silently expose or
 // indefinitely hide the site. The request-time gate reads the same server-only value.
@@ -39,38 +43,18 @@ if (
   );
 }
 
-// Inline scripts/styles are required by statically rendered Next.js pages (nonces would force
-// dynamic rendering; deferred, threat model X1); every other resource class is restricted, and
-// the browser may reach only this site and the configured API origin.
-const securityHeaders = [
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  {
-    key: 'Content-Security-Policy',
-    value: [
-      "default-src 'self'",
-      // React's development build needs eval() for its debugging tools; production never does.
-      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === 'development' ? " 'unsafe-eval'" : ''}`,
-      "style-src 'self' 'unsafe-inline'",
-      // Uploaded profile photos are served by the API (/v1/avatars/...).
-      `img-src 'self' data: blob: ${apiUrl.origin}`,
-      "font-src 'self' data:",
-      `connect-src 'self' ${apiUrl.origin}`,
-      "media-src 'self'",
-      "manifest-src 'self'",
-      "worker-src 'self' blob:",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-      "object-src 'none'",
-    ].join('; '),
-  },
-  {
-    key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
-  },
-];
+// The site-wide headers, and the public page's, which may also frame a Page Studio video.
+const dev = process.env.NODE_ENV === 'development';
+const siteHeaders = securityHeaders({
+  apiOrigin: apiUrl.origin,
+  dev,
+  frames: false,
+});
+const publicPageHeaders = securityHeaders({
+  apiOrigin: apiUrl.origin,
+  dev,
+  frames: true,
+});
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -89,7 +73,11 @@ const nextConfig: NextConfig = {
     ];
   },
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    // When two entries set one header for a path, the later one wins: the public page's last.
+    return [
+      { source: '/:path*', headers: siteHeaders },
+      { source: PUBLIC_PAGE_SOURCE, headers: publicPageHeaders },
+    ];
   },
   // How it works is a section of Home now (the owner, 3 Nov 2026); old links land on it.
   async redirects() {
