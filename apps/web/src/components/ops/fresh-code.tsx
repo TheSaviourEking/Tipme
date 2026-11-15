@@ -102,7 +102,12 @@ export function FreshCodePrompt() {
             </Notice>
           )}
           <div className="ops-actions">
-            <Button type="submit" disabled={busy} aria-busy={busy}>
+            <Button
+              variant="continue"
+              type="submit"
+              disabled={busy}
+              aria-busy={busy}
+            >
               Continue
             </Button>
             <Button variant="quiet" onClick={() => settle(false)}>

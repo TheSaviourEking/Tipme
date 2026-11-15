@@ -190,7 +190,12 @@ export function OpsEnrol({
               maxLength={10}
               required
             />
-            <Button type="submit" disabled={busy} aria-busy={busy}>
+            <Button
+              variant="continue"
+              type="submit"
+              disabled={busy}
+              aria-busy={busy}
+            >
               Continue
             </Button>
           </form>
@@ -256,7 +261,12 @@ export function OpsEnrol({
             </code>
           </p>
           <CodeField id={`${id}-code`} />
-          <Button type="submit" disabled={busy} aria-busy={busy}>
+          <Button
+            variant="continue"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
             Confirm
           </Button>
         </form>
@@ -297,7 +307,12 @@ export function OpsCode({ onDone }: { onDone: () => void }) {
       )}
       <form className="settings-form" onSubmit={(e) => void submit(e)}>
         <CodeField id={`${id}-code`} />
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Continue
         </Button>
       </form>

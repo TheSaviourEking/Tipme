@@ -211,7 +211,7 @@ function BachsRecoveryAction({
           {error}
         </Notice>
       )}
-      <Button type="submit" disabled={busy} aria-busy={busy}>
+      <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking with Bachs…' : submitLabel}
       </Button>
     </form>
@@ -292,7 +292,7 @@ function BachsFeeBearerAction({
           {error}
         </Notice>
       )}
-      <Button type="submit" disabled={busy} aria-busy={busy}>
+      <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking with Bachs…' : 'Confirm the fee and check the tip'}
       </Button>
     </form>
@@ -389,7 +389,7 @@ export default function IssuePage() {
     !evidence.recovery.completedAt;
 
   return (
-    <div className="ops-issue">
+    <div className="ops-issue ops-page-body">
       <p>
         <Link href="/ops/issues">← All issues</Link>
       </p>

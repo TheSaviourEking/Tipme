@@ -6,8 +6,8 @@ import type {
   OpsMetricsEnvelope,
   WebVitalSummary,
 } from '@tipme/contracts';
-import { Notice, Skeleton } from '@tipme/ui';
-import { Funnel, Tile } from '@/components/ops/charts';
+import { Notice } from '@tipme/ui';
+import { Funnel, Tile, TilesSkeleton } from '@/components/ops/charts';
 import { StaffActivity } from '@/components/ops/staff-activity';
 import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { WithdrawalsSwitch } from '@/components/ops/withdrawals-switch';
@@ -56,8 +56,11 @@ function ForEveryone() {
   return (
     <>
       {can(access, 'payouts.resolve') && <WithdrawalsSwitch />}
-      <WaitingRequests />
-      {can(access, 'audit.view') && <StaffActivity />}
+      {/* Side by side on a wide screen, each on its own paper (OpsShell board). */}
+      <div className="ops-two">
+        <WaitingRequests />
+        {can(access, 'audit.view') && <StaffActivity />}
+      </div>
     </>
   );
 }
@@ -67,7 +70,7 @@ export default function OpsOverviewPage() {
   const access = useOpsAccess();
   const mayRead = can(access, 'analytics.view');
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Overview</h1>
       <ForEveryone />
       {mayRead && <Numbers />}
@@ -97,7 +100,7 @@ function Numbers() {
         <Link href="/ops/issues">Go to the issues inbox</Link>
       </Notice>
     );
-  if (!health) return <Skeleton label="Loading the overview" />;
+  if (!health) return <TilesSkeleton label="Loading the overview" />;
   // An API older than PR-011 sends no web vitals (the web app deploys first).
   const {
     money,

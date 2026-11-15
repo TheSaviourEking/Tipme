@@ -57,7 +57,12 @@ function NewRole({
     setOpen(false);
     setTicked([]);
   };
-  if (!open) return <Button onClick={() => setOpen(true)}>New role…</Button>;
+  if (!open)
+    return (
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        New role…
+      </Button>
+    );
   return (
     <form className="settings-form" onSubmit={(e) => void submit(e)}>
       <InputField
@@ -90,7 +95,12 @@ function NewRole({
         </Notice>
       )}
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
           Create role
         </Button>
         <Button variant="quiet" onClick={() => setOpen(false)}>
@@ -185,6 +195,7 @@ function Role({
           {!impact && (
             <div className="ops-actions">
               <Button
+                variant="continue"
                 disabled={busy}
                 aria-busy={busy}
                 onClick={() => void review()}
@@ -234,7 +245,12 @@ function Role({
                 required
               />
               <div className="ops-actions">
-                <Button type="submit" disabled={busy} aria-busy={busy}>
+                <Button
+                  variant="continue"
+                  type="submit"
+                  disabled={busy}
+                  aria-busy={busy}
+                >
                   Save role
                 </Button>
                 <Button variant="quiet" onClick={() => setImpact(null)}>
@@ -311,7 +327,7 @@ export default function RolesPage() {
       </Notice>
     );
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Roles</h1>
       <p className="tm-hint">
         A new role starts with nothing ticked. A role can’t be deleted while

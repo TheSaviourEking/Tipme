@@ -17,14 +17,19 @@ const problem = (answer: { status: number; code: string; message?: string }) =>
     ? 'Check the values: a reason of at least 10 characters is needed.'
     : refusalWords(answer);
 
-/** A value and a written reason, sent together (every pricing change is audited). */
+/**
+ * A value and a written reason, sent together (every pricing change is audited). Closed, it is one
+ * button ending in "…" (the OpsShell board's Pattern 3), so a card has one action in view at a time.
+ */
 export function ValueWithReason({
+  open: openLabel,
   label,
   hint,
   submit,
   parse,
   onSubmit,
 }: {
+  open: string;
   label: string;
   hint: string;
   submit: string;
@@ -32,6 +37,7 @@ export function ValueWithReason({
   onSubmit: (value: number, reason: string) => Promise<string | null>;
 }) {
   const id = useId();
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const send = async (event: FormEvent<HTMLFormElement>) => {
@@ -48,8 +54,17 @@ export function ValueWithReason({
     const failed = await onSubmit(value, reason);
     setBusy(false);
     if (failed) setError(failed);
-    else form.reset();
+    else {
+      form.reset();
+      setOpen(false);
+    }
   };
+  if (!open)
+    return (
+      <Button variant="secondary" onClick={() => setOpen(true)}>
+        {openLabel}
+      </Button>
+    );
   return (
     <form className="ops-reason" onSubmit={(e) => void send(e)} noValidate>
       <InputField id={`${id}-value`} name="value" label={label} hint={hint} />
@@ -65,9 +80,25 @@ export function ValueWithReason({
           {error}
         </Notice>
       )}
-      <Button type="submit" disabled={busy} aria-busy={busy}>
-        {submit}
-      </Button>
+      <div className="ops-actions">
+        <Button
+          variant="continue"
+          type="submit"
+          disabled={busy}
+          aria-busy={busy}
+        >
+          {submit}
+        </Button>
+        <Button
+          variant="quiet"
+          onClick={() => {
+            setError('');
+            setOpen(false);
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
     </form>
   );
 }
@@ -132,50 +163,56 @@ export function PagePricing({ profileId }: { profileId: string }) {
         kept. Nothing here is automatic.
       </p>
       {outcome && <ActionOutcome outcome={outcome} />}
-      <ValueWithReason
-        label="New TipMe fee (%)"
-        hint={`For example 4 or 2.5. Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
-        submit="Set this page’s fee"
-        parse={percentToBps}
-        onSubmit={(bps, reason) =>
-          act(
-            'fee',
-            { feeBps: bps, reason },
-            `The fee is now ${bpsToPercent(bps)} for new tips.`,
-          )
-        }
-      />
-      {pricing.customFeeBps !== null && (
-        <ReasonAction
-          open="Return to the plan’s rate"
-          field="Why return to the plan’s rate?"
-          submit="Use the plan’s rate"
-          onSubmit={(reason) =>
+      <div className="ops-actions">
+        <ValueWithReason
+          open="Set this page’s fee…"
+          label="New TipMe fee (%)"
+          hint={`For example 4 or 2.5. Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
+          submit="Set this page’s fee"
+          parse={percentToBps}
+          onSubmit={(bps, reason) =>
             act(
               'fee',
-              { feeBps: null, reason },
-              `The plan’s rate (${standard}) applies to new tips.`,
+              { feeBps: bps, reason },
+              `The fee is now ${bpsToPercent(bps)} for new tips.`,
             )
           }
         />
-      )}
-      <ValueWithReason
-        label="Fee-free tips to grant"
-        hint="Whole number, 1 to 100. Each paid tip uses one."
-        submit="Grant fee-free tips"
-        parse={(raw) =>
-          /^\d{1,3}$/.test(raw.trim()) && Number(raw) >= 1 && Number(raw) <= 100
-            ? Number(raw)
-            : null
-        }
-        onSubmit={(count, reason) =>
-          act(
-            'fee-free',
-            { count, reason },
-            `${count} fee-free ${count === 1 ? 'tip' : 'tips'} granted.`,
-          )
-        }
-      />
+        {pricing.customFeeBps !== null && (
+          <ReasonAction
+            open="Return to the plan’s rate"
+            field="Why return to the plan’s rate?"
+            submit="Use the plan’s rate"
+            onSubmit={(reason) =>
+              act(
+                'fee',
+                { feeBps: null, reason },
+                `The plan’s rate (${standard}) applies to new tips.`,
+              )
+            }
+          />
+        )}
+        <ValueWithReason
+          open="Grant fee-free tips…"
+          label="Fee-free tips to grant"
+          hint="Whole number, 1 to 100. Each paid tip uses one."
+          submit="Grant fee-free tips"
+          parse={(raw) =>
+            /^\d{1,3}$/.test(raw.trim()) &&
+            Number(raw) >= 1 &&
+            Number(raw) <= 100
+              ? Number(raw)
+              : null
+          }
+          onSubmit={(count, reason) =>
+            act(
+              'fee-free',
+              { count, reason },
+              `${count} fee-free ${count === 1 ? 'tip' : 'tips'} granted.`,
+            )
+          }
+        />
+      </div>
     </Card>
   );
 }

@@ -28,20 +28,22 @@
   align-items: center;
   gap: var(--space-3);
   margin-bottom: var(--space-6);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-sm);
-  background: var(--text-primary);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  /* The frame strip's material (OpsShell board) before access too, so the staff mark is one thing. */
+  background: var(--key-face-dark);
   color: var(--surface-base);
+  font-size: var(--text-sm);
 }
 
 .ops-banner strong {
-  padding: var(--space-1) var(--space-3);
+  padding: 0.125rem var(--space-3);
   border-radius: var(--radius-pill);
   background: var(--brand-primary);
   color: var(--surface-base);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .ops-step {
@@ -74,9 +76,9 @@
 .ops-email-preview {
   width: 100%;
   min-height: 420px;
-  border: 1px solid var(--color-border, currentColor);
-  border-radius: var(--radius-md, 8px);
-  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-field);
+  background: var(--surface-base);
 }
 
 /* Staff announcements: the email light and dark, side by side when there is room. */
@@ -125,16 +127,31 @@
   font-weight: 600;
 }
 
-.ops-announcement-kind {
+/* A plain radio row for a choice that isn't an amount (announcement kinds, who sees a changelog
+   entry): a brand-accented radio, a bold label and its hint. Never the browser's blue (UI audit F14). */
+.ops-radio {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-3);
   align-items: start;
+  min-height: 44px;
+  cursor: pointer;
 }
 
-.ops-announcement-kind > span {
+.ops-radio input {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0.1rem 0 0;
+  accent-color: var(--brand-primary);
+}
+
+.ops-radio > span {
   display: grid;
   gap: var(--space-1);
+}
+
+.ops-radio .tm-hint {
+  font-size: var(--text-sm);
 }
 
 .ops-announcement-checklist {
@@ -150,7 +167,15 @@
 .ops-filters {
   display: flex;
   flex-wrap: wrap;
+  /* Fields line up by their labels, so a hint under one field never pushes the others down; the
+     button sits on the fields' line, at a field's height (UI audit F15). */
+  align-items: flex-start;
   gap: var(--space-4);
+}
+
+.ops-filters > .tm-button {
+  align-self: flex-end;
+  min-height: 50px;
 }
 
 .ops-list {
@@ -181,14 +206,15 @@
   gap: var(--space-2);
 }
 
+/* Severity is a state, never the signature purple (OpsShell board .b-money, .b-account, .b-info). */
 .ops-severity--money {
-  background: var(--brand-primary);
-  color: var(--surface-base);
+  background: var(--state-danger-soft);
+  color: var(--state-danger);
 }
 
 .ops-severity--account {
-  background: var(--brand-soft);
-  color: var(--brand-ink);
+  background: var(--state-warning-soft);
+  color: var(--state-warning);
 }
 
 .ops-issue {
@@ -287,6 +313,12 @@
   vertical-align: top;
 }
 
+/* Long unbroken values (a reason holding raw JSON, a long action name) wrap inside their cell, so
+   a table never scrolls sideways at a desktop width (UI audit F2/F3). People keeps its own rules. */
+.ops-table td {
+  overflow-wrap: anywhere;
+}
+
 .ops-permissions {
   list-style: none;
   margin: 0;
@@ -317,13 +349,25 @@
 
 .ops-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: var(--space-4);
+  /* Two across on a 390px phone, as the board's .t2; one tile never stretches the whole column. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr));
+  gap: var(--space-3);
 }
 
+.ops-tiles:has(> .ops-tile:only-child) {
+  grid-template-columns: minmax(0, 20rem);
+}
+
+/* A recessed well (OpsShell board .tile; TOKENS-AND-MATERIALS "Recessed"), not a raised card. */
 .ops-tile {
   display: grid;
+  align-content: start;
   gap: var(--space-1);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-field);
+  background: var(--surface-recessed);
+  box-shadow: var(--shadow-recessed);
 }
 
 .ops-tile p {
@@ -332,12 +376,43 @@
 
 .ops-tile__label {
   color: var(--text-secondary);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .ops-tile__value {
   font-size: var(--text-xl);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.ops-tile__previous {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+
+.ops-tile--skeleton {
+  min-height: 5.5rem;
+  animation: tm-pulse 1.8s ease-in-out infinite alternate;
+}
+
+.ops-tiles-skeleton {
+  display: grid;
+  gap: var(--space-6);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ops-tile--skeleton {
+    animation: none;
+  }
+}
+@media (max-width: 39.99rem) {
+  .ops-tile__value {
+    font-size: var(--text-lg);
+  }
 }
 
 .ops-chart {
@@ -392,6 +467,23 @@
   grid-template-columns: minmax(7rem, 9rem) 1fr minmax(4rem, auto);
   align-items: center;
   gap: var(--space-3);
+}
+
+/* The funnel's value column has one width, so every bar ends at the same x (UI audit F26). */
+.ops-funnel--steps li {
+  grid-template-columns: minmax(7rem, 9rem) 1fr 10rem;
+}
+
+.ops-funnel__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.ops-funnel__share {
+  display: block;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
 }
 
 .ops-top {
@@ -738,20 +830,8 @@ body > .coming-soon-page {
 }
 
 .ops-frame .ops-banner {
-  gap: var(--space-3);
   margin: 0;
-  padding: var(--space-2) var(--space-4);
   border-radius: 0;
-  background: var(--key-face-dark);
-  font-size: 0.8125rem;
-}
-
-.ops-frame .ops-banner strong {
-  padding: 0.125rem var(--space-3);
-  font-size: 0.75rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
-  text-transform: none;
 }
 
 .ops-frame__wordmark {
@@ -795,7 +875,7 @@ body > .coming-soon-page {
 }
 
 .ops-frame__label {
-  margin: var(--space-3) 10px 0;
+  margin: var(--space-3) var(--space-3) 0;
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 700;
@@ -805,7 +885,7 @@ body > .coming-soon-page {
 
 .ops-frame__links {
   display: grid;
-  gap: 2px;
+  gap: 2px; /* the board's; at 4px the full menu no longer fits a 900px-high window */
   margin: 0;
   padding: 0;
   list-style: none;
@@ -819,7 +899,7 @@ body > .coming-soon-page {
   padding: 0 var(--space-3);
   border-radius: var(--radius-control);
   color: var(--text-secondary);
-  font-size: 0.9063rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-decoration: none;
 }
@@ -832,9 +912,7 @@ body > .coming-soon-page {
   background: var(--surface-raised);
   color: var(--text-primary);
   font-weight: 700;
-  box-shadow:
-    0 1px 1px rgb(20 18 16 / 10%),
-    0 5px 14px rgb(20 18 16 / 7%);
+  box-shadow: var(--shadow-raised-1);
 }
 
 /* What is waiting for this person, on Approvals: purple as a material, with its words for readers. */
@@ -880,7 +958,7 @@ body > .coming-soon-page {
     height: 100dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 22px var(--space-4);
+    padding: var(--space-5) var(--space-4);
     border-right: 1px solid var(--edge-hairline);
   }
 
@@ -895,17 +973,17 @@ body > .coming-soon-page {
     display: inline-flex;
     align-items: center;
     height: 22px;
-    padding: 0 9px;
+    padding: 0 var(--space-2);
     border-radius: var(--radius-pill);
     background: var(--text-primary);
     color: var(--surface-base);
-    font-size: 0.7188rem;
+    font-size: var(--text-xs);
     font-weight: 800;
     letter-spacing: 0.02em;
   }
 
   .ops-frame .ops-banner {
-    padding: 10px var(--space-8);
+    padding: var(--space-2) var(--space-8);
   }
 
   .ops-frame__bar {
@@ -913,7 +991,7 @@ body > .coming-soon-page {
   }
 
   .ops-frame__content.dashboard-page {
-    padding: 26px var(--space-8) var(--space-8);
+    padding: var(--space-6) var(--space-8) var(--space-8);
   }
 }
 
@@ -2351,7 +2429,7 @@ body > .coming-soon-page {
 }
 
 .ops-people__chips .tm-button.ops-people__chip {
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 var(--space-3);
   border-color: transparent;
   background: var(--brand-soft);
@@ -2380,6 +2458,14 @@ body > .coming-soon-page {
 .ops-people__table td {
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* The name and email may wrap, so the table fits a 1440px screen's column (UI audit F3). */
+.ops-people__table td:first-child,
+.ops-people__table td:has(.ops-people__email-cell) {
+  min-width: 10rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ops-people__row--linked {
@@ -2420,7 +2506,7 @@ body > .coming-soon-page {
 .ops-people .tm-button.ops-people__reveal-button {
   position: relative;
   z-index: 1;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 var(--space-2);
 }
 
@@ -2469,8 +2555,9 @@ body > .coming-soon-page {
 
 .ops-people__email-cell {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0 var(--space-2);
 }
 
 .ops-people__email {
@@ -2881,4 +2968,281 @@ a.ops-people__card:hover {
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+}
+
+/* ---- UI audit (15 Nov 2026): one page root and the OpsShell board's shared patterns ---- */
+
+/* One page root on every admin page, with the board's rhythm (.content gap), so sibling screens
+   space their sections alike (UI audit F4, F5). Headings bring no margins of their own inside it. */
+.ops-page-body {
+  display: grid;
+  align-content: start;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.ops-page-body > * {
+  min-width: 0;
+}
+
+.ops-frame__content .ops-page-body h1 {
+  margin: 0;
+}
+
+.ops-frame__content .ops-page-body h2:not([class]) {
+  margin: 0;
+}
+
+/* The line under a page title belongs to it, and reads at interface size (UI audit F13). */
+.ops-page-body > h1 + :is(p:not([class]), p.tm-hint) {
+  max-width: 48rem;
+  margin-top: calc(var(--space-2) - var(--space-6));
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+/* Hints and quiet lines in the admin area: the board's hint size, not 12px (UI audit F13). */
+.ops-page .tm-hint {
+  font-size: var(--text-sm);
+}
+
+.ops-page .tm-field .tm-hint {
+  font-size: var(--text-xs);
+}
+
+/* Buttons keep their own width beside a wide column (UI audit F7). On a phone they may fill it. */
+@media (min-width: 40rem) {
+  .ops-frame__content .tm-button {
+    justify-self: start;
+  }
+}
+
+/* A row of actions never touches the words above or below it (UI audit F21). */
+.ops-frame__content :is(p, .tm-notice, .tm-state-line) + .ops-actions,
+.ops-frame__content .ops-actions + :is(p, .tm-notice) {
+  margin-top: var(--space-2);
+}
+
+/* Loading starts at the content edge (EXPERIENCE-AND-MOTION §5; UI audit F24). */
+.ops-frame__content .tm-skeleton {
+  min-height: 0;
+  padding: 0;
+}
+
+/* Paper: the board's .paper, one sheet holding rows divided by hairlines. */
+.ops-paper {
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+/* Two papers side by side on a wide screen (Overview: approvals and staff activity). */
+.ops-two {
+  display: grid;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.ops-two > .dashboard-section {
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border: 1px solid var(--edge-hairline);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-paper);
+}
+
+.ops-two .ops-row {
+  padding: var(--space-3) 0;
+  border: 0;
+  border-top: 1px solid var(--edge-hairline);
+  border-radius: 0;
+}
+
+.ops-two .ops-list {
+  gap: 0;
+}
+@media (min-width: 64rem) {
+  .ops-two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* A switch: the state on the left and its action on the right (board .switch, Overview). */
+.ops-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.ops-switch > .tm-notice,
+.ops-switch > .ops-reason {
+  flex-basis: 100%;
+}
+
+.ops-switch__state {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+/* Switches: one paper with hairline rows, the words left and the action right (UI audit F11). */
+.ops-switch-list {
+  display: grid;
+}
+
+.ops-switch-row {
+  display: grid;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-5);
+}
+
+.ops-switch-row + .ops-switch-row {
+  border-top: 1px solid var(--edge-hairline);
+}
+
+.ops-switch-row__words,
+.ops-switch-row__act {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.ops-switch-row__words p {
+  margin: 0;
+}
+
+.ops-switch-row__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ops-switch-row__state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ops-switch-row__words code {
+  font-size: var(--text-xs);
+}
+
+.ops-switch-row__history {
+  grid-column: 1 / -1;
+}
+@media (min-width: 48rem) {
+  .ops-switch-row {
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem);
+  }
+
+  .ops-switch-row__act {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .ops-switch-row__act > :is(.ops-reason, .tm-notice, form) {
+    justify-self: stretch;
+    text-align: left;
+  }
+
+  .ops-switch-row__act--wide {
+    justify-items: stretch;
+    text-align: left;
+  }
+}
+
+/* Info issues: a recessed tag (board .b-info); money and account use the state colours above. */
+.ops-severity--info {
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+}
+
+.ops-mono {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: var(--text-xs);
+}
+
+/* A table's action sits on the row's first line, not 12px under it (UI audit F15). */
+.ops-table td.ops-table__action {
+  padding-block: 0;
+  vertical-align: top;
+}
+
+/* On a phone each table row becomes a stacked card with the same fields (OpsShell board,
+   Pattern 1b; UI audit F2). Labels come from data-label, so nothing scrolls sideways. */
+@media (max-width: 39.99rem) {
+  .ops-table-wrap:has(> .ops-table--stack) {
+    overflow: visible;
+  }
+
+  .ops-table--stack,
+  .ops-table--stack tbody,
+  .ops-table--stack tr {
+    display: block;
+  }
+
+  .ops-table--stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .ops-table--stack tr {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--edge-hairline);
+    border-radius: var(--radius-field);
+    background: var(--surface-raised);
+  }
+
+  .ops-table--stack tr + tr {
+    margin-top: var(--space-3);
+  }
+
+  .ops-table--stack td {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: var(--space-3);
+    padding: var(--space-1) 0;
+    border: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ops-table--stack td[data-label]::before {
+    content: attr(data-label);
+    color: var(--text-secondary);
+    font: 600 var(--text-sm) / 1.5 var(--font-interface);
+  }
+
+  .ops-table--stack td.ops-table__action {
+    display: block;
+    padding-top: var(--space-2);
+  }
+}
+
+/* An issue's sections: title, facts, actions and their hint on the 8px rhythm (UI audit F21). */
+.ops-section > section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ops-section > section > h3 {
+  margin: var(--space-2) 0 0;
 }

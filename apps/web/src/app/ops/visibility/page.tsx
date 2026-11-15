@@ -53,7 +53,7 @@ export default function VisibilityPage() {
       ? '—'
       : `${Math.round((v.returningVisits / v.visits) * 100)}%`;
   return (
-    <div className="ops-dashboard">
+    <div className="ops-dashboard ops-page-body">
       <h1>Visibility</h1>
       <p className="tm-hint">
         {shortDate(v.from)} to {shortDate(v.to)} ({v.days} days). Anonymous: no

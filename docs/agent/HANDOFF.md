@@ -1,3 +1,8 @@
+# Current handoff: admin UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-ops`; PR into `dev`, not merged, merge after #242. Web and `packages/ui` CSS/markup only; no migration, no API change. New `tests/e2e/ops-layout.spec.ts`; pricing e2e tests click the new "…" openers.
+- Passed: web unit tests (incl. `route-css.test.mjs`), UI tests, typecheck, lint; affected e2e on lane 8 (desktop, mobile, @alone), `ops-layout.spec.ts` five times. Not run: the full suite (CI) and burn-in of the other changed specs.
+
 # Current handoff: dashboard UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-dashboard`; PR into `dev`, not merged (after #242). Before/after screenshots at 320, 390 and 1440 were taken on e2e lane 7 against throwaway containers (removed). The PR body maps every audit item to fixed or left, with the reason.

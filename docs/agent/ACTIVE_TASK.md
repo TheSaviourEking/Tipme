@@ -1,3 +1,8 @@
+# Current task: admin UI audit fixes (15 November 2026)
+
+- Branch `fix/ui-audit-ops` from `origin/dev` (with #241). The admin findings F1–F26 of the UI audit, built from the OpsShell/OpsPages boards: one page root (`.ops-page-body`), recessed tiles, purple never a state colour (state badges, green switch lamp, black save/continue and reasoned actions), Switches as hairline rows, phone tables as stacked cards, `EmptyWell`, pricing behind "…" openers, `.tm-choice > span`, an in-frame missing page. Rulings in DECISION-LOG 2026-11-15.
+- Must merge after the release PR #242. Left: F12, F18, F19 (another PR's copy), F20 (status wording), the six-box code input (F17).
+
 # Current task: dashboard UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-dashboard` from `origin/dev` (after #241). One PR into `dev`, not merged; it must merge after release PR #242. CSS (dashboard.css only; the route-css test stays green), small TSX changes (nav-account, earnings, bar chart, tips empty state, QR thumbnails, recap slip, campaigns stacked rows), one new spec (`dashboard-layout.spec.ts`), `nav-account.spec.ts` updated. No migration, no API change.

@@ -51,9 +51,14 @@ export function ReasonAction({
     if (problem) setError(problem);
     else setOpen(false);
   };
+  // The OpsShell board's Pattern 3: the button that leads (`primary`) and the one that names the
+  // action are black. Purple stays the signature, not the colour of every admin change.
   if (!open)
     return (
-      <Button variant={variant} onClick={() => setOpen(true)}>
+      <Button
+        variant={variant === 'primary' ? 'continue' : variant}
+        onClick={() => setOpen(true)}
+      >
         {openLabel}
       </Button>
     );
@@ -75,7 +80,12 @@ export function ReasonAction({
         </Notice>
       )}
       <div className="ops-actions">
-        <Button type="submit" disabled={busy} aria-busy={busy}>
+        <Button
+          type="submit"
+          variant="continue"
+          disabled={busy}
+          aria-busy={busy}
+        >
           {submit}
         </Button>
         <Button

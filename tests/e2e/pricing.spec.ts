@@ -22,6 +22,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   await expect(staff.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
 
   // A deal only counts below the plan's rate (Free 7%, owner 12 Nov 2026).
+  await staff.getByRole('button', { name: 'Set this page’s fee…' }).click();
   await staff.getByLabel('New TipMe fee (%)').fill('6');
   // Other cards on the page have reason fields too, so each is found by its own form.
   const formOf = (label: string) =>
@@ -74,6 +75,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
     feeFree: false,
   });
 
+  await staff.getByRole('button', { name: 'Grant fee-free tips…' }).click();
   await staff.getByLabel('Fee-free tips to grant').fill('1');
   await formOf('Fee-free tips to grant')
     .getByLabel('Reason')
