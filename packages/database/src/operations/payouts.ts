@@ -505,7 +505,7 @@ export function flagPaymentReversal(
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
     /**
-     * REFUND_FEE_RETURN (owner, 12 Nov 2026): a final refund is recorded in the ledger at once. Since
+     * The `refund_fee_return` switch (owner, 12 Nov 2026): a final refund is recorded in the ledger at once. Since
      * 14 Nov 2026 a refund returns nothing of TipMe's fee (the flag keeps its name; it still gates
      * this automatic recording, an open question for the owner).
      */
@@ -605,7 +605,7 @@ export function flagPaymentReversal(
         });
         issueId = issue.id;
       }
-      // Owner, 12 Nov 2026 (REFUND_FEE_RETURN): once a refund is final (refund.paid, for the
+      // Owner, 12 Nov 2026 (the `refund_fee_return` switch): once a refund is final (refund.paid, for the
       // amount it gave back; never after a final failure), it is reversed in the ledger here, in
       // this transaction (`reverseTip`; TipMe keeps its fee on a refund, owner 14 Nov 2026). Money
       // never moves without its posting, and both are keyed on the refund: a replayed event finds

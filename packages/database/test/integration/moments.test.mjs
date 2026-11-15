@@ -89,7 +89,7 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
       const moments = await listMoments(db, TOBI.id);
       assert.equal(
         moments[0].title,
-        '10 tips! People keep coming back to thank you.',
+        '10 tips! People keep coming back to tip you.',
       );
       assert.equal(await credits(), 0);
       const next = await createQuote(db, {
@@ -116,7 +116,7 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
       );
       assert.equal(
         moment.title,
-        '50 tips! People keep coming back to thank you.',
+        '50 tips! People keep coming back to tip you.',
       );
       assert.equal(
         (await q(`SELECT count(*)::int AS n FROM reward_grants`))[0].n,

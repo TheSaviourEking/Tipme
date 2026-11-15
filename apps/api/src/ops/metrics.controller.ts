@@ -6,7 +6,12 @@ import type {
   OpsMetricsEnvelope,
   OpsVisibility,
 } from '@tipme/contracts';
-import { healthMetrics, recordAudit, visibilityMetrics } from '@tipme/database';
+import {
+  healthMetrics,
+  recordAudit,
+  visibilityMetrics,
+  featureOn,
+} from '@tipme/database';
 import { isLiveProvider } from '@tipme/payments';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -16,13 +21,10 @@ import { OpsPermission } from './permission.decorator.js';
 /** Health and visibility numbers for staff (permission `analytics.view`, audited). */
 @Controller('v1/ops/metrics')
 export class OpsMetricsController {
-  private readonly collecting: boolean;
   constructor(
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-  ) {
-    this.collecting = config.ANALYTICS_ENABLED;
-  }
+  ) {}
 
   @Get('health')
   @OpsPermission('analytics.view')
@@ -32,7 +34,7 @@ export class OpsMetricsController {
     await this.audit(ops, 'health');
     return {
       data: {
-        collecting: this.collecting,
+        collecting: await featureOn(this.database.db, 'analytics'),
         metrics: {
           ...(await healthMetrics(this.database.db, { now: new Date() })),
           liveNow: this.liveNow(),
@@ -69,7 +71,7 @@ export class OpsMetricsController {
     await this.audit(ops, 'visibility');
     return {
       data: {
-        collecting: this.collecting,
+        collecting: await featureOn(this.database.db, 'analytics'),
         metrics: await visibilityMetrics(this.database.db, {
           now: new Date(),
           days: 28,

@@ -185,10 +185,17 @@ export const pageImageRemoved = defineMailType({
   category: 'account',
   sender: 'notifications',
   preference: null,
-  schema: z.object({ image: z.enum(['cover', 'photo']) }).strict(),
+  schema: z
+    .object({ image: z.enum(['cover', 'photo', 'studio_photo']) })
+    .strict(),
   sample: { image: 'cover' },
   render: ({ image }, ctx) => {
-    const name = image === 'cover' ? 'cover' : 'profile photo';
+    const name =
+      image === 'cover'
+        ? 'cover'
+        : image === 'studio_photo'
+          ? 'Page Studio photo'
+          : 'profile photo';
     return letter(
       {
         subject: `We removed your page’s ${name}`,
@@ -356,7 +363,7 @@ export const milestone = defineMailType({
   sender: 'notifications',
   preference: 'notify_milestones',
   schema: z.object({ copy: z.string().min(1).max(200) }).strict(),
-  sample: { copy: '10 tips! People keep coming back to thank you.' },
+  sample: { copy: '10 tips! People keep coming back to tip you.' },
   render: (data, ctx) =>
     letter(
       {

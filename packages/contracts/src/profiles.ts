@@ -1,5 +1,6 @@
 import type { TakeBackKind } from './usernames.js';
 import { z } from 'zod';
+import type { PublicStudio } from './studio-document.js';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
 import type { ThanksChoice } from './thanks.js';
@@ -189,6 +190,11 @@ export interface PublicProfile {
    * may then offer "Let {name} recognise me next time". Older APIs send nothing (no tick box).
    */
   recognition?: true;
+  /**
+   * A published Page Studio design, sent only while Page Studio is on, the page is Pro and the
+   * design passes today's design check; otherwise the standard page shows. Older APIs send none.
+   */
+  studio?: PublicStudio;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */
@@ -253,6 +259,11 @@ export const notificationPrefsSchema = z
      * owner but is not approved, and would arrive as a separate optional field.
      */
     tipSound: z.boolean().optional(),
+    /**
+     * "News and announcements" (owner, 14 Nov 2026): the marketing switch. Off by default, opt-in.
+     * Optional, so an older client's PUT leaves it as it was.
+     */
+    newsEmails: z.boolean().optional(),
   })
   .strict();
 export type NotificationPrefs = z.infer<typeof notificationPrefsSchema>;

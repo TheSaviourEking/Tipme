@@ -24,7 +24,7 @@ import {
 import { useDatabase } from './helpers.mjs';
 
 /*
- * Staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS. Staff ask, a second person approves
+ * Staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch. Staff ask, a second person approves
  * (`tip.refund`), the worker asks our payment partner for exactly the tip minus TipMe's fee, as the
  * recipient's account, and the partner's refund.paid books it: each side gives back what it received,
  * and TipMe keeps its fee. Pretend partner only.

@@ -19,6 +19,7 @@ import {
   type StaffPageRedirect,
 } from '@tipme/contracts';
 import {
+  featureOn,
   publicBusiness,
   publicLocation,
   publicStaffTipPage,
@@ -47,9 +48,10 @@ export class BusinessPublicController {
   ) {}
 
   /** The same rule as the person's own page: tips through Bachs need their own ready account. */
-  private options(): PublicReadOptions {
+  private async options(): Promise<PublicReadOptions> {
     const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
-    const sharesOn = this.config.BUSINESS_SHARES_ENABLED;
+    // Behind BusinessEnabledGuard, so only the shares switch is left to read.
+    const sharesOn = await featureOn(this.database.db, 'business_shares');
     return {
       ...(environment
         ? { requiredAccount: { provider: 'bachs', environment } }
@@ -84,7 +86,7 @@ export class BusinessPublicController {
         this.database.db,
         business,
         query.q,
-        this.options(),
+        await this.options(),
       ),
     };
   }
@@ -99,7 +101,7 @@ export class BusinessPublicController {
       this.database.db,
       business,
       location,
-      this.options(),
+      await this.options(),
     );
     if (!page) throw new NotFoundException();
     return { data: page };
@@ -118,7 +120,7 @@ export class BusinessPublicController {
       business,
       location,
       handle,
-      this.options(),
+      await this.options(),
     );
     if (!page) throw new NotFoundException();
     if ('redirectTo' in page) return { data: page };

@@ -1,6 +1,6 @@
 import { Controller, Get, Header, Inject } from '@nestjs/common';
 import type { ApiDataResponse, PublicProPrice } from '@tipme/contracts';
-import { currentProPrice } from '@tipme/database';
+import { currentProPrice, featureOn } from '@tipme/database';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -27,7 +27,7 @@ export class ProPriceController {
         amountMinor: String(price.amountMinor),
         currency: price.currency,
         interval: 'month',
-        billingOn: this.config.PRO_BILLING_ENABLED,
+        billingOn: await featureOn(this.database.db, 'pro_billing'),
       },
     };
   }

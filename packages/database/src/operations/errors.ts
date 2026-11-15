@@ -1,6 +1,12 @@
 import { connectionErrors } from '../client.js';
 export type OperationErrorCode =
   | 'PROFILE_NOT_FOUND'
+  // Page Studio.
+  | 'STUDIO_DRAFT_STALE'
+  | 'STUDIO_DRAFT_INVALID'
+  | 'STUDIO_PRO_REQUIRED'
+  | 'STUDIO_IMAGE_LIMIT'
+  | 'STUDIO_IMAGE_NOT_FOUND'
   | 'AMOUNT_OUT_OF_RANGE'
   | 'QUOTE_NOT_FOUND'
   | 'QUOTE_EXPIRED'
@@ -115,7 +121,12 @@ export type OperationErrorCode =
   | 'NOTE_NOT_OPEN'
   | 'NOTE_TEXT_REFUSED'
   | 'BUSINESS_LAST_OWNER'
+  // An owner tried to end another owner's seat: TipMe staff do that (interim lock, 14 Nov 2026).
+  | 'OWNER_REMOVAL_NEEDS_TIPME'
   | 'BUSINESS_NOT_VERIFIED'
+  // Business Pro (plan Task A4).
+  | 'BUSINESS_STAFF_LIMIT'
+  | 'BUSINESS_LOCATION_LIMIT'
   // Business release 2 (R2-0).
   | 'SHARE_NOT_ALLOWED'
   | 'SHARE_CHANGE_TOO_SOON'
@@ -132,11 +143,20 @@ export type OperationErrorCode =
   | 'CHANGELOG_EDITED_ELSEWHERE'
   | 'CHANGELOG_TEXT_NOT_ALLOWED'
   | 'CHANGELOG_NOT_FOUND'
+  // Staff announcements (14 Nov 2026).
+  | 'ANNOUNCEMENT_NOT_FOUND'
+  | 'ANNOUNCEMENT_EDITED_ELSEWHERE'
+  | 'ANNOUNCEMENT_NOT_DRAFT'
+  | 'ANNOUNCEMENT_NO_RECIPIENTS'
+  | 'ANNOUNCEMENT_EMAIL_NOT_SET_UP'
   // Pro insights (11 Nov 2026).
   | 'CAMPAIGN_LIMIT'
   | 'CAMPAIGN_SLUG_TAKEN'
   | 'CAMPAIGN_SLUG_UNAVAILABLE'
   | 'CAMPAIGN_NOT_FOUND'
+  | 'CAMPAIGN_PRO_REQUIRED'
+  | 'CAMPAIGN_STOPPED'
+  | 'CAMPAIGN_HEADLINE_NAME'
   | 'SUPPORT_TOO_MANY_OPEN';
 
 /**

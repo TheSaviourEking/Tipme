@@ -35,7 +35,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(
-      page.getByText('10 tips! People keep coming back to thank you.'),
+      page.getByText('10 tips! People keep coming back to tip you.'),
     ).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 20_000 });
   await expectAccessible(page);
@@ -76,7 +76,7 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   await visitor.getByRole('button', { name: /^Pay/ }).click();
   await visitor.waitForURL(/\/tip\//);
   await expect(
-    visitor.getByRole('heading', { name: /got your thanks\.$/ }),
+    visitor.getByRole('heading', { name: /got your tip\.$/ }),
   ).toBeVisible({
     timeout: 20_000,
   });

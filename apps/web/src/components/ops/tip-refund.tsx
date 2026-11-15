@@ -8,7 +8,7 @@ import { ActionOutcome, type ActionOutcomeState } from './action-outcome';
 import { ReasonAction } from './reason-action';
 
 /**
- * Staff "Refund tip…" (owner, 14 Nov 2026), behind TIP_REFUNDS. Says exactly what the supporter
+ * Staff "Refund tip…" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch. Says exactly what the supporter
  * gets back (the tip minus TipMe's fee, which TipMe keeps) and who gives back what, then asks with
  * a written reason; a second person approves. Our payment partner is never named.
  */

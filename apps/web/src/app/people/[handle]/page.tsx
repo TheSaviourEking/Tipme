@@ -18,10 +18,12 @@ import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
+import { getDisplaySettings } from '@/lib/display-settings-api';
 import { getPaymentMode } from '@/lib/payment-mode-api';
 import { profileTippingClosed } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
-import { loadPublicProfile } from '@/lib/profiles-api';
+import { CampaignTop } from '@/components/profile/campaign-top';
+import { getPublicCampaignPage, loadPublicProfile } from '@/lib/profiles-api';
 import ProfileUnavailable from './not-found';
 
 // Wait for the cached page rather than stream a silhouette: the name and photo are in the first
@@ -30,30 +32,43 @@ import ProfileUnavailable from './not-found';
 export const instant = false;
 
 type Props = {
-  params: Promise<{ handle: string }>;
+  // `campaign` only on /@handle/<ending> (the [campaign] route re-exports this page).
+  params: Promise<{ handle: string; campaign?: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function generateMetadata({ params }: Props) {
-  const profile = await loadPublicProfile((await params).handle);
+  const { handle, campaign } = await params;
+  const profile = await loadPublicProfile(handle);
   // Says nothing about the page: not "unavailable", and no robots rule of its own.
   if (profile === 'unreachable') return { title: 'Let’s try that again' };
   const copy = paymentModeCopy(await getPaymentMode());
-  return profile && !('movedTo' in profile)
-    ? previewMetadata(
-        `${profile.displayName} on TipMe`,
-        `${profile.role ?? 'A TipMe recipient'}.${copy.profileMetaSuffix}`,
-        `/@${profile.handle}`,
-        {
-          url: `/people/${profile.handle}/share-card`,
-          alt: `${profile.displayName} on TipMe`,
-        },
-      )
-    : { title: 'Page unavailable', robots: { index: false, follow: false } };
+  if (!profile || 'movedTo' in profile)
+    return {
+      title: 'Page unavailable',
+      robots: { index: false, follow: false },
+    };
+  const base = previewMetadata(
+    `${profile.displayName} on TipMe`,
+    `${profile.role ?? 'A TipMe recipient'}.${copy.profileMetaSuffix}`,
+    `/@${profile.handle}`,
+    {
+      url: `/people/${profile.handle}/share-card`,
+      alt: `${profile.displayName} on TipMe`,
+    },
+  );
+  // A campaign's own page (ruling 10): not indexed, links followed, canonical the main page.
+  return campaign && (await getPublicCampaignPage(profile.handle, campaign))
+    ? {
+        ...base,
+        robots: { index: false, follow: true },
+        alternates: { canonical: `/@${profile.handle}` },
+      }
+    : base;
 }
 
 export default async function ProfilePage({ params, searchParams }: Props) {
-  const { handle } = await params;
+  const { handle, campaign } = await params;
   const profile = await loadPublicProfile(handle);
   if (profile === 'unreachable')
     return <PageRetry href={movedProfilePath(handle, await searchParams)} />;
@@ -66,7 +81,11 @@ export default async function ProfilePage({ params, searchParams }: Props) {
   const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
   const mode = await getPaymentMode();
   const copy = paymentModeCopy(mode);
-  const pilotShown = pilotNoticeShown(process.env, mode);
+  const pilotShown = pilotNoticeShown(
+    await getDisplaySettings(),
+    process.env,
+    mode,
+  );
   // Closed checkout outranks the owner's own setup: nobody can tip yet.
   const opensSoon = !copy.payable || profileTippingClosed(mode, profile);
   const takesTips = !opensSoon && profile.acceptingTips !== false;
@@ -79,12 +98,17 @@ export default async function ProfilePage({ params, searchParams }: Props) {
       coverDesign: null,
       coverColour: null,
     });
+  // A campaign's own page (Pro): its top and cover change; the person and tip area never do.
+  const campaignPage = campaign
+    ? await getPublicCampaignPage(profile.handle, campaign)
+    : null;
+  const shownCover = campaignPage?.cover ?? cover;
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
       <div className="profile-sheet">
-        <ProfileCover cover={cover} priority animate />
-        {cover.kind === 'animated' && cover.play !== 'still' ? (
+        <ProfileCover cover={shownCover} priority animate />
+        {shownCover.kind === 'animated' && shownCover.play !== 'still' ? (
           <CoverFreeze />
         ) : null}
         <div className="profile-columns">
@@ -95,6 +119,9 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             celebrationLabel={
               takesTips ? (profile.celebration?.label ?? null) : null
             }
+            {...(campaignPage
+              ? { after: <CampaignTop page={campaignPage} /> }
+              : {})}
           />
           <aside
             className="profile-composer tip-instrument"
@@ -136,6 +163,14 @@ export default async function ProfilePage({ params, searchParams }: Props) {
           </aside>
         </div>
         <footer className="profile-foot">
+          {campaignPage && (
+            <p className="profile-foot__campaign">
+              Tips go to {firstName}.{' '}
+              <Link href={`/@${profile.handle}`}>
+                See {firstName}’s main page
+              </Link>
+            </p>
+          )}
           <div className="profile-foot__quiet">
             <ReportPage handle={profile.handle} />
             <Link href="/legal/privacy">Privacy</Link>

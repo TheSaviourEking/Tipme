@@ -14,7 +14,7 @@ import { reverseTip } from './reversals.js';
 import { recordTransition } from './transitions.js';
 
 /*
- * Staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS (off by default). TipMe keeps its fee:
+ * Staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` switch (off by default). TipMe keeps its fee:
  * the supporter gets back the tip minus TipMe's fee on that tip's quote, which is exactly what its
  * recipients received. Staff ask and a second person approves (`tip.refund`, a serious action);
  * approving only records the refund (REQUESTED). The worker asks our payment partner once, as the

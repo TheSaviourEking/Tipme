@@ -4,7 +4,7 @@ import { payAtBusiness } from './business-fixtures';
 import { enrolOwner, sql } from './ops-helpers';
 
 // Owner, 14 Nov 2026: staff refund a tip from admin, and the supporter is given back the tip minus
-// TipMe's fee (TipMe keeps its fee). The e2e stack has TIP_REFUNDS on; it is off everywhere else.
+// TipMe's fee (TipMe keeps its fee). The e2e stack seeds the tip_refunds switch on (TIP_REFUNDS, playwright.config.ts); it is off everywhere else.
 
 test('staff see exactly what goes back and who gives it, and ask with a reason', async ({
   page,

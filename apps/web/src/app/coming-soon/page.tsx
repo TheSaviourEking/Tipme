@@ -3,11 +3,12 @@ import { connection } from 'next/server';
 import { HEART_MARK, Wordmark } from '@/components/brand';
 import { LAGOS_LAUNCH_TARGET, launchIso, launchLabel } from '@/lib/countdown';
 import { siteOrigin } from '@/lib/metadata';
-import { parseProductionLaunchAt } from '@/lib/production-launch';
+import { launchTargetFrom } from '@/lib/display-settings';
+import { getDisplaySettings } from '@/lib/display-settings-api';
 import { Countdown } from './countdown';
 
 export const metadata: Metadata = {
-  title: 'A little thanks is almost here',
+  title: 'A little tip is almost here',
   description: 'TipMe opens at midnight in Lagos.',
   robots: { index: false, follow: false, nocache: true },
 };
@@ -18,7 +19,7 @@ export const instant = false;
 export default async function ComingSoonPage() {
   await connection();
   const target =
-    parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT) ??
+    launchTargetFrom(await getDisplaySettings(), process.env) ??
     Date.parse(LAGOS_LAUNCH_TARGET);
 
   return (
@@ -28,7 +29,7 @@ export default async function ComingSoonPage() {
         <div className="coming-soon__stage">
           <div className="coming-soon__intro">
             <p className="coming-soon__eyebrow">Coming soon</p>
-            <h1 id="coming-soon-title">A little thanks is almost here.</h1>
+            <h1 id="coming-soon-title">A little tip is almost here.</h1>
             <p className="coming-soon__lede">
               TipMe opens at midnight in Lagos.
             </p>

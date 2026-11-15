@@ -54,6 +54,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/b/{business}/{location}/{handle}',
   'GET /v1/business-logos/{businessId}/{file}',
   'GET /v1/covers/{profileId}/{file}',
+  // Page Studio photos: only a crop the published design of a live Pro page uses; never a master.
+  'GET /v1/studio-images/{profileId}/{imageId}/{version}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
   'GET /v1/mail/unsubscribe',
@@ -61,6 +63,8 @@ const PUBLIC_REVIEWED = [
   // Paid Pro (ADR-0015): the monthly price, read only and cached publicly; nothing private.
   'GET /v1/pro/price',
   'GET /v1/profiles/{handle}',
+  // Campaign pages (Pro): a campaign's headline, description and cover; read-only, no session.
+  'GET /v1/profiles/{handle}/campaigns/{slug}',
   'POST /v1/profiles/{handle}/report',
   'GET /v1/qr-art/previews/{file}',
   'POST /v1/tip-intents',

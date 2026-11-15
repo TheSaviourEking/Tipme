@@ -89,7 +89,8 @@ test(
     expect(size.height).toBeGreaterThanOrEqual(44);
     await expect(close).toBeFocused();
     // The action to start is pinned to the bottom of the screen.
-    const create = nav.getByRole('link', { name: 'Claim your username' });
+    // Business sign-up is on in the e2e stack: the action reads "Get tipped".
+    const create = nav.getByRole('link', { name: 'Get tipped' });
     const end = await create.boundingBox();
     expect((end?.y ?? 0) + (end?.height ?? 0)).toBeGreaterThan(covered.vh - 40);
     // Tab goes round inside the menu and never reaches the page beneath.

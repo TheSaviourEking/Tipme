@@ -4,7 +4,7 @@ import {
 } from './state-machines.js';
 
 /**
- * A staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS. TipMe keeps its fee: the supporter
+ * A staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch. TipMe keeps its fee: the supporter
  * gets back the tip minus TipMe's fee on that tip's quote, which is exactly what its recipients
  * received (`recipientNetMinor`). At a business, the person gives back their part and the business
  * its share (`businessShareMinor`), each exactly what it received, together the refund.

@@ -6,6 +6,7 @@ import {
   tipAsVisitor,
 } from './helpers';
 import { LONG_NAME, UNBROKEN_NAME } from './profile-fixtures';
+import { WITHDRAWALS_SPREAD_MS } from '../../apps/web/src/lib/live-refetch';
 import {
   enrolOwner,
   noOtherStaff,
@@ -809,8 +810,10 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
 
   const history = watching.getByRole('region', { name: 'Your withdrawals' });
   const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
-  // Requested, then paid: the pretend partner pays within seconds.
-  await expect(row).toBeVisible({ timeout: 10_000 });
+  // Requested, then paid: the pretend partner pays within seconds. This tab knows of no withdrawal
+  // on its way (its list was empty), so by design it re-reads a `withdrawals.changed` only after a
+  // random 0-10 s spread (live-refetch.ts), plus the debounce and the read itself.
+  await expect(row).toBeVisible({ timeout: WITHDRAWALS_SPREAD_MS + 10_000 });
   await expect(row.getByText('Paid', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
@@ -893,12 +896,23 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
   await page.goto('/dashboard/withdraw');
   await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,860');
   await page.getByLabel('Amount (NGN)').fill('1860');
-  // The figure changes only from the dashboard's own answer, re-read after the request.
-  const reread = page.waitForResponse(
-    (response) =>
-      response.url().endsWith('/v1/me/dashboard') &&
-      response.request().method() === 'GET',
-  );
+  // The figure changes only from the dashboard's own answer, re-read after the request. A read a
+  // late tip signal started can land beside the request with the old balance (burn-in, 14 Nov
+  // 2026), so this waits for the answer that says ₦0, not for the first answer.
+  const balances: string[] = [];
+  page.on('response', (response) => {
+    if (
+      !response.url().endsWith('/v1/me/dashboard') ||
+      response.request().method() !== 'GET'
+    )
+      return;
+    void response
+      .json()
+      .then((body: { data: { availableMinor: string } }) =>
+        balances.push(body.data.availableMinor),
+      )
+      .catch(() => undefined);
+  });
   await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
   const done = page.locator('.tm-slip--done');
   await expect(done).toHaveAttribute('role', 'status');
@@ -909,10 +923,7 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
   await expect(
     done.getByRole('link', { name: 'Back to your dashboard' }),
   ).toHaveAttribute('href', '/dashboard');
-  const after = (await (await reread).json()) as {
-    data: { availableMinor: string };
-  };
-  expect(after.data.availableMinor).toBe('0');
+  await expect.poll(() => balances).toContain('0');
   await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
   await expectAccessible(page);
 });

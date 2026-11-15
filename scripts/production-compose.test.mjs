@@ -71,6 +71,9 @@ test(
       'LIVE_HEARTBEAT_MS',
       // The mock provider's secret: production never runs the mock provider.
       'MOCK_PROVIDER_WEBHOOK_SECRET',
+      // A tunable with a code default (owner, 14 Nov 2026, #216: deploy settings are secrets and
+      // addresses only); still an override in the schema for an emergency.
+      'ANNOUNCEMENT_SENDS_PER_MINUTE',
     ]);
     const services = {
       api: ['api-blue', 'api-green'],
@@ -88,7 +91,7 @@ test(
       for (const name of names) {
         const passed = config.services[name].environment;
         const missing = read.filter(
-          (k) => !(k in passed) && !deliberate.has(k),
+          (k) => !(k in passed) && !deliberate.has(k) && !CODE_DEFAULT_ONLY(k),
         );
         assert.deepEqual(missing, [], `${name} settings missing from compose`);
         for (const key of deliberate)
@@ -251,7 +254,10 @@ test('production.env.example names every ${VAR} the compose file reads, with no 
   const values = new Map(
     lines.map((l) => [l.split('=')[0], l.slice(l.indexOf('=') + 1)]),
   );
-  const missing = [...new Set(readVars)].filter((v) => !values.has(v));
+  // The moved switches are forwarded for one release only, as seeds (SEED_ONLY below).
+  const missing = [...new Set(readVars)].filter(
+    (v) => !values.has(v) && !SEED_ONLY.includes(v),
+  );
   assert.deepEqual(
     missing,
     [],
@@ -337,4 +343,146 @@ test('every app service notices a dead connection soon', { skip }, () => {
       '8',
       name,
     );
+});
+
+// Feature switches (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md): set in admin now. The
+// compose files forward the old variables for one release, so the first start seeds each switch from
+// the server's current value; nothing defaults them here. The examples no longer name them.
+export const SEED_ONLY = [
+  'PRO_BILLING_ENABLED',
+  'PRO_PAY_FROM_BALANCE',
+  'PRO_REFUNDS',
+  'PRO_AUTO_RENEW',
+  'BUSINESS_ENABLED',
+  'BUSINESS_SHARES_ENABLED',
+  'TEAM_TIPS_ENABLED',
+  'ANALYTICS_ENABLED',
+  'ADULT_PLATFORM_LINKS',
+  'SUPPORTER_RECOGNITION',
+];
+
+test('the env examples no longer name the switches that moved to admin', () => {
+  for (const file of ['production.env.example', 'staging.env.example']) {
+    const example = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY)
+      assert.doesNotMatch(
+        example,
+        new RegExp(`^${name}=`, 'm'),
+        `${file} still sets ${name}`,
+      );
+    assert.match(
+      example,
+      /settings-and-switches\.md/,
+      `${file} says where they went`,
+    );
+  }
+});
+
+test('compose forwards each moved switch for one release, with no default of its own', () => {
+  for (const file of ['compose.production.yml', 'compose.staging.yml']) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    for (const name of SEED_ONLY) {
+      const uses = [
+        ...text.matchAll(new RegExp(`\\$\\{${name}([^}]*)\\}`, 'g')),
+      ];
+      assert.ok(uses.length > 0, `${file} no longer forwards ${name}`);
+      for (const use of uses)
+        assert.equal(
+          use[1],
+          ':-',
+          `${file}: ${name} must default to blank (seed only)`,
+        );
+    }
+  }
+});
+
+// Page Studio is the `page_studio` switch alone (owner, 14 Nov 2026: as few variables as possible). It
+// never shipped as a setting, so no deploy file forwards, defaults or documents a variable for it.
+test('no deploy file names PAGE_STUDIO_ENABLED: Page Studio is set in admin only', () => {
+  for (const file of [
+    'compose.production.yml',
+    'compose.staging.yml',
+    'production.env.example',
+    'staging.env.example',
+  ]) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    assert.doesNotMatch(text, /PAGE_STUDIO_ENABLED/, `${file} names it`);
+  }
+});
+
+// Owner, 14 Nov 2026 (#216): limits and money tunables take the code's defaults on every copy. The
+// config keeps each as an optional override, for tests and emergencies; the deploy files name none.
+export const CODE_DEFAULT_ONLY = (name) =>
+  name.startsWith('RATE_LIMIT_') ||
+  name === 'PARTNER_QUOTE_CACHE_SECONDS' ||
+  name === 'BACHS_RESERVE_ALERT_MINOR';
+
+test('rate limits and money tunables are in no deploy file: the code defaults are the values', () => {
+  for (const file of [
+    'compose.production.yml',
+    'compose.staging.yml',
+    'production.env.example',
+    'staging.env.example',
+  ]) {
+    const text = readFileSync(
+      new URL(`../deploy/${file}`, import.meta.url),
+      'utf8',
+    );
+    const named = [...text.matchAll(/\b([A-Z][A-Z0-9_]+)\b/g)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.deepEqual([...new Set(named)], [], `${file} still names them`);
+  }
+  // Still overridable: the schemas keep them.
+  for (const service of ['api', 'worker']) {
+    const source = readFileSync(
+      new URL(`../apps/${service}/src/config.ts`, import.meta.url),
+      'utf8',
+    );
+    const kept = [...source.matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm)]
+      .map((m) => m[1])
+      .filter(CODE_DEFAULT_ONLY);
+    assert.ok(kept.length > 0, `${service} lost its overrides`);
+  }
+});
+
+// The owner, 14 Nov 2026 (#216): keep deploy settings to a minimum. Secrets and the sender stay;
+// tunables and dev toggles use code defaults (still overridable in the config schemas).
+test('announcement email: secrets and the sender are deploy settings, tunables are not', () => {
+  const files = [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+    'deploy/production.env.example',
+    'deploy/staging.env.example',
+  ].map((path) => [
+    path,
+    readFileSync(new URL(`../${path}`, import.meta.url), 'utf8'),
+  ]);
+  for (const [path, text] of files) {
+    for (const tunable of [
+      'ANNOUNCEMENT_SENDS_PER_MINUTE',
+      'BREVO_SANDBOX',
+      'BREVO_API_BASE',
+    ])
+      assert.doesNotMatch(
+        text,
+        new RegExp(`\\b${tunable}\\b`),
+        `${path}: ${tunable}`,
+      );
+    for (const setting of [
+      'BREVO_API_KEY',
+      'BREVO_WEBHOOK_TOKEN',
+      'ANNOUNCEMENT_FROM_ADDRESS',
+    ])
+      assert.match(text, new RegExp(`\\b${setting}\\b`), `${path}: ${setting}`);
+  }
 });

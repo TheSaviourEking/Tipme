@@ -1574,6 +1574,40 @@
             "session": []
           }
         ]
+      },
+      "get": {
+        "operationId": "Account.account",
+        "tags": [
+          "Account"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
       }
     },
     "/v1/me/activity": {
@@ -1778,6 +1812,10 @@
                       "address"
                     ],
                     "additionalProperties": false
+                  },
+                  "ownerName": {
+                    "type": "string",
+                    "maxLength": 480
                   }
                 },
                 "required": [
@@ -3977,6 +4015,46 @@
         ]
       }
     },
+    "/v1/me/businesses/{id}/verified-seen": {
+      "post": {
+        "operationId": "BusinessManage.verifiedSeen",
+        "tags": [
+          "BusinessManage"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Done; no body."
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/campaigns": {
       "get": {
         "operationId": "Insights.campaigns",
@@ -4145,6 +4223,153 @@
                 },
                 "required": [
                   "name"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/campaigns/{id}/page": {
+      "put": {
+        "operationId": "Insights.savePage",
+        "tags": [
+          "Insights"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "on": {
+                    "type": "boolean"
+                  },
+                  "headline": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 480
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 1600
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "cover": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "design": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "colour": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "animation": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "maxLength": 40
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "motion": {
+                            "type": "string",
+                            "enum": [
+                              "once",
+                              "loop"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "design"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "on",
+                  "headline",
+                  "description",
+                  "cover"
                 ],
                 "additionalProperties": false
               }
@@ -5301,6 +5526,9 @@
                   },
                   "tipSound": {
                     "type": "boolean"
+                  },
+                  "newsEmails": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -5605,7 +5833,36 @@
                 "properties": {
                   "country": {
                     "type": "string",
-                    "pattern": "^[A-Z]{2}$"
+                    "enum": [
+                      "NG",
+                      "AT",
+                      "BE",
+                      "CA",
+                      "HR",
+                      "CY",
+                      "EE",
+                      "FI",
+                      "FR",
+                      "DE",
+                      "GH",
+                      "GR",
+                      "IE",
+                      "IT",
+                      "KE",
+                      "LV",
+                      "LT",
+                      "LU",
+                      "MT",
+                      "NL",
+                      "PT",
+                      "SK",
+                      "SI",
+                      "ES",
+                      "TZ",
+                      "UG",
+                      "GB",
+                      "US"
+                    ]
                   },
                   "entityType": {
                     "type": "string",
@@ -5616,7 +5873,6 @@
                   }
                 },
                 "required": [
-                  "country",
                   "entityType"
                 ],
                 "additionalProperties": false
@@ -7109,6 +7365,945 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio": {
+      "get": {
+        "operationId": "Studio.get",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio-images/{imageId}/{version}/{file}": {
+      "get": {
+        "operationId": "Studio.own",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/draft": {
+      "delete": {
+        "operationId": "Studio.discard",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      },
+      "put": {
+        "operationId": "Studio.save",
+        "tags": [
+          "Studio"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rev": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "draft": {
+                    "type": "object",
+                    "properties": {
+                      "v": {
+                        "type": "number",
+                        "const": 1
+                      },
+                      "brand": {
+                        "anyOf": [
+                          {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "items": false,
+                            "minItems": 1,
+                            "maxItems": 1
+                          },
+                          {
+                            "type": "array",
+                            "prefixItems": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "string"
+                              }
+                            ],
+                            "items": false,
+                            "minItems": 2,
+                            "maxItems": 2
+                          }
+                        ]
+                      },
+                      "mode": {
+                        "type": "string",
+                        "enum": [
+                          "light",
+                          "dark",
+                          "auto"
+                        ]
+                      },
+                      "fonts": {
+                        "type": "object",
+                        "properties": {
+                          "heading": {
+                            "type": "string",
+                            "enum": [
+                              "manrope",
+                              "dm-serif-display",
+                              "inter",
+                              "work-sans",
+                              "space-grotesk",
+                              "bricolage-grotesque",
+                              "outfit",
+                              "nunito",
+                              "fraunces",
+                              "source-serif-4"
+                            ]
+                          },
+                          "body": {
+                            "type": "string",
+                            "enum": [
+                              "manrope",
+                              "dm-serif-display",
+                              "inter",
+                              "work-sans",
+                              "space-grotesk",
+                              "bricolage-grotesque",
+                              "outfit",
+                              "nunito",
+                              "fraunces",
+                              "source-serif-4"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "heading",
+                          "body"
+                        ],
+                        "additionalProperties": false
+                      },
+                      "scale": {
+                        "type": "string",
+                        "enum": [
+                          "standard",
+                          "compact",
+                          "roomy"
+                        ]
+                      },
+                      "corners": {
+                        "type": "string",
+                        "enum": [
+                          "soft",
+                          "square",
+                          "round"
+                        ]
+                      },
+                      "rows": {
+                        "maxItems": 12,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[a-z0-9]{8}$"
+                            },
+                            "columns": {
+                              "type": "string",
+                              "enum": [
+                                "1",
+                                "1-1",
+                                "2-1",
+                                "1-2",
+                                "1-1-1"
+                              ]
+                            },
+                            "spacing": {
+                              "type": "string",
+                              "enum": [
+                                "m",
+                                "s",
+                                "l"
+                              ]
+                            },
+                            "background": {
+                              "anyOf": [
+                                {
+                                  "type": "string",
+                                  "enum": [
+                                    "page",
+                                    "card",
+                                    "colour",
+                                    "second"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "photo": {
+                                      "type": "string",
+                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "photo"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "cells": {
+                              "minItems": 1,
+                              "maxItems": 3,
+                              "type": "array",
+                              "items": {
+                                "maxItems": 3,
+                                "type": "array",
+                                "items": {
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "text"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "paragraph",
+                                            "heading",
+                                            "lead"
+                                          ]
+                                        },
+                                        "level": {
+                                          "anyOf": [
+                                            {
+                                              "type": "number",
+                                              "const": 2
+                                            },
+                                            {
+                                              "type": "number",
+                                              "const": 3
+                                            }
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "photo"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "square",
+                                            "wide",
+                                            "tall",
+                                            "circle"
+                                          ]
+                                        },
+                                        "imageId": {
+                                          "type": "string",
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                        },
+                                        "alt": {
+                                          "type": "string"
+                                        },
+                                        "decorative": {
+                                          "type": "boolean",
+                                          "const": true
+                                        },
+                                        "caption": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "imageId",
+                                        "alt"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "gallery"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "grid",
+                                            "strip",
+                                            "mosaic"
+                                          ]
+                                        },
+                                        "images": {
+                                          "maxItems": 9,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "imageId": {
+                                                "type": "string",
+                                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                              },
+                                              "alt": {
+                                                "type": "string"
+                                              },
+                                              "decorative": {
+                                                "type": "boolean",
+                                                "const": true
+                                              }
+                                            },
+                                            "required": [
+                                              "imageId",
+                                              "alt"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "images"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "video"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "still"
+                                        },
+                                        "url": {
+                                          "type": "string",
+                                          "maxLength": 300
+                                        },
+                                        "caption": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "url"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "services"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "list",
+                                            "cards"
+                                          ]
+                                        },
+                                        "items": {
+                                          "maxItems": 12,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "name": {
+                                                "type": "string"
+                                              },
+                                              "detail": {
+                                                "type": "string"
+                                              },
+                                              "priceMinor": {
+                                                "type": "string"
+                                              },
+                                              "from": {
+                                                "type": "boolean",
+                                                "const": true
+                                              }
+                                            },
+                                            "required": [
+                                              "name",
+                                              "priceMinor"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "items"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "events"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "list",
+                                            "cards"
+                                          ]
+                                        },
+                                        "items": {
+                                          "maxItems": 6,
+                                          "type": "array",
+                                          "items": {
+                                            "type": "object",
+                                            "properties": {
+                                              "date": {
+                                                "type": "string"
+                                              },
+                                              "time": {
+                                                "type": "string",
+                                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                              },
+                                              "title": {
+                                                "type": "string"
+                                              },
+                                              "place": {
+                                                "type": "string"
+                                              },
+                                              "note": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "date",
+                                              "title"
+                                            ],
+                                            "additionalProperties": false
+                                          }
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "items"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "links"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "buttons",
+                                            "icons"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "quote"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "enum": [
+                                            "plain",
+                                            "band"
+                                          ]
+                                        },
+                                        "text": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant",
+                                        "text"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "about"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "plain"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "pattern": "^[a-z0-9]{8}$"
+                                        },
+                                        "kind": {
+                                          "type": "string",
+                                          "const": "supporters"
+                                        },
+                                        "variant": {
+                                          "type": "string",
+                                          "const": "names"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "kind",
+                                        "variant"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "columns",
+                            "spacing",
+                            "background",
+                            "cells"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "v",
+                      "brand",
+                      "mode",
+                      "fonts",
+                      "scale",
+                      "corners",
+                      "rows"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "rev",
+                  "draft"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "studio_drafts",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/images": {
+      "post": {
+        "operationId": "Studio.upload",
+        "tags": [
+          "Studio"
+        ],
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/images/{imageId}/focus": {
+      "put": {
+        "operationId": "Studio.focus",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "focalX": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "focalY": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100
+                  }
+                },
+                "required": [
+                  "focalX",
+                  "focalY"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "avatars",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/studio/publish": {
+      "post": {
+        "operationId": "Studio.publish",
+        "tags": [
+          "Studio"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rev": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "rev"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "studio_drafts",
         "security": [
           {
             "session": []
@@ -9209,6 +10404,644 @@
         "x-tipme-permission": "recoveries.manage"
       }
     },
+    "/v1/ops/announcements": {
+      "get": {
+        "operationId": "OpsAnnouncements.list",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      },
+      "post": {
+        "operationId": "OpsAnnouncements.create",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/preview": {
+      "post": {
+        "operationId": "OpsAnnouncements.preview",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}": {
+      "get": {
+        "operationId": "OpsAnnouncements.read",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      },
+      "put": {
+        "operationId": "OpsAnnouncements.edit",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "preheader": {
+                    "type": "string",
+                    "minLength": 0,
+                    "maxLength": 150
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 5000
+                  },
+                  "buttonLabel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 40
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "buttonUrl": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 500
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "audience": {
+                    "type": "string",
+                    "enum": [
+                      "everyone",
+                      "free",
+                      "pro",
+                      "business_owners"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "news",
+                      "service"
+                    ]
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "subject",
+                  "preheader",
+                  "text",
+                  "buttonLabel",
+                  "buttonUrl",
+                  "audience",
+                  "kind",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/cancel": {
+      "post": {
+        "operationId": "OpsAnnouncements.cancel",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/send": {
+      "post": {
+        "operationId": "OpsAnnouncements.send",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "reason",
+                  "revision"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
+    "/v1/ops/announcements/{id}/test": {
+      "post": {
+        "operationId": "OpsAnnouncements.test",
+        "tags": [
+          "OpsAnnouncements"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "announcements.send"
+      }
+    },
     "/v1/ops/approvals": {
       "get": {
         "operationId": "OpsApprovals.list",
@@ -9865,6 +11698,107 @@
         "x-tipme-permission": "issues.resolve"
       }
     },
+    "/v1/ops/business-pro-price": {
+      "get": {
+        "operationId": "OpsBusinessProPrice.state",
+        "tags": [
+          "OpsBusinessProPrice"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
+      },
+      "post": {
+        "operationId": "OpsBusinessProPrice.change",
+        "tags": [
+          "OpsBusinessProPrice"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "amountMinor": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,11}$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "amountMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pro.price"
+      }
+    },
     "/v1/ops/businesses": {
       "get": {
         "operationId": "OpsBusinesses.list",
@@ -10019,6 +11953,84 @@
           }
         ],
         "x-tipme-permission": "search.view"
+      }
+    },
+    "/v1/ops/businesses/{id}/owners/{managerId}/remove": {
+      "post": {
+        "operationId": "OpsBusinesses.removeOwner",
+        "tags": [
+          "OpsBusinesses"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "managerId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "businesses.manage"
       }
     },
     "/v1/ops/businesses/{id}/restore": {
@@ -13389,6 +15401,138 @@
         "x-tipme-permission": "pages.plan"
       }
     },
+    "/v1/ops/pages/{profileId}/studio-images/{imageId}": {
+      "get": {
+        "operationId": "OpsPages.studioImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
+    "/v1/ops/pages/{profileId}/studio-images/{imageId}/remove": {
+      "post": {
+        "operationId": "OpsPages.removeStudioImage",
+        "tags": [
+          "OpsPages"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "pages.suspend"
+      }
+    },
     "/v1/ops/pages/{profileId}/suspend": {
       "post": {
         "operationId": "OpsActions.suspend",
@@ -14715,7 +16859,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 24,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14743,7 +16887,9 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -14827,7 +16973,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 24,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -14855,7 +17001,9 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -14994,7 +17142,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 24,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15022,7 +17170,9 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -15141,7 +17291,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 24,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15169,12 +17319,14 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 24,
+                    "maxItems": 26,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -15202,7 +17354,9 @@
                         "businesses.manage",
                         "changelog.edit",
                         "changelog.publish",
-                        "pro.price"
+                        "pro.price",
+                        "switches.manage",
+                        "announcements.send"
                       ]
                     }
                   }
@@ -15532,6 +17686,200 @@
           }
         ],
         "x-tipme-permission": "staff.manage"
+      }
+    },
+    "/v1/ops/switches": {
+      "get": {
+        "operationId": "OpsSwitches.list",
+        "tags": [
+          "OpsSwitches"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "switches.manage"
+      }
+    },
+    "/v1/ops/switches/display/{key}": {
+      "post": {
+        "operationId": "OpsSwitches.setDisplay",
+        "tags": [
+          "OpsSwitches"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "value": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "reason",
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "switches.manage"
+      }
+    },
+    "/v1/ops/switches/{key}": {
+      "post": {
+        "operationId": "OpsSwitches.set",
+        "tags": [
+          "OpsSwitches"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "on": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "on"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "switches.manage"
       }
     },
     "/v1/ops/tips/{tipId}/refund": {
@@ -16051,6 +18399,221 @@
         "x-tipme-permission": "usernames.manage"
       }
     },
+    "/v1/ops/users": {
+      "get": {
+        "operationId": "OpsPeople.list",
+        "tags": [
+          "OpsPeople"
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100000
+            }
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "25",
+              "type": "string",
+              "enum": [
+                "25",
+                "50",
+                "100"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "plan",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "free",
+                "pro"
+              ]
+            }
+          },
+          {
+            "name": "pageStatus",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "live",
+                "offline",
+                "suspended",
+                "none"
+              ]
+            }
+          },
+          {
+            "name": "payouts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "set_up",
+                "not_set_up"
+              ]
+            }
+          },
+          {
+            "name": "joinedFrom",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "joinedTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "default": "newest",
+              "type": "string",
+              "enum": [
+                "newest",
+                "oldest",
+                "name",
+                "most_tips"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "search.view"
+      }
+    },
+    "/v1/ops/users/{id}/reveal": {
+      "post": {
+        "operationId": "OpsPeople.reveal",
+        "tags": [
+          "OpsPeople"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "private.view"
+      }
+    },
     "/v1/ops/users/{userId}/cancel-recovery": {
       "post": {
         "operationId": "OpsActions.cancelRecovery",
@@ -16327,6 +18890,55 @@
         "x-tipme-access": "public"
       }
     },
+    "/v1/profiles/{handle}/campaigns/{slug}": {
+      "get": {
+        "operationId": "PublicProfile.campaignPage",
+        "tags": [
+          "PublicProfile"
+        ],
+        "parameters": [
+          {
+            "name": "handle",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
+      }
+    },
     "/v1/profiles/{handle}/report": {
       "post": {
         "operationId": "PublicProfile.report",
@@ -16514,6 +19126,71 @@
           }
         },
         "x-tipme-access": "release-token"
+      }
+    },
+    "/v1/studio-images/{profileId}/{imageId}/{version}/{file}": {
+      "get": {
+        "operationId": "Studio.serve",
+        "tags": [
+          "Studio"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "imageId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/tip-intents": {
@@ -17157,6 +19834,7 @@
                   "EMAIL_VERIFICATION_REQUIRED",
                   "PAYMENT_ACCOUNT_REQUIRED",
                   "PROVIDER_OUTCOME_UNKNOWN",
+                  "COUNTRY_NOT_SUPPORTED",
                   "PAYMENT_START_REJECTED",
                   "TIPPING_NOT_OPEN",
                   "NO_CONFIRMED_TEST",
@@ -17185,6 +19863,11 @@
                   "CHANGELOG_EDITED_ELSEWHERE",
                   "CHANGELOG_TEXT_NOT_ALLOWED",
                   "CHANGELOG_NOT_FOUND",
+                  "ANNOUNCEMENT_NOT_FOUND",
+                  "ANNOUNCEMENT_EDITED_ELSEWHERE",
+                  "ANNOUNCEMENT_NOT_DRAFT",
+                  "ANNOUNCEMENT_NO_RECIPIENTS",
+                  "ANNOUNCEMENT_EMAIL_NOT_SET_UP",
                   "PRO_PRICE_NOT_SET",
                   "PRO_PRICE_CHANGED",
                   "PRO_PURCHASE_OPEN",
@@ -17233,7 +19916,10 @@
                   "MEMBER_NOT_TIPPABLE",
                   "NOTE_NOT_OPEN",
                   "BUSINESS_LAST_OWNER",
+                  "OWNER_REMOVAL_NEEDS_TIPME",
                   "BUSINESS_NOT_VERIFIED",
+                  "BUSINESS_STAFF_LIMIT",
+                  "BUSINESS_LOCATION_LIMIT",
                   "SHARE_NOT_ALLOWED",
                   "SHARE_CHANGE_TOO_SOON",
                   "SHARE_NOT_OPEN",
@@ -17246,7 +19932,15 @@
                   "CAMPAIGN_LIMIT",
                   "CAMPAIGN_SLUG_TAKEN",
                   "CAMPAIGN_SLUG_UNAVAILABLE",
+                  "CAMPAIGN_PRO_REQUIRED",
+                  "CAMPAIGN_STOPPED",
+                  "CAMPAIGN_HEADLINE_NAME",
                   "SUPPORT_TOO_MANY_OPEN",
+                  "STUDIO_DRAFT_STALE",
+                  "STUDIO_DESIGN_CHECK_FAILED",
+                  "STUDIO_PRO_REQUIRED",
+                  "IMAGE_TOO_SMALL",
+                  "STUDIO_IMAGE_LIMIT",
                   "INTERNAL_ERROR"
                 ]
               },

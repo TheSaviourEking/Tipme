@@ -11,10 +11,19 @@ import { API_ORIGIN, E2E_REVALIDATE_SECRET } from './stack';
 
 export type Mode = 'test' | 'closed' | 'live';
 
+// Not set in admin (owner, 14 Nov 2026, #216): the stand-in web keeps its own PILOT_NOTICE.
+const DISPLAY = {
+  pilotNotice: { set: false, on: false },
+  launch: { set: false, at: null },
+};
 const RELEASE: Record<Mode, unknown> = {
-  test: { paymentProvider: 'mock', paymentsLive: false },
-  closed: { paymentProvider: 'bachs-live', paymentsLive: false },
-  live: { paymentProvider: 'bachs-live', paymentsLive: true },
+  test: { paymentProvider: 'mock', paymentsLive: false, display: DISPLAY },
+  closed: {
+    paymentProvider: 'bachs-live',
+    paymentsLive: false,
+    display: DISPLAY,
+  },
+  live: { paymentProvider: 'bachs-live', paymentsLive: true, display: DISPLAY },
 };
 
 export const page = (

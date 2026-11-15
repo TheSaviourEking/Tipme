@@ -7,7 +7,7 @@ import {
   type StaffPayoutReader,
 } from '@tipme/database';
 import type { OpsActedAlone, OpsSeriousPending } from '@tipme/contracts';
-import type { MailProviderName } from '@tipme/mail';
+import type { MailProvider, MailProviderName } from '@tipme/mail';
 import type { Logger } from '@tipme/observability';
 import type { BachsProvider, MockProvider } from '@tipme/payments';
 import type { Response } from 'express';
@@ -18,6 +18,7 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import {
+  ANNOUNCEMENT_PROVIDER,
   MAIL_PROVIDERS,
   MAIL_SEALING,
   type MailProviders,
@@ -38,6 +39,7 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
     PAYMENT_PROVIDER_TOKEN,
     BACHS_PROVIDER_TOKEN,
     LOGGER,
+    ANNOUNCEMENT_PROVIDER,
   ],
   useFactory: (
     config: ApiConfig,
@@ -46,20 +48,19 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
     mock: MockProvider,
     bachs: BachsProvider | null,
     logger: Logger,
+    announcements: MailProvider | null,
   ): SeriousActionServices => {
     registerRealSeriousActions();
     return {
       sealing,
       authCodeSecret: config.AUTH_CODE_SECRET,
+      announcementSender: announcements?.name ?? null,
       payoutReader: (name): StaffPayoutReader => {
         if (name === 'mock') return mock;
         if (name === 'bachs' && bachs) return bachs;
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
       },
       payoutLog: (entry) => logger.warn({ ...entry }),
-      businessSharesEnabled:
-        config.BUSINESS_ENABLED && config.BUSINESS_SHARES_ENABLED,
-      refundFeeReturn: config.REFUND_FEE_RETURN,
       mail: {
         production:
           config.NODE_ENV === 'production' &&

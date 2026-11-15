@@ -481,20 +481,75 @@ test('the revalidation settings are optional, and checked when given', () => {
   );
 });
 
-test('anonymous analytics is on in production unless set to false (owner, 9 Nov 2026; D-07 open)', () => {
-  const production = {
+// Feature switches (owner, 14 Nov 2026): the worker's two (analytics, auto-renew) are set in admin.
+test('the worker no longer parses ANALYTICS_ENABLED or PRO_AUTO_RENEW; it keeps them only as seeds', async () => {
+  const { readFileSync } = await import('node:fs');
+  // The keys the schema declares, read as the compose tests read them.
+  const declared = [
+    ...readFileSync(
+      new URL('../src/config.ts', import.meta.url),
+      'utf8',
+    ).matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm),
+  ].map((m) => m[1]);
+  const base = {
     REDIS_URL: 'redis://127.0.0.1:6379',
     DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
     MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
     MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
-    NODE_ENV: 'production',
-    DEPLOYMENT_MODE: 'preview',
-    PREVIEW_PASSWORD: 'p'.repeat(32),
+    NODE_ENV: 'test',
   };
-  assert.equal(loadWorkerConfig(production).ANALYTICS_ENABLED, true);
-  assert.equal(
-    loadWorkerConfig({ ...production, ANALYTICS_ENABLED: 'false' })
-      .ANALYTICS_ENABLED,
-    false,
+  const config = loadWorkerConfig({
+    ...base,
+    ANALYTICS_ENABLED: 'false',
+    PRO_AUTO_RENEW: 'on',
+  });
+  for (const name of ['ANALYTICS_ENABLED', 'PRO_AUTO_RENEW']) {
+    assert.ok(!declared.includes(name), `${name} is still in the schema`);
+    assert.ok(!(name in config), `${name} is still parsed`);
+  }
+  assert.deepEqual(config.switchSeeds, {
+    ANALYTICS_ENABLED: 'false',
+    PRO_AUTO_RENEW: 'on',
+  });
+  assert.throws(
+    () => loadWorkerConfig({ ...base, PRO_AUTO_RENEW: 'true' }),
+    /PRO_AUTO_RENEW/,
   );
+});
+
+// Business release 2, option B (#193): the worker reads the `business`, `business_shares` and
+// `refund_fee_return` admin switches, not variables of its own; the share's settle wait is a code
+// value. The old switch variables only seed a switch on a database with no row yet.
+test('the worker has no business-share or refund variables; the switch ones only seed', async () => {
+  const { readFileSync } = await import('node:fs');
+  const declared = [
+    ...readFileSync(
+      new URL('../src/config.ts', import.meta.url),
+      'utf8',
+    ).matchAll(/^ {4}([A-Z][A-Z0-9_]+):/gm),
+  ].map((m) => m[1]);
+  const base = {
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    NODE_ENV: 'test',
+  };
+  const config = loadWorkerConfig({
+    ...base,
+    BUSINESS_SHARES_ENABLED: 'true',
+    REFUND_FEE_RETURN: 'true',
+  });
+  for (const name of [
+    'BUSINESS_SHARES_ENABLED',
+    'REFUND_FEE_RETURN',
+    'BUSINESS_SHARE_SETTLE_HOURS',
+  ]) {
+    assert.ok(!declared.includes(name), `${name} is in the schema`);
+    assert.ok(!(name in config), `${name} is parsed`);
+  }
+  assert.deepEqual(config.switchSeeds, {
+    BUSINESS_SHARES_ENABLED: 'true',
+    REFUND_FEE_RETURN: 'true',
+  });
 });

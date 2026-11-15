@@ -101,7 +101,7 @@ type WithdrawalProvider = PayoutReader &
  * withdrawals, for its owners only. Everything goes through the person's balance-based path in
  * `@tipme/database` (same states, idempotency, holds, switch and partner calls). A location
  * manager, a former owner or anyone else gets 404, as for an unknown business: they see nothing of
- * the money. Behind `BUSINESS_ENABLED` and `BUSINESS_SHARES_ENABLED`, since only shares fill it.
+ * the money. Behind the `business` and `business_shares` switches, since only shares fill it.
  *
  * The full account number passes through to our payment partner and is never stored or logged.
  */

@@ -723,7 +723,7 @@ test('option B: shares and their money', async (t) => {
   );
 
   // Owner, 12 Nov 2026: TipMe returns its fee on EVERY refunded tip once the refund is final
-  // (refund.paid), behind REFUND_FEE_RETURN, keyed on the refund so it happens exactly once.
+  // (refund.paid), behind the refund_fee_return switch, keyed on the refund so it happens exactly once.
   const feeReturns = (tipId) =>
     q(
       `SELECT status, amount_minor::text AS amount, partner_reversal_id AS refund
@@ -906,7 +906,7 @@ test('option B: shares and their money', async (t) => {
   );
 
   await t.test(
-    'with REFUND_FEE_RETURN off, a plain tip’s refund returns nothing',
+    'with the refund_fee_return switch off, a plain tip’s refund returns nothing',
     async () => {
       await database.fresh();
       const tip = await paidTip({ sharesOn: false });

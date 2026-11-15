@@ -1,8 +1,13 @@
 import { z } from 'zod';
+import { PAYMENT_COUNTRY_CODES } from './payment-countries.js';
 
+/**
+ * `country` is needed only to create an account. Without it the request re-checks an account that
+ * already exists (the return from the hosted setup page) and never creates one.
+ */
 export const bachsOnboardingRequestSchema = z
   .object({
-    country: z.string().regex(/^[A-Z]{2}$/),
+    country: z.enum(PAYMENT_COUNTRY_CODES).optional(),
     entityType: z.enum(['individual', 'company']),
   })
   .strict();

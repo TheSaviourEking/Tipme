@@ -18,6 +18,7 @@ import {
   type OpsTipRefundRequest,
 } from '@tipme/contracts';
 import {
+  featureOn,
   requestSeriousAction,
   tipRefundFacts,
   type SeriousActionServices,
@@ -29,7 +30,6 @@ import {
   BACHS_PROVIDER_TOKEN,
   PAYMENT_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
-import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
@@ -41,7 +41,8 @@ import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 /**
- * Staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS (off by default). Staff with
+ * Staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch (a money switch,
+ * off by default). Staff with
  * `payments.repair` see what the supporter gets back (the tip minus TipMe's fee) and who gives back
  * what, and ask with a written reason and a fresh code; a second person decides (`tip.refund`). A
  * tip our payment partner says was paid by bank transfer is refused before anyone asks.
@@ -49,15 +50,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 @Controller('v1/ops/tips')
 export class OpsTipRefundsController {
   constructor(
-    @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(PAYMENT_PROVIDER_TOKEN) private readonly mock: MockProvider,
     @Inject(BACHS_PROVIDER_TOKEN) private readonly bachs: BachsProvider | null,
   ) {}
 
-  private on(tipId: string): void {
-    if (!this.config.TIP_REFUNDS)
+  private async on(tipId: string): Promise<void> {
+    if (!(await featureOn(this.database.db, 'tip_refunds')))
       throw new CodedHttpException(404, 'TIP_REFUNDS_OFF');
     if (!UUID.test(tipId)) throw new CodedHttpException(404, 'NOT_FOUND');
   }
@@ -98,7 +98,7 @@ export class OpsTipRefundsController {
   async read(
     @Param('tipId') tipId: string,
   ): Promise<ApiDataResponse<OpsTipRefund>> {
-    this.on(tipId);
+    await this.on(tipId);
     const facts = await this.facts(tipId);
     return {
       data: {
@@ -135,7 +135,7 @@ export class OpsTipRefundsController {
       | OpsSeriousPending
     >
   > {
-    this.on(tipId);
+    await this.on(tipId);
     const facts = await this.facts(tipId);
     if (!facts.refundable)
       throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');

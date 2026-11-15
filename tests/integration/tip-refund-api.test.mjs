@@ -9,18 +9,19 @@ import {
   WEB,
   browserHeaders,
   opsSignIn,
+  setSwitch,
   startStack,
 } from './helpers.mjs';
 
 /*
- * Staff "Refund tip" over HTTP (owner, 14 Nov 2026), behind TIP_REFUNDS (off by default): staff with
+ * Staff "Refund tip" over HTTP (owner, 14 Nov 2026), behind the `tip_refunds` admin switch (a money
+ * switch, off by default): staff with
  * payments.repair read what the supporter gets back and who gives back what, and ask with a written
  * reason and a fresh code (`tip.refund`; with one owner it runs alone and says so). The pretend
  * partner stands in: nothing here reaches the network.
  */
 let database;
 let stack;
-let off;
 let owner;
 const q = (text, values = []) =>
   database.pool.query(text, values).then((result) => result.rows);
@@ -37,15 +38,11 @@ before(async () => {
     RATE_LIMIT_AUTH_PER_HOUR: '1000',
     RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
   };
-  stack = await startStack({
-    databaseUrl: database.url,
-    apiEnv: { ...env, TIP_REFUNDS: 'on' },
-  });
-  off = await startStack({ databaseUrl: database.url, apiEnv: env });
+  stack = await startStack({ databaseUrl: database.url, apiEnv: env });
+  await setSwitch(database.pool, 'tip_refunds', true);
   owner = await opsSignIn(stack.api, database.db, '+2348037770101');
 });
 after(async () => {
-  await off?.stop();
   await stack?.stop();
   await database?.close();
 });
@@ -89,11 +86,23 @@ const call = (base, method, path, body) =>
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 
-test('off by default: the routes answer 404', async () => {
+test('with the tip_refunds switch off, the routes answer 404', async () => {
   const { tipId } = await paidTip();
-  const read = await call(off.api, 'GET', `/v1/ops/tips/${tipId}/refund`);
-  assert.equal(read.status, 404);
-  assert.equal((await read.json()).error.code, 'TIP_REFUNDS_OFF');
+  await setSwitch(database.pool, 'tip_refunds', false);
+  try {
+    const read = await call(stack.api, 'GET', `/v1/ops/tips/${tipId}/refund`);
+    assert.equal(read.status, 404);
+    assert.equal((await read.json()).error.code, 'TIP_REFUNDS_OFF');
+    const asked = await call(
+      stack.api,
+      'POST',
+      `/v1/ops/tips/${tipId}/refund`,
+      { reason: REASON },
+    );
+    assert.equal(asked.status, 404);
+  } finally {
+    await setSwitch(database.pool, 'tip_refunds', true);
+  }
 });
 
 test('staff read the figures, ask once with a reason, and a second ask is refused in plain words', async () => {

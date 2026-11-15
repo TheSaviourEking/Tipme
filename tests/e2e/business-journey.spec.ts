@@ -194,7 +194,7 @@ async function journey(owner: Page, browser: Browser, testInfo: TestInfo) {
   });
   await expect(notes).toContainText('Kemi · Friendly');
   await expect(notes).not.toContainText(/\d{1,2}:\d{2}/);
-  const table = week.getByRole('table', { name: 'Who’s thanked most' });
+  const table = week.getByRole('table', { name: 'Who got the most tips' });
   await expect(table.getByRole('row', { name: /Kemi/ })).toContainText(
     'Fewer than 3',
   );

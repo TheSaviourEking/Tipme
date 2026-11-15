@@ -5,7 +5,7 @@ import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js'
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
-import { MAIL_SEAL_KEY, OPS_TOTP_KEY } from './helpers.mjs';
+import { MAIL_SEAL_KEY, OPS_TOTP_KEY, setSwitch } from './helpers.mjs';
 
 /*
  * Staff "Refund tip" (owner, 14 Nov 2026): a written reason, a fresh code and a second person
@@ -31,6 +31,7 @@ before(async () => {
   await ops.seedDemoProfiles(database.db);
   await ops.ensureOwnerRole(database.db);
   ops.registerRealSeriousActions();
+  await setSwitch(database.pool, 'tip_refunds', true);
 });
 after(async () => {
   await database.close();
@@ -163,6 +164,24 @@ test('a tip refund waits for a second person and says what goes back; approving 
     (await ops.balanceOf(database.db, TOBI.id)).availableMinor,
     before,
   );
+});
+
+// The `tip_refunds` switch is a money switch: turned off while a refund waits for its second
+// person, the approval records nothing (as tip.reverse, review finding 3).
+test('an approval after the tip_refunds switch went off records no refund', async () => {
+  const requester = await person();
+  const approver = await person();
+  const tipId = await paidTip();
+  const outcome = await ask(requester, tipId);
+  assert.equal(outcome.state, 'pending');
+  await setSwitch(database.pool, 'tip_refunds', false);
+  try {
+    const decided = await approve(outcome.requestId, approver);
+    assert.equal(decided.status, 'stale', JSON.stringify(decided));
+    assert.equal((await q(`SELECT 1 FROM tip_refunds`)).length, 0);
+  } finally {
+    await setSwitch(database.pool, 'tip_refunds', true);
+  }
 });
 
 test('the partner’s refund.paid repeating TipMe’s reference books the refund once; TipMe keeps its fee', async () => {

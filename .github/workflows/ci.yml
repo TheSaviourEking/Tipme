@@ -227,8 +227,9 @@ jobs:
       fail-fast: false
       matrix:
         # `alone` is the @alone tests: its own job and database, so a failure in a shard can't skip
-        # them, and record-tested-tree needs it to pass like the rest.
-        shard: [1, 2, 3, 4, 5, 6, alone]
+        # them, and record-tested-tree needs it to pass like the rest. `studio` is the Page Studio
+        # render property (@studio-lab, about 4 minutes), kept out of the six numbered shards.
+        shard: [1, 2, 3, 4, 5, 6, alone, studio]
     env:
       NEXT_TELEMETRY_DISABLED: '1'
       TURBO_TELEMETRY_DISABLED: '1'
@@ -239,8 +240,10 @@ jobs:
       # No .next/cache restore: Turbopack reused a compile cache from another commit and built a
       # stylesheet without newer rules (PR #117, run 41991783296: unstyled bank sheet, header not
       # sticky). Every e2e build compiles the web app from scratch.
-      - if: matrix.shard != 'alone'
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/6
+      - if: matrix.shard != 'alone' && matrix.shard != 'studio'
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/6 --grep-invert @studio-lab
+      - if: matrix.shard == 'studio'
+        run: pnpm test:e2e tests/e2e/studio-lab.spec.ts --grep @studio-lab
       - if: matrix.shard == 'alone'
         run: pnpm test:e2e --alone
       - name: Upload Playwright PNG diagnostics
@@ -255,18 +258,20 @@ jobs:
   # Burn-in: the e2e spec files a pull request adds or changes, five times each with no retries,
   # so a test that passes only sometimes (timers, shared data, a slow runner) fails here instead
   # of in a later pull request. All their tests run, @alone ones included (scripts/run-e2e.mjs).
-  # Passes at once when no spec file changed.
-  e2e-burn-in:
+  # Passes at once when no spec file changed. The files are split over the fewest shards that
+  # keep each under its time limit (scripts/ci-burn-in.mjs: one per 8 files, at most 6), and
+  # `e2e-burn-in` gives the one result: a merge train changing 41 files ran out of time in one job.
+  e2e-burn-in-plan:
     needs: changes
     if: >-
       github.event_name == 'pull_request' &&
       needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      NEXT_TELEMETRY_DISABLED: '1'
-      TURBO_TELEMETRY_DISABLED: '1'
-      TURBO_CACHE_DIR: .turbo/cache
+    timeout-minutes: 5
+    outputs:
+      files: ${{ steps.specs.outputs.files }}
+      count: ${{ steps.plan.outputs.count }}
+      shards: ${{ steps.plan.outputs.shards }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -287,24 +292,67 @@ jobs:
           else
             echo "Burning in (5 runs each, no retries): $specs" >> "$GITHUB_STEP_SUMMARY"
           fi
-      - if: steps.specs.outputs.files != ''
-        uses: ./.github/actions/e2e-setup
-      # Through env, not an expression in the script: file names come from the pull request.
-      - if: steps.specs.outputs.files != ''
+      - id: plan
         env:
           SPECS: ${{ steps.specs.outputs.files }}
+        run: node scripts/ci-burn-in.mjs plan
+
+  e2e-burn-in-shard:
+    needs: [changes, e2e-burn-in-plan]
+    if: needs.e2e-burn-in-plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.e2e-burn-in-plan.outputs.shards) }}
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      TURBO_TELEMETRY_DISABLED: '1'
+      TURBO_CACHE_DIR: .turbo/cache
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/e2e-setup
+      # Through env, not an expression in the script: file names come from the pull request.
+      - env:
+          SPECS: ${{ needs.e2e-burn-in-plan.outputs.files }}
+          SHARD: ${{ matrix.shard }}
+          COUNT: ${{ needs.e2e-burn-in-plan.outputs.count }}
         run: |
-          # One argument per file.
-          read -ra files <<< "$SPECS"
+          # One argument per file: this shard's share of the changed files.
+          mapfile -t files < <(node scripts/ci-burn-in.mjs files "$SHARD" "$COUNT")
+          echo "Shard $SHARD of $COUNT: ${files[*]}" >> "$GITHUB_STEP_SUMMARY"
           pnpm test:e2e "${files[@]}" --repeat-each=5 --retries=0
       - name: Upload Playwright PNG diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-burn-in-png-diagnostics
+          name: e2e-burn-in-png-diagnostics-${{ matrix.shard }}
           path: test-results/**/*.png
           if-no-files-found: ignore
           retention-days: 3
+
+  # The burn-in's one result, which record-tested-tree and the merge-train runbook rely on: it
+  # passes when the plan passed and every shard passed (or none was needed: no spec changed).
+  e2e-burn-in:
+    needs: [changes, e2e-burn-in-plan, e2e-burn-in-shard]
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' &&
+      needs.changes.outputs.code == 'true' && needs.changes.outputs.reused != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          PLAN: ${{ needs.e2e-burn-in-plan.result }}
+          COUNT: ${{ needs.e2e-burn-in-plan.outputs.count }}
+          SHARDS: ${{ needs.e2e-burn-in-shard.result }}
+        run: |
+          echo "plan: $PLAN, shards needed: ${COUNT:-?}, shards: $SHARDS"
+          if [ "$PLAN" != success ]; then echo "The burn-in plan did not pass."; exit 1; fi
+          if [ "$COUNT" = 0 ]; then exit 0; fi
+          if [ "$SHARDS" != success ]; then echo "A burn-in shard did not pass."; exit 1; fi
 
   # A pull request run that passed every job, slow suites included, records the file tree it
   # tested on the PR's head commit, so the merge into dev or main can reuse this run.

@@ -16,6 +16,7 @@ const NAMES: Record<string, string> = {
   tip_received: 'emails about each tip',
   weekly_report: 'weekly report emails',
   milestone: 'milestone emails',
+  announcement: 'news and announcements',
 };
 
 /** Asks first: mail scanners open every link, and opening this one must change nothing. */

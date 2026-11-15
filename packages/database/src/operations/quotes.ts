@@ -40,7 +40,7 @@ type QuoteInput = {
   now?: Date;
   /** The business membership the tip page is for (TipMe for businesses). */
   businessMemberId?: string;
-  /** The API's BUSINESS_SHARES_ENABLED. Off unless passed: no share is ever looked up. */
+  /** The `business` and `business_shares` switches. Off unless passed: no share is ever looked up. */
   sharesOn?: boolean;
 };
 

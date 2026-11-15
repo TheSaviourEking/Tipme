@@ -44,6 +44,8 @@ import {
   type SeriousActionServices,
   setPagePlan,
   staffRemovePageImage,
+  staffRemoveStudioImage,
+  staffViewStudioImage,
   staffViewPageImage,
   type MailSealing,
   type PhotoStore,
@@ -181,6 +183,58 @@ export class OpsPagesController {
       staffUserId: ops.userId,
       profileId: uuidOf(profileId),
       image: imageOf(image),
+      reason: body.reason,
+      sealing: this.sealing,
+      store: this.photos ?? undefined,
+    });
+    if (changed) {
+      this.revalidator.revalidate(handle);
+      void this.publishLive({
+        to: { profile: profileId },
+        type: 'profile.changed',
+      });
+    }
+    return { data: { removed: changed } };
+  }
+
+  /** One Page Studio photo, as staff review it (owner ruling 9): the master; audited, never cached. */
+  @Get(':profileId/studio-images/:imageId')
+  @OpsPermission('pages.suspend')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async studioImage(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('imageId') imageId: string,
+    @Res() response: Response,
+  ): Promise<void> {
+    sendPrivateImage(
+      response,
+      await staffViewStudioImage(
+        this.database.db,
+        {
+          staffUserId: ops.userId,
+          profileId: uuidOf(profileId),
+          imageId: uuidOf(imageId),
+        },
+        this.photos ?? undefined,
+      ),
+    );
+  }
+
+  /** Takes down one Page Studio photo: it drops out of the draft and the published page. */
+  @Post(':profileId/studio-images/:imageId/remove')
+  @HttpCode(200)
+  @OpsPermission('pages.suspend')
+  async removeStudioImage(
+    @CurrentOps() ops: OpsContext,
+    @Param('profileId') profileId: string,
+    @Param('imageId') imageId: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ removed: boolean }>> {
+    const { handle, changed } = await staffRemoveStudioImage(this.database.db, {
+      staffUserId: ops.userId,
+      profileId: uuidOf(profileId),
+      imageId: uuidOf(imageId),
       reason: body.reason,
       sealing: this.sealing,
       store: this.photos ?? undefined,

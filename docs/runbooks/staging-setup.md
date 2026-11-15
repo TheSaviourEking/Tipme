@@ -92,7 +92,7 @@ Without it, the release check stops in seconds and names the page; `RELEASE_BACH
 
 Pro is bought on TipMe's **own** partner account, not a recipient's. To try a whole purchase on staging with test money:
 
-1. Deploy the release with paid Pro. Set `BACHS_PLATFORM_ORGANIZATION_ID` (TipMe's own sandbox organization) and `PRO_BILLING_ENABLED=true` on the API, and redeploy.
+1. Deploy the release with paid Pro. Set `BACHS_PLATFORM_ORGANIZATION_ID` (TipMe's own sandbox organization) on the API and redeploy, then turn on **Pro billing** at `/ops/switches` (a money switch: a second person approves).
 2. Only then switch the sandbox webhook endpoint to `event_source=all` (see above), and subscribe it to `collection.succeeded`, `checkout.completed`, `collection.failed` and the refund events.
 3. Signed in as a recipient, `POST /v1/me/pro/purchases` with `{"expectedAmountMinor":"250000"}` and an `Idempotency-Key` (there is no buy screen yet). Open the returned `checkoutUrl` and pay with the partner's sandbox test card, or by sandbox bank transfer.
 4. Expect, within seconds: the purchase `PAID`, one `pro.<purchaseId>` ledger transaction, a Pro month in `pro_periods`, the page on Pro, and a `pro_receipt` email. Coming back from the checkout alone changes nothing; only the partner's confirmed payment does.

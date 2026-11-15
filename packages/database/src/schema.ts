@@ -3,6 +3,9 @@ import {
   BUSINESS_NOTIFICATION_KINDS,
   ISSUE_KINDS,
   ISSUE_OUTCOMES,
+  ANNOUNCEMENT_AUDIENCES,
+  ANNOUNCEMENT_KINDS,
+  ANNOUNCEMENT_STATUSES,
   OPS_PERMISSIONS,
   type OpsPermission,
   type OpsIssueKind as IssueKind,
@@ -320,7 +323,7 @@ export const mailMessages = pgTable(
     dataSealed: text('data_sealed'),
     renderedSealed: text('rendered_sealed'),
     status: text('status').notNull().default('queued'),
-    // 0 security, 1 account, 2 everything else: codes never wait behind a broadcast.
+    // 0 a code or link someone is waiting for, 1 other security, 2 account, 3 everything else.
     priority: integer('priority').notNull(),
     pinnedProvider: text('pinned_provider'),
     provider: text('provider'),
@@ -453,6 +456,93 @@ export const providerSettings = pgTable(
     detail: jsonb('detail').notNull().default({}),
   },
   () => [check('provider_settings_kind', sql`kind IN ('mail', 'payment')`)],
+);
+
+/**
+ * Feature switches staff set in admin (owner, 14 Nov 2026; docs/runbooks/settings-and-switches.md). One
+ * row per switch: `source` says whether the first start wrote it from the old variable (`env`) or the
+ * code default (`default`), or staff set it since (`staff`). Keys are checked in code, not here, so a
+ * new switch needs no migration.
+ */
+export const featureSwitches = pgTable(
+  'feature_switches',
+  {
+    key: text('key').primaryKey(),
+    enabled: boolean('enabled').notNull(),
+    source: text('source').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+  },
+  (table) => [
+    check(
+      'feature_switches_source',
+      sql`${table.source} IN ('default', 'env', 'staff')`,
+    ),
+    check('feature_switches_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+/** Every value a switch has had, seeded or set, for its history on the admin screen. */
+export const featureSwitchChanges = pgTable(
+  'feature_switch_changes',
+  {
+    id: uuid('id').primaryKey(),
+    key: text('key').notNull(),
+    enabled: boolean('enabled').notNull(),
+    source: text('source').notNull(),
+    changedBy: uuid('changed_by').references(() => users.id),
+    /** The second person, or null when it ran alone or needed none. */
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('feature_switch_changes_key').on(table.key, table.createdAt),
+    check(
+      'feature_switch_changes_source',
+      sql`${table.source} IN ('default', 'env', 'staff')`,
+    ),
+  ],
+);
+
+/**
+ * Display settings (owner, 14 Nov 2026, #216): the pilot notice and the launch time, set in admin.
+ * No row until staff first set one: the web app keeps its old setting until then. `value` null is
+ * "no launch time".
+ */
+export const displaySettings = pgTable(
+  'display_settings',
+  {
+    key: text('key').primaryKey(),
+    value: text('value'),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+    reason: text('reason').notNull(),
+  },
+  (table) => [
+    check('display_settings_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+/** Every value a display setting has had, for its history on the admin screen. */
+export const displaySettingChanges = pgTable(
+  'display_setting_changes',
+  {
+    id: uuid('id').primaryKey(),
+    key: text('key').notNull(),
+    value: text('value'),
+    changedBy: uuid('changed_by')
+      .notNull()
+      .references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('display_setting_changes_key').on(table.key, table.createdAt),
+  ],
 );
 
 /** A staff test of a provider. Only a hash of the confirmation token is kept. */
@@ -2072,6 +2162,100 @@ export const profileCovers = pgTable(
 );
 
 /**
+ * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
+ * `published` are StudioDocument JSON, written only after the strict schema accepted them; a
+ * read always goes through `resolveStudio`. `rev` counts saves, so two tabs can't overwrite each
+ * other. Kept when Pro lapses (owner ruling): the standard page shows until Pro returns.
+ */
+export const pageStudios = pgTable('page_studios', {
+  profileId: uuid('profile_id')
+    .primaryKey()
+    .references(() => profiles.id),
+  draft: jsonb('draft').notNull(),
+  published: jsonb('published'),
+  publishedCheckVersion: integer('published_check_version'),
+  rev: integer('rev').notNull().default(0),
+  publishedAt: timestamp('published_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * A Page Studio photo: the size of its re-encoded master and the focal point every crop keeps.
+ * `version` changes whenever the crops do, so each version has its own never-reused address.
+ */
+export const studioImages = pgTable(
+  'studio_images',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    version: integer('version').notNull().default(1),
+    width: integer('width').notNull(),
+    height: integer('height').notNull(),
+    focalX: integer('focal_x').notNull().default(50),
+    focalY: integer('focal_y').notNull().default(50),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('studio_images_profile').on(table.profileId),
+    check(
+      'studio_images_focal',
+      sql`focal_x BETWEEN 0 AND 100 AND focal_y BETWEEN 0 AND 100`,
+    ),
+  ],
+);
+
+/**
+ * The files of a Studio photo: `master` and its crops (`square-960`…), each already re-encoded on
+ * the server with no metadata. Kept like `profile_covers`: in Postgres or in R2, never both.
+ */
+export const studioImageFiles = pgTable(
+  'studio_image_files',
+  {
+    imageId: uuid('image_id')
+      .notNull()
+      .references(() => studioImages.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    size: integer('size').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+  },
+  (table) => [
+    primaryKey({ columns: [table.imageId, table.name] }),
+    check(
+      'studio_image_files_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+    check(
+      'studio_image_files_name',
+      sql`name ~ '^(master|(square|wide|tall|strip)-(480|960|1440))$'`,
+    ),
+  ],
+);
+
+/**
+ * What the video sites last said about a Studio video link (owner ruling 5), kept a day. The link
+ * is what the person pasted; nothing about who asked is stored.
+ */
+export const studioVideoChecks = pgTable(
+  'studio_video_checks',
+  {
+    url: text('url').primaryKey(),
+    status: text('status').notNull(),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+  },
+  () => [
+    check(
+      'studio_video_checks_status',
+      sql`status IN ('ok', 'gone', 'unknown')`,
+    ),
+  ],
+);
+
+/**
  * Visitors' reports of a page (PR-013): the page, a reason from a fixed list and the minute.
  * No IP, user agent or free text.
  */
@@ -2319,6 +2503,10 @@ const quotedList = (values: readonly string[]) =>
   sql.raw(values.map((value) => `'${value}'`).join(', '));
 
 /** A business account: verified by TipMe staff before its codes go live. */
+/** Business Pro (plan Task A1): a business's plan, and which Pro a price is for. */
+export const BUSINESS_PLANS = ['free', 'pro'] as const;
+export const PRO_PRICE_PLANS = ['personal', 'business'] as const;
+
 export const businesses = pgTable(
   'businesses',
   {
@@ -2341,9 +2529,15 @@ export const businesses = pgTable(
     // `logoVersion` only ever goes up, like a page's `avatarVersion`: a new logo is a new URL.
     logoPath: text('logo_path'),
     logoVersion: integer('logo_version').notNull().default(0),
+    // Business Pro (plan Task A1): a cache of the paid months, like `profiles.plan`; every limit
+    // and Pro-feature check reads it. Only recomputeBusinessPlan writes it.
+    plan: text('plan').notNull().default('free'),
+    // Set when Business Pro ends, cleared when it starts again: drives the lapse banner.
+    proLapsedAt: timestamp('pro_lapsed_at', { withTimezone: true }),
     createdAt: createdAt(),
   },
   (table) => [
+    check('businesses_plan', sql`plan IN ('free', 'pro')`),
     check('businesses_slug', sql`slug ~ ${sql.raw(BUSINESS_SLUG_RE(40))}`),
     check('businesses_name', sql`char_length(name) BETWEEN 1 AND 80`),
     check(
@@ -2434,9 +2628,18 @@ export const businessManagers = pgTable(
     addedBy: uuid('added_by').references(() => users.id),
     createdAt: createdAt(),
     removedAt: timestamp('removed_at', { withTimezone: true }),
+    // Business sign-up (Phase D, R13): a manager with no page is named by this, set from the
+    // sign-up contact name. A page's own name still wins wherever managers are listed.
+    shownName: text('shown_name'),
+    // R19: when this manager saw the once-only "verified" moment.
+    verifiedSeenAt: timestamp('verified_seen_at', { withTimezone: true }),
   },
   (table) => [
     check('business_managers_role', sql`role IN ('owner', 'location_manager')`),
+    check(
+      'business_managers_shown_name',
+      sql`shown_name IS NULL OR char_length(shown_name) BETWEEN 1 AND 60`,
+    ),
     check(
       'business_managers_location',
       sql`(role = 'owner') = (location_id IS NULL)`,
@@ -2875,6 +3078,70 @@ export const tableAssignments = pgTable(
 );
 
 /**
+ * A staff announcement by email (owner-approved, 14 Nov 2026). Staff edit a draft (each edit bumps
+ * `revision`); a second person approves sending the revision asked about. The worker then queues
+ * one `announcement` email per person in batches, walking users by id from `cursor_user_id`, and
+ * only users created by `cutoff` (the approval). Each email's dedupe key is the announcement and
+ * the user, so a batch repeated after a restart queues nobody twice. "Waiting for approval" is a
+ * draft with a pending request, never stored.
+ */
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: uuid('id').primaryKey(),
+    subject: text('subject').notNull(),
+    preheader: text('preheader').notNull(),
+    text: text('text').notNull(),
+    buttonLabel: text('button_label'),
+    buttonUrl: text('button_url'),
+    audience: text('audience').notNull(),
+    // News (marketing, opt-in) or a service notice (fees, terms: everyone), the owner's ruling.
+    kind: text('kind').notNull().default('news'),
+    status: text('status').notNull().default('draft'),
+    revision: integer('revision').notNull().default(1),
+    // The count when the send was approved: the N in "x of N".
+    recipientCount: integer('recipient_count'),
+    // Emails handed to the mail queue so far: the x.
+    queuedCount: integer('queued_count').notNull().default(0),
+    cursorUserId: uuid('cursor_user_id'),
+    cutoff: timestamp('cutoff', { withTimezone: true }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    requestedBy: uuid('requested_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    sendStartedAt: timestamp('send_started_at', { withTimezone: true }),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check('announcements_audience', inList('audience', ANNOUNCEMENT_AUDIENCES)),
+    check('announcements_status', inList('status', ANNOUNCEMENT_STATUSES)),
+    check('announcements_kind', inList('kind', ANNOUNCEMENT_KINDS)),
+    // A service notice concerns every account (contracts: serviceGoesToEveryone).
+    check(
+      'announcements_service_everyone',
+      sql`kind <> 'service' OR audience = 'everyone'`,
+    ),
+    check(
+      'announcements_button',
+      sql`(button_label IS NULL) = (button_url IS NULL)`,
+    ),
+    check(
+      'announcements_counts',
+      sql`queued_count >= 0 AND (recipient_count IS NULL OR recipient_count >= 0)`,
+    ),
+    // The worker's question each tick: what is sending, oldest first.
+    index('announcements_status_created').on(table.status, table.createdAt),
+  ],
+);
+
+/**
  * One entry per pull request merged into dev (changelog plan, 5 Nov 2026). Staff edit the working
  * copy (`user_text`, `audience`, each change bumping `revision`); users only ever read the
  * published copy, which an approval writes. The state (draft, approved, live, recorded, withdrawn)
@@ -3008,10 +3275,14 @@ export const proPrices = pgTable(
     setBy: uuid('set_by').references(() => users.id),
     approvedBy: uuid('approved_by').references(() => users.id),
     reason: text('reason').notNull(),
+    // Which Pro this price is for: a person's page or a business (Business Pro, plan Task A1).
+    plan: text('plan').notNull().default('personal'),
     createdAt: createdAt(),
   },
   (table) => [
     index('pro_prices_effective_from').on(table.effectiveFrom),
+    index('pro_prices_plan_effective_from').on(table.plan, table.effectiveFrom),
+    check('pro_prices_plan', sql`${table.plan} IN ('personal', 'business')`),
     check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
     check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
     check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
@@ -3040,9 +3311,9 @@ export const proPeriods = pgTable(
   'pro_periods',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's month or a business's month (Business Pro): exactly one (`pro_periods_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
     // Null only for periods made in tests; every paid month has its purchase.
     purchaseId: uuid('purchase_id').unique(),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
@@ -3059,6 +3330,14 @@ export const proPeriods = pgTable(
     uniqueIndex('pro_periods_one_scheduled')
       .on(table.profileId)
       .where(sql`${table.status} = 'SCHEDULED'`),
+    unique('pro_periods_business_start').on(table.businessId, table.startsAt),
+    uniqueIndex('pro_periods_business_one_scheduled')
+      .on(table.businessId)
+      .where(sql`${table.status} = 'SCHEDULED'`),
+    check(
+      'pro_periods_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
     index('pro_periods_due').on(table.status, table.endsAt),
     check(
       'pro_periods_status',
@@ -3087,9 +3366,11 @@ export const proPurchases = pgTable(
   'pro_purchases',
   {
     id: uuid('id').primaryKey(),
-    profileId: uuid('profile_id')
-      .notNull()
-      .references(() => profiles.id),
+    // A page's purchase or a business's (Business Pro): exactly one (`pro_purchases_owner`).
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    // A business purchase: the owner who paid (receipts go to them). Null for a page's own.
+    boughtBy: uuid('bought_by').references(() => users.id),
     method: text('method').notNull(),
     priceId: uuid('price_id')
       .notNull()
@@ -3131,6 +3412,21 @@ export const proPurchases = pgTable(
     uniqueIndex('pro_purchases_one_open')
       .on(table.profileId)
       .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    unique('pro_purchases_business_idempotency').on(
+      table.businessId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex('pro_purchases_business_one_open')
+      .on(table.businessId)
+      .where(sql`${table.status} IN ('PENDING', 'COLLECTING', 'UNKNOWN')`),
+    check(
+      'pro_purchases_owner',
+      sql`(${table.profileId} IS NULL) <> (${table.businessId} IS NULL)`,
+    ),
+    check(
+      'pro_purchases_bought_by',
+      sql`(${table.businessId} IS NULL) = (${table.boughtBy} IS NULL)`,
+    ),
     uniqueIndex('pro_purchases_provider_reference')
       .on(table.provider, table.providerReference)
       .where(sql`${table.providerReference} IS NOT NULL`),
@@ -3155,9 +3451,10 @@ export const proPurchases = pgTable(
 // ---- Pro insights: Campaign Studio, monthly recap, priority support (11 Nov 2026) ----
 
 /**
- * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>` to the
- * normal tip page. Only a tracked link: no goal, target, end date or purpose. Stopping keeps its
- * results; its link keeps opening the page. Never deleted while the page exists.
+ * A campaign (Campaign Studio, the ProCampaigns board): a named link `/@handle/<slug>`. On Pro it
+ * may have its own page (headline, description, cover) above the same person's same tip area;
+ * otherwise the link opens the normal tip page. Stopping keeps its results; its link keeps opening
+ * the main page. Never deleted while the page exists.
  */
 export const campaigns = pgTable(
   'campaigns',
@@ -3170,10 +3467,30 @@ export const campaigns = pgTable(
     slug: text('slug').notNull(),
     createdAt: createdAt(),
     stoppedAt: timestamp('stopped_at', { withTimezone: true }),
+    // Its own page (Pro; ProCampaignPages, 14 Nov 2026). Shown only while the page is Pro, the
+    // campaign runs, `page_on` is set and there is a headline. Campaigns made before the release
+    // keep `page_on` false, so their links open the normal page as before (ruling G1).
+    pageOn: boolean('page_on').notNull().default(false),
+    headline: text('headline'),
+    description: text('description'),
+    // The page's cover choices (design, colour, animation, motion); all null: "Same as page".
+    coverDesign: text('cover_design'),
+    coverColour: text('cover_colour'),
+    coverAnimation: text('cover_animation'),
+    coverMotion: text('cover_motion'),
   },
   (table) => [
     unique('campaigns_profile_slug').on(table.profileId, table.slug),
     check('campaigns_name_length', sql`char_length(name) BETWEEN 1 AND 40`),
+    check(
+      'campaigns_headline_length',
+      sql`char_length(headline) BETWEEN 1 AND 60`,
+    ),
+    check(
+      'campaigns_description_length',
+      sql`char_length(description) BETWEEN 1 AND 200`,
+    ),
+    check('campaigns_cover_motion', sql`cover_motion IN ('once', 'loop')`),
     check(
       'campaigns_slug_format',
       sql`slug ~ '^[a-z0-9](?:[a-z0-9-]{0,28}[a-z0-9])?$'`,
@@ -3196,6 +3513,27 @@ export const tipCampaigns = pgTable(
       .references(() => campaigns.id),
   },
   (table) => [index('tip_campaigns_campaign').on(table.campaignId)],
+);
+
+/**
+ * When a page's plan changed (plan 2026-11-14 Task 2). Written only by `recomputePlan`, the one place
+ * `profiles.plan` changes, so statements know which days were Pro and a goal pauses while Pro has
+ * lapsed. Pages that were Pro at the release got one backfilled `pro` row (ruling G6).
+ */
+export const planChanges = pgTable(
+  'plan_changes',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    plan: text('plan').notNull(),
+    changedAt: timestamp('changed_at', { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    index('plan_changes_profile_at').on(table.profileId, table.changedAt),
+    check('plan_changes_plan', sql`${table.plan} IN ('free', 'pro')`),
+  ],
 );
 
 /** One recap per Pro page and Lagos month, however often the monthly job runs. */
@@ -3307,7 +3645,7 @@ export const proRefunds = pgTable(
 );
 
 /**
- * A staff "Refund tip" (owner, 14 Nov 2026), behind TIP_REFUNDS. Staff ask and a second person
+ * A staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` switch. Staff ask and a second person
  * approves (`tip.refund`); the worker asks our payment partner, as the recipient's account, for
  * exactly the tip minus TipMe's fee (`amount_minor`, fixed when asked), with the key
  * `tipme-tip-refund-<id>`; only refund.paid books it (each side gives back what it received, TipMe
@@ -3383,6 +3721,38 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
 });
 
 /**
+ * Business Pro auto-renew (plan Task A1; rulings R10): from the business balance (a TipMe-scheduled
+ * collection, under PRO_PAY_FROM_BALANCE) or a saved naira card (under PRO_AUTO_RENEW), as an owner
+ * set it. The partner's ids only, never card details. Built by Phase B; Phase A only adds the table.
+ */
+export const businessProAutoRenew = pgTable(
+  'business_pro_auto_renew',
+  {
+    businessId: uuid('business_id')
+      .primaryKey()
+      .references(() => businesses.id),
+    source: text('source').notNull(),
+    enabled: boolean('enabled').notNull(),
+    provider: text('provider'),
+    customerReference: text('customer_reference'),
+    paymentMethodReference: text('payment_method_reference'),
+    failedPeriodId: uuid('failed_period_id'),
+    setBy: uuid('set_by')
+      .notNull()
+      .references(() => users.id),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  () => [
+    check(
+      'business_pro_auto_renew_source',
+      sql`source IN ('balance', 'saved_card')`,
+    ),
+  ],
+);
+
+/**
  * Business release 2, option B (owner, 11 Nov 2026): money TipMe moves between partner accounts for
  * a shared tip. The partner refuses a transfer between two accounts, so every movement goes through
  * TipMe's own balance in two legs: `out` (an account to TipMe, `destination: "self"`) and `in`
@@ -3393,7 +3763,7 @@ export const proAutoRenew = pgTable('pro_auto_renew', {
  * - `sweep`: the business's share, staff -> TipMe -> business, once the tip's money is available.
  * - `recover`: a refunded tip's share the business still holds, business -> TipMe -> staff.
  * - `fee_return`: TipMe's fee on a refunded tip, TipMe -> the person tipped (no `out` leg). On
- *   every refunded tip once the refund is final (owner, 12 Nov 2026, behind REFUND_FEE_RETURN), and
+ *   every refunded tip once the refund is final (owner, 12 Nov 2026, behind the `refund_fee_return` switch), and
  *   on a lost dispute staff reverse; once per partner refund or dispute (`partner_reversal_id`).
  * - `holdback_repay`: part of a later sweep held back from the business for a share it had already
  *   withdrawn, TipMe -> the staff member it is owed to (no `out` leg: the sweep brought it in).

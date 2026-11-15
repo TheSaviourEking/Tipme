@@ -20,7 +20,10 @@ import {
 } from '@tipme/database';
 import type { ErrorReporter, Logger } from '@tipme/observability';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
-import { CodedHttpException } from './coded.exception.js';
+import {
+  CodedHttpException,
+  StudioCheckFailedException,
+} from './coded.exception.js';
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
 import { referenceOf } from './reference.js';
 import { ValidationFailedException } from './zod-validation.pipe.js';
@@ -36,11 +39,25 @@ const messages: Record<ApiErrorCode, string> = {
   EARNINGS_PRO_REQUIRED:
     'Past periods, your average tip, best day and notes are part of TipMe Pro.',
   RECAP_PRO_REQUIRED: 'The monthly recap is part of TipMe Pro.',
+  // Page Studio (plan 2026-11-12-page-studio).
+  STUDIO_DRAFT_STALE:
+    'Your page was changed somewhere else. Load the latest version, then save again.',
+  STUDIO_DESIGN_CHECK_FAILED:
+    'Your page can’t be published yet. Fix what the design check lists first; your draft is saved.',
+  STUDIO_PRO_REQUIRED: 'Page Studio is part of TipMe Pro.',
+  IMAGE_TOO_SMALL:
+    'This photo is too small. Choose one at least 600 pixels on its shortest side, so it looks sharp on every screen.',
+  STUDIO_IMAGE_LIMIT:
+    'Page Studio keeps up to 48 photos. Remove one you no longer use, then try again.',
   CAMPAIGN_LIMIT:
     'You’ve used all your campaign links. Stop one to make another.',
   CAMPAIGN_SLUG_TAKEN:
     'You already have a campaign with that link. Try another.',
   CAMPAIGN_SLUG_UNAVAILABLE: 'That link ending can’t be used. Try another one.',
+  CAMPAIGN_PRO_REQUIRED: 'A page for each campaign is part of TipMe Pro.',
+  CAMPAIGN_STOPPED: 'This campaign has stopped, so its page can’t change.',
+  CAMPAIGN_HEADLINE_NAME:
+    'Use your own name in the headline, not someone else’s name or handle.',
   SUPPORT_TOO_MANY_OPEN:
     'You have 3 requests waiting. We’ll answer those first.',
   BUSINESS_SLUG_TAKEN: 'That address is taken. Try another.',
@@ -61,7 +78,11 @@ const messages: Record<ApiErrorCode, string> = {
   NOTE_NOT_OPEN: 'A note can’t be added to this tip.',
   BUSINESS_LAST_OWNER:
     'Make someone else an owner of the business first, or close it.',
+  OWNER_REMOVAL_NEEDS_TIPME:
+    'To remove an owner, contact TipMe support. We check it with both owners first.',
   BUSINESS_NOT_VERIFIED: 'This business isn’t verified yet.',
+  BUSINESS_STAFF_LIMIT: 'Your business is at its staff limit.',
+  BUSINESS_LOCATION_LIMIT: 'Your business is at its location limit.',
   SHARE_NOT_ALLOWED: 'A share isn’t possible here.',
   SHARE_CHANGE_TOO_SOON:
     'A share can change at most once a month. Try a later start date.',
@@ -105,6 +126,15 @@ const messages: Record<ApiErrorCode, string> = {
   CHANGELOG_TEXT_NOT_ALLOWED:
     'This text can’t be shown to users as it is. Change it and try again.',
   CHANGELOG_NOT_FOUND: 'There is no changelog entry with that number.',
+  ANNOUNCEMENT_NOT_FOUND: 'There is no announcement with that id.',
+  ANNOUNCEMENT_EDITED_ELSEWHERE:
+    'Someone else changed this announcement while you were working. Nothing changed.',
+  ANNOUNCEMENT_NOT_DRAFT:
+    'This announcement is no longer a draft, so it can’t be changed or sent again.',
+  ANNOUNCEMENT_NO_RECIPIENTS:
+    'Nobody in this audience can get announcements right now. Nothing was sent.',
+  ANNOUNCEMENT_EMAIL_NOT_SET_UP:
+    'Announcement email isn’t set up on this server, so nothing can be sent.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -249,6 +279,8 @@ const messages: Record<ApiErrorCode, string> = {
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
+  COUNTRY_NOT_SUPPORTED:
+    'Payment accounts can’t be set up in that country. Choose one from the list.',
   INTERNAL_ERROR: 'Something went wrong.',
 };
 
@@ -275,6 +307,15 @@ const operationErrors: Partial<
   >
 > = {
   IDEMPOTENCY_CONFLICT: { status: 409, code: 'IDEMPOTENCY_CONFLICT' },
+  STUDIO_DRAFT_STALE: { status: 409, code: 'STUDIO_DRAFT_STALE' },
+  STUDIO_DRAFT_INVALID: {
+    status: 400,
+    code: 'VALIDATION_FAILED',
+    fields: ['draft'],
+  },
+  STUDIO_PRO_REQUIRED: { status: 403, code: 'STUDIO_PRO_REQUIRED' },
+  STUDIO_IMAGE_LIMIT: { status: 409, code: 'STUDIO_IMAGE_LIMIT' },
+  STUDIO_IMAGE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   QUOTE_EXPIRED: { status: 409, code: 'QUOTE_EXPIRED' },
   QUOTE_ALREADY_USED: { status: 409, code: 'QUOTE_ALREADY_USED' },
   TIP_NOT_PAYABLE: { status: 409, code: 'TIP_NOT_PAYABLE' },
@@ -364,6 +405,21 @@ const operationErrors: Partial<
     code: 'CHANGELOG_EDITED_ELSEWHERE',
   },
   CHANGELOG_NOT_FOUND: { status: 404, code: 'CHANGELOG_NOT_FOUND' },
+  // Staff announcements (14 Nov 2026).
+  ANNOUNCEMENT_NOT_FOUND: { status: 404, code: 'ANNOUNCEMENT_NOT_FOUND' },
+  ANNOUNCEMENT_EDITED_ELSEWHERE: {
+    status: 409,
+    code: 'ANNOUNCEMENT_EDITED_ELSEWHERE',
+  },
+  ANNOUNCEMENT_NOT_DRAFT: { status: 409, code: 'ANNOUNCEMENT_NOT_DRAFT' },
+  ANNOUNCEMENT_NO_RECIPIENTS: {
+    status: 409,
+    code: 'ANNOUNCEMENT_NO_RECIPIENTS',
+  },
+  ANNOUNCEMENT_EMAIL_NOT_SET_UP: {
+    status: 409,
+    code: 'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
+  },
   // Pro insights (11 Nov 2026).
   CAMPAIGN_LIMIT: { status: 409, code: 'CAMPAIGN_LIMIT' },
   CAMPAIGN_SLUG_TAKEN: { status: 409, code: 'CAMPAIGN_SLUG_TAKEN' },
@@ -372,6 +428,9 @@ const operationErrors: Partial<
     code: 'CAMPAIGN_SLUG_UNAVAILABLE',
   },
   CAMPAIGN_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
+  CAMPAIGN_PRO_REQUIRED: { status: 403, code: 'CAMPAIGN_PRO_REQUIRED' },
+  CAMPAIGN_STOPPED: { status: 409, code: 'CAMPAIGN_STOPPED' },
+  CAMPAIGN_HEADLINE_NAME: { status: 422, code: 'CAMPAIGN_HEADLINE_NAME' },
   SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
@@ -425,6 +484,10 @@ const operationErrors: Partial<
   MEMBER_NOT_TIPPABLE: { status: 409, code: 'MEMBER_NOT_TIPPABLE' },
   OWNER_REQUIRED: { status: 403, code: 'OWNER_REQUIRED' },
   BUSINESS_NOT_VERIFIED: { status: 403, code: 'BUSINESS_NOT_VERIFIED' },
+  OWNER_REMOVAL_NEEDS_TIPME: { status: 403, code: 'OWNER_REMOVAL_NEEDS_TIPME' },
+  // Business Pro (plan Task A4): a state to change (a plan, a seat), not bad input.
+  BUSINESS_STAFF_LIMIT: { status: 409, code: 'BUSINESS_STAFF_LIMIT' },
+  BUSINESS_LOCATION_LIMIT: { status: 409, code: 'BUSINESS_LOCATION_LIMIT' },
   // Business release 2 (R2-0).
   SHARE_NOT_ALLOWED: { status: 409, code: 'SHARE_NOT_ALLOWED' },
   SHARE_CHANGE_TOO_SOON: { status: 409, code: 'SHARE_CHANGE_TOO_SOON' },
@@ -602,6 +665,9 @@ export class ApiExceptionFilter implements ExceptionFilter {
     else if (fields) body.error.fields = fields;
     if (exception instanceof CodedHttpException && exception.reason)
       body.error.reason = exception.reason;
+    // The person's own draft, checked by the server: what the editor lists with its fixes.
+    if (exception instanceof StudioCheckFailedException)
+      body.error.issues = exception.issues;
     const problems = changelogProblemsOf(exception);
     if (problems) body.error.reason = problems;
     if (
