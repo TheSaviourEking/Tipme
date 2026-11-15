@@ -390,6 +390,12 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
               </>
             )}
           </dl>
+          {tip.refund && (
+            <p className="tip-thanks__refund" data-testid="receipt-refund">
+              Refunded {formatNaira(Number(tip.refund.refundedMinor))} (TipMe’s
+              fee is kept)
+            </p>
+          )}
           {pilotNotice}
           {celebration && (
             <aside className="tip-recognition" aria-label="Your tips">

@@ -147,7 +147,9 @@ const messages: Record<ApiErrorCode, string> = {
   PRO_BALANCE_REFUSED:
     'Our payment partner couldn’t take this from your balance. Nothing was paid. You can pay by card or bank transfer instead.',
   PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
+  TIP_REFUND_REFUSED: 'This tip can’t be refunded.',
   PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
+  TIP_REFUNDS_OFF: 'Tip refunds aren’t switched on.',
   PRO_AUTO_RENEW_OFF: 'Auto-renew isn’t available.',
   PRO_AUTO_RENEW_NEEDS_EMAIL:
     'Add an email address to your account to turn on auto-renew. Nothing was charged.',
@@ -439,6 +441,7 @@ const operationErrors: Partial<
   PRO_PURCHASE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   PRO_BALANCE_REFUSED: { status: 409, code: 'PRO_BALANCE_REFUSED' },
   PRO_REFUND_REFUSED: { status: 409, code: 'PRO_REFUND_REFUSED' },
+  TIP_REFUND_REFUSED: { status: 409, code: 'TIP_REFUND_REFUSED' },
   PRO_AUTO_RENEW_OFF: { status: 404, code: 'PRO_AUTO_RENEW_OFF' },
   PRO_AUTO_RENEW_NEEDS_EMAIL: {
     status: 409,

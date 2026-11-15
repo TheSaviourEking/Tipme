@@ -84,6 +84,7 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   pro_collect_unknown: 'A Pro payment from the balance is unconfirmed',
   pro_refund_failed: 'A Pro refund failed at the partner',
   share_transfer_stuck: 'A business share movement needs checking',
+  tip_refund_failed: 'A tip refund didn’t happen at the partner',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

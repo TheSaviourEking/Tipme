@@ -131,6 +131,9 @@ export default defineConfig({
         // Page Studio (Pro): seeds the page_studio switch on the lane's fresh database, so the Studio
         // routes answer in the e2e stack; off by default everywhere else, and in no deploy file.
         PAGE_STUDIO_ENABLED: 'true',
+        // Staff "Refund tip" (owner, 14 Nov 2026): seeds the tip_refunds switch on the lane's fresh
+        // database; off by default everywhere else, and in no deploy file.
+        TIP_REFUNDS: 'on',
         RATE_LIMIT_BUSINESS_PUBLIC_PER_MIN: '10000',
         RATE_LIMIT_BUSINESS_NOTE_PER_HOUR: '10000',
         // Every page opens a stream from 127.0.0.1.

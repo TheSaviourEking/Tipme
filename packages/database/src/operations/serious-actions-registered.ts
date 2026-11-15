@@ -57,6 +57,7 @@ import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
+import { askTipRefund, tipRefundFacts } from './tip-refunds.js';
 import {
   checkedProPrice,
   currentProPrice,
@@ -652,6 +653,46 @@ const proRefund = acting<{ purchaseId: string }>({
     }),
 });
 
+/**
+ * Staff "Refund tip" (owner, 14 Nov 2026): the supporter gets back the tip minus TipMe's fee, and
+ * TipMe keeps its fee. A second person decides; neither the page's owner nor anyone behind its
+ * mailbox can. Pinned on the tip's refund state, so a refund already asked, paid or taken back makes
+ * it stale. The run only records the refund: the worker sends it, and only refund.paid books it.
+ */
+const tipRefund = acting<{ tipId: string }>({
+  name: 'tip.refund',
+  permission: 'payments.repair',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return { refund: facts.refund?.status ?? null, refusal: facts.refusal };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'a page';
+    const sides = facts.businessName
+      ? ` ${page} gives back ${naira(facts.personMinor)} and ${facts.businessName} ${naira(facts.businessMinor)}.`
+      : '';
+    return `Refund ${naira(facts.refundMinor)} of a ${naira(facts.grossMinor)} tip to ${page} (tip ending ${tipId.slice(-6)}): the tip minus TipMe's fee.${sides} TipMe keeps its ${naira(facts.feeMinor)} fee. Sent once a second person approves; booked when the payment partner confirms it.`;
+  },
+  act: async (tx, { tipId }, context) => {
+    // A money switch: approved after it was turned off, nothing is recorded (as tip.reverse).
+    if (!(await readFeatureSwitch(tx, 'tip_refunds')))
+      throw new OperationError('TIP_REFUND_REFUSED', 'switched_off');
+    return askTipRefund(tx, {
+      tipId,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    });
+  },
+});
+
 /* TipMe for businesses */
 
 /**
@@ -1213,6 +1254,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(featureSwitchSet);
   registerSeriousAction(businessProPriceChange);
   registerSeriousAction(announcementSendAction);
+  registerSeriousAction(tipRefund);
 }
 
 /* Routes whose seriousness depends on what is being done */
