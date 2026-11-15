@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { OpsAuditEntry } from '@tipme/contracts';
-import { Button, EmptyState, Notice, Skeleton } from '@tipme/ui';
+import { Button, EmptyState, Skeleton } from '@tipme/ui';
+import { ReadFailureNotice } from '@/components/ops/read-failure-notice';
+import { readFailure, type ReadFailure } from '@/lib/ops-answers';
 import { when } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 
@@ -9,15 +11,21 @@ import { opsFetch } from '@/lib/ops-staff-api';
 export default function AuditPage() {
   const [rows, setRows] = useState<OpsAuditEntry[] | null>(null);
   const [more, setMore] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<ReadFailure | null>(null);
 
-  useEffect(() => {
-    void opsFetch<OpsAuditEntry[]>('/v1/ops/audit').then((result) => {
-      if (!result.ok) return setFailed(true);
-      setRows(result.data);
-      setMore(result.data.length === 50);
-    });
+  // opsFetch asks for a fresh code when the server wants one, then reads again. Only if that is
+  // turned down (or the role truly lacks the log) does this say why it didn't load.
+  const load = useCallback(async () => {
+    const result = await opsFetch<OpsAuditEntry[]>('/v1/ops/audit');
+    if (!result.ok) return setFailed(readFailure(result, 'the audit log'));
+    setFailed(null);
+    setRows(result.data);
+    setMore(result.data.length === 50);
   }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await
+    void load();
+  }, [load]);
 
   const loadMore = async () => {
     const last = rows?.at(-1);
@@ -25,10 +33,10 @@ export default function AuditPage() {
     const result = await opsFetch<OpsAuditEntry[]>(
       `/v1/ops/audit?cursor=${last.seq}`,
     );
-    if (result.ok) {
-      setRows([...(rows ?? []), ...result.data]);
-      setMore(result.data.length === 50);
-    }
+    if (!result.ok) return setFailed(readFailure(result, 'the audit log'));
+    setFailed(null);
+    setRows([...(rows ?? []), ...result.data]);
+    setMore(result.data.length === 50);
   };
 
   return (
@@ -38,9 +46,11 @@ export default function AuditPage() {
         Who did what, when and why. Entries cannot be changed or removed.
       </p>
       {failed && (
-        <Notice tone="error" title="Couldn’t load the audit log">
-          Your role may not include it, or the connection failed.
-        </Notice>
+        <ReadFailureNotice
+          failure={failed}
+          title="Couldn’t load the audit log"
+          onRetry={() => void load()}
+        />
       )}
       {!rows && !failed && <Skeleton label="Loading the audit log" />}
       {rows?.length === 0 && (

@@ -151,7 +151,7 @@ export function deviceLabel(): string {
 export async function apiDownload(
   path: string,
   filename: string,
-): Promise<{ ok: boolean }> {
+): Promise<{ ok: boolean; status?: number; code?: string }> {
   let response: Response;
   try {
     response = await fetch(`${API_ORIGIN}${path}`, {
@@ -159,9 +159,19 @@ export async function apiDownload(
       cache: 'no-store',
     });
   } catch {
-    return { ok: false };
+    return { ok: false, status: 0, code: 'NETWORK' };
   }
-  if (!response.ok) return { ok: false };
+  if (!response.ok) {
+    // The code, so a caller can tell "needs a fresh code" from a failed export.
+    const body = (await response.json().catch(() => null)) as {
+      error?: { code?: string };
+    } | null;
+    return {
+      ok: false,
+      status: response.status,
+      code: body?.error?.code ?? 'INTERNAL_ERROR',
+    };
+  }
   const link = document.createElement('a');
   link.href = URL.createObjectURL(await response.blob());
   link.download = filename;

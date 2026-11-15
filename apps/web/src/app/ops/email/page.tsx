@@ -11,8 +11,8 @@ import { Button, Card, EmptyState, Notice, Skeleton } from '@tipme/ui';
 import { LineChart, Tile } from '@/components/ops/charts';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
-import { opsFetch } from '@/lib/ops-staff-api';
-import { apiDownload } from '@/lib/session-client';
+import { readFailure } from '@/lib/ops-answers';
+import { opsDownload, opsFetch } from '@/lib/ops-staff-api';
 
 const PERIODS: Record<string, { label: string; versus: string }> = {
   today: { label: 'Today', versus: 'all of yesterday' },
@@ -64,6 +64,7 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
   const [timeline, setTimeline] = useState<OpsMailTimelineEvent[] | null>(null);
   const [content, setContent] = useState<OpsMailContent | null>(null);
   const [address, setAddress] = useState<string | null | undefined>(undefined);
+  const [unread, setUnread] = useState('');
   const region = useRef<HTMLDivElement>(null);
   // It opens above the list, so take focus (and the view) there.
   useEffect(() => {
@@ -75,7 +76,10 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
     if (!canRead) return;
     void opsFetch<OpsMailTimelineEvent[]>(
       `/v1/ops/email/messages/${row.id}/timeline`,
-    ).then((result) => setTimeline(result.ok ? result.data : []));
+    ).then((result) => {
+      setTimeline(result.ok ? result.data : []);
+      if (!result.ok) setUnread(readFailure(result, 'this email').words);
+    });
   }, [row.id, canRead]);
   return (
     <div ref={region} tabIndex={-1} role="region" aria-label="This email">
@@ -105,6 +109,11 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             }}
           />
         )}
+        {unread && (
+          <Notice tone="error" title="Couldn’t load all of this email">
+            {unread}
+          </Notice>
+        )}
         {!canRead ? null : timeline === null ? (
           <Skeleton />
         ) : (
@@ -126,9 +135,12 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             onClick={() =>
               void opsFetch<OpsMailContent>(
                 `/v1/ops/email/messages/${row.id}/content`,
-              ).then((result) =>
-                setContent(result.ok ? result.data : { status: 'withheld' }),
-              )
+              ).then((result) => {
+                if (result.ok) {
+                  setUnread('');
+                  setContent(result.data);
+                } else setUnread(readFailure(result, 'this email').words);
+              })
             }
           >
             View email
@@ -244,7 +256,9 @@ export default function EmailConsolePage() {
   useEffect(() => {
     latestQuery.current = query;
   }, [query]);
-  const [exportFailed, setExportFailed] = useState(false);
+  const [exportFailed, setExportFailed] = useState<'code' | 'failed' | null>(
+    null,
+  );
 
   const tile = (label: string, key: keyof OpsMailSummary['totals']) => {
     const total = summary?.totals[key];
@@ -258,10 +272,18 @@ export default function EmailConsolePage() {
     );
   };
   const download = (kind: 'summary' | 'messages') =>
-    void apiDownload(
+    void opsDownload(
       `/v1/ops/email/export.csv?${query}&kind=${kind}`,
       `tipme-email-${kind}-${period}.csv`,
-    ).then((result) => setExportFailed(!result.ok));
+    ).then((result) =>
+      setExportFailed(
+        result.ok
+          ? null
+          : result.code === 'FRESH_CODE_REQUIRED'
+            ? 'code'
+            : 'failed',
+      ),
+    );
   const hourly = period === 'today';
   const label = (date: string) => (hourly ? `${date.slice(11)}:00` : date);
 
@@ -438,7 +460,13 @@ export default function EmailConsolePage() {
           </Button>
         </div>
       )}
-      {exportFailed && (
+      {exportFailed === 'code' && (
+        <Notice tone="neutral" title="The export needs a fresh code">
+          Nothing was downloaded. Choose the export again and enter the code
+          from your authenticator app.
+        </Notice>
+      )}
+      {exportFailed === 'failed' && (
         <Notice tone="error" title="The export didn’t finish">
           There may be too many emails. Choose a shorter period or add a filter.
         </Notice>
