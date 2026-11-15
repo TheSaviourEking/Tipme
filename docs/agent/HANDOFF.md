@@ -3,6 +3,13 @@
 - Branch `fix/ui-audit-behaviour-copy` from `origin/dev`. Audit items: the dashboard shell sends only a signed-out answer (401) to Sign in; a server or network failure shows "We couldn’t load your dashboard" with Try again (`lib/dashboard-load.ts`, `components/dashboard/load-failed.tsx`). Panel reads now give up after 15 s (`lib/panel-read.ts`): a read that never answered kept Tips and Earnings on a skeleton forever (reproduced in e2e). Home, Tips, Earnings and Withdraw use one error slip with Try again. Copy: no fee policy id on tip detail, no "provider"/"funds-flow approvals" in user words, campaign switch hint on its own line, admin Pages space, enrolment hint without a command, "Staff members" heading, a recap not made yet is neutral.
 - No CSS, no migration, no API change. Tests: `apps/web/test/dashboard-load.test.mjs`, `panel-read.test.mjs`, `payment-mode-copy.test.mjs`; e2e `tests/e2e/dashboard-read-failures.spec.ts` plus copy assertions in touched specs. Next: CI, owner review and merge into `dev`.
 
+# Current handoff: the home page's first paint (15 November 2026)
+
+- Branch `perf/home-first-paint` from `origin/dev`; PR into `dev`, not merged. Web CSS split, one unit test, release-check change, `dialogs.spec.ts` opens the dashboard/admin dialogs where their styles now load. No migration, no API change.
+- Measured (production build, release-check throttling, cold contexts, lane 6 stack): `/` LCP median 1292 ms before, 1000 after; perf lab `/` 1268-1276 to 964-976, `/@tobi` ~1316 to ~972, `/ops` ~1628 to ~1000, `/dashboard` unchanged (~3530).
+- Proved unchanged look: computed styles of every element on 54 page states (public, 15 dashboard, 20 admin pages, and client navigation across areas), desktop and 360 px, before vs after: only handle-dependent differences (automatic cover colour, auto margins).
+- Not proven: production numbers (needs a deploy); the dashboard's first visit downloads about 6 KB gzip more CSS (repeated rules), its LCP did not move in the lab.
+
 # Current handoff: the production migration deadlock fix (15 November 2026)
 
 - Branch `fix/deploy-migration-deadlock` from `origin/dev`. Deploy production (main @ `05231073`) failed twice at Migrations with 40P01: drizzle runs migrations 0071–0112 in one transaction, which deadlocked with the old workers' jobs. Each attempt rolled back; production is unchanged.

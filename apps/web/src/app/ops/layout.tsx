@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { Container, Skeleton } from '@tipme/ui';
 import { PaymentModeScope } from '@/components/payment-mode-slot';
 import { OpsShell } from './ops-shell';
+import './ops.css';
 
 export const metadata: Metadata = {
   title: { default: 'Admin', template: '%s · Admin | TipMe' },
