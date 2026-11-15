@@ -120,8 +120,9 @@ test('the tip detail is a receipt: tipped, TipMe’s 7% on Free, received', asyn
     receipt.getByText('TipMe fee (7%, includes processing)'),
   ).toBeVisible();
   await expect(receipt).toContainText('−₦140');
-  // The policy the tip was priced under, recorded on it (owner, 12 Nov 2026).
-  await expect(receipt).toContainText('v2-free-7pct');
+  // The tip keeps the policy it was priced under (owner, 12 Nov 2026); the receipt says the share
+  // in words above and never prints the policy's internal id (UI audit, 15 Nov 2026).
+  await expect(receipt).not.toContainText(/v2-free-7pct|fees from policy/i);
   await expect(receipt.getByText('You received')).toBeVisible();
   await expect(receipt.getByText('In your balance')).toBeVisible();
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
@@ -163,7 +164,7 @@ test('on Pro the receipt shows TipMe’s 5%, recorded on the tip', async ({
     receipt.getByText('TipMe fee (5%, includes processing)'),
   ).toBeVisible();
   await expect(receipt).toContainText('−₦100');
-  await expect(receipt).toContainText('v2-pro-5pct');
+  await expect(receipt).not.toContainText(/v2-pro-5pct|policy/i);
 });
 
 test('the week’s notes are a stack you press through', async ({

@@ -10,7 +10,7 @@ import {
   FIRST_READ_CAP_MS,
   type FirstRead,
 } from '@/lib/first-read';
-import { apiFetch } from '@/lib/session-client';
+import { readPanel } from '@/lib/panel-read';
 import {
   nextPanelState,
   type PanelError,
@@ -26,6 +26,11 @@ export interface Panel<T> {
   reload: () => Promise<void>;
   /** Browser clock at the last successful read; null before the first. */
   updatedAt: Date | null;
+  /**
+   * The HTTP status of the last read when it failed (0: no answer), else null. Lets a panel tell
+   * "there is nothing here yet" (404) from a failure, which only the failure calls an error.
+   */
+  failedStatus: number | null;
 }
 
 const NONE: readonly LiveEventType[] = [];
@@ -46,13 +51,17 @@ export function usePanel<T>(
   });
   // An answer for an older path (a search typed over), or an older read, never replaces a newer one.
   const latest = useRef(0);
+  const [failedStatus, setFailedStatus] = useState<number | null>(null);
   const first = useRef<FirstRead | null>(null);
   const reload = useCallback(async () => {
     first.current?.started();
     const mine = ++latest.current;
-    const result = await apiFetch<T>(path);
+    // Always settles (a time limit, panel-read.ts), so a first read that never answers still ends
+    // in the load error, with Try again, instead of an endless skeleton.
+    const result = await readPanel<T>(path);
     if (mine !== latest.current) return;
     setState((prev) => nextPanelState(prev, result, new Date()));
+    setFailedStatus(result.ok ? null : result.status);
   }, [path]);
   // The first read (again for each new path). While the stream connects it waits for the ready
   // resync, so a load reads each panel once (first-read.ts).
@@ -74,5 +83,5 @@ export function usePanel<T>(
     first.current?.update(phase);
   }, [phase, reload]);
   useLiveEvents(options?.live ?? NONE, reload, { resync });
-  return { ...state, reload };
+  return { ...state, failedStatus, reload };
 }

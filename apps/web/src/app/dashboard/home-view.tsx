@@ -7,7 +7,8 @@ import type {
   DashboardSummary,
   WeeklyReportData,
 } from '@tipme/contracts';
-import { Button, Notice, Skeleton } from '@tipme/ui';
+import { Button, Skeleton } from '@tipme/ui';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
 import { WhatsNewSlip } from '@/components/dashboard/whats-new-slip';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -106,9 +107,10 @@ export default function DashboardHome() {
   // Only a first load that failed blanks the page; a failed refresh keeps the last numbers.
   if (balance.error === 'load' || recent.error === 'load')
     return (
-      <Notice tone="error" title="We couldn’t load your dashboard">
-        Please reload the page.
-      </Notice>
+      <LoadFailed
+        title="We couldn’t load your dashboard"
+        onRetry={() => Promise.all([balance.reload(), recent.reload()])}
+      />
     );
   if (!summary || !activity) return <Skeleton label="Loading your numbers" />;
   const firstDay = activity.length === 0 && summary.availableMinor === '0';
@@ -231,9 +233,8 @@ export default function DashboardHome() {
                   <div>
                     <strong>Set up payments and payouts</strong>
                     <p>
-                      Account setup is not available yet. Real payments and
-                      payouts remain disabled until provider and funds-flow
-                      approvals are complete.
+                      You can’t set this up yet. Real payments and payouts stay
+                      off until TipMe opens them.
                     </p>
                   </div>
                   <span>Coming later</span>
