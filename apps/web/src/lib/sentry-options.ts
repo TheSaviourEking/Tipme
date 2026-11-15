@@ -1,11 +1,15 @@
-import { scrubEvent } from './sentry-scrub.ts';
+import { scrubEvent, scrubSpan } from './sentry-scrub.ts';
 
 /**
  * Sentry for the web app (ADR-0005): unexpected errors and a sample of traces, nothing else. No
  * session replay, no logs, no personal data; every event is scrubbed (sentry-scrub.ts) before it
  * leaves. Off unless a DSN is configured, so local runs and tests send nothing.
  */
-export function sentryOptions(dsn: string | undefined) {
+export function sentryOptions(
+  dsn: string | undefined,
+  // Passed in (not imported) so this module never pulls the SDK into the deferred client bundle.
+  sdk: { withStaticSpan: typeof import('@sentry/nextjs').withStaticSpan },
+) {
   return {
     dsn,
     enabled: Boolean(dsn),
@@ -20,5 +24,8 @@ export function sentryOptions(dsn: string | undefined) {
     traceLifecycle: 'static' as const,
     beforeSend: scrubEvent,
     beforeSendTransaction: scrubEvent,
+    // Runs on every span of a transaction and on standalone spans, which never reach
+    // beforeSendTransaction. The static lifecycle ignores it unless wrapped.
+    beforeSendSpan: sdk.withStaticSpan(scrubSpan),
   };
 }
