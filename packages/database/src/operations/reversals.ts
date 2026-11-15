@@ -100,13 +100,6 @@ export async function reverseTip(
     refundedMinor: bigint;
     /** A fee the refund itself carried: TipMe's expense, out of the partner balance. */
     refundFeeMinor?: bigint;
-    /**
-     * The `refund_fee_return` switch (owner, 12 Nov 2026; since 14 Nov for chargebacks only): TipMe's fee goes
-     * back to the person by transfer when the network charged the tip back. A
-     * shared tip gets it whatever the flag (option B). For a refund it was usually already asked
-     * for at refund.paid; the same partner refund never gets it twice.
-     */
-    feeReturnOn?: boolean;
     traceId?: string | null;
     now?: Date;
   },
@@ -275,10 +268,10 @@ export async function reverseTip(
       now,
     });
     // A chargeback only (owner, 14 Nov 2026): the network took the whole tip from the person's
-    // account, so TipMe sends its fee back and bears it; they lose only what they received. A
-    // refund returns nothing of TipMe's fee.
-    const shared = lines.some((l) => l.account === 'business_payable');
-    if (!refund && (input.feeReturnOn || shared))
+    // account, so TipMe sends its fee back and bears it; they lose only what they received. Always,
+    // for every tip: no switch decides it (`refund_fee_return` only records final refunds at once).
+    // A refund returns nothing of TipMe's fee.
+    if (!refund)
       await scheduleFeeReturn(tx, {
         tipId: tip.id,
         partnerReversalId: input.partnerReversalId,

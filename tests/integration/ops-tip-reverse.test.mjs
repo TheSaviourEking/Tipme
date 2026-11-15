@@ -400,20 +400,19 @@ test("only a paid refund is reversed, for exactly what the partner gave back, an
   assert.equal(fee, '1500');
 });
 
-// Owner, 14 Nov 2026: a chargeback costs TipMe its fee, sent back to the person once per dispute
-// (`fee_return`). For a tip with no business share that rides the `refund_fee_return` admin switch,
-// which replaced the REFUND_FEE_RETURN variable: off, nothing goes back; on, one fee return.
-test('a lost dispute sends TipMe’s fee back only while the refund_fee_return switch is on', async () => {
-  const chargedBack = async () => {
-    const tip = await reportedReversal(database);
-    const [{ attempt_id: attemptId }] = await q(
-      `SELECT a.id AS attempt_id FROM payment_attempts a JOIN tips t ON t.intent_id = a.intent_id
-        WHERE t.id = $1`,
-      [tip.tipId],
-    );
+// Owner, 14 Nov 2026: on a chargeback TipMe always bears its fee. It sends its whole fee to the
+// person's account once per dispute (`fee_return`), so they lose only what they received. No switch
+// decides this: `refund_fee_return` only records final refunds at once, and here it stays off.
+test('a lost dispute sends TipMe’s fee back once with the refund_fee_return switch off, plain or shared', async () => {
+  await setSwitch(database.pool, 'refund_fee_return', false);
+  const chargedBack = async (options) => {
+    const tip = await reportedReversal(database, {
+      ...options,
+      events: ['refund.created'],
+    });
     const disputeId = `dispute.dp_${randomUUID().replaceAll('-', '')}`;
     await ops.flagPaymentReversal(database.db, {
-      attemptId,
+      attemptId: tip.attemptId,
       eventId: `evt_chargeback_${randomUUID()}`,
       eventType: 'dispute.created',
       partnerReversalId: disputeId,
@@ -421,33 +420,40 @@ test('a lost dispute sends TipMe’s fee back only while the refund_fee_return s
     });
     const [{ id: issueId }] = await q(
       `SELECT id FROM issues WHERE dedupe_key = $1`,
-      [`event.payment.reversed.${attemptId}.${disputeId}`],
+      [`event.payment.reversed.${tip.attemptId}.${disputeId}`],
     );
     return { ...tip, disputeId, chargebackIssue: issueId };
   };
-  const feeReturns = async (disputeId) =>
-    (
-      await q(
-        `SELECT count(*)::int AS n FROM share_transfers
-          WHERE kind = 'fee_return' AND partner_reversal_id = $1`,
-        [disputeId],
-      )
-    )[0].n;
+  const feeReturns = (disputeId) =>
+    q(
+      `SELECT profile_id, amount_minor::text AS amount FROM share_transfers
+        WHERE kind = 'fee_return' AND partner_reversal_id = $1`,
+      [disputeId],
+    );
+  // Every ledger transaction of the tip balances: its debits equal its credits.
+  const unbalanced = (tipId) =>
+    q(
+      `SELECT x.id FROM ledger_transactions x JOIN ledger_entries e ON e.transaction_id = x.id
+        WHERE x.tip_id = $1
+        GROUP BY x.id
+       HAVING sum(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END) <> 0`,
+      [tipId],
+    );
 
-  const off = await chargedBack();
-  const offAnswer = await reverse(off.chargebackIssue, full);
-  assert.equal(offAnswer.status, 200, await offAnswer.clone().text());
-  assert.equal(await off.reversals(), 1);
-  assert.equal(await feeReturns(off.disputeId), 0);
-
-  await setSwitch(database.pool, 'refund_fee_return', true);
-  try {
-    const on = await chargedBack();
-    const onAnswer = await reverse(on.chargebackIssue, full);
-    assert.equal(onAnswer.status, 200, await onAnswer.clone().text());
-    assert.equal(await on.reversals(), 1);
-    assert.equal(await feeReturns(on.disputeId), 1);
-  } finally {
-    await setSwitch(database.pool, 'refund_fee_return', false);
+  for (const options of [{}, { bps: 1000 }]) {
+    const tip = await chargedBack(options);
+    const answer = await reverse(tip.chargebackIssue, full);
+    assert.equal(answer.status, 200, await answer.clone().text());
+    assert.equal(await tip.reversals(), 1);
+    // TipMe's whole fee on the ₦4,000 tip (₦280), to the person, once.
+    assert.deepEqual(await feeReturns(tip.disputeId), [
+      { profile_id: tip.profileId, amount: (GROSS - NET).toString() },
+    ]);
+    // The same dispute again is refused and sends nothing more.
+    const again = await reverse(tip.chargebackIssue, full);
+    assert.equal(again.status, 409, await again.clone().text());
+    assert.equal((await feeReturns(tip.disputeId)).length, 1);
+    assert.equal(await tip.reversals(), 1);
+    assert.deepEqual(await unbalanced(tip.tipId), []);
   }
 });

@@ -47,10 +47,10 @@ other needs a reason and a fresh code. Every change is in the audit log and the 
 
 Registered for open pull requests, so they can read the switch instead of adding a variable:
 
-| Variable              | Switch key          | Money | Default | Pull request                                                                                                                                                                                      |
-| --------------------- | ------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it                                                                                                       |
-| `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff, and a lost dispute returns TipMe's fee. No deploy file names the variable |
+| Variable              | Switch key          | Money | Default | Pull request                                                                                                                                                                                                                                                 |
+| --------------------- | ------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it                                                                                                                                                                  |
+| `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff; that is all it does. A chargeback always returns TipMe's fee, with no switch (owner, 14 Nov 2026). No deploy file names the variable |
 
 Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of
 these variables was ever in a deploy file, so nothing needs deleting from the servers; each still seeds its

@@ -505,9 +505,9 @@ export function flagPaymentReversal(
     refundedMinor?: bigint | null;
     refundFeeMinor?: bigint | null;
     /**
-     * The `refund_fee_return` switch (owner, 12 Nov 2026): a final refund is recorded in the ledger at once. Since
-     * 14 Nov 2026 a refund returns nothing of TipMe's fee (the flag keeps its name; it still gates
-     * this automatic recording, an open question for the owner).
+     * The `refund_fee_return` switch (owner, 12 Nov 2026): a final refund is recorded in the ledger at once,
+     * without two staff. That is all it gates (an open question for the owner). Since 14 Nov 2026 a
+     * refund returns nothing of TipMe's fee, and a chargeback always returns it, with no switch.
      */
     feeReturnOn?: boolean;
     now?: Date;
@@ -626,7 +626,6 @@ export function flagPaymentReversal(
               partnerReversalId,
               refundedMinor: input.refundedMinor!,
               refundFeeMinor: input.refundFeeMinor ?? 0n,
-              feeReturnOn: true,
               now,
             }),
           );

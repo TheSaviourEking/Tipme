@@ -3704,9 +3704,9 @@ export const businessProAutoRenew = pgTable(
  *
  * - `sweep`: the business's share, staff -> TipMe -> business, once the tip's money is available.
  * - `recover`: a refunded tip's share the business still holds, business -> TipMe -> staff.
- * - `fee_return`: TipMe's fee on a refunded tip, TipMe -> the person tipped (no `out` leg). On
- *   every refunded tip once the refund is final (owner, 12 Nov 2026, behind the `refund_fee_return` switch), and
- *   on a lost dispute staff reverse; once per partner refund or dispute (`partner_reversal_id`).
+ * - `fee_return`: TipMe's fee on a charged-back tip, TipMe -> the person tipped (no `out` leg). On
+ *   every lost dispute staff reverse, with no switch (owner, 14 Nov 2026; never on a refund, where
+ *   TipMe keeps its fee); once per partner refund or dispute (`partner_reversal_id`).
  * - `holdback_repay`: part of a later sweep held back from the business for a share it had already
  *   withdrawn, TipMe -> the staff member it is owed to (no `out` leg: the sweep brought it in).
  *

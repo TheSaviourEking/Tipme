@@ -139,7 +139,7 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
   refund_fee_return: {
     label: 'Record final refunds at once',
     description:
-      'A refund our payment partner says is final is taken back in TipMe’s books at once, without two staff, and a lost chargeback sends TipMe’s fee back to the person. TipMe keeps its fee on a refund.',
+      'A refund our payment partner says is final is taken back in TipMe’s books at once, without two staff. Off, two staff record it.',
     money: true,
     default: false,
     env: truthy('REFUND_FEE_RETURN'),
