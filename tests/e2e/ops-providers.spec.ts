@@ -86,7 +86,7 @@ test('@alone an override can be set and removed with a reason (needs the confirm
   await enrolOwner(page, testInfo);
   await page.goto('/ops/providers');
   await page.getByLabel('Provider', { exact: true }).selectOption('mock');
-  await page.getByLabel('Account (handle or user id)').fill('tobi');
+  await page.getByLabel('Account (username or user id)').fill('tobi');
   await page
     .getByLabel('Why does this account need its own provider?')
     .fill('Their mailbox rejects the main provider');

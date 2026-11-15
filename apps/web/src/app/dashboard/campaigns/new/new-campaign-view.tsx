@@ -179,7 +179,7 @@ export default function NewCampaignPage() {
           </li>
           <li>
             A link ending can’t be one of TipMe’s own words or another person’s
-            handle.
+            username.
           </li>
         </ul>
       </Card>

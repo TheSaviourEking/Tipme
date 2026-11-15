@@ -201,7 +201,7 @@ function Overrides({
     if (!result.ok) {
       setError(
         result.code === 'NOT_FOUND'
-          ? 'No account with that handle or id, or that provider isn’t configured.'
+          ? 'No account with that username or id, or that provider isn’t configured.'
           : 'That didn’t save. Please check the fields and try again.',
       );
       return;
@@ -261,7 +261,7 @@ function Overrides({
           <InputField
             id={`${id}-account`}
             name="account"
-            label="Account (handle or user id)"
+            label="Account (username or user id)"
             maxLength={64}
             required
           />

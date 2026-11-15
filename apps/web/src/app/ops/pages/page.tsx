@@ -158,9 +158,9 @@ function HandleChanges({
   };
   return (
     <Card className="settings-section">
-      <h2>Handle changes</h2>
+      <h2>Username changes</h2>
       <p>
-        Handle changes:{' '}
+        Username changes:{' '}
         <strong>
           {used} of {allowed} used
         </strong>
@@ -474,14 +474,14 @@ export default function OpsPagesPage() {
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
-        below NGN 2,000) and change their handle. The fee and withdrawal minimum
-        are the same as Free.
+        below NGN 2,000) and change their username. The fee and withdrawal
+        minimum are the same as Free.
         {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField
           id={`${id}-handle`}
-          label="Handle"
+          label="Username"
           autoComplete="off"
           spellCheck={false}
           value={handle}

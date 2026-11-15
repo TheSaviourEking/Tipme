@@ -13,7 +13,7 @@ import { signUpPath } from '@/lib/sign-up-path';
 import { BusinessSteps } from './business-steps';
 import { SignUpFork, type ForkChoice } from './fork';
 
-const tippedSteps = ['Your email', 'The code', 'Your handle'] as const;
+const tippedSteps = ['Your email', 'The code', 'Your username'] as const;
 const businessSteps = [
   'Your email',
   'The code',

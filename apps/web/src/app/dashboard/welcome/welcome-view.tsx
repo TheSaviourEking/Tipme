@@ -269,7 +269,7 @@ export function WelcomeView() {
           </p>
           <Surface material="instrument" className="welcome-card welcome-plan">
             <ol>
-              <li className="is-done">Claim your handle</li>
+              <li className="is-done">Claim your username</li>
               <li>Tell people your name and what you do</li>
               <li>Add a line about you</li>
               <li>Put your page online and share it</li>

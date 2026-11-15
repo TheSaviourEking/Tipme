@@ -93,7 +93,7 @@ test('the whole story works together, and leaves nothing visible behind', async 
 
     // A new recipient signs up, claims a (tagged) handle and goes live.
     await signIn(recipient, email, '/sign-up');
-    await expect(recipient.getByLabel('Handle')).toBeVisible();
+    await expect(recipient.getByLabel('Username')).toBeVisible();
     accountCreated = true;
     const claim = await apiCall(
       recipient.request,

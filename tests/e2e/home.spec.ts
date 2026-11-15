@@ -98,13 +98,13 @@ test('the handle typed on Home is waiting, lowercased, at the handle step of sig
   const typed = who.handle.toUpperCase();
   await page.goto('/');
   const form = page.getByRole('form', { name: 'Claim your link' });
-  await form.getByLabel('Your handle').fill(typed);
+  await form.getByLabel('Your username').fill(typed);
   // Business sign-up is on in the e2e stack: the claim button reads "Get tipped".
   await form.getByRole('button', { name: 'Get tipped' }).click();
   await expect(page).toHaveURL(/\/sign-up\?handle=/);
   // Through the email and the code (the handle must survive both) to the handle step.
   await signInWithEmail(page, who.email, page.url());
-  const field = page.getByLabel('Handle');
+  const field = page.getByLabel('Username');
   await expect(field).toHaveValue(who.handle);
   await expect(page.getByText(`@${who.handle} is available`)).toBeVisible();
   // Still editable.
@@ -117,13 +117,13 @@ test('a handle in the sign-up link that breaks the handle rule prefills nothing'
 }, testInfo) => {
   const who = identity(testInfo);
   await signInWithEmail(page, who.email, '/sign-up?handle=not%20a-handle!');
-  await expect(page.getByLabel('Handle')).toBeVisible();
-  await expect(page.getByLabel('Handle')).toHaveValue('');
+  await expect(page.getByLabel('Username')).toBeVisible();
+  await expect(page.getByLabel('Username')).toHaveValue('');
 });
 
 test('the claim field says capitals become lowercase', async ({ page }) => {
   await page.goto('/');
-  const field = page.getByLabel('Your handle');
+  const field = page.getByLabel('Your username');
   await expect(field).toHaveAttribute('title', /lowercase/);
   expect(
     await field.evaluate((input) => getComputedStyle(input).textTransform),

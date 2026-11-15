@@ -77,7 +77,7 @@ test('Settings has the login’s own sections, and “Turn on your page” leads
   await expectAccessible(page);
 
   await main.getByRole('button', { name: 'Turn on your page' }).click();
-  await page.getByLabel('Handle').fill(owner.handle);
+  await page.getByLabel('Username').fill(owner.handle);
   await expect(page.getByText(`@${owner.handle} is available`)).toBeVisible();
   await page.getByRole('button', { name: `Claim @${owner.handle}` }).click();
   await page.waitForURL(/\/dashboard\/welcome$/);
