@@ -17,7 +17,12 @@ const env = (extra: Record<string, string>) => ({
 
 export default defineConfig({
   testDir: './tests/e2e',
-  outputDir: `./${LANE.outputDir}`,
+  // The @alone stage runs after the suite in the same job (scripts/run-e2e.mjs), and Playwright
+  // empties its output folder when it starts: in a folder of its own, it leaves the suite's failure
+  // screenshots for CI to upload.
+  outputDir: process.env.E2E_ALONE
+    ? `./${LANE.outputDir}/alone`
+    : `./${LANE.outputDir}`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,

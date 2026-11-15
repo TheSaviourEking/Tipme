@@ -15,6 +15,12 @@ import { chooseAndSave, chooseImage } from './image-picker-helpers';
 
 // Choosing a cover in Settings (design spec §6, motion §7.6). Reduced motion is on in this suite,
 // so a choice shows at once; the crossfade timings are in the component and the motion document.
+
+// A route handler still running when a test ends (a live re-read mid route.fetch()) must not fail it.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 type MakeImage = (options: {
   create: {
     width: number;
