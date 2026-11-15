@@ -1,3 +1,9 @@
+# Current handoff: the production migration deadlock fix (15 November 2026)
+
+- Branch `fix/deploy-migration-deadlock` from `origin/dev`. Deploy production (main @ `05231073`) failed twice at Migrations with 40P01: drizzle runs migrations 0071–0112 in one transaction, which deadlocked with the old workers' jobs. Each attempt rolled back; production is unchanged.
+- `deploy-production.sh` pauses the running `worker-a`/`worker-b` (`docker compose stop`) before migrating; the exit trap starts the same containers again (`docker compose start`) if the deploy stops before the replace step. Staging's `deploy.sh` does the same for `worker`. `release-migrate` keeps `lock_timeout` 10 s and retries 40P01/55P03 up to 3 attempts (5 s, then 15 s apart).
+- Passed: fake-docker deploy tests (63, staging and production), database package suite (61), typecheck, lint, Prettier; compose `ps --services --status running`/`stop`/`start`/`up` checked on real Docker (Compose v5.6.1) with a throwaway project. Not proven: a real run on the server. Next: CI, the owner merges into `dev`, staging full pass, `dev` → `main`, re-run Deploy production.
+
 # Current handoff: the backlog merge train, withdraw and audit fixes, missed visits, public boards (12 November 2026)
 
 - Branch `train/backlog` from `origin/dev` at `c4966605` (the Pro train, #190, merged): #191 (`feat/backlog-withdraw-visits`: R1, D1, S1, X1 and missed visits) and #192 (`feat/backlog-public`: coming soon from `PRODUCTION_LAUNCH_AT`, QR print, the tip form restyle and its two proposals) merged in that order with `--no-ff`. Merging it marks both merged. No conflicts.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploys one version to staging (PR-010). GitHub Actions has already built and tested the image
 # and shipped it here (deploy-staging workflow): this only runs it.
-#   backup → migrate (guarded) → switch → health → record → prune old versions.
+#   backup → pause the worker → migrate (guarded) → switch → health → record → prune old versions.
 # If the new version is unhealthy it puts the previous one back (no down-migrations: migrations
 # are forward-only and must stay compatible with the previous release).
 #
@@ -28,12 +28,23 @@ compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
 echo "==> Backup before migrating"
 compose_for "$version" run --rm backup sh deploy/backup-loop.sh once
 
+# As production: the old worker is paused while the migrations run (lib.sh, "Workers paused for
+# migrations"), and started again by the exit trap if the deploy stops before the switch.
+trap resume_paused_workers EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+pause_workers "$version" worker
+
 echo "==> Migrations"
 MIGRATE_CONFIRM_DATABASE=tipme MIGRATE_BACKUP_DONE=1 compose_for "$version" run --rm migrate
+resume_reason="the deploy stopped after migrating, before the switch"
 compose_for "$version" exec -T postgres sh /opt/tipme/bootstrap-roles.sh
 
 echo "==> Switching to $version"
 compose_for "$version" up -d --remove-orphans $(app_services "$version")
+# The switch started the new version's worker (and an unhealthy deploy puts the previous one back).
+worker_replaced worker
 attach_edge "$version"
 
 if wait_healthy "$version"; then

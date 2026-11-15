@@ -102,8 +102,10 @@ Besides the watcher, an outside service pings `https://api.usetipme.xyz/health/l
 
 1. `gate`: refuses a commit whose file tree has no full staging pass (`release/staging-full`), unless `override_reason` is filled in;
 2. builds `tipme-app:<12-char sha>` once, ships the edge (validated, reloaded) and the image and files to `/srv/tipme-production/releases/<version>/`;
-3. runs `deploy-production.sh` on the server: Redis (never restarted), `db-roles`, migrations as the migrator, `db-roles` again, the idle colour on the new version (×3), wait until `/health/release` shows it, record, stop the old colour (it fails readiness, drains 5 s, closes), replace `worker-a` then `worker-b`;
+3. runs `deploy-production.sh` on the server: Redis (never restarted), `db-roles`, **pauses the running workers** (`docker compose stop worker-a worker-b`; the API colours keep serving), migrations as the migrator, `db-roles` again, the idle colour on the new version (×3), wait until `/health/release` shows it, record, stop the old colour (it fails readiness, drains 5 s, closes), replace `worker-a` then `worker-b` (`up` recreates the paused containers on the new version);
 4. runs the release check, read-only, expecting the version and `bachs-live`; posts to Slack.
+
+**Migrations and the workers:** drizzle applies every pending migration in one transaction, and the old workers' short jobs deadlocked with it (40P01) on both tries of the November 2026 release deploy (0070 → 0112), so the workers are paused while it runs; queued jobs wait in Redis. If the deploy stops before the new workers replace them (a failed migration, an unhealthy colour, a dropped SSH session), the exit trap runs `docker compose start` on the same containers and logs `==> Workers resumed (<why>)`: production is as it was. If it cannot, it prints the `compose.sh start …` command to run by hand. The migration itself waits at most 10 s for any table lock (`lock_timeout`) and, after a deadlock or a lock timeout, runs again up to 3 attempts in all (5 s, then 15 s apart): each failed attempt rolls back entirely. Staging's `deploy.sh` pauses its `worker` the same way.
 
 If the new colour never becomes healthy, it is stopped and the old colour keeps serving; nothing is recorded.
 

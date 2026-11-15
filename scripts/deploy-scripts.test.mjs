@@ -153,6 +153,48 @@ test('an unhealthy new version is replaced by the previous one automatically', (
   assert.equal(read('releases/current').trim(), 'aaaaaaa1');
 });
 
+test('the old worker is paused after the backup and before the migrations, then replaced by the switch', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('bbbbbbb2');
+  assert.equal(run('deploy.sh', ['aaaaaaa1']).status, 0);
+  assert.equal(read('worker').trim(), 'aaaaaaa1');
+  const before = read('calls.log').split('\n').filter(Boolean).length;
+  const result = run('deploy.sh', ['bbbbbbb2']);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /==> Pausing workers for migrations: worker/);
+  const calls = read('calls.log').split('\n').filter(Boolean).slice(before);
+  const at = (pattern) => calls.findIndex((line) => pattern.test(line));
+  const backup = at(/run --rm backup/);
+  const pause = at(/ stop worker \|/);
+  const migrate = at(/run --rm migrate/);
+  const up = at(/up -d --remove-orphans api worker/);
+  assert.ok(
+    backup < pause && pause < migrate && migrate < up,
+    calls.join('\n'),
+  );
+  assert.equal(at(/ start /), -1, 'never started back on the old version');
+  assert.equal(read('worker').trim(), 'bbbbbbb2');
+});
+
+test('a failed staging migration starts the paused worker again, unchanged', () => {
+  const { run, read, ship } = stage();
+  ship('aaaaaaa1');
+  ship('bbbbbbb2');
+  assert.equal(run('deploy.sh', ['aaaaaaa1']).status, 0);
+  const result = run('deploy.sh', ['bbbbbbb2'], { FAKE_MIGRATE_FAILS: '1' });
+  assert.equal(result.status, 1);
+  assert.match(
+    result.stderr,
+    /==> Workers resumed \(migrations failed\): worker/,
+  );
+  const calls = read('calls.log').split('\n').filter(Boolean);
+  assert.match(calls.at(-1), / start worker \|/);
+  assert.equal(read('worker').trim(), 'aaaaaaa1');
+  assert.equal(read('running').trim(), 'aaaaaaa1');
+  assert.equal(read('releases/current').trim(), 'aaaaaaa1');
+});
+
 test('backups owned by anyone but the image user are refused before a deploy changes anything', () => {
   const { run, read, ship } = stage();
   ship('aaaaaaa1');
