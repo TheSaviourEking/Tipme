@@ -14,17 +14,84 @@ export async function studioModules() {
   return { contracts, arbitrary, pbt };
 }
 
-/**
- * After a viewport change, wait two frames so media and container queries have re-applied before
- * measuring (a measurement in the same frame can still see the previous width's padding).
- */
-export const settled = (page: Page) =>
+/** Sizes of the viewport, the frame and every row, read in the page (what `settled` and a failure's snapshot use). */
+export const readLayout = () => {
+  const root = document.documentElement;
+  const rows = [...document.querySelectorAll('.studio-row')].map((row) => {
+    const box = row.getBoundingClientRect();
+    return {
+      columns: row.getAttribute('data-columns'),
+      bg: row.getAttribute('data-bg'),
+      client: row.clientWidth,
+      scroll: row.scrollWidth,
+      left: Math.round(box.left),
+      right: Math.round(box.right),
+    };
+  });
+  return {
+    innerWidth: window.innerWidth,
+    clientWidth: root.clientWidth,
+    scrollWidth: root.scrollWidth,
+    visualViewport: window.visualViewport?.width ?? null,
+    frameClient: document.querySelector('.studio-frame')?.clientWidth ?? null,
+    rows,
+  };
+};
+
+const frames = (page: Page) =>
   page.evaluate(
     () =>
       new Promise<void>((done) =>
         requestAnimationFrame(() => requestAnimationFrame(() => done())),
       ),
   );
+
+/**
+ * After a viewport change, wait until the browser has applied it and the layout has stopped
+ * moving, then measure. Two frames alone were not enough: on a busy machine a measurement (fast-check
+ * seed -732091363, 16 Nov 2026) saw a row 272px wide holding content 288px wide, which no single
+ * layout produces, and the failure screenshot showed the previous width. So wait for `innerWidth`
+ * to equal the width Playwright set (the document agreeing, less a scrollbar), then for two
+ * readings in a row of the same frame and row sizes. Throws, with the last reading, if that does
+ * not happen within `timeout`.
+ */
+export async function settled(page: Page, timeout = 10_000) {
+  const want = page.viewportSize()?.width;
+  const deadline = Date.now() + timeout;
+  let previous = '';
+  for (;;) {
+    await frames(page);
+    const read = await page.evaluate(readLayout);
+    const applied =
+      want === undefined ||
+      (read.innerWidth === want &&
+        read.clientWidth <= want &&
+        want - read.clientWidth <= 24 &&
+        (read.visualViewport === null ||
+          Math.abs(read.visualViewport - want) <= 24));
+    const signature = JSON.stringify([
+      read.innerWidth,
+      read.frameClient,
+      read.rows,
+    ]);
+    if (applied && signature === previous) return;
+    previous = signature;
+    if (Date.now() > deadline)
+      throw new Error(
+        `Layout did not settle at ${want ?? '?'}px within ${timeout}ms; last reading: ${JSON.stringify(read)}`,
+      );
+  }
+}
+
+/** A failure's attachment: the viewport, the frame, and every row with the ones that overflow marked. */
+export async function layoutSnapshot(page: Page) {
+  const read = await page.evaluate(readLayout);
+  return {
+    requestedViewport: page.viewportSize(),
+    ...read,
+    overflowingRows: read.rows.filter((row) => row.scroll > row.client),
+  };
+}
 
 /** A Studio document as the lab's `?doc=` parameter: deflate-raw, then base64url. */
 export const encodeDoc = (doc: unknown) =>

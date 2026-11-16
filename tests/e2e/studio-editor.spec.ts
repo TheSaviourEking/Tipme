@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
+import { settled } from './studio-probes';
 import { API_ORIGIN, WEB_ORIGIN } from './stack';
 
 // Page Studio editor, PR G1 (plan 2026-11-12-page-studio, Task 9a): the way in from My page, the
@@ -154,6 +155,7 @@ test('G1: a picked yellow shows the accent-only note and passing chips @mobile',
   }
   expect(await fitsViewport(page)).toBe(true);
   await page.setViewportSize({ width: 320, height: 800 });
+  await settled(page);
   expect(await fitsViewport(page)).toBe(true);
 });
 

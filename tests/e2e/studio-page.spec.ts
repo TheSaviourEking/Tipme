@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
+import { settled } from './studio-probes';
 import {
   STUDIO_HANDLES,
   startStack,
@@ -119,6 +120,7 @@ test.describe('a published Studio page', () => {
       await expectAccessible(page);
       for (const width of [320, 390, 1440]) {
         await page.setViewportSize({ width, height: 900 });
+        await settled(page);
         expect(await fitsViewport(page), `${handle} at ${width}px`).toBe(true);
       }
     }
