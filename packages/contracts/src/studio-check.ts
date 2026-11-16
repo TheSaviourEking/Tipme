@@ -238,7 +238,8 @@ export function studioColourName(hex: Hex): string {
   if (c < 0.03) return 'grey';
   if (h >= 15 && h < 115 && l < 0.5) return 'brown';
   if (h < 15 || h >= 345) return 'pink';
-  if (h < 45) return 'red';
+  // A light red-orange, like the Studio's suggested second colour #ff7a59, reads as coral, not red.
+  if (h < 45) return l >= 0.68 ? 'coral' : 'red';
   if (h < 75) return 'orange';
   if (h < 115) return 'yellow';
   if (h < 170) return 'green';
