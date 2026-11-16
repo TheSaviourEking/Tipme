@@ -1,3 +1,8 @@
+# Current handoff: the last tinted Notices (16 November 2026)
+
+- Branch `refactor/notice-to-design-law`; PR into `dev`, not merged. Changed: 55 web files (Notice → Slip / StandingWarning / LoadFailed), `load-failed.tsx` (`dense`), `packages/ui` (Notice and its CSS removed), CSS selectors that named `.tm-notice`, guard tests (`states-migration.test.mjs`, `packages/ui/test/states.test.mjs`), `ops-staff.spec.ts` (the "✓ " prefix is gone), DECISION-LOG.
+- Left: the board's proposed stamps; Try again on reads whose state never clears (Providers, Email, Issues, Usernames).
+
 # Current handoff: Studio Tip bar and the sample announcement (16 November 2026)
 
 - Branch `feat/studio-sticky-tip-bar`; PR into `dev`, not merged. Changed: `components/studio/studio-page.tsx` (rail class), `components/studio/studio.css` (rail placement), `packages/mail` announcement sample and account-events copy (+ `test/fixtures/text-before-m2.json`), new e2e test in `tests/e2e/studio-page.spec.ts`, darwin Studio visual baselines, DECISION-LOG.

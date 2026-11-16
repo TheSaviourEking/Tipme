@@ -14,7 +14,7 @@ import {
   FREE_QR_STYLES,
   type CampaignDetail,
 } from '@tipme/contracts';
-import { Button, Card, InputField, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, InputField, Skeleton, Slip } from '@tipme/ui';
 import { BarChart } from '@/components/dashboard/bar-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { track } from '@/lib/analytics';
@@ -191,9 +191,9 @@ export default function CampaignPage() {
   const detail = panel.data;
   if (panel.error === 'load' && !detail)
     return (
-      <Notice tone="error" title="We couldn’t find that campaign">
+      <Slip tone="error" title="We couldn’t find that campaign">
         <Link href="/dashboard/campaigns">Back to your campaigns</Link>
-      </Notice>
+      </Slip>
     );
   if (!detail) return <Skeleton label="Loading the campaign" />;
   const link = origin ? campaignLink(origin, detail.handle, detail.slug) : null;

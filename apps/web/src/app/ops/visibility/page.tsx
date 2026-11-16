@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { OpsMetricsEnvelope, OpsVisibility } from '@tipme/contracts';
-import { Card, Notice, Skeleton } from '@tipme/ui';
+import { Card, Skeleton, Slip } from '@tipme/ui';
 import { BarChart, LineChart, Tile } from '@/components/ops/charts';
 import { opsFetch } from '@/lib/ops-staff-api';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 const CHANNELS: Record<string, string> = {
   qr: 'QR code',
@@ -35,16 +36,25 @@ export default function VisibilityPage() {
     null,
   );
   const [failed, setFailed] = useState(false);
+  const read = useCallback(
+    () =>
+      opsFetch<OpsMetricsEnvelope<OpsVisibility>>(
+        '/v1/ops/metrics/visibility',
+      ).then((result) => {
+        if (!result.ok) return setFailed(true);
+        setFailed(false);
+        setData(result.data);
+      }),
+    [],
+  );
   useEffect(() => {
-    void opsFetch<OpsMetricsEnvelope<OpsVisibility>>(
-      '/v1/ops/metrics/visibility',
-    ).then((result) => (result.ok ? setData(result.data) : setFailed(true)));
-  }, []);
+    void read();
+  }, [read]);
   if (failed)
     return (
-      <Notice tone="error" title="Couldn’t load visibility">
+      <LoadFailed dense title="Couldn’t load visibility" onRetry={read}>
         Your role may not include analytics, or the connection failed.
-      </Notice>
+      </LoadFailed>
     );
   if (!data) return <Skeleton label="Loading visibility" />;
   const v = data.metrics;
@@ -60,10 +70,10 @@ export default function VisibilityPage() {
         names, numbers or ids that link visits together.
       </p>
       {!data.collecting && (
-        <Notice tone="neutral" title="Anonymous collection is off">
+        <Slip dense tone="neutral" title="Anonymous collection is off">
           These numbers stay empty until the privacy decision (D-07) turns
           collection on.
-        </Notice>
+        </Slip>
       )}
       <div className="ops-tiles">
         <Tile label="Visits" value={String(v.visits)} />

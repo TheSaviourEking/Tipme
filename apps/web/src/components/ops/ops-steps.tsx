@@ -2,7 +2,7 @@
 import QRCode from 'qrcode';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import type { OpsEnrolment } from '@tipme/contracts';
-import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { Button, Card, InputField, Slip } from '@tipme/ui';
 import {
   ENROL_LINK_KEY,
   ENROL_LINK_PREFIX,
@@ -171,9 +171,9 @@ export function OpsEnrol({
       </p>
       <div ref={errorBox} tabIndex={-1}>
         {error && (
-          <Notice tone="error" title="Not done">
+          <Slip dense tone="error" title="Not done">
             {error}
-          </Notice>
+          </Slip>
         )}
       </div>
       {!enrolment ? (
@@ -301,9 +301,9 @@ export function OpsCode({ onDone }: { onDone: () => void }) {
         area.
       </p>
       {error && (
-        <Notice tone="error" title="Not signed in to admin">
+        <Slip dense tone="error" title="Not signed in to admin">
           {error}
-        </Notice>
+        </Slip>
       )}
       <form className="settings-form" onSubmit={(e) => void submit(e)}>
         <CodeField id={`${id}-code`} />

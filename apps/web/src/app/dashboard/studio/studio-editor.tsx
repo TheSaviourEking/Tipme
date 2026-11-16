@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import type { MyStudio, StudioIssue } from '@tipme/contracts';
-import { Button, EmptySlip, Notice, Skeleton, Slip } from '@tipme/ui';
+import { Button, EmptySlip, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { apiFetch } from '@/lib/session-client';
@@ -225,19 +225,19 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
         </div>
       </header>
       {studio.stale && (
-        <Notice tone="neutral" title="This draft changed in another tab">
+        <Slip tone="neutral" title="This draft changed in another tab">
           Your design was saved somewhere else after this page opened, so we
           stopped saving here to keep that version.{' '}
           <Button variant="secondary" onClick={() => void studio.reload()}>
             Show the latest
           </Button>
-        </Notice>
+        </Slip>
       )}
       {studio.proEnded && (
-        <Notice tone="neutral" title="Your Pro has ended">
+        <Slip tone="neutral" title="Your Pro has ended">
           Your design and draft are kept, and you can look at them. Editing
           comes back with Pro. <Link href="/pro">See Pro</Link>
-        </Notice>
+        </Slip>
       )}
       <div className="pst-body">
         <div className="pst-side">

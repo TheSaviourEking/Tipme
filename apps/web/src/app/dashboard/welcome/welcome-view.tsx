@@ -14,7 +14,7 @@ import {
   ActionLink,
   Button,
   InputField,
-  Notice,
+  Slip,
   Surface,
   TextareaField,
 } from '@tipme/ui';
@@ -464,9 +464,9 @@ export function WelcomeView() {
               Settings.
             </p>
             {profile.suspended && (
-              <Notice tone="neutral" title="Your page can’t go live right now">
+              <Slip tone="neutral" title="Your page can’t go live right now">
                 TipMe has paused your page. Your dashboard explains why.
-              </Notice>
+              </Slip>
             )}
             {error && (
               <p className="tm-field-error" role="alert">

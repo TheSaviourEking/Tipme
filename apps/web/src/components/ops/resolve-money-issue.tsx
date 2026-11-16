@@ -1,6 +1,6 @@
 'use client';
 import { useId, useState, type FormEvent } from 'react';
-import { Button, Notice, TextareaField } from '@tipme/ui';
+import { Button, Slip, StandingWarning, TextareaField } from '@tipme/ui';
 import { ISSUE_OUTCOME_CHOICES } from '@/lib/ops-client';
 
 /** Resolving a money issue: how it was settled, and why. Neither changes a balance. */
@@ -74,12 +74,12 @@ export function ResolveMoneyIssue({
       </div>
       {takeover && (
         <>
-          <Notice tone="error" title="This releases the freeze">
+          <StandingWarning dense title="This releases the freeze">
             The next withdrawal goes to the current bank, which may be the
             thief’s, and whoever is signed in stays signed in. Check them first:
             the current bank belongs to the real owner, any withdrawal waiting
             is theirs (if not, mark it failed), and sessions were ended.
-          </Notice>
+          </StandingWarning>
           <label className="ops-recovery__confirm">
             <input type="checkbox" name="checked" required />
             <span>
@@ -98,9 +98,9 @@ export function ResolveMoneyIssue({
         required
       />
       {error && (
-        <Notice tone="error" title="Not done">
+        <Slip dense tone="error" title="Not done">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button

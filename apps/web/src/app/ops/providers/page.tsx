@@ -5,8 +5,8 @@ import {
   Button,
   Card,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -70,11 +70,11 @@ function ProviderCard({
         </p>
       )}
       {card.sandbox === true ? (
-        <Notice tone="neutral" title="Sandbox">
+        <Slip dense tone="neutral" title="Sandbox">
           This provider only delivers to verified recipients
           {card.statusDetail ? ` (${card.statusDetail})` : ''}. It can’t be made
           active in production.
-        </Notice>
+        </Slip>
       ) : (
         <p>
           {card.sandbox === false
@@ -124,9 +124,9 @@ function ProviderCard({
                 required
               />
               {error && (
-                <Notice tone="error" title="Not sent">
+                <Slip dense tone="error" title="Not sent">
                   {error}
-                </Notice>
+                </Slip>
               )}
               <Button variant="continue" type="submit">
                 Send the test email
@@ -287,9 +287,9 @@ function Overrides({
             required
           />
           {error && (
-            <Notice tone="error" title="Not saved">
+            <Slip dense tone="error" title="Not saved">
               {error}
-            </Notice>
+            </Slip>
           )}
           <Button type="submit" variant="secondary">
             Pin account
@@ -410,9 +410,9 @@ export default function ProvidersPage() {
         proves mail really arrives.
       </p>
       {failed && (
-        <Notice tone="error" title="Couldn’t load providers">
+        <Slip dense tone="error" title="Couldn’t load providers">
           Please refresh the page.
-        </Notice>
+        </Slip>
       )}
       {!data && !failed && <Skeleton />}
       {data && (

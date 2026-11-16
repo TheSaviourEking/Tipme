@@ -1,6 +1,6 @@
 'use client';
 import { useId, useState } from 'react';
-import { Button, Notice } from '@tipme/ui';
+import { Button, Slip } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 
 /**
@@ -36,9 +36,9 @@ export function MessageControls({
   return (
     <div className="message-controls">
       {error && (
-        <Notice tone="error" title="Not done">
+        <Slip tone="error" title="Not done">
           {error}
-        </Notice>
+        </Slip>
       )}
       {reporting ? (
         <form

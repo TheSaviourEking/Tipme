@@ -1,7 +1,7 @@
 'use client';
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsTipReversed } from '@tipme/contracts';
-import { Button, InputField, Notice, TextareaField } from '@tipme/ui';
+import { Button, InputField, Slip, TextareaField } from '@tipme/ui';
 import { nairaCode as naira, parseNaira } from '@/lib/money';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct } from '@/lib/ops-staff-api';
@@ -169,9 +169,9 @@ export function TipReverse({
             maxLength={500}
           />
           {error && (
-            <Notice tone="error" title="Not done">
+            <Slip dense tone="error" title="Not done">
               {error}
-            </Notice>
+            </Slip>
           )}
           <div className="ops-actions">
             <Button

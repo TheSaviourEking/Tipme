@@ -12,8 +12,9 @@ import {
   Badge,
   Button,
   Card,
-  Notice,
   Skeleton,
+  Slip,
+  StandingWarning,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -209,9 +210,9 @@ function BachsRecoveryAction({
         <span>{confirmation}</span>
       </label>
       {error && (
-        <Notice tone="error" title="Recovery not completed">
+        <Slip dense tone="error" title="Recovery not completed">
           {error}
-        </Notice>
+        </Slip>
       )}
       <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking with Bachs…' : submitLabel}
@@ -290,9 +291,9 @@ function BachsFeeBearerAction({
         </span>
       </label>
       {error && (
-        <Notice tone="error" title="Not confirmed">
+        <Slip dense tone="error" title="Not confirmed">
           {error}
-        </Notice>
+        </Slip>
       )}
       <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         {busy ? 'Checking with Bachs…' : 'Confirm the fee and check the tip'}
@@ -364,9 +365,9 @@ export default function IssuePage() {
 
   if (missing)
     return (
-      <Notice tone="error" title="We couldn’t find that issue">
+      <Slip dense tone="error" title="We couldn’t find that issue">
         <Link href="/ops/issues">Back to issues</Link>
-      </Notice>
+      </Slip>
     );
   if (!evidence) return <Skeleton label="Loading the issue" />;
 
@@ -539,7 +540,7 @@ export default function IssuePage() {
           closes, their withdrawals resume.
         </p>
         {holdPins.length > 0 && (
-          <Notice tone="error" title="Withdrawals stay on hold">
+          <StandingWarning dense title="Withdrawals stay on hold">
             This recipient’s withdrawals stay on hold until these close:{' '}
             {holdPins.map((pin, index) => (
               <span key={pin.id}>
@@ -550,7 +551,7 @@ export default function IssuePage() {
               </span>
             ))}
             .
-          </Notice>
+          </StandingWarning>
         )}
       </Section>
 
@@ -700,10 +701,10 @@ export default function IssuePage() {
               ID and current provider status are verified.
             </p>
             {!person?.emailVerified ? (
-              <Notice tone="error" title="Recipient email is not verified">
+              <StandingWarning dense title="Recipient email is not verified">
                 Do not link an account until the recipient has a verified TipMe
                 email address.
-              </Notice>
+              </StandingWarning>
             ) : (
               <BachsRecoveryAction
                 valueLabel="Bachs account ID"

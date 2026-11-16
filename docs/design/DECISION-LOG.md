@@ -513,3 +513,11 @@ brought into view above it). No Studio colours reach the panel or the bar; `stud
 rail in the frame (in the flow on phones and tablets, sticky beside the rows from 1024px, scrolling
 with the page when taller than the window). The standard page is unchanged. The dev Studio lab shows
 the bar too, without the public page's bottom padding.
+
+## 2026-11-16 — The last tinted `Notice`s move to the state patterns (`refactor/notice-to-design-law`)
+
+- Finishes the states plan's migration (`docs/superpowers/plans/2026-11-05-states.md`, PRs D, F, G and Task 18 for `Notice`) for the 136 `Notice`s left in the dashboard, settings, account and `/ops`, and resolves the 2026-11-15 "replacing the remaining generic `Notice`s per StatesMap" item. A visual decision, not a regulatory approval; no words, API, permission or money rule change.
+- **Rules applied:** a success is a `Slip tone="done"`, a neutral note a neutral `Slip`, an error at an action an error `Slip`; "Waiting for a second person" is a `waiting` slip. Every `/ops` slip is `dense`. A condition people must know about that isn't a failed action (the StatesMap "standing warning" rows, plus "Listed for live checkout" and "Announcement email isn’t set up") is a `StandingWarning`, so it is announced politely (status), no longer as an alert.
+- **A read that failed** keeps its words and gains Try again: `LoadFailed` (now with `dense` for `/ops`) where the screen has a reader to call (Campaigns, a business's balance, Switches, Announcements, Prices, Approvals ×2, Roles, Visibility); a Try again that already sat under the box moves onto the slip. The rest keep their words and their own way out (a link, the issues list's 30-second retry, a filter change or a page refresh): their state code has no reader that also clears the error, so a key there would be a change of behaviour.
+- **No stamps were added**: the board's proposed stamps ("On hold", "Done alone") are new words, which this change does not introduce.
+- `Notice`, `.tm-notice` and its styles are deleted; `states-migration.test.mjs` now fails on a `Notice` anywhere in `apps/web/src`.

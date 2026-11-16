@@ -213,7 +213,9 @@ test('editing a role shows who is affected before saving', async ({
   await expect(card.getByText('Gains: analytics.view')).toBeVisible();
   await card.getByLabel('Why change this role?').fill(REASON);
   await card.getByRole('button', { name: 'Save role' }).click();
-  await expect(card.getByText('✓ The role is saved')).toBeVisible();
+  await expect(
+    card.getByText('The role is saved', { exact: true }),
+  ).toBeVisible();
   await sql(`UPDATE staff SET revoked_at = now() WHERE user_id = $1`, [
     user!.id,
   ]);

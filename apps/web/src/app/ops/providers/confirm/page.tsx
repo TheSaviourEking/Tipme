@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Notice, Skeleton } from '@tipme/ui';
+import { Skeleton, Slip } from '@tipme/ui';
 import { PROVIDER_TEST_TOKEN_KEY } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 
@@ -39,15 +39,15 @@ export default function ConfirmProviderTestPage() {
       <h1>Provider test</h1>
       {state === 'working' && <Skeleton />}
       {state === 'confirmed' && (
-        <Notice tone="success" title="Test confirmed">
+        <Slip dense tone="done" title="Test confirmed">
           This provider delivers mail. It can be made active for the next 24
           hours.
-        </Notice>
+        </Slip>
       )}
       {state === 'invalid' && (
-        <Notice tone="error" title="This link doesn’t work">
+        <Slip dense tone="error" title="This link doesn’t work">
           It may be over 24 hours old or already used. Send a new test.
-        </Notice>
+        </Slip>
       )}
       <p>
         <Link href="/ops/providers">Back to Providers</Link>

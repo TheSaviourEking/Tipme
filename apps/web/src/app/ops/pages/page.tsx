@@ -21,7 +21,8 @@ import {
   Button,
   Card,
   InputField,
-  Notice,
+  Slip,
+  StandingWarning,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -121,9 +122,9 @@ function MoveSignInEmail({ userId }: { userId: string }) {
             required
           />
           {error && (
-            <Notice tone="error" title="Not done">
+            <Slip dense tone="error" title="Not done">
               {error}
-            </Notice>
+            </Slip>
           )}
           <Button variant="continue" type="submit">
             Send code to new email
@@ -176,9 +177,9 @@ function HandleChanges({
         {page.plan === 'pro' ? '' : ' (only Pro pages can make them)'}
       </p>
       {done && (
-        <Notice tone="success" title="Allowed">
+        <Slip dense tone="done" title="Allowed">
           {done}
-        </Notice>
+        </Slip>
       )}
       <ValueWithReason
         open="Allow more changes…"
@@ -262,24 +263,24 @@ function FreezeWithdrawals({
         and mark any withdrawal the thief asked for as failed.
       </p>
       {issueId && !view.issueOpen ? (
-        <Notice tone="neutral" title="Withdrawals are still frozen">
+        <Slip dense tone="neutral" title="Withdrawals are still frozen">
           The takeover report is closed, but another open issue is holding this
           page’s withdrawals. If it has been reported again, record it below:
           that opens a new issue and alerts staff, and the freeze moves to it.
           See <Link href={`/ops/issues/${issueId}`}>the closed report</Link>.
-        </Notice>
+        </Slip>
       ) : null}
       {issueId && view.issueOpen ? (
-        <Notice tone="success" title="Withdrawals are frozen">
+        <Slip dense tone="done" title="Withdrawals are frozen">
           Resolve <Link href={`/ops/issues/${issueId}`}>the issue</Link> once
           the real owner has the account back. Another report can still be
           recorded below.
-        </Notice>
+        </Slip>
       ) : null}
       {view.warning && (
-        <Notice tone="error" title="Freeze state unknown">
+        <StandingWarning dense title="Freeze state unknown">
           {view.warning}
-        </Notice>
+        </StandingWarning>
       )}
       <ReasonAction
         open={view.open}
@@ -288,9 +289,9 @@ function FreezeWithdrawals({
         onSubmit={freeze}
       />
       {ended && (
-        <Notice tone="success" title="Signed out everywhere">
+        <Slip dense tone="done" title="Signed out everywhere">
           Every session on this account has ended.
-        </Notice>
+        </Slip>
       )}
       {userId && mayEndSessions && !ended && (
         <ReasonAction
@@ -353,9 +354,9 @@ function UsernameCard({ handle }: { handle: string }) {
     <Card className="settings-section">
       <h2>Username</h2>
       {said && (
-        <Notice tone="success" title={said}>
+        <Slip dense tone="done" title={said}>
           See Usernames for where it stands.
-        </Notice>
+        </Slip>
       )}
       {answer.openTakeBack ? (
         <p>
@@ -451,9 +452,9 @@ export default function OpsPagesPage() {
 
   if (!allowed)
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Finding a page needs a permission that acts on pages.
-      </Notice>
+      </Slip>
     );
 
   const find = async (event: FormEvent) => {
@@ -509,9 +510,9 @@ export default function OpsPagesPage() {
         </Button>
       </form>
       {done && (
-        <Notice tone="success" title="Plan changed">
+        <Slip dense tone="done" title="Plan changed">
           {done}
-        </Notice>
+        </Slip>
       )}
       {page && (
         <Card className="settings-section">

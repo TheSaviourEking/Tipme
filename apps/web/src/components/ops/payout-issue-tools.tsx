@@ -4,7 +4,7 @@ import type {
   OpsPayoutActionResult,
   OpsPayoutIssueView,
 } from '@tipme/contracts';
-import { Button, Notice, TextareaField } from '@tipme/ui';
+import { Button, StandingWarning, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
   ActionOutcome,
@@ -132,9 +132,9 @@ export function PayoutIssueTools({
         {busy ? 'Asking the provider…' : 'Ask the provider'}
       </Button>
       {error && (
-        <Notice tone="error" title="Check what happened">
+        <StandingWarning dense title="Check what happened">
           {error}
-        </Notice>
+        </StandingWarning>
       )}
       {waiting && <ActionOutcome outcome={waiting} />}
       {view && <Answer view={view} act={act} />}
@@ -163,10 +163,10 @@ function Answer({
         {read.failureReason && ` Reason: ${read.failureReason}.`}
       </p>
       {read.differing.length > 0 && (
-        <Notice tone="error" title="It differs from what TipMe asked for">
+        <StandingWarning dense title="It differs from what TipMe asked for">
           Different: {read.differing.join(', ')}. Nothing can be recorded from
           it.
-        </Notice>
+        </StandingWarning>
       )}
       {view.holdActive && (
         <p className="tm-hint">Withdrawals for this recipient are on hold.</p>
@@ -189,9 +189,9 @@ function Answer({
       )}
       {none && <p className="tm-hint">Nothing can be done from this answer.</p>}
       {offers.resume && resumeWarnings(view).length > 0 && (
-        <Notice tone="error" title="Check this before you resume">
+        <StandingWarning dense title="Check this before you resume">
           {resumeWarnings(view).join(' ')}
-        </Notice>
+        </StandingWarning>
       )}
       <div className="ops-actions">
         {offers.applyReported && (
@@ -292,9 +292,9 @@ function MarkFailed({
         </span>
       </label>
       {error && (
-        <Notice tone="error" title="Check what happened">
+        <StandingWarning dense title="Check what happened">
           {error}
-        </Notice>
+        </StandingWarning>
       )}
       <Button variant="continue" type="submit" disabled={busy} aria-busy={busy}>
         Mark failed and release

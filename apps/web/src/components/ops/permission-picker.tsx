@@ -7,7 +7,7 @@ import {
   SERIOUS_ACTION_PERMISSIONS,
   type OpsPermission,
 } from '@tipme/contracts';
-import { Badge, Notice } from '@tipme/ui';
+import { Badge, Slip } from '@tipme/ui';
 
 const GROUP_WORDS: Record<(typeof OPS_PERMISSION_GROUPS)[number], string> = {
   money: 'Money',
@@ -80,11 +80,11 @@ export function PermissionPicker({
         </fieldset>
       ))}
       {sensitive.length > 0 && (
-        <Notice tone="neutral" title="You’ve ticked sensitive access">
+        <Slip dense tone="neutral" title="You’ve ticked sensitive access">
           {sensitive.join(', ')}: moving or settling money, reading private
           details, or changing accounts and settings. When someone else can
           approve, giving this waits for them.
-        </Notice>
+        </Slip>
       )}
     </div>
   );

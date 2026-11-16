@@ -14,8 +14,8 @@ import {
   Card,
   EmptyWell,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
@@ -27,6 +27,7 @@ import {
   STALE_WORDS,
 } from '@/lib/ops-answers';
 import { actionWords, opsFetch } from '@/lib/ops-staff-api';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 type Said = {
   tone: 'success' | 'error' | 'neutral';
@@ -189,11 +190,11 @@ function Waiting({
         </div>
       </dl>
       {row.mine && row.nobodyElseQualified && (
-        <Notice tone="neutral" title="Nobody else can decide this now">
+        <Slip dense tone="neutral" title="Nobody else can decide this now">
           The other people who could have approved it have gone. Cancel it, then
           do it again: it will run straight away, and the log will say you acted
           alone.
-        </Notice>
+        </Slip>
       )}
       {!row.mine && !row.canDecide && (
         <p className="tm-hint">
@@ -310,9 +311,13 @@ export default function ApprovalsPage() {
       </p>
       <div ref={saidAt} tabIndex={-1}>
         {said && (
-          <Notice tone={said.tone} title={said.title}>
+          <Slip
+            dense
+            tone={said.tone === 'success' ? 'done' : said.tone}
+            title={said.title}
+          >
             {said.text}
-          </Notice>
+          </Slip>
         )}
       </div>
       <section
@@ -321,9 +326,9 @@ export default function ApprovalsPage() {
       >
         <h2 id="approvals-pending">Waiting</h2>
         {failed && (
-          <Notice tone="error" title="Couldn’t load what’s waiting">
+          <LoadFailed dense title="Couldn’t load what’s waiting" onRetry={load}>
             There may be requests waiting. Please reload in a moment.
-          </Notice>
+          </LoadFailed>
         )}
         {!pending && !failed && <Skeleton label="Loading approvals" />}
         {pending?.length === 0 && (
@@ -350,9 +355,9 @@ export default function ApprovalsPage() {
       >
         <h2 id="approvals-history">History</h2>
         {historyFailed && (
-          <Notice tone="error" title="Couldn’t load the history">
+          <LoadFailed dense title="Couldn’t load the history" onRetry={load}>
             Earlier decisions may exist. Please reload in a moment.
-          </Notice>
+          </LoadFailed>
         )}
         {!all && !historyFailed && <Skeleton label="Loading the history" />}
         {all && closed.length === 0 && (

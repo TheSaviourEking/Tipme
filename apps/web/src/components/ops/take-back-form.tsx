@@ -10,7 +10,7 @@ import {
   type TakeBackCategory,
   type TakeBackKind,
 } from '@tipme/contracts';
-import { Button, Notice } from '@tipme/ui';
+import { Button, StandingWarning } from '@tipme/ui';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct } from '@/lib/ops-staff-api';
 
@@ -128,10 +128,10 @@ export function TakeBackForm({
         </dl>
       )}
       {facts?.liveCheckoutListed && (
-        <Notice tone="error" title="Listed for live checkout">
+        <StandingWarning dense title="Listed for live checkout">
           This page is listed in LIVE_CHECKOUT_HANDLES. Update it to the new
           username, or it loses live checkout.
-        </Notice>
+        </StandingWarning>
       )}
       <fieldset>
         <legend>Category</legend>

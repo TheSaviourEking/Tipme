@@ -21,8 +21,8 @@ import {
   Card,
   EmptyWell,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
 } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
@@ -272,9 +272,9 @@ export default function UsernamesPage() {
 
   if (!allowed)
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Reserving usernames needs the usernames.manage permission.
-      </Notice>
+      </Slip>
     );
 
   const submitCheck = async (event: FormEvent) => {
@@ -413,9 +413,13 @@ export default function UsernamesPage() {
       </p>
       <div ref={saidAt} tabIndex={-1}>
         {said && (
-          <Notice tone={said.tone} title={said.title}>
+          <Slip
+            dense
+            tone={said.tone === 'success' ? 'done' : said.tone}
+            title={said.title}
+          >
             {said.text}
-          </Notice>
+          </Slip>
         )}
       </div>
 
@@ -446,9 +450,9 @@ export default function UsernamesPage() {
           </Button>
         </form>
         {checkFailed && (
-          <Notice tone="error" title="Couldn’t check that name">
+          <Slip dense tone="error" title="Couldn’t check that name">
             {checkFailed}
-          </Notice>
+          </Slip>
         )}
         {answer && (
           <CheckAnswer
@@ -559,9 +563,9 @@ export default function UsernamesPage() {
           </Button>
         </form>
         {listFailed && (
-          <Notice tone="error" title="Couldn’t load the reserved usernames">
+          <Slip dense tone="error" title="Couldn’t load the reserved usernames">
             {listFailed}
-          </Notice>
+          </Slip>
         )}
         {!list && !listFailed && (
           <Skeleton label="Loading reserved usernames" />

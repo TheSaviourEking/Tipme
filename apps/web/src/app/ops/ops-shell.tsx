@@ -2,7 +2,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
-import { Button, Container, Notice, Skeleton } from '@tipme/ui';
+import { Button, Container, Skeleton, Slip } from '@tipme/ui';
 import {
   ApprovalsCount,
   useApprovalsCount,
@@ -71,21 +71,25 @@ function OpsRetry({
     document.getElementById('main')?.focus();
   };
   return (
-    <>
-      <Notice tone="error" title="We couldn’t load the admin area">
-        {failed
-          ? 'Still not loading. Please try again in a minute.'
-          : 'This is usually brief.'}
-      </Notice>
-      <Button
-        variant="secondary"
-        disabled={busy}
-        aria-busy={busy}
-        onClick={() => void retry()}
-      >
-        Try again
-      </Button>
-    </>
+    <Slip
+      dense
+      tone="error"
+      title="We couldn’t load the admin area"
+      actions={
+        <Button
+          variant="secondary"
+          disabled={busy}
+          aria-busy={busy}
+          onClick={() => void retry()}
+        >
+          Try again
+        </Button>
+      }
+    >
+      {failed
+        ? 'Still not loading. Please try again in a minute.'
+        : 'This is usually brief.'}
+    </Slip>
   );
 }
 

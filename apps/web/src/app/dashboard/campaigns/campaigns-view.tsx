@@ -2,10 +2,11 @@
 import Link from 'next/link';
 import { useState, useSyncExternalStore } from 'react';
 import type { CampaignList, CampaignResults } from '@tipme/contracts';
-import { Card, Notice, Skeleton } from '@tipme/ui';
+import { Card, Skeleton } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { campaignLink } from '@/lib/campaign-link';
 import { naira } from '@/lib/money';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 const noSubscription = () => () => undefined;
 export const useOrigin = () =>
@@ -65,9 +66,12 @@ export default function CampaignsPage() {
   const list = panel.data;
   if (panel.error === 'load' && !list)
     return (
-      <Notice tone="error" title="We couldn’t load your campaigns">
+      <LoadFailed
+        title="We couldn’t load your campaigns"
+        onRetry={panel.reload}
+      >
         Please reload the page.
-      </Notice>
+      </LoadFailed>
     );
   if (!list) return <Skeleton label="Loading your campaigns" />;
   const running = list.campaigns.filter((c) => !c.stoppedAt);

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useState } from 'react';
 import type { OpsStaffActivity } from '@tipme/contracts';
-import { Notice, Skeleton } from '@tipme/ui';
+import { Skeleton, Slip } from '@tipme/ui';
 import { when } from '@/lib/ops-client';
 import { STAFF_ACTIVITY_WORDS } from '@/lib/ops-answers';
 import { actionWords, opsFetch } from '@/lib/ops-staff-api';
@@ -20,9 +20,9 @@ export function StaffActivity() {
     <section aria-labelledby={id} className="dashboard-section">
       <h2 id={id}>Staff activity</h2>
       {failed && (
-        <Notice tone="error" title="Couldn’t read staff activity">
+        <Slip dense tone="error" title="Couldn’t read staff activity">
           The audit log has the full record.
-        </Notice>
+        </Slip>
       )}
       {!rows && !failed && <Skeleton label="Loading staff activity" />}
       {rows?.length === 0 && (

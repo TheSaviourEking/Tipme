@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import type { OpsTipRefund } from '@tipme/contracts';
-import { Button, Notice } from '@tipme/ui';
+import { Button, Slip } from '@tipme/ui';
 import { nairaCode as naira } from '@/lib/money';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { ActionOutcome, type ActionOutcomeState } from './action-outcome';
@@ -72,9 +72,9 @@ export function TipRefund({ tipId }: { tipId: string }) {
           Refund tip…
         </Button>
         {problem && (
-          <Notice tone="error" title="Not open">
+          <Slip dense tone="error" title="Not open">
             {problem}
-          </Notice>
+          </Slip>
         )}
       </span>
     );
@@ -100,9 +100,9 @@ export function TipRefund({ tipId }: { tipId: string }) {
           onSubmit={ask}
         />
       ) : (
-        <Notice tone="neutral" title="Can’t be refunded">
+        <Slip dense tone="neutral" title="Can’t be refunded">
           {facts.words}
-        </Notice>
+        </Slip>
       )}
       <Button variant="quiet" onClick={() => setFacts(null)}>
         Close

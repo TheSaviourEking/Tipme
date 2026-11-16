@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -38,4 +38,22 @@ test('the guard sees the old patterns', () => {
   // Words that only contain the names are fine (the pilot notice, an EmptySlip).
   for (const text of ['pilotNotice', '<EmptySlip />', 'tm-empty-slip'])
     assert.doesNotMatch(text, OLD);
+});
+
+// Every area now uses the state patterns, so the tinted Notice is checked across all of the web
+// app, not just the listed files (states plan, Task 18 for Notice).
+const NOTICE = /<Notice\b|\bNotice\b[^\n]*from '@tipme\/ui'|tm-notice/;
+function* files(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) yield* files(path);
+    else if (/\.(tsx?|css)$/.test(entry.name)) yield path;
+  }
+}
+
+test('no web file uses the tinted Notice or its class', () => {
+  const offenders = [...files(src)].filter((file) =>
+    NOTICE.test(readFileSync(file, 'utf8')),
+  );
+  assert.deepEqual(offenders, []);
 });

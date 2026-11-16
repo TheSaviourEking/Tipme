@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
 import type { HandleStatus, MyProfile, MyStudio } from '@tipme/contracts';
 import { CURRENT_FEE_POLICY } from '@tipme/domain';
-import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
+import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { CoverSettings, type Layer } from '@/components/account/cover-settings';
 import { Avatar } from '@/components/avatar';
@@ -72,9 +72,9 @@ export function PageState() {
         </Link>
       </p>
       {error && (
-        <Notice tone="error" title="Not changed">
+        <Slip tone="error" title="Not changed">
           {error}
-        </Notice>
+        </Slip>
       )}
       <Button
         variant={live ? 'secondary' : 'primary'}
@@ -857,9 +857,9 @@ export function AboutYou({
           </>
         )}
         {errors.form && (
-          <Notice tone="error" title="Not saved">
+          <Slip tone="error" title="Not saved">
             {errors.form}
-          </Notice>
+          </Slip>
         )}
         <Button type="submit" disabled={busy} aria-busy={busy}>
           Save changes

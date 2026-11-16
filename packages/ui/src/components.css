@@ -923,33 +923,6 @@ textarea.tm-input {
   margin: 0;
 }
 
-.tm-notice {
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--edge-hairline);
-  border-left: 3px solid var(--brand-primary);
-  border-radius: var(--radius-control);
-  background: var(--surface-raised);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  line-height: 1.6;
-}
-
-.tm-notice strong {
-  display: block;
-}
-
-.tm-notice--error {
-  border-color: var(--state-danger);
-  background: var(--state-danger-soft);
-  color: var(--state-danger);
-}
-
-.tm-notice--success {
-  border-color: var(--state-success);
-  background: var(--state-success-soft);
-  color: var(--state-success);
-}
-
 .tm-empty {
   padding: var(--space-12);
   text-align: center;
@@ -1241,8 +1214,7 @@ textarea.tm-input {
   .tm-input,
   .tm-choice > span,
   .tm-well,
-  .tm-lever,
-  .tm-notice {
+  .tm-lever {
     border: 1px solid CanvasText;
     box-shadow: none;
   }

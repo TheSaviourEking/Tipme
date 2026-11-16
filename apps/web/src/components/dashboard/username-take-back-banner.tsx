@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 import type { MyProfile } from '@tipme/contracts';
-import { Notice } from '@tipme/ui';
+import { Slip } from '@tipme/ui';
 import { apiFetch } from '@/lib/session-client';
 import { freeChangeWords, takeBackBannerWords } from '@/lib/take-back-words';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -59,25 +59,25 @@ export function UsernameTakeBackBanner() {
     const after = freeChangeWords(free);
     return (
       <div className="take-back-banner">
-        <Notice title={after.title}>
+        <Slip title={after.title}>
           <p>
             <Link href="/dashboard/settings#handle">{after.action}</Link>
           </p>
-        </Notice>
+        </Slip>
       </div>
     );
   }
   const words = takeBackBannerWords(takeBack);
   return (
     <div ref={box} className="take-back-banner">
-      <Notice title={words.title}>
+      <Slip title={words.title}>
         <p>{words.why}</p>
         {words.action && (
           <p>
             <Link href="/dashboard/settings#handle">{words.action}</Link>
           </p>
         )}
-      </Notice>
+      </Slip>
     </div>
   );
 }

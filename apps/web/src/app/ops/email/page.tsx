@@ -7,7 +7,7 @@ import type {
   OpsMailSummary,
   OpsMailTimelineEvent,
 } from '@tipme/contracts';
-import { Button, Card, EmptyWell, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { LineChart, Tile } from '@/components/ops/charts';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
@@ -110,9 +110,9 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
           />
         )}
         {unread && (
-          <Notice tone="error" title="Couldn’t load all of this email">
+          <Slip dense tone="error" title="Couldn’t load all of this email">
             {unread}
-          </Notice>
+          </Slip>
         )}
         {!canRead ? null : timeline === null ? (
           <Skeleton />
@@ -146,10 +146,10 @@ function MessageDrawer({ row }: { row: OpsMailRow }) {
             View email
           </Button>
         ) : content.status === 'withheld' ? (
-          <Notice tone="neutral" title="Content withheld">
+          <Slip dense tone="neutral" title="Content withheld">
             This email contains a sign-in or recovery code, or has no saved
             copy, so it can’t be shown.
-          </Notice>
+          </Slip>
         ) : (
           <>
             <p>
@@ -309,9 +309,9 @@ export default function EmailConsolePage() {
         </div>
       </div>
       {numbersFailed && (
-        <Notice tone="error" title="Couldn’t load the numbers">
+        <Slip dense tone="error" title="Couldn’t load the numbers">
           These may be out of date. Please refresh the page.
-        </Notice>
+        </Slip>
       )}
       <div className="ops-tiles">
         {tile('Sent', 'sent')}
@@ -461,20 +461,20 @@ export default function EmailConsolePage() {
         </div>
       )}
       {exportFailed === 'code' && (
-        <Notice tone="neutral" title="The export needs a fresh code">
+        <Slip dense tone="neutral" title="The export needs a fresh code">
           Nothing was downloaded. Choose the export again and enter the code
           from your authenticator app.
-        </Notice>
+        </Slip>
       )}
       {exportFailed === 'failed' && (
-        <Notice tone="error" title="The export didn’t finish">
+        <Slip dense tone="error" title="The export didn’t finish">
           There may be too many emails. Choose a shorter period or add a filter.
-        </Notice>
+        </Slip>
       )}
       {listFailed && (
-        <Notice tone="error" title="Couldn’t load the emails">
+        <Slip dense tone="error" title="Couldn’t load the emails">
           This list may be out of date. Please try again.
-        </Notice>
+        </Slip>
       )}
       {chosen && <MessageDrawer key={chosen.id} row={chosen} />}
       {rows === null ? (

@@ -5,8 +5,8 @@ import {
   Badge,
   Button,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -20,6 +20,7 @@ import { WaitingRequests } from '@/components/ops/waiting-requests';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 function NewRole({
   held,
@@ -90,9 +91,9 @@ function NewRole({
         required
       />
       {error && (
-        <Notice tone="error" title="Not created">
+        <Slip dense tone="error" title="Not created">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button
@@ -260,9 +261,9 @@ function Role({
             </form>
           )}
           {error && (
-            <Notice tone="error" title="Not saved">
+            <Slip dense tone="error" title="Not saved">
               {error}
-            </Notice>
+            </Slip>
           )}
         </div>
       ) : (
@@ -322,9 +323,9 @@ export default function RolesPage() {
   }, [allowed, load]);
   if (!allowed)
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Managing roles needs the “staff.manage” permission.
-      </Notice>
+      </Slip>
     );
   return (
     <div className="ops-dashboard ops-page-body">
@@ -347,9 +348,9 @@ export default function RolesPage() {
         }}
       />
       {problem && (
-        <Notice tone="error" title="Couldn’t load the roles">
+        <LoadFailed dense title="Couldn’t load the roles" onRetry={load}>
           {problem}
-        </Notice>
+        </LoadFailed>
       )}
       {!roles && !problem && <Skeleton label="Loading the roles" />}
       {roles && (

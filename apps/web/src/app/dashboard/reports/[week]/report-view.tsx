@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import type { WeeklyReportData } from '@tipme/contracts';
-import { Button, Card, Notice, Skeleton } from '@tipme/ui';
+import { Button, Card, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { useWeekNotes, type WeekNote } from '@/components/dashboard/week-notes';
@@ -96,9 +96,9 @@ export default function WeeklyReportPage() {
 
   if (error === 'load' && !report)
     return (
-      <Notice tone="error" title="We couldn’t find that week">
+      <Slip tone="error" title="We couldn’t find that week">
         <Link href="/dashboard">Back to your dashboard</Link>
-      </Notice>
+      </Slip>
     );
   if (!report) return <Skeleton label="Loading your week" />;
   const range = isoWeekRange(report.week);

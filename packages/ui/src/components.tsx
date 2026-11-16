@@ -461,28 +461,6 @@ export function StateLine({
   );
 }
 
-export function Notice({
-  tone = 'neutral',
-  title,
-  children,
-}: {
-  tone?: 'neutral' | 'error' | 'success';
-  title: string;
-  children?: ReactNode;
-}) {
-  return (
-    <div
-      className={`tm-notice tm-notice--${tone}`}
-      role={tone === 'error' ? 'alert' : 'status'}
-    >
-      <strong>
-        {tone === 'success' ? '✓ ' : tone === 'error' ? '! ' : ''}
-        {title}
-      </strong>
-      {children && <div>{children}</div>}
-    </div>
-  );
-}
 export function EmptyState({
   title,
   children,

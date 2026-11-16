@@ -1,6 +1,6 @@
 'use client';
 import { useId, useState, type FormEvent } from 'react';
-import { Button, Notice, TextareaField } from '@tipme/ui';
+import { Button, Slip, TextareaField } from '@tipme/ui';
 
 /**
  * A button that opens a short form asking for the written reason every admin change needs
@@ -75,9 +75,9 @@ export function ReasonAction({
         autoFocus
       />
       {error && (
-        <Notice tone="error" title={errorTitle}>
+        <Slip dense tone="error" title={errorTitle}>
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button
