@@ -1,3 +1,8 @@
+# Current task: Studio Tip bar and the sample announcement (16 November 2026)
+
+- Branch `feat/studio-sticky-tip-bar` from `origin/dev`; one PR into `dev`, not merged. A Studio page's tip rail takes the standard panel class (`profile-composer`): same tip block styling and, on a phone, the same fixed Tip bar; `studio.css` only places the rail. The staff preview's sample announcement is now an evergreen product update (no prices, no dates). Member emails say "our payment partner" instead of "the payment provider" (4 strings in `account-events.ts`).
+- No migration, no API change. Studio Linux visual baselines come from CI. Studio editor files untouched.
+
 # Current task: admin money screens (16 November 2026)
 
 - Branch `feat/ops-pro-refunds-reverse` from `origin/dev`; one PR into `dev`, not merged. Screens for APIs that already existed: a page's Pro payments with a reasoned "Refund…" (`pro.refund`, `pro_refunds` switch) on `/ops/pages`; "Take back this tip" (`tip.reverse`) on refund-or-chargeback issues; `team_tips` and `business_owners` marked not built (`notBuilt` in the catalogue) and refused on (`409 SWITCH_NOT_BUILT`).

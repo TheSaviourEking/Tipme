@@ -501,3 +501,15 @@ the appreciation moment) is unchanged.
 - **Pro payments** sit on the admin page view for staff with `payments.repair`, as a Pattern 1b table (stacked cards on a phone): paid, month, method, amount, status, refund. A paid month's badge is the success state, a refunded one recessed; never purple. A card month gets a quiet "Refund…" in its row; it opens, under the table, the words of what happens (the full amount back on the card, TipMe pays the card fee, the month ends when our payment partner confirms) and the reason box with a black "Ask for the refund". With the `pro_refunds` switch off, the history still shows with a neutral notice "Pro refunds aren’t switched on" and no button; a month that can’t be refunded shows the server’s own reason under its refund state. No Pro payments: `EmptyWell`.
 - **Take back this tip** is its own section on an open refund-or-chargeback issue for staff with `payments.repair`. The words come first (who gives back what, TipMe keeps its fee on a refund and bears it on a chargeback, a balance can go below zero, nothing moves at our payment partner, once per refund or chargeback), then a secondary "Take back this tip…" opening the amount (fixed for a paid refund, typed for a chargeback), the dashboard check, the reason and a black "Take back the tip". A refund not yet paid, failed, or naming no refund or dispute shows only why.
 - **Switches with nothing built** (`team_tips`, `business_owners`) stay in the list with a recessed "Not built yet" tag and the line "Nothing is built behind this switch yet, so it can’t be turned on." in place of the action.
+
+## 2026-11-16 — Studio pages use the standard tip panel and phone Tip bar (`feat/studio-sticky-tip-bar`)
+
+Owner, 16 Nov 2026. A published Page Studio page (`/@username`) shows TipMe's tip block exactly as the
+standard page does: the rail carries the standard panel's class (`profile-composer`), so the paper
+card, DM Serif "Tip <name>" heading, raised keys and recessed fields apply at every width, and on a
+phone (≤860px, ≥30rem tall, `:has()` supported) the form's Tip button is the same fixed Tip bar, with
+the same rules (steps aside while a typing field has focus, scroll padding sized to the bar, problems
+brought into view above it). No Studio colours reach the panel or the bar; `studio.css` only places the
+rail in the frame (in the flow on phones and tablets, sticky beside the rows from 1024px, scrolling
+with the page when taller than the window). The standard page is unchanged. The dev Studio lab shows
+the bar too, without the public page's bottom padding.

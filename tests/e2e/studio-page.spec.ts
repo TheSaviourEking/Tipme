@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
+import { settled } from './studio-probes';
 import {
   STUDIO_HANDLES,
   startStack,
@@ -119,9 +120,87 @@ test.describe('a published Studio page', () => {
       await expectAccessible(page);
       for (const width of [320, 390, 1440]) {
         await page.setViewportSize({ width, height: 900 });
+        await settled(page);
         expect(await fitsViewport(page), `${handle} at ${width}px`).toBe(true);
       }
     }
+  });
+
+  test('on a phone a Studio page has the standard page’s Tip bar and tip block @mobile', async ({
+    page,
+  }) => {
+    // Owner, 16 Nov 2026: the same sticky Tip bar and tip block styling as the standard page.
+    /** No overlap between the on-screen part of an element and the fixed Tip bar. */
+    const clearOfBar = (selector: string) =>
+      page.evaluate((target) => {
+        const bar = document.querySelector('.composer-action')!;
+        const element = document.querySelector(target)!;
+        const a = bar.getBoundingClientRect();
+        const b = element.getBoundingClientRect();
+        const hidden = getComputedStyle(bar).visibility === 'hidden';
+        return hidden || b.bottom <= a.top || b.top >= a.bottom;
+      }, selector);
+    const scrollTop = (top: number) =>
+      page.evaluate((y) => scrollTo({ top: y, behavior: 'instant' }), top);
+    for (const handle of EXAMPLES) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${stack.origin}/@${handle}`);
+      const panel = page.locator('aside.studio-rail[data-tip-panel]');
+      // The standard page's panel classes: its tip block styling and its Tip bar.
+      await expect(panel, handle).toHaveClass(/\bprofile-composer\b/);
+      await expect(panel.locator('.appreciation-card h2')).toHaveCSS(
+        'font-family',
+        /Iowan Old Style/,
+      );
+      const bar = panel.locator('.composer-action');
+      await expect(bar, handle).toHaveCSS('position', 'fixed');
+      // One action: the form's own submit button, in the bar.
+      const tip = page.getByRole('button', { name: /^Tip\b/ });
+      await expect(tip).toHaveCount(1);
+      await expect(bar.getByRole('button', { name: /^Tip\b/ })).toHaveCount(1);
+      // At the bottom of the screen, at the top of the page and far down it.
+      for (const top of [0, 1500]) {
+        await scrollTop(top);
+        await expect(tip, `${handle} at ${top}`).toBeInViewport({ ratio: 1 });
+        const box = await bar.boundingBox();
+        expect(Math.round(box!.y + box!.height), handle).toBe(844);
+      }
+      // Out of the way while a field has focus, back after.
+      await scrollTop(0);
+      const other = panel.getByLabel(/^Other amount/);
+      await other.fill('5');
+      await expect(bar).toBeHidden();
+      await other.blur();
+      await expect(bar).toBeVisible();
+      // Pressed from far down the page, Tip brings the tip block's problem into view, clear of
+      // the bar.
+      await scrollTop(100_000);
+      await tip.click();
+      const error = panel.getByText(/Enter an amount of NGN 2,000 or more/);
+      await expect(error).toBeInViewport();
+      await expect
+        .poll(() => clearOfBar('.studio-rail .tm-field-error'))
+        .toBe(true);
+      // At the page's end, the Report link sits above the bar.
+      await page.locator('.studio-rail .tm-input').first().blur();
+      await scrollTop(100_000);
+      await expect(bar).toBeVisible();
+      await expect
+        .poll(() => clearOfBar('.studio-foot .report-page'))
+        .toBe(true);
+      // Readable over the design: axe (contrast included) on the whole page, bar showing.
+      await expectAccessible(page);
+    }
+    // An automatic design in a dark browser (the examples are light and dark): the bar and the
+    // tip block keep TipMe's colours and pass too.
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto(`${stack.origin}/@studiosule`);
+    await page
+      .locator('.studio')
+      .evaluate((studio) => studio.setAttribute('data-mode', 'auto'));
+    await expect(page.locator('.studio')).toHaveCSS('color-scheme', 'dark');
+    await expect(page.locator('.composer-action')).toBeVisible();
+    await expectAccessible(page);
   });
 
   test('a profile without studio renders exactly today’s page', async ({
