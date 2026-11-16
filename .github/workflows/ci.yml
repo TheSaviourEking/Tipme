@@ -251,7 +251,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-png-diagnostics-${{ matrix.shard }}
-          path: test-results/**/*.png
+          path: |
+            test-results/**/*.png
+            test-results/**/studio-counterexample.json
+            test-results/**/studio-snapshot.json
           if-no-files-found: ignore
           retention-days: 3
 
@@ -332,7 +335,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: e2e-burn-in-png-diagnostics-${{ matrix.shard }}
-          path: test-results/**/*.png
+          path: |
+            test-results/**/*.png
+            test-results/**/studio-counterexample.json
+            test-results/**/studio-snapshot.json
           if-no-files-found: ignore
           retention-days: 3
 
