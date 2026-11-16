@@ -18,7 +18,9 @@ import {
   type DatabaseFailure,
   type OperationErrorCode,
 } from '@tipme/database';
+import { withdrawalMinimumMinor } from '@tipme/domain';
 import type { ErrorReporter, Logger } from '@tipme/observability';
+import { NGN_PAYOUT_FEE_MINOR } from '@tipme/payments';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import {
   CodedHttpException,
@@ -27,6 +29,10 @@ import {
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
 import { referenceOf } from './reference.js';
 import { ValidationFailedException } from './zod-validation.pipe.js';
+
+/** Whole naira with the ISO code, from minor units: NGN 2,000. */
+const wholeNgn = (minor: bigint) =>
+  `NGN ${(minor / 100n).toLocaleString('en-US')}`;
 
 /** Thrown when Postgres/Redis cannot serve a request in time. */
 export class DependencyUnavailableError extends Error {
@@ -206,9 +212,8 @@ const messages: Record<ApiErrorCode, string> = {
     'You’ve used all your username changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
-  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
-  WITHDRAWAL_BELOW_FEE:
-    'The amount must be more than the NGN 50 transfer fee, which is taken from it.',
+  WITHDRAWAL_TOO_SMALL: `The smallest withdrawal is ${wholeNgn(withdrawalMinimumMinor())}.`,
+  WITHDRAWAL_BELOW_FEE: `The amount must be more than the ${wholeNgn(NGN_PAYOUT_FEE_MINOR)} transfer fee, which is taken from it.`,
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:

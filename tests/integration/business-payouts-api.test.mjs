@@ -249,6 +249,11 @@ test('an owner withdraws: CSRF and a key are required, a retry replays, too much
     headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },
   });
   assert.equal(tooSmall.body.error.code, 'WITHDRAWAL_TOO_SMALL');
+  // The words come from the fee policy, not a typed number.
+  assert.equal(
+    tooSmall.body.error.message,
+    'The smallest withdrawal is NGN 2,000.',
+  );
   const smallest = await call('POST', path, {
     body: { amountMinor: '200000' },
     headers: { ...browserHeaders(ada.cookie), 'idempotency-key': randomUUID() },

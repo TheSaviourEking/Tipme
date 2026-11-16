@@ -62,6 +62,15 @@ test('supporters are never told about totals or what the person receives, or tha
   }
 });
 
+test('the ops Pages intro never says billing does not exist (live production sells Pro behind a switch)', () => {
+  for (const mode of ['test', 'closed', 'live']) {
+    const { opsBilling } = paymentModeCopy(mode);
+    assert.doesNotMatch(opsBilling, /no billing/i, mode);
+  }
+  assert.match(paymentModeCopy('live').opsBilling, /Pro billing switch/);
+  assert.match(paymentModeCopy('test').opsBilling, /Pro billing is on/);
+});
+
 test('closed copy says tipping opens soon where a supporter would pay', () => {
   const copy = paymentModeCopy('closed');
   assert.equal(copy.payable, false);
