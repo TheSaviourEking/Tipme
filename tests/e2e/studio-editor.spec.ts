@@ -258,7 +258,10 @@ test('G1: the editor works by keyboard and passes axe on each tab @mobile', asyn
   await expect(style).toHaveAttribute('aria-selected', 'true');
   await expectAccessible(page);
   await style.focus();
+  // G2 put Blocks between Style and Check; End jumps to the last tab.
   await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Blocks' })).toBeFocused();
+  await page.keyboard.press('End');
   const checkTab = page.getByRole('tab', { name: /^Check/ });
   await expect(checkTab).toBeFocused();
   await expect(checkTab).toHaveAttribute('aria-selected', 'true');
@@ -266,7 +269,7 @@ test('G1: the editor works by keyboard and passes axe on each tab @mobile', asyn
     page.getByRole('tabpanel').getByRole('heading', { name: 'Design check' }),
   ).toBeVisible();
   await expectAccessible(page);
-  await page.keyboard.press('ArrowLeft');
+  await page.keyboard.press('Home');
   await expect(style).toBeFocused();
   // The segmented choices are buttons that say which one is on.
   await page.getByRole('button', { name: 'Compact' }).focus();

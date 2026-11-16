@@ -8,11 +8,13 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { MyStudio } from '@tipme/contracts';
+import type { MyStudio, StudioIssue } from '@tipme/contracts';
 import { Button, EmptySlip, Notice, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { apiFetch } from '@/lib/session-client';
+import { BlocksTab, type BlocksTarget } from './blocks-tab';
+import { fixTarget } from './blocks-model';
 import { CheckPanel } from './check-panel';
 import { saveWords } from './studio-editor-model';
 import { StudioPreview, type PreviewDevice } from './studio-preview';
@@ -22,12 +24,10 @@ import './studio-editor.css';
 
 const MY_PAGE = '/dashboard/settings#page';
 
-/*
- * The tabs, in the board's order. G2 adds { key: 'blocks', label: 'Blocks' } between Style and
- * Check (the rows list, row toolbar and block forms).
- */
+/** The tabs, in the board's order. */
 const TABS = [
   { key: 'style', label: 'Style' },
+  { key: 'blocks', label: 'Blocks' },
   { key: 'check', label: 'Check' },
 ] as const;
 type Tab = (typeof TABS)[number]['key'];
@@ -136,6 +136,9 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const roomy = useMedia('(min-width: 1280px)');
   const [tab, setTab] = useState<Tab>('style');
   const [device, setDevice] = useState<PreviewDevice>('desktop');
+  const [grid, setGrid] = useState(false);
+  const [target, setTarget] = useState<BlocksTarget | null>(null);
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const readOnly = studio.stale || studio.proEnded;
   const count = studio.check.issues.length;
@@ -150,6 +153,17 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const open = (key: Tab) => {
     setTab(key);
     refs.current[key]?.focus();
+  };
+  // "Replace photo", "Change the link", "Add a description", "Edit the text": the block's form.
+  const input = (issue: StudioIssue, fixId: string) => {
+    const to = fixTarget(issue, fixId);
+    if (!to) return;
+    setTab('blocks');
+    setTarget({ ...to, n: (target?.n ?? 0) + 1 });
+  };
+  const profileFacts = {
+    bio: Boolean(profile.bioPublic && profile.bio),
+    links: profile.links?.length ?? 0,
   };
   const move = (event: KeyboardEvent, index: number) => {
     const last = TABS.length - 1;
@@ -271,12 +285,24 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
                     onChange={studio.change}
                     readOnly={readOnly}
                   />
+                ) : t.key === 'blocks' ? (
+                  <BlocksTab
+                    draft={studio.draft}
+                    update={studio.update}
+                    readOnly={readOnly}
+                    images={studio.images}
+                    upload={studio.upload}
+                    profile={profileFacts}
+                    target={target}
+                    onOpenRow={setOpenRow}
+                  />
                 ) : (
                   <CheckPanel
                     id={`${id}-tab-check`}
                     check={studio.check}
                     draft={studio.draft}
                     onFix={studio.fix}
+                    onInput={input}
                     readOnly={readOnly}
                   />
                 ))}
@@ -289,6 +315,14 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
             <p>
               {shownDevice === 'phone' ? 'Phone, 390 px' : 'Desktop, 1280 px'}
             </p>
+            <label className="pst-grid-toggle">
+              <input
+                type="checkbox"
+                checked={grid}
+                onChange={(e) => setGrid(e.target.checked)}
+              />
+              Show grid
+            </label>
           </div>
           <p className="sr-only">
             A picture of your page as supporters will see it. It follows every
@@ -296,9 +330,15 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           </p>
           <StudioPreview
             draft={studio.draft}
-            images={initial.images}
+            images={studio.images}
             profile={profile}
             device={shownDevice}
+            grid={grid}
+            outlineRow={
+              tab === 'blocks'
+                ? studio.draft.rows.findIndex((r) => r.id === openRow)
+                : -1
+            }
           />
         </section>
         {/* Wide screens: the check stays beside the preview (the board's right panel). */}
@@ -309,6 +349,7 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
               check={studio.check}
               draft={studio.draft}
               onFix={studio.fix}
+              onInput={input}
               readOnly={readOnly}
             />
           </aside>

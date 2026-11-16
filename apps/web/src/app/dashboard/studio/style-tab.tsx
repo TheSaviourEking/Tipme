@@ -35,7 +35,7 @@ const CATEGORY = {
 } as const;
 
 /** A row of choices: the dashboard's segmented control (filter-row), the current one raised. */
-function Choice<T extends string>({
+export function Choice<T extends string>({
   label,
   options,
   value,

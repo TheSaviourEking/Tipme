@@ -6,6 +6,7 @@ import {
   type MyStudio,
   type StudioCheckResult,
   type StudioDocument,
+  type StudioImage,
   type StudioIssue,
 } from '@tipme/contracts';
 import { apiFetch } from '@/lib/session-client';
@@ -26,8 +27,17 @@ export interface StudioDraft {
   proEnded: boolean;
   /** The editor's own check on every change; the server's once a save has checked this draft. */
   check: StudioCheckResult;
+  /** The page's Studio photos, including ones uploaded in this editor (the preview draws these). */
+  images: StudioImage[];
   change(next: StudioDocument): void;
+  /** A change made from the latest draft (an edit that lands after an upload or a moment's wait). */
+  update(fn: (doc: StudioDocument) => StudioDocument): void;
   fix(issue: StudioIssue, fixId: string): void;
+  /**
+   * Uploads a photo (`POST /v1/me/studio/images`): the id of the new image, or the API's error
+   * code. It isn't on the page until a block or row uses it.
+   */
+  upload(file: Blob): Promise<{ imageId: string } | { code: string }>;
   /** Saves now (after a failure). */
   retry(): void;
   /** Drops this tab's edits for the latest saved draft. */
@@ -44,6 +54,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
   const [published, setPublished] = useState(initial.published);
   const [context, setContext] = useState(initial.context);
+  const [images, setImages] = useState(initial.images);
+  const imagesNow = useRef(initial.images);
   const [server, setServer] = useState<{
     doc: string;
     check: StudioCheckResult;
@@ -67,6 +79,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     setShownRev(studio.rev);
     setPublished(studio.published);
     setContext(studio.context);
+    imagesNow.current = studio.images;
+    setImages(studio.images);
     setServer({ doc: JSON.stringify(studio.draft), check: studio.check });
   }, []);
 
@@ -123,11 +137,38 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     [schedule],
   );
 
+  const update = useCallback(
+    (fn: (doc: StudioDocument) => StudioDocument) => {
+      const next = fn(latest.current);
+      if (next !== latest.current) change(next);
+    },
+    [change],
+  );
+
   const fix = useCallback(
     (issue: StudioIssue, fixId: string) =>
       change(applyStudioFix(latest.current, issue, fixId)),
     [change],
   );
+
+  // A new photo changes the server's facts (its size, for the check) but not the draft or its rev.
+  const upload = useCallback(async (file: Blob) => {
+    const result = await apiFetch<MyStudio>('/v1/me/studio/images', {
+      method: 'POST',
+      file,
+    });
+    if (!result.ok) return { code: result.code };
+    // The answer is the whole studio (`meta.imageId` names the new one, but the session client
+    // reads only `data`): the new photo is the one this editor didn't have.
+    const known = new Set(imagesNow.current.map((i) => i.imageId));
+    const added = result.data.images.find((i) => !known.has(i.imageId));
+    if (!added) return { code: 'UNKNOWN' };
+    const imageId = added.imageId;
+    imagesNow.current = result.data.images;
+    setImages(result.data.images);
+    setContext(result.data.context);
+    return { imageId };
+  }, []);
 
   const reload = useCallback(async () => {
     const result = await apiFetch<MyStudio>('/v1/me/studio');
@@ -170,7 +211,10 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     stale,
     proEnded,
     check: checkShown(draft, local, server),
+    images,
+    upload,
     change,
+    update,
     fix,
     retry: () => void send(),
     reload,

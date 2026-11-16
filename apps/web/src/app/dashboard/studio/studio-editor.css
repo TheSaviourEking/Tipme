@@ -583,6 +583,247 @@
   padding-top: var(--space-4);
 }
 
+/*
+ * Blocks tab (PR G2). Deliberately plain: layout and existing tokens only, so the editor's visual
+ * pass can restyle it without touching the logic.
+ */
+.pst-blocks {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pst-rows,
+.pst-block-list,
+.pst-kinds,
+.pst-gallery {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pst-row {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+}
+
+.pst-row[data-open] {
+  border-color: var(--brand-primary);
+}
+
+.pst-row[data-dragging] {
+  opacity: 0.6;
+}
+
+.pst-row--locked {
+  border-style: dashed;
+  background: none;
+}
+
+.pst-row--locked .pst-hint {
+  margin: 0;
+}
+
+.pst-row__head,
+.pst-block__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.pst-row__grip {
+  color: var(--text-secondary);
+  cursor: grab;
+  user-select: none;
+}
+
+.pst-row__toggle,
+.pst-block__toggle {
+  flex: 1;
+  min-width: 10rem;
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm, 8px);
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.pst-row__toggle span,
+.pst-block__toggle span {
+  color: var(--text-secondary);
+}
+
+.pst-row__body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pst-toolbar,
+.pst-cell,
+.pst-block__form,
+.pst-add__panel {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.pst-block {
+  padding: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--surface-recessed);
+}
+
+.pst-block__form {
+  padding: var(--space-2);
+}
+
+.pst-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.pst-kinds {
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+}
+
+.pst-kinds li {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pst-kind {
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pst-kind[aria-disabled='true'] {
+  color: var(--text-secondary);
+  cursor: not-allowed;
+}
+
+.pst-kinds small,
+.pst-count {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.pst-input {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.pst-input label {
+  font-weight: 700;
+  font-size: var(--text-sm);
+}
+
+.pst-input input,
+.pst-input textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-material);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.pst-count,
+.pst-input .pst-hint {
+  margin: 0;
+}
+
+.pst-error {
+  margin: 0;
+  color: var(--state-danger);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.pst-check-box {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 44px;
+  font-size: var(--text-sm);
+}
+
+.pst-item {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.pst-item legend {
+  font-weight: 700;
+}
+
+.pst-thumb {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-md);
+  background: var(--surface-recessed);
+  object-fit: cover;
+}
+
+.pst-grid-toggle {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+/* "Show grid": the 12 columns of the rows, drawn over the preview. */
+.pst-preview__page[data-grid] .studio-rows {
+  position: relative;
+}
+
+.pst-preview__page[data-grid] .studio-rows::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background-image: linear-gradient(
+    to right,
+    rgb(122 50 249 / 14%) 0 calc(100% - var(--studio-gap)),
+    transparent 0
+  );
+  background-size: calc((100% + var(--studio-gap)) / 12) 100%;
+  pointer-events: none;
+}
+
 /* Phones: the check's count stays in reach at the bottom (the board's sheet, folded). */
 .pst-sheet {
   position: sticky;
