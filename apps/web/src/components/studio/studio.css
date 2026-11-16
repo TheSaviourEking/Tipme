@@ -290,6 +290,15 @@
   margin-block: var(--space-6, 1.5rem);
 }
 
+/* The rail is also the standard page's tip panel (it carries that panel's class): its card, keys
+   and, on a phone, its fixed Tip bar come from globals.css unchanged. Only its place differs, set
+   here with the frame's own classes: in the frame's flow, not pulled up over the cover, and sticky
+   only beside the rows (from 1024px). */
+.studio-frame > .studio-rail {
+  position: static;
+  margin-top: var(--space-6, 1.5rem);
+}
+
 .studio-rows {
   grid-area: rows;
   min-width: 0;
@@ -331,9 +340,16 @@
     align-items: start;
   }
 
-  .studio-rail {
+  .studio-rail,
+  .studio-frame > .studio-rail {
     position: sticky;
     top: var(--space-4, 1rem);
+  }
+
+  /* As on the standard page: a panel taller than the window scrolls with the page. */
+  .studio-frame > .studio-rail[data-taller-than-window] {
+    position: relative;
+    top: 0;
   }
 }
 
