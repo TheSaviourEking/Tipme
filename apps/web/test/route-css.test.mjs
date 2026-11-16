@@ -102,3 +102,46 @@ test(
     );
   },
 );
+
+// Page Studio (plan Task 8): its stylesheet travels with the renderer, which only the public page
+// and the Studio lab import. Next.js links it on /@username whether or not the page has a design,
+// so every rule is scoped to a Studio page and matches nothing on a standard one.
+const studioCss = readFileSync(
+  new URL('../src/components/studio/studio.css', import.meta.url),
+  'utf8',
+);
+
+test('Studio styles stay out of globals.css and the root layout, and only style a Studio page', () => {
+  assert.doesNotMatch(read('globals.css'), /\.studio[\w-]*|studio\.css/);
+  assert.doesNotMatch(read('layout.tsx'), /studio/);
+  const selectors = rules(studioCss).flatMap(({ key }) =>
+    key
+      .split(' / ')
+      .at(-1)
+      .split(',')
+      .map((s) => s.trim()),
+  );
+  assert.ok(selectors.length > 50, 'studio.css has its rules');
+  for (const selector of selectors)
+    assert.match(
+      selector,
+      /^\.(studio|profile-page--studio)\b/,
+      `studio.css: "${selector}" could style a page without a Studio design`,
+    );
+});
+
+test(
+  'the home page loads no Studio styles',
+  { skip: !existsSync(homeHtml) && 'no production build (run pnpm build)' },
+  () => {
+    const html = readFileSync(homeHtml, 'utf8');
+    for (const [, sheet] of html.matchAll(
+      /<link rel="stylesheet" href="\/_next\/([^"]+\.css)"/g,
+    ))
+      assert.doesNotMatch(
+        readFileSync(new URL(sheet, built), 'utf8'),
+        /\.studio-frame/,
+        sheet,
+      );
+  },
+);
