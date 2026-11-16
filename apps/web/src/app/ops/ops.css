@@ -319,6 +319,13 @@
   overflow-wrap: anywhere;
 }
 
+/* The audit log's change record, in words, under the written reason. */
+.ops-audit__detail {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-secondary);
+}
+
 .ops-permissions {
   list-style: none;
   margin: 0;
