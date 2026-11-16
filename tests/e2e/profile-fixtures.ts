@@ -3,6 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import type { PublicProfile } from '../../packages/contracts/src/profiles';
+import type { StudioDocument } from '../../packages/contracts/src/studio-document';
 import { API_ORIGIN, E2E_REVALIDATE_SECRET } from './stack';
 
 // The e2e API runs one payment mode, and a web instance keeps its mode for a minute. So the page's
@@ -48,6 +49,71 @@ export const page = (
   cover: { kind: 'design', design: 'danfo' },
   ...extra,
 });
+
+/** The board's three Studio pages (Kemi, Sule, Ify): /@studiokemi, /@studiosule, /@studioify. */
+export const STUDIO_HANDLES = [
+  'studiokemi',
+  'studiosule',
+  'studioify',
+] as const;
+export type StudioHandle = (typeof STUDIO_HANDLES)[number];
+
+/**
+ * The Studio documents and the contracts they need, loaded on first use: both are ES modules,
+ * which this file's static imports can't load (as tests/e2e/studio-probes.ts).
+ */
+export async function studioFixtures() {
+  const [contracts, examples, arbitrary] = await Promise.all([
+    import('../../packages/contracts/dist/index.js'),
+    import('../../packages/contracts/test/fixtures/studio-examples.mjs'),
+    import('../../packages/contracts/test/support/studio-arbitrary.mjs'),
+  ]);
+  const docs: Record<StudioHandle, StudioDocument> = {
+    studiokemi: examples.KEMI as StudioDocument,
+    studiosule: examples.SULE as StudioDocument,
+    studioify: examples.IFY as StudioDocument,
+  };
+  /**
+   * A Pro page with a published design, as the API sends it while the switch is on (plan Task 8).
+   * The photos are the Studio lab's generated images (served by the e2e build only), 2400 by
+   * 1600 like the examples' check context.
+   */
+  const studioPage = (
+    handle: string,
+    document: StudioDocument,
+    extra: Partial<PublicProfile> = {},
+  ): PublicProfile =>
+    page(handle, {
+      displayName: 'Kemi Adeyinka',
+      craft: 'Songs about home, sung live.',
+      note: 'Thank you for every visit.',
+      plan: 'pro',
+      links: [
+        { platform: 'instagram', url: 'https://www.instagram.com/kemisings' },
+        { platform: 'tiktok', url: 'https://www.tiktok.com/@kemisings' },
+        { platform: 'youtube', url: 'https://www.youtube.com/@kemisings' },
+        { platform: 'x', url: 'https://x.com/kemisings' },
+      ],
+      studio: {
+        document,
+        palette: contracts.deriveStudioPalette(document.brand),
+        images: Object.fromEntries(
+          (arbitrary.IMAGE_POOL as string[]).map((id) => [
+            id,
+            { path: `/dev/studio-lab/image/${id}`, width: 2400, height: 1600 },
+          ]),
+        ),
+        checkVersion: contracts.DESIGN_CHECK_VERSION,
+      },
+      ...extra,
+    });
+  const pages = [
+    ...STUDIO_HANDLES.map((handle) => studioPage(handle, docs[handle])),
+    // A design sent for a Free page (a stale answer): the page must stay standard.
+    studioPage('studiofree', docs.studiokemi, { plan: 'free' }),
+  ];
+  return { contracts, docs, context: examples.EXAMPLE_CONTEXT, pages };
+}
 
 export const LONG_NAME =
   'Oluwatobiloba Adebayo-Akinwande Oghenekaro Chukwuemeka Ibekwe';
@@ -170,6 +236,7 @@ export async function startStack(
   options: { pilotNotice?: boolean } = {},
 ): Promise<Stack> {
   let state: ApiState = 'up';
+  const pages = [...PAGES, ...(await studioFixtures()).pages];
   const api = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://stand-in');
     const handle = /^\/v1\/profiles\/(\w+)$/.exec(url.pathname)?.[1];
@@ -179,7 +246,7 @@ export async function startStack(
       response.end('{}');
       return;
     }
-    const found = PAGES.find((p) => p.handle === handle);
+    const found = pages.find((p) => p.handle === handle);
     const answer = url.pathname === '/health/release' ? RELEASE[mode] : found;
     if (handle === 'oldname') {
       response.statusCode = 308;

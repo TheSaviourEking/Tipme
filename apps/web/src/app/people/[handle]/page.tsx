@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { permanentRedirect } from 'next/navigation';
-import { resolveCover } from '@tipme/contracts';
+import { resolveCover, type PublicProfile } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { PilotNotice } from '@/components/pilot-notice';
 import {
@@ -20,10 +20,13 @@ import { movedProfilePath } from '@/lib/handle-redirect';
 import { previewMetadata } from '@/lib/metadata';
 import { getDisplaySettings } from '@/lib/display-settings-api';
 import { getPaymentMode } from '@/lib/payment-mode-api';
-import { profileTippingClosed } from '@/lib/payment-mode';
+import { profileTippingClosed, type PaymentMode } from '@/lib/payment-mode';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { CampaignTop } from '@/components/profile/campaign-top';
 import { getPublicCampaignPage, loadPublicProfile } from '@/lib/profiles-api';
+import { API_ORIGIN as BROWSER_API_ORIGIN } from '@/lib/avatar-source';
+import { identityFor, studioFor } from '@/lib/public-studio';
+import { studioLabOpen } from '@/app/dev/studio-lab/lab-gate';
 import ProfileUnavailable from './not-found';
 
 // Wait for the cached page rather than stream a silhouette: the name and photo are in the first
@@ -103,14 +106,70 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     ? await getPublicCampaignPage(profile.handle, campaign)
     : null;
   const shownCover = campaignPage?.cover ?? cover;
+  const coverView = (
+    <>
+      <ProfileCover cover={shownCover} priority animate />
+      {shownCover.kind === 'animated' && shownCover.play !== 'still' ? (
+        <CoverFreeze />
+      ) : null}
+    </>
+  );
+  // Page Studio (plan Task 8): a published design, sent by the API only while the `page_studio`
+  // switch is on. Its renderer and stylesheet are loaded only here, so a standard page carries
+  // neither. TipMe's cover, identity, tip block and footer go in unchanged.
+  const studio = studioFor(profile, {
+    apiOrigin: BROWSER_API_ORIGIN,
+    labImages: studioLabOpen(),
+    ...(campaign ? { campaign } : {}),
+  });
+  if (studio) {
+    const { StudioPage } = await import('@/components/studio/studio-page');
+    return (
+      <main
+        id="main"
+        tabIndex={-1}
+        className="profile-page profile-page--studio"
+      >
+        <ProfileViewTracker handle={profile.handle} />
+        <StudioPage
+          studio={studio}
+          profile={profile}
+          cover={coverView}
+          identity={
+            <RecipientIdentity
+              profile={identityFor(profile, studio.document)}
+              firstName={firstName}
+              celebrationLabel={
+                takesTips ? (profile.celebration?.label ?? null) : null
+              }
+            />
+          }
+          tipBlock={
+            <TipBlock
+              profile={profile}
+              firstName={firstName}
+              mode={mode}
+              opensSoon={opensSoon}
+              pilotShown={pilotShown}
+            />
+          }
+          footer={
+            <ProfileFoot
+              profile={profile}
+              firstName={firstName}
+              campaign={false}
+              previewPages={copy.previewPages}
+            />
+          }
+        />
+      </main>
+    );
+  }
   return (
     <main id="main" tabIndex={-1} className="profile-page">
       <ProfileViewTracker handle={profile.handle} />
       <div className="profile-sheet">
-        <ProfileCover cover={shownCover} priority animate />
-        {shownCover.kind === 'animated' && shownCover.play !== 'still' ? (
-          <CoverFreeze />
-        ) : null}
+        {coverView}
         <div className="profile-columns">
           <RecipientIdentity
             profile={profile}
@@ -128,64 +187,107 @@ export default async function ProfilePage({ params, searchParams }: Props) {
             aria-label={`Tip ${firstName}`}
             data-tip-panel
           >
-            {opensSoon ? (
-              <TippingOpensSoon handle={profile.handle} name={firstName} />
-            ) : profile.acceptingTips === false ? (
-              <TipsNotReady recipient={firstName} />
-            ) : (
-              <AppreciationForm
-                surface="profile"
-                paymentMode={mode}
-                {...(pilotShown
-                  ? {
-                      pilotNotice: <PilotNotice />,
-                      barNotice: (
-                        <>
-                          {PILOT_NOTICE_TEXT}{' '}
-                          <a href={`mailto:${PILOT_NOTICE_SUPPORT_EMAIL}`}>
-                            {PILOT_NOTICE_SUPPORT_EMAIL}
-                          </a>
-                        </>
-                      ),
-                    }
-                  : {})}
-                recipient={firstName}
-                handle={profile.handle}
-                recognition={profile.recognition === true}
-                {...(profile.tipAmounts
-                  ? { tipAmounts: profile.tipAmounts }
-                  : {})}
-                {...(profile.celebration
-                  ? { celebration: profile.celebration }
-                  : {})}
-              />
-            )}
+            <TipBlock
+              profile={profile}
+              firstName={firstName}
+              mode={mode}
+              opensSoon={opensSoon}
+              pilotShown={pilotShown}
+            />
           </aside>
         </div>
-        <footer className="profile-foot">
-          {campaignPage && (
-            <p className="profile-foot__campaign">
-              Tips go to {firstName}.{' '}
-              <Link href={`/@${profile.handle}`}>
-                See {firstName}’s main page
-              </Link>
-            </p>
-          )}
-          <div className="profile-foot__quiet">
-            <ReportPage handle={profile.handle} />
-            <Link href="/legal/privacy">Privacy</Link>
-            <Link href="/legal/terms">Terms</Link>
-            {copy.previewPages && (
-              <Link href="/about-preview">Learn about this preview</Link>
-            )}
-          </div>
-          {profile.plan !== 'pro' && (
-            <Link className="profile-foot__own" href="/sign-up">
-              Get your own TipMe page
-            </Link>
-          )}
-        </footer>
+        <ProfileFoot
+          profile={profile}
+          firstName={firstName}
+          campaign={Boolean(campaignPage)}
+          previewPages={copy.previewPages}
+        />
       </div>
     </main>
+  );
+}
+
+/** TipMe's tip block: the same on the standard page and beside a Studio design (locked). */
+function TipBlock({
+  profile,
+  firstName,
+  mode,
+  opensSoon,
+  pilotShown,
+}: {
+  profile: PublicProfile;
+  firstName: string;
+  mode: PaymentMode;
+  opensSoon: boolean;
+  pilotShown: boolean;
+}) {
+  return (
+    <>
+      {opensSoon ? (
+        <TippingOpensSoon handle={profile.handle} name={firstName} />
+      ) : profile.acceptingTips === false ? (
+        <TipsNotReady recipient={firstName} />
+      ) : (
+        <AppreciationForm
+          surface="profile"
+          paymentMode={mode}
+          {...(pilotShown
+            ? {
+                pilotNotice: <PilotNotice />,
+                barNotice: (
+                  <>
+                    {PILOT_NOTICE_TEXT}{' '}
+                    <a href={`mailto:${PILOT_NOTICE_SUPPORT_EMAIL}`}>
+                      {PILOT_NOTICE_SUPPORT_EMAIL}
+                    </a>
+                  </>
+                ),
+              }
+            : {})}
+          recipient={firstName}
+          handle={profile.handle}
+          recognition={profile.recognition === true}
+          {...(profile.tipAmounts ? { tipAmounts: profile.tipAmounts } : {})}
+          {...(profile.celebration ? { celebration: profile.celebration } : {})}
+        />
+      )}
+    </>
+  );
+}
+
+/** The page's footer: report, Privacy, Terms, the preview link (locked on a Studio page too). */
+function ProfileFoot({
+  profile,
+  firstName,
+  campaign,
+  previewPages,
+}: {
+  profile: PublicProfile;
+  firstName: string;
+  campaign: boolean;
+  previewPages: boolean;
+}) {
+  return (
+    <footer className="profile-foot">
+      {campaign && (
+        <p className="profile-foot__campaign">
+          Tips go to {firstName}.{' '}
+          <Link href={`/@${profile.handle}`}>See {firstName}’s main page</Link>
+        </p>
+      )}
+      <div className="profile-foot__quiet">
+        <ReportPage handle={profile.handle} />
+        <Link href="/legal/privacy">Privacy</Link>
+        <Link href="/legal/terms">Terms</Link>
+        {previewPages && (
+          <Link href="/about-preview">Learn about this preview</Link>
+        )}
+      </div>
+      {profile.plan !== 'pro' && (
+        <Link className="profile-foot__own" href="/sign-up">
+          Get your own TipMe page
+        </Link>
+      )}
+    </footer>
   );
 }
