@@ -14,6 +14,7 @@ import {
   colourNotes,
   colourUse,
   fontChoices,
+  fixesInput,
   fixesNow,
   formatRatio,
   normaliseHex,
@@ -184,7 +185,7 @@ test('the shown check is the server’s for the document it checked, the editor�
   assert.equal(checkShown(d, local, null), local);
 });
 
-test('fix buttons are the one-click fixes; fixes that need the person’s input wait for Blocks', () => {
+test('one-click fixes apply at once; fixes that need the person’s input open the Blocks tab (G2)', () => {
   const issue = {
     rule: 'photo-resolution',
     severity: 'error',
@@ -198,6 +199,10 @@ test('fix buttons are the one-click fixes; fixes that need the person’s input 
   assert.deepEqual(
     fixesNow(issue).map((f) => f.id),
     ['smaller-slot'],
+  );
+  assert.deepEqual(
+    fixesInput(issue).map((f) => f.id),
+    ['replace-photo'],
   );
   assert.ok(STUDIO_FIX_NEEDS_INPUT.includes('replace-photo'));
 });

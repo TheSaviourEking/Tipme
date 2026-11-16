@@ -6,7 +6,7 @@ import type {
   StudioIssue,
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
-import { fixesNow, passingWords } from './studio-editor-model';
+import { fixesInput, fixesNow, passingWords } from './studio-editor-model';
 
 /**
  * The design check (StudioEditor board §1, right panel; the Check tab): what must be fixed before
@@ -19,6 +19,7 @@ export function CheckPanel({
   check,
   draft,
   onFix,
+  onInput,
   readOnly,
 }: {
   /** Unique per copy: the panel shows beside the preview and in the Check tab. */
@@ -26,6 +27,8 @@ export function CheckPanel({
   check: StudioCheckResult;
   draft: StudioDocument;
   onFix(issue: StudioIssue, fixId: string): void;
+  /** A fix that needs the person's input: opens the block's form at the field (Blocks tab). */
+  onInput(issue: StudioIssue, fixId: string): void;
   readOnly: boolean;
 }) {
   const summary = useRef<HTMLParagraphElement>(null);
@@ -69,7 +72,7 @@ export function CheckPanel({
             >
               <b>{issue.message}</b>
               {issue.detail && <p>{issue.detail}</p>}
-              {fixesNow(issue).length > 0 && (
+              {issue.fixes.length > 0 && (
                 <div className="pst-issue__fixes">
                   {fixesNow(issue).map((f) => (
                     <Button
@@ -77,6 +80,16 @@ export function CheckPanel({
                       variant="secondary"
                       disabled={readOnly}
                       onClick={() => apply(issue, f.id, f.label)}
+                    >
+                      {f.label}
+                    </Button>
+                  ))}
+                  {fixesInput(issue).map((f) => (
+                    <Button
+                      key={f.id}
+                      variant="quiet"
+                      disabled={readOnly}
+                      onClick={() => onInput(issue, f.id)}
                     >
                       {f.label}
                     </Button>

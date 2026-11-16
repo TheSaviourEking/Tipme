@@ -59,11 +59,17 @@ export function StudioPreview({
   images,
   profile,
   device,
+  grid = false,
+  outlineRow = -1,
 }: {
   draft: StudioDocument;
   images: StudioImage[];
   profile: MyProfile;
   device: PreviewDevice;
+  /** "Show grid": the 12 columns the rows sit on. */
+  grid?: boolean;
+  /** The row open in the Blocks tab (its index), outlined; -1 for none. */
+  outlineRow?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState<number>(PREVIEW_WIDTH[device]);
@@ -128,9 +134,13 @@ export function StudioPreview({
   return (
     <div ref={box} className="pst-preview__room">
       {phoneSizes && <style>{phoneSizes}</style>}
+      {outlineRow >= 0 && (
+        <style>{`.pst-preview__page .studio-rows > .studio-row:nth-child(${outlineRow + 1}) { outline: 2px solid var(--brand-primary); outline-offset: 2px; }`}</style>
+      )}
       <div
         className="pst-preview__page"
         data-device={device}
+        data-grid={grid || undefined}
         inert
         style={{ width, zoom }}
       >

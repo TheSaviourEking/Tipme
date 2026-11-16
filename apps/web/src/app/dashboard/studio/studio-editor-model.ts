@@ -161,9 +161,14 @@ export function checkShown(
   return server && server.doc === JSON.stringify(doc) ? server.check : local;
 }
 
-/** The fixes a button applies in one click. Fixes needing a new photo, link or words come with Blocks. */
+/** The fixes a button applies in one click. */
 export function fixesNow(issue: StudioIssue): StudioFix[] {
   return issue.fixes.filter((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id));
+}
+
+/** Fixes that need a new photo, link or words: their buttons open the block's form (Blocks tab). */
+export function fixesInput(issue: StudioIssue): StudioFix[] {
+  return issue.fixes.filter((f) => STUDIO_FIX_NEEDS_INPUT.includes(f.id));
 }
 
 const PASSING: Record<
