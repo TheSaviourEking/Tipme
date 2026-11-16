@@ -25,6 +25,8 @@ import { BusinessNoteReview } from '@/components/ops/business-note-review';
 import { PayoutIssueTools } from '@/components/ops/payout-issue-tools';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
+import { TipReverse } from '@/components/ops/tip-reverse';
+import { tipReverseView } from '@/lib/tip-reverse-view';
 import { nairaCode as naira } from '@/lib/money';
 import {
   can,
@@ -383,6 +385,8 @@ export default function IssuePage() {
     issue.subject.payoutId !== undefined &&
     payout !== null &&
     ['REQUESTED', 'PROCESSING'].includes(payout.status);
+  // A refund or chargeback our payment partner reported: can it be taken back from here, and how.
+  const reverse = tipReverseView(issue);
   const recoveryPending =
     evidence.recovery &&
     !evidence.recovery.cancelledAt &&
@@ -558,6 +562,25 @@ export default function IssuePage() {
             canDecide={can(access, 'issues.resolve')}
             onDecided={load}
           />
+        </Section>
+      )}
+
+      {reverse.kind !== 'none' && can(access, 'payments.repair') && (
+        <Section title="Take back this tip">
+          {reverse.kind === 'refund' || reverse.kind === 'dispute' ? (
+            <TipReverse
+              issueId={issue.id}
+              view={reverse}
+              handle={page?.handle ?? null}
+              onDone={(next) => {
+                setOutcome(next);
+                void load();
+              }}
+              onRefused={load}
+            />
+          ) : (
+            <p data-testid="tip-reverse-wait">{reverse.words}</p>
+          )}
         </Section>
       )}
 

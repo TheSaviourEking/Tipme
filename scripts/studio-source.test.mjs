@@ -96,3 +96,21 @@ test('text on a photo always sits on the scrim', () => {
     /\.studio-scrim\s*\{[^}]*background:\s*rgb\(0 0 0 \/ 0\.62\)/,
   );
 });
+
+test('the services block ends with the fixed line the owner set (16 Nov 2026)', () => {
+  const blocks = read('studio-blocks.tsx');
+  // JSX text: the formatter may wrap it between any two words.
+  const line =
+    'Prices are for information. Tips here are a gift, not a payment for a service.';
+  assert.match(
+    blocks,
+    new RegExp(
+      line
+        .split(' ')
+        .map((w) => w.replace(/[.,]/g, '\\$&'))
+        .join('\\s+'),
+    ),
+  );
+  // The plan's first wording called a tip "thanks"; money is "tips" in TipMe's copy.
+  assert.doesNotMatch(blocks, /Tips here are thanks/);
+});

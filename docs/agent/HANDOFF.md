@@ -1,3 +1,15 @@
+# Current handoff: Studio Tip bar and the sample announcement (16 November 2026)
+
+- Branch `feat/studio-sticky-tip-bar`; PR into `dev`, not merged. Changed: `components/studio/studio-page.tsx` (rail class), `components/studio/studio.css` (rail placement), `packages/mail` announcement sample and account-events copy (+ `test/fixtures/text-before-m2.json`), new e2e test in `tests/e2e/studio-page.spec.ts`, darwin Studio visual baselines, DECISION-LOG.
+- Passed (lane 7, throwaway containers `tipme-tipbar-*`, removed after): web unit tests (incl. `route-css.test.mjs`), mail and contracts tests, root script tests, typecheck, lint; e2e `studio-page` (burn-in 5x), `studio-examples`, `studio-examples.visual` (darwin), `studio-lab`, `profile-page`.
+- Left: the six Linux Studio baselines must come from CI's run of this PR (inspect, then commit).
+
+# Current handoff: admin money screens (16 November 2026)
+
+- Branch `feat/ops-pro-refunds-reverse`; PR into `dev`, not merged. New: `components/ops/pro-payments.tsx`, `components/ops/tip-reverse.tsx`, `lib/pro-payment-view.ts`, `lib/tip-reverse-view.ts`; switches screen shows "Not built yet". Contracts: `OpsProPayments`, `OpsProPayment.period`, `OpsFeatureSwitch.notBuilt`, `featureSwitchBuilt`, error `SWITCH_NOT_BUILT`. Runbook `settings-and-switches.md` and DECISION-LOG (2026-11-16) updated.
+- Passed (lane 6, throwaway containers `tipme-refrev-*`, removed after): web/contracts/api unit tests, typecheck, lint, `route-css.test.mjs`, integration `feature-switches-api`, `pro-refund`, `ops-tip-reverse`, `account-api`, database `feature-switches`; e2e `ops-pro-payments`, `ops-tip-reverse`, `ops-switches` (desktop, mobile, @alone). Not run: the full e2e and integration suites (CI), burn-in.
+- Left: the `payment_reversed` issue summary (server words) still names the partner on the staff screen; not changed here.
+
 # Current handoff: admin UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-ops`; PR into `dev`, not merged, merge after #242. Web and `packages/ui` CSS/markup only; no migration, no API change. New `tests/e2e/ops-layout.spec.ts`; pricing e2e tests click the new "…" openers.

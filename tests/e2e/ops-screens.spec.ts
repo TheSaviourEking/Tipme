@@ -138,9 +138,13 @@ test('granting fee-free tips that waits reads as waiting, not as granted', async
     }),
   );
   await page.goto(`/ops/pages?handle=${handle}`);
-  // A space between the intro's two sentences (UI audit, 15 Nov 2026).
+  // The intro states the current plans: Pro keeps 5%, Free 7%, billing sits behind a switch.
   await expect(
-    page.getByRole('main').getByText(/the same as Free\. There is no billing/),
+    page
+      .getByRole('main')
+      .getByText(
+        /TipMe keeps 5% of each tip on Pro and 7% on Free, processing included\. Withdrawals work the same on both plans\. .*Pro billing/,
+      ),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Grant fee-free tips…' }).click();
   await page.getByLabel('Fee-free tips to grant').fill('2');

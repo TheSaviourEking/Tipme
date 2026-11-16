@@ -5,6 +5,8 @@ import {
   contrastProblems,
   encodeDoc,
   geometryProblems,
+  layoutSnapshot,
+  settled,
   studioModules,
 } from './studio-probes';
 
@@ -67,10 +69,19 @@ test('random Studio pages that pass the check render cleanly at 320–1440px, li
         }
       }
     } catch (error) {
-      writeFileSync(
-        testInfo.outputPath('studio-counterexample.json'),
-        JSON.stringify({ doc, ctx }, null, 2),
-      );
+      // The document, and what the page measured when it failed (viewport sizes, every row's
+      // client and scroll width), attached to the result; CI uploads both files.
+      const attach = async (name: string, data: unknown) => {
+        const path = testInfo.outputPath(name);
+        writeFileSync(path, JSON.stringify(data, null, 2));
+        await testInfo.attach(name, { path, contentType: 'application/json' });
+      };
+      await attach('studio-counterexample.json', { doc, ctx });
+      try {
+        await attach('studio-snapshot.json', await layoutSnapshot(page));
+      } catch (snapshotError) {
+        await attach('studio-snapshot.json', { error: String(snapshotError) });
+      }
       throw error;
     }
   };
@@ -89,6 +100,26 @@ test('random Studio pages that pass the check render cleanly at 320–1440px, li
       seed: seedFor(seed()),
       interruptAfterTimeLimit: 330_000,
     },
+  );
+});
+
+// The probes measure only a settled layout: `settled` waits for the browser to report the width
+// Playwright set (a measurement that saw the previous width failed the property test once in CI, and
+// once locally on Linux, as "div.studio-row overflows sideways (288 > 272)"). It can't be made to
+// happen on demand, so this proves the two ends: it returns at once on a settled page, and it
+// refuses, with the reading, when the page never reports the requested width.
+test('settled waits for the requested width and says so when it never comes @studio-lab', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?example=min');
+  await page.locator('.studio').waitFor();
+  await settled(page);
+  expect((await layoutSnapshot(page)).innerWidth).toBe(390);
+  // Pretend Playwright had asked for another width than the page shows.
+  page.viewportSize = () => ({ width: 333, height: 900 });
+  await expect(settled(page, 1500)).rejects.toThrow(
+    /did not settle at 333px within 1500ms; last reading: .*"innerWidth":390/,
   );
 });
 

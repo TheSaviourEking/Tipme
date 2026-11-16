@@ -18,7 +18,9 @@ import {
   type DatabaseFailure,
   type OperationErrorCode,
 } from '@tipme/database';
+import { withdrawalMinimumMinor } from '@tipme/domain';
 import type { ErrorReporter, Logger } from '@tipme/observability';
+import { NGN_PAYOUT_FEE_MINOR } from '@tipme/payments';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import {
   CodedHttpException,
@@ -27,6 +29,10 @@ import {
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
 import { referenceOf } from './reference.js';
 import { ValidationFailedException } from './zod-validation.pipe.js';
+
+/** Whole naira with the ISO code, from minor units: NGN 2,000. */
+const wholeNgn = (minor: bigint) =>
+  `NGN ${(minor / 100n).toLocaleString('en-US')}`;
 
 /** Thrown when Postgres/Redis cannot serve a request in time. */
 export class DependencyUnavailableError extends Error {
@@ -149,6 +155,8 @@ const messages: Record<ApiErrorCode, string> = {
   PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
   TIP_REFUND_REFUSED: 'This tip can’t be refunded.',
   PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
+  SWITCH_NOT_BUILT:
+    'Nothing is built behind this switch yet, so it can’t be turned on.',
   TIP_REFUNDS_OFF: 'Tip refunds aren’t switched on.',
   PRO_AUTO_RENEW_OFF: 'Auto-renew isn’t available.',
   PRO_AUTO_RENEW_NEEDS_EMAIL:
@@ -204,9 +212,8 @@ const messages: Record<ApiErrorCode, string> = {
     'You’ve used all your username changes. Contact the TipMe team at support@usetipme.xyz to change it again.',
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
-  WITHDRAWAL_TOO_SMALL: 'The smallest withdrawal is NGN 2,000.',
-  WITHDRAWAL_BELOW_FEE:
-    'The amount must be more than the NGN 50 transfer fee, which is taken from it.',
+  WITHDRAWAL_TOO_SMALL: `The smallest withdrawal is ${wholeNgn(withdrawalMinimumMinor())}.`,
+  WITHDRAWAL_BELOW_FEE: `The amount must be more than the ${wholeNgn(NGN_PAYOUT_FEE_MINOR)} transfer fee, which is taken from it.`,
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:
@@ -441,6 +448,7 @@ const operationErrors: Partial<
   PRO_PURCHASE_NOT_FOUND: { status: 404, code: 'NOT_FOUND' },
   PRO_BALANCE_REFUSED: { status: 409, code: 'PRO_BALANCE_REFUSED' },
   PRO_REFUND_REFUSED: { status: 409, code: 'PRO_REFUND_REFUSED' },
+  SWITCH_NOT_BUILT: { status: 409, code: 'SWITCH_NOT_BUILT' },
   TIP_REFUND_REFUSED: { status: 409, code: 'TIP_REFUND_REFUSED' },
   PRO_AUTO_RENEW_OFF: { status: 404, code: 'PRO_AUTO_RENEW_OFF' },
   PRO_AUTO_RENEW_NEEDS_EMAIL: {

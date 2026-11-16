@@ -65,6 +65,8 @@ export interface ProRefundFacts {
   /** A Business Pro month's business (then `profileId` is null). */
   businessId: string | null;
   refund: { id: string; status: ProRefundStatus } | null;
+  /** The Pro month this payment bought, for staff reading the history. */
+  period: { startsAt: Date; endsAt: Date } | null;
 }
 
 /** Whether a purchase can be refunded now, and why not. Read under the purchase lock to act on. */
@@ -79,7 +81,11 @@ export async function proRefundFacts(
     .where(eq(proPurchases.id, purchaseId));
   const [period] = purchase
     ? await db
-        .select({ paidBy: proPeriods.paidBy })
+        .select({
+          paidBy: proPeriods.paidBy,
+          startsAt: proPeriods.startsAt,
+          endsAt: proPeriods.endsAt,
+        })
         .from(proPeriods)
         .where(eq(proPeriods.purchaseId, purchaseId))
     : [];
@@ -122,6 +128,9 @@ export async function proRefundFacts(
     businessId: purchase?.businessId ?? null,
     refund: refund
       ? { id: refund.id, status: refund.status as ProRefundStatus }
+      : null,
+    period: period
+      ? { startsAt: period.startsAt, endsAt: period.endsAt }
       : null,
   };
 }

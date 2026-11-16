@@ -42,6 +42,11 @@ export interface FeatureSwitchEntry {
   default: boolean;
   /** The variable it replaces, and that variable's own words for on and off. */
   env: { name: string; on: 'true' | 'on'; off: 'false' | 'off' };
+  /**
+   * Nothing is built behind it yet (16 Nov 2026): staff can't turn it on (`SWITCH_NOT_BUILT`), only
+   * off if it is on. The key stays in FEATURE_SWITCHES so stored rows and old variables stay valid.
+   */
+  notBuilt?: true;
 }
 
 const truthy = (name: string) => ({ name, on: 'true', off: 'false' }) as const;
@@ -106,6 +111,8 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: truthy('TEAM_TIPS_ENABLED'),
+    // Its routes were never added: the API's team tips controller has none.
+    notBuilt: true,
   },
   analytics: {
     label: 'Visit counts',
@@ -165,10 +172,12 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
   business_owners: {
     label: 'Business co-owners',
     description:
-      'Co-owners and handing a business over (Phase E, not built yet): for now it only tells the web app. Moves no money. Needs TipMe for businesses on.',
+      'Co-owners and handing a business over (Phase E). Moves no money. Needs TipMe for businesses on.',
     money: false,
     default: false,
     env: truthy('BUSINESS_OWNERS_ENABLED'),
+    // Only reported on /health/release; no screen or route reads it yet.
+    notBuilt: true,
   },
   campaign_pages: {
     label: 'Campaign pages',
@@ -187,6 +196,10 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     env: onOff('TIP_REFUNDS'),
   },
 };
+
+/** Whether staff may turn this switch on: false while nothing is built behind it. */
+export const featureSwitchBuilt = (key: FeatureSwitch): boolean =>
+  FEATURE_SWITCH_CATALOGUE[key].notBuilt !== true;
 
 export function isFeatureSwitch(key: string): key is FeatureSwitch {
   return (FEATURE_SWITCHES as readonly string[]).includes(key);
@@ -233,6 +246,8 @@ export interface OpsFeatureSwitch {
   default: boolean;
   /** The variable it replaced, so staff can match it to the old settings. */
   envName: string;
+  /** Nothing is built behind it yet: it can't be turned on (only off, if it is on). */
+  notBuilt: boolean;
   source: FeatureSwitchSource | null;
   changedBy: string | null;
   changedAt: string | null;

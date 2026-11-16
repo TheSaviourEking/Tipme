@@ -67,8 +67,10 @@ export function StudioPage({
         >
           {identity}
         </div>
+        {/* The standard page's panel classes (owner, 16 Nov 2026): the same tip block styling and,
+            on a phone, the same fixed Tip bar. studio.css keeps only its place in the frame. */}
         <aside
-          className="studio-rail studio-fixed tip-instrument"
+          className="studio-rail studio-fixed profile-composer tip-instrument"
           aria-label={`Tip ${firstName}`}
           data-tip-panel
         >

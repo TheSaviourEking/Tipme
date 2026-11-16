@@ -367,6 +367,7 @@ export function DashboardShell({
                   account={account}
                   roles={roles}
                   personName={profile?.displayName ?? null}
+                  personAvatarPath={profile?.avatarPath ?? null}
                   onSignOut={() => void signOut()}
                 />
               ) : (

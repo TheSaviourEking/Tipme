@@ -93,7 +93,7 @@
   {
     "id": "payment_account_action_needed",
     "data": {},
-    "text": "Your payment account needs attention\n\nOur payment provider needs something from you. You may not be able to receive tips until it’s sorted.\n\nCheck your payment account: https://usetipme.xyz/dashboard/settings?ml=settings\n\n—\nYou get this email when your payment account is restricted or needs information.\nQuestions? support@usetipme.xyz"
+    "text": "Your payment account needs attention\n\nOur payment partner needs something from you. You may not be able to receive tips until it’s sorted.\n\nCheck your payment account: https://usetipme.xyz/dashboard/settings?ml=settings\n\n—\nYou get this email when your payment account is restricted or needs information.\nQuestions? support@usetipme.xyz"
   },
   {
     "id": "page_paused",
@@ -117,7 +117,7 @@
     "data": {
       "amountMinor": "250000"
     },
-    "text": "Your withdrawal was paid\n\nWe paid out NGN 2,500.00. The payment provider confirmed it.\n\n—\nYou get this email for each withdrawal from your balance.\nQuestions? support@usetipme.xyz"
+    "text": "Your withdrawal was paid\n\nWe paid out NGN 2,500.00. Our payment partner confirmed it.\n\n—\nYou get this email for each withdrawal from your balance.\nQuestions? support@usetipme.xyz"
   },
   {
     "id": "withdrawal_failed",
@@ -129,7 +129,7 @@
   {
     "id": "tip_reversed",
     "data": {},
-    "text": "A tip was refunded or disputed\n\nThe payment provider reported a refund or dispute on a tip you received. Our team is looking at it, and your TipMe balance hasn’t changed. We’ll contact you if we need anything.\n\n—\nYou get this email when a tip you received is refunded or disputed.\nQuestions? support@usetipme.xyz"
+    "text": "A tip was refunded or disputed\n\nOur payment partner reported a refund or dispute on a tip you received. Our team is looking at it, and your TipMe balance hasn’t changed. We’ll contact you if we need anything.\n\n—\nYou get this email when a tip you received is refunded or disputed.\nQuestions? support@usetipme.xyz"
   },
   {
     "id": "milestone",

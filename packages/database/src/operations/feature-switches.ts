@@ -7,6 +7,7 @@ import {
   type PublicDisplaySettings,
   FEATURE_SWITCHES,
   FEATURE_SWITCH_CATALOGUE,
+  featureSwitchBuilt,
   featureSwitchFromEnv,
   isFeatureSwitch,
   type FeatureSwitch,
@@ -227,7 +228,9 @@ export async function seedFeatureSwitches(
 
 /**
  * Staff turn a switch on or off (inside a transaction: the serious action's, or the route's own). The
- * same value again is refused, so a waiting request that has been overtaken goes stale. Audited.
+ * same value again is refused, so a waiting request that has been overtaken goes stale. A switch
+ * with nothing built behind it can't be turned on (`SWITCH_NOT_BUILT`), even by an approval asked
+ * before; turning it off always works. Audited.
  */
 export async function setFeatureSwitch(
   tx: Tx,
@@ -243,6 +246,8 @@ export async function setFeatureSwitch(
   if (!isFeatureSwitch(input.key) || typeof input.on !== 'boolean')
     throw new OperationError('INVALID_INPUT');
   const key = input.key;
+  if (input.on && !featureSwitchBuilt(key))
+    throw new OperationError('SWITCH_NOT_BUILT');
   const [row] = await tx
     .select({ enabled: featureSwitches.enabled })
     .from(featureSwitches)
@@ -328,6 +333,7 @@ export async function featureSwitchOverview(
       on: row?.enabled ?? fallbackFor(key),
       default: entry.default,
       envName: entry.env.name,
+      notBuilt: !featureSwitchBuilt(key),
       source: (row?.source as FeatureSwitchSource | undefined) ?? null,
       changedBy: row?.changedBy ?? null,
       changedAt: row?.changedAt.toISOString() ?? null,

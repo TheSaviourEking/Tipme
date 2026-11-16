@@ -186,6 +186,7 @@ export function ImagePicker({
   error: outsideError = '',
   disabled = false,
   keepAlpha = false,
+  frame: framed = true,
   buttonRef,
 }: {
   kind: PickerKind;
@@ -206,6 +207,11 @@ export function ImagePicker({
   disabled?: boolean;
   /** A logo that may be see-through is sent as PNG, so its transparency survives. */
   keepAlpha?: boolean;
+  /**
+   * False skips the position-and-zoom step and sends the chosen file as it is: Page Studio keeps
+   * the whole photo and cuts every shape from it on the server, around a focal point (plan Task 10).
+   */
+  frame?: boolean;
   buttonRef?: RefObject<HTMLButtonElement | null>;
 }) {
   const id = useId();
@@ -258,6 +264,12 @@ export function ImagePicker({
     try {
       if (!ACCEPT.split(',').includes(file.type)) throw new Error('type');
       const img = await loadImage(url);
+      if (!framed) {
+        URL.revokeObjectURL(url);
+        refocus.current = 'button';
+        await send(file);
+        return;
+      }
       picture.current = img;
       setView(initialView());
       refocus.current = 'frame';

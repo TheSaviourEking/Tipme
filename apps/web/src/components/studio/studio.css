@@ -222,6 +222,17 @@
   line-height: 1.5;
 }
 
+/* On the public page (/@username): the design fills the page edge to edge, so the standard page's
+   framed, rounded cover and bottom padding step aside. Loaded only with a Studio page. */
+.profile-page--studio {
+  padding-bottom: 0;
+}
+
+.profile-page--studio .profile-cover {
+  border-radius: 0;
+  box-shadow: none;
+}
+
 /* Page frame: rows in the main column, the tip block in a rail beside them from 1024px. */
 .studio-frame {
   box-sizing: border-box;
@@ -257,14 +268,35 @@
 
 .studio-identity .profile-identity__handle,
 .studio-identity .profile-role,
-.studio-identity .profile-bio {
+.studio-identity .profile-bio,
+.studio-identity .profile-words__note {
   color: var(--studio-c-muted);
+}
+
+/* The identity's own text sits on the page's colour, so it takes the page's checked text colours
+   (a dark design would otherwise keep TipMe's dark text). Link chips and the celebration keep
+   their own TipMe surfaces. */
+.studio-identity .profile-contact a {
+  color: var(--studio-c-text);
+}
+
+.studio-identity .profile-contact a:hover {
+  color: var(--studio-c-link);
 }
 
 .studio-rail {
   grid-area: tip;
   min-width: 0;
   margin-block: var(--space-6, 1.5rem);
+}
+
+/* The rail is also the standard page's tip panel (it carries that panel's class): its card, keys
+   and, on a phone, its fixed Tip bar come from globals.css unchanged. Only its place differs, set
+   here with the frame's own classes: in the frame's flow, not pulled up over the cover, and sticky
+   only beside the rows (from 1024px). */
+.studio-frame > .studio-rail {
+  position: static;
+  margin-top: var(--space-6, 1.5rem);
 }
 
 .studio-rows {
@@ -308,9 +340,16 @@
     align-items: start;
   }
 
-  .studio-rail {
+  .studio-rail,
+  .studio-frame > .studio-rail {
     position: sticky;
     top: var(--space-4, 1rem);
+  }
+
+  /* As on the standard page: a panel taller than the window scrolls with the page. */
+  .studio-frame > .studio-rail[data-taller-than-window] {
+    position: relative;
+    top: 0;
   }
 }
 

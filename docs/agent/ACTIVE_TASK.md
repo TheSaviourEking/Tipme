@@ -1,3 +1,14 @@
+# Current task: Studio Tip bar and the sample announcement (16 November 2026)
+
+- Branch `feat/studio-sticky-tip-bar` from `origin/dev`; one PR into `dev`, not merged. A Studio page's tip rail takes the standard panel class (`profile-composer`): same tip block styling and, on a phone, the same fixed Tip bar; `studio.css` only places the rail. The staff preview's sample announcement is now an evergreen product update (no prices, no dates). Member emails say "our payment partner" instead of "the payment provider" (4 strings in `account-events.ts`).
+- No migration, no API change. Studio Linux visual baselines come from CI. Studio editor files untouched.
+
+# Current task: admin money screens (16 November 2026)
+
+- Branch `feat/ops-pro-refunds-reverse` from `origin/dev`; one PR into `dev`, not merged. Screens for APIs that already existed: a page's Pro payments with a reasoned "Refund…" (`pro.refund`, `pro_refunds` switch) on `/ops/pages`; "Take back this tip" (`tip.reverse`) on refund-or-chargeback issues; `team_tips` and `business_owners` marked not built (`notBuilt` in the catalogue) and refused on (`409 SWITCH_NOT_BUILT`).
+- API changes: the Pro payments list is readable whatever the switch and returns `{ refundsOn, payments }` with each payment's month; asking for a refund still needs the switch. No migration. Page Studio files untouched.
+- Next: CI, owner review and merge into `dev`.
+
 # Current task: admin UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-ops` from `origin/dev` (with #241). The admin findings F1–F26 of the UI audit, built from the OpsShell/OpsPages boards: one page root (`.ops-page-body`), recessed tiles, purple never a state colour (state badges, green switch lamp, black save/continue and reasoned actions), Switches as hairline rows, phone tables as stacked cards, `EmptyWell`, pricing behind "…" openers, `.tm-choice > span`, an in-frame missing page. Rulings in DECISION-LOG 2026-11-15.

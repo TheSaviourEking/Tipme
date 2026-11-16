@@ -189,3 +189,33 @@ test('lab LCP sample', async ({ page, browser }) => {
   console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
   console.log(`LCP_RESULTS ${JSON.stringify(results)}`);
 });
+
+// Page Studio (plan Task 8): the board's three designs, each a published Studio page on the built
+// web app against the stand-in API (tests/e2e/profile-fixtures.ts). Same throttle, fresh contexts.
+test('lab LCP sample: Studio pages', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const { STUDIO_HANDLES, startStack } =
+    await import('../e2e/profile-fixtures');
+  const stack = await startStack('test');
+  try {
+    const context = await browser.newContext();
+    const state = await context.storageState();
+    await context.close();
+    const studio: Record<string, number[]> = {};
+    // Warm only the server: every sample below starts with an empty browser cache.
+    for (const handle of STUDIO_HANDLES)
+      await fetch(`${stack.origin}/@${handle}`);
+    for (let run = 0; run < 3; run += 1)
+      for (const handle of STUDIO_HANDLES)
+        (studio[`/@${handle}`] ??= []).push(
+          await lcp(browser, state, `${stack.origin}/@${handle}`),
+        );
+    console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
+    console.log(`LCP_STUDIO ${JSON.stringify(studio)}`);
+    for (const [url, samples] of Object.entries(studio))
+      for (const ms of samples)
+        expect(ms, `${url} LCP ${ms}ms`).toBeLessThan(2000);
+  } finally {
+    await stack.stop();
+  }
+});

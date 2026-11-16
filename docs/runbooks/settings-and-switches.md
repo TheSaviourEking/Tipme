@@ -36,10 +36,10 @@ other needs a reason and a fresh code. Every change is in the audit log and the 
 | ------------------------- | ----------------------- | ----- | ------- | ------------------------------------------------------------------------------------------------------ | ------- |
 | `PRO_BILLING_ENABLED`     | `pro_billing`           | yes   | off     | Recipients may buy a Pro month (live money also needs the live gates below)                            | A P S   |
 | `PRO_PAY_FROM_BALANCE`    | `pro_pay_from_balance`  | yes   | off     | Pay for Pro from the TipMe balance (waits on the partner's answer, plan Q1)                            | A P S   |
-| `PRO_REFUNDS`             | `pro_refunds`           | yes   | off     | Staff refunds of card-paid Pro months                                                                  | A P S   |
+| `PRO_REFUNDS`             | `pro_refunds`           | yes   | off     | Staff refunds of card-paid Pro months (the payment history on the admin page view shows either way)    | A P S   |
 | `PRO_AUTO_RENEW`          | `pro_auto_renew`        | yes   | off     | Auto-renew on a saved card: the offer (API) and the `pro.renew` sweep (worker), now one switch         | A W P S |
 | `BUSINESS_SHARES_ENABLED` | `business_shares`       | yes   | off     | Business release 2 share agreements, a business's own balance, and the worker's share moves (option B) | A W P S |
-| `TEAM_TIPS_ENABLED`       | `team_tips`             | yes   | off     | Tipping a whole business team (release 2). Treated as money: it splits a tip between people            | A P S   |
+| `TEAM_TIPS_ENABLED`       | `team_tips`             | yes   | off     | Tipping a whole business team (release 2). **Not built yet**: can't be turned on (see below)           | A P S   |
 | `BUSINESS_ENABLED`        | `business`              | no    | off     | TipMe for businesses: every business route, and a tip's business member                                | A P S   |
 | `ANALYTICS_ENABLED`       | `analytics`             | no    | on      | Anonymous, cookieless visit counts and server outcomes (owner, 9 Nov 2026; D-07 stays open)            | A W P S |
 | `ADULT_PLATFORM_LINKS`    | `adult_platform_links`  | no    | on      | OnlyFans and Fansly links on Pro pages (`adult-platform-links.md`)                                     | A P S   |
@@ -62,8 +62,17 @@ Pro (Phase B) is not here.
 | ------------------------- | ----------------- | ----- | ------- | ------------------------------------------------------------------------------------------------ | ------------ |
 | `BUSINESS_PRO_ENABLED`    | `business_pro`    | no    | off     | Business plans: staff and location limits, and the Business Pro price in admin. Needs `business` | #212         |
 | `BUSINESS_SIGNUP_ENABLED` | `business_signup` | no    | off     | Signing up as a business with no personal page, the "verified" moment, the account switcher      | #211         |
-| `BUSINESS_OWNERS_ENABLED` | `business_owners` | no    | off     | Co-owners and handover (Phase E, not built): only reported on `/health/release`; moves no money  | #211         |
+| `BUSINESS_OWNERS_ENABLED` | `business_owners` | no    | off     | Co-owners and handover (Phase E). **Not built yet**: can't be turned on (see below)              | #211         |
 | `CAMPAIGN_PAGES_ENABLED`  | `campaign_pages`  | no    | off     | A campaign link's own page (headline, description, cover) above the same tip area                | #220         |
+
+### Switches with nothing built behind them (16 Nov 2026)
+
+`team_tips` (its controller has no routes) and `business_owners` (only reported on `/health/release`; no screen or
+route reads it) gate nothing yet. They stay in `FEATURE_SWITCHES`, so stored rows and old variables stay valid, but
+the catalogue marks them `notBuilt`: `/ops/switches` lists them with a "Not built yet" tag and no "Turn on", and the
+API refuses turning one on with `409 SWITCH_NOT_BUILT`, before any approval is asked and again inside the change
+itself (an approval asked earlier can't turn it on either). Turning one off always works. The PR that builds the
+feature removes its `notBuilt` mark.
 
 ### Release day and after
 

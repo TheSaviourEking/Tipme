@@ -5,6 +5,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { FEATURE_SWITCH_CATALOGUE } from '../../packages/contracts/dist/index.js';
 import {
+  MAIL_SEAL_KEY,
   WEB,
   browserHeaders,
   opsSignIn,
@@ -195,6 +196,144 @@ test('a non-money switch changes at once with a reason, is audited, and gates it
   await setSwitch(database.pool, 'adult_platform_links', true);
 });
 
+// 16 Nov 2026: team_tips (no routes) and business_owners (read by no screen) have nothing built
+// behind them. They stay registered, marked, and can't be turned on; off always works.
+test('a switch with nothing built behind it is marked, and turning it on is refused before any approval', async () => {
+  const session = await opsSignIn(stack.api, database.db, phone());
+  const listed = (
+    await (await opsCall(session, 'GET', '/v1/ops/switches')).json()
+  ).data.switches;
+  assert.deepEqual(
+    listed
+      .filter((s) => s.notBuilt)
+      .map((s) => s.key)
+      .sort(),
+    ['business_owners', 'team_tips'],
+  );
+  assert.ok(listed.every((s) => typeof s.notBuilt === 'boolean'));
+  const before = await q(
+    `SELECT count(*)::int AS n FROM approval_requests WHERE action = 'feature_switch.set'`,
+  );
+  for (const key of ['team_tips', 'business_owners']) {
+    const refused = await opsCall(session, 'POST', `/v1/ops/switches/${key}`, {
+      on: true,
+      reason: REASON,
+    });
+    assert.equal(refused.status, 409, key);
+    assert.equal((await refused.json()).error.code, 'SWITCH_NOT_BUILT', key);
+    assert.equal(await ops.featureOn(database.db, key), false, key);
+  }
+  // Nothing was asked of a second person for the money one.
+  assert.deepEqual(
+    await q(
+      `SELECT count(*)::int AS n FROM approval_requests WHERE action = 'feature_switch.set'`,
+    ),
+    before,
+  );
+  // One already on (an old variable, a row from before) can still be turned off.
+  await setSwitch(database.pool, 'business_owners', true);
+  const off = await opsCall(
+    session,
+    'POST',
+    '/v1/ops/switches/business_owners',
+    { on: false, reason: REASON },
+  );
+  assert.equal(off.status, 200, await off.clone().text());
+  assert.equal(await ops.featureOn(database.db, 'business_owners'), false);
+});
+
+test('an approval asked before a switch was marked not built can’t turn it on either', async () => {
+  await assert.rejects(
+    database.db.transaction((tx) =>
+      ops.setFeatureSwitch(tx, {
+        key: 'team_tips',
+        on: true,
+        staffUserId: randomUUID(),
+        approvedBy: randomUUID(),
+        reason: REASON,
+        now: new Date(),
+      }),
+    ),
+    (error) => error.code === 'SWITCH_NOT_BUILT',
+  );
+  assert.equal(await ops.featureOn(database.db, 'team_tips'), false);
+});
+
+// 16 Nov 2026: the admin page view lists a page's Pro payments whatever the pro_refunds switch,
+// with the month each bought; only asking for a refund needs the switch on.
+test('a page’s Pro payments are listed with their month while refunds are off; asking is refused', async () => {
+  const session = await opsSignIn(stack.api, database.db, phone());
+  const ada = ops.DEMO_PROFILES[0];
+  const price = String((await ops.currentProPrice(database.db)).amountMinor);
+  const reference = randomUUID();
+  const bought = await ops.buyProByCheckout(database.db, {
+    profileId: ada.id,
+    expectedAmountMinor: BigInt(price),
+    idempotencyKey: randomUUID(),
+    provider: {
+      async initializePlatformCheckout() {
+        return {
+          providerReference: `platform:cs_${reference}`,
+          checkoutUrl: 'https://checkout.example/session/x',
+          expiresAt: new Date(Date.now() + 30 * 60_000),
+        };
+      },
+      async verifyTransaction() {
+        throw new Error('not here');
+      },
+    },
+    providerName: 'mock',
+    successUrl: `${WEB}/dashboard/settings`,
+    cancelUrl: `${WEB}/dashboard/settings`,
+    now: new Date(),
+  });
+  await ops.confirmProCheckout(database.db, {
+    purchaseId: bought.purchaseId,
+    verified: {
+      status: 'succeeded',
+      amountMinor: BigInt(price),
+      currency: 'NGN',
+      feeMinor: 5000n,
+      method: 'NGN_CARD',
+      chargeReference: `ch_${reference.slice(0, 8)}`,
+    },
+    now: new Date(),
+    sealing: ops.mailSealing(Buffer.from(MAIL_SEAL_KEY, 'base64')),
+  });
+  await setSwitch(database.pool, 'pro_refunds', false);
+  const listed = await opsCall(
+    session,
+    'GET',
+    `/v1/ops/pro/pages/${ada.id}/payments`,
+  );
+  assert.equal(listed.status, 200, await listed.clone().text());
+  const { refundsOn, payments } = (await listed.json()).data;
+  assert.equal(refundsOn, false);
+  const row = payments.find((p) => p.purchaseId === bought.purchaseId);
+  assert.ok(row, 'the paid month is listed');
+  assert.equal(row.amountMinor, price);
+  assert.equal(row.paidBy, 'card');
+  assert.equal(row.refundable, true, 'refundable by the rules, switch aside');
+  assert.ok(row.period?.startsAt && row.period?.endsAt);
+  assert.ok(Date.parse(row.period.endsAt) > Date.parse(row.period.startsAt));
+  const asked = await opsCall(
+    session,
+    'POST',
+    `/v1/ops/pro/purchases/${bought.purchaseId}/refund`,
+    { reason: REASON },
+  );
+  assert.equal(asked.status, 404);
+  assert.equal((await asked.json()).error.code, 'PRO_REFUNDS_OFF');
+  assert.equal(
+    (
+      await q(`SELECT 1 FROM pro_refunds WHERE purchase_id = $1`, [
+        bought.purchaseId,
+      ])
+    ).length,
+    0,
+  );
+});
+
 test('an unknown switch is 404', async () => {
   const session = await opsSignIn(stack.api, database.db, phone());
   const response = await opsCall(session, 'POST', '/v1/ops/switches/nope', {
@@ -283,12 +422,15 @@ test('every moved switch still gates its feature', async (t) => {
       const mine = await get('/v1/me/pro');
       return mine.status === 200 && mine.body.data.autoRenew.available;
     },
-    pro_refunds: async () =>
-      (
-        await fetch(`${stack.api}/v1/ops/pro/pages/${ada}/payments`, {
-          headers: browserHeaders(ownerSession.cookie),
-        })
-      ).status !== 404,
+    // The history is readable either way (16 Nov 2026); the switch says whether refunds are on.
+    pro_refunds: async () => {
+      const response = await fetch(
+        `${stack.api}/v1/ops/pro/pages/${ada}/payments`,
+        { headers: browserHeaders(ownerSession.cookie) },
+      );
+      assert.equal(response.status, 200);
+      return (await response.json()).data.refundsOn;
+    },
     analytics: async () => (await get('/health/release')).body.data.analytics,
     supporter_recognition: async () => {
       await q(`UPDATE profiles SET plan = 'pro' WHERE id = $1`, [ada]);
