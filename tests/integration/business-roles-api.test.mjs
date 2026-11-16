@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
@@ -15,7 +16,7 @@ import {
   seedManager,
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
-import { WEB, signIn, startStack } from './helpers.mjs';
+import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
 
 // TipMe for businesses, PR B0: GET /v1/me/business-roles with the flag on, and attribution through
 // the API.
@@ -25,10 +26,15 @@ startTelemetry({
   spanExporter: new InMemorySpanExporter(),
 });
 
+const sharp = createRequire(
+  new URL('../../apps/api/package.json', import.meta.url),
+)('sharp');
+
 const [ADA, TOBI] = DEMO_PROFILES;
 let database;
 let stack;
 let ada;
+let tobi;
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
@@ -44,6 +50,7 @@ before(async () => {
     },
   });
   ada = await signIn(stack.api, ADA.phone);
+  tobi = await signIn(stack.api, TOBI.phone);
 });
 after(async () => {
   await stack.stop();
@@ -147,6 +154,7 @@ test("with it on, business-roles lists a manager's business, a member's workplac
         name: 'Ada Bakes',
         status: 'pending',
         role: 'owner',
+        logoPath: null,
       },
       {
         businessId: other.businessId,
@@ -155,6 +163,7 @@ test("with it on, business-roles lists a manager's business, a member's workplac
         status: 'verified',
         role: 'location_manager',
         locationId: other.locations[1].id,
+        logoPath: null,
       },
     ],
     works: [
@@ -162,6 +171,7 @@ test("with it on, business-roles lists a manager's business, a member's workplac
         memberId,
         businessName: 'The Yellow Chilli',
         locationName: 'Victoria Island',
+        logoPath: null,
       },
     ],
     invitations: 1,
@@ -210,4 +220,93 @@ test('with it on, a tip through the API is labelled with the member and still cr
   assert.equal(byId[tipId].profile_id, ADA.id);
   assert.equal(byId[stray.tipId].business_member_id, null);
   assert.equal(byId[stray.tipId].profile_id, ADA.id);
+});
+
+// The account menu's mark (owner, 16 Nov 2026): each business carries its logo's public address,
+// as the page photo's is exposed, so the owner, a manager and a member all see it. Only while the
+// business is verified: the public route serves nothing for a waiting or paused one.
+test('business-roles carries each business’s public logo address, or null without one', async () => {
+  const logo = await sharp({
+    create: {
+      width: 300,
+      height: 300,
+      channels: 3,
+      background: { r: 15, g: 118, b: 110 },
+    },
+  })
+    .jpeg()
+    .toBuffer();
+  const upload = (businessId) =>
+    fetch(`${stack.api}/v1/me/businesses/${businessId}/logo`, {
+      method: 'PUT',
+      headers: { ...browserHeaders(ada.cookie), 'content-type': 'image/jpeg' },
+      body: logo,
+    });
+  const withLogo = await seedBusiness(database, {
+    owner: ADA.userId,
+    name: 'Lagoon Bakery',
+    locations: [
+      { slug: 'vi', name: 'Victoria Island' },
+      { slug: 'ikoyi', name: 'Ikoyi' },
+    ],
+  });
+  const bare = await seedBusiness(database, {
+    owner: ADA.userId,
+    name: 'Bare Kitchen',
+  });
+  const waiting = await seedBusiness(database, {
+    owner: ADA.userId,
+    name: 'Waiting Room Cafe',
+    status: 'pending',
+  });
+  const uploaded = await upload(withLogo.businessId);
+  assert.equal(uploaded.status, 200);
+  const { logoPath } = (await uploaded.json()).data;
+  assert.match(
+    logoPath,
+    new RegExp(`^/v1/business-logos/${withLogo.businessId}/\\d+\\.webp$`),
+  );
+  assert.equal((await upload(waiting.businessId)).status, 200);
+  // A manager of one location and a member at the other.
+  await seedManager(database, {
+    businessId: withLogo.businessId,
+    userId: TOBI.userId,
+    locationId: withLogo.locations[1].id,
+  });
+  const { memberId } = await seedMember(database, {
+    locationId: withLogo.locations[0].id,
+    profileId: TOBI.id,
+  });
+
+  const owner = (await roles(ada.cookie)).body.data.manages;
+  const byName = Object.fromEntries(owner.map((row) => [row.name, row]));
+  assert.equal(byName['Lagoon Bakery'].logoPath, logoPath);
+  assert.equal(byName['Bare Kitchen'].logoPath, null);
+  // Waiting: it has a logo, but its public address doesn't serve it yet.
+  assert.equal(byName['Waiting Room Cafe'].logoPath, null);
+  assert.equal(
+    (await fetch(`${stack.api}${logoPath}`)).status,
+    200,
+    'the address it sends is the public one, and it serves',
+  );
+
+  const staff = (await roles(tobi.cookie)).body.data;
+  const managed = staff.manages.find(
+    (row) => row.businessId === withLogo.businessId,
+  );
+  assert.equal(managed.role, 'location_manager');
+  assert.equal(managed.logoPath, logoPath);
+  assert.deepEqual(
+    staff.works.find((row) => row.memberId === memberId),
+    {
+      memberId,
+      businessName: 'Lagoon Bakery',
+      locationName: 'Victoria Island',
+      logoPath,
+    },
+  );
+  assert.equal(
+    staff.manages.find((row) => row.businessId === bare.businessId),
+    undefined,
+  );
 });

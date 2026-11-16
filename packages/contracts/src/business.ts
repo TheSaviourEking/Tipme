@@ -384,8 +384,19 @@ export interface MyBusinessRoles {
     status: BusinessStatus;
     role: ManagerRole;
     locationId?: string;
+    /**
+     * The logo's public address (`/v1/business-logos/<id>/<n>.webp`) while the business is
+     * verified and has one; null otherwise (the account menu shows the initial).
+     */
+    logoPath: string | null;
   }[];
-  works: { memberId: string; businessName: string; locationName: string }[];
+  works: {
+    memberId: string;
+    businessName: string;
+    locationName: string;
+    /** The business's public logo address, as in `manages`; null for none. */
+    logoPath: string | null;
+  }[];
   /** Open invitations to this account: its proven email or its username, not blocked. */
   invitations: number;
 }

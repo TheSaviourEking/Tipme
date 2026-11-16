@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { currentHat, hatHref, hatsOf } from '../src/lib/hats.ts';
+import { currentHat, hatHref, hatLabel, hatsOf } from '../src/lib/hats.ts';
 
 // Business sign-up, Task D6: the hats on one login, from the board's three people.
 const account = (handle) => ({
@@ -23,13 +23,17 @@ test('Tunde: his page, two businesses he owns, and where he works, in that order
   const hats = hatsOf(account('tunde_grills'), {
     manages: [
       manages('k', 'Kilishi Corner', 'pending'),
-      manages('s', 'Tunde’s Suya Spot', 'verified', 'owner', { plan: 'pro' }),
+      manages('s', 'Tunde’s Suya Spot', 'verified', 'owner', {
+        plan: 'pro',
+        logoPath: '/v1/business-logos/s/2.webp',
+      }),
     ],
     works: [
       {
         memberId: 'm1',
         businessName: 'Mama Put Lekki',
         locationName: 'Admiralty Way',
+        logoPath: '/v1/business-logos/mp/1.webp',
       },
     ],
     invitations: 0,
@@ -41,6 +45,7 @@ test('Tunde: his page, two businesses he owns, and where he works, in that order
       businessId: 'k',
       name: 'Kilishi Corner',
       status: 'pending',
+      logoPath: null,
     },
     {
       kind: 'owner',
@@ -48,12 +53,14 @@ test('Tunde: his page, two businesses he owns, and where he works, in that order
       name: 'Tunde’s Suya Spot',
       status: 'verified',
       plan: 'pro',
+      logoPath: '/v1/business-logos/s/2.webp',
     },
     {
       kind: 'work',
       memberId: 'm1',
       businessName: 'Mama Put Lekki',
       locationName: 'Admiralty Way',
+      logoPath: '/v1/business-logos/mp/1.webp',
     },
   ]);
   assert.deepEqual(hats.map(hatHref), [
@@ -76,6 +83,7 @@ test('Ngozi: business only, no page hat', () => {
       businessId: 'mp',
       name: 'Mama Put Lekki',
       status: 'verified',
+      logoPath: null,
     },
   ]);
 });
@@ -128,4 +136,23 @@ test('the hat being worn follows the address', () => {
   assert.equal(currentHat(hats, '/dashboard/work', '')?.kind, 'work');
   // Settings belongs to the login: no hat from the address.
   assert.equal(currentHat(hats, '/dashboard/settings', ''), null);
+});
+
+test('the page goes by its username, with the name standing in only without one', () => {
+  assert.equal(
+    hatLabel({ kind: 'page', handle: 'tunde_grills' }, 'Tunde'),
+    '@tunde_grills',
+  );
+  assert.equal(hatLabel({ kind: 'page', handle: '' }, 'Tunde'), 'Tunde');
+  assert.equal(hatLabel({ kind: 'page', handle: '' }, null), 'Your page');
+  assert.equal(
+    hatLabel({
+      kind: 'work',
+      memberId: 'm',
+      businessName: 'Mama Put',
+      locationName: 'A',
+      logoPath: null,
+    }),
+    'Mama Put',
+  );
 });
