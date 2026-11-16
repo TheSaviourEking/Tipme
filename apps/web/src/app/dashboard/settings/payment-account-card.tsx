@@ -8,7 +8,7 @@ import {
   type BachsPaymentAccountStatus,
   type PaymentCountryCode,
 } from '@tipme/contracts';
-import { Button, Card, Notice } from '@tipme/ui';
+import { Button, Card, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { useLiveEvents } from '@/components/live/live-provider';
 import { apiFetch } from '@/lib/session-client';
@@ -142,12 +142,17 @@ export function PaymentAccountCard() {
     return (
       <Card id="payments" className="settings-section">
         <h3>{paymentAccountCopy(null).heading}</h3>
-        <Notice tone="error" title="Couldn’t load your payment account">
+        <Slip
+          tone="error"
+          title="Couldn’t load your payment account"
+          actions={
+            <Button variant="secondary" onClick={() => void refresh()}>
+              Try again
+            </Button>
+          }
+        >
           Please try again.
-        </Notice>
-        <Button variant="secondary" onClick={() => void refresh()}>
-          Try again
-        </Button>
+        </Slip>
       </Card>
     );
 
@@ -168,10 +173,10 @@ export function PaymentAccountCard() {
         </p>
       )}
       {pending && (
-        <Notice title="We’re checking your account">
+        <Slip title="We’re checking your account">
           We couldn’t confirm your payment account yet. TipMe support will check
           it; please don’t start again.
-        </Notice>
+        </Slip>
       )}
       {!active && !pending && (
         <>
@@ -192,9 +197,9 @@ export function PaymentAccountCard() {
             </p>
           )}
           {error && (
-            <Notice tone="error" title="Not set up">
+            <Slip tone="error" title="Not set up">
               {error}
-            </Notice>
+            </Slip>
           )}
           <form onSubmit={start} className="settings-form" noValidate>
             <div className="tm-field">

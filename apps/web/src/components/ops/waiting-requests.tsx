@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { OpsApproval } from '@tipme/contracts';
-import { Notice, Skeleton } from '@tipme/ui';
+import { Skeleton, Slip } from '@tipme/ui';
 import { actionWords, opsFetch } from '@/lib/ops-staff-api';
 
 /**
@@ -44,10 +44,10 @@ export function WaitingRequests({
     <section aria-labelledby={id} className="dashboard-section">
       <h2 id={id}>{title}</h2>
       {failed && (
-        <Notice tone="error" title="Couldn’t read what’s waiting">
+        <Slip dense tone="error" title="Couldn’t read what’s waiting">
           There may be requests waiting.{' '}
           <Link href="/ops/approvals">Open approvals</Link>
-        </Notice>
+        </Slip>
       )}
       {!shown && !failed && <Skeleton label="Loading pending approvals" />}
       {shown?.length === 0 && (

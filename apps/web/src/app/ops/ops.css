@@ -3026,8 +3026,10 @@ a.ops-people__card:hover {
 }
 
 /* A row of actions never touches the words above or below it (UI audit F21). */
-.ops-frame__content :is(p, .tm-notice, .tm-state-line) + .ops-actions,
-.ops-frame__content .ops-actions + :is(p, .tm-notice) {
+.ops-frame__content
+  :is(p, .tm-slip, .tm-warning, .tm-state-line)
+  + .ops-actions,
+.ops-frame__content .ops-actions + :is(p, .tm-slip, .tm-warning) {
   margin-top: var(--space-2);
 }
 
@@ -3087,7 +3089,8 @@ a.ops-people__card:hover {
   padding: var(--space-4) var(--space-5);
 }
 
-.ops-switch > .tm-notice,
+.ops-switch > .tm-slip,
+.ops-switch > .tm-warning,
 .ops-switch > .ops-reason {
   flex-basis: 100%;
 }
@@ -3161,7 +3164,7 @@ a.ops-people__card:hover {
     text-align: right;
   }
 
-  .ops-switch-row__act > :is(.ops-reason, .tm-notice, form) {
+  .ops-switch-row__act > :is(.ops-reason, .tm-slip, .tm-warning, form) {
     justify-self: stretch;
     text-align: left;
   }

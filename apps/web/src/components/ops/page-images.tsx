@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { OpsPage, OpsPageImage } from '@tipme/contracts';
-import { Button, Card, Notice } from '@tipme/ui';
+import { Button, Card, Slip } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { API_ORIGIN } from '@/lib/avatar-source';
 import { opsFetch } from '@/lib/ops-staff-api';
@@ -57,9 +57,9 @@ function PageImage({
     <div>
       <h3>{title}</h3>
       {error && (
-        <Notice tone="error" title="Not shown">
+        <Slip dense tone="error" title="Not shown">
           {error}
-        </Notice>
+        </Slip>
       )}
       {source ? (
         // A private blob, so the image optimiser has no part in it.

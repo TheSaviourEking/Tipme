@@ -11,9 +11,12 @@ export function LoadFailed({
   title,
   children = 'This is usually brief. Please try again.',
   onRetry,
+  dense = false,
 }: {
   title: string;
   children?: string;
+  /** Staff screens (`/ops`): the dense slip. */
+  dense?: boolean;
   /** Reads again; settles once the read has answered (or failed). */
   onRetry: () => Promise<unknown>;
 }) {
@@ -36,6 +39,7 @@ export function LoadFailed({
   };
   return (
     <Slip
+      dense={dense}
       tone="error"
       title={title}
       actions={

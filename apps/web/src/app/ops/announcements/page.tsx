@@ -20,8 +20,9 @@ import {
   Card,
   EmptyWell,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
+  StandingWarning,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -34,6 +35,7 @@ import { refusalWords } from '@/lib/ops-answers';
 import { when } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 const fetchList = () => opsFetch<OpsAnnouncementList>('/v1/ops/announcements');
 
@@ -122,7 +124,7 @@ function DailyLimitNotice({
     const total = sending.recipientCount ?? 0;
     const left = Math.max(0, total - sending.queuedCount);
     return (
-      <Notice tone="neutral" title="Paused for the daily limit">
+      <Slip dense tone="neutral" title="Paused for the daily limit">
         <span data-testid="announcement-paused">
           Paused: today’s limit of {limit} is used. Sending continues
           automatically.
@@ -130,7 +132,7 @@ function DailyLimitNotice({
         {sending.queuedCount.toLocaleString('en-NG')} of{' '}
         {total.toLocaleString('en-NG')} queued, {count(left)} still to go.
         {daily.freesAt && ` Room frees up from ${when(daily.freesAt)}.`}
-      </Notice>
+      </Slip>
     );
   }
   return (
@@ -342,9 +344,9 @@ export default function AnnouncementsPage() {
     return (
       <section className="dashboard-section ops-page-body">
         <h1>Announcements</h1>
-        <Notice tone="error" title="Couldn’t load announcements">
+        <LoadFailed dense title="Couldn’t load announcements" onRetry={load}>
           Your role may not include them, or the connection failed.
-        </Notice>
+        </LoadFailed>
       </section>
     );
   if (!list)
@@ -367,10 +369,10 @@ export default function AnnouncementsPage() {
       </p>
 
       {!setUp && (
-        <Notice tone="error" title="Announcement email isn’t set up">
+        <StandingWarning dense title="Announcement email isn’t set up">
           This server has no announcement email provider, so nothing can be
           tested or sent. You can still write and preview drafts.
-        </Notice>
+        </StandingWarning>
       )}
 
       {daily && (
@@ -454,7 +456,7 @@ export default function AnnouncementsPage() {
               ))}
             </fieldset>
             {draft.kind === 'service' && (
-              <Notice tone="neutral" title="Is this a service notice?">
+              <Slip dense tone="neutral" title="Is this a service notice?">
                 <ul className="ops-announcement-checklist">
                   <li>
                     Only for changes to fees, terms or how TipMe works for the
@@ -469,7 +471,7 @@ export default function AnnouncementsPage() {
                     payment partner”, never its name.
                   </li>
                 </ul>
-              </Notice>
+              </Slip>
             )}
             <InputField
               id={`${id}-subject`}
@@ -536,22 +538,22 @@ export default function AnnouncementsPage() {
             </div>
           </fieldset>
           {problems.length > 0 && (
-            <Notice tone="error" title="This can’t go to users as it is">
+            <Slip dense tone="error" title="This can’t go to users as it is">
               {problems.includes('provider_name') &&
                 'Say “our payment partner”, never its name. '}
               {problems.includes('regulatory_claim') &&
                 'Don’t say or imply that a regulator approved TipMe.'}
-            </Notice>
+            </Slip>
           )}
           {error && (
-            <Notice tone="error" title="Not done">
+            <Slip dense tone="error" title="Not done">
               {error}
-            </Notice>
+            </Slip>
           )}
           {said && (
-            <Notice tone="success" title="Done">
+            <Slip dense tone="done" title="Done">
               {said}
-            </Notice>
+            </Slip>
           )}
           <div className="ops-actions">
             {editable && (
@@ -598,15 +600,15 @@ export default function AnnouncementsPage() {
             counted again when sending starts.
           </p>
           {open.audienceCount === 0 && open.kind === 'news' && (
-            <Notice tone="neutral" title="Nobody to send to yet">
+            <Slip dense tone="neutral" title="Nobody to send to yet">
               Nobody in this audience has turned on news and announcements in
               their email settings.
-            </Notice>
+            </Slip>
           )}
           {open.state === 'waiting' && !outcome ? (
-            <Notice tone="neutral" title="Waiting for a second person">
+            <Slip dense tone="waiting" title="Waiting for a second person">
               Sending is waiting in Approvals. Nothing has been sent.
-            </Notice>
+            </Slip>
           ) : open.state === 'draft' && !outcome && setUp ? (
             <ReasonAction
               open="Ask to send…"

@@ -13,8 +13,8 @@ import {
   Badge,
   Button,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -146,10 +146,10 @@ function AddPerson({
         </select>
       </div>
       {sensitive.length > 0 && (
-        <Notice tone="neutral" title="This role holds sensitive access">
+        <Slip dense tone="neutral" title="This role holds sensitive access">
           {sensitive.join(', ')}. When someone else can approve, adding them
           waits for that person.
-        </Notice>
+        </Slip>
       )}
       <TextareaField
         id={`${id}-reason`}
@@ -161,9 +161,9 @@ function AddPerson({
         required
       />
       {error && (
-        <Notice tone="error" title="Not added">
+        <Slip dense tone="error" title="Not added">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button
@@ -263,9 +263,9 @@ function ChangeRole({
         required
       />
       {error && (
-        <Notice tone="error" title="Not changed">
+        <Slip dense tone="error" title="Not changed">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button
@@ -360,9 +360,9 @@ function AdjustAccess({
         required
       />
       {error && (
-        <Notice tone="error" title="Not changed">
+        <Slip dense tone="error" title="Not changed">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button
@@ -556,9 +556,9 @@ export default function PeoplePage() {
 
   if (!allowed)
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Managing people needs the “staff.manage” permission.
-      </Notice>
+      </Slip>
     );
   return (
     <div className="ops-dashboard ops-page-body">

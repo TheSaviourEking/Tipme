@@ -553,3 +553,8 @@ test('useKeyResult needs its retry: the hook takes onRetry, not a bare duration'
   assert.doesNotMatch(source, /onRetry\?: \(\) => void/);
   assert.doesNotMatch(source, /options: number \|/);
 });
+
+test('the tinted Notice box is gone: no export and no styles', () => {
+  assert.equal(ui.Notice, undefined);
+  assert.doesNotMatch(css, /tm-notice/);
+});

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import type { MyTipDetail } from '@tipme/contracts';
 import { PROCESSING_INCLUDED_FEE_VERSIONS } from '@tipme/domain';
-import { Notice, Skeleton, Surface } from '@tipme/ui';
+import { Skeleton, Slip, Surface } from '@tipme/ui';
 import { MessageControls } from '@/components/dashboard/message-controls';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
@@ -38,9 +38,9 @@ export default function TipDetailPage() {
 
   if (error === 'load' && !tip)
     return (
-      <Notice tone="error" title="We couldn’t find that tip">
+      <Slip tone="error" title="We couldn’t find that tip">
         <Link href="/dashboard/tips">Back to your tips</Link>
-      </Notice>
+      </Slip>
     );
   if (!tip) return <Skeleton label="Loading the tip" />;
   const who = tip.supporterLabel ?? 'Anonymous';

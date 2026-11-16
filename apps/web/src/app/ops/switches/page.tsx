@@ -11,8 +11,8 @@ import {
   Button,
   InputField,
   Lamp,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -25,6 +25,7 @@ import { when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 const PATH = '/v1/ops/switches';
 
@@ -112,9 +113,9 @@ function SwitchCard({
       <div className="ops-switch-row__act">
         {outcome && <ActionOutcome outcome={outcome} />}
         {item.waitingRequestId && !outcome && (
-          <Notice tone="neutral" title="Waiting for a second person">
+          <Slip dense tone="waiting" title="Waiting for a second person">
             A change is waiting in Approvals. {item.label} hasn’t changed yet.
-          </Notice>
+          </Slip>
         )}
         {/* Nothing behind it yet: no dead "Turn on" (the API refuses it too). Off always works. */}
         {item.notBuilt && to ? (
@@ -268,9 +269,9 @@ function DisplayCard({
         }
       >
         {done && (
-          <Notice tone="neutral" title="Saved">
+          <Slip dense tone="neutral" title="Saved">
             {done}
-          </Notice>
+          </Slip>
         )}
         {item.kind === 'on_off' ? (
           <ReasonAction
@@ -321,9 +322,9 @@ function DisplayCard({
               maxLength={500}
             />
             {error && (
-              <Notice tone="error" title="Not saved">
+              <Slip dense tone="error" title="Not saved">
                 {error}
-              </Notice>
+              </Slip>
             )}
             <Button
               variant="continue"
@@ -384,9 +385,9 @@ export default function SwitchesPage() {
     return (
       <section className="dashboard-section ops-page-body">
         <h1>Switches</h1>
-        <Notice tone="error" title="Couldn’t load the switches">
+        <LoadFailed dense title="Couldn’t load the switches" onRetry={read}>
           Your role may not include them, or the connection failed.
-        </Notice>
+        </LoadFailed>
       </section>
     );
   if (!state)

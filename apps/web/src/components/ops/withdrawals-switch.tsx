@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { OpsWithdrawalsSwitch } from '@tipme/contracts';
-import { Lamp, Notice, Skeleton } from '@tipme/ui';
+import { Lamp, Skeleton, StandingWarning } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
@@ -57,17 +57,17 @@ export function WithdrawalsSwitch() {
       className="ops-paper ops-switch"
     >
       {unknown && (
-        <Notice tone="error" title="We couldn’t read the withdrawals switch">
+        <StandingWarning dense title="We couldn’t read the withdrawals switch">
           They may be on or off. Switching off is safe either way.
-        </Notice>
+        </StandingWarning>
       )}
       {paused && (
-        <Notice tone="error" title="Withdrawals are OFF for everyone">
+        <StandingWarning dense title="Withdrawals are OFF for everyone">
           New withdrawals are refused and queued ones wait, reserved.
           Withdrawals already with the provider can’t be recalled and still
           settle.
           {state.changedAt ? ` Since ${when(state.changedAt)}.` : ''}
-        </Notice>
+        </StandingWarning>
       )}
       {!unknown && !paused && (
         <p className="ops-switch__state">

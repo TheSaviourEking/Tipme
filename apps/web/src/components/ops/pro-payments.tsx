@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useId, useState } from 'react';
 import type { OpsProPayment, OpsProPayments } from '@tipme/contracts';
-import { Badge, Button, Card, EmptyWell, Notice, Skeleton } from '@tipme/ui';
+import { Badge, Button, Card, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { nairaCode as naira } from '@/lib/money';
 import { when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
@@ -96,12 +96,18 @@ export function ProPayments({ profileId }: { profileId: string }) {
     return (
       <Card className="settings-section">
         <h2 id={titleId}>Pro payments</h2>
-        <Notice tone="error" title="Couldn’t load the Pro payments">
+        <Slip
+          dense
+          tone="error"
+          title="Couldn’t load the Pro payments"
+          actions={
+            <Button variant="secondary" onClick={() => void load()}>
+              Try again
+            </Button>
+          }
+        >
           Check your connection and try again.
-        </Notice>
-        <Button variant="secondary" onClick={() => void load()}>
-          Try again
-        </Button>
+        </Slip>
       </Card>
     );
   const { refundsOn, payments } = read.data;
@@ -113,10 +119,10 @@ export function ProPayments({ profileId }: { profileId: string }) {
       <h2 id={titleId}>Pro payments</h2>
       {outcome && <ActionOutcome outcome={outcome} />}
       {!refundsOn && payments.length > 0 && (
-        <Notice tone="neutral" title="Pro refunds aren’t switched on">
+        <Slip dense tone="neutral" title="Pro refunds aren’t switched on">
           The payments show here, but none can be refunded from TipMe until the
           Pro refunds switch is on.
-        </Notice>
+        </Slip>
       )}
       {payments.length === 0 ? (
         <EmptyWell title="No Pro payments" headingLevel={3}>

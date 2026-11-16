@@ -5,7 +5,7 @@ import {
   NOTIFICATION_PREFS_CHANGED,
   type NotificationPrefsView,
 } from '@tipme/contracts';
-import { Button, Card, Notice } from '@tipme/ui';
+import { Button, Card, Slip } from '@tipme/ui';
 import { ChangedElsewhere } from '@/components/dashboard/changed-elsewhere';
 import { useLiveForm } from '@/components/dashboard/use-live-form';
 import { useLiveEvents } from '@/components/live/live-provider';
@@ -148,9 +148,9 @@ function PrefsForm<K extends PrefKey>({
           ),
         )}
         {error && (
-          <Notice tone="error" title="Not saved">
+          <Slip tone="error" title="Not saved">
             {error}
-          </Notice>
+          </Slip>
         )}
         <p role="status" className="tm-hint">
           {done ? 'Saved.' : ''}

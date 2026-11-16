@@ -6771,7 +6771,8 @@ body > .coming-soon-page {
 
 /* Forms keep the editor's measure: a bank form 1,000px wide reads as nothing but fields. */
 .settings-chapter > .settings-section,
-.settings-chapter > .tm-notice {
+.settings-chapter > .tm-slip,
+.settings-chapter > .tm-warning {
   max-width: 32.5rem;
 }
 

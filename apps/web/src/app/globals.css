@@ -4794,11 +4794,10 @@ html:has(.confirm-dialog[open]) {
     margin: 6mm;
   }
 
-  /* Only the card on paper: no pilot, paused-page or "Needs your attention" notices. Names the
-     states classes too, so it holds before and after they replace Notice. */
+  /* Only the card on paper: no pilot, paused-page or "Needs your attention" notices. */
   body:has(.print-card)
     .dashboard-page
-    :is(.owner-attention, .pilot-notice, .tm-notice, .tm-slip, .tm-warning):not(
+    :is(.owner-attention, .pilot-notice, .tm-slip, .tm-warning):not(
       .print-card *
     ) {
     display: none !important;

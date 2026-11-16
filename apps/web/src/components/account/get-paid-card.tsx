@@ -7,7 +7,7 @@ import type {
   PayoutDestinationState,
   PayoutDestinationView,
 } from '@tipme/contracts';
-import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { Button, Card, InputField, Slip } from '@tipme/ui';
 import { NameChecks, nameCheckKey } from '@/lib/name-check';
 import { apiFetch } from '@/lib/session-client';
 import { BankPicker } from './bank-picker';
@@ -243,12 +243,17 @@ export function GetPaidCard({
     return (
       <Card id={anchor} className="settings-section">
         <h3>Get paid</h3>
-        <Notice tone="error" title="Couldn’t load your bank account">
+        <Slip
+          tone="error"
+          title="Couldn’t load your bank account"
+          actions={
+            <Button variant="secondary" onClick={() => void load()}>
+              Try again
+            </Button>
+          }
+        >
           Please try again.
-        </Notice>
-        <Button variant="secondary" onClick={() => void load()}>
-          Try again
-        </Button>
+        </Slip>
       </Card>
     );
 
@@ -278,7 +283,7 @@ export function GetPaidCard({
         </p>
       )}
       {bankChangesFrom && (
-        <Notice title="Bank changes are paused for now">
+        <Slip title="Bank changes are paused for now">
           You changed your sign-in email recently, so for your security your
           bank account can’t be added or changed until{' '}
           {new Date(bankChangesFrom).toLocaleString(undefined, {
@@ -288,7 +293,7 @@ export function GetPaidCard({
           .
           {destination?.status === 'usable' &&
             ` Withdrawals keep going to ${destination.bankName} ••${destination.last4}.`}
-        </Notice>
+        </Slip>
       )}
       {!showForm && !bankChangesFrom && (
         <Button variant="secondary" onClick={() => setChanging(true)}>
@@ -368,9 +373,9 @@ export function GetPaidCard({
               )}
               {nameCheck.kind === 'failed' && (
                 <>
-                  <Notice tone="error" title="Not saved">
+                  <Slip tone="error" title="Not saved">
                     {checkMessageFor(nameCheck.code)}
-                  </Notice>
+                  </Slip>
                   {nameCheck.code !== 'RATE_LIMITED' && (
                     <Button
                       type="button"
@@ -435,9 +440,9 @@ export function GetPaidCard({
             </>
           )}
           {error && (
-            <Notice tone="error" title="Not saved">
+            <Slip tone="error" title="Not saved">
               {error}
-            </Notice>
+            </Slip>
           )}
           {changing && (
             <Button

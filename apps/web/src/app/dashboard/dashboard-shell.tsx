@@ -16,7 +16,7 @@ import type {
   RecoveryEmailStatus,
   VisitsToday,
 } from '@tipme/contracts';
-import { Button, Container, Notice, Skeleton } from '@tipme/ui';
+import { Button, Container, Skeleton, Slip } from '@tipme/ui';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { AccountContext } from '@/components/account/account-context';
 import { HatSwitcher } from '@/components/dashboard/hat-switcher';
@@ -384,7 +384,7 @@ export function DashboardShell({
             pathname !== '/dashboard/withdraw' &&
             pilotNotice}
           {profile?.suspended && (
-            <Notice tone="neutral" title="TipMe has paused your page">
+            <Slip tone="neutral" title="TipMe has paused your page">
               Visitors see “This page isn’t available right now” and nobody can
               start a new tip. Tips already on their way still reach you, and
               you can still withdraw your balance.
@@ -395,7 +395,7 @@ export function DashboardShell({
                 </>
               )}{' '}
               Questions? Reply to any TipMe email or contact support.
-            </Notice>
+            </Slip>
           )}
           {/* Not on the welcome, which walks through the same steps itself. */}
           {shown && shown.length > 0 && pathname !== '/dashboard/welcome' && (
@@ -404,7 +404,7 @@ export function DashboardShell({
               aria-label="Needs your attention"
             >
               {shown.map((item) => (
-                <Notice key={item.id} tone="neutral" title={item.title}>
+                <Slip key={item.id} tone="neutral" title={item.title}>
                   {item.body}
                   {item.action && (
                     <>
@@ -417,7 +417,7 @@ export function DashboardShell({
                       </Link>
                     </>
                   )}
-                </Notice>
+                </Slip>
               ))}
             </section>
           )}

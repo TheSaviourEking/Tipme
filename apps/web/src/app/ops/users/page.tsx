@@ -16,7 +16,7 @@ import {
   type OpsPerson,
   type OpsPersonEmail,
 } from '@tipme/contracts';
-import { Badge, Button, EmptyWell, Notice, ProBadge } from '@tipme/ui';
+import { Badge, Button, EmptyWell, ProBadge, Slip } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { naira } from '@/lib/money';
@@ -817,9 +817,9 @@ export default function OpsPeoplePage() {
 
   if (!allowed)
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Seeing everyone needs the “search.view” permission.
-      </Notice>
+      </Slip>
     );
 
   const change = (patch: Partial<PeopleQuery>) => go(withChange(state, patch));
@@ -1102,17 +1102,21 @@ export default function OpsPeoplePage() {
         data-testid="ops-people"
       >
         {failed ? (
-          <>
-            <Notice tone="error" title="We couldn’t load the list">
-              The connection may have dropped. Your filters are kept.
-            </Notice>
-            <Button
-              variant="secondary"
-              onClick={() => setAttempt((n) => n + 1)}
-            >
-              Try again
-            </Button>
-          </>
+          <Slip
+            dense
+            tone="error"
+            title="We couldn’t load the list"
+            actions={
+              <Button
+                variant="secondary"
+                onClick={() => setAttempt((n) => n + 1)}
+              >
+                Try again
+              </Button>
+            }
+          >
+            The connection may have dropped. Your filters are kept.
+          </Slip>
         ) : !shown ? (
           <LoadingRows view={view} />
         ) : shown.items.length === 0 ? (

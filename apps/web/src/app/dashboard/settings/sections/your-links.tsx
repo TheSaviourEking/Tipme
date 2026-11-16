@@ -12,7 +12,7 @@ import {
   type SocialLink,
   type SocialPlatform,
 } from '@tipme/contracts';
-import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { Button, Card, InputField, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { LinkBadge } from '@/components/profile/link-badge';
 import { apiFetch } from '@/lib/session-client';
@@ -568,9 +568,9 @@ export function YourLinks({
           <span>Show my links on my page</span>
         </label>
         {formError && (
-          <Notice tone="error" title="Not saved">
+          <Slip tone="error" title="Not saved">
             {formError}
-          </Notice>
+          </Slip>
         )}
         <Button ref={saveButton} type="submit" disabled={busy} aria-busy={busy}>
           Save links
