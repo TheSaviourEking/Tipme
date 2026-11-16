@@ -141,7 +141,7 @@ export const paymentAccountActionNeeded = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'Our payment provider needs something from you. You may not be able to receive tips until it’s sorted.',
+            text: 'Our payment partner needs something from you. You may not be able to receive tips until it’s sorted.',
           },
           {
             kind: 'button',
@@ -270,13 +270,13 @@ export const withdrawalPaid = defineMailType({
           : 'Your TipMe withdrawal was paid',
         heading: 'Your withdrawal was paid',
         // The first text names someone or something private; the preview line must not.
-        preheader: 'The payment provider confirmed it.',
+        preheader: 'Our payment partner confirmed it.',
         blocks: [
           {
             kind: 'text',
             text: data.businessName
-              ? `We paid out ${ngn(data.amountMinor)} from ${data.businessName}’s balance. The payment provider confirmed it.`
-              : `We paid out ${ngn(data.amountMinor)}. The payment provider confirmed it.`,
+              ? `We paid out ${ngn(data.amountMinor)} from ${data.businessName}’s balance. Our payment partner confirmed it.`
+              : `We paid out ${ngn(data.amountMinor)}. Our payment partner confirmed it.`,
           },
         ],
         reason: data.businessName
@@ -347,7 +347,7 @@ export const tipReversed = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: 'The payment provider reported a refund or dispute on a tip you received. Our team is looking at it, and your TipMe balance hasn’t changed. We’ll contact you if we need anything.',
+            text: 'Our payment partner reported a refund or dispute on a tip you received. Our team is looking at it, and your TipMe balance hasn’t changed. We’ll contact you if we need anything.',
           },
         ],
         reason:

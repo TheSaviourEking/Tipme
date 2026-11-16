@@ -140,10 +140,11 @@ export const announcement = defineMailType({
   bulk: true,
   schema: announcementSchema,
   sample: {
-    subject: 'Lower fees on TipMe',
-    preheader: 'TipMe’s fee on each tip is going down.',
-    text: 'From 1 December, TipMe’s fee on each tip is going down.\n\n- **TipMe Free: 7% per tip**\n- **TipMe Pro: 5% per tip**\n\nYour supporters still pay exactly the tip they choose.',
-    button: { label: 'See the new fees', url: '/pro' },
+    // An evergreen example for the staff preview: no prices, no dates (owner, 16 Nov 2026).
+    subject: 'A short update from TipMe',
+    preheader: 'A few things you can do on TipMe.',
+    text: 'Here’s a short update from the TipMe team.\n\n- **Share your page** with its link or QR code, both on your dashboard.\n- **See your tips** any time on the Tips screen.\n\nThanks for being part of TipMe.',
+    button: { label: 'Open your dashboard', url: '/dashboard' },
   },
   render: (data, ctx) => {
     const blocks = announcementBlocks(data.text);
