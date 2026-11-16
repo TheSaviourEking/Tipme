@@ -10,8 +10,8 @@ import {
   type ReactNode,
 } from 'react';
 import type { MyAccount, MyBusinessRoles } from '@tipme/contracts';
-import { AvatarImage } from '@/components/avatar';
-import { hasAvatar } from '@/lib/avatar-source';
+import { HatMark } from '@/components/dashboard/hat-mark';
+import { API_ORIGIN, businessLogoSource, hasAvatar } from '@/lib/avatar-source';
 import { currentHat, hatHref, hatLabel, hatsOf, type Hat } from '@/lib/hats';
 
 // Business sign-up, Task D6: the account menu. The top-right button says which hat is worn and its
@@ -35,43 +35,8 @@ function lastHat(): string | null {
   }
 }
 
-const initial = (name: string) =>
-  (Array.from(name.replace(/^@/, '').trim())[0] ?? '·').toUpperCase();
-
-/**
- * The round mark beside a hat's name: the person's photo when the hat is their page and it has one
- * (the page card's source and component), the initial only when not. The mark's box is fixed, so the
- * picture loading moves nothing. Decorative: the name always sits next to it.
- */
-function HatMark({
-  initialOf,
-  photo,
-  name,
-}: {
-  initialOf: string;
-  photo: string | null;
-  name: string;
-}) {
-  return (
-    <span className="hat-menu__initial" aria-hidden="true">
-      {photo ? (
-        <AvatarImage
-          className="hat-menu__photo"
-          src={photo}
-          name={name}
-          width={32}
-          height={32}
-          sizes="32px"
-        />
-      ) : (
-        initial(initialOf)
-      )}
-    </span>
-  );
-}
-
 function hatDetail(hat: Hat): string {
-  if (hat.kind === 'page') return `@${hat.handle}`;
+  if (hat.kind === 'page') return 'Your page';
   if (hat.kind === 'work') return `Staff · ${hat.locationName}`;
   const role = hat.kind === 'owner' ? 'Owner' : 'Manager';
   if (hat.status === 'pending') return `${role} · Waiting for TipMe`;
@@ -125,13 +90,18 @@ export function HatSwitcher({
     hats.length === 1 && shown?.kind === 'page' && personName
       ? personName
       : shown
-        ? hatLabel(shown)
+        ? hatLabel(shown, personName)
         : 'Account';
 
-  // Only the page hat is a person: a business has no logo in the roles read.
+  // The page hat shows the person's photo; a business or workplace its public logo (the roles read
+  // sends it only while the business is verified, when the public address serves it).
   const personPhoto = hasAvatar(personAvatarPath) ? personAvatarPath : null;
   const photoOf = (hat: Hat | null) =>
     hat?.kind === 'page' ? personPhoto : null;
+  const logoOf = (hat: Hat | null) =>
+    hat && hat.kind !== 'page'
+      ? businessLogoSource(hat.logoPath, API_ORIGIN)
+      : null;
 
   const items = () =>
     Array.from(
@@ -178,7 +148,7 @@ export function HatSwitcher({
 
   const item = (hat: Hat): ReactNode => {
     const href = hatHref(hat);
-    const name = hatLabel(hat);
+    const name = hatLabel(hat, personName);
     const pending =
       (hat.kind === 'owner' || hat.kind === 'manager') &&
       hat.status === 'pending';
@@ -198,11 +168,17 @@ export function HatSwitcher({
         <HatMark
           initialOf={hat.kind === 'work' ? hat.businessName : name}
           photo={photoOf(hat)}
+          logo={logoOf(hat)}
           name={personName ?? name}
         />
+        {/* One line each, cut with an ellipsis; the title holds a long name in full. */}
         <span className="hat-menu__words">
-          <span className="hat-menu__name">{name}</span>
-          <span className="hat-menu__detail">{hatDetail(hat)}</span>
+          <span className="hat-menu__name" title={name}>
+            {name}
+          </span>
+          <span className="hat-menu__detail" title={hatDetail(hat)}>
+            {hatDetail(hat)}
+          </span>
         </span>
         {pending && <span className="hat-menu__tag">Pending</span>}
       </Link>
@@ -257,10 +233,13 @@ export function HatSwitcher({
         aria-controls={open ? `${id}-menu` : undefined}
         onClick={() => setOpen((was) => !was)}
         onKeyDown={onButtonKey}
+        // The label is cut to the pill's width: the full name shows on hover.
+        title={label}
       >
         <HatMark
           initialOf={label}
           photo={photoOf(shown)}
+          logo={logoOf(shown)}
           name={personName ?? label}
         />
         <span className="hat-switcher__label">

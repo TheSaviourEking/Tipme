@@ -7,6 +7,15 @@ import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 
 /**
+ * The logo's public address (`/v1/business-logos/...`), as the page photo's is exposed: only while
+ * the business is verified, because the public route serves nothing for a waiting or paused one.
+ * Otherwise null, and the account menu shows the initial.
+ */
+const publicLogo = sql.raw(
+  "CASE WHEN b.status = 'verified' THEN b.logo_path END",
+);
+
+/**
  * What the dashboard needs to show the Business and Work links (PR B0): the businesses this
  * account manages, where its page works, and how many invitations wait for it. Removed managers,
  * ended memberships, used, expired and blocked invitations never count.
@@ -23,8 +32,10 @@ export async function myBusinessRoles(
     status: string;
     role: string;
     location_id: string | null;
+    logo_path: string | null;
   }>(sql`
-    SELECT b.id AS business_id, b.slug, b.name, b.status, m.role, m.location_id
+    SELECT b.id AS business_id, b.slug, b.name, b.status, m.role, m.location_id,
+           ${publicLogo} AS logo_path
       FROM business_managers m
       JOIN businesses b ON b.id = m.business_id
      WHERE m.user_id = ${userId} AND m.removed_at IS NULL
@@ -33,8 +44,10 @@ export async function myBusinessRoles(
     member_id: string;
     business_name: string;
     location_name: string;
+    logo_path: string | null;
   }>(sql`
-    SELECT bm.id AS member_id, b.name AS business_name, l.name AS location_name
+    SELECT bm.id AS member_id, b.name AS business_name, l.name AS location_name,
+           ${publicLogo} AS logo_path
       FROM business_members bm
       JOIN profiles p ON p.id = bm.profile_id
       JOIN business_locations l ON l.id = bm.location_id
@@ -66,11 +79,13 @@ export async function myBusinessRoles(
       status: row.status as BusinessStatus,
       role: row.role as ManagerRole,
       ...(row.location_id ? { locationId: row.location_id } : {}),
+      logoPath: row.logo_path,
     })),
     works: works.rows.map((row) => ({
       memberId: row.member_id,
       businessName: row.business_name,
       locationName: row.location_name,
+      logoPath: row.logo_path,
     })),
     invitations: invitations.rows[0]?.n ?? 0,
   };

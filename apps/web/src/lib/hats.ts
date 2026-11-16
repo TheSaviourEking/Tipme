@@ -15,12 +15,16 @@ export type Hat =
       status: BusinessStatus;
       /** Business Pro's plan, once the API sends one (Phase A). */
       plan?: 'free' | 'pro';
+      /** The business's public logo address (`/v1/business-logos/...`); null shows the initial. */
+      logoPath: string | null;
     }
   | {
       kind: 'work';
       memberId: string;
       businessName: string;
       locationName: string;
+      /** The business's public logo address; null shows the initial. */
+      logoPath: string | null;
     };
 
 /**
@@ -44,6 +48,7 @@ export function hatsOf(
         name: entry.name,
         status: entry.status,
         ...(plan === 'free' || plan === 'pro' ? { plan } : {}),
+        logoPath: entry.logoPath ?? null,
       });
     }
   for (const work of roles?.works ?? [])
@@ -52,6 +57,7 @@ export function hatsOf(
       memberId: work.memberId,
       businessName: work.businessName,
       locationName: work.locationName,
+      logoPath: work.logoPath ?? null,
     });
   return hats;
 }
@@ -98,9 +104,13 @@ export function currentHat(
   return hats.find((hat) => hat.kind === 'page') ?? null;
 }
 
-/** The words a hat goes by on the button and in the menu. */
-export function hatLabel(hat: Hat): string {
-  if (hat.kind === 'page') return 'My page';
+/**
+ * The words a hat goes by on the button and in the menu. The page goes by its username (owner,
+ * 16 Nov 2026: "@thesavioureking", not "My page"); `personName` stands in if it has none.
+ */
+export function hatLabel(hat: Hat, personName?: string | null): string {
+  if (hat.kind === 'page')
+    return hat.handle ? `@${hat.handle}` : personName || 'Your page';
   if (hat.kind === 'work') return hat.businessName;
   return hat.name;
 }
