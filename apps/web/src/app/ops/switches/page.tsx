@@ -84,7 +84,8 @@ function SwitchCard({
     >
       <div className="ops-switch-row__words">
         <h2 id={`${id}-name`} className="ops-switch-row__name">
-          {item.label} {item.money && <Badge>Money</Badge>}
+          {item.label} {item.money && <Badge>Money</Badge>}{' '}
+          {item.notBuilt && <Badge>Not built yet</Badge>}
         </h2>
         <p>{item.description}</p>
         <p data-testid="switch-state" className="ops-switch-row__state">
@@ -115,14 +116,21 @@ function SwitchCard({
             A change is waiting in Approvals. {item.label} hasn’t changed yet.
           </Notice>
         )}
-        <ReasonAction
-          key={String(item.on)}
-          open={`Turn ${item.label} ${words}…`}
-          field={`Why turn ${item.label} ${words}?`}
-          submit={item.money ? 'Ask for approval' : `Turn ${words}`}
-          onSubmit={change}
-        />
-        {item.money && (
+        {/* Nothing behind it yet: no dead "Turn on" (the API refuses it too). Off always works. */}
+        {item.notBuilt && to ? (
+          <p className="tm-hint" data-testid="switch-not-built">
+            Nothing is built behind this switch yet, so it can’t be turned on.
+          </p>
+        ) : (
+          <ReasonAction
+            key={String(item.on)}
+            open={`Turn ${item.label} ${words}…`}
+            field={`Why turn ${item.label} ${words}?`}
+            submit={item.money ? 'Ask for approval' : `Turn ${words}`}
+            onSubmit={change}
+          />
+        )}
+        {item.money && !(item.notBuilt && to) && (
           <p className="tm-hint">
             This moves money, so another qualified person approves. A lone admin
             changes it alone, with an alert.

@@ -319,3 +319,23 @@ test('tip_refunds is a money switch, off by default, seeded from TIP_REFUNDS (on
   );
   assert.match(entry.description, /minus TipMe’s fee/);
 });
+
+// 16 Nov 2026: a switch with nothing built behind it stays registered (stored rows and old variables
+// stay valid) but is marked, so admin can't offer turning it on and the API refuses it.
+test('team_tips and business_owners are marked not built; every other switch is built', async () => {
+  const { featureSwitchBuilt } = await import('../dist/index.js');
+  const notBuilt = FEATURE_SWITCHES.filter((key) => !featureSwitchBuilt(key));
+  assert.deepEqual(notBuilt.sort(), ['business_owners', 'team_tips']);
+  for (const key of notBuilt) {
+    assert.equal(FEATURE_SWITCH_CATALOGUE[key].notBuilt, true, key);
+    assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
+    // The mark says it, not the words staff read beside it.
+    assert.doesNotMatch(
+      FEATURE_SWITCH_CATALOGUE[key].description,
+      /not built/i,
+      key,
+    );
+  }
+  assert.ok(isFeatureSwitch('team_tips'));
+  assert.ok(isFeatureSwitch('business_owners'));
+});

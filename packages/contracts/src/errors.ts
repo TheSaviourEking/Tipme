@@ -101,6 +101,8 @@ export const apiErrorCodes = [
   'PRO_REFUND_REFUSED',
   'TIP_REFUND_REFUSED',
   'PRO_REFUNDS_OFF',
+  // A feature switch with nothing built behind it can't be turned on (16 Nov 2026).
+  'SWITCH_NOT_BUILT',
   'TIP_REFUNDS_OFF',
   'PRO_AUTO_RENEW_OFF',
   'PRO_AUTO_RENEW_NEEDS_EMAIL',

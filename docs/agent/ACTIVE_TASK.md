@@ -1,3 +1,9 @@
+# Current task: admin money screens (16 November 2026)
+
+- Branch `feat/ops-pro-refunds-reverse` from `origin/dev`; one PR into `dev`, not merged. Screens for APIs that already existed: a page's Pro payments with a reasoned "Refund…" (`pro.refund`, `pro_refunds` switch) on `/ops/pages`; "Take back this tip" (`tip.reverse`) on refund-or-chargeback issues; `team_tips` and `business_owners` marked not built (`notBuilt` in the catalogue) and refused on (`409 SWITCH_NOT_BUILT`).
+- API changes: the Pro payments list is readable whatever the switch and returns `{ refundsOn, payments }` with each payment's month; asking for a refund still needs the switch. No migration. Page Studio files untouched.
+- Next: CI, owner review and merge into `dev`.
+
 # Current task: admin UI audit fixes (15 November 2026)
 
 - Branch `fix/ui-audit-ops` from `origin/dev` (with #241). The admin findings F1–F26 of the UI audit, built from the OpsShell/OpsPages boards: one page root (`.ops-page-body`), recessed tiles, purple never a state colour (state badges, green switch lamp, black save/continue and reasoned actions), Switches as hairline rows, phone tables as stacked cards, `EmptyWell`, pricing behind "…" openers, `.tm-choice > span`, an in-frame missing page. Rulings in DECISION-LOG 2026-11-15.

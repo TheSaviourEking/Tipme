@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 import {
   FEATURE_SWITCH_CATALOGUE,
+  featureSwitchBuilt,
   isDisplaySetting,
   isFeatureSwitch,
   opsDisplaySettingSetSchema,
@@ -115,6 +116,9 @@ export class OpsSwitchesController {
   > {
     if (!isFeatureSwitch(key)) throw new CodedHttpException(404, 'NOT_FOUND');
     const name: FeatureSwitch = key;
+    // Refused before any approval is asked: nobody should approve a switch with nothing behind it.
+    if (body.on && !featureSwitchBuilt(name))
+      throw new CodedHttpException(409, 'SWITCH_NOT_BUILT');
     if (FEATURE_SWITCH_CATALOGUE[name].money) {
       const answer = pendingOr(
         await requestSeriousAction(this.database.db, {
