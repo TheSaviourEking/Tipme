@@ -42,7 +42,8 @@ import {
 } from './studio-type.js';
 
 /** Bump when a rule changes; published pages that now fail fall back to the standard page. */
-export const DESIGN_CHECK_VERSION = 1;
+// 2 (15 Nov 2026): the page-weight base measured on the built public page (Task 8).
+export const DESIGN_CHECK_VERSION = 2;
 
 export type StudioRuleId =
   | 'contrast'
@@ -158,8 +159,13 @@ export const STUDIO_FIX_NEEDS_INPUT: readonly string[] = [
 /** The first-load budget on a phone (owner ruling 6) and the model behind the estimate. */
 export const STUDIO_WEIGHT = {
   budget: 1_500_000,
-  /** HTML, CSS and script of a page, before fonts and photos. */
-  base: 180_000,
+  /**
+   * What the public page loads before the design's own fonts and photos: HTML, CSS, script,
+   * TipMe's two fonts, the cover and the tip block. Measured on the built page (plan Task 8,
+   * 15 Nov 2026: about 463 KB compressed for the board's examples); tests/e2e/studio-page.spec.ts
+   * keeps the whole estimate within 15% of the measured first load.
+   */
+  base: 460_000,
   phone: 390,
   screen: 844,
   screens: 1.5,

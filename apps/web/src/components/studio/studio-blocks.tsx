@@ -244,7 +244,8 @@ export function StudioBlockView({
             ))}
           </ul>
           <p className="studio-fine">
-            Prices are for information. Tips here are thanks.
+            Prices are for information. Tips here are a gift, not a payment for
+            a service.
           </p>
         </div>
       );

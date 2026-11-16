@@ -3,7 +3,10 @@ import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
-import { applyStudioFix } from '../../packages/contracts/dist/index.js';
+import {
+  DESIGN_CHECK_VERSION,
+  applyStudioFix,
+} from '../../packages/contracts/dist/index.js';
 import {
   addStudioImage,
   deleteAccount,
@@ -206,7 +209,7 @@ test('a Pro page saves a failing draft, cannot publish it, fixes it and publishe
   assert.deepEqual(done.body.data.published, fixed);
   const visible = await publicPage(handle);
   assert.deepEqual(visible.studio.document, fixed);
-  assert.equal(visible.studio.checkVersion, 1);
+  assert.equal(visible.studio.checkVersion, DESIGN_CHECK_VERSION);
   const image = visible.studio.images[imageId];
   assert.match(
     image.path,
