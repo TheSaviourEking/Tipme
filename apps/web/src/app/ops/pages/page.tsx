@@ -40,6 +40,12 @@ import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { apiFetch } from '@/lib/session-client';
+import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import { naira } from '@/lib/money';
+import { CURRENT_FEE_POLICY } from '@tipme/domain';
+
+/** The smallest tip (and withdrawal), from the fee policy, as ₦2,000. */
+const MINIMUM_TIP_TEXT = naira(CURRENT_FEE_POLICY.minTipMinor.toString());
 
 const STATE_LABELS: Record<OpsPage['pageState'], string> = {
   live: 'Live',
@@ -477,8 +483,10 @@ export default function OpsPagesPage() {
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
-        below NGN 2,000) and change their username. The fee and withdrawal
-        minimum are the same as Free. {copy.opsBilling}
+        below {MINIMUM_TIP_TEXT}) and change their username. TipMe keeps{' '}
+        {PRO_SHARE_PERCENT}% of each tip on Pro and {FREE_SHARE_PERCENT}% on
+        Free, processing included. Withdrawals work the same on both plans.{' '}
+        {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

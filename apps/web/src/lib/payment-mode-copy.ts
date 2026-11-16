@@ -96,7 +96,8 @@ const TEST: PaymentModeCopy = {
   receiptBanner: 'Test payment · no real money moved',
   footerNote: 'Development preview · Test mode',
   weekCardSuffix: ' · test mode',
-  opsBilling: 'There is no billing while payments are in test mode.',
+  opsBilling:
+    'Payments here are in test mode, so no real money moves, even when Pro billing is on.',
 };
 
 const LIVE: PaymentModeCopy = {
@@ -127,7 +128,8 @@ const LIVE: PaymentModeCopy = {
   receiptBanner: null,
   footerNote: null,
   weekCardSuffix: '',
-  opsBilling: 'There is no billing for Pro yet.',
+  opsBilling:
+    'Recipients can buy Pro only while the Pro billing switch is on. Staff can grant it either way.',
 };
 
 const CLOSED: PaymentModeCopy = {
