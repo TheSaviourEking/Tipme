@@ -14,6 +14,7 @@ import { PageRetry } from '@/components/profile/page-retry';
 import { ProfileCover } from '@/components/profile/cover';
 import { CoverFreeze } from '@/components/profile/cover-freeze';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
+import { StandardProfile } from '@/components/profile/standard-profile';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
@@ -166,44 +167,41 @@ export default async function ProfilePage({ params, searchParams }: Props) {
     );
   }
   return (
-    <main id="main" tabIndex={-1} className="profile-page">
-      <ProfileViewTracker handle={profile.handle} />
-      <div className="profile-sheet">
-        {coverView}
-        <div className="profile-columns">
-          <RecipientIdentity
-            profile={profile}
-            firstName={firstName}
-            // Only beside a form that can add to it.
-            celebrationLabel={
-              takesTips ? (profile.celebration?.label ?? null) : null
-            }
-            {...(campaignPage
-              ? { after: <CampaignTop page={campaignPage} /> }
-              : {})}
-          />
-          <aside
-            className="profile-composer tip-instrument"
-            aria-label={`Tip ${firstName}`}
-            data-tip-panel
-          >
-            <TipBlock
-              profile={profile}
-              firstName={firstName}
-              mode={mode}
-              opensSoon={opensSoon}
-              pilotShown={pilotShown}
-            />
-          </aside>
-        </div>
+    <StandardProfile
+      firstName={firstName}
+      lead={<ProfileViewTracker handle={profile.handle} />}
+      cover={coverView}
+      identity={
+        <RecipientIdentity
+          profile={profile}
+          firstName={firstName}
+          // Only beside a form that can add to it.
+          celebrationLabel={
+            takesTips ? (profile.celebration?.label ?? null) : null
+          }
+          {...(campaignPage
+            ? { after: <CampaignTop page={campaignPage} /> }
+            : {})}
+        />
+      }
+      tipBlock={
+        <TipBlock
+          profile={profile}
+          firstName={firstName}
+          mode={mode}
+          opensSoon={opensSoon}
+          pilotShown={pilotShown}
+        />
+      }
+      footer={
         <ProfileFoot
           profile={profile}
           firstName={firstName}
           campaign={Boolean(campaignPage)}
           previewPages={copy.previewPages}
         />
-      </div>
-    </main>
+      }
+    />
   );
 }
 
