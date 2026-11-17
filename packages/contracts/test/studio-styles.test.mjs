@@ -414,6 +414,48 @@ test('every style but Classic proves its unselected chip border at 3:1', () => {
     }
 });
 
+test('Classic’s fg3 is today’s tertiary text, proved at 4.5:1 wherever a style defines fg3', () => {
+  // packages/ui/src/tokens.css --text-tertiary (17 Nov: #77736b failed 4.5:1).
+  assert.equal(STUDIO_STYLES.classic.neutrals.light.fg3, '#6e6a63');
+  assert.equal(STUDIO_STYLES.classic.neutrals.dark.fg3, '#a39e94');
+  for (const style of STUDIO_STYLE_IDS)
+    for (const mode of MODES) {
+      const n = STUDIO_STYLES[style].neutrals[mode];
+      const fg3 = studioContrastPairs(
+        style,
+        accentValues(style, null, mode),
+        mode,
+      ).filter((p) => p.name.startsWith('fg3 on'));
+      if (!n.fg3) {
+        assert.equal(fg3.length, 0, `${style} ${mode}`);
+        continue;
+      }
+      assert.deepEqual(
+        fg3.map((p) => [p.fg, p.bg, p.min]),
+        [n.bg, n.card, n.el2].map((bg) => [n.fg3, bg, 4.5]),
+        `${style} ${mode}`,
+      );
+    }
+});
+
+test('Tiles’ focus ring inside the Tip tile is accLabel, proved on acc', () => {
+  for (const accent of [...CURATED, null])
+    for (const mode of MODES) {
+      const a = accentValues('tiles', accent, mode);
+      const pair = studioContrastPairs('tiles', a, mode).find(
+        (p) => p.name === 'focus ring inside the Tip tile',
+      );
+      assert.deepEqual(pair, {
+        name: 'focus ring inside the Tip tile',
+        fg: a.label,
+        bg: a.fill,
+        min: 3,
+      });
+      assert.equal(studioTokens('tiles', accent)[mode].tileFocus, a.label);
+    }
+  assert.equal(studioTokens('clear', null).light.tileFocus, undefined);
+});
+
 test('Classic is checked on every surface it puts link text on', () => {
   const light = studioContrastPairs('classic', CLASSIC_PURPLE.light, 'light');
   const dark = studioContrastPairs('classic', CLASSIC_PURPLE.dark, 'dark');

@@ -176,7 +176,8 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg2: '#5d5a54',
         line: '#d4d3cf',
         base: '#ffffff',
-        fg3: '#77736b',
+        // tokens.css --text-tertiary (17 Nov 2026; the canvas's #77736b failed 4.5:1).
+        fg3: '#6e6a63',
         border: 'rgba(20,18,16,.14)',
         hair: 'rgba(20,18,16,.09)',
         rule: 'rgba(20,18,16,.10)',
@@ -529,6 +530,12 @@ const chipOn = (acc: Hex, bg: Hex, mode: 'light' | 'dark') =>
   mixOklab(acc, CHIP_ON_MIX[mode], bg);
 
 /**
+ * Tiles' focus ring inside the Tip tile (chips and the Tip sit on `acc`): `accLabel`, not
+ * `accText`. Served as the `tileFocus` token; the CSS draws in-tile focus rings with it.
+ */
+export const STUDIO_TILES_TILE_FOCUS = (a: StudioAccentValues): Hex => a.label;
+
+/**
  * Tiles' unselected chip ring: `color-mix(in srgb, accLabel 64%, acc)`. The canvas drew 45%, which
  * measures 2.17–2.96 on `acc`; 64% is the smallest whole percent reaching 3:1 (§4.2 control
  * borders) for every accent in both modes (lowest: Coral light, 3.05).
@@ -570,6 +577,15 @@ export function studioContrastPairs(
   ];
   const add = (name: string, fg: Hex, bg: Hex, min: 3 | 4.5) =>
     pairs.push({ name, fg, bg, min });
+  // A style that names a tertiary text colour sets text in it on all three surfaces.
+  if (n.fg3)
+    for (const bg of [n.bg, n.card, n.el2])
+      add(
+        `fg3 on ${bg === n.bg ? 'bg' : bg === n.card ? 'card' : 'el2'}`,
+        n.fg3 as Hex,
+        bg,
+        4.5,
+      );
   // Unselected chips sit on bg (Linen's in the card, Stage's desktop in a card): prove both.
   const chipBorder = (border: Hex) => {
     add('unselected chip border on bg', border, n.bg, 3);
@@ -617,6 +633,13 @@ export function studioContrastPairs(
       add('selected chip (accLabel) on acc', accLabel, acc, 4.5);
       break;
     case 'tiles':
+      // Chips and the Tip sit inside the acc tile, where accText would be ~1:1 on acc.
+      add(
+        'focus ring inside the Tip tile',
+        STUDIO_TILES_TILE_FOCUS(accent),
+        acc,
+        3,
+      );
       add('Tip and selected chip (acc) on accLabel', acc, accLabel, 4.5);
       add('chip label (accLabel) on acc', accLabel, acc, 4.5);
       add(
@@ -640,7 +663,7 @@ export type StudioTokenMap = Record<string, string>;
 /**
  * Both modes' tokens for a page: the style's neutrals (extras included), the accent's three
  * values as `acc`, `accLabel` and `accText`, `bar` (bg at 85%), and the derived tokens a style
- * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`).
+ * names in §9 (`chipOn` for Journal and Linen, Stage's `glow`, Tiles' `tileFocus`).
  */
 export function studioTokens(
   style: StudioStyleId,
@@ -658,6 +681,7 @@ export function studioTokens(
       bar: `${n.bg}d9`,
     };
     if (CHIP_ON_STYLES.includes(style)) t.chipOn = chipOn(a.fill, n.bg, mode);
+    if (style === 'tiles') t.tileFocus = STUDIO_TILES_TILE_FOCUS(a);
     if (style === 'stage') t.glow = mode === 'dark' ? a.fill : 'none';
     return t;
   };
