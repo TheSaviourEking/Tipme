@@ -241,6 +241,26 @@ test("long-word measures headings in the style's display face at 320 px", () => 
     applyStudioFix(signboard, result.issues[0], 'shorter-heading'),
     signboard,
   );
+  // Only headings are checked: a long word in a paragraph or a quote passes.
+  const link = 'See https://example.com/a-very-long-link-to-something';
+  const paragraph = {
+    id: 'para0001',
+    kind: 'text',
+    variant: 'paragraph',
+    text: link,
+  };
+  const quote = { id: 'quote001', kind: 'quote', text: link };
+  for (const style of ['clear', 'signboard'])
+    for (const block of [paragraph, quote])
+      assert.deepEqual(
+        rules(checkDesign(doc({ style, blocks: [block] }), CTX)),
+        [],
+        `${style} ${block.kind}`,
+      );
+  assert.deepEqual(
+    rules(checkDesign(doc({ style: 'clear', blocks: [heading(link)] }), CTX)),
+    ['long-word'],
+  );
   // Unbounded is far wider than Inter: a word that fits Clear doesn't fit Signboard.
   const middle = 'Wwwwwwwwwwwwww';
   assert.deepEqual(
@@ -283,20 +303,27 @@ test("photo rules use the style's slot widths", () => {
   // Clear: a 440 px column on desktop, 350 px on a phone.
   assert.equal(studioSlotWidth('clear', 'photo', 1440), (920 - 40) / 2);
   assert.equal(studioSlotWidth('clear', 'photo', 390), 390 - 40);
-  assert.equal(widest('clear') * 2, 880);
-  assert.deepEqual(rules(at('clear', 640)), ['photo-resolution']);
-  assert.deepEqual(rules(at('clear', 880)), []);
+  // As in v1: 1x at the widest screen, no density factor and no cap.
+  assert.equal(widest('clear'), 440);
+  assert.equal(widest('stage'), 720);
+  assert.deepEqual(rules(at('clear', 439)), ['photo-resolution']);
+  assert.deepEqual(rules(at('clear', 440)), []);
+  // Passes now, failed under the 2x rule (880).
+  assert.deepEqual(rules(at('clear', 640)), []);
   // Another style, another slot: Stage's main column is wider, so it needs more.
-  assert.ok(widest('stage') * 2 > 880);
-  assert.deepEqual(rules(at('stage', 880)), ['photo-resolution']);
-  assert.deepEqual(rules(at('stage', widest('stage') * 2)), []);
+  assert.deepEqual(rules(at('stage', 640)), ['photo-resolution']);
+  assert.deepEqual(rules(at('stage', 719)), ['photo-resolution']);
+  assert.deepEqual(rules(at('stage', 720)), []);
+  // Sprint's full-bleed photos need the full 1440.
+  assert.deepEqual(rules(at('sprint', 1439)), ['photo-resolution']);
+  assert.deepEqual(rules(at('sprint', 1440)), []);
   // A photo we have no facts for is as blurry as one with no pixels.
   assert.deepEqual(
     rules(checkDesign(doc({ blocks: [photo()] }), { ...CTX, images: {} })),
     ['photo-resolution'],
   );
   // The fix needs a new photo.
-  const blurry = at('clear', 640);
+  const blurry = at('clear', 400);
   assert.deepEqual(
     blurry.issues[0].fixes.map((f) => f.id),
     ['replace-photo'],

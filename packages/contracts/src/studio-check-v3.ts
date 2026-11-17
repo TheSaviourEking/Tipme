@@ -205,8 +205,6 @@ const HEADING_PX: Record<StudioStyleId, number> = {
   linen: 24,
   horizon: 24,
 };
-const QUOTE_PX = 20;
-const PARAGRAPH_PX = 16;
 
 function copy(doc: StudioDocument): StudioDocument {
   return {
@@ -243,8 +241,8 @@ export function proItemsOf(doc: StudioDocument): {
 
 const MAX_RENDITION = RENDITION_WIDTHS[RENDITION_WIDTHS.length - 1] as number;
 const DPR = STUDIO_WEIGHT.dpr;
-/** The two screens a photo is judged at: a phone and the widest desktop (§9). */
-const JUDGED = [390, 1440] as const;
+/** The widest screen the model sizes for: photos are judged at their spot here. */
+const WIDEST = 1440;
 
 /** Pixels a stored photo can fill, after the crop (a wide crop for a block, a square for a tile). */
 function usable(
@@ -257,10 +255,9 @@ function usable(
   return Math.floor(Math.min(f.width, f.height * STUDIO_IMAGE_ASPECT[shape]));
 }
 
-/** What a photo needs at its widest spot: the slot at 2× pixel density, never past a rendition. */
+/** As in v1: a photo needs the width of its slot at the widest screen, at 1x. */
 function neededWidth(style: StudioStyleId, kind: 'photo' | 'gallery'): number {
-  const slot = Math.max(...JUDGED.map((v) => studioSlotWidth(style, kind, v)));
-  return Math.min(Math.round(slot * DPR), MAX_RENDITION);
+  return Math.round(studioSlotWidth(style, kind, WIDEST));
 }
 
 /** Bytes a photo costs at a slot: the stored file's, scaled to the rendition the slot loads. */
@@ -398,7 +395,7 @@ function isEmpty(b: StudioBlock): boolean {
   }
 }
 
-/** The face a text is set in, and its size at 320 px; null for text that has no heading rule. */
+/** The face a heading is set in, and its size at 320 px; null for anything but a heading block. */
 function headingFace(
   doc: StudioDocument,
   b: StudioBlock,
@@ -410,10 +407,6 @@ function headingFace(
   };
   if (b.kind === 'text' && b.variant === 'heading')
     return { font: face(b.text), px: HEADING_PX[doc.style], text: b.text };
-  if (b.kind === 'quote')
-    return { font: face(b.text), px: QUOTE_PX, text: b.text };
-  if (b.kind === 'text')
-    return { font: INTER(), px: PARAGRAPH_PX, text: b.text };
   return null;
 }
 
@@ -477,7 +470,7 @@ function rawIssues(doc: StudioDocument, ctx: StudioCheckContext): Raw[] {
       rule: 'photo-resolution',
       at: { row: '', block: b.id },
       message: 'A photo will look blurry',
-      detail: `${b.kind === 'gallery' ? `Gallery photo ${blurry.n + 1}: ` : ''}${number(usable(ctx, blurry.imageId, blurry.shape))} pixels wide, and this style shows it at up to ${number(blurry.need)}.`,
+      detail: `${b.kind === 'gallery' ? `Gallery photo ${blurry.n + 1}: ` : ''}${number(usable(ctx, blurry.imageId, blurry.shape))} pixels wide, shown at up to ${number(blurry.need)}.`,
       fixes: ['replace-photo'],
     });
   }
