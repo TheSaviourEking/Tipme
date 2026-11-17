@@ -15,6 +15,7 @@ import { usePanel } from '@/components/dashboard/use-panel';
 import { naira } from '@/lib/money';
 import { apiDownload } from '@/lib/session-client';
 import { dayRange, monthNameOf } from '@/lib/month-share';
+import { Money } from '@/components/money';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DAY_NAMES = [
@@ -54,7 +55,11 @@ function versus(current: string, previous: string, when: string) {
   const before = BigInt(previous);
   if (now === before)
     return before === BigInt(0) ? null : `the same as ${when}`;
-  return `${now > before ? 'up' : 'down'} from ${naira(previous)} ${when}`;
+  return (
+    <>
+      {now > before ? 'up' : 'down'} from <Money minor={previous} /> {when}
+    </>
+  );
 }
 
 function Summary({ summary, pro }: { summary: EarningsSummary; pro: boolean }) {
@@ -81,24 +86,30 @@ function Summary({ summary, pro }: { summary: EarningsSummary; pro: boolean }) {
       </h2>
       <div className="earnings-total">
         <span>This week</span>
-        <strong>{naira(summary.thisWeek.netMinor)}</strong>
+        <strong>
+          <Money minor={summary.thisWeek.netMinor} />
+        </strong>
         <span className="tm-hint">
           {tipsWord(summary.thisWeek.tips)}
-          {week ? ` · ${week}` : ''}
+          {week ? <> · {week}</> : ''}
         </span>
       </div>
       <div className="earnings-total">
         <span>{monthLabel}</span>
-        <strong>{naira(summary.thisMonth.netMinor)}</strong>
+        <strong>
+          <Money minor={summary.thisMonth.netMinor} />
+        </strong>
         <span className="tm-hint">
           {tipsWord(summary.thisMonth.tips)}
-          {pro && month ? ` · ${month}` : ''}
+          {pro && month ? <> · {month}</> : ''}
         </span>
       </div>
       {pro ? (
         <div className="earnings-total">
           <span>This year</span>
-          <strong>{naira(summary.thisYear.netMinor)}</strong>
+          <strong>
+            <Money minor={summary.thisYear.netMinor} />
+          </strong>
           <span className="tm-hint">
             {tipsWord(summary.thisYear.tips)}
             {joinedThisYear
@@ -109,7 +120,9 @@ function Summary({ summary, pro }: { summary: EarningsSummary; pro: boolean }) {
       ) : (
         <div className="earnings-total">
           <span>All time</span>
-          <strong>{naira(summary.allTime.netMinor)}</strong>
+          <strong>
+            <Money minor={summary.allTime.netMinor} />
+          </strong>
           <span className="tm-hint">{tipsWord(summary.allTime.tips)}</span>
         </div>
       )}
@@ -228,11 +241,14 @@ function Period() {
     setAt(direction < 0 ? shift(view.from, -1) : shift(view.to, 1));
   };
   const change =
-    view && view.changePct !== null
-      ? `${view.changePct >= 0 ? 'Up' : 'Down'} ${Math.abs(view.changePct)}% on ${previousWords(view)} (${naira(view.previous.netMinor)})`
-      : view && view.previous.tips === 0
-        ? `Nothing on ${previousWords(view)}`
-        : null;
+    view && view.changePct !== null ? (
+      <>
+        {view.changePct >= 0 ? 'Up' : 'Down'} {Math.abs(view.changePct)}% on{' '}
+        {previousWords(view)} (<Money minor={view.previous.netMinor} />)
+      </>
+    ) : view && view.previous.tips === 0 ? (
+      `Nothing on ${previousWords(view)}`
+    ) : null;
   return (
     <Card className="earnings-period">
       <div className="earnings-head">
@@ -290,7 +306,9 @@ function Period() {
           <dl className="earnings-tiles">
             <div>
               <dt>Received</dt>
-              <dd>{naira(view.netMinor)}</dd>
+              <dd>
+                <Money minor={view.netMinor} />
+              </dd>
               {change && <dd className="tm-hint">{change}</dd>}
             </div>
             <div>
@@ -302,10 +320,13 @@ function Period() {
             </div>
             <div>
               <dt>Average tip</dt>
-              <dd>{view.averageMinor ? naira(view.averageMinor) : '—'}</dd>
+              <dd>
+                {view.averageMinor ? <Money minor={view.averageMinor} /> : '—'}
+              </dd>
               {view.previous.averageMinor && (
                 <dd className="tm-hint">
-                  {naira(view.previous.averageMinor)} on {previousWords(view)}
+                  <Money minor={view.previous.averageMinor} /> on{' '}
+                  {previousWords(view)}
                 </dd>
               )}
             </div>

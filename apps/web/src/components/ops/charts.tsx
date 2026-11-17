@@ -30,16 +30,21 @@ export function Tile({
   label,
   value,
   previous,
+  money = false,
 }: {
   label: string;
   value: string;
   previous?: string;
+  /** The value is an amount: set in the money face. */
+  money?: boolean;
 }) {
   return (
     // A recessed well, as the OpsShell board draws it (`.tile`), not a raised card (UI audit F9).
     <div className="ops-tile">
       <p className="ops-tile__label">{label}</p>
-      <p className="ops-tile__value">{value}</p>
+      <p className={money ? 'ops-tile__value money' : 'ops-tile__value'}>
+        {value}
+      </p>
       {previous && <p className="ops-tile__previous">{previous}</p>}
     </div>
   );

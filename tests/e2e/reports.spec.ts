@@ -252,7 +252,7 @@ test('a note that cannot be read leaves the rest of the stack', async ({
   await expect(page.getByText('1 of 1')).toBeVisible();
 });
 
-test('home on a desktop: the side column is at least 18rem and the week’s figure is set in the editorial face', async ({
+test('home on a desktop: the side column is at least 18rem and the week’s figure is set in the money face', async ({
   page,
   browser,
   request,
@@ -269,7 +269,7 @@ test('home on a desktop: the side column is at least 18rem and the week’s figu
   expect((await side.boundingBox())!.width).toBeGreaterThanOrEqual(288);
   expect(
     await figure.evaluate((element) => getComputedStyle(element).fontFamily),
-  ).toMatch(/dm ?serif/i);
+  ).toMatch(/^"?interMoney"?,/);
   await expect(page.getByRole('link', { name: /Your week/ })).toBeVisible();
   await expectAccessible(page);
 });

@@ -68,7 +68,9 @@ export function CampaignPagePreview({
         )}
         <div className="campaign-preview__amounts">
           {amounts.map((minor) => (
-            <span key={minor}>{naira(minor)}</span>
+            <span key={minor} className="money">
+              {naira(minor)}
+            </span>
           ))}
         </div>
         <p className="campaign-preview__pay">Tip {firstName}</p>

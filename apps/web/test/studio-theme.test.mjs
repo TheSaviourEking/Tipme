@@ -58,7 +58,7 @@ test('studioStyle sets only --studio-* properties, all derived from the palette 
       // Nothing a person typed: only hex, clamp(), lengths, numbers and registry font stacks.
       assert.match(
         value,
-        /^(#[0-9a-f]{6}|clamp\([\d.a-z +,()-]+\)|[\d.]+(px)?|'Studio [A-Za-z0-9 ]+', 'Studio [A-Za-z0-9 ]+ Fallback', (serif|sans-serif))$/,
+        /^(#[0-9a-f]{6}|clamp\([\d.a-z +,()-]+\)|[\d.]+(px)?|'Studio [A-Za-z0-9 ]+', var\(--font-glyph-fallback, 'Studio Glyphs'\), 'Studio [A-Za-z0-9 ]+ Fallback', (serif|sans-serif))$/,
         `${key}: ${value}`,
       );
     }

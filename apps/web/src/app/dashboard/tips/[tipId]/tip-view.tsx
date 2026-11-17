@@ -9,8 +9,8 @@ import { usePanel } from '@/components/dashboard/use-panel';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { feeLine, followsCurrentRule } from '@/lib/fee-line';
-import { formatNaira } from '@/lib/demo-amount';
 import { purposeLabels } from '@/lib/tip-purpose';
+import { Money } from '@/components/money';
 
 const statusText = {
   paid: 'In your balance',
@@ -57,7 +57,7 @@ export default function TipDetailPage() {
       </p>
       <Surface material="paper" className="receipt">
         <h1>
-          {formatNaira(Number(tip.netMinor))} from{' '}
+          <Money minor={Number(tip.netMinor)} /> from{' '}
           {tip.supporterLabel ?? 'Anonymous'}
         </h1>
         <p className="receipt__when">
@@ -66,16 +66,22 @@ export default function TipDetailPage() {
         <dl className="receipt__rows">
           <div className="rrow">
             <dt>{who} tipped</dt>
-            <dd>{formatNaira(Number(tip.grossMinor))}</dd>
+            <dd>
+              <Money minor={Number(tip.grossMinor)} />
+            </dd>
           </div>
           <div className="rrow">
             {/* One line (PRD v1.1): what came off the tip, labelled by what it was. */}
             <dt>{fee.label}</dt>
-            <dd>−{formatNaira(Number(fee.minor))}</dd>
+            <dd>
+              −<Money minor={Number(fee.minor)} />
+            </dd>
           </div>
           <div className="rrow">
             <dt>You received</dt>
-            <dd>{formatNaira(Number(tip.netMinor))}</dd>
+            <dd>
+              <Money minor={Number(tip.netMinor)} />
+            </dd>
           </div>
           {tip.purpose && (
             <div className="rrow">

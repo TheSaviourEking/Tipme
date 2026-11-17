@@ -3,13 +3,13 @@ import type { MyProfile } from '@tipme/contracts';
 import { LayerView, type Layer } from '@/components/account/cover-settings';
 import { AvatarImage } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
-import { formatNaira } from '@/lib/demo-amount';
 import { amountOptions } from '@/lib/tip-amounts';
 import { shownLinks } from '@/lib/link-editor';
 import { LinkBadge } from '@/components/profile/link-badge';
 import { SOCIAL_PLATFORMS, linkHandle } from '@tipme/contracts';
 import type { AboutForm } from './my-page';
 import type { LinksDraft } from './your-links';
+import { Money } from '@/components/money';
 
 /**
  * "What supporters see" (ScreenSettings): the page as a phone shows it, drawn from what is typed
@@ -87,12 +87,14 @@ export function PagePreview({
                   key={preset.minor}
                   data-selected={preset.minor === start || undefined}
                 >
-                  {formatNaira(preset.minor)}
+                  <Money minor={preset.minor} />
                 </li>
               ))}
             </ul>
             {start !== null && (
-              <p className="settings-preview__go">Tip {formatNaira(start)}</p>
+              <p className="settings-preview__go">
+                Tip <Money minor={start} />
+              </p>
             )}
           </div>
         </div>

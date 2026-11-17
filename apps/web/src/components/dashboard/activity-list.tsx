@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import type { ActivityRow } from '@tipme/contracts';
-import { naira } from '@/lib/money';
 import { bankLine } from '@/lib/withdrawal-bank';
+import { Money } from '@/components/money';
 
 const stateText: Record<string, string> = {
   paid: 'Paid',
@@ -59,7 +59,7 @@ export function ActivityList({
               className={`activity-list__amount${row.state === 'confirming' ? ' activity-list__amount--pending' : ''}`}
             >
               {row.kind === 'withdrawal' ? '−' : ''}
-              {naira(row.amountMinor)}{' '}
+              <Money minor={row.amountMinor} />{' '}
               <span className={`status-tag status-tag--${row.state}`}>
                 {stateText[row.state] ?? row.state}
               </span>

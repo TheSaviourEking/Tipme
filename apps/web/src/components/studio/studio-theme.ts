@@ -89,10 +89,14 @@ export function studioFont(id: string): StudioFont {
   );
 }
 
-/** `'Studio Inter', 'Studio Inter Fallback', sans-serif` */
+/**
+ * `'Studio Nunito', var(--font-glyph-fallback, …), 'Studio Nunito Fallback', sans-serif`. The
+ * root layout's Inter face (unicode-range: ₦, tone marks, ɓ ɗ ƙ ƴ, ẹ ọ ṣ) comes straight after
+ * the chosen face, so a letter it lacks (Nunito has no ƙ) is drawn in Inter, not a system font.
+ */
 export function studioFontStack(font: StudioFont): string {
   const generic = font.fallback.family === 'Georgia' ? 'serif' : 'sans-serif';
-  return `'Studio ${font.name}', 'Studio ${font.name} Fallback', ${generic}`;
+  return `'Studio ${font.name}', var(--font-glyph-fallback, 'Studio Glyphs'), 'Studio ${font.name} Fallback', ${generic}`;
 }
 
 /**

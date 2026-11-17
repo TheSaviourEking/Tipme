@@ -7,13 +7,13 @@ import { Button, Card, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { useWeekNotes, type WeekNote } from '@/components/dashboard/week-notes';
-import { formatNaira } from '@/lib/demo-amount';
 import { isoWeekRange } from '@/lib/iso-week';
 import { track } from '@/lib/analytics';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { drawWeekCard } from '@/lib/week-card';
 import { shareableWeek } from '@/lib/week-share';
+import { Money } from '@/components/money';
 
 /**
  * The week's notes, one on top of two behind. Pressing deals the next note and wraps after
@@ -36,7 +36,7 @@ function NoteStack({ notes }: { notes: WeekNote[] }) {
               “{note.note}”
             </p>
             <p className="stack__from">
-              From {note.who}, {formatNaira(Number(note.grossMinor))}
+              From {note.who}, <Money minor={Number(note.grossMinor)} />
               <span className="stack__count">
                 {' '}
                 · {(index % notes.length) + 1} of {notes.length}
@@ -122,7 +122,9 @@ export default function WeeklyReportPage() {
         <div className="week-hero__stats">
           <div>
             <span>You received</span>
-            <strong>{formatNaira(Number(report.totalNetMinor))}</strong>
+            <strong>
+              <Money minor={Number(report.totalNetMinor)} />
+            </strong>
           </div>
           <div>
             <span>Tips</span>
@@ -146,7 +148,7 @@ export default function WeeklyReportPage() {
                 'en-NG',
                 { weekday: 'long', day: 'numeric', month: 'long' },
               )}{' '}
-              ({formatNaira(Number(report.bestDay.netMinor))})
+              (<Money minor={Number(report.bestDay.netMinor)} />)
             </li>
           )}
           <li>

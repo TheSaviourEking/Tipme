@@ -13,6 +13,7 @@ import { naira } from '@/lib/money';
 import { drawMonthCard } from '@/lib/month-card';
 import { monthNameOf, recapShareable } from '@/lib/month-share';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
+import { Money } from '@/components/money';
 
 // A per-viewer convenience: whether this browser shows the total on the card. Nothing is sent.
 const TOTAL_STORAGE_NAME = 'tipme.recapTotal.v1';
@@ -114,7 +115,9 @@ export default function MonthlyRecapPage() {
         <div className="week-hero__stats">
           <div>
             <span>You received</span>
-            <strong>{naira(recap.totalNetMinor)}</strong>
+            <strong>
+              <Money minor={recap.totalNetMinor} />
+            </strong>
           </div>
           <div>
             <span>Tips</span>
@@ -123,7 +126,9 @@ export default function MonthlyRecapPage() {
           {recap.averageMinor && (
             <div>
               <span>Average tip</span>
-              <strong>{naira(recap.averageMinor)}</strong>
+              <strong>
+                <Money minor={recap.averageMinor} />
+              </strong>
             </div>
           )}
         </div>
@@ -141,7 +146,9 @@ export default function MonthlyRecapPage() {
           <li>
             {recap.notes} {recap.notes === 1 ? 'note' : 'notes'} from supporters
           </li>
-          <li>{naira(recap.previousNetMinor)} the month before</li>
+          <li>
+            <Money minor={recap.previousNetMinor} /> the month before
+          </li>
         </ul>
       </Card>
       <section className="recap-card" aria-labelledby="recap-card-title">

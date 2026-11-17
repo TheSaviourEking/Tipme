@@ -17,6 +17,7 @@ import {
   type ActionOutcomeState,
 } from './action-outcome';
 import { ReasonAction } from './reason-action';
+import { Money } from '@/components/money';
 
 const day = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
@@ -162,7 +163,9 @@ export function ProPayments({ profileId }: { profileId: string }) {
                     <td data-label="Method">
                       {proPaymentMethodWords(payment.paidBy)}
                     </td>
-                    <td data-label="Amount">{naira(payment.amountMinor)}</td>
+                    <td data-label="Amount">
+                      <Money code minor={payment.amountMinor} />
+                    </td>
                     <td data-label="Status">
                       <span>
                         <Badge
@@ -219,11 +222,14 @@ export function ProPayments({ profileId }: { profileId: string }) {
           data-testid="pro-refund"
         >
           <p>
-            The member gets <strong>{naira(asking.amountMinor)}</strong> back on
-            the card they paid with, the full amount: TipMe pays the card fee.
-            Their Pro month ({month(asking.period)}) ends when our payment
-            partner confirms the refund, unless another paid month or a staff
-            grant still covers today.
+            The member gets{' '}
+            <strong>
+              <Money code minor={asking.amountMinor} />
+            </strong>{' '}
+            back on the card they paid with, the full amount: TipMe pays the
+            card fee. Their Pro month ({month(asking.period)}) ends when our
+            payment partner confirms the refund, unless another paid month or a
+            staff grant still covers today.
           </p>
           <p className="tm-hint">
             Only on the member’s own request, within 14 days of paying.

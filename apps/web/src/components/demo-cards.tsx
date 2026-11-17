@@ -264,7 +264,7 @@ export function PersonCard({
               {amounts.map((amount, index) => (
                 <span
                   key={amount.key}
-                  className="home-key"
+                  className="home-key money"
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
                     // To one side, the click goes on to the card and brings it to the centre.
@@ -278,7 +278,7 @@ export function PersonCard({
               ))}
             </div>
             <span
-              className="home-demo__tip"
+              className="home-demo__tip money"
               onClick={(event) => {
                 if (!canPlay() || !centred) return;
                 event.stopPropagation();

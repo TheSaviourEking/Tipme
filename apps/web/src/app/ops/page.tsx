@@ -24,6 +24,7 @@ const count = (n: { thisWeek: number; lastWeek: number }) => ({
 const amount = (n: { thisWeek: string; lastWeek: string }) => ({
   value: naira(n.thisWeek),
   previous: `Last week ${naira(n.lastWeek)}`,
+  money: true,
 });
 const percent = (rate: number | null) =>
   rate === null ? '—' : `${Math.round(rate * 1000) / 10}%`;
@@ -201,6 +202,7 @@ function Numbers() {
             label="Reserve available"
             value={reserveNow.value}
             previous={reserveNow.hint}
+            money
           />
         </div>
       </section>

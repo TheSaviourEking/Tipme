@@ -7,6 +7,7 @@ import { formatNaira } from '@/lib/demo-amount';
 import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { DemoStack, PersonCard } from './demo-cards';
 import { IndigoQr } from './marketing/indigo-qr';
+import { Money } from '@/components/money';
 
 /* ---- Home (ScreenHome board) ---------------------------------------------------------------
    Everything below renders on the server. The only client island on Home is the steps lever
@@ -67,7 +68,7 @@ function AmountKeys({ dark = false }: { dark?: boolean }) {
           className="home-key"
           data-selected={amount === DEFAULT_TIP ? 'true' : undefined}
         >
-          {naira(amount)}
+          <Money minor={amount} />
         </span>
       ))}
     </div>
@@ -318,7 +319,7 @@ export function TippedSteps() {
             {[LARGE_TIP, DEFAULT_TIP, SMALL_TIP].map((amount) => (
               <li key={String(amount)}>
                 <Heart />
-                {naira(amount)}
+                <Money minor={amount} />
               </li>
             ))}
           </ul>
@@ -343,7 +344,9 @@ export function TippingSteps() {
         media={
           <div className="home-step__keys">
             <AmountKeys dark />
-            <span className="home-demo__tip">Tip {TIP_LABEL}</span>
+            <span className="home-demo__tip">
+              Tip <span className="money">{TIP_LABEL}</span>
+            </span>
           </div>
         }
       >

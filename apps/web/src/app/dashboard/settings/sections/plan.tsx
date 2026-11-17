@@ -5,7 +5,6 @@ import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { dateOf } from '@/lib/lagos-time';
-import { naira } from '@/lib/money';
 import {
   ASK_FOR_PRO,
   forgetPurchase,
@@ -21,6 +20,7 @@ import {
 import { apiFetch } from '@/lib/session-client';
 import { nextCheckDelay } from '@/lib/status-polling';
 import { SettingsChapter } from './section';
+import { Money } from '@/components/money';
 
 // Plan (ScreenSettings; ProPage board's Settings line, ProBadge board's Settings Plan).
 
@@ -236,11 +236,19 @@ export function ProPlan() {
   const following = followed?.kind === 'confirming';
   const open = !followed && pro?.openPurchase ? pro.openPurchase : null;
   const paidMonth = pro?.source === 'paid' || Boolean(pro?.current);
-  const buyLabel = price
-    ? paidMonth
-      ? `Pay for next month · ${naira(price.amountMinor)}`
-      : `Get Pro · ${naira(price.amountMinor)} a month`
-    : '';
+  const buyLabel = price ? (
+    paidMonth ? (
+      <span>
+        Pay for next month · <Money minor={price.amountMinor} />
+      </span>
+    ) : (
+      <span>
+        Get Pro · <Money minor={price.amountMinor} /> a month
+      </span>
+    )
+  ) : (
+    ''
+  );
   const fromDate = pro?.current ? dateOf(pro.current.endsAt) : 'today';
   // Both behind the server's flags (off by default): with them off the screen is unchanged.
   const balanceOn = Boolean(pro?.methods?.includes('balance'));
@@ -379,14 +387,14 @@ export function ProPlan() {
             </ActionLink>
           }
         >
-          {naira(open.amountMinor)} for one month of Pro, not paid yet.
+          <Money minor={open.amountMinor} /> for one month of Pro, not paid yet.
         </Slip>
       )}
 
       {pro && canBuy && !following && !open && (
         <div className="settings-plan__buy">
           <p className="settings-plan__price">
-            {naira(price!.amountMinor)} a month
+            <Money minor={price!.amountMinor} /> a month
           </p>
           <p className="tm-hint">
             Pay by card or bank transfer. You choose which on our payment
@@ -397,7 +405,7 @@ export function ProPlan() {
           {confirmingBuy ? (
             <div className="settings-plan__confirm">
               <p>
-                {naira(price!.amountMinor)} for one month of Pro, from{' '}
+                <Money minor={price!.amountMinor} /> for one month of Pro, from{' '}
                 {fromDate}.
               </p>
               {renewOffered && (
@@ -437,7 +445,7 @@ export function ProPlan() {
                     disabled={busy}
                     onClick={() => void buyFromBalance()}
                   >
-                    Pay {naira(price!.amountMinor)} from your balance
+                    Pay <Money minor={price!.amountMinor} /> from your balance
                   </Button>
                 )}
                 <Button
@@ -503,7 +511,11 @@ export function ProPlan() {
         <>
           <p className="tm-hint">
             <strong>Pro is coming soon to buy.</strong>{' '}
-            {price ? `It will cost ${naira(price.amountMinor)} a month. ` : ''}
+            {price ? (
+              <>
+                It will cost <Money minor={price.amountMinor} /> a month.{' '}
+              </>
+            ) : null}
             Until then, the TipMe team can turn Pro on for your page, and this
             page will show it when they do.
           </p>

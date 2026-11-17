@@ -2,11 +2,12 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsTipReversed } from '@tipme/contracts';
 import { Button, InputField, Slip, TextareaField } from '@tipme/ui';
-import { nairaCode as naira, parseNaira } from '@/lib/money';
+import { parseNaira } from '@/lib/money';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct } from '@/lib/ops-staff-api';
 import type { TipReverseView } from '@/lib/tip-reverse-view';
 import { outcomeOf, type ActionOutcomeState } from './action-outcome';
+import { Money } from '@/components/money';
 
 /**
  * Taking back a refunded or charged-back tip from its issue (`tip.reverse`, business release 2 Q7;
@@ -103,11 +104,13 @@ export function TipReverse({
       {refund ? (
         <p>
           Our payment partner gave the supporter back{' '}
-          <strong>{naira(view.refundedMinor)}</strong>. Taking it back records
-          that in TipMe’s books: {person} gives back their part of it, and a
-          business its share if there is one, each in proportion. TipMe keeps
-          its fee on a refund. If the refund is more than they received, only
-          what they received is taken back.
+          <strong>
+            <Money code minor={view.refundedMinor} />
+          </strong>
+          . Taking it back records that in TipMe’s books: {person} gives back
+          their part of it, and a business its share if there is one, each in
+          proportion. TipMe keeps its fee on a refund. If the refund is more
+          than they received, only what they received is taken back.
         </p>
       ) : (
         <p>
@@ -136,13 +139,17 @@ export function TipReverse({
         >
           {refund ? (
             <p>
-              Amount: <strong>{naira(view.refundedMinor)}</strong>, as our
-              payment partner reported it.
+              Amount:{' '}
+              <strong>
+                <Money code minor={view.refundedMinor} />
+              </strong>
+              , as our payment partner reported it.
             </p>
           ) : (
             <InputField
               id={`${id}-amount`}
               name="amount"
+              className="money"
               label="Amount charged back (NGN)"
               hint="As our payment partner’s dashboard shows it. Less than the tip is a partial chargeback."
               inputMode="decimal"
