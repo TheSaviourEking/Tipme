@@ -12,6 +12,7 @@ import {
   studioDocumentSchema,
   studioImageIdsOf,
 } from '../dist/index.js';
+import { runs, seed } from './support/pbt.mjs';
 import { TODAY, studioDocumentArb } from './support/studio-arbitrary.mjs';
 import { studioDocumentV1Arb } from './support/studio-arbitrary.mjs';
 
@@ -270,13 +271,37 @@ test('a rich document with every optional field round-trips through resolveStudi
   assert.deepEqual(resolveStudio(rich, TODAY), rich);
 });
 
+test('a heading cut at the limit is still a clean line (regression, seed -131580715)', () => {
+  const doc = {
+    v: 2,
+    style: 'classic',
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [
+      {
+        id: '00a0000a',
+        kind: 'text',
+        variant: 'heading',
+        text: `${'W'.repeat(50)}      ${'W'.repeat(15)} Ọlápéjú`,
+      },
+    ],
+  };
+  assert.equal(studioDocumentSchema.safeParse(doc).success, true);
+  assert.deepEqual(resolveStudio(doc, TODAY), doc);
+  // The same text with a trailing space is what the generator used to make: refused.
+  const spaced = structuredClone(doc);
+  spaced.blocks[0].text += ' ';
+  assert.equal(studioDocumentSchema.safeParse(spaced).success, false);
+});
+
 test('every generated valid v2 document is accepted, and broken ones never are', () => {
   fc.assert(
     fc.property(studioDocumentArb({ valid: true }), (d) => {
       assert.equal(studioDocumentSchema.safeParse(d).success, true);
       assert.deepEqual(resolveStudio(JSON.parse(JSON.stringify(d)), TODAY), d);
     }),
-    { numRuns: 300 },
+    { numRuns: runs(2000), seed: seed() },
   );
   fc.assert(
     fc.property(studioDocumentArb({ valid: false }), (d) =>

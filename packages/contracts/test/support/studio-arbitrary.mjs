@@ -432,6 +432,13 @@ export function studioDocumentV1Arb({ valid: wanted = true } = {}) {
     .map(([d, i]) => BREAKS[i](d));
 }
 
+function cut(t, max) {
+  let out = cleanStudioText(t);
+  while ([...out].length > max)
+    out = cleanStudioText([...out].slice(0, max).join(''));
+  return out;
+}
+
 const blockV2 = fc.oneof(
   fc
     .record({
@@ -441,9 +448,9 @@ const blockV2 = fc.oneof(
     .map(({ variant, t }) => ({
       kind: 'text',
       variant,
-      text: [...t]
-        .slice(0, variant === 'heading' ? L.headingText : L.paragraphText)
-        .join(''),
+      // Cutting at the limit can leave a trailing space, which the schema's clean-line rule
+      // refuses, so clean again after each cut (as the schema's own text rules do).
+      text: cut(t, variant === 'heading' ? L.headingText : L.paragraphText),
     })),
   fc
     .record({
