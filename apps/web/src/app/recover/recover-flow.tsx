@@ -2,7 +2,7 @@
 import { useId, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
-import { Button, InputField, Notice } from '@tipme/ui';
+import { Button, InputField, Slip } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
 import { apiFetch } from '@/lib/session-client';
 
@@ -88,14 +88,14 @@ export function RecoverFlow() {
 
   if (step === 'scheduled')
     return (
-      <Notice tone="success" title="Your account will move in 24 hours">
+      <Slip tone="done" title="Your account will move in 24 hours">
         It moves on{' '}
         {new Date(effectiveAt).toLocaleString('en-NG', {
           timeZone: 'Africa/Lagos',
         })}
         . We told your old address, in case this wasn’t you. After that, sign in
         with your new email.
-      </Notice>
+      </Slip>
     );
   if (step === 'email')
     return (

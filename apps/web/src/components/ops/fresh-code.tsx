@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
-import { Button, InputField, Notice } from '@tipme/ui';
+import { Button, InputField, Slip } from '@tipme/ui';
 import { setFreshCodePrompt } from '@/lib/ops-staff-api';
 import { apiFetch } from '@/lib/session-client';
 
@@ -97,9 +97,9 @@ export function FreshCodePrompt() {
             autoFocus
           />
           {error && (
-            <Notice tone="error" title="Not accepted">
+            <Slip dense tone="error" title="Not accepted">
               {error}
-            </Notice>
+            </Slip>
           )}
           <div className="ops-actions">
             <Button

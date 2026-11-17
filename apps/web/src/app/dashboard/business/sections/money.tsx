@@ -8,7 +8,7 @@ import type {
   WithdrawalQuoteResponse,
 } from '@tipme/contracts';
 import { withdrawalMinimumMinor } from '@tipme/domain';
-import { Button, InputField, Notice, Skeleton } from '@tipme/ui';
+import { Button, InputField, Skeleton, Slip } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
 import {
   businessCanSend,
@@ -18,6 +18,7 @@ import { formatNaira } from '@/lib/demo-amount';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { withdrawRefusal, withdrawSummary } from '@/lib/withdraw-state';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 type Loaded =
   | { kind: 'loading' }
@@ -81,9 +82,12 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     );
   if (loaded.kind === 'failed')
     return (
-      <Notice tone="error" title="We couldn’t load the business’s balance">
+      <LoadFailed
+        title="We couldn’t load the business’s balance"
+        onRetry={load}
+      >
         Please reload the page.
-      </Notice>
+      </LoadFailed>
     );
 
   const { balance, quote } = loaded;
@@ -193,11 +197,11 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
         </p>
       )}
       {heldBack > BigInt(0) && (
-        <Notice title="Held back from the next shares">
+        <Slip title="Held back from the next shares">
           A tip was refunded after its share had been withdrawn.{' '}
           {formatNaira(heldBack)} will be taken from the business’s next shares
           and returned to the staff member.
-        </Notice>
+        </Slip>
       )}
       {needsAccount && (
         <div className="business-money__setup">
@@ -218,13 +222,13 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
             card payments.
           </p>
           {setupError && (
-            <Notice tone="error" title="Not set up yet">
+            <Slip tone="error" title="Not set up yet">
               {setupError}
-            </Notice>
+            </Slip>
           )}
         </div>
       )}
-      <Notice title={state.notice.title}>
+      <Slip title={state.notice.title}>
         {state.notice.body}
         {state.notice.href && state.notice.linkLabel && (
           <>
@@ -232,16 +236,16 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
             <a href={state.notice.href}>{state.notice.linkLabel}</a>
           </>
         )}
-      </Notice>
+      </Slip>
       {quote?.inReview && (
-        <Notice title="Being checked">
+        <Slip title="Being checked">
           A withdrawal is being checked by our payment partner.
-        </Notice>
+        </Slip>
       )}
       {done && (
-        <Notice tone="success" title="Withdrawal requested">
+        <Slip tone="done" title="Withdrawal requested">
           {done} is on its way to the business’s bank.
-        </Notice>
+        </Slip>
       )}
       <form className="withdraw__form" onSubmit={submit} noValidate>
         <InputField

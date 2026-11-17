@@ -7,7 +7,7 @@ import type {
   MyProfile,
   SessionView,
 } from '@tipme/contracts';
-import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { Button, Card, InputField, StandingWarning } from '@tipme/ui';
 import { CodeField } from '@/components/account/code-field';
 import { RecipientContext } from '@/components/account/recipient-context';
 import { AccountContext } from '@/components/account/account-context';
@@ -46,7 +46,7 @@ export function PendingRecovery() {
     setRound((n) => n + 1);
   };
   return (
-    <Notice tone="error" title="Your number is about to change">
+    <StandingWarning title="Your number is about to change">
       Someone asked to move this account to a number ending{' '}
       {pending[0]?.newPhoneHint} on{' '}
       {new Date(pending[0]?.effectiveAt ?? '').toLocaleString('en-NG', {
@@ -56,7 +56,7 @@ export function PendingRecovery() {
       <Button variant="secondary" onClick={() => void cancel()}>
         Cancel the change
       </Button>
-    </Notice>
+    </StandingWarning>
   );
 }
 
@@ -87,7 +87,7 @@ export function EmailMoveNotice() {
     else setFailed(true);
   };
   return (
-    <Notice tone="error" title="Your account is being moved">
+    <StandingWarning title="Your account is being moved">
       Your account is being moved to {first.newEmailHint} on{' '}
       {new Date(first.effectiveAt).toLocaleString('en-NG', {
         timeZone: 'Africa/Lagos',
@@ -97,7 +97,7 @@ export function EmailMoveNotice() {
         Cancel the move
       </Button>
       {failed && <p role="alert">That didn’t go through. Try again now.</p>}
-    </Notice>
+    </StandingWarning>
   );
 }
 

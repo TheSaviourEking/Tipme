@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useId, useState } from 'react';
 import type { OpsIssue } from '@tipme/contracts';
-import { Badge, Button, EmptyWell, Notice, Skeleton } from '@tipme/ui';
+import { Badge, Button, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 
@@ -92,9 +92,9 @@ export default function IssuesPage() {
         </div>
       </div>
       {failed && (
-        <Notice tone="error" title="Couldn’t load the issues">
+        <Slip dense tone="error" title="Couldn’t load the issues">
           Check your connection; the list retries every 30 seconds.
-        </Notice>
+        </Slip>
       )}
       {!issues && !failed && <Skeleton label="Loading issues" />}
       {issues?.length === 0 && (

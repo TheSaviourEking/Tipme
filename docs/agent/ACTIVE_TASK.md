@@ -1,3 +1,8 @@
+# Current task: the last tinted Notices (16 November 2026)
+
+- Branch `refactor/notice-to-design-law` from `origin/dev`; one PR into `dev`, not merged. Replaces all 136 remaining `Notice` uses (55 files: dashboard, settings, account, `/ops`) with `Slip`, `StandingWarning`, `LoadFailed` (Try again) per the states plan and StatesMap; deletes `Notice` and `.tm-notice`. Words unchanged. Rulings in DECISION-LOG 2026-11-16.
+- No migration, no API change. Linux visual baselines, if any change, come from CI artifacts.
+
 # Current task: Studio Tip bar and the sample announcement (16 November 2026)
 
 - Branch `feat/studio-sticky-tip-bar` from `origin/dev`; one PR into `dev`, not merged. A Studio page's tip rail takes the standard panel class (`profile-composer`): same tip block styling and, on a phone, the same fixed Tip bar; `studio.css` only places the rail. The staff preview's sample announcement is now an evergreen product update (no prices, no dates). Member emails say "our payment partner" instead of "the payment provider" (4 strings in `account-events.ts`).

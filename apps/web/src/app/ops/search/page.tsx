@@ -3,7 +3,7 @@ import { lagosDateWords } from '@tipme/domain';
 import Link from 'next/link';
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsSearchResult } from '@tipme/contracts';
-import { Button, Card, InputField, Notice } from '@tipme/ui';
+import { Button, Card, InputField, Slip } from '@tipme/ui';
 import { nairaCode as naira } from '@/lib/money';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
@@ -27,9 +27,9 @@ export default function OpsSearchPage() {
 
   if (!can(access, 'search.view'))
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         Searching needs the “search.view” permission.
-      </Notice>
+      </Slip>
     );
 
   const find = async (event: FormEvent) => {

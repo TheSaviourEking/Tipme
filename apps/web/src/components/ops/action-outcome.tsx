@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
-import { Notice } from '@tipme/ui';
+import { Slip } from '@tipme/ui';
 
 export type ActionOutcomeState =
   | {
@@ -38,7 +38,7 @@ export function ActionOutcome({ outcome }: { outcome: ActionOutcomeState }) {
 function OutcomeWords({ outcome }: { outcome: ActionOutcomeState }) {
   if (outcome.kind === 'waiting')
     return (
-      <Notice tone="neutral" title="Waiting for a second person">
+      <Slip dense tone="waiting" title="Waiting for a second person">
         <p>
           {outcome.repeat
             ? 'This was already waiting, so no new request was made. Your reason is in the audit log with it. '
@@ -46,27 +46,29 @@ function OutcomeWords({ outcome }: { outcome: ActionOutcomeState }) {
           {outcome.meanwhile && `${outcome.meanwhile} `}
           <Link href="/ops/approvals">See it in Approvals</Link>
         </p>
-      </Notice>
+      </Slip>
     );
   if (outcome.actedAlone)
     return (
-      <Notice
-        tone={outcome.warning ? 'neutral' : 'success'}
+      <Slip
+        dense
+        tone={outcome.warning ? 'neutral' : 'done'}
         title="Done, without a second person"
       >
         <p>
           {outcome.text} Nobody else can approve this right now, so it ran
           straight away. The log and the alert say you acted alone.
         </p>
-      </Notice>
+      </Slip>
     );
   return (
-    <Notice
-      tone={outcome.warning ? 'neutral' : 'success'}
+    <Slip
+      dense
+      tone={outcome.warning ? 'neutral' : 'done'}
       title={outcome.title ?? 'Done'}
     >
       {outcome.text}
-    </Notice>
+    </Slip>
   );
 }
 

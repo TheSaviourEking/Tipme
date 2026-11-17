@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { OpsPagePricing } from '@tipme/contracts';
-import { Button, Card, InputField, Notice, TextareaField } from '@tipme/ui';
+import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
   ActionOutcome,
@@ -76,9 +76,9 @@ export function ValueWithReason({
         maxLength={500}
       />
       {error && (
-        <Notice tone="error" title="Not done">
+        <Slip dense tone="error" title="Not done">
           {error}
-        </Notice>
+        </Slip>
       )}
       <div className="ops-actions">
         <Button

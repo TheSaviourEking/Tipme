@@ -6,7 +6,7 @@ import type {
   OpsMetricsEnvelope,
   WebVitalSummary,
 } from '@tipme/contracts';
-import { Notice } from '@tipme/ui';
+import { Slip, StandingWarning } from '@tipme/ui';
 import { Funnel, Tile, TilesSkeleton } from '@/components/ops/charts';
 import { StaffActivity } from '@/components/ops/staff-activity';
 import { WaitingRequests } from '@/components/ops/waiting-requests';
@@ -95,10 +95,10 @@ function Numbers() {
   }, []);
   if (failed)
     return (
-      <Notice tone="error" title="Couldn’t load the numbers">
+      <Slip dense tone="error" title="Couldn’t load the numbers">
         The connection failed, or your access changed.{' '}
         <Link href="/ops/issues">Go to the issues inbox</Link>
-      </Notice>
+      </Slip>
     );
   if (!health) return <TilesSkeleton label="Loading the overview" />;
   // An API older than PR-011 sends no web vitals (the web app deploys first).
@@ -138,19 +138,19 @@ function Numbers() {
         </p>
       )}
       {live.disagrees && (
-        <Notice tone="error" title="The record of live payments disagrees">
+        <StandingWarning dense title="The record of live payments disagrees">
           This API’s setting and the last recorded change don’t match: a record
           that failed to write, or a deploy that failed partway. The first line
           above is what this API is doing now. Check the API log and the last
           deploy.
-        </Notice>
+        </StandingWarning>
       )}
       {!health.collecting && (
-        <Notice tone="neutral" title="Anonymous collection is off">
+        <Slip dense tone="neutral" title="Anonymous collection is off">
           The funnel stays empty until the privacy decision (D-07) turns it on.
           Money, reliability and recipient numbers still come from TipMe’s own
           records.
-        </Notice>
+        </Slip>
       )}
       <section aria-labelledby="ops-money" className="dashboard-section">
         <h2 id="ops-money">Money</h2>
@@ -177,24 +177,24 @@ function Numbers() {
           drops below the alert level.
         </p>
         {reserveNow.status === 'low' && (
-          <Notice tone="error" title="The payment reserve is low">
+          <StandingWarning dense title="The payment reserve is low">
             Top it up so payout fees can be paid.
-          </Notice>
+          </StandingWarning>
         )}
         {reserveNow.status === 'unreadable' && (
-          <Notice tone="error" title="The payment reserve can’t be read">
+          <StandingWarning dense title="The payment reserve can’t be read">
             The last check could not read the balance. Check the payment
             provider and the worker.
-          </Notice>
+          </StandingWarning>
         )}
         {reserveNow.stale && (
-          <Notice
-            tone="error"
+          <StandingWarning
+            dense
             title="The payment reserve checks may have stopped"
           >
             The last reading is more than 45 minutes old, and the worker reads
             every 15 minutes. Check the worker and the payment provider key.
-          </Notice>
+          </StandingWarning>
         )}
         <div className="ops-tiles">
           <Tile

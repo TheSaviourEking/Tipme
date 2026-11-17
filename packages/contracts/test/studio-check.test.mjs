@@ -325,6 +325,18 @@ test('colour names for the one-sentence notes', () => {
   assert.equal(studioColourName('#7a32f9'), 'purple');
   assert.equal(studioColourName('#2e7d32'), 'green');
   assert.equal(studioColourName('#d32f2f'), 'red');
+  assert.equal(studioColourName('#ff0000'), 'red');
+  // The coral accent the Studio suggests is named coral, never red.
+  assert.equal(studioColourName('#ff7a59'), 'coral');
+  assert.equal(studioColourName('#f08080'), 'coral');
+  const coralNotes = checkDesign({ ...KEMI, mode: 'light' }, CTX)
+    .notices.filter((n) => n.rule === 'contrast')
+    .map((n) => n.message);
+  assert.ok(
+    coralNotes.some((m) => /Your coral /.test(m)),
+    coralNotes.join('\n'),
+  );
+  assert.ok(!coralNotes.some((m) => /\bred\b/.test(m)), coralNotes.join('\n'));
   assert.equal(studioColourName('#6d4c41'), 'brown');
 });
 

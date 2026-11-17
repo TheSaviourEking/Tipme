@@ -6,8 +6,8 @@ import {
   Card,
   EmptyWell,
   InputField,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import { LineChart } from '@/components/ops/charts';
@@ -136,9 +136,9 @@ function AddObservation({ onSaved }: { onSaved: () => void }) {
           maxLength={500}
         />
         {error && (
-          <Notice tone="error" title="Not saved">
+          <Slip dense tone="error" title="Not saved">
             {error}
-          </Notice>
+          </Slip>
         )}
         {saved && (
           <p role="status" className="settings-saved">

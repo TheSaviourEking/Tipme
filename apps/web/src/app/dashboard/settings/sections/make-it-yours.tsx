@@ -12,7 +12,7 @@ import {
   type MyProfile,
   type ThanksStyle,
 } from '@tipme/contracts';
-import { Button, Card, Notice, TextareaField } from '@tipme/ui';
+import { Button, Card, Slip, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { ThanksSlip } from '@/components/thanks-slip';
 import { apiFetch } from '@/lib/session-client';
@@ -183,10 +183,10 @@ export function ThanksSettings({ title }: { title: string }) {
             </>
           )}
           {cardError && (
-            <Notice tone="error" title="Not saved">
+            <Slip tone="error" title="Not saved">
               {cardError} Your page is on the Free plan now, so save again to
               keep your line.
-            </Notice>
+            </Slip>
           )}
           <Button type="submit" disabled={busy} aria-busy={busy}>
             Save thank-you

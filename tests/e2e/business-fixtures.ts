@@ -189,3 +189,29 @@ export async function seedTableCard({
   );
   return { cardId, code };
 }
+
+/**
+ * A business logo, stored as the upload route stores one (a `business_logos` row with its bytes, a
+ * new version and its public address). `webp` is a test image the caller makes.
+ */
+export async function seedBusinessLogo(
+  businessId: string,
+  webp: Buffer,
+): Promise<string> {
+  const [row] = await sql<{ version: number }>(
+    `UPDATE businesses SET logo_version = logo_version + 1 WHERE id = $1 RETURNING logo_version AS version`,
+    [businessId],
+  );
+  if (!row) throw new Error(`no business ${businessId}`);
+  const path = `/v1/business-logos/${businessId}/${row.version}.webp`;
+  await sql(
+    `INSERT INTO business_logos (business_id, version, bytes) VALUES ($1, $2, $3)
+     ON CONFLICT (business_id) DO UPDATE SET version = EXCLUDED.version, bytes = EXCLUDED.bytes`,
+    [businessId, row.version, webp],
+  );
+  await sql(`UPDATE businesses SET logo_path = $2 WHERE id = $1`, [
+    businessId,
+    path,
+  ]);
+  return path;
+}

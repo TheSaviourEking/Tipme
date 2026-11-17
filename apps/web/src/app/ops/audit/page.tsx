@@ -4,6 +4,7 @@ import type { OpsAuditEntry } from '@tipme/contracts';
 import { Button, EmptyWell, Skeleton } from '@tipme/ui';
 import { ReadFailureNotice } from '@/components/ops/read-failure-notice';
 import { readFailure, type ReadFailure } from '@/lib/ops-answers';
+import { auditWords } from '@/lib/ops-audit-words';
 import { when } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 
@@ -93,7 +94,9 @@ export default function AuditPage() {
                       ? `${row.subjectType} …${(row.subjectId ?? '').slice(-6)}`
                       : '—'}
                   </td>
-                  <td data-label="Reason">{row.reason ?? '—'}</td>
+                  <td data-label="Reason">
+                    <AuditReason row={row} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -106,5 +109,18 @@ export default function AuditPage() {
         </Button>
       )}
     </section>
+  );
+}
+
+/** The written reason, then what changed in plain words (never the stored JSON). */
+function AuditReason({ row }: { row: OpsAuditEntry }) {
+  const { reason, detail } = auditWords(row);
+  if (!reason && !detail) return <>—</>;
+  // One wrapper, so on a phone (where the cell is a label | value grid) both lines sit in the value.
+  return (
+    <span>
+      {reason ?? '—'}
+      {detail && <span className="ops-audit__detail">{detail}</span>}
+    </span>
   );
 }

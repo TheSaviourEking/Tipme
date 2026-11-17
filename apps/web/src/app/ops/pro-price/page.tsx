@@ -5,8 +5,8 @@ import {
   Button,
   Card,
   EmptyWell,
-  Notice,
   Skeleton,
+  Slip,
   TextareaField,
 } from '@tipme/ui';
 import {
@@ -18,6 +18,7 @@ import { when } from '@/lib/ops-client';
 import { refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
+import { LoadFailed } from '@/components/dashboard/load-failed';
 
 /** The board's step: ₦500, within the server's limits (₦100 to ₦1,000,000). */
 const STEP_MINOR = BigInt(50_000);
@@ -134,9 +135,9 @@ function PriceCard({
         )}
         {outcome && <ActionOutcome outcome={outcome} />}
         {state.waitingRequestId && !outcome && (
-          <Notice tone="neutral" title="Waiting for a second person">
+          <Slip dense tone="waiting" title="Waiting for a second person">
             A change is waiting in Approvals. The price hasn’t changed yet.
-          </Notice>
+          </Slip>
         )}
         <form className="ops-reason" onSubmit={(e) => void send(e)} noValidate>
           <div
@@ -175,9 +176,9 @@ function PriceCard({
             maxLength={500}
           />
           {error && (
-            <Notice tone="error" title="Not done">
+            <Slip dense tone="error" title="Not done">
               {error}
-            </Notice>
+            </Slip>
           )}
           <Button
             variant="continue"
@@ -253,9 +254,9 @@ export default function PricesPage() {
     return (
       <section className="dashboard-section ops-page-body">
         <h1>Prices</h1>
-        <Notice tone="error" title="Couldn’t load the prices">
+        <LoadFailed dense title="Couldn’t load the prices" onRetry={load}>
           Your role may not include them, or the connection failed.
-        </Notice>
+        </LoadFailed>
       </section>
     );
   if (!loaded || !states.personal)
@@ -287,14 +288,15 @@ export default function PricesPage() {
         )}
       </div>
 
-      <Notice
+      <Slip
+        dense
         tone="neutral"
         title="New price applies to the next renewal; the shown price is honoured."
       >
         Someone mid-purchase pays what they saw, or is asked to confirm the new
         price. Another qualified person approves each change; a lone admin saves
         it alone, with an alert.
-      </Notice>
+      </Slip>
 
       <Card className="settings-section">
         <h2 id={`${id}-history`}>History</h2>

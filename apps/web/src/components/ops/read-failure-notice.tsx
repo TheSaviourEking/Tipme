@@ -1,5 +1,5 @@
 'use client';
-import { Button, Notice } from '@tipme/ui';
+import { Button, Slip } from '@tipme/ui';
 import type { ReadFailure } from '@/lib/ops-answers';
 
 /**
@@ -17,19 +17,22 @@ export function ReadFailureNotice({
 }) {
   if (failure.kind === 'forbidden')
     return (
-      <Notice tone="neutral" title="Not part of your role">
+      <Slip dense tone="neutral" title="Not part of your role">
         {failure.words}
-      </Notice>
+      </Slip>
     );
   return (
-    <Notice
+    <Slip
+      dense
       tone={failure.kind === 'needs_code' ? 'neutral' : 'error'}
       title={failure.kind === 'needs_code' ? 'Enter a code to see this' : title}
+      actions={
+        <Button variant="quiet" onClick={onRetry}>
+          {failure.kind === 'needs_code' ? 'Enter a code' : 'Try again'}
+        </Button>
+      }
     >
-      {failure.words}{' '}
-      <Button variant="quiet" onClick={onRetry}>
-        {failure.kind === 'needs_code' ? 'Enter a code' : 'Try again'}
-      </Button>
-    </Notice>
+      {failure.words}
+    </Slip>
   );
 }
