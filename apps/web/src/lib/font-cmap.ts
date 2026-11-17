@@ -147,11 +147,11 @@ const KNOWN_TAGS: readonly string[] = [
 ];
 
 /**
- * The characters a WOFF2 font draws. Reads the table directory (UIntBase128 lengths),
- * brotli-decompresses the font data and reads the `cmap` table, which WOFF2 never transforms.
- * Used by the Page Studio font-coverage test; server and build side only.
+ * One table of a WOFF2 font, decompressed. Reads the table directory (UIntBase128 lengths) and
+ * brotli-decompresses the font data. `cmap` and `name` are never transformed in WOFF2, so their
+ * bytes are the plain table.
  */
-export function woff2CharacterMap(font: Uint8Array): Set<number> {
+function woff2Table(font: Uint8Array, wanted: 'cmap' | 'name'): Uint8Array {
   const view = new DataView(font.buffer, font.byteOffset, font.byteLength);
   if (font.byteLength < 48 || view.getUint32(0) !== 0x774f4632)
     throw new Error('not a WOFF2 font');
@@ -169,7 +169,7 @@ export function woff2CharacterMap(font: Uint8Array): Set<number> {
     throw new Error('bad WOFF2 length');
   };
   let offset = 0;
-  let cmap: { offset: number; length: number } | undefined;
+  let found: { offset: number; length: number } | undefined;
   for (let i = 0; i < tables; i += 1) {
     const flags = font[at++] ?? 0;
     let tag: string;
@@ -183,12 +183,46 @@ export function woff2CharacterMap(font: Uint8Array): Set<number> {
     const transformed =
       tag === 'glyf' || tag === 'loca' ? version === 0 : version !== 0;
     const stored = transformed ? base128() : length;
-    if (tag === 'cmap') cmap = { offset, length: stored };
+    if (tag === wanted) found = { offset, length: stored };
     offset += stored;
   }
-  if (!cmap) throw new Error('font has no cmap table');
+  if (!found) throw new Error(`font has no ${wanted} table`);
   const data = brotliDecompressSync(font.subarray(at, at + compressedSize));
-  return cmapOf(data.subarray(cmap.offset, cmap.offset + cmap.length));
+  return data.subarray(found.offset, found.offset + found.length);
+}
+
+/**
+ * The characters a WOFF2 font draws, from its `cmap` table.
+ * Used by the Page Studio font-coverage test; server and build side only.
+ */
+export function woff2CharacterMap(font: Uint8Array): Set<number> {
+  return cmapOf(woff2Table(font, 'cmap'));
+}
+
+/**
+ * Every string in a WOFF2 font's `name` table (all name IDs, all platforms). Used by the font
+ * licence test to prove a renamed Modified Version carries no Reserved Font Name.
+ */
+export function woff2NameStrings(font: Uint8Array): string[] {
+  const table = woff2Table(font, 'name');
+  const view = new DataView(table.buffer, table.byteOffset, table.byteLength);
+  const count = view.getUint16(2);
+  const strings = view.getUint16(4);
+  const out: string[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const record = 6 + i * 12;
+    const platform = view.getUint16(record);
+    const length = view.getUint16(record + 8);
+    const start = strings + view.getUint16(record + 10);
+    const raw = table.subarray(start, start + length);
+    // Platforms 0 and 3 store UTF-16BE; platform 1 (Macintosh) stores Roman, ASCII for our names.
+    out.push(
+      platform === 1
+        ? String.fromCharCode(...raw)
+        : new TextDecoder('utf-16be').decode(raw),
+    );
+  }
+  return out;
 }
 
 /** Whether a font with this character map draws every character of `text`. */

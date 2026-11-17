@@ -5,9 +5,14 @@ import {
   STUDIO_FONTS,
   STUDIO_REQUIRED_CODEPOINTS,
 } from '../packages/contracts/dist/index.js';
-import { woff2CharacterMap } from '../apps/web/src/lib/font-cmap.ts';
+import {
+  woff2CharacterMap,
+  woff2NameStrings,
+} from '../apps/web/src/lib/font-cmap.ts';
 import { OUT_DIR, SOURCES, licenceName, outputName } from './studio-fonts.mjs';
 
+// v1 body fonts that lack some Hausa letters; the v1 editor keeps them until PR 4c (plan ruling R3).
+const LEGACY_BODY = ['work-sans', 'nunito', 'source-serif-4'];
 const PUBLIC = new URL('../apps/web/public', import.meta.url);
 const bytesOf = (path) => readFileSync(new URL(`.${path}`, `${PUBLIC.href}/`));
 const hexOf = (c) => `U+${c.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -17,7 +22,7 @@ test('every library font draws every required character (body) or is marked word
     for (const file of f.files) {
       const map = woff2CharacterMap(bytesOf(file.path));
       const missing = STUDIO_REQUIRED_CODEPOINTS.filter((c) => !map.has(c));
-      if (f.roles.includes('body'))
+      if (f.roles.includes('body') && !LEGACY_BODY.includes(f.id))
         assert.deepEqual(missing, [], `${f.id} misses ${missing.map(hexOf)}`);
       else if (missing.length)
         assert.ok(
@@ -39,17 +44,25 @@ test('the registry bytes match the files, and no file exceeds 100 KB', () => {
     }
 });
 
-test('any two families stay within 4 files and 200 KB', () => {
-  const total = (f) => f.files.reduce((sum, file) => sum + file.bytes, 0);
-  for (const a of STUDIO_FONTS)
-    for (const b of STUDIO_FONTS) {
-      const families = a.id === b.id ? [a] : [a, b];
-      assert.ok(families.flatMap((f) => f.files).length <= 4);
-      assert.ok(
-        families.reduce((sum, f) => sum + total(f), 0) <= 200_000,
-        `${a.id} + ${b.id}`,
-      );
-    }
+test('every style page stays within 2 families, 4 files and 200 KB', () => {
+  const inter = STUDIO_FONTS.find((f) => f.id === 'inter');
+  for (const id of [
+    null,
+    'source-serif-4',
+    'unbounded',
+    'anton',
+    'linen-serif',
+  ]) {
+    const own = id === null ? [] : STUDIO_FONTS.find((f) => f.id === id).files;
+    const files = [...inter.files, ...own];
+    assert.ok(files.length <= 4, `${id}: ${files.length} files`);
+    assert.ok(
+      files.reduce((sum, file) => sum + file.bytes, 0) <= 204_800,
+      `${id}: over 200 KB`,
+    );
+    for (const file of files)
+      assert.ok(file.bytes <= 102_400, `${file.path}: ${file.bytes} bytes`);
+  }
 });
 
 test('every font has a licence file beside it', () => {
@@ -69,22 +82,23 @@ test('the build script and the registry describe the same files, and nothing els
   assert.deepEqual(shipped, registry);
   assert.deepEqual(SOURCES.map(outputName).sort(), registry);
   assert.deepEqual(
-    SOURCES.map((s) => s.id).sort(),
+    [...new Set(SOURCES.map((s) => s.id))].sort(),
     STUDIO_FONTS.map((f) => f.id).sort(),
   );
-  for (const s of SOURCES) {
-    const f = STUDIO_FONTS.find((x) => x.id === s.id);
+  for (const f of STUDIO_FONTS)
     assert.deepEqual(
-      f.files.map((file) => file.weight),
-      [s.weight],
-      s.id,
+      f.files.map((file) => `${file.weight} ${file.style}`).sort(),
+      SOURCES.filter((s) => s.id === f.id)
+        .map((s) => `${s.weight} ${s.style ?? 'normal'}`)
+        .sort(),
+      f.id,
     );
-  }
 });
 
 test('no shipped family carries a Reserved Font Name it would need permission to use on a subset', () => {
   // OFL 1.1 §3: a Modified Version (a subset or an instance is one) may not use a Reserved Font
-  // Name without written permission. A family whose own name contains its RFN is not shipped.
+  // Name without written permission. A family whose own name contains its RFN is not shipped,
+  // unless it is renamed: then no name record of any of its files may carry the reserved words.
   for (const s of SOURCES) {
     const text = readFileSync(new URL(licenceName(s), OUT_DIR), 'utf8');
     const f = STUDIO_FONTS.find((x) => x.id === s.id);
@@ -96,6 +110,23 @@ test('no shipped family carries a Reserved Font Name it would need permission to
         `${f.name}: reserved font name "${name.trim()}"`,
       );
   }
+  for (const f of STUDIO_FONTS)
+    for (const file of f.files)
+      for (const record of woff2NameStrings(bytesOf(file.path)))
+        if (f.id === 'linen-serif')
+          assert.ok(
+            !/gentium/i.test(record) && !record.includes('SIL'),
+            `${file.path}: name record "${record}"`,
+          );
+});
+
+test('Linen Serif keeps the original copyright and Reserved Font Names in its licence text', () => {
+  const text = readFileSync(
+    new URL('OFL-GentiumBookPlus.txt', OUT_DIR),
+    'utf8',
+  );
+  assert.match(text, /Copyright \(c\) 2003-2022 SIL International/);
+  assert.match(text, /Reserved Font Names "Gentium" and "SIL"/);
 });
 
 test('each font lists exactly the required characters it cannot draw', () => {

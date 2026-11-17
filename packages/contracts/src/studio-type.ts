@@ -17,7 +17,10 @@ export type StudioFontId =
   | 'outfit'
   | 'nunito'
   | 'fraunces'
-  | 'source-serif-4';
+  | 'source-serif-4'
+  | 'unbounded'
+  | 'anton'
+  | 'linen-serif';
 
 export interface StudioFont {
   id: StudioFontId;
@@ -28,7 +31,7 @@ export interface StudioFont {
     path: `/fonts/studio/${string}.woff2`;
     /** One weight, or the range a variable file keeps ("400 700"). */
     weight: `${number}` | `${number} ${number}`;
-    style: 'normal';
+    style: 'normal' | 'italic';
     bytes: number;
   }[];
   headingWeight: number;
@@ -79,12 +82,21 @@ const NOT_REQUIRED = new Set([
  * The characters a body font must draw: Basic Latin, Latin-1 (not the soft hyphen, which is never
  * drawn), Latin Extended-A (less NOT_REQUIRED), the Yoruba and Igbo letters Ẹ ẹ Ọ ọ Ṣ ṣ Ị ị Ụ ụ Ṅ ṅ,
  * the combining marks those languages and European names put on letters, the naira sign, and the
- * punctuation people type or autocorrect gives them.
+ * punctuation people type or autocorrect gives them, and the Hausa hooked letters ɓ ɗ ƙ ƴ Ɓ Ɗ Ƙ Ƴ.
  */
 export const STUDIO_REQUIRED_CODEPOINTS: readonly number[] = [
   ...range(0x20, 0x7e),
   ...range(0xa0, 0xff).filter((c) => c !== 0xad),
   ...range(0x100, 0x17f).filter((c) => !NOT_REQUIRED.has(c)),
+  // The Hausa hooked letters: Ɓ Ɗ Ƙ ƙ Ƴ ƴ ɓ ɗ.
+  0x181,
+  0x18a,
+  0x198,
+  0x199,
+  0x1b3,
+  0x1b4,
+  0x253,
+  0x257,
   0x1e44,
   0x1e45,
   0x1e62,
@@ -126,10 +138,11 @@ export const STUDIO_REQUIRED_CODEPOINTS: readonly number[] = [
 ];
 
 /**
- * The library: 10 of the plan's 14 families. A family sets text only if it draws every required
- * character; the others are heading-only (Manrope lacks Ṣ and ₦ upstream). IBM Plex Sans, Lora,
- * Playfair Display and Libre Baskerville are not shipped: their licences reserve the family's own
- * name, which a subset may not use without the authors' written permission (OFL 1.1 §3).
+ * The library: 13 families, 10 of the plan's 14 plus the style faces Unbounded, Anton and Linen
+ * Serif. A family sets text only if it draws every required character; the others are heading-only
+ * (Manrope lacks Ṣ and ₦ upstream). IBM Plex Sans, Lora, Playfair Display and Libre Baskerville are
+ * not shipped: their licences reserve the family's own name, which a subset may not use without
+ * the authors' written permission (OFL 1.1 §3). Gentium Book Plus is shipped renamed, as Linen Serif.
  */
 export const STUDIO_FONTS: readonly StudioFont[] = [
   {
@@ -163,9 +176,10 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     },
     wordFallback: true,
     missing: [
-      0x114, 0x115, 0x13f, 0x140, 0x14e, 0x14f, 0x1e44, 0x1e45, 0x1e62, 0x1e63,
-      0x300, 0x301, 0x302, 0x303, 0x304, 0x306, 0x307, 0x308, 0x30a, 0x30c,
-      0x323, 0x327, 0x328, 0x20a6,
+      0x114, 0x115, 0x13f, 0x140, 0x14e, 0x14f, 0x181, 0x18a, 0x198, 0x199,
+      0x1b3, 0x1b4, 0x253, 0x257, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x300, 0x301,
+      0x302, 0x303, 0x304, 0x306, 0x307, 0x308, 0x30a, 0x30c, 0x323, 0x327,
+      0x328, 0x20a6,
     ],
   },
   {
@@ -202,8 +216,9 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       0x108, 0x109, 0x10a, 0x10b, 0x114, 0x115, 0x11c, 0x11d, 0x120, 0x121,
       0x124, 0x125, 0x126, 0x127, 0x128, 0x129, 0x134, 0x135, 0x14a, 0x14b,
       0x14e, 0x14f, 0x15c, 0x15d, 0x168, 0x169, 0x16c, 0x16d, 0x174, 0x175,
-      0x176, 0x177, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
-      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
+      0x176, 0x177, 0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257,
+      0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca, 0x1ecb, 0x1ecc,
+      0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
     ],
   },
   {
@@ -213,10 +228,10 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     roles: ['heading', 'body'],
     files: [
       {
-        path: '/fonts/studio/inter-400-700.woff2',
-        weight: '400 700',
+        path: '/fonts/studio/inter-400-800.woff2',
+        weight: '400 800',
         style: 'normal',
-        bytes: 63180,
+        bytes: 66076,
       },
     ],
     headingWeight: 700,
@@ -269,8 +284,8 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       ascentOverride: '83.00%',
       descentOverride: '21.69%',
     },
-    wordFallback: false,
-    missing: [],
+    wordFallback: true,
+    missing: [0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257],
   },
   {
     id: 'space-grotesk',
@@ -301,8 +316,8 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       ascentOverride: '87.01%',
       descentOverride: '25.82%',
     },
-    wordFallback: false,
-    missing: [],
+    wordFallback: true,
+    missing: [0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257],
   },
   {
     id: 'bricolage-grotesque',
@@ -336,8 +351,9 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     wordFallback: true,
     missing: [
       0xa4, 0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x134,
-      0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163, 0x1e44,
-      0x1e45, 0x1e62, 0x1e63,
+      0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163, 0x181,
+      0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257, 0x1e44, 0x1e45, 0x1e62,
+      0x1e63,
     ],
   },
   {
@@ -373,8 +389,9 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     missing: [
       0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x128, 0x129,
       0x134, 0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163,
-      0x168, 0x169, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
-      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
+      0x168, 0x169, 0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257,
+      0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca, 0x1ecb, 0x1ecc,
+      0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
     ],
   },
   {
@@ -407,8 +424,8 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       ascentOverride: '97.84%',
       descentOverride: '34.16%',
     },
-    wordFallback: false,
-    missing: [],
+    wordFallback: true,
+    missing: [0x198, 0x199],
   },
   {
     id: 'fraunces',
@@ -440,7 +457,10 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       descentOverride: '22.87%',
     },
     wordFallback: true,
-    missing: [0x1e44, 0x1e45, 0x30a, 0x323],
+    missing: [
+      0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257, 0x1e44, 0x1e45,
+      0x30a, 0x323,
+    ],
   },
   {
     id: 'source-serif-4',
@@ -453,6 +473,12 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
         weight: '400 600',
         style: 'normal',
         bytes: 40904,
+      },
+      {
+        path: '/fonts/studio/source-serif-4-400-italic.woff2',
+        weight: '400',
+        style: 'italic',
+        bytes: 25052,
       },
     ],
     headingWeight: 600,
@@ -471,6 +497,120 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       sizeAdjust: '102.09%',
       ascentOverride: '101.48%',
       descentOverride: '32.81%',
+    },
+    // Draws every Nigerian letter and ₦ but not the Hausa hooked letters (checked 17 Nov 2026), so
+    // a heading it cannot draw whole is set in Inter 700. It stays a body font in the v1 editor
+    // until that editor is replaced (plan 2026-11-17, ruling R3); the styles use it for headings.
+    wordFallback: true,
+    missing: [0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257],
+  },
+  {
+    id: 'unbounded',
+    name: 'Unbounded',
+    category: 'display',
+    roles: ['heading'],
+    files: [
+      {
+        path: '/fonts/studio/unbounded-600-700.woff2',
+        weight: '600 700',
+        style: 'normal',
+        bytes: 94160,
+      },
+    ],
+    headingWeight: 700,
+    metrics: {
+      unitsPerEm: 1000,
+      ascent: 995,
+      descent: -245,
+      lineGap: 0,
+      xHeight: 570,
+      avgAdvance: 704,
+      maxWordAdvance: 1349,
+    },
+    fallback: {
+      family: 'Arial',
+      sizeAdjust: '146.08%',
+      ascentOverride: '68.11%',
+      descentOverride: '16.77%',
+    },
+    wordFallback: true,
+    missing: [0xb5],
+  },
+  {
+    id: 'anton',
+    name: 'Anton',
+    category: 'display',
+    roles: ['heading'],
+    files: [
+      {
+        path: '/fonts/studio/anton-400.woff2',
+        weight: '400',
+        style: 'normal',
+        bytes: 22524,
+      },
+    ],
+    headingWeight: 400,
+    metrics: {
+      unitsPerEm: 2048,
+      ascent: 2409,
+      descent: -674,
+      lineGap: 0,
+      xHeight: 1500,
+      avgAdvance: 916,
+      maxWordAdvance: 1553,
+    },
+    fallback: {
+      family: 'Arial',
+      sizeAdjust: '92.81%',
+      ascentOverride: '126.74%',
+      descentOverride: '35.46%',
+    },
+    wordFallback: false,
+    missing: [],
+  },
+  {
+    // Gentium Book Plus, renamed: its licence reserves "Gentium" and "SIL", so the cut is a
+    // Modified Version under another name (plan ruling R2; scripts/studio-fonts.mjs).
+    id: 'linen-serif',
+    name: 'Linen Serif',
+    category: 'serif',
+    roles: ['heading', 'body'],
+    files: [
+      {
+        path: '/fonts/studio/linen-serif-400.woff2',
+        weight: '400',
+        style: 'normal',
+        bytes: 40812,
+      },
+      {
+        path: '/fonts/studio/linen-serif-700.woff2',
+        weight: '700',
+        style: 'normal',
+        bytes: 40088,
+      },
+      {
+        path: '/fonts/studio/linen-serif-400-italic.woff2',
+        weight: '400',
+        style: 'italic',
+        bytes: 45724,
+      },
+    ],
+    headingWeight: 700,
+    bodyWeight: 400,
+    metrics: {
+      unitsPerEm: 2048,
+      ascent: 2250,
+      descent: -750,
+      lineGap: 0,
+      xHeight: 930,
+      avgAdvance: 962,
+      maxWordAdvance: 1741,
+    },
+    fallback: {
+      family: 'Georgia',
+      sizeAdjust: '95.91%',
+      ascentOverride: '114.55%',
+      descentOverride: '38.18%',
     },
     wordFallback: false,
     missing: [],
