@@ -24,11 +24,13 @@ test('no studio component renders raw HTML or builds a style from user content',
       assert.match(m[1], /^\s*studioStyle\(/, `${file}: style={${m[1]}}`);
     assert.doesNotMatch(src, /\beval\(|new Function\(/, file);
   }
-  // Exactly one client island: the video player.
+  // One client island, the video player, plus the stylesheet loader (it renders nothing; it keeps
+  // studio.css off the /@username route so a prefetch never preloads it, studio-styles.tsx).
   assert.deepEqual(
     code.filter(([, src]) => /^['"]use client['"]/m.test(src)).map(([f]) => f),
-    ['video-embed.tsx'],
+    ['studio-sheet.tsx', 'studio-styles.tsx', 'video-embed.tsx'],
   );
+  assert.match(read('studio-sheet.tsx'), /return null;/);
 });
 
 test('the grid CSS and the layout model use the same constants', () => {

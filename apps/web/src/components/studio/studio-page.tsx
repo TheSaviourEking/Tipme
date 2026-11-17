@@ -7,15 +7,15 @@ import {
 } from '@tipme/contracts';
 import { needsTextFont, type StudioRenderContext } from './studio-blocks';
 import { StudioRowView } from './studio-row';
+import { StudioStyles } from './studio-styles';
 import { studioFont, studioFontFaces, studioStyle } from './studio-theme';
-import './studio.css';
 
 /**
  * A published Page Studio page (plan Task 5). The person's design styles the rows and the colours
  * around TipMe's parts; the cover, name, photo, handle and badge (identity), the tip block and the
  * footer are TipMe's own components, passed in unchanged. The tip block and footer sit inside
  * `.studio-fixed`, which resets every Studio token, so none of the person's colours or fonts reach
- * them. Server component; no client code but the video island.
+ * them. Server component; no client code but the video island and the stylesheet loader.
  */
 export function StudioPage({
   studio,
@@ -59,6 +59,7 @@ export function StudioPage({
       data-corners={doc.corners}
       style={studioStyle(doc, palette)}
     >
+      <StudioStyles />
       <style>{studioFontFaces(doc.fonts)}</style>
       <div className="studio-frame">
         <div className="studio-cover">{cover}</div>
