@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DESIGN_CHECK_VERSION, deriveStudioPalette } from '@tipme/contracts';
+import { DESIGN_CHECK_VERSION_V1, deriveStudioPalette } from '@tipme/contracts';
 import { identityFor, studioFor } from '../src/lib/public-studio.ts';
 
 // Which public pages show a published Page Studio design (plan Task 8), and what TipMe's own
@@ -34,7 +34,7 @@ const studio = (blocks, images = {}) => {
     document,
     palette: deriveStudioPalette(document.brand),
     images,
-    checkVersion: DESIGN_CHECK_VERSION,
+    checkVersion: DESIGN_CHECK_VERSION_V1,
   };
 };
 const profile = (extra = {}) => ({

@@ -13,7 +13,7 @@ import {
   isHex,
   type Hex,
   type StudioCheckResult,
-  type StudioDocument,
+  type StudioDocumentV1,
   type StudioFix,
   type StudioFont,
   type StudioFontId,
@@ -122,10 +122,10 @@ export function fontChoices(role: 'heading' | 'body'): StudioFont[] {
  * family; a family that can't take the role changes nothing.
  */
 export function withFont(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   slot: 'heading' | 'body',
   id: StudioFontId,
-): StudioDocument {
+): StudioDocumentV1 {
   const font = STUDIO_FONTS.find((f) => f.id === id);
   if (!font?.roles.includes(slot)) return doc;
   return { ...doc, fonts: { ...doc.fonts, [slot]: id } };
@@ -136,9 +136,9 @@ export function withFont(
  * exist without one, so removing it moves those rows onto the main colour.
  */
 export function withSecondColour(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   hex: Hex | null,
-): StudioDocument {
+): StudioDocumentV1 {
   if (hex) return { ...doc, brand: [doc.brand[0], hex] };
   return {
     ...doc,
@@ -154,7 +154,7 @@ export function withSecondColour(
  * the editor's own instant check as soon as anything changes.
  */
 export function checkShown(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   local: StudioCheckResult,
   server: { doc: string; check: StudioCheckResult } | null,
 ): StudioCheckResult {
@@ -173,7 +173,7 @@ export function fixesInput(issue: StudioIssue): StudioFix[] {
 
 const PASSING: Record<
   (typeof STUDIO_ERROR_RULES)[number],
-  (doc: StudioDocument, check: StudioCheckResult) => string
+  (doc: StudioDocumentV1, check: StudioCheckResult) => string
 > = {
   contrast: () => 'Text is readable (light and dark)',
   'phone-fit': () => 'Fits phones from 320 px',
@@ -195,7 +195,7 @@ const PASSING: Record<
 /** The passing list, in the check's order. */
 export function passingWords(
   check: StudioCheckResult,
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
 ): string[] {
   return check.passing
     .filter((rule): rule is (typeof STUDIO_ERROR_RULES)[number] =>

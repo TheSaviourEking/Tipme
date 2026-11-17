@@ -7,8 +7,8 @@ import {
   STUDIO_FONTS,
   deriveStudioPalette,
   resolveCover,
-  resolveStudio,
-  DESIGN_CHECK_VERSION,
+  resolveStudioV1,
+  DESIGN_CHECK_VERSION_V1,
   type PublicProfile,
   type SocialLink,
   type StudioFontId,
@@ -88,7 +88,7 @@ export default async function StudioLabPage({ searchParams }: Props) {
   }
   // &today=YYYY-MM-DD pins the date events are kept against, so a screenshot never ages.
   const day = one('today');
-  const document = resolveStudio(
+  const document = resolveStudioV1(
     raw,
     day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : today(),
   );
@@ -131,7 +131,7 @@ export default async function StudioLabPage({ searchParams }: Props) {
           document,
           palette: deriveStudioPalette(document.brand),
           images,
-          checkVersion: DESIGN_CHECK_VERSION,
+          checkVersion: DESIGN_CHECK_VERSION_V1,
         }}
         profile={profile}
         cover={

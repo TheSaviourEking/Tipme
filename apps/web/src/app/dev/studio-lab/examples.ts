@@ -7,10 +7,10 @@
 import {
   STUDIO_FONTS,
   STUDIO_LIMITS as L,
-  type StudioBlock,
-  type StudioDocument,
+  type StudioBlockV1,
+  type StudioDocumentV1,
   type StudioFontId,
-  type StudioRow,
+  type StudioRowV1,
 } from '@tipme/contracts';
 
 /** The lab's image ids, the same as the contracts test pool. */
@@ -30,7 +30,7 @@ const [STAGE, CUT1, CUT2, CUT3, CUT4, CUT5, CUT6, SHOP] = LAB_IMAGES as [
   string,
 ];
 
-const kemi: StudioDocument = {
+const kemi: StudioDocumentV1 = {
   v: 1,
   brand: ['#1d4e89', '#ff7a59'],
   mode: 'dark',
@@ -134,7 +134,7 @@ const kemi: StudioDocument = {
   ],
 };
 
-const sule: StudioDocument = {
+const sule: StudioDocumentV1 = {
   v: 1,
   brand: ['#f5c400'],
   mode: 'light',
@@ -240,7 +240,7 @@ const sule: StudioDocument = {
   ],
 };
 
-const ify: StudioDocument = {
+const ify: StudioDocumentV1 = {
   v: 1,
   brand: ['#e0457b'],
   mode: 'light',
@@ -298,8 +298,8 @@ const ify: StudioDocument = {
 };
 
 /** A block without its id, kind by kind. */
-type BlockDraft = StudioBlock extends infer B
-  ? B extends StudioBlock
+type BlockDraft = StudioBlockV1 extends infer B
+  ? B extends StudioBlockV1
     ? Omit<B, 'id'>
     : never
   : never;
@@ -307,9 +307,9 @@ type BlockDraft = StudioBlock extends infer B
 const id = (prefix: string, n: number) =>
   `${prefix}${String(n).padStart(8 - prefix.length, '0')}`;
 const base = (
-  rows: StudioRow[],
-  extra: Partial<StudioDocument> = {},
-): StudioDocument => ({
+  rows: StudioRowV1[],
+  extra: Partial<StudioDocumentV1> = {},
+): StudioDocumentV1 => ({
   v: 1,
   brand: ['#7a32f9'],
   mode: 'light',
@@ -321,9 +321,9 @@ const base = (
 });
 const row = (
   n: number,
-  cells: StudioBlock[][],
-  extra: Partial<StudioRow> = {},
-): StudioRow => ({
+  cells: StudioBlockV1[][],
+  extra: Partial<StudioRowV1> = {},
+): StudioRowV1 => ({
   id: id('row', n),
   columns: (['1', '1-1', '1-1-1'] as const)[cells.length - 1] ?? '1',
   spacing: 'm',
@@ -338,10 +338,10 @@ const fill = (n: number, word = 'Lorem') =>
     .trim();
 
 /** Every limit at once: 12 rows, 40 blocks, 24 photos, 3 videos, 6 events, 12 services, full text. */
-const max: StudioDocument = (() => {
+const max: StudioDocumentV1 = (() => {
   let b = 0;
   const blk = (block: BlockDraft) =>
-    ({ ...block, id: id('mx', ++b) }) as StudioBlock;
+    ({ ...block, id: id('mx', ++b) }) as StudioBlockV1;
   const heading = () =>
     blk({
       kind: 'text',
@@ -364,7 +364,7 @@ const max: StudioDocument = (() => {
         alt: fill(L.alt, 'Photo'),
       })),
     });
-  const rows: StudioRow[] = [
+  const rows: StudioRowV1[] = [
     row(1, [[heading(), para()]]),
     row(2, [[gallery(0)], [gallery(8)]], { columns: '1-1' }),
     row(3, [[gallery(16)]]),
@@ -585,14 +585,14 @@ const hostile = base(
 );
 
 /** One page per font: the font as heading, and as text where the library allows it. */
-export function fontSpecimen(fontId: StudioFontId): StudioDocument {
+export function fontSpecimen(fontId: StudioFontId): StudioDocumentV1 {
   const font = STUDIO_FONTS.find((f) => f.id === fontId) ?? STUDIO_FONTS[0]!;
   const body = font.roles.includes('body') ? font.id : 'inter';
   const text = (
     n: number,
     variant: 'heading' | 'lead' | 'paragraph',
     words: string,
-  ): StudioBlock =>
+  ): StudioBlockV1 =>
     variant === 'heading'
       ? {
           id: id('fnt', n),

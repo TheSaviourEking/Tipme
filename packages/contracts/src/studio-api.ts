@@ -3,11 +3,14 @@
  * named. The routes answer 404 while Page Studio is switched off.
  */
 import { z } from 'zod';
-import type { StudioCheckContext, StudioCheckResult } from './studio-check.js';
+import type {
+  StudioCheckContextV1,
+  StudioCheckResult,
+} from './studio-check.js';
 import {
-  studioDocumentSchema,
-  type StudioDocument,
-} from './studio-document.js';
+  studioDocumentV1Schema,
+  type StudioDocumentV1,
+} from './studio-document-v1.js';
 
 /** Edit: Pro. Preview: Free, an in-memory draft that is never stored. Lapsed: kept, read-only. */
 export type StudioAccess = 'edit' | 'preview' | 'lapsed';
@@ -23,26 +26,26 @@ export interface StudioImage {
 }
 
 /** `GET /v1/me/studio`, and the answer to every Studio write. */
-export interface MyStudio {
-  draft: StudioDocument;
-  published: StudioDocument | null;
+export interface MyStudioV1 {
+  draft: StudioDocumentV1;
+  published: StudioDocumentV1 | null;
   /** Bumped by every save: a save must name the revision it was based on. */
   rev: number;
   publishedAt: string | null;
   /** The design check of the draft with the server's facts; the editor shows this one. */
   check: StudioCheckResult;
   /** Those facts, so the editor's own instant check agrees with the server's. */
-  context: StudioCheckContext;
+  context: StudioCheckContextV1;
   images: StudioImage[];
   access: StudioAccess;
 }
 
 /** `PUT /v1/me/studio/draft`. Saving never needs a passing check; publishing does. */
-export const studioDraftSchema = z.strictObject({
+export const studioDraftV1Schema = z.strictObject({
   rev: z.number().int().min(0),
-  draft: studioDocumentSchema,
+  draft: studioDocumentV1Schema,
 });
-export type StudioDraftRequest = z.infer<typeof studioDraftSchema>;
+export type StudioDraftRequest = z.infer<typeof studioDraftV1Schema>;
 
 /** `POST /v1/me/studio/publish`. There is no "publish anyway" (owner ruling 12). */
 export const studioPublishSchema = z.strictObject({

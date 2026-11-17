@@ -1,6 +1,6 @@
 import type { TakeBackKind } from './usernames.js';
 import { z } from 'zod';
-import type { PublicStudio } from './studio-document.js';
+import type { PublicStudioV1 } from './studio-document-v1.js';
 import type { ResolvedCover } from './covers.js';
 import { qrStyleSchema } from './qr.js';
 import type { ThanksChoice } from './thanks.js';
@@ -194,7 +194,7 @@ export interface PublicProfile {
    * A published Page Studio design, sent only while Page Studio is on, the page is Pro and the
    * design passes today's design check; otherwise the standard page shows. Older APIs send none.
    */
-  studio?: PublicStudio;
+  studio?: PublicStudioV1;
 }
 
 /** Changing the page's handle (Pro only, counted); the old one keeps pointing at the page. */

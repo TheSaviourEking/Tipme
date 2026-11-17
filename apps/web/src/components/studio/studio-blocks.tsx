@@ -4,11 +4,11 @@ import {
   linkHandle,
   parseVideoLink,
   tileWidth,
-  type PublicStudio,
+  type PublicStudioV1,
   type SocialLink,
-  type StudioBlock,
-  type StudioDocument,
-  type StudioRow,
+  type StudioBlockV1,
+  type StudioDocumentV1,
+  type StudioRowV1,
 } from '@tipme/contracts';
 import { LinkBadge } from '@/components/profile/link-badge';
 import {
@@ -21,8 +21,8 @@ import { Money } from '@/components/money';
 
 /** What every block needs besides itself. */
 export interface StudioRenderContext {
-  doc: StudioDocument;
-  images: PublicStudio['images'];
+  doc: StudioDocumentV1;
+  images: PublicStudioV1['images'];
   profile: { bio?: string; links: SocialLink[]; firstName: string };
   /** Photos that load straight away (studioEagerImages); the rest load lazily. */
   eager: Set<string>;
@@ -30,7 +30,7 @@ export interface StudioRenderContext {
 
 /** The cell a block sits in, for its photos' `sizes`. */
 export interface StudioCellPlace {
-  row: StudioRow;
+  row: StudioRowV1;
   /** CSS px of the cell on a 1023px and a 1440px screen; a phone uses the screen less padding. */
   tablet: number;
   desktop: number;
@@ -131,7 +131,7 @@ export function StudioBlockView({
   place,
   ctx,
 }: {
-  block: StudioBlock;
+  block: StudioBlockV1;
   place: StudioCellPlace;
   ctx: StudioRenderContext;
 }) {

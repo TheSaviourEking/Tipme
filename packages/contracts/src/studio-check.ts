@@ -3,7 +3,7 @@
  * the editor on every edit, by the API on every save and by publishing as the gate: a page with
  * any issue can't be published, and there is no "publish anyway", for staff too (owner ruling 12).
  *
- * Every issue comes with fixes. A fix is a pure document transform (`applyStudioFix`), and is only
+ * Every issue comes with fixes. A fix is a pure document transform (`applyStudioFixV1`), and is only
  * offered after the check has tried it: it must remove its issue and add none. Fixes that need the
  * person's input (a new photo, a new link, a description, new words) are listed but change nothing.
  * Corrections the renderer makes by itself are reported as notices ("Fixed for you").
@@ -18,12 +18,12 @@ import {
 } from './studio-colour.js';
 import {
   STUDIO_BLOCK_VARIANTS,
-  studioDocumentSchema,
-  type StudioBlock,
+  studioDocumentV1Schema,
+  type StudioBlockV1,
   type StudioColumns,
-  type StudioDocument,
-  type StudioRow,
-} from './studio-document.js';
+  type StudioDocumentV1,
+  type StudioRowV1,
+} from './studio-document-v1.js';
 import {
   BLOCK_MIN_WIDTH,
   STUDIO_BREAKPOINTS,
@@ -43,7 +43,7 @@ import {
 
 /** Bump when a rule changes; published pages that now fail fall back to the standard page. */
 // 2 (15 Nov 2026): the page-weight base measured on the built public page (Task 8).
-export const DESIGN_CHECK_VERSION = 2;
+export const DESIGN_CHECK_VERSION_V1 = 2;
 
 export type StudioRuleId =
   | 'contrast'
@@ -82,7 +82,7 @@ const PAGE_RULES: readonly StudioRuleId[] = [
   'page-weight',
 ];
 
-export interface StudioCheckContext {
+export interface StudioCheckContextV1 {
   /** Server facts per stored image: source size and bytes per rendition ("square-960"). */
   images: Record<
     string,
@@ -197,7 +197,7 @@ const lacks = (font: StudioFont, text: string) =>
   [...text].some((c) => font.missing.includes(c.codePointAt(0) ?? 0));
 
 /** The font a heading-font text is actually set in. */
-function headingFontFor(doc: StudioDocument, text: string): StudioFont {
+function headingFontFor(doc: StudioDocumentV1, text: string): StudioFont {
   const heading = fontById(doc.fonts.heading);
   return lacks(heading, text) ? fontById(doc.fonts.body) : heading;
 }
@@ -222,7 +222,7 @@ function sizeAt(css: string, viewport: number): number {
  * smallest size. The renderer colours text with a LARGE_ONLY accent only when this is true.
  */
 export function studioLargeText(
-  doc: Pick<StudioDocument, 'scale' | 'fonts'>,
+  doc: Pick<StudioDocumentV1, 'scale' | 'fonts'>,
   role: 'display' | 'h2' | 'h3',
 ): boolean {
   const min = studioTypeScale(doc.scale)[role].min;
@@ -253,7 +253,7 @@ const palettes = new Map<
   string,
   { palette: StudioPalette; failures: string[] }
 >();
-function derived(brand: StudioDocument['brand']) {
+function derived(brand: StudioDocumentV1['brand']) {
   const key = brand.join();
   let p = palettes.get(key);
   if (!p) {
@@ -264,20 +264,20 @@ function derived(brand: StudioDocument['brand']) {
   }
   return p;
 }
-const paletteOf = (brand: StudioDocument['brand']) => derived(brand).palette;
+const paletteOf = (brand: StudioDocumentV1['brand']) => derived(brand).palette;
 
 const scales = new Map<string, ReturnType<typeof studioTypeScale>>();
-function scaleOf(step: StudioDocument['scale']) {
+function scaleOf(step: StudioDocumentV1['scale']) {
   let s = scales.get(step);
   if (!s) scales.set(step, (s = studioTypeScale(step)));
   return s;
 }
 
 /** A deep copy of a document (plain JSON data, so cheaper than structuredClone). */
-function copy(doc: StudioDocument): StudioDocument {
+function copy(doc: StudioDocumentV1): StudioDocumentV1 {
   return {
     ...doc,
-    brand: [...doc.brand] as StudioDocument['brand'],
+    brand: [...doc.brand] as StudioDocumentV1['brand'],
     fonts: { ...doc.fonts },
     rows: doc.rows.map((row) => ({
       ...row,
@@ -307,14 +307,14 @@ const snippet = (s: string) =>
   [...s].length > 24 ? `${[...s].slice(0, 24).join('')}…` : s;
 
 interface Located {
-  row: StudioRow;
+  row: StudioRowV1;
   r: number;
   c: number;
   k: number;
-  block: StudioBlock;
+  block: StudioBlockV1;
 }
 
-function* blocksOf(doc: StudioDocument): Generator<Located> {
+function* blocksOf(doc: StudioDocumentV1): Generator<Located> {
   for (const [r, row] of doc.rows.entries())
     for (const [c, cell] of row.cells.entries())
       for (const [k, block] of cell.entries()) yield { row, r, c, k, block };
@@ -338,9 +338,9 @@ export function sameIssue(
 // Page weight
 
 function blockHeight(
-  b: StudioBlock,
+  b: StudioBlockV1,
   w: number,
-  ctx: StudioCheckContext,
+  ctx: StudioCheckContextV1,
 ): number {
   const lines = (text: string, perChar: number) =>
     Math.max(1, Math.ceil(([...text].length * perChar) / w));
@@ -389,7 +389,7 @@ function blockHeight(
 }
 
 function renditionBytes(
-  ctx: StudioCheckContext,
+  ctx: StudioCheckContextV1,
   imageId: string,
   shape: Shape,
   cssWidth: number,
@@ -410,8 +410,8 @@ function renditionBytes(
 
 /** Estimated first load on a 390px phone, and the row holding the heaviest photo in it. */
 export function studioWeight(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
 ): { bytes: number; heaviestRow: string } {
   const { bytes, heaviestRow } = firstScreens(doc, ctx);
   return { bytes, heaviestRow };
@@ -423,15 +423,15 @@ export function studioWeight(
  * `<blockId>:<index>` for a gallery photo.
  */
 export function studioEagerImages(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
 ): Set<string> {
   return firstScreens(doc, ctx).eager;
 }
 
 function firstScreens(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
 ): { bytes: number; heaviestRow: string; eager: Set<string> } {
   const eager = new Set<string>();
   const heading = fontById(doc.fonts.heading);
@@ -448,7 +448,7 @@ function firstScreens(
   const spacing = { s: 16, m: 24, l: 40 } as const;
   let y = 0;
   let heaviest = { bytes: 0, row: '' };
-  const count = (row: StudioRow, add: number, key: string) => {
+  const count = (row: StudioRowV1, add: number, key: string) => {
     eager.add(key);
     bytes += add;
     if (add > heaviest.bytes) heaviest = { bytes: add, row: row.id };
@@ -533,7 +533,7 @@ const NARROWER: Partial<Record<string, string>> = {
   'text:lead': 'paragraph',
 };
 
-const KIND_WORDS: Record<StudioBlock['kind'], string> = {
+const KIND_WORDS: Record<StudioBlockV1['kind'], string> = {
   text: 'Text',
   photo: 'A photo',
   gallery: 'A gallery',
@@ -554,7 +554,7 @@ interface Raw {
   fixes: FixId[];
 }
 
-function weightOf(b: StudioBlock, ctx: StudioCheckContext): number {
+function weightOf(b: StudioBlockV1, ctx: StudioCheckContextV1): number {
   switch (b.kind) {
     case 'photo':
     case 'video':
@@ -574,7 +574,7 @@ function weightOf(b: StudioBlock, ctx: StudioCheckContext): number {
 
 /** Text a block shows, its type role, and whether it is set in the heading font. */
 function textOf(
-  b: StudioBlock,
+  b: StudioBlockV1,
 ): { text: string; role: StudioTextRole; heading: boolean } | null {
   if (b.kind === 'text') {
     if (b.variant === 'heading')
@@ -587,7 +587,7 @@ function textOf(
   return null;
 }
 
-function isEmpty(b: StudioBlock, ctx: StudioCheckContext): boolean {
+function isEmpty(b: StudioBlockV1, ctx: StudioCheckContextV1): boolean {
   switch (b.kind) {
     case 'gallery':
       return b.images.length === 0;
@@ -606,7 +606,7 @@ function isEmpty(b: StudioBlock, ctx: StudioCheckContext): boolean {
   }
 }
 
-function rawIssues(doc: StudioDocument, ctx: StudioCheckContext): Raw[] {
+function rawIssues(doc: StudioDocumentV1, ctx: StudioCheckContextV1): Raw[] {
   const out: Raw[] = [];
   const rowName = (r: number) => `Row ${r + 1}`;
 
@@ -723,7 +723,7 @@ function rawIssues(doc: StudioDocument, ctx: StudioCheckContext): Raw[] {
         });
     });
     const before = doc.rows[r - 1];
-    const band = (x: StudioRow) =>
+    const band = (x: StudioRowV1) =>
       x.background === 'colour' || x.background === 'second';
     if (
       before &&
@@ -870,7 +870,7 @@ function rawIssues(doc: StudioDocument, ctx: StudioCheckContext): Raw[] {
 function colourNotice(
   note: StudioColourNote,
   mode: 'light' | 'dark',
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   palette: StudioPalette,
 ): string {
   const hex = doc.brand[note.colour] ?? doc.brand[0];
@@ -884,7 +884,10 @@ function colourNotice(
   return `Your ${name} is too ${light ? 'light' : 'dark'} for text on a ${mode} page. We’ll use it for highlights and for buttons with ${onButton} text, and a ${light ? 'deeper' : 'lighter'} shade of it for links and headings. Your page will still look ${name}.`;
 }
 
-function notices(doc: StudioDocument, ctx: StudioCheckContext): StudioNotice[] {
+function notices(
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
+): StudioNotice[] {
   const out: StudioNotice[] = [];
   const palette = paletteOf(doc.brand);
   const modes =
@@ -946,14 +949,14 @@ function notices(doc: StudioDocument, ctx: StudioCheckContext): StudioNotice[] {
 
 /** Whether applying `fix` removes `issue`, adds no issue, and keeps the document valid. */
 function works(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
   issue: Raw,
   fix: FixId,
   before: Raw[],
 ): boolean {
   const next = applyFix(doc, issue, fix);
-  if (!next || !studioDocumentSchema.safeParse(next).success) return false;
+  if (!next || !studioDocumentV1Schema.safeParse(next).success) return false;
   const after = rawIssues(next, ctx);
   return (
     !after.some((a) => sameIssue(a, issue)) &&
@@ -961,7 +964,7 @@ function works(
   );
 }
 
-function fixLabel(doc: StudioDocument, issue: Raw, fix: FixId): string {
+function fixLabel(doc: StudioDocumentV1, issue: Raw, fix: FixId): string {
   if (fix === 'list-style' || fix === 'narrower-style')
     return STUDIO_FIX_LABELS[fix];
   if (fix === 'move-lower') {
@@ -975,12 +978,12 @@ function fixLabel(doc: StudioDocument, issue: Raw, fix: FixId): string {
 }
 
 /**
- * Where each issue is, without trying any fix: the same issues `checkDesign` lists, at a fraction
+ * Where each issue is, without trying any fix: the same issues `checkDesignV1` lists, at a fraction
  * of the cost. For counting and comparing (tests, a quick "N to fix"); never for showing fixes.
  */
 export function studioIssueKeys(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
 ): Pick<StudioIssue, 'rule' | 'at'>[] {
   return rawIssues(doc, ctx).map(({ rule, at }) => ({ rule, at }));
 }
@@ -989,9 +992,9 @@ export function studioIssueKeys(
  * Checks a document against every rule with the server's facts. Pure and deterministic: the
  * editor, the API and publishing get the same answer for the same document and facts.
  */
-export function checkDesign(
-  doc: StudioDocument,
-  ctx: StudioCheckContext,
+export function checkDesignV1(
+  doc: StudioDocumentV1,
+  ctx: StudioCheckContextV1,
 ): StudioCheckResult {
   const raw = rawIssues(doc, ctx);
   const issues: StudioIssue[] = raw.map((issue) => ({
@@ -1008,7 +1011,7 @@ export function checkDesign(
       .map((f) => ({ id: f, label: fixLabel(doc, issue, f) })),
   }));
   return {
-    version: DESIGN_CHECK_VERSION,
+    version: DESIGN_CHECK_VERSION_V1,
     issues,
     notices: notices(doc, ctx),
     passing: STUDIO_ERROR_RULES.filter(
@@ -1018,7 +1021,7 @@ export function checkDesign(
   };
 }
 
-function freshRowId(doc: StudioDocument, base: string): string {
+function freshRowId(doc: StudioDocumentV1, base: string): string {
   const used = new Set([
     ...doc.rows.map((r) => r.id),
     ...[...blocksOf(doc)].map((l) => l.block.id),
@@ -1042,27 +1045,31 @@ const SMALLER_SLOT: Partial<
  * Applies one fix to a copy of the document. Pure. A fix that needs the person's input, or that
  * no longer applies, returns an unchanged copy.
  */
-export function applyStudioFix(
-  doc: StudioDocument,
+export function applyStudioFixV1(
+  doc: StudioDocumentV1,
   issue: Pick<StudioIssue, 'rule' | 'at'>,
   fixId: string,
-): StudioDocument {
+): StudioDocumentV1 {
   return applyFix(doc, issue, fixId) ?? copy(doc);
 }
 
 /** The fixed copy, or null when the fix needs input or no longer applies. */
 function applyFix(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   issue: Pick<StudioIssue, 'rule' | 'at'>,
   fixId: string,
-): StudioDocument | null {
+): StudioDocumentV1 | null {
   const d = copy(doc);
   const r = d.rows.findIndex((row) => row.id === issue.at.row);
   const row = d.rows[r];
   const found = issue.at.block
     ? [...blocksOf(d)].find((l) => l.block.id === issue.at.block)
     : undefined;
-  const insertAfter = (at: number, blocks: StudioBlock[], from: StudioRow) =>
+  const insertAfter = (
+    at: number,
+    blocks: StudioBlockV1[],
+    from: StudioRowV1,
+  ) =>
     d.rows.splice(at + 1, 0, {
       id: freshRowId(d, from.id),
       columns: '1',
@@ -1140,7 +1147,7 @@ function applyFix(
       const cell =
         issue.at.cell !== undefined ? row?.cells[issue.at.cell] : undefined;
       if (!row || !cell || cell.length < 2) return no;
-      insertAfter(r, [cell.pop() as StudioBlock], row);
+      insertAfter(r, [cell.pop() as StudioBlockV1], row);
       return d;
     }
     case 'more-space': {
@@ -1170,7 +1177,7 @@ function applyFix(
     }
     case 'move-lower':
       if (!row || r >= d.rows.length - 1) return no;
-      d.rows.splice(r, 2, d.rows[r + 1] as StudioRow, row);
+      d.rows.splice(r, 2, d.rows[r + 1] as StudioRowV1, row);
       return d;
     default:
       return no;
@@ -1180,4 +1187,4 @@ function applyFix(
 /** Every block kind a document can hold, for the editor's "Add a block" list. */
 export const STUDIO_BLOCK_KINDS = Object.keys(
   STUDIO_BLOCK_VARIANTS,
-) as StudioBlock['kind'][];
+) as StudioBlockV1['kind'][];

@@ -4,7 +4,7 @@ import {
   STUDIO_BLOCK_VARIANTS,
   STUDIO_LIMITS as L,
   parseVideoLink,
-  type StudioBlock,
+  type StudioBlockV1,
   type StudioImage,
   type StudioImageRef,
 } from '@tipme/contracts';
@@ -33,7 +33,10 @@ import { Choice } from './style-tab';
  * classes on existing tokens): the editor's visual pass comes later.
  */
 
-type Block<K extends StudioBlock['kind']> = Extract<StudioBlock, { kind: K }>;
+type Block<K extends StudioBlockV1['kind']> = Extract<
+  StudioBlockV1,
+  { kind: K }
+>;
 
 /** Uploads a chosen photo and hands its new id to `place`; the picker shows the outcome. */
 export type SavePhoto = (
@@ -41,9 +44,9 @@ export type SavePhoto = (
   place: (imageId: string) => void,
 ) => Promise<PickerOutcome>;
 
-export interface BlockFormProps<B extends StudioBlock> {
+export interface BlockFormProps<B extends StudioBlockV1> {
   block: B;
-  onChange(next: StudioBlock): void;
+  onChange(next: StudioBlockV1): void;
   images: StudioImage[];
   savePhoto: SavePhoto;
   /** Room for more photos on the page (24), or why not. */
@@ -135,12 +138,12 @@ export function WordsField({
   );
 }
 
-function Variants<B extends StudioBlock>({
+function Variants<B extends StudioBlockV1>({
   block,
   onChange,
 }: {
   block: B;
-  onChange(next: StudioBlock): void;
+  onChange(next: StudioBlockV1): void;
 }) {
   const options = STUDIO_BLOCK_VARIANTS[block.kind] as readonly string[];
   if (options.length < 2) return null;
@@ -153,7 +156,7 @@ function Variants<B extends StudioBlock>({
         onChange(
           block.kind === 'text'
             ? textVariant(block, variant as Block<'text'>['variant'])
-            : ({ ...block, variant } as StudioBlock),
+            : ({ ...block, variant } as StudioBlockV1),
         )
       }
     />
@@ -821,7 +824,7 @@ function AboutForm({ profile }: BlockFormProps<Block<'about'>>) {
 }
 
 /** The form for one block, by kind. */
-export function BlockForm(props: BlockFormProps<StudioBlock>) {
+export function BlockForm(props: BlockFormProps<StudioBlockV1>) {
   const { block } = props;
   switch (block.kind) {
     case 'text':

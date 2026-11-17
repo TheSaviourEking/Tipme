@@ -1,10 +1,10 @@
 // The shared fast-check generator for Page Studio documents (plan Task 3). The contracts
 // property tests use it, and so will the Playwright render property test (Task 6).
 //
-// studioDocument({ valid: true }) makes documents the schema accepts: random brand colours, any
+// studioDocumentV1Arb({ valid: true }) makes documents the schema accepts: random brand colours, any
 // font pair fontsOk allows, rows, columns and blocks up to the limits, and text from empty to the
 // limit (biased to the limit, with long unbroken words, emoji, right-to-left and Yoruba text).
-// studioDocument({ valid: false }) makes a valid one, then breaks exactly one rule.
+// studioDocumentV1Arb({ valid: false }) makes a valid one, then breaks exactly one rule.
 // checkContext() makes the server facts the design check reads: image sizes and rendition
 // bytes, video status and the profile's bio and link count.
 import fc from 'fast-check';
@@ -12,17 +12,17 @@ import {
   STUDIO_FIX_NEEDS_INPUT,
   STUDIO_FONTS,
   STUDIO_LIMITS,
-  applyStudioFix,
-  checkDesign,
+  applyStudioFixV1,
+  checkDesignV1,
   cleanStudioText,
   fontsOk,
-  resolveStudio,
+  resolveStudioV1,
 } from '../../dist/index.js';
 
 /** fast-check itself, for specs outside this package (the Playwright render test). */
 export { fc };
 
-/** Every generated event is on or after this day, so resolveStudio keeps it. */
+/** Every generated event is on or after this day, so resolveStudioV1 keeps it. */
 export const TODAY = '2026-11-14';
 
 export const IMAGE_POOL = Array.from(
@@ -256,7 +256,7 @@ const valid = fc
     };
     // The page-wide limits (40 blocks, 24 photos, 3 videos, one About and one Links) are met by
     // the resolver, which trims from the end: what it returns is what a person could have made.
-    return resolveStudio(raw, TODAY);
+    return resolveStudioV1(raw, TODAY);
   });
 
 /** One rule broken per document, each of which the strict schema must refuse. */
@@ -420,7 +420,7 @@ export function withBlock(d, b) {
   };
 }
 
-export function studioDocument({ valid: wanted = true } = {}) {
+export function studioDocumentV1Arb({ valid: wanted = true } = {}) {
   if (wanted) return valid;
   return fc
     .tuple(valid, fc.integer({ min: 0, max: BREAKS.length - 1 }))
@@ -480,7 +480,7 @@ export function imageFacts({ width, height, perPixel = 0.08 }) {
 export function repairToPassing(doc, ctx) {
   let d = doc;
   for (let step = 0; step < 120; step += 1) {
-    const { issues } = checkDesign(d, ctx);
+    const { issues } = checkDesignV1(d, ctx);
     if (issues.length === 0) return d;
     const fixable = issues.find((i) =>
       i.fixes.some((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id)),
@@ -490,12 +490,12 @@ export function repairToPassing(doc, ctx) {
       const fix = fixable.fixes.find(
         (f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id),
       );
-      next = applyStudioFix(d, fixable, fix.id);
+      next = applyStudioFixV1(d, fixable, fix.id);
     } else {
       const [issue] = issues;
-      if (issue.at.block) next = applyStudioFix(d, issue, 'remove-block');
+      if (issue.at.block) next = applyStudioFixV1(d, issue, 'remove-block');
       else if (issue.rule === 'photo-resolution')
-        next = applyStudioFix(d, issue, 'plain-background');
+        next = applyStudioFixV1(d, issue, 'plain-background');
       else next = { ...d, rows: d.rows.filter((r) => r.id !== issue.at.row) };
     }
     if (JSON.stringify(next) === JSON.stringify(d))
@@ -508,7 +508,7 @@ export function repairToPassing(doc, ctx) {
 /** A passing page and the facts it passes with, made by repairToPassing. */
 export function studioPassingDocument() {
   return fc
-    .tuple(studioDocument({ valid: true }), checkContext())
+    .tuple(studioDocumentV1Arb({ valid: true }), checkContext())
     .map(([doc, ctx]) => ({ doc: repairToPassing(doc, ctx), ctx }))
     .filter(({ doc }) => doc !== null);
 }

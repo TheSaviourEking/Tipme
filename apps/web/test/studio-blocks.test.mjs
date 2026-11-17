@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   STUDIO_LIMITS,
-  checkDesign,
-  studioDocumentSchema,
+  checkDesignV1,
+  studioDocumentV1Schema,
 } from '@tipme/contracts';
 import {
   ADD_KINDS,
@@ -59,7 +59,7 @@ const doc = (rows = [row('row00001', [[text('blk00001')]])], extra = {}) => ({
   ...extra,
 });
 const valid = (d) => {
-  const parsed = studioDocumentSchema.safeParse(d);
+  const parsed = studioDocumentV1Schema.safeParse(d);
   assert.ok(parsed.success, JSON.stringify(parsed.error?.issues));
 };
 const profile = { bio: true, links: 2 };
@@ -328,7 +328,7 @@ test('a fix that needs the person’s input opens the block’s form at the righ
       ],
     ]),
   ]);
-  const check = checkDesign(d, {
+  const check = checkDesignV1(d, {
     images: { [IMAGE]: { width: 2000, height: 2000, bytes: {} } },
     videos: {},
     profile,

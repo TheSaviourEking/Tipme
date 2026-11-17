@@ -9,17 +9,17 @@ import {
   STUDIO_VIDEO_SITES,
   cleanStudioParagraph,
   cleanStudioText,
-  defaultStudioDocument,
+  defaultStudioDocumentV1,
   embedUrl,
   parseVideoLink,
-  resolveStudio,
-  studioDocumentSchema,
+  resolveStudioV1,
+  studioDocumentV1Schema,
 } from '../dist/index.js';
 import { regressions, runs, seed } from './support/pbt.mjs';
 import {
   IMAGE_POOL,
   TODAY,
-  studioDocument,
+  studioDocumentV1Arb,
   withBlock,
 } from './support/studio-arbitrary.mjs';
 
@@ -50,7 +50,7 @@ const VALID = {
     },
   ],
 };
-const ok = (d) => studioDocumentSchema.safeParse(d).success;
+const ok = (d) => studioDocumentV1Schema.safeParse(d).success;
 const withRow = (extra) => ({
   ...VALID,
   rows: [{ ...VALID.rows[0], ...extra }],
@@ -386,66 +386,66 @@ test('the supporter wall is refused until its own switch (Task 13)', () => {
 
 test('generated valid documents parse, and broken ones never do', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), (d) => {
-      const r = studioDocumentSchema.safeParse(d);
+    fc.property(studioDocumentV1Arb({ valid: true }), (d) => {
+      const r = studioDocumentV1Schema.safeParse(d);
       assert.equal(r.success, true, JSON.stringify(r.error?.issues?.[0]));
     }),
     { numRuns: runs(2000), seed: seed() },
   );
   fc.assert(
-    fc.property(studioDocument({ valid: false }), (d) =>
+    fc.property(studioDocumentV1Arb({ valid: false }), (d) =>
       assert.equal(ok(d), false),
     ),
     { numRuns: runs(2000), seed: seed() },
   );
 });
 
-test('resolveStudio never throws, is idempotent and always yields a schema-valid document', () => {
+test('resolveStudioV1 never throws, is idempotent and always yields a schema-valid document', () => {
   for (const raw of regressions('resolve')) {
-    const r = resolveStudio(raw, TODAY);
+    const r = resolveStudioV1(raw, TODAY);
     assert.equal(ok(r), true);
-    assert.deepEqual(resolveStudio(r, TODAY), r);
+    assert.deepEqual(resolveStudioV1(r, TODAY), r);
   }
   fc.assert(
     fc.property(
       fc.oneof(
         fc.anything(),
-        studioDocument({ valid: false }),
-        studioDocument({ valid: true }),
+        studioDocumentV1Arb({ valid: false }),
+        studioDocumentV1Arb({ valid: true }),
       ),
       (g) => {
-        const r = resolveStudio(g, TODAY);
-        const parsed = studioDocumentSchema.safeParse(r);
+        const r = resolveStudioV1(g, TODAY);
+        const parsed = studioDocumentV1Schema.safeParse(r);
         assert.equal(
           parsed.success,
           true,
           JSON.stringify(parsed.error?.issues?.[0]),
         );
-        assert.deepEqual(resolveStudio(r, TODAY), r);
+        assert.deepEqual(resolveStudioV1(r, TODAY), r);
       },
     ),
     { numRuns: runs(2000), seed: seed() },
   );
 });
 
-test('every generated valid document survives a JSON round trip, and resolveStudio leaves it as it is', () => {
+test('every generated valid document survives a JSON round trip, and resolveStudioV1 leaves it as it is', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), (d) => {
+    fc.property(studioDocumentV1Arb({ valid: true }), (d) => {
       assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
-      assert.deepEqual(resolveStudio(d, TODAY), d);
+      assert.deepEqual(resolveStudioV1(d, TODAY), d);
     }),
     { numRuns: runs(2000), seed: seed() },
   );
 });
 
-test('resolveStudio keeps a page readable after a font is retired', () => {
-  const r = resolveStudio(
+test('resolveStudioV1 keeps a page readable after a font is retired', () => {
+  const r = resolveStudioV1(
     { ...VALID, fonts: { heading: 'lora', body: 'libre-baskerville' } },
     TODAY,
   );
   assert.deepEqual(r.fonts, STUDIO_DEFAULT_FONTS);
   assert.deepEqual(r.rows, VALID.rows);
-  const display = resolveStudio(
+  const display = resolveStudioV1(
     { ...VALID, fonts: { heading: 'fraunces', body: 'dm-serif-display' } },
     TODAY,
   );
@@ -455,16 +455,19 @@ test('resolveStudio keeps a page readable after a font is retired', () => {
   });
 });
 
-test('resolveStudio replaces what it cannot use and trims from the end', () => {
+test('resolveStudioV1 replaces what it cannot use and trims from the end', () => {
   assert.deepEqual(
-    resolveStudio({ ...VALID, brand: ['nope', 'also'] }, TODAY).brand,
+    resolveStudioV1({ ...VALID, brand: ['nope', 'also'] }, TODAY).brand,
     ['#7a32f9'],
   );
   assert.deepEqual(
-    resolveStudio({ ...VALID, brand: ['#1D4E89'] }, TODAY).brand,
+    resolveStudioV1({ ...VALID, brand: ['#1D4E89'] }, TODAY).brand,
     ['#1d4e89'],
   );
-  assert.equal(resolveStudio({ ...VALID, mode: 'neon' }, TODAY).mode, 'light');
+  assert.equal(
+    resolveStudioV1({ ...VALID, mode: 'neon' }, TODAY).mode,
+    'light',
+  );
   const withUnknown = {
     ...VALID,
     rows: [
@@ -479,17 +482,17 @@ test('resolveStudio replaces what it cannot use and trims from the end', () => {
       },
     ],
   };
-  assert.deepEqual(resolveStudio(withUnknown, TODAY).rows, VALID.rows);
+  assert.deepEqual(resolveStudioV1(withUnknown, TODAY).rows, VALID.rows);
   const rows = many(15, (i) => ({
     ...VALID.rows[0],
     id: rid(i),
     cells: [[{ ...VALID.rows[0].cells[0][0], id: bid(i) }]],
   }));
   assert.deepEqual(
-    resolveStudio({ ...VALID, rows }, TODAY).rows.map((r) => r.id),
+    resolveStudioV1({ ...VALID, rows }, TODAY).rows.map((r) => r.id),
     rows.slice(0, 12).map((r) => r.id),
   );
-  const long = resolveStudio(
+  const long = resolveStudioV1(
     withBlock(VALID, {
       kind: 'text',
       variant: 'heading',
@@ -502,11 +505,11 @@ test('resolveStudio replaces what it cannot use and trims from the end', () => {
     long.rows[0].cells[0][0].text,
     'y'.repeat(STUDIO_LIMITS.headingText),
   );
-  assert.equal(resolveStudio(null, TODAY).rows.length, 0);
-  assert.equal(resolveStudio('<script>', TODAY).v, 1);
+  assert.equal(resolveStudioV1(null, TODAY).rows.length, 0);
+  assert.equal(resolveStudioV1('<script>', TODAY).v, 1);
 });
 
-test('resolveStudio hides events that have passed (Lagos date)', () => {
+test('resolveStudioV1 hides events that have passed (Lagos date)', () => {
   const doc = withBlock(VALID, {
     kind: 'events',
     variant: 'list',
@@ -516,9 +519,10 @@ test('resolveStudio hides events that have passed (Lagos date)', () => {
       { date: '2026-11-15', title: 'Tomorrow' },
     ],
   });
-  const titles = resolveStudio(doc, '2026-11-14').rows[0].cells[0][0].items.map(
-    (e) => e.title,
-  );
+  const titles = resolveStudioV1(
+    doc,
+    '2026-11-14',
+  ).rows[0].cells[0][0].items.map((e) => e.title);
   assert.deepEqual(titles, ['Today', 'Tomorrow']);
 });
 
@@ -584,13 +588,13 @@ test('embeds load from the listed origins only', () => {
     assert.ok(STUDIO_EMBED_ORIGINS.includes(new URL(embedUrl(v)).origin));
 });
 
-test('defaultStudioDocument is a valid starter page in the default fonts', () => {
+test('defaultStudioDocumentV1 is a valid starter page in the default fonts', () => {
   for (const profile of [
     { bio: 'Singer, Lagos', links: 3 },
     { bio: null, links: 0 },
     { bio: '', links: 2 },
   ]) {
-    const d = defaultStudioDocument(profile);
+    const d = defaultStudioDocumentV1(profile);
     assert.equal(ok(d), true);
     assert.deepEqual(d.fonts, STUDIO_DEFAULT_FONTS);
     assert.equal(

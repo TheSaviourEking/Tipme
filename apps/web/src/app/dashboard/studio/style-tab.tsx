@@ -6,7 +6,7 @@ import {
   deriveStudioPalette,
   type Hex,
   type StudioCheckResult,
-  type StudioDocument,
+  type StudioDocumentV1,
   type StudioFontId,
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
@@ -114,9 +114,9 @@ export function StyleTab({
   onChange,
   readOnly,
 }: {
-  draft: StudioDocument;
+  draft: StudioDocumentV1;
   check: StudioCheckResult;
-  onChange(next: StudioDocument): void;
+  onChange(next: StudioDocumentV1): void;
   readOnly: boolean;
 }) {
   const palette = useMemo(
@@ -127,7 +127,7 @@ export function StyleTab({
   const modes =
     draft.mode === 'auto' ? (['light', 'dark'] as const) : [draft.mode];
   const [main, second] = draft.brand;
-  const set = (patch: Partial<StudioDocument>) =>
+  const set = (patch: Partial<StudioDocumentV1>) =>
     onChange({ ...draft, ...patch });
   const accentOnly = (index: 0 | 1, mode: 'light' | 'dark') =>
     palette.notes[mode].some(

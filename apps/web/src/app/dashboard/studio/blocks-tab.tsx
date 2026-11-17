@@ -13,11 +13,11 @@ import {
   STUDIO_SPACINGS,
   studioCounts,
   STUDIO_LIMITS as L,
-  type StudioBlock,
+  type StudioBlockV1,
   type StudioColumns,
-  type StudioDocument,
+  type StudioDocumentV1,
   type StudioImage,
-  type StudioRow,
+  type StudioRowV1,
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -84,8 +84,8 @@ export interface BlocksTarget {
 }
 
 type Confirm =
-  | { kind: 'row'; row: StudioRow; index: number }
-  | { kind: 'block'; block: StudioBlock };
+  | { kind: 'row'; row: StudioRowV1; index: number }
+  | { kind: 'block'; block: StudioBlockV1 };
 
 const BACKGROUND_LABEL = {
   page: 'Page',
@@ -113,8 +113,8 @@ export function BlocksTab({
   target,
   onOpenRow,
 }: {
-  draft: StudioDocument;
-  update(fn: (doc: StudioDocument) => StudioDocument): void;
+  draft: StudioDocumentV1;
+  update(fn: (doc: StudioDocumentV1) => StudioDocumentV1): void;
   readOnly: boolean;
   images: StudioImage[];
   upload(file: Blob): Promise<{ imageId: string } | { code: string }>;
@@ -218,7 +218,7 @@ export function BlocksTab({
     shiftRow(index, to);
   };
 
-  const shiftBlock = (block: StudioBlock, to: BlockMove, focus: string) => {
+  const shiftBlock = (block: StudioBlockV1, to: BlockMove, focus: string) => {
     const next = moveBlock(draft, block.id, to);
     if (!next) {
       setSaid(
@@ -237,7 +237,7 @@ export function BlocksTab({
     focusNext.current = `[data-block="${block.id}"] ${focus}`;
   };
 
-  const blockKeys = (event: KeyboardEvent, block: StudioBlock) => {
+  const blockKeys = (event: KeyboardEvent, block: StudioBlockV1) => {
     const to = (
       {
         ArrowUp: 'up',
@@ -627,10 +627,10 @@ function RowToolbar({
   savePhoto,
   photoReason,
 }: {
-  row: StudioRow;
+  row: StudioRowV1;
   index: number;
-  draft: StudioDocument;
-  update(fn: (doc: StudioDocument) => StudioDocument): void;
+  draft: StudioDocumentV1;
+  update(fn: (doc: StudioDocumentV1) => StudioDocumentV1): void;
   images: StudioImage[];
   savePhoto: SavePhoto;
   photoReason: string | null;
@@ -750,12 +750,12 @@ function AddBlock({
   savePhoto,
   onAdd,
 }: {
-  draft: StudioDocument;
-  row: StudioRow;
+  draft: StudioDocumentV1;
+  row: StudioRowV1;
   cell: number;
   profile: { bio: boolean; links: number };
   savePhoto: SavePhoto;
-  onAdd(block: StudioBlock): void;
+  onAdd(block: StudioBlockV1): void;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);

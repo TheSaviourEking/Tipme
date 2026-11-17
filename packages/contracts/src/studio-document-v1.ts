@@ -4,7 +4,7 @@
  * CSS; see studio-colour.ts), registry ids, enum steps, user text, kobo strings, dates and TipMe
  * image ids. Nothing in it is a CSS length, position, size, font name, URL to an image, or style.
  *
- * `studioDocumentSchema` is strict and is used for writes. `resolveStudio` is for reads: it never
+ * `studioDocumentV1Schema` is strict and is used for writes. `resolveStudioV1` is for reads: it never
  * throws, and turns anything (an old document, a registry change, a hand-edited row) into a
  * document the schema accepts.
  */
@@ -27,7 +27,7 @@ import {
 // ---------------------------------------------------------------------------------------------
 // Types
 
-/** Each list starts with the value `resolveStudio` uses when a stored one is unknown. */
+/** Each list starts with the value `resolveStudioV1` uses when a stored one is unknown. */
 export const STUDIO_MODES = [
   'light',
   'dark',
@@ -60,7 +60,7 @@ export const STUDIO_BLOCK_VARIANTS = {
   about: ['plain'],
   supporters: ['names'],
 } as const;
-export type StudioBlockKind = keyof typeof STUDIO_BLOCK_VARIANTS;
+export type StudioBlockKindV1 = keyof typeof STUDIO_BLOCK_VARIANTS;
 
 export interface StudioImageRef {
   imageId: string;
@@ -68,7 +68,7 @@ export interface StudioImageRef {
   decorative?: true;
 }
 
-export type StudioBlock =
+export type StudioBlockV1 =
   | {
       id: string;
       kind: 'text';
@@ -129,28 +129,28 @@ export type StudioBlock =
   /** Refused until Task 13 (STUDIO_SUPPORTER_WALL). */
   | { id: string; kind: 'supporters'; variant: 'names' };
 
-export interface StudioRow {
+export interface StudioRowV1 {
   id: string;
   columns: StudioColumns;
   spacing: StudioSpacing;
   background: StudioRowBackground;
   /** One list of blocks per column: `cells.length` is the column count. */
-  cells: StudioBlock[][];
+  cells: StudioBlockV1[][];
 }
 
-export interface StudioDocument {
+export interface StudioDocumentV1 {
   v: 1;
   brand: [Hex] | [Hex, Hex];
   mode: StudioMode;
   fonts: { heading: StudioFontId; body: StudioFontId };
   scale: StudioScaleStep;
   corners: (typeof STUDIO_CORNERS)[number];
-  rows: StudioRow[];
+  rows: StudioRowV1[];
 }
 
 /** What the public page receives (Task 7 adds it to PublicProfile behind the page_studio switch). */
-export interface PublicStudio {
-  document: StudioDocument;
+export interface PublicStudioV1 {
+  document: StudioDocumentV1;
   palette: StudioPalette;
   images: Record<string, { path: string; width: number; height: number }>;
   checkVersion: number;
@@ -464,7 +464,7 @@ const rowSchema = z.strictObject({
 });
 
 /** Page-wide totals, in reading order. Shared by the schema and the design check. */
-export function studioCounts(doc: Pick<StudioDocument, 'rows'>) {
+export function studioCounts(doc: Pick<StudioDocumentV1, 'rows'>) {
   const counts = {
     blocks: 0,
     images: 0,
@@ -525,7 +525,7 @@ const documentSchema = z
         ids.add(each);
       }
     });
-    const c = studioCounts(doc as unknown as StudioDocument);
+    const c = studioCounts(doc as unknown as StudioDocumentV1);
     if (c.blocks > L.blocks) fail(['rows'], `at most ${L.blocks} blocks`);
     if (c.images > L.pageImages)
       fail(['rows'], `at most ${L.pageImages} photos`);
@@ -538,8 +538,8 @@ const documentSchema = z
   });
 
 /** Strict: refuses unknown keys, sizes, positions and anything past a limit. For writes. */
-export const studioDocumentSchema =
-  documentSchema as unknown as z.ZodType<StudioDocument>;
+export const studioDocumentV1Schema =
+  documentSchema as unknown as z.ZodType<StudioDocumentV1>;
 
 // ---------------------------------------------------------------------------------------------
 // Resolver (reads)
@@ -565,7 +565,7 @@ function brandOf(v: unknown): [Hex] | [Hex, Hex] {
   return second ? [first, second] : [first];
 }
 
-function fontsOf(v: unknown): StudioDocument['fonts'] {
+function fontsOf(v: unknown): StudioDocumentV1['fonts'] {
   const f = isObj(v) ? v : {};
   const can = (id: unknown, role: 'heading' | 'body') =>
     STUDIO_FONTS.find((font) => font.id === id && font.roles.includes(role))
@@ -587,14 +587,14 @@ function imageRefOf(v: unknown): StudioImageRef | null {
 }
 
 /** One block as stored, or null when it can't be shown (unknown kind, no image, bad link). */
-function blockOf(v: unknown, today: string): StudioBlock | null {
+function blockOf(v: unknown, today: string): StudioBlockV1 | null {
   if (
     !isObj(v) ||
     typeof v['kind'] !== 'string' ||
     !(v['kind'] in STUDIO_BLOCK_VARIANTS)
   )
     return null;
-  const kind = v['kind'] as StudioBlockKind;
+  const kind = v['kind'] as StudioBlockKindV1;
   const blockId = typeof v['id'] === 'string' ? v['id'] : '';
   const variant = pick(
     v['variant'],
@@ -721,7 +721,7 @@ function backgroundOf(v: unknown, twoColours: boolean): StudioRowBackground {
   return b === 'second' && !twoColours ? 'colour' : b;
 }
 
-function rowOf(v: Loose, twoColours: boolean, today: string): StudioRow {
+function rowOf(v: Loose, twoColours: boolean, today: string): StudioRowV1 {
   const rawCells = Array.isArray(v['cells']) ? v['cells'] : [];
   const columns = STUDIO_COLUMNS.includes(v['columns'] as StudioColumns)
     ? (v['columns'] as StudioColumns)
@@ -731,7 +731,7 @@ function rowOf(v: Loose, twoColours: boolean, today: string): StudioRow {
   const cells = Array.from({ length: columnCount(columns) }, (_, i) =>
     (Array.isArray(rawCells[i]) ? (rawCells[i] as unknown[]) : [])
       .map((b) => blockOf(b, today))
-      .filter((b): b is StudioBlock => b !== null)
+      .filter((b): b is StudioBlockV1 => b !== null)
       .slice(0, L.blocksPerCell),
   );
   return {
@@ -744,7 +744,7 @@ function rowOf(v: Loose, twoColours: boolean, today: string): StudioRow {
 }
 
 /** Page-wide limits, in reading order: whatever comes later is trimmed first. */
-function withinLimits(rows: StudioRow[]): StudioRow[] {
+function withinLimits(rows: StudioRowV1[]): StudioRowV1[] {
   const left: Record<
     'blocks' | 'images' | 'videos' | 'events' | 'services' | 'about' | 'links',
     number
@@ -768,9 +768,9 @@ function withinLimits(rows: StudioRow[]): StudioRow[] {
         ? 'page'
         : row.background;
     const cells = row.cells.map((cell) =>
-      cell.flatMap((b): StudioBlock[] => {
+      cell.flatMap((b): StudioBlockV1[] => {
         if (left.blocks < 1) return [];
-        let next: StudioBlock = b;
+        let next: StudioBlockV1 = b;
         if (b.kind === 'photo' && !take('images')) return [];
         if (b.kind === 'video' && !take('videos')) return [];
         if ((b.kind === 'about' || b.kind === 'links') && !take(b.kind))
@@ -784,7 +784,7 @@ function withinLimits(rows: StudioRow[]): StudioRow[] {
           const key = b.kind;
           const n = Math.min(b.items.length, left[key]);
           left[key] -= n;
-          next = { ...b, items: b.items.slice(0, n) } as StudioBlock;
+          next = { ...b, items: b.items.slice(0, n) } as StudioBlockV1;
         }
         take('blocks');
         return [next];
@@ -795,7 +795,7 @@ function withinLimits(rows: StudioRow[]): StudioRow[] {
 }
 
 /** Keeps each valid id the first time it appears; gives every other row and block a new one. */
-function withIds(rows: StudioRow[]): StudioRow[] {
+function withIds(rows: StudioRowV1[]): StudioRowV1[] {
   const seen = new Set<string>();
   const keep = (each: string) => {
     if (!ID.test(each) || seen.has(each)) return false;
@@ -823,7 +823,7 @@ function withIds(rows: StudioRow[]): StudioRow[] {
   }));
 }
 
-function resolve(raw: unknown, today: string): StudioDocument {
+function resolve(raw: unknown, today: string): StudioDocumentV1 {
   const o = isObj(raw) ? raw : {};
   const brand = brandOf(o['brand']);
   const rows = (Array.isArray(o['rows']) ? o['rows'] : [])
@@ -841,7 +841,7 @@ function resolve(raw: unknown, today: string): StudioDocument {
   };
 }
 
-const EMPTY: StudioDocument = {
+const EMPTY: StudioDocumentV1 = {
   v: 1,
   brand: ['#7a32f9'],
   mode: 'light',
@@ -857,7 +857,7 @@ const EMPTY: StudioDocument = {
  * blocks are dropped, lists and rows past a limit are trimmed from the end, and events before
  * `today` (the Lagos date, YYYY-MM-DD) are hidden. A valid document comes back unchanged.
  */
-export function resolveStudio(raw: unknown, today: string): StudioDocument {
+export function resolveStudioV1(raw: unknown, today: string): StudioDocumentV1 {
   try {
     return resolve(raw, today);
   } catch {
@@ -866,12 +866,12 @@ export function resolveStudio(raw: unknown, today: string): StudioDocument {
 }
 
 /** A starter page that passes the design check: the bio and social links if there are any. */
-export function defaultStudioDocument(profile: {
+export function defaultStudioDocumentV1(profile: {
   bio?: string | null;
   links: number;
-}): StudioDocument {
-  const rows: StudioRow[] = [];
-  const row = (n: number, block: StudioBlock): StudioRow => ({
+}): StudioDocumentV1 {
+  const rows: StudioRowV1[] = [];
+  const row = (n: number, block: StudioBlockV1): StudioRowV1 => ({
     id: `row0000${n}`,
     columns: '1',
     spacing: 'm',
