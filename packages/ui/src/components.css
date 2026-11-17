@@ -1,3 +1,11 @@
+/* Every amount of money: Inter (it draws ₦; DM Serif Display and Manrope do not) with tabular
+   figures, so a ₦ never comes from another font and columns of amounts line up. Important because
+   amounts sit inside headings, keys and table cells whose own rules set a font with `font:`. */
+.money {
+  font-family: var(--font-money) !important;
+  font-variant-numeric: var(--numeric-variant) !important;
+}
+
 .tm-container {
   width: min(var(--container), calc(100% - 5rem));
   margin-inline: auto;

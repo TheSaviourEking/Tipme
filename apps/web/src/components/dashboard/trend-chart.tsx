@@ -1,4 +1,4 @@
-import { naira } from '@/lib/money';
+import { Money } from '@/components/money';
 
 /** Seven bars plus a text table, so the trend is readable without the picture. */
 export function TrendChart({
@@ -42,7 +42,9 @@ export function TrendChart({
             {days.map((day) => (
               <tr key={day.date}>
                 <th scope="row">{label(day.date)}</th>
-                <td>{naira(day.netMinor)}</td>
+                <td>
+                  <Money minor={day.netMinor} />
+                </td>
               </tr>
             ))}
           </tbody>

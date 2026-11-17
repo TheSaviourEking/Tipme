@@ -16,9 +16,9 @@ import { ProBadge } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
 import { ProfileCover } from '@/components/profile/cover';
 import { StudioPage } from '@/components/studio/studio-page';
-import { formatNaira } from '@/lib/demo-amount';
 import { apiUrl } from '@/lib/session-client';
 import { amountOptions } from '@/lib/tip-amounts';
+import { Money } from '@/components/money';
 
 export type PreviewDevice = 'phone' | 'desktop';
 
@@ -178,13 +178,13 @@ export function StudioPreview({
                       key={p.minor}
                       data-on={p.minor === amounts.defaultMinor || undefined}
                     >
-                      {formatNaira(p.minor)}
+                      <Money minor={p.minor} />
                     </li>
                   ))}
                 </ul>
                 {amounts.defaultMinor !== null && (
                   <p className="pst-tip__go">
-                    Tip {formatNaira(amounts.defaultMinor)}
+                    Tip <Money minor={amounts.defaultMinor} />
                   </p>
                 )}
                 <p className="pst-tip__fee">Fees are shown before you pay.</p>

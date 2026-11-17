@@ -44,6 +44,7 @@ import {
   withdrawState,
   withdrawUnsure,
 } from '@/lib/withdraw-state';
+import { Money } from '@/components/money';
 
 /**
  * Re-read on a withdrawal change or a tip (live updates, PR 2), but never on a resync, a tab focus
@@ -154,7 +155,7 @@ function History({
             return (
               <li key={row.payoutId} className="withdraw__row" data-open={open}>
                 <span className="withdraw__amount">
-                  {formatNaira(row.amountMinor)}
+                  <Money minor={row.amountMinor} />
                 </span>
                 <Stamp tone={view.stamp}>{view.label}</Stamp>
                 {open && (
@@ -169,7 +170,7 @@ function History({
                     (withdraw-and-audit plan, money-safety proofs). Only on a row the API reports failed. */}
                 {row.state === 'failed' && (
                   <p className="withdraw__back">
-                    Back in your balance: {formatNaira(row.amountMinor)}
+                    Back in your balance: <Money minor={row.amountMinor} />
                   </p>
                 )}
                 {bank && <p className="withdraw__bank">{bank}</p>}
@@ -379,7 +380,7 @@ export default function WithdrawPage({
           title="Withdrawal requested"
           className="withdraw__done"
         >
-          {done}
+          <span className="money">{done}</span>
           {copy.withdrawDoneSuffix}{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
         </Slip>
@@ -394,7 +395,7 @@ export default function WithdrawPage({
               Available
             </h2>
             <p className="withdraw__figure" data-testid="withdraw-available">
-              {formatNaira(summary.availableMinor)}
+              <Money minor={summary.availableMinor} />
             </p>
             <p className="withdraw__lamp">
               <Lamp tone={lamp.tone} />
@@ -464,6 +465,7 @@ export default function WithdrawPage({
               <form className="withdraw__form" onSubmit={submit} noValidate>
                 <InputField
                   id={`${id}-amount`}
+                  className="money"
                   label="Amount (NGN)"
                   inputMode="decimal"
                   autoComplete="off"
@@ -497,7 +499,7 @@ export default function WithdrawPage({
                         aria-pressed={chosen === minor}
                         onClick={() => choose(minor)}
                       >
-                        {formatNaira(minor)}
+                        <Money minor={minor} />
                       </button>
                     ))}
                     <button
@@ -515,21 +517,27 @@ export default function WithdrawPage({
                     <dl className="withdraw__summary">
                       <dt>Transfer fee</dt>
                       <dd data-testid="transfer-fee">
-                        {figures
-                          ? figures.feePaidBy === 'tipme'
-                            ? 'Paid by TipMe'
-                            : formatNaira(figures.feeMinor)
-                          : '—'}
+                        {figures ? (
+                          figures.feePaidBy === 'tipme' ? (
+                            'Paid by TipMe'
+                          ) : (
+                            <Money minor={figures.feeMinor} />
+                          )
+                        ) : (
+                          '—'
+                        )}
                       </dd>
                       <dt>You’ll receive</dt>
                       <dd data-testid="you-receive">
-                        {figures ? formatNaira(figures.receiveMinor) : '—'}
+                        {figures ? <Money minor={figures.receiveMinor} /> : '—'}
                       </dd>
                       <dt>Balance afterwards</dt>
                       <dd data-testid="balance-afterwards">
-                        {covered && chosen !== null
-                          ? formatNaira(available - chosen)
-                          : '—'}
+                        {covered && chosen !== null ? (
+                          <Money minor={available - chosen} />
+                        ) : (
+                          '—'
+                        )}
                       </dd>
                     </dl>
                   </section>
@@ -542,14 +550,21 @@ export default function WithdrawPage({
                   }
                   aria-busy={busy}
                 >
-                  {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
+                  {amount ? (
+                    <span>
+                      Withdraw <Money minor={amount} />
+                    </span>
+                  ) : (
+                    'Withdraw'
+                  )}
                 </Button>
                 {figures?.feePaidBy === 'user' && (
                   <p className="tm-hint">{FEE_DIFFERENCE_NOTE}</p>
                 )}
                 <p className="tm-hint">
                   Once sent, a withdrawal can’t be cancelled. The smallest
-                  withdrawal is {smallest}, or your whole balance if it’s less.
+                  withdrawal is <span className="money">{smallest}</span>, or
+                  your whole balance if it’s less.
                 </p>
               </form>
             </Surface>

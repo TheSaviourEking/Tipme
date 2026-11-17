@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Skeleton, Slip } from '@tipme/ui';
 import { mockCheckoutPay, mockCheckoutSummary } from '@/lib/api-client';
-import { formatDemoAmount } from '@/lib/demo-amount';
+import { Money } from '@/components/money';
 
 const outcomes = [
   { outcome: 'succeed', label: 'Pay', hint: 'The payment succeeds.' },
@@ -121,7 +121,7 @@ export function MockCheckoutView() {
       {summary && (
         <>
           <p className="mock-provider__amount">
-            {formatDemoAmount(Number(summary.amountMinor))}
+            <Money code minor={Number(summary.amountMinor)} />
           </p>
           <p>
             {pro

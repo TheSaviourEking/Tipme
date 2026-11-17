@@ -66,7 +66,8 @@ export default function ForCreators() {
             <p>
               Free to start. TipMe keeps {FREE_SHARE_PERCENT}% of each tip,
               processing included, and you withdraw to your bank from{' '}
-              {MIN_WITHDRAWAL}, or take your whole balance if it is less.
+              <span className="money">{MIN_WITHDRAWAL}</span>, or take your
+              whole balance if it is less.
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">

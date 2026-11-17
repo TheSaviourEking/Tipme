@@ -132,7 +132,7 @@ export function WhereYouMeetPeople() {
           className="meet__tip"
           onClick={tip}
         >
-          Tip {TIP_TEXT}
+          Tip <span className="money">{TIP_TEXT}</span>
         </Button>
         <div
           className="meet__tray"
@@ -152,7 +152,10 @@ export function WhereYouMeetPeople() {
               className="meet__slip"
               data-testid="example-slip"
             >
-              <strong>{TIP_TEXT}</strong> from {slip.who}
+              <strong>
+                <span className="money">{TIP_TEXT}</span>
+              </strong>{' '}
+              from {slip.who}
               <br />
               {slip.note}
             </Surface>

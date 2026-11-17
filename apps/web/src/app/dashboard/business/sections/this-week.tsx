@@ -18,8 +18,8 @@ import {
   useInsightsView,
   weekText,
 } from '@/lib/business/insights-api';
-import { naira } from '@/lib/money';
 import { useBusinessRevision } from '@/lib/business/use-business-live';
+import { Money } from '@/components/money';
 
 /** A person's tags with any mention, most first; under 3 reads "fewer than 3", never a number. */
 function topTags(person: MemberWeek): string {
@@ -195,11 +195,13 @@ export function ThisWeekCard({ business }: { business: BusinessDetail }) {
                       <td>{topTags(person)}</td>
                       {shares && (
                         <td>
-                          {person.amountMinor !== undefined
-                            ? naira(person.amountMinor)
-                            : 'hidden' in person.tips
-                              ? 'Hidden'
-                              : 'Not shared'}
+                          {person.amountMinor !== undefined ? (
+                            <Money minor={person.amountMinor} />
+                          ) : 'hidden' in person.tips ? (
+                            'Hidden'
+                          ) : (
+                            'Not shared'
+                          )}
                         </td>
                       )}
                     </tr>

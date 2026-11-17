@@ -89,7 +89,7 @@ test('“Back in your balance” is written only for a failed row, once, with th
   const expression = view.slice(guard.from, guard.to);
   assert.match(
     expression,
-    /Back in your balance: \{formatNaira\(row\.amountMinor\)\}/,
+    /Back in your balance: <Money minor=\{row\.amountMinor\} \/>/,
   );
   assert.ok(lines[0].index > guard.from && lines[0].index < guard.to);
 });

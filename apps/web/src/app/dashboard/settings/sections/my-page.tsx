@@ -28,6 +28,7 @@ import { studioEntry } from '../../studio/studio-editor-model';
 import { PagePreview } from './page-preview';
 import { YourLinks, linksDraftFrom } from './your-links';
 import { SettingsChapter } from './section';
+import { Money } from '@/components/money';
 
 // My page (ScreenSettings): whether the page is live, its photo, handle, amounts and words.
 
@@ -554,9 +555,15 @@ export function TipAmountsSettings() {
         <h3>Tip amounts</h3>
         <p className="tm-hint">
           Your page offers{' '}
-          {amounts.presetsMinor.map((minor) => formatNaira(minor)).join(', ')},
-          and supporters can tip any amount from {formatNaira(amounts.minMinor)}
-          . Choosing your own amounts and minimum is part of TipMe Pro.
+          {amounts.presetsMinor.map((minor, i) => (
+            <span key={minor}>
+              {i > 0 && ', '}
+              <Money minor={minor} />
+            </span>
+          ))}
+          , and supporters can tip any amount from{' '}
+          <Money minor={amounts.minMinor} />. Choosing your own amounts and
+          minimum is part of TipMe Pro.
         </p>
         <p className="tm-hint">
           Pro pages choose which amount the page starts on.
@@ -638,6 +645,7 @@ export function TipAmountsSettings() {
             <InputField
               key={index}
               id={`${id}-preset-${index}`}
+              className="money"
               label={`Amount ${index + 1}${index === 0 ? '' : ' (optional)'}`}
               inputMode="numeric"
               autoComplete="off"
@@ -661,6 +669,7 @@ export function TipAmountsSettings() {
         </fieldset>
         <InputField
           id={`${id}-minimum`}
+          className="money"
           label="Smallest tip (NGN)"
           inputMode="numeric"
           autoComplete="off"
@@ -700,9 +709,13 @@ export function TipAmountsSettings() {
                   }}
                 />
                 <span className="tip-start__amount">
-                  {minor === null
-                    ? `Closest to ${formatNaira(200_000)} (automatic)`
-                    : formatNaira(minor)}
+                  {minor === null ? (
+                    <>
+                      Closest to <Money minor={200_000} /> (automatic)
+                    </>
+                  ) : (
+                    <Money minor={minor} />
+                  )}
                 </span>
                 {/* The checked radio already says so to a screen reader; this is for the eye. */}
                 {checked && (

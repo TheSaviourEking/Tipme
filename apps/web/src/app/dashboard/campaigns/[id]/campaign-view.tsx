@@ -20,12 +20,12 @@ import { usePanel } from '@/components/dashboard/use-panel';
 import { track } from '@/lib/analytics';
 import { interfaceFont } from '@/lib/brand-font';
 import { campaignLink } from '@/lib/campaign-link';
-import { naira } from '@/lib/money';
 import { drawQrCard } from '@/lib/qr-card';
 import { styleById } from '@/lib/qr-render';
 import { apiFetch } from '@/lib/session-client';
 import { madeOn, useOrigin } from '../campaigns-view';
 import { CampaignPageEditor } from './page-editor';
+import { Money } from '@/components/money';
 
 /** The campaign's QR: the same card, looks and download as My QR, holding the campaign link. */
 function CampaignQr({ detail }: { detail: CampaignDetail }) {
@@ -259,9 +259,11 @@ export default function CampaignPage() {
         <div>
           <dt>Received</dt>
           <dd>
-            {detail.receivedNetMinor === null
-              ? 'Hidden'
-              : naira(detail.receivedNetMinor)}
+            {detail.receivedNetMinor === null ? (
+              'Hidden'
+            ) : (
+              <Money minor={detail.receivedNetMinor} />
+            )}
           </dd>
           <dd className="tm-hint">After TipMe’s fee</dd>
         </div>

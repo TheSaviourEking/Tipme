@@ -19,6 +19,7 @@ import { refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import type { SessionResult } from '@/lib/session-client';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+import { Money } from '@/components/money';
 
 /** The board's step: ₦500, within the server's limits (₦100 to ₦1,000,000). */
 const STEP_MINOR = BigInt(50_000);
@@ -125,7 +126,13 @@ function PriceCard({
         <h2>{words.title}</h2>
         <p data-testid={`${words.testId}-live`}>
           <strong>
-            {live === null ? 'Not set' : `${naira(live)} a month`}
+            {live === null ? (
+              'Not set'
+            ) : (
+              <>
+                <Money minor={live} /> a month
+              </>
+            )}
           </strong>
         </p>
         {state.current && (
@@ -156,7 +163,7 @@ function PriceCard({
               −
             </Button>
             <output aria-live="polite" data-testid={`${words.testId}-new`}>
-              {naira(shown)}
+              <Money minor={shown} />
             </output>
             <Button
               type="button"
@@ -308,9 +315,16 @@ export default function PricesPage() {
           <ol aria-labelledby={`${id}-history`} className="ops-list">
             {history.map(({ row, was }) => (
               <li key={row.id}>
-                <strong>{naira(BigInt(row.amountMinor))} a month</strong> ·{' '}
-                {PLAN_WORD[row.plan]} · {when(row.effectiveFrom)} · {who(row)}
-                {was !== null && <> · was {naira(was)}</>}
+                <strong>
+                  <Money minor={BigInt(row.amountMinor)} /> a month
+                </strong>{' '}
+                · {PLAN_WORD[row.plan]} · {when(row.effectiveFrom)} · {who(row)}
+                {was !== null && (
+                  <>
+                    {' '}
+                    · was <Money minor={was} />
+                  </>
+                )}
                 <br />
                 <span className="tm-hint">{row.reason}</span>
               </li>
