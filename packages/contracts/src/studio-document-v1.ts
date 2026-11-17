@@ -893,3 +893,18 @@ export function defaultStudioDocumentV1(profile: {
     );
   return { ...structuredClone(EMPTY), rows };
 }
+
+/** Internal: the v1 text and value rules, shared with the v2 document so the two cannot drift. */
+export const studioDocumentShared = {
+  ID,
+  UUID,
+  TIME,
+  fit,
+  isLine,
+  isParagraph,
+  isDate,
+  isKobo,
+  isObj,
+  optional,
+  without,
+};

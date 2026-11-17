@@ -5,17 +5,22 @@
 // font pair fontsOk allows, rows, columns and blocks up to the limits, and text from empty to the
 // limit (biased to the limit, with long unbroken words, emoji, right-to-left and Yoruba text).
 // studioDocumentV1Arb({ valid: false }) makes a valid one, then breaks exactly one rule.
+// studioDocumentArb({ valid }) is the same for the v2 document: a style, an accent (or none), a mode,
+// a cover the style offers and up to 45 blocks of the eight v2 kinds, trimmed to the limits.
 // checkContext() makes the server facts the design check reads: image sizes and rendition
 // bytes, video status and the profile's bio and link count.
 import fc from 'fast-check';
 import {
   STUDIO_FIX_NEEDS_INPUT,
   STUDIO_FONTS,
+  STUDIO_ACCENT_IDS,
   STUDIO_LIMITS,
+  STUDIO_STYLE_IDS,
   applyStudioFixV1,
   checkDesignV1,
   cleanStudioText,
   fontsOk,
+  resolveStudio,
   resolveStudioV1,
 } from '../../dist/index.js';
 
@@ -425,6 +430,154 @@ export function studioDocumentV1Arb({ valid: wanted = true } = {}) {
   return fc
     .tuple(valid, fc.integer({ min: 0, max: BREAKS.length - 1 }))
     .map(([d, i]) => BREAKS[i](d));
+}
+
+const blockV2 = fc.oneof(
+  fc
+    .record({
+      variant: fc.constantFrom('heading', 'paragraph'),
+      t: text(L.paragraphText),
+    })
+    .map(({ variant, t }) => ({
+      kind: 'text',
+      variant,
+      text: [...t]
+        .slice(0, variant === 'heading' ? L.headingText : L.paragraphText)
+        .join(''),
+    })),
+  fc
+    .record({
+      image: imageRef,
+      caption: fc.option(text(L.caption, { empty: false }), { nil: undefined }),
+    })
+    .map(({ image, caption }) =>
+      withoutUndefined({ kind: 'photo', ...image, caption }),
+    ),
+  fc.array(imageRef, { maxLength: L.galleryImages }).map((images) => ({
+    kind: 'gallery',
+    images: images.map(withoutUndefined),
+  })),
+  fc
+    .record({
+      url: fc.constantFrom(...VIDEO_POOL),
+      caption: fc.option(text(L.caption, { empty: false }), { nil: undefined }),
+    })
+    .map((v) => withoutUndefined({ kind: 'video', ...v })),
+  fc
+    .array(
+      fc
+        .record({
+          name: text(L.serviceName, { empty: false }),
+          detail: fc.option(text(L.serviceDetail, { empty: false }), {
+            nil: undefined,
+          }),
+          priceMinor: kobo,
+          from: fc.option(fc.constant(true), { nil: undefined }),
+        })
+        .map(withoutUndefined),
+      { maxLength: 4 },
+    )
+    .map((items) => ({ kind: 'services', items })),
+  fc
+    .array(
+      fc
+        .record({
+          date,
+          time: fc.option(fc.constantFrom('09:00', '19:30', '21:00'), {
+            nil: undefined,
+          }),
+          title: text(L.eventTitle, { empty: false }),
+          place: fc.option(text(L.eventPlace, { empty: false }), {
+            nil: undefined,
+          }),
+          note: fc.option(text(L.eventNote, { empty: false }), {
+            nil: undefined,
+          }),
+        })
+        .map(withoutUndefined),
+      { maxLength: 3 },
+    )
+    .map((items) => ({ kind: 'events', items })),
+  text(L.quoteText).map((t) => ({ kind: 'quote', text: t })),
+);
+
+const BLOCKS_V2 = 45;
+const validV2 = fc
+  .record({
+    style: fc.constantFrom(...STUDIO_STYLE_IDS),
+    accent: fc.constantFrom(null, ...STUDIO_ACCENT_IDS),
+    mode: fc.constantFrom('light', 'dark', 'auto'),
+    cover: fc.constantFrom('yours', 'gradient', 'plain'),
+    blocks: fc.array(blockV2, { maxLength: BLOCKS_V2 }),
+    ids: fc.uniqueArray(id, { minLength: BLOCKS_V2, maxLength: BLOCKS_V2 }),
+  })
+  .map(({ ids, blocks, ...doc }) =>
+    // The resolver trims to the page-wide limits and gives Sprint and Signboard a cover they offer.
+    resolveStudio(
+      { v: 2, ...doc, blocks: blocks.map((b, i) => ({ id: ids[i], ...b })) },
+      TODAY,
+    ),
+  );
+
+/** One rule broken per v2 document, each of which the strict schema must refuse. */
+const BREAKS_V2 = [
+  (d) => ({ ...d, css: 'color: red' }),
+  (d) => ({ ...d, brand: ['#7a32f9'] }),
+  (d) => ({ ...d, fonts: { heading: 'manrope', body: 'inter' } }),
+  (d) => ({ ...d, rows: [] }),
+  (d) => ({ ...d, scale: 'roomy' }),
+  (d) => ({ ...d, corners: 'soft' }),
+  (d) => ({ ...d, v: 1 }),
+  (d) => ({ ...d, style: 'neon' }),
+  (d) => ({ ...d, accent: 'magenta' }),
+  (d) => ({ ...d, accent: undefined }),
+  (d) => ({ ...d, mode: 'neon' }),
+  (d) => ({ ...d, cover: 'video' }),
+  (d) => ({ ...d, blocks: [{ id: 'aaaaaaaa', kind: 'about' }] }),
+  (d) => ({ ...d, blocks: [{ id: 'aaaaaaaa', kind: 'links' }] }),
+  (d) => ({
+    ...d,
+    blocks: [{ id: 'aaaaaaaa', kind: 'text', variant: 'lead', text: 'x' }],
+  }),
+  (d) => ({
+    ...d,
+    blocks: [
+      { id: 'aaaaaaaa', kind: 'text', variant: 'heading', level: 2, text: 'x' },
+    ],
+  }),
+  (d) => ({
+    ...d,
+    blocks: [{ id: 'aaaaaaaa', kind: 'quote', variant: 'plain', text: 'x' }],
+  }),
+  (d) => ({
+    ...d,
+    blocks: Array.from({ length: L.blocks + 1 }, (_, i) => ({
+      id: `blk${String(i).padStart(5, '0')}`,
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'x',
+    })),
+  }),
+  (d) => ({
+    ...d,
+    blocks: [
+      { id: 'aaaaaaaa', kind: 'text', variant: 'paragraph', text: 'x' },
+      { id: 'aaaaaaaa', kind: 'text', variant: 'paragraph', text: 'y' },
+    ],
+  }),
+  (d) => ({
+    ...d,
+    style: 'sprint',
+    cover: 'gradient',
+  }),
+];
+
+/** Generates v2 documents (`valid: true`) or v2 documents that break exactly one rule. */
+export function studioDocumentArb({ valid: wanted = true } = {}) {
+  if (wanted) return validV2;
+  return fc
+    .tuple(validV2, fc.integer({ min: 0, max: BREAKS_V2.length - 1 }))
+    .map(([d, i]) => BREAKS_V2[i](d));
 }
 
 export function checkContext() {
