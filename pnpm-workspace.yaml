@@ -15,3 +15,10 @@ overrides:
   body-parser: 2.4.0
   # GHSA-q7qp-rjg7-q26m: denial of service via a pending async fileFilter (the API has no uploads).
   multer: 2.5.0
+
+# Advisories the CI audit skips for now. Each one needs a reason and an end date in
+# scripts/audit-exceptions.test.mjs, which fails once the date has passed.
+auditConfig:
+  ignoreGhsas:
+    # picomatch ReDoS: no patched release yet; build-time only (via @sentry/nextjs). Until 1 Dec 2026.
+    - GHSA-fc5q-39xc-vjpf
