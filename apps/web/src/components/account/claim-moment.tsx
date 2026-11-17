@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '@tipme/ui';
 import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { claimBuzz, endsClaimMoment } from '@/lib/claim-moment';
-import { formatNaira } from '@/lib/demo-amount';
+import { Money } from '@/components/money';
 
 /** When the card touches down, for the buzz (the timeline is in globals.css, `.claim-moment`). */
 const LAND_MS = 350;
@@ -140,11 +140,13 @@ export function ClaimMoment({
           <span className="claim-moment__stamp">@{handle} · YOURS</span>
           <span className="claim-moment__keys">
             {STANDARD_TIP_PRESETS_MINOR.map((amount) => (
-              <span key={String(amount)}>{formatNaira(amount)}</span>
+              <span key={String(amount)}>
+                <Money minor={amount} />
+              </span>
             ))}
           </span>
           <span className="claim-moment__tip">
-            Tip {formatNaira(STANDARD_TIP_PRESETS_MINOR[0])}
+            Tip <Money minor={STANDARD_TIP_PRESETS_MINOR[0]} />
           </span>
         </div>
         {Array.from({ length: hearts }, (_, index) => (

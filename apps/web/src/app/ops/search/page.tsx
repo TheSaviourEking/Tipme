@@ -4,10 +4,10 @@ import Link from 'next/link';
 import { useId, useState, type FormEvent } from 'react';
 import type { OpsSearchResult } from '@tipme/contracts';
 import { Button, Card, InputField, Slip } from '@tipme/ui';
-import { nairaCode as naira } from '@/lib/money';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 import { TipRefund } from '@/components/ops/tip-refund';
+import { Money } from '@/components/money';
 
 const when = (iso: string) =>
   new Intl.DateTimeFormat('en-GB', {
@@ -131,7 +131,7 @@ export default function OpsSearchPage() {
                   <ul className="activity-list">
                     {result.tips.map((t) => (
                       <li key={t.tipId}>
-                        {naira(t.grossMinor)} to{' '}
+                        <Money code minor={t.grossMinor} /> to{' '}
                         {t.handle ? `@${t.handle}` : 'a deleted page'} ·{' '}
                         {t.status} · {when(t.at)} · <code>{t.tipId}</code>
                         {t.status === 'SUCCEEDED' &&
@@ -149,7 +149,7 @@ export default function OpsSearchPage() {
                   <ul className="activity-list">
                     {result.payouts.map((o) => (
                       <li key={o.payoutId}>
-                        {naira(o.amountMinor)} for{' '}
+                        <Money code minor={o.amountMinor} /> for{' '}
                         {o.handle ? `@${o.handle}` : 'a deleted page'} ·{' '}
                         {o.status} · {when(o.at)} · <code>{o.payoutId}</code>
                       </li>

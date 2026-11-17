@@ -28,7 +28,6 @@ import { ReasonAction } from '@/components/ops/reason-action';
 import { ResolveMoneyIssue } from '@/components/ops/resolve-money-issue';
 import { TipReverse } from '@/components/ops/tip-reverse';
 import { tipReverseView } from '@/lib/tip-reverse-view';
-import { nairaCode as naira } from '@/lib/money';
 import {
   can,
   ISSUE_KIND_LABELS,
@@ -39,6 +38,7 @@ import {
 } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { Money } from '@/components/money';
 
 // Bachs IDs are opaque (no fixed prefix); whitespace, ':' and '/' are refused. The browser
 // compiles this with the `v` flag, so '/' is escaped.
@@ -865,10 +865,31 @@ export default function IssuePage() {
           <Facts
             rows={[
               ['Status', tipProof.tip.status],
-              ['Amount', naira(tipProof.breakdown.grossMinor)],
+              [
+                'Amount',
+                <Money
+                  key="gross"
+                  code
+                  minor={tipProof.breakdown.grossMinor}
+                />,
+              ],
               // Since PR-012 processing is paid out of TipMe's share (the tip's own recorded rate); this is what TipMe keeps.
-              ['TipMe keeps', naira(tipProof.breakdown.platformFeeMinor)],
-              ['Recipient gets', naira(tipProof.breakdown.recipientNetMinor)],
+              [
+                'TipMe keeps',
+                <Money
+                  key="fee"
+                  code
+                  minor={tipProof.breakdown.platformFeeMinor}
+                />,
+              ],
+              [
+                'Recipient gets',
+                <Money
+                  key="net"
+                  code
+                  minor={tipProof.breakdown.recipientNetMinor}
+                />,
+              ],
               [
                 'Ledger',
                 tipProof.paymentLedgerTransactionId
@@ -934,7 +955,10 @@ export default function IssuePage() {
           <Facts
             rows={[
               ['Status', payout.status],
-              ['Amount', naira(payout.amountMinor)],
+              [
+                'Amount',
+                <Money key="payout" code minor={payout.amountMinor} />,
+              ],
               [
                 'Reference',
                 payout.referenceTail ? `…${payout.referenceTail}` : null,

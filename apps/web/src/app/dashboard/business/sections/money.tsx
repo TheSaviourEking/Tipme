@@ -19,6 +19,7 @@ import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
 import { withdrawRefusal, withdrawSummary } from '@/lib/withdraw-state';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+import { Money } from '@/components/money';
 
 type Loaded =
   | { kind: 'loading' }
@@ -180,7 +181,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       <p>
         Balance:{' '}
         <strong data-testid="business-balance">
-          {formatNaira(balance.balanceMinor)}
+          <Money minor={balance.balanceMinor} />
         </strong>
       </p>
       <p className="tm-hint">
@@ -189,7 +190,11 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       </p>
       {onTheWay > BigInt(0) && (
         <p data-testid="business-on-the-way">
-          On its way: <strong>{formatNaira(onTheWay)}</strong>.{' '}
+          On its way:{' '}
+          <strong>
+            <Money minor={onTheWay} />
+          </strong>
+          .{' '}
           <span className="tm-hint">
             Each share reaches the business once our payment partner has settled
             its tip.
@@ -199,8 +204,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       {heldBack > BigInt(0) && (
         <Slip title="Held back from the next shares">
           A tip was refunded after its share had been withdrawn.{' '}
-          {formatNaira(heldBack)} will be taken from the business’s next shares
-          and returned to the staff member.
+          <Money minor={heldBack} /> will be taken from the business’s next
+          shares and returned to the staff member.
         </Slip>
       )}
       {needsAccount && (
@@ -244,12 +249,14 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       )}
       {done && (
         <Slip tone="done" title="Withdrawal requested">
-          {done} is on its way to the business’s bank.
+          <span className="money">{done}</span> is on its way to the business’s
+          bank.
         </Slip>
       )}
       <form className="withdraw__form" onSubmit={submit} noValidate>
         <InputField
           id={`${id}-amount`}
+          className="money"
           label="Amount (NGN)"
           inputMode="decimal"
           autoComplete="off"
@@ -282,18 +289,34 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
           disabled={busy || !state.canWithdraw || (amount !== null && !summary)}
           aria-busy={busy}
         >
-          {amount ? `Withdraw ${formatNaira(amount)}` : 'Withdraw'}
+          {amount ? (
+            <span>
+              Withdraw <Money minor={amount} />
+            </span>
+          ) : (
+            'Withdraw'
+          )}
         </Button>
         {summary && (
           <p className="tm-hint" data-testid="business-you-receive">
-            {summary.feePaidBy === 'user' && summary.feeMinor > BigInt(0)
-              ? `Transfer fee: ${formatNaira(summary.feeMinor)}, charged by our payment partner. It comes off the amount: the business receives ${formatNaira(summary.receiveMinor)}. If the fee is different, the difference is settled on the business’s balance.`
-              : `No transfer fee comes off it this time: the business receives ${formatNaira(summary.receiveMinor)}.`}
+            {summary.feePaidBy === 'user' && summary.feeMinor > BigInt(0) ? (
+              <>
+                Transfer fee: <Money minor={summary.feeMinor} />, charged by our
+                payment partner. It comes off the amount: the business receives{' '}
+                <Money minor={summary.receiveMinor} />. If the fee is different,
+                the difference is settled on the business’s balance.
+              </>
+            ) : (
+              <>
+                No transfer fee comes off it this time: the business receives{' '}
+                <Money minor={summary.receiveMinor} />.
+              </>
+            )}
           </p>
         )}
         <p className="tm-hint">
           Once sent, a withdrawal can’t be cancelled. The smallest withdrawal
-          for a business is {formatNaira(withdrawalMinimumMinor())}, or
+          for a business is <Money minor={withdrawalMinimumMinor()} />, or
           everything it has.
         </p>
       </form>

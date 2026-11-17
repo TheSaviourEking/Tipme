@@ -1,3 +1,8 @@
+# Current task: money in Inter and Inter as the backup letters (17 November 2026)
+
+- Branch `fix/inter-fallback-money` from `origin/dev`; one PR into `dev`, not merged. The owner's three fixes: every amount in Inter with tabular figures (`<Money>` / `.money`), Inter (unicode-range: ₦, combining marks, Latin Extended-B, IPA, Latin Extended Additional) straight after Manrope, DM Serif Display and every Studio face, and `--text-tertiary` #6e6a63. Rulings in DECISION-LOG 2026-11-17.
+- No migration, no API change. Linux visual baselines come from CI artifacts only.
+
 # Current task: the last tinted Notices (16 November 2026)
 
 - Branch `refactor/notice-to-design-law` from `origin/dev`; one PR into `dev`, not merged. Replaces all 136 remaining `Notice` uses (55 files: dashboard, settings, account, `/ops`) with `Slip`, `StandingWarning`, `LoadFailed` (Try again) per the states plan and StatesMap; deletes `Notice` and `.tm-notice`. Words unchanged. Rulings in DECISION-LOG 2026-11-16.

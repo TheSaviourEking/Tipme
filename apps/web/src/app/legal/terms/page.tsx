@@ -1,17 +1,19 @@
 import { LegalPlaceholder } from '@/components/legal-placeholder';
 import { FEE_POLICY_V2_FREE, FEE_POLICY_V2_PRO, priceTip } from '@tipme/domain';
-import { formatNaira } from '@/lib/demo-amount';
 import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
 import { previewMetadata } from '@/lib/metadata';
+import { Money } from '@/components/money';
 
 // The example in the Fees section, worked out by the same pricing the quotes use.
 const EXAMPLE_TIP = BigInt(500000);
-const exampleNet = (policy: typeof FEE_POLICY_V2_FREE) =>
-  formatNaira(Number(priceTip(EXAMPLE_TIP, policy).recipientNetMinor));
+const exampleNet = (policy: typeof FEE_POLICY_V2_FREE) => (
+  <Money minor={priceTip(EXAMPLE_TIP, policy).recipientNetMinor} />
+);
 // The refund example: a refund gives back the tip minus TipMe's fee, which is what the recipient got.
 const REFUND_TIP = BigInt(1000000);
-const refundBack = (policy: typeof FEE_POLICY_V2_FREE) =>
-  formatNaira(Number(priceTip(REFUND_TIP, policy).recipientNetMinor));
+const refundBack = (policy: typeof FEE_POLICY_V2_FREE) => (
+  <Money minor={priceTip(REFUND_TIP, policy).recipientNetMinor} />
+);
 
 export const metadata = previewMetadata(
   'Terms of use',
@@ -36,27 +38,30 @@ export default function TermsPlaceholder() {
         <h2 id="fees">Fees</h2>
         <p>
           <strong>If you are tipping,</strong> you pay exactly the amount you
-          choose. TipMe adds no charge on top. The smallest tip is ₦2,000.
+          choose. TipMe adds no charge on top. The smallest tip is{' '}
+          <span className="money">₦2,000</span>.
         </p>
         <p>
           <strong>If you receive tips,</strong> TipMe keeps {FREE_SHARE_PERCENT}
           % of each tip on the Free plan, or {PRO_SHARE_PERCENT}% on TipMe Pro,
           unless we have agreed a lower fee with you, and you receive the rest.
           The fee includes the cost of processing the payment. From a{' '}
-          {formatNaira(Number(EXAMPLE_TIP))} tip, you receive{' '}
+          <Money minor={Number(EXAMPLE_TIP)} /> tip, you receive{' '}
           {exampleNet(FEE_POLICY_V2_FREE)} on Free, or{' '}
           {exampleNet(FEE_POLICY_V2_PRO)} on Pro. The fee is set by your plan
           when the supporter sees the amount, so a tip keeps the fee it was
           shown with if your plan changes afterwards.
         </p>
         <p>
-          <strong>Withdrawals:</strong> The smallest withdrawal is ₦2,000,
-          unless you are withdrawing your whole balance. Each withdrawal has our
-          payment partner’s ₦50 transfer fee, taken from the amount: if you
-          withdraw ₦10,000, you receive ₦9,950. A balance of ₦50 or less can’t
-          be withdrawn. If our payment partner charges a different fee for a
-          withdrawal, the difference is taken from or added back to your
-          balance.
+          <strong>Withdrawals:</strong> The smallest withdrawal is{' '}
+          <span className="money">₦2,000</span>, unless you are withdrawing your
+          whole balance. Each withdrawal has our payment partner’s{' '}
+          <span className="money">₦50</span> transfer fee, taken from the
+          amount: if you withdraw <span className="money">₦10,000</span>, you
+          receive <span className="money">₦9,950</span>. A balance of{' '}
+          <span className="money">₦50</span> or less can’t be withdrawn. If our
+          payment partner charges a different fee for a withdrawal, the
+          difference is taken from or added back to your balance.
         </p>
       </section>
       {/* The owner's decisions, 14 Nov 2026: TipMe keeps its fee on a refund (the supporter gets back
@@ -67,7 +72,7 @@ export default function TermsPlaceholder() {
         <p>
           <strong>Refunds.</strong> If a tip is refunded, the supporter gets
           back the tip minus TipMe’s fee. TipMe keeps its fee. From a{' '}
-          {formatNaira(Number(REFUND_TIP))} tip, the supporter gets back{' '}
+          <Money minor={Number(REFUND_TIP)} /> tip, the supporter gets back{' '}
           {refundBack(FEE_POLICY_V2_FREE)} on Free, or{' '}
           {refundBack(FEE_POLICY_V2_PRO)} on Pro, and you give back what you
           received.

@@ -92,7 +92,7 @@ export default function Home() {
               TipMe keeps {FREE_SHARE_PERCENT}% of each tip on Free, or{' '}
               {PRO_SHARE_PERCENT}% on Pro, and that covers processing. You
               receive the rest, and see every tip and note. The smallest tip is{' '}
-              {MINIMUM_TIP_TEXT}.
+              <span className="money">{MINIMUM_TIP_TEXT}</span>.
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">

@@ -485,10 +485,10 @@ export default function OpsPagesPage() {
       <h1>Pages</h1>
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
-        below {MINIMUM_TIP_TEXT}) and change their username. TipMe keeps{' '}
-        {PRO_SHARE_PERCENT}% of each tip on Pro and {FREE_SHARE_PERCENT}% on
-        Free, processing included. Withdrawals work the same on both plans.{' '}
-        {copy.opsBilling}
+        below <span className="money">{MINIMUM_TIP_TEXT}</span>) and change
+        their username. TipMe keeps {PRO_SHARE_PERCENT}% of each tip on Pro and{' '}
+        {FREE_SHARE_PERCENT}% on Free, processing included. Withdrawals work the
+        same on both plans. {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

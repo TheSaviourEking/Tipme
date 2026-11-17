@@ -21,6 +21,9 @@ const SANS =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 // The first family is never loaded (emails load nothing remote); it only matches if installed.
 const SERIF = "'DM Serif Display',Georgia,'Times New Roman',serif";
+// Amounts: Inter where installed (emails load no fonts), then the system sans, which all draw ₦;
+// tabular figures, as on the site (owner, 17 Nov 2026).
+const MONEY = `Inter,${SANS}`;
 const SUPPORT = 'support@usetipme.xyz';
 const SAFETY = 'Your account’s safety';
 
@@ -227,7 +230,7 @@ function blockHtml(block: Block): [string, number] {
       const cells = block.items
         .map(
           (item) =>
-            `<td class="tm-well tm-stat" bgcolor="${WELL}" width="${Math.floor((100 - 3 * (block.items.length - 1)) / block.items.length)}%" style="padding:14px 16px;vertical-align:top;${wellStyle};"><div class="tm-stat-v" style="font-family:${SERIF};font-size:30px;line-height:1.1;">${e(item.value)}</div><div class="tm-muted" style="margin-top:2px;font-size:13px;font-weight:600;color:${MUTED};">${e(item.label)}</div></td>`,
+            `<td class="tm-well tm-stat" bgcolor="${WELL}" width="${Math.floor((100 - 3 * (block.items.length - 1)) / block.items.length)}%" style="padding:14px 16px;vertical-align:top;${wellStyle};"><div class="tm-stat-v" style="font-family:${MONEY};font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;">${e(item.value)}</div><div class="tm-muted" style="margin-top:2px;font-size:13px;font-weight:600;color:${MUTED};">${e(item.label)}</div></td>`,
         )
         .join(
           '<td width="3%" style="width:3%;font-size:0;line-height:0;">&nbsp;</td>',
@@ -340,7 +343,7 @@ export function letter(input: Letter, ctx: MailContext): RenderedMail {
     : '';
 
   const body = input.slab
-    ? `<tr><td class="tm-slab" bgcolor="${BRAND}" style="background:${BRAND};border-radius:24px;padding:30px 30px 28px;font-family:${SANS};color:${WHITE};">${tag}<h1 class="tm-slab-h" style="margin:0;font-family:${SERIF};font-size:34px;font-weight:400;line-height:1.08;color:${WHITE};">${e(input.heading)}</h1><p class="tm-amount" style="font-size:64px;margin:18px 0 0;font-family:${SERIF};font-weight:400;line-height:1;color:${WHITE};">${e(input.slab.amount)}</p><p style="margin:10px 0 0;font-size:15px;line-height:1.5;color:${SLAB_LINE};">${e(input.slab.line)}</p></td></tr>${input.blocks.length ? `<tr><td style="padding:0 4px;">${blocksTable(input.blocks, 26)}</td></tr>` : ''}`
+    ? `<tr><td class="tm-slab" bgcolor="${BRAND}" style="background:${BRAND};border-radius:24px;padding:30px 30px 28px;font-family:${SANS};color:${WHITE};">${tag}<h1 class="tm-slab-h" style="margin:0;font-family:${SERIF};font-size:34px;font-weight:400;line-height:1.08;color:${WHITE};">${e(input.heading)}</h1><p class="tm-amount" style="font-size:64px;margin:18px 0 0;font-family:${MONEY};font-weight:700;font-variant-numeric:tabular-nums;line-height:1;color:${WHITE};">${e(input.slab.amount)}</p><p style="margin:10px 0 0;font-size:15px;line-height:1.5;color:${SLAB_LINE};">${e(input.slab.line)}</p></td></tr>${input.blocks.length ? `<tr><td style="padding:0 4px;">${blocksTable(input.blocks, 26)}</td></tr>` : ''}`
     : `<tr><td class="tm-card" bgcolor="${CARD}" style="background:${CARD};border:1px solid ${LINE};border-radius:24px;padding:28px;font-family:${SANS};color:${INK};">${tag}<h1 class="tm-ink" style="margin:0;font-family:${SERIF};font-size:31px;font-weight:400;line-height:1.1;color:${INK};">${e(input.heading)}</h1>${input.blocks.length ? blocksTable(input.blocks, null) : ''}</td></tr>`;
 
   const settings = ctx.unsubscribeUrl

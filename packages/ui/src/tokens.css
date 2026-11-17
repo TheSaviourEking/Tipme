@@ -22,7 +22,9 @@
   /* Ink and feedback */
   --text-primary: #000000;
   --text-secondary: #5d5a54;
-  --text-tertiary: #77736b;
+  /* Hints and placeholders: 4.59:1 on a recessed field, 4.80:1 on the canvas (#77736b was 4.03 and
+     4.21; 17 Nov 2026). */
+  --text-tertiary: #6e6a63;
   --state-success: #23623b;
   --state-success-soft: #e8f4ec;
   --state-warning: #75500b;
@@ -51,6 +53,8 @@
   --font-interface: var(--font-manrope), 'Avenir Next', Arial, sans-serif;
   --font-body: var(--font-interface);
   --font-editorial: var(--font-dm-serif), 'Iowan Old Style', Georgia, serif;
+  /* Money (the `.money` class): Inter, which draws ₦, with tabular figures (owner, 17 Nov 2026). */
+  --font-money: var(--font-inter), var(--font-interface);
   /* The wordmark is an authored SVG; brand text falls back to interface type. */
   --font-brand: var(--font-interface);
   --numeric-variant: tabular-nums lining-nums;

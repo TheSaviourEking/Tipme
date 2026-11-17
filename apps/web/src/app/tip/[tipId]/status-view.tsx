@@ -17,7 +17,6 @@ import { ThanksSlip } from '@/components/thanks-slip';
 import { AvatarImage } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { BusinessNote } from './business-note';
-import { formatNaira } from '@/lib/demo-amount';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
 import { nextCheckDelay } from '@/lib/status-polling';
 import { forgetSupporterKeys } from '@/lib/supporter-keys';
@@ -30,6 +29,7 @@ import {
   recognitionMessage,
   rememberTip,
 } from '@/lib/recognition';
+import { Money } from '@/components/money';
 
 type Screen =
   | { kind: 'loading' }
@@ -233,7 +233,7 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
   const initial = Array.from(name.trim())[0]?.toUpperCase() ?? '';
   // Their photo when the API sends one (only while it is public), else their initial.
   const photo = tip.recipient.avatarPath;
-  const amount = formatNaira(Number(tip.amountMinor));
+  const amount = <Money minor={tip.amountMinor} />;
   const profile = `/@${tip.recipient.handle}`;
   const paid = tip.state === 'paid';
   const retry = tip.state === 'declined' || tip.state === 'cancelled';
@@ -392,8 +392,8 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
           </dl>
           {tip.refund && (
             <p className="tip-thanks__refund" data-testid="receipt-refund">
-              Refunded {formatNaira(Number(tip.refund.refundedMinor))} (TipMe’s
-              fee is kept)
+              Refunded <Money minor={Number(tip.refund.refundedMinor)} />{' '}
+              (TipMe’s fee is kept)
             </p>
           )}
           {pilotNotice}

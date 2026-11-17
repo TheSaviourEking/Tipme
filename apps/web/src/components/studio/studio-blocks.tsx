@@ -11,13 +11,13 @@ import {
   type StudioRow,
 } from '@tipme/contracts';
 import { LinkBadge } from '@/components/profile/link-badge';
-import { formatNaira } from '@/lib/demo-amount';
 import {
   studioFont,
   studioImageSources,
   type StudioShape,
 } from './studio-theme';
 import { VideoEmbed } from './video-embed';
+import { Money } from '@/components/money';
 
 /** What every block needs besides itself. */
 export interface StudioRenderContext {
@@ -238,7 +238,7 @@ export function StudioBlockView({
                 )}
                 <span className="studio-price">
                   {item.from ? 'from ' : ''}
-                  {formatNaira(item.priceMinor)}
+                  <Money minor={item.priceMinor} />
                 </span>
               </li>
             ))}
