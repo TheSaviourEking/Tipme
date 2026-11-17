@@ -1,0 +1,94 @@
+/**
+ * README: how a style's CSS reaches the page (spec 2026-11-17-page-studio-styles §4.3, §16).
+ *
+ * Next.js links every stylesheet imported from the /@username route's module graph on every
+ * profile page (apps/web/test/route-css.test.mjs), standard ones included, and a prefetch of any
+ * /@username link preloads it. So no style CSS is imported from here. Each style has a sheet
+ * module (sheets/<style>.tsx) that imports frame.css (the shared skeleton, the form skin's common
+ * rules, the sticky Tip bar, reduced motion) and the style's own file (clear.css: §9.2 exactly),
+ * and renders nothing. style-sheets.tsx loads the page's one sheet through next/dynamic, so it is
+ * linked, render-blocking, only in the HTML of a page that renders that style. A standard or
+ * Classic page links none of it (budget 8 KB gzip of Studio CSS); a styled page links its route's
+ * sheets plus frame and its style (budget 12 KB gzip). Every selector starts
+ * `.studio[data-style…]`. The budgets are tested on the production build.
+ *
+ * Tokens: the root carries the resolved token map (`PublicStudio.palette`) as `--studio-*` custom
+ * properties for its mode; auto adds the dark map inside `prefers-color-scheme: dark`, so it needs
+ * no script and never flashes. Fonts: `@font-face` for Studio Inter and the style's display face
+ * only, and one preload, for the face that sets the name (style-fonts.ts).
+ */
+import type { ReactNode } from 'react';
+import { preload } from 'react-dom';
+import type { PublicProfile, PublicStudio } from '@tipme/contracts';
+import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
+import { styleFontFaces, styleFontPreload } from './style-fonts';
+import { StyleSheet } from './style-sheets';
+import { autoDarkCss, modeTokens, styleTokens } from './style-tokens';
+
+export type { TipSkin } from '@/components/appreciation-form';
+
+/**
+ * A page in one of the eight new styles (§8 skeleton, §13): cover, identity, the Tip moment,
+ * profile links, the blocks in the person's order, and today's footer. The tip block and the
+ * footer are TipMe's own, passed in; the tip block carries its style through `skin`. Server
+ * component; no client code but the stylesheet loader, the avatar, the Pro note and the video.
+ */
+export function StudioStylePage({
+  studio,
+  profile,
+  tipBlock,
+  footer,
+  coverArt,
+}: {
+  studio: PublicStudio;
+  profile: PublicProfile;
+  tipBlock: ReactNode;
+  footer: ReactNode;
+  coverArt: ReactNode;
+}) {
+  const { document: doc, images, palette } = studio;
+  const style = doc.style;
+  const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
+  preload(styleFontPreload(style, profile.displayName), {
+    as: 'font',
+    type: 'font/woff2',
+    crossOrigin: 'anonymous',
+  });
+  const own = modeTokens(
+    style,
+    palette,
+    doc.mode === 'dark' ? 'dark' : 'light',
+  );
+  const css =
+    styleFontFaces(style) +
+    (doc.mode === 'auto'
+      ? autoDarkCss(modeTokens(style, palette, 'dark'))
+      : '');
+  return (
+    <div
+      className="studio"
+      data-style={style}
+      data-mode={doc.mode}
+      style={styleTokens(own)}
+    >
+      <style>{css}</style>
+      <StyleSheet styleId={style} />
+      <div className="studio-page">
+        <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
+        <StyleIdentity
+          styleId={style}
+          profile={profile}
+          firstName={firstName}
+        />
+        <section className="studio-tip" aria-label={`Tip ${firstName}`}>
+          {tipBlock}
+        </section>
+        <div className="studio-grid">
+          <StyleLinks links={profile.links ?? []} />
+          <StyleBlocks doc={doc} images={images} />
+        </div>
+        <div className="studio-foot">{footer}</div>
+      </div>
+    </div>
+  );
+}

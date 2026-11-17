@@ -2,7 +2,12 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
-import type { TipAmounts, TipPurpose, TipQuote } from '@tipme/contracts';
+import type {
+  StudioStyleId,
+  TipAmounts,
+  TipPurpose,
+  TipQuote,
+} from '@tipme/contracts';
 import {
   AmountChoice,
   Badge,
@@ -66,6 +71,13 @@ const failureMessage = (failure: ApiFailure, rangeText: string): string => {
   return CONNECTION_COPY.ourSideTip;
 };
 
+/**
+ * A Page Studio style's look for this form (spec 2026-11-17-page-studio-styles §13): class names
+ * and tokens only. Amounts, fees, minimums, validation and checkout never change with it. Classic
+ * is today's form, so it has no skin.
+ */
+export type TipSkin = Exclude<StudioStyleId, 'classic'>;
+
 export function AppreciationForm({
   paymentMode,
   recipient,
@@ -78,6 +90,7 @@ export function AppreciationForm({
   barNotice,
   recognition = false,
   business,
+  skin,
 }: {
   /** This copy's payment mode, read by the page on the server. */
   paymentMode: PaymentMode;
@@ -115,6 +128,12 @@ export function AppreciationForm({
     /** The split agreed with the business (R2-C2), told before paying. */
     share?: { personKeepsPercent: number; businessPercent: number };
   };
+  /**
+   * A styled Studio page's skin: sets `data-skin` (its CSS styles the form), adds the "Custom"
+   * choice that reveals the Other-amount field, and turns on the phone's sticky Tip bar, which
+   * shows only once the in-page Tip button has scrolled away. No skin: today's form exactly.
+   */
+  skin?: TipSkin;
 }) {
   const id = useId();
   const copy = paymentModeCopy(paymentMode);
@@ -440,7 +459,9 @@ export function AppreciationForm({
   // Scroll padding and page padding follow the bar's real height: a notice or a failed quote
   // makes it taller, and the Report link must still clear it.
   useEffect(() => {
-    const bar = form.current?.querySelector('.composer-action');
+    const bar = form.current?.querySelector(
+      skin ? '.tip-bar' : '.composer-action',
+    );
     if (!onProfile || !bar) return;
     const root = document.documentElement;
     const observer = new ResizeObserver(() => {
@@ -454,7 +475,22 @@ export function AppreciationForm({
       observer.disconnect();
       root.style.removeProperty('--tip-bar');
     };
-  }, [onProfile, closed]);
+  }, [onProfile, closed, skin]);
+
+  // A styled page's sticky Tip bar (§8): shown once the in-page Tip button scrolls away, hidden
+  // while it is on screen. The server renders it shown, so without JavaScript it always is. The
+  // attribute is written straight to the form, so scrolling never re-renders it.
+  useEffect(() => {
+    const host = form.current;
+    const tip = host?.querySelector('.composer-action .composer-submit');
+    if (!skin || !host || !tip || typeof IntersectionObserver === 'undefined')
+      return;
+    const observer = new IntersectionObserver(([entry]) => {
+      host.dataset.bar = entry?.isIntersecting ? 'hidden' : 'shown';
+    });
+    observer.observe(tip);
+    return () => observer.disconnect();
+  }, [skin, closed]);
 
   // Tipping closed since this page loaded: the announcement beside the form goes with it.
   useEffect(() => {
@@ -680,6 +716,33 @@ export function AppreciationForm({
         {...(onProfile ? { handle, name: recipient } : {})}
       />
     );
+  const customInput = (
+    <InputField
+      id={`${id}-custom`}
+      className="money"
+      label={`Other amount (${options.rangeText})`}
+      inputMode="decimal"
+      autoComplete="off"
+      maxLength={16}
+      placeholder={`e.g. ${options.example}`}
+      value={selection === 'other' ? custom : ''}
+      disabled={submitting}
+      ref={customField}
+      onChange={(event) => {
+        if (!customCounted.current && event.target.value) {
+          customCounted.current = true;
+          track('custom_amount_entered', { surface: 'profile', handle });
+        }
+        setSelection('other');
+        choseAmount.current = true;
+        setCustom(event.target.value);
+        setError('');
+      }}
+      aria-describedby={minimumHint ? `${id}-minimum` : undefined}
+      error={selection === 'other' && error ? error : undefined}
+      flag={belowMinimum ? `below ${options.minLabel}` : ''}
+    />
+  );
   return (
     <Card
       className={`appreciation-card ${compact ? 'appreciation-card--compact' : ''}`}
@@ -698,6 +761,7 @@ export function AppreciationForm({
         noValidate
         autoComplete="off"
         {...(submitting ? { 'data-submitting': '' } : {})}
+        {...(skin ? { 'data-skin': skin, 'data-bar': 'shown' } : {})}
       >
         {onProfile ? (
           <h2>
@@ -765,6 +829,24 @@ export function AppreciationForm({
                   ₦{preset.label}
                 </AmountChoice>
               ))}
+              {/* A style's fourth choice (§9): it reveals today's Other-amount field. */}
+              {skin && (
+                <AmountChoice
+                  name={`amount-${id}`}
+                  value="other"
+                  checked={selection === 'other'}
+                  onChange={() => {
+                    flushSync(() => {
+                      setSelection('other');
+                      choseAmount.current = true;
+                      setError('');
+                    });
+                    customField.current?.focus();
+                  }}
+                >
+                  Custom
+                </AmountChoice>
+              )}
             </div>
           </div>
           {error && selection !== 'other' && (
@@ -773,31 +855,13 @@ export function AppreciationForm({
             </p>
           )}
         </fieldset>
-        <InputField
-          id={`${id}-custom`}
-          className="money"
-          label={`Other amount (${options.rangeText})`}
-          inputMode="decimal"
-          autoComplete="off"
-          maxLength={16}
-          placeholder={`e.g. ${options.example}`}
-          value={selection === 'other' ? custom : ''}
-          disabled={submitting}
-          ref={customField}
-          onChange={(event) => {
-            if (!customCounted.current && event.target.value) {
-              customCounted.current = true;
-              track('custom_amount_entered', { surface: 'profile', handle });
-            }
-            setSelection('other');
-            choseAmount.current = true;
-            setCustom(event.target.value);
-            setError('');
-          }}
-          aria-describedby={minimumHint ? `${id}-minimum` : undefined}
-          error={selection === 'other' && error ? error : undefined}
-          flag={belowMinimum ? `below ${options.minLabel}` : ''}
-        />
+        {skin ? (
+          <div className="tip-custom" hidden={selection !== 'other'}>
+            {customInput}
+          </div>
+        ) : (
+          customInput
+        )}
         {minimumHint && (
           <p id={`${id}-minimum`} className="tm-hint tip-minimum-hint">
             {minimumRule}
@@ -868,6 +932,34 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
+        {/* A styled page's phone bar (CSS): a second way to press this form's Tip, kept out of the
+            accessibility tree and the tab order, since the in-page button above is the one a
+            keyboard or a screen reader uses. It carries the same notice as the bar on Classic. */}
+        {skin && (
+          <div className="tip-bar" aria-hidden="true">
+            {(barNotice ?? copy.formDisclaimer) && (
+              <p className="tip-bar__notice">
+                {barNotice ?? copy.formDisclaimer}
+              </p>
+            )}
+            <button
+              type="submit"
+              className="tip-bar__button"
+              tabIndex={-1}
+              disabled={busy}
+            >
+              {submitting ? (
+                'Starting your tip…'
+              ) : amount ? (
+                <span>
+                  Tip <Money minor={amount} />
+                </span>
+              ) : (
+                'Tip'
+              )}
+            </button>
+          </div>
+        )}
         {/* After Tip, so it comes out from under the button that was pressed. */}
         {notice && (
           <Slip

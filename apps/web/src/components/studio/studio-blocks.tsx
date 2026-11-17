@@ -16,7 +16,7 @@ import {
   studioImageSources,
   type StudioShape,
 } from './studio-theme';
-import { VideoEmbed } from './video-embed';
+import { VideoEmbed } from '../studio-styles/video-embed';
 import { Money } from '@/components/money';
 
 /** What every block needs besides itself. */

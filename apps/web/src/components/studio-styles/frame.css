@@ -1,0 +1,329 @@
+/* Page Studio styles: the frame every new style shares (spec 2026-11-17-page-studio-styles §8).
+   The skeleton, the tip form's common skin, the phone's sticky Tip bar, and reduced motion. Each
+   style's own file (clear.css, …) gives the look. Every selector starts `.studio[data-style]`, so
+   nothing here can touch a standard or Classic page. Colours come only from the root's
+   `--studio-*` tokens (style-tokens.ts). */
+
+.studio[data-style] {
+  --studio-ui: 'Studio Inter', 'Studio Inter Fallback', system-ui, sans-serif;
+  min-height: 100vh;
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font-family: var(--studio-ui);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+.studio[data-style][data-mode='dark'] {
+  color-scheme: dark;
+}
+
+.studio[data-style][data-mode='auto'] {
+  color-scheme: light dark;
+}
+
+/* Money is Inter with tabular, lining figures (§4.1), from the page's own Inter file. */
+.studio[data-style] .money,
+.studio[data-style] .studio-price {
+  font-family: var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.studio[data-style] :is(h1, h2, p, figure, blockquote, ul) {
+  margin: 0;
+}
+
+.studio[data-style] ul {
+  padding: 0;
+  list-style: none;
+}
+
+.studio[data-style] img {
+  display: block;
+  max-width: 100%;
+}
+
+/* User text wraps instead of overflowing; names and bios balance, paragraphs wrap pretty. */
+.studio[data-style]
+  :is(.studio-name, .studio-bio, .studio-meta, .studio-title, .studio-block) {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.studio[data-style]
+  :is(.studio-text p, .studio-quote p, .studio-list__words, figcaption) {
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.studio[data-style] :is(.studio-name, .studio-bio) {
+  text-wrap: balance;
+}
+
+/* A name the display face can't draw is set wholly in Inter 700 (§4.1); a heading in Inter at its
+   own weight. */
+.studio[data-style] .studio-name--fallback {
+  font-family: var(--studio-ui);
+  font-weight: 700;
+}
+
+.studio[data-style] .studio-title--fallback {
+  font-family: var(--studio-ui);
+}
+
+.studio[data-style] .studio-cover {
+  position: relative;
+  overflow: hidden;
+}
+
+.studio[data-style] .studio-cover__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 33%;
+}
+
+/* Today's cover art in the style's slot: it fills the slot instead of its own frame. */
+.studio[data-style] .studio-cover .profile-cover {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.studio[data-style] .studio-avatar {
+  display: block;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.studio[data-style] .studio-avatar.avatar--initials {
+  display: inline-flex;
+  background: var(--studio-el2);
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-meta .studio-pro {
+  margin-inline-start: 0.375rem;
+  vertical-align: middle;
+}
+
+.studio[data-style] .link-badge {
+  border-color: transparent;
+  background: var(--studio-el2);
+  color: var(--studio-fg);
+}
+
+.studio[data-style] a {
+  color: inherit;
+}
+
+/* Focus: a 2 px ring in the accent's text value, offset 2 (§4.4). */
+.studio[data-style]
+  :is(a, button, summary, input, select, textarea):focus-visible,
+.studio[data-style] .tm-choice input:focus-visible + span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 2px;
+}
+
+/* The video still, in the page's own colours: no request to the video site until a tap. */
+.studio[data-style] .studio-video__still {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 88px;
+  padding: 16px;
+  border: 0;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.studio[data-style] .studio-video__still svg {
+  flex: none;
+  color: var(--studio-accText);
+}
+
+.studio[data-style] .studio-video__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio[data-style] .studio-video__note {
+  color: var(--studio-fg2);
+  font-size: 13px;
+}
+
+.studio[data-style] .studio-video__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+
+/* The tip form's common skin: the panel is the page, the form's heading is for screen readers,
+   the fixed parts sit in the page's colours. Amounts, fields and the Tip are the style's. */
+.studio[data-style] .studio-tip .appreciation-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+}
+
+.studio[data-style] .studio-tip form > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.studio[data-style] .studio-tip fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.studio[data-style] .studio-tip .amount-fit {
+  margin: 0;
+}
+
+.studio[data-style] .studio-tip .tip-custom[hidden] {
+  display: none;
+}
+
+.studio[data-style]
+  .studio-tip
+  :is(.tm-field label, .tip-remember, .composer-extras summary) {
+  color: var(--studio-fg);
+}
+
+.studio[data-style]
+  .studio-tip
+  :is(
+    .tm-hint,
+    .tm-field-error,
+    .composer-disclaimer,
+    .composer-trust,
+    .composer-action__partner,
+    .tip-remember small
+  ) {
+  color: var(--studio-fg2);
+}
+
+.studio[data-style] .studio-tip .tm-field-error {
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-tip .tm-input {
+  border-color: var(--studio-control);
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-tip .tm-input::placeholder {
+  color: var(--studio-fg2);
+}
+
+.studio[data-style] .studio-tip .tip-remember input {
+  accent-color: var(--studio-acc);
+}
+
+/* The arrow belongs to Classic's black key; the styles' Tip is the label alone, as drawn. */
+.studio[data-style] .studio-tip .composer-submit svg {
+  display: none;
+}
+
+/* The phone's sticky Tip bar (§8). The form toggles data-bar from one IntersectionObserver;
+   the server renders it shown, so without JavaScript it always is. It steps aside while a typing
+   field has focus (the keyboard needs the room), and desktops have none. */
+.studio[data-style] .tip-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  padding: 10px 16px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 0.5px solid var(--studio-line);
+  background: var(--studio-bar);
+  -webkit-backdrop-filter: saturate(1.8) blur(20px);
+  backdrop-filter: saturate(1.8) blur(20px);
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.studio[data-style] .tip-bar__notice {
+  color: var(--studio-fg2);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.studio[data-style] form[data-bar='hidden'] .tip-bar {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style]:has(
+    :is(input:not([type='radio'], [type='checkbox']), textarea):focus
+  )
+  .tip-bar {
+  visibility: hidden;
+}
+
+/* The page keeps room under its last block for the bar, sized to the bar by the form. */
+@media (max-width: 1023px) {
+  .studio[data-style] .studio-page {
+    padding-bottom: calc(var(--tip-bar, 110px) + 16px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio[data-style] .tip-bar {
+    display: none;
+  }
+}
+
+/* Reduced motion (§4.5): fades only. No slide, scale, press travel or lift. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style] *,
+  .studio[data-style] *::before,
+  .studio[data-style] *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .studio[data-style] .tip-bar,
+  .studio[data-style] form[data-bar='hidden'] .tip-bar {
+    transform: none;
+  }
+}
+
+/* The payment moment stays still: nothing moves while a tip starts. */
+.studio[data-style] form[data-submitting] *,
+.studio[data-style] form[data-submitting] *::before,
+.studio[data-style] form[data-submitting] *::after {
+  transition: none !important;
+  animation: none !important;
+}
