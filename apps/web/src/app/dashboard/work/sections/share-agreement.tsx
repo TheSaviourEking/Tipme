@@ -11,7 +11,6 @@ import {
   type ShareReportReason,
 } from '@tipme/contracts';
 import { Button, Choice, Skeleton, StateLine, TextareaField } from '@tipme/ui';
-import { formatNaira } from '@/lib/demo-amount';
 import {
   acceptShare,
   counterShare,
@@ -22,6 +21,7 @@ import {
   shareDate,
   shareProblem,
 } from '@/lib/business/shares-api';
+import { Money } from '@/components/money';
 
 // Business PR R2-C1, board section 3: the staff member decides. Accept, Decline, or suggest another
 // split; and report the business to TipMe, which the business is never told about.
@@ -251,11 +251,13 @@ export function ShareAgreementCard({
       {shared && BigInt(shared.totalMinor) > BigInt(0) && (
         <p data-testid="work-shared">
           This month you shared{' '}
-          <strong>{formatNaira(shared.monthMinor)}</strong> with{' '}
-          {shared.businessName}, from {shared.monthTips}{' '}
+          <strong>
+            <Money minor={shared.monthMinor} />
+          </strong>{' '}
+          with {shared.businessName}, from {shared.monthTips}{' '}
           {shared.monthTips === 1 ? 'tip' : 'tips'}.{' '}
           <span className="tm-hint">
-            {formatNaira(shared.totalMinor)} in all. A refunded tip’s share
+            <Money minor={shared.totalMinor} /> in all. A refunded tip’s share
             comes back to you.
           </span>
         </p>

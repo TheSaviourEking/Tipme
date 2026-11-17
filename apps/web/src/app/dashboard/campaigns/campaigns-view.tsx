@@ -5,8 +5,8 @@ import type { CampaignList, CampaignResults } from '@tipme/contracts';
 import { Card, Skeleton } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { campaignLink } from '@/lib/campaign-link';
-import { naira } from '@/lib/money';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+import { Money } from '@/components/money';
 
 const noSubscription = () => () => undefined;
 export const useOrigin = () =>
@@ -50,7 +50,9 @@ export function ResultCells({ results }: { results: CampaignResults }) {
         {results.receivedNetMinor === null ? (
           <span className="tm-hint">Hidden</span>
         ) : (
-          <b>{naira(results.receivedNetMinor)}</b>
+          <b>
+            <Money minor={results.receivedNetMinor} />
+          </b>
         )}
       </td>
     </>

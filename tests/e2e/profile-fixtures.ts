@@ -119,6 +119,8 @@ export const LONG_NAME =
   'Oluwatobiloba Adebayo-Akinwande Oghenekaro Chukwuemeka Ibekwe';
 export const UNBROKEN_NAME = 'W'.repeat(60);
 export const UNBROKEN_ROLE = 'R'.repeat(60);
+/** Yoruba (Ẹ, ọ) and Hausa (Ɗ, ɗ) letters DM Serif Display and Manrope don't draw (17 Nov 2026). */
+export const NIGERIAN_NAME = 'Ẹniọlá Ɗanɗaura';
 
 /** A moment a page shared, as the API sends it. */
 export const CELEBRATION = {
@@ -159,6 +161,11 @@ export const PAGES: PublicProfile[] = [
     bio: 'A long bio that keeps on going. '.repeat(9).slice(0, 280),
   }),
   page('widename', { displayName: UNBROKEN_NAME }),
+  page('eniola', {
+    displayName: NIGERIAN_NAME,
+    role: 'Aṣọ-ọkẹ weaver',
+    tipAmounts: amounts(1_000, 2_000, 5_000, 10_000),
+  }),
   page('widerole', { role: UNBROKEN_ROLE }),
   // The compact tip card's worst and usual cases: a page like DR7's, then more amounts.
   page('dr7', {

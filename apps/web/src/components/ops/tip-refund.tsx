@@ -6,6 +6,7 @@ import { nairaCode as naira } from '@/lib/money';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { ActionOutcome, type ActionOutcomeState } from './action-outcome';
 import { ReasonAction } from './reason-action';
+import { Money } from '@/components/money';
 
 /**
  * Staff "Refund tip…" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch. Says exactly what the supporter
@@ -82,14 +83,24 @@ export function TipRefund({ tipId }: { tipId: string }) {
   return (
     <div className="tip-refund" data-testid="tip-refund">
       <p>
-        The supporter gets back <strong>{naira(facts.refundMinor)}</strong>: the{' '}
-        {naira(facts.grossMinor)} tip minus TipMe’s {naira(facts.feeMinor)} fee,
-        which TipMe keeps.
+        The supporter gets back{' '}
+        <strong>
+          <Money code minor={facts.refundMinor} />
+        </strong>
+        : the <Money code minor={facts.grossMinor} /> tip minus TipMe’s{' '}
+        <Money code minor={facts.feeMinor} /> fee, which TipMe keeps.
       </p>
       <p>
-        {facts.businessName
-          ? `${page} gives back ${naira(facts.personMinor)} and ${facts.businessName} gives back ${naira(facts.businessMinor)}: what each received.`
-          : `${page} gives back ${naira(facts.personMinor)}: what they received.`}
+        {page} gives back <Money code minor={facts.personMinor} />
+        {facts.businessName ? (
+          <>
+            {' '}
+            and {facts.businessName} gives back{' '}
+            <Money code minor={facts.businessMinor} />: what each received.
+          </>
+        ) : (
+          ': what they received.'
+        )}
       </p>
       {facts.refundable ? (
         <ReasonAction

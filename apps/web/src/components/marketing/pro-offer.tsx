@@ -1,8 +1,7 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { MyPro } from '@tipme/contracts';
 import { ActionLink, Button, Skeleton, Slip } from '@tipme/ui';
-import { naira } from '@/lib/money';
 import { dateOf } from '@/lib/lagos-time';
 import {
   ASK_FOR_PRO,
@@ -13,6 +12,7 @@ import {
   type PriceState,
 } from '@/lib/pro-buy';
 import { readSignedInHint } from '@/lib/signed-in-hint';
+import { Money } from '@/components/money';
 
 const SIGN_IN = '/sign-in?next=%2Fpro';
 
@@ -90,7 +90,7 @@ export function ProOffer({
     if (result.priceChanged) void load();
   };
 
-  const getPro = (label: string, className?: string) =>
+  const getPro = (label: ReactNode, className?: string) =>
     viewer.kind === 'signed-in' ? (
       <Button
         variant="continue"
@@ -121,7 +121,7 @@ export function ProOffer({
         {price.kind === 'price' && (
           <p className="pro-offer__price">
             <span className="pro-offer__amount">
-              {naira(price.price.amountMinor)}
+              <Money minor={price.price.amountMinor} />
             </span>
             <span className="pro-offer__per">a month</span>
           </p>
@@ -194,7 +194,12 @@ export function ProOffer({
       {settled && !onPro && price.kind !== 'error' && (
         <div className="pro-foot" hidden={blockInView}>
           {billingOn && amount ? (
-            getPro(`Get Pro · ${naira(amount)} a month`, 'pro-foot__key')
+            getPro(
+              <>
+                Get Pro · <Money minor={amount} /> a month
+              </>,
+              'pro-foot__key',
+            )
           ) : (
             <span
               className="pro-foot__key pro-foot__key--off"

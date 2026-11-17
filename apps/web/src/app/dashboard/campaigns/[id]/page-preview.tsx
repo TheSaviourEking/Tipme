@@ -3,7 +3,7 @@ import type { ResolvedCover } from '@tipme/contracts';
 import { AvatarImage } from '@/components/avatar';
 import { CampaignTop } from '@/components/profile/campaign-top';
 import { ProfileCover } from '@/components/profile/cover';
-import { naira } from '@/lib/money';
+import { Money } from '@/components/money';
 
 // The standard amounts, for a page whose answer predates `tipAmounts`.
 const STANDARD = ['50000', '100000', '200000', '500000'];
@@ -68,7 +68,9 @@ export function CampaignPagePreview({
         )}
         <div className="campaign-preview__amounts">
           {amounts.map((minor) => (
-            <span key={minor}>{naira(minor)}</span>
+            <span key={minor}>
+              <Money minor={minor} />
+            </span>
           ))}
         </div>
         <p className="campaign-preview__pay">Tip {firstName}</p>

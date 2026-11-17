@@ -23,11 +23,11 @@ import { ClaimMoment } from '@/components/account/claim-moment';
 import { useRecipient } from '@/components/account/recipient-context';
 import { Arrow } from '@/components/brand';
 import { takeClaimed } from '@/lib/claim-moment';
-import { formatNaira } from '@/lib/demo-amount';
 import { apiFetch } from '@/lib/session-client';
 import { onReconnect, sendWithOneRetry } from '@/lib/connection';
 import { CONNECTION_COPY } from '@/lib/connection-copy';
 import { useSiteHost } from '@/lib/site-host';
+import { Money } from '@/components/money';
 
 type Step = 'hello' | 'about' | 'bio' | 'live' | 'done';
 const setupSteps = ['about', 'bio', 'live'] as const;
@@ -73,7 +73,7 @@ function PagePreview({
         <div className="welcome-preview__amounts" aria-hidden="true">
           {STANDARD_TIP_PRESETS_MINOR.map((amount) => (
             <span key={amount} className="tm-well">
-              {formatNaira(Number(amount))}
+              <Money minor={Number(amount)} />
             </span>
           ))}
         </div>

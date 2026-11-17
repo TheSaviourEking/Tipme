@@ -15,7 +15,6 @@ import {
 import { track } from '@/lib/analytics';
 import { newUuid } from '@/lib/random-id';
 import { createTip, quoteTip, type ApiFailure } from '@/lib/api-client';
-import { formatDemoAmount, formatNaira } from '@/lib/demo-amount';
 import { amountOptions, keyLayout } from '@/lib/tip-amounts';
 import { purposeOptions } from '@/lib/tip-purpose';
 import { pendingTipKey, statusTokenKey } from '@/lib/pending-tip';
@@ -28,6 +27,7 @@ import { TippingOpensSoon } from './tipping-opens-soon';
 import { Arrow } from './brand';
 import { TipAction } from './tip-action';
 import { campaignFromPath } from '@/lib/campaign-link';
+import { Money } from '@/components/money';
 
 type QuoteState =
   | { kind: 'idle' }
@@ -761,7 +761,7 @@ export function AppreciationForm({
                     track('amount_selected', { surface: 'profile', handle });
                   }}
                 >
-                  ₦{preset.label}
+                  <span className="money">₦{preset.label}</span>
                 </AmountChoice>
               ))}
             </div>
@@ -774,6 +774,7 @@ export function AppreciationForm({
         </fieldset>
         <InputField
           id={`${id}-custom`}
+          className="money"
           label={`Other amount (${options.rangeText})`}
           inputMode="decimal"
           autoComplete="off"
@@ -854,11 +855,15 @@ export function AppreciationForm({
             disabled={busy}
             aria-busy={busy}
           >
-            {submitting
-              ? 'Starting your tip…'
-              : amount
-                ? `Tip ${onProfile ? formatNaira(amount) : formatDemoAmount(amount)}`
-                : 'Tip'}{' '}
+            {submitting ? (
+              'Starting your tip…'
+            ) : amount ? (
+              <>
+                Tip <Money minor={amount} code={!onProfile} />
+              </>
+            ) : (
+              'Tip'
+            )}{' '}
             <Arrow />
           </Button>
         </TipAction>

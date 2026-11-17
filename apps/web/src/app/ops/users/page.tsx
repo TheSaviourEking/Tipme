@@ -19,7 +19,6 @@ import {
 import { Badge, Button, EmptyWell, ProBadge, Slip } from '@tipme/ui';
 import { AvatarImage } from '@/components/avatar';
 import { ReasonAction } from '@/components/ops/reason-action';
-import { naira } from '@/lib/money';
 import { refusalWords } from '@/lib/ops-answers';
 import { can, useOpsAccess } from '@/lib/ops-client';
 import {
@@ -47,6 +46,7 @@ import {
   type PerPage,
 } from '@/lib/ops-people-view';
 import { opsFetch } from '@/lib/ops-staff-api';
+import { Money } from '@/components/money';
 
 /** From here the table, the inline filters and the numbered pager; below it, the phone layout. */
 const WIDE = '(min-width: 48rem)';
@@ -330,7 +330,7 @@ function PersonRows({
         <td>{activeWords(person.lastActiveAt, reveal.now)}</td>
         {money && (
           <td className="ops-people__money">
-            {naira(person.tipsTotalMinor ?? '0')}
+            <Money minor={person.tipsTotalMinor ?? '0'} />
           </td>
         )}
       </tr>
@@ -395,7 +395,12 @@ function PeopleStack({
             <small>
               Joined {joinedWords(person.joinedAt)} · active{' '}
               {activeWords(person.lastActiveAt, reveal.now).toLowerCase()}
-              {money && ` · ${naira(person.tipsTotalMinor ?? '0')} in tips`}
+              {money && (
+                <>
+                  {' · '}
+                  <Money minor={person.tipsTotalMinor ?? '0'} /> in tips
+                </>
+              )}
             </small>
             {reveal.revealing === person.id && (
               <RevealForm

@@ -264,7 +264,7 @@ export function PersonCard({
               {amounts.map((amount, index) => (
                 <span
                   key={amount.key}
-                  className="home-key"
+                  className="home-key money"
                   data-selected={index === chosen ? 'true' : undefined}
                   onClick={(event) => {
                     // To one side, the click goes on to the card and brings it to the centre.
@@ -285,7 +285,7 @@ export function PersonCard({
                 tip();
               }}
             >
-              Tip {label}
+              Tip <span className="money">{label}</span>
             </span>
           </div>
         </>

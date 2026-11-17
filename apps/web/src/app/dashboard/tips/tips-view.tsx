@@ -4,7 +4,6 @@ import { useEffect, useId, useState } from 'react';
 import type { LiveEventType, MyTipRow, TipTotals } from '@tipme/contracts';
 import { Button, EmptySlip, InputField, Skeleton, Stamp } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
-import { formatNaira } from '@/lib/demo-amount';
 import { dayKey, timeOf } from '@/lib/lagos-time';
 import { useRecipient } from '@/components/account/recipient-context';
 import { usePanel } from '@/components/dashboard/use-panel';
@@ -14,6 +13,7 @@ import { canInsertInPlace } from '@/lib/live-merge';
 const TIPS_CHANGED: readonly LiveEventType[] = ['tips.changed'];
 const NO_SIGNALS: readonly LiveEventType[] = [];
 import { apiDownload, apiFetch } from '@/lib/session-client';
+import { Money } from '@/components/money';
 
 type Filter = 'all' | 'notes' | 'confirming';
 // "With a note" asks only for paid tips: a note's words reach the recipient with a paid tip.
@@ -154,8 +154,10 @@ export default function TipsPage() {
         <div className="tips-aside">
           {totals.data && totals.data.paidTipCount > 0 && (
             <p className="tips-total">
-              <strong>{formatNaira(totals.data.receivedNetMinor)}</strong> from{' '}
-              {totals.data.paidTipCount}{' '}
+              <strong>
+                <Money minor={totals.data.receivedNetMinor} />
+              </strong>{' '}
+              from {totals.data.paidTipCount}{' '}
               {totals.data.paidTipCount === 1 ? 'tip' : 'tips'} so far
             </p>
           )}
@@ -270,9 +272,11 @@ export default function TipsPage() {
                           )}
                         </span>
                         <span className="tip-row__money">
-                          <strong>{formatNaira(Number(tip.netMinor))}</strong>
+                          <strong>
+                            <Money minor={Number(tip.netMinor)} />
+                          </strong>
                           <small>
-                            from {formatNaira(Number(tip.grossMinor))}
+                            from <Money minor={Number(tip.grossMinor)} />
                           </small>
                         </span>
                       </Link>

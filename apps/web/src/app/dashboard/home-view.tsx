@@ -23,12 +23,13 @@ import { useWithdrawalInFlight } from '@/components/live/live-provider';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import { useArrivals, useBalanceRose } from '@/components/live/use-live-merge';
 import { updatedLabel } from '@/lib/live-merge';
-import { change, naira } from '@/lib/money';
+import { change } from '@/lib/money';
 import { recipientReturned, track } from '@/lib/analytics';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
 import { withdrawableNow } from '@/lib/withdraw-state';
+import { Money } from '@/components/money';
 
 function Tile({
   label,
@@ -45,7 +46,9 @@ function Tile({
   return (
     <div className="perf-tile">
       <span>{label}</span>
-      <strong>{naira(current)}</strong>
+      <strong>
+        <Money minor={current} />
+      </strong>
       <span className={`perf-tile__change perf-tile__change--${delta.tone}`}>
         {delta.text}
         {delta.text !== '—' && delta.text !== 'New' && (
@@ -270,17 +273,18 @@ export default function DashboardHome() {
                   className={`balance-card__figure${balanceRose ? ' balance-card__figure--rose' : ''}`}
                 >
                   <strong data-testid="balance">
-                    {naira(summary.availableMinor)}
+                    <Money minor={summary.availableMinor} />
                   </strong>
                 </span>
                 {withdrawable > BigInt(0) && (
                   <span className="balance-card__note" data-testid="ready">
-                    Ready to withdraw {naira(withdrawable.toString())}
+                    Ready to withdraw <Money minor={withdrawable.toString()} />
                   </span>
                 )}
                 {pending && (
                   <span className="balance-card__note">
-                    {naira(summary.confirmingMinor)} still being confirmed
+                    <Money minor={summary.confirmingMinor} /> still being
+                    confirmed
                   </span>
                 )}
                 {refreshNote}
@@ -353,7 +357,7 @@ export default function DashboardHome() {
           <div className="first-day-balance">
             <span>Your balance:</span>{' '}
             <strong data-testid="balance">
-              {naira(summary.availableMinor)}
+              <Money minor={summary.availableMinor} />
             </strong>
             {shareStatus}
           </div>
@@ -365,7 +369,7 @@ export default function DashboardHome() {
           >
             <strong>Your week · {latestWeek.week}</strong>
             <span className="week-teaser__figure">
-              {naira(latestWeek.data.totalNetMinor)}
+              <Money minor={latestWeek.data.totalNetMinor} />
             </span>
             <span>
               from {latestWeek.data.tipCount}{' '}
