@@ -30,6 +30,7 @@ import {
   type StudioCoverType,
   type StudioCuratedAccentId,
   type StudioStyleId,
+  type StudioTokenMap,
 } from './studio-styles.js';
 
 const { ID, UUID, TIME, fit, isLine, isParagraph, isDate, isKobo } = shared;
@@ -109,6 +110,19 @@ export interface StudioDocument {
   cover: StudioCoverType;
   /** The order is the page order. */
   blocks: StudioBlock[];
+}
+
+/**
+ * A published design as the public page receives it (§5.4; the API sends it from Task 10).
+ * `palette` is the resolved token map for both modes (`studioTokens`: neutrals and the accent's
+ * values), which the renderer writes as `--studio-*` custom properties; nothing in it is typed by
+ * a person. `images` are the document's photos, with the source size the renditions came from.
+ */
+export interface PublicStudio {
+  document: StudioDocument;
+  images: Record<string, { path: string; width: number; height: number }>;
+  palette: { light: StudioTokenMap; dark: StudioTokenMap };
+  checkVersion: 3;
 }
 
 // ---------------------------------------------------------------------------------------------

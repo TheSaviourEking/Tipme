@@ -193,10 +193,14 @@ const snippet = (s: string) =>
 const number = (n: number) =>
   String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
-/** Heading size at 320 px, per style (builder's call within §9; it only feeds the width check). */
+/**
+ * Heading size at 320 px, per style (builder's call within §9; it only feeds the width check).
+ * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css): Clear's
+ * phone section title is 20/26 (§9.2).
+ */
 const HEADING_PX: Record<StudioStyleId, number> = {
   classic: 24,
-  clear: 22,
+  clear: 20,
   journal: 24,
   stage: 24,
   signboard: 22,
