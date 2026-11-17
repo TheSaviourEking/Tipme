@@ -113,8 +113,8 @@ interface Desktop {
 const DESKTOP: Record<StudioStyleId, Desktop> = {
   // Today's page: the main column beside the 340 px rail (1440 − 2×24 − 340 − 32).
   classic: { text: 1020, media: 1020, list: 1020, tile: 506 },
-  // Content 920, a 2-column grid with a 40 px gap.
-  clear: { text: 440, media: 440, list: 440, tile: 216 },
+  // Content 920, a 2-column grid with a 40 px gap; photos 3-up squares in the 440 column, gap 8.
+  clear: { text: 440, media: 440, list: 440, tile: 141 },
   // Content 1120: a 420 px column, gap 96, the rest (604); text maxes at 520; photos 3-up, gap 6.
   journal: { text: 520, media: 604, list: 604, tile: 197 },
   // Content 1200: a 400 px rail, gap 80, the main column.
@@ -131,6 +131,8 @@ const DESKTOP: Record<StudioStyleId, Desktop> = {
   horizon: { text: 520, media: 520, list: 520, tile: 256 },
 };
 
+/** Clear's phone and tablet photo strip: 150×200 tiles (clear.css `.studio-strip li`). */
+const CLEAR_STRIP_TILE = 150;
 const PHONE_GUTTER = 20;
 const TABLET_GUTTER = 24;
 const TABLET_MAX = 720;
@@ -168,8 +170,9 @@ export function studioSlotWidth(
       ? screen - 2 * PHONE_GUTTER
       : Math.min(screen - 2 * TABLET_GUTTER, TABLET_MAX);
   if (kind !== 'gallery') return column;
-  // One gallery photo on a phone or tablet: Journal 3-up (gap 6), Tiles 2-up (gap 12), Linen
-  // 3fr/2fr (gap 8, the larger), the rest 2-up (gap 8).
+  // One gallery photo on a phone or tablet: Clear's strip of fixed 150 px tiles (§9.2), Journal
+  // 3-up (gap 6), Tiles 2-up (gap 12), Linen 3fr/2fr (gap 8, the larger), the rest 2-up (gap 8).
+  if (style === 'clear') return CLEAR_STRIP_TILE;
   if (style === 'journal') return Math.round((column - 12) / 3);
   if (style === 'tiles') return Math.round((column - 12) / 2);
   if (style === 'linen') return Math.round(((column - 8) * 3) / 5);

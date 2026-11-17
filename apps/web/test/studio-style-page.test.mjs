@@ -8,6 +8,7 @@ import {
   DESIGN_CHECK_VERSION,
   STUDIO_FONTS,
   resolveStudio,
+  studioSlotWidth,
   studioTokens,
 } from '@tipme/contracts';
 
@@ -303,4 +304,34 @@ test("a name the face can't draw is set wholly in Inter", () => {
     profile: { displayName: 'Ẹniọlá Bámidélé' },
   });
   assert.match(/<h1[^>]*>/.exec(drawn)?.[0] ?? '', /class="studio-name"/);
+});
+
+test("the design check's photo slots are the widths Clear's CSS draws, and sizes follows them", () => {
+  const css = readFileSync(new URL('clear.css', src), 'utf8');
+  // Phone and tablet: the strip's fixed tile width.
+  const strip = /\.studio-strip li \{[^}]*?width: (\d+)px/.exec(css);
+  assert.ok(strip, 'the strip tile width in clear.css');
+  const tile = Number(strip[1]);
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('clear', 'gallery', v), tile, `${v}px`);
+  // Desktop: a 3-up grid with the strip's gap, inside the column a photo block fills.
+  const columns =
+    /\.studio-strip \{[^}]*grid-template-columns: repeat\((\d+),/.exec(css);
+  const gap = /\.studio-strip \{[^}]*?gap: (\d+)px/.exec(css);
+  assert.ok(columns && gap, 'the desktop grid and gap in clear.css');
+  const column = studioSlotWidth('clear', 'photo', 1440);
+  const n = Number(columns[1]);
+  assert.equal(
+    studioSlotWidth('clear', 'gallery', 1440),
+    Math.round((column - (n - 1) * Number(gap[1])) / n),
+  );
+  // The rendered photos ask for exactly those widths.
+  const html = page();
+  const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.equal(
+    sizes,
+    `(min-width: 1024px) ${studioSlotWidth('clear', 'gallery', 1440)}px, (min-width: 768px) ${tile}px, ${tile}px`,
+  );
 });
