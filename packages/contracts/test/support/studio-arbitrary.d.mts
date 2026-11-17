@@ -16,9 +16,6 @@ export declare function studioDocumentV1Arb(options?: {
 export declare function studioDocumentArb(options?: {
   valid?: boolean;
 }): fc.Arbitrary<StudioDocument>;
-export declare function studioDocumentArb(options?: {
-  valid?: boolean;
-}): fc.Arbitrary<StudioDocument>;
 export declare function checkContext(): fc.Arbitrary<StudioCheckContextV1>;
 export declare function repairToPassing(
   doc: StudioDocumentV1,

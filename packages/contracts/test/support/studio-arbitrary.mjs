@@ -15,12 +15,12 @@ import {
   STUDIO_FONTS,
   STUDIO_ACCENT_IDS,
   STUDIO_LIMITS,
+  STUDIO_STYLES,
   STUDIO_STYLE_IDS,
   applyStudioFixV1,
   checkDesignV1,
   cleanStudioText,
   fontsOk,
-  resolveStudio,
   resolveStudioV1,
 } from '../../dist/index.js';
 
@@ -502,22 +502,54 @@ const blockV2 = fc.oneof(
 );
 
 const BLOCKS_V2 = 45;
+
+/**
+ * Keeps blocks, in order, while the page-wide totals hold (40 blocks, 24 photos, 3 videos, 6
+ * events, 12 services); a block that would pass one is left out. This is the generator's own
+ * budget: valid documents are built without calling resolveStudio, so the resolver is tested
+ * against them rather than against its own output.
+ */
+function withinBudget(blocks) {
+  const left = {
+    blocks: L.blocks,
+    images: L.pageImages,
+    videos: L.videos,
+    events: L.events,
+    services: L.services,
+  };
+  const need = (b) => ({
+    blocks: 1,
+    images: b.kind === 'photo' ? 1 : b.kind === 'gallery' ? b.images.length : 0,
+    videos: b.kind === 'video' ? 1 : 0,
+    events: b.kind === 'events' ? b.items.length : 0,
+    services: b.kind === 'services' ? b.items.length : 0,
+  });
+  return blocks.filter((b) => {
+    const n = need(b);
+    if (Object.keys(left).some((k) => n[k] > left[k])) return false;
+    for (const k of Object.keys(left)) left[k] -= n[k];
+    return true;
+  });
+}
+
 const validV2 = fc
   .record({
     style: fc.constantFrom(...STUDIO_STYLE_IDS),
     accent: fc.constantFrom(null, ...STUDIO_ACCENT_IDS),
     mode: fc.constantFrom('light', 'dark', 'auto'),
-    cover: fc.constantFrom('yours', 'gradient', 'plain'),
+    coverPick: fc.nat({ max: 2 }),
     blocks: fc.array(blockV2, { maxLength: BLOCKS_V2 }),
     ids: fc.uniqueArray(id, { minLength: BLOCKS_V2, maxLength: BLOCKS_V2 }),
   })
-  .map(({ ids, blocks, ...doc }) =>
-    // The resolver trims to the page-wide limits and gives Sprint and Signboard a cover they offer.
-    resolveStudio(
-      { v: 2, ...doc, blocks: blocks.map((b, i) => ({ id: ids[i], ...b })) },
-      TODAY,
-    ),
-  );
+  .map(({ ids, blocks, coverPick, ...doc }) => {
+    const covers = STUDIO_STYLES[doc.style].covers;
+    return {
+      v: 2,
+      ...doc,
+      cover: covers[coverPick % covers.length],
+      blocks: withinBudget(blocks.map((b, i) => ({ id: ids[i], ...b }))),
+    };
+  });
 
 /** One rule broken per v2 document, each of which the strict schema must refuse. */
 const BREAKS_V2 = [

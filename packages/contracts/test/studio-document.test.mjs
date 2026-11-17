@@ -199,6 +199,77 @@ test('resolveStudio never throws, is idempotent and always yields a schema-valid
     check(raw);
 });
 
+test('a rich document with every optional field round-trips through resolveStudio unchanged', () => {
+  const rich = {
+    v: 2,
+    style: 'stage',
+    accent: 'photo',
+    mode: 'auto',
+    cover: 'gradient',
+    blocks: [
+      { id: 'rich0001', kind: 'text', variant: 'heading', text: 'Ẹ káàbọ̀' },
+      {
+        id: 'rich0002',
+        kind: 'text',
+        variant: 'paragraph',
+        text: 'One.\n\nTwo.\n\nThree.\n\nFour.',
+      },
+      {
+        id: 'rich0003',
+        kind: 'photo',
+        imageId: IMG,
+        alt: '',
+        decorative: true,
+        caption: 'Caption',
+      },
+      {
+        id: 'rich0004',
+        kind: 'gallery',
+        images: [
+          { imageId: IMG, alt: 'One', decorative: true },
+          { imageId: '11111111-1111-4111-8111-111111111111', alt: 'Two' },
+        ],
+      },
+      {
+        id: 'rich0005',
+        kind: 'video',
+        url: 'https://youtu.be/9bZkp7q19f0',
+        caption: 'Clip',
+      },
+      {
+        id: 'rich0006',
+        kind: 'services',
+        items: [
+          {
+            name: 'Cut',
+            detail: 'Skin fade',
+            priceMinor: '500000',
+            from: true,
+          },
+          { name: 'Beard', priceMinor: '200000' },
+        ],
+      },
+      {
+        id: 'rich0007',
+        kind: 'events',
+        items: [
+          {
+            date: TODAY,
+            time: '19:30',
+            title: 'Show',
+            place: 'Lekki',
+            note: 'Doors 7',
+          },
+          { date: '2027-01-01', title: 'Later' },
+        ],
+      },
+      { id: 'rich0008', kind: 'quote', text: 'Thank you' },
+    ],
+  };
+  assert.equal(studioDocumentSchema.safeParse(rich).success, true);
+  assert.deepEqual(resolveStudio(rich, TODAY), rich);
+});
+
 test('every generated valid v2 document is accepted, and broken ones never are', () => {
   fc.assert(
     fc.property(studioDocumentArb({ valid: true }), (d) => {

@@ -599,7 +599,8 @@ function resolveV2(o: Record<string, unknown>, today: string): StudioDocument {
  * anything else is the default Classic document. Never throws. Unknown choices become the default
  * one, a cover the style does not offer becomes "Your cover", unknown blocks are dropped, lists
  * past a limit are trimmed from the end, and events before `today` (the Lagos date, YYYY-MM-DD)
- * are hidden. It is idempotent, and a valid v2 document comes back unchanged.
+ * are hidden. It is idempotent, and a valid v2 document comes back unchanged
+ * apart from events before `today`.
  */
 export function resolveStudio(raw: unknown, today: string): StudioDocument {
   try {
