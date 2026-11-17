@@ -103,9 +103,9 @@ test(
   },
 );
 
-// Page Studio (plan Task 8): its stylesheet travels with the renderer, which only the public page
-// and the Studio lab import. Next.js links it on /@username whether or not the page has a design,
-// so every rule is scoped to a Studio page and matches nothing on a standard one.
+// Page Studio (plan Task 8): its stylesheet travels with the renderer, which only the public page,
+// the Studio preview and the Studio lab import. Every rule is scoped to a Studio page and matches
+// nothing on a standard one.
 const studioCss = readFileSync(
   new URL('../src/components/studio/studio.css', import.meta.url),
   'utf8',
@@ -145,3 +145,21 @@ test(
       );
   },
 );
+
+// Chrome warned "preloaded using link preload but not used" (17 Nov 2026): imported by the renderer,
+// studio.css belonged to the /@username route, so every prefetched link to a public page preloaded it
+// on pages that never use it. Only the dynamically loaded sheet imports it now (studio-styles.tsx).
+test('studio.css loads only through the dynamic sheet, never with the /@username route', () => {
+  const studio = (file) =>
+    readFileSync(
+      new URL(`../src/components/studio/${file}`, import.meta.url),
+      'utf8',
+    );
+  assert.doesNotMatch(studio('studio-page.tsx'), /import '[^']*studio\.css'/);
+  assert.match(studio('studio-sheet.tsx'), /import '\.\/studio\.css';/);
+  assert.match(
+    studio('studio-styles.tsx'),
+    /dynamic\(\(\) => import\('\.\/studio-sheet'\)\)/,
+  );
+  assert.match(studio('studio-page.tsx'), /<StudioStyles \/>/);
+});
