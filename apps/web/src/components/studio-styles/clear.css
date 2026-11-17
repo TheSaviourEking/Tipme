@@ -668,6 +668,7 @@
 
 .studio[data-style='clear'] .studio-foot :is(a, .tm-button--quiet) {
   color: var(--studio-fg2);
+  font: inherit;
   text-decoration-color: var(--studio-accText);
   text-decoration-thickness: 1.5px;
 }
