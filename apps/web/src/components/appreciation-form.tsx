@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { CSSProperties, FormEvent, ReactNode } from 'react';
+import type { CSSProperties, FormEvent, PointerEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import type {
   StudioStyleId,
@@ -200,6 +200,8 @@ export function AppreciationForm({
   // Counted once a page view: choosing a key clears the field, and typing again is the same person.
   const customCounted = useRef(false);
   const customField = useRef<HTMLInputElement>(null);
+  // Whether the "Custom" choice (a style's skin only) was pressed with a pointer, not the keys.
+  const customByPointer = useRef(false);
   const firstChoice = useRef<HTMLInputElement>(null);
   const messageField = useRef<HTMLTextAreaElement>(null);
   const nameField = useRef<HTMLInputElement>(null);
@@ -787,6 +789,20 @@ export function AppreciationForm({
           <div className="amount-fit">
             <div
               className="amount-options"
+              {...(skin
+                ? {
+                    onPointerDown: (event: PointerEvent<HTMLDivElement>) => {
+                      customByPointer.current = Boolean(
+                        (event.target as Element)
+                          .closest('label')
+                          ?.querySelector('input[value="other"]'),
+                      );
+                    },
+                    onKeyDown: () => {
+                      customByPointer.current = false;
+                    },
+                  }
+                : {})}
               style={
                 {
                   '--keys-small': layout.small,
@@ -841,7 +857,10 @@ export function AppreciationForm({
                       choseAmount.current = true;
                       setError('');
                     });
-                    customField.current?.focus();
+                    // A tap or click goes on to the field; arrowing through the choices keeps
+                    // focus in the group (WCAG 3.2.2).
+                    if (customByPointer.current) customField.current?.focus();
+                    customByPointer.current = false;
                   }}
                 >
                   Custom
@@ -932,24 +951,33 @@ export function AppreciationForm({
             <Arrow />
           </Button>
         </TipAction>
-        {/* A styled page's phone bar (CSS): a second way to press this form's Tip, kept out of the
-            accessibility tree and the tab order, since the in-page button above is the one a
-            keyboard or a screen reader uses. It carries the same notice as the bar on Classic. */}
+        {/* A styled page's phone bar (CSS), after the in-page Tip: this form's Tip again, shown
+            only once the in-page one has scrolled away (hidden, it leaves the accessibility tree
+            too). Its words repeat what the page already says, so they stay out of the tree; a
+            failed quote is read from the live region above, and the button becomes Try again,
+            as on Classic's bar. */}
         {skin && (
-          <div className="tip-bar" aria-hidden="true">
+          <div className="tip-bar">
+            {shown.kind === 'failed' && (
+              <p className="tip-bar__failed" aria-hidden="true">
+                {shown.message}
+              </p>
+            )}
             {(barNotice ?? copy.formDisclaimer) && (
-              <p className="tip-bar__notice">
+              <p className="tip-bar__notice" aria-hidden="true">
                 {barNotice ?? copy.formDisclaimer}
               </p>
             )}
             <button
               type="submit"
               className="tip-bar__button"
-              tabIndex={-1}
               disabled={busy}
+              aria-busy={busy}
             >
               {submitting ? (
                 'Starting your tip…'
+              ) : shown.kind === 'failed' ? (
+                'Try again'
               ) : amount ? (
                 <span>
                   Tip <Money minor={amount} />

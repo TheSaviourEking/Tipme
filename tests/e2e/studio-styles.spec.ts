@@ -120,6 +120,18 @@ for (const style of STYLES) {
     await expect(custom).toHaveCount(1);
     const other = page.getByLabel(/^Other amount/);
     await expect(other).toBeHidden();
+    // From the keyboard, arrowing onto Custom reveals the field but leaves focus in the group
+    // (WCAG 3.2.2: choosing is not a change of context).
+    const first = styled.form.getByRole('radio').first();
+    await first.focus();
+    for (let i = 0; i < styled.amounts.length; i += 1)
+      await page.keyboard.press('ArrowRight');
+    await expect(custom).toBeChecked();
+    await expect(custom).toBeFocused();
+    await expect(other).toBeVisible();
+    // A click on Custom takes the supporter straight to the field.
+    await first.check({ force: true });
+    await expect(other).toBeHidden();
     await styled.form.locator('label', { hasText: 'Custom' }).click();
     await expect(custom).toBeChecked();
     await expect(other).toBeVisible();
@@ -131,7 +143,10 @@ for (const style of STYLES) {
     ).toBe(standardOther);
     // A below-minimum amount shows today's error, word for word.
     await other.fill('1,000');
-    await styled.form.getByRole('button', { name: /^Tip/ }).click();
+    await styled.form
+      .locator('.composer-action')
+      .getByRole('button', { name: /^Tip/ })
+      .click();
     await expect(styled.form.locator('.tm-field-error').first()).toHaveText(
       standardError!,
     );
@@ -145,7 +160,9 @@ for (const style of STYLES) {
     await styled.form.locator('.tm-amount-choice').first().click();
     await expect(other).toBeHidden();
     await expect(
-      styled.form.getByRole('button', { name: /^Tip/ }),
+      styled.form
+        .locator('.composer-action')
+        .getByRole('button', { name: /^Tip/ }),
     ).toContainText(styled.amounts[0]!.replace(' NGN', ''));
   });
 }

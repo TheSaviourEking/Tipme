@@ -269,6 +269,14 @@
     visibility 0s linear 0s;
 }
 
+.studio[data-style] .tip-bar__failed {
+  color: var(--studio-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
 .studio[data-style] .tip-bar__notice {
   color: var(--studio-fg2);
   font-size: 11px;
@@ -296,7 +304,13 @@
 /* The page keeps room under its last block for the bar, sized to the bar by the form. */
 @media (max-width: 1023px) {
   .studio[data-style] .studio-page {
-    padding-bottom: calc(var(--tip-bar, 110px) + 16px);
+    padding-bottom: calc(var(--tip-bar, 136px) + 16px);
+  }
+
+  /* Anything scrolled into view (a focused link, the form's problem) stops above the bar
+     (WCAG 2.4.11), as on Classic. The fallback holds the bar as drawn, notice included. */
+  html:has(.studio[data-style] form[data-skin]) {
+    scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
   }
 }
 

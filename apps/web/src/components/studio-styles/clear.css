@@ -674,16 +674,17 @@
 }
 
 /* Load: name and bio fade up 8 px, 240 ms ease-out, 40 ms apart. */
+/* From .01, not 0: a text at opacity 0 is not yet a largest-paint candidate. */
 @keyframes studio-clear-rise {
   from {
-    opacity: 0;
+    opacity: 0.01;
     transform: translateY(8px);
   }
 }
 
 @keyframes studio-clear-fade {
   from {
-    opacity: 0;
+    opacity: 0.01;
   }
 }
 

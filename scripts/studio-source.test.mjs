@@ -196,7 +196,7 @@ test('every style rule is scoped to a styled Studio page', () => {
         s,
         own
           ? new RegExp(`^\\.studio\\[data-style=['"]?${own}['"]?\\]`)
-          : /^\.studio\[data-style\]/,
+          : /^(html:has\()?\.studio\[data-style\]/,
         `${file}: "${s}"`,
       );
   }
