@@ -58,6 +58,18 @@
 
 .profile-page--studio[data-style='classic'][data-mode] .tip-remember input {
   border-color: var(--studio-boxLine);
+  box-shadow: var(--studio-shBox);
+}
+
+/* The Pro featured link's ledge, off in dark like every shadow. */
+.profile-page--studio[data-style='classic'][data-mode]
+  .profile-links__featured {
+  box-shadow: var(--studio-shFeat);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .profile-links__featured:active {
+  box-shadow: var(--studio-shFeatDown);
 }
 
 .profile-page--studio[data-style='classic'][data-mode]

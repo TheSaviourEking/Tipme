@@ -9,7 +9,9 @@ import {
   STUDIO_ACCENTS,
   STUDIO_STYLES,
   hexToOklch,
+  STUDIO_HEADING_PX,
   resolveStudio,
+  studioSlotWidth,
   studioTokens,
 } from '@tipme/contracts';
 
@@ -101,6 +103,7 @@ const { classicTokens, classicCss } = await import(
 );
 const { ClassicStudio } = await import(new URL('classic.mjs', out));
 const { renderStyled } = await import(new URL('style-page.mjs', out));
+const { StandardProfile } = await import(new URL('standard-profile.mjs', out));
 
 // Quotes normalised: Prettier writes the sheet's attribute values in single quotes.
 const classicSheet = readFileSync(
@@ -327,7 +330,9 @@ test('dark Classic has no shadows or gloss, and uses the canvas’s derived pale
       accent === null,
     );
     for (const [key, value] of Object.entries(t))
-      if (/^sh/.test(key)) assert.equal(value, 'none', key);
+      // A valid no-op, not `none`: some shadows sit in a list (the invalid field's red edge is
+      // `var(--shadow-recessed), inset 3px 0 0 red`), and `none` there drops the whole list.
+      if (/^sh/.test(key)) assert.equal(value, '0 0 0 transparent', key);
     for (const key of ['accGloss', 'tipGloss'])
       assert.equal(t[key], 'rgba(255,255,255,0)', key);
     assert.equal(t.scheme, 'dark');
@@ -453,7 +458,7 @@ test('auto mode is pure CSS: the dark tokens inside prefers-color-scheme', () =>
   assert.ok(css.startsWith(`${root}[data-mode]){`));
   assert.match(
     css,
-    /@media \(prefers-color-scheme: dark\)\{:root:has\(\.profile-page--studio\[data-style="classic"\]\[data-mode="auto"\]\)\{[^}]*--studio-bg:#141210;[^}]*--studio-shSig:none;/,
+    /@media \(prefers-color-scheme: dark\)\{:root:has\(\.profile-page--studio\[data-style="classic"\]\[data-mode="auto"\]\)\{[^}]*--studio-bg:#141210;[^}]*--studio-shSig:0 0 0 transparent;/,
   );
   assert.match(css, /--studio-bg:#f3f2ee;/);
   // Dark mode alone needs no media query.
@@ -491,4 +496,208 @@ test('Classic’s stylesheet styles only a Classic page and loads only on one', 
   // Classic keeps today's faces: Manrope and DM Serif from the root layout, money in Inter.
   assert.doesNotMatch(classicSheet, /@font-face|Studio /);
   assert.equal(STUDIO_STYLES.classic.displayFont, 'dm-serif-display');
+});
+
+const globalsCss = readFileSync(
+  new URL('../src/app/globals.css', import.meta.url),
+  'utf8',
+);
+/** One declaration's value in a stylesheet's rule (first match), whitespace collapsed. */
+const declOf = (css, selector, prop) => {
+  const at = css.indexOf(`${selector} {`);
+  assert.ok(at >= 0, `${selector} in the stylesheet`);
+  const body = css.slice(at, css.indexOf('}', at));
+  const m = new RegExp(`(?:^|[;{\\s])${prop}:\\s*([^;]+);`).exec(body);
+  assert.ok(m, `${selector} { ${prop} }`);
+  return m[1].replace(/\s+/g, ' ').trim();
+};
+const rem = (v) => Number(/^([\d.]+)rem$/.exec(v)?.[1]) * 16;
+const SPACE = { 'var(--space-4)': 16, 'var(--space-10)': 40 };
+
+test('the design check’s Classic slot widths are what classic.css draws on today’s page, and sizes follows them', () => {
+  // Today's layout (globals.css), read rather than retyped.
+  const sheet = declOf(globalsCss, '.profile-sheet', 'width');
+  const [, sheetMax, sheetGutter] =
+    /^min\(([\d.]+)rem, calc\(100% - ([\d.]+)rem\)\)$/.exec(sheet);
+  const columns = declOf(
+    globalsCss,
+    '.profile-columns',
+    'grid-template-columns',
+  );
+  const [, rail] = /^minmax\(0, 1fr\) ([\d.]+)rem$/.exec(columns);
+  const gap = declOf(globalsCss, '.profile-columns', 'column-gap');
+  const [, gapMin, gapVw, gapMax] =
+    /^clamp\(([\d.]+)rem, ([\d.]+)vw, ([\d.]+)rem\)$/.exec(gap);
+  const phone = globalsCss.slice(
+    globalsCss.indexOf(
+      '@media (max-width: 860px) {\n  body:has(.profile-page) .nav-shell',
+    ),
+  );
+  const phoneMax = rem(declOf(phone, '.profile-columns', 'max-width'));
+  const phoneGutter =
+    SPACE[declOf(phone, '.profile-columns', 'padding-inline')];
+  // Classic's own: the blocks' inset beside the rail, the strip's columns and gap.
+  const desktop = classicSheet.slice(
+    classicSheet.indexOf('@media (min-width: 861px)'),
+  );
+  const inset = SPACE[declOf(desktop, '.classic-blocks', 'padding-left')];
+  const stripCols = Number(
+    /^repeat\((\d+),/.exec(
+      declOf(classicSheet, '.studio-strip', 'grid-template-columns'),
+    )[1],
+  );
+  const stripGap = rem(declOf(classicSheet, '.studio-strip', 'gap'));
+  assert.deepEqual([phoneGutter, inset, stripCols, stripGap], [16, 40, 2, 8]);
+  const drawn = (v) => {
+    const col =
+      v >= 861
+        ? Math.min(Number(sheetMax) * 16, v - Number(sheetGutter) * 16) -
+          Number(rail) * 16 -
+          Math.min(
+            Math.max(Number(gapMin) * 16, (Number(gapVw) / 100) * v),
+            Number(gapMax) * 16,
+          ) -
+          inset
+        : Math.min(v, phoneMax) - 2 * phoneGutter;
+    return { block: col, tile: (col - (stripCols - 1) * stripGap) / stripCols };
+  };
+  for (const v of [
+    320, 390, 575, 576, 768, 860, 861, 1023, 1024, 1200, 1300, 1440,
+  ]) {
+    const { block, tile } = drawn(v);
+    for (const kind of ['text', 'photo', 'video', 'services', 'events'])
+      assert.equal(
+        studioSlotWidth('classic', kind, v),
+        Math.round(block),
+        `${kind} at ${v}`,
+      );
+    assert.equal(
+      studioSlotWidth('classic', 'gallery', v),
+      Math.round(tile),
+      `gallery at ${v}`,
+    );
+  }
+  // The rendered photos ask for at least what is drawn at every width: the widest desktop
+  // width (1200), the widest of 861–1023, 544 from 576, and the phone column as a calc.
+  const html = page({ accent: 'green' });
+  const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.equal(
+    sizes,
+    `(min-width: 1024px) ${studioSlotWidth('classic', 'gallery', 1200)}px, (min-width: 861px) ${studioSlotWidth('classic', 'gallery', 1023)}px, (min-width: 576px) ${studioSlotWidth('classic', 'gallery', 576)}px, calc(50vw - 20px)`,
+  );
+  for (const v of [320, 390, 575])
+    assert.equal(
+      Math.round(v / 2 - 20),
+      studioSlotWidth('classic', 'gallery', v),
+      `${v}`,
+    );
+  for (let v = 1024; v <= 1440; v += 8)
+    assert.ok(
+      studioSlotWidth('classic', 'gallery', 1200) >= drawn(v).tile - 0.5,
+      `${v}`,
+    );
+  for (let v = 861; v <= 1023; v += 2)
+    assert.ok(
+      studioSlotWidth('classic', 'gallery', 1023) >= drawn(v).tile - 0.5,
+      `${v}`,
+    );
+});
+
+test('the design check measures Classic’s section titles at the size classic.css draws', () => {
+  const font = declOf(classicSheet, '.studio-title', 'font');
+  const [, size] = /^400 ([\d.]+rem) \/ /.exec(font);
+  assert.equal(STUDIO_HEADING_PX.classic, rem(size));
+  // One size at every width: no media query restyles it.
+  assert.equal(classicSheet.split('.studio-title {').length - 1, 1);
+});
+
+test('an all-default Classic document renders exactly the standard page', () => {
+  const p = props(doc({ blocks: [] }));
+  const styled = renderToStaticMarkup(
+    renderStyled({
+      ...p,
+      lead: createElement('i', { 'data-part': 'tracker' }),
+    }),
+  );
+  const standard = renderToStaticMarkup(
+    createElement(StandardProfile, {
+      firstName: 'Kemi',
+      lead: createElement('i', { 'data-part': 'tracker' }),
+      cover: p.coverArt,
+      identity: p.identity,
+      tipBlock: p.tipBlock,
+      footer: p.footer,
+    }),
+  );
+  assert.equal(styled, standard);
+  assert.doesNotMatch(styled, /profile-page--studio|<style>|data-sheet/);
+  // Any one choice is no longer the default.
+  for (const over of [
+    { accent: 'green' },
+    { mode: 'dark' },
+    { mode: 'auto' },
+    { cover: 'plain' },
+    {},
+  ])
+    assert.match(
+      renderToStaticMarkup(renderStyled(props(doc(over)))),
+      /profile-page--studio/,
+      JSON.stringify(over),
+    );
+});
+
+test('dark Classic turns off the featured link’s and the remember box’s shadows too', () => {
+  const S = '.profile-page--studio[data-style="classic"][data-mode]';
+  const want = [
+    [`${S} .profile-links__featured`, 'shFeat', '.profile-links__featured'],
+    [
+      `${S} .profile-links__featured:active`,
+      'shFeatDown',
+      '.profile-links__featured:active',
+    ],
+    [
+      `${S} .tip-remember input`,
+      'shBox',
+      '.profile-composer .tip-remember input',
+    ],
+  ];
+  const norm = (v) =>
+    v
+      .replace(
+        /rgb\((\d+) (\d+) (\d+) \/ (\d+)%\)/g,
+        (_, r, g, b, a) => `rgba(${r},${g},${b},${Number(a) / 100})`,
+      )
+      .replace(
+        /rgba\((\d+),(\d+),(\d+),\.(\d+)\)/g,
+        (_, r, g, b, a) => `rgba(${r},${g},${b},${Number(`0.${a}`)})`,
+      );
+  const light = classicTokens(
+    studioTokens('classic', null).light,
+    'light',
+    true,
+  );
+  const dark = classicTokens(
+    studioTokens('classic', 'green').dark,
+    'dark',
+    false,
+  );
+  for (const [selector, token, today] of want) {
+    const rule = rules(classicSheet).find((r) => r.selector === selector);
+    assert.ok(rule, selector);
+    assert.ok(
+      rule.decls.some(
+        ([p, v]) => p === 'box-shadow' && v === `var(--studio-${token})`,
+      ),
+      `${selector} uses --studio-${token}`,
+    );
+    // Light keeps today's shadow; dark has none.
+    assert.equal(
+      norm(light[token]),
+      norm(declOf(globalsCss, today, 'box-shadow')),
+      token,
+    );
+    assert.equal(dark[token], '0 0 0 transparent', token);
+  }
 });

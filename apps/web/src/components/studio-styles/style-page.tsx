@@ -19,7 +19,12 @@
  */
 import type { ReactNode } from 'react';
 import { preload } from 'react-dom';
-import type { PublicProfile, PublicStudio } from '@tipme/contracts';
+import {
+  isClassicDefault,
+  type PublicProfile,
+  type PublicStudio,
+} from '@tipme/contracts';
+import { StandardProfile } from '@/components/profile/standard-profile';
 import { ClassicStudio } from './classic';
 import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
@@ -113,7 +118,23 @@ export function renderStyled(
   },
 ) {
   const { identity, lead, ...rest } = props;
-  return props.studio.document.style === 'classic' ? (
+  const doc = props.studio.document;
+  // Classic with every default is today's page, byte for byte (§4.3, §9.1): the standard markup
+  // through the same component as a page with no Studio, with no Classic root, tokens or sheet.
+  if (isClassicDefault(doc))
+    return (
+      <StandardProfile
+        firstName={
+          props.profile.displayName.split(/\s+/)[0] ?? props.profile.displayName
+        }
+        lead={lead}
+        cover={props.coverArt}
+        identity={identity}
+        tipBlock={props.tipBlock}
+        footer={props.footer}
+      />
+    );
+  return doc.style === 'classic' ? (
     <ClassicStudio {...rest} identity={identity} {...(lead ? { lead } : {})} />
   ) : (
     <StudioStylePage {...rest} />

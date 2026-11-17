@@ -30,6 +30,10 @@ const SHADOWS_LIGHT = {
   shTipDown:
     'inset 0 1px 0 rgba(255,255,255,.14), 0 1px 1px rgba(20,18,16,.30)',
   shBar: '0 -8px 24px rgba(20,18,16,.08)',
+  // Hard-coded in globals.css today: the featured link's ledge and the remember box's well.
+  shFeat: '0 3px 0 rgba(20,18,16,.12)',
+  shFeatDown: '0 1px 0 rgba(20,18,16,.12)',
+  shBox: 'inset 0 1px 2px rgba(20,18,16,.14)',
 } as const;
 
 /** Today's purple key: its edge (the purple mixed with 16% black) and its shadow's tint. */
@@ -73,7 +77,10 @@ export function classicTokens(
   const stop = (s: { l: number; c: number }) =>
     oklchToHex({ l: s.l, c: Math.min(hue.c, s.c), h: hue.h });
   const tint = rgb(purple ? PURPLE_SHADE : shade(acc, SHADE.l, SHADE.c));
-  const off = 'none';
+  // Dark turns every shadow off with a valid no-op, not `none`: a shadow token can sit in a list
+  // (the invalid field's red edge is `var(--shadow-recessed), inset 3px 0 0 red`), and `none`
+  // there would make the whole declaration invalid and drop the red edge with it.
+  const off = '0 0 0 transparent';
   return {
     ...base,
     accEdge: light ? (purple ? PURPLE_EDGE : shade(acc, EDGE, EDGE)) : acc,

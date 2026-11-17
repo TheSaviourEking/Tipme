@@ -201,6 +201,10 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
  */
 function sizesFor(style: StudioStyleId, kind: StudioBlock['kind']): string {
   const at = (viewport: number) => studioSlotWidth(style, kind, viewport);
+  // Classic is today's page (classic.css): two columns from 861 px, widest at 1200, then one
+  // column of min(vw, 576) − 32, its photos 2-up with an 8 px gap.
+  if (style === 'classic')
+    return `(min-width: 1024px) ${at(1200)}px, (min-width: 861px) ${at(1023)}px, (min-width: 576px) ${at(576)}px, ${kind === 'gallery' ? 'calc(50vw - 20px)' : 'calc(100vw - 32px)'}`;
   return `(min-width: 1024px) ${at(1440)}px, (min-width: 768px) ${at(1023)}px, ${at(390)}px`;
 }
 

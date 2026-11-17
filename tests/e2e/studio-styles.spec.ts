@@ -248,15 +248,32 @@ test('classic takes an accent, dark or auto, and a cover type', async ({
     'rgb(243, 242, 238)',
   );
   expect(await styleOf('.composer-submit', 'color')).toBe('rgb(20, 18, 16)');
-  expect(
-    await styleOf('.profile-composer .appreciation-card', 'box-shadow'),
-  ).toBe('none');
+  // No shadow in dark (§9.1): the valid no-op, a transparent zero shadow, never a visible one.
+  for (const selector of [
+    '.profile-composer .appreciation-card',
+    '.composer-submit',
+    '.tm-amount-choice input:checked + span',
+  ])
+    expect(await styleOf(selector, 'box-shadow'), selector).toMatch(
+      /^(rgba\(0, 0, 0, 0\) 0px 0px 0px 0px(, )?)+$/,
+    );
   await expectAccessible(page);
   // An error in dark (the canvas draws none): readable, the field's edge too.
   await page.getByLabel(/^Other amount/).fill('1,000');
   await page.locator('form').getByRole('button', { name: /^Tip/ }).click();
   await expect(page.locator('.tm-field-error').first()).toBeVisible();
   expect(await contrastProblems(page, '.profile-page')).toEqual([]);
+  // The invalid field keeps its red edge in dark: the shadow list survives Classic's dark
+  // shadows (a valid no-op, not `none`, which would drop the whole list).
+  await expect(page.getByLabel(/^Other amount/)).toHaveAttribute(
+    'aria-invalid',
+    'true',
+  );
+  expect(
+    await page
+      .getByLabel(/^Other amount/)
+      .evaluate((el) => getComputedStyle(el).boxShadow),
+  ).toContain('rgb(194, 56, 44) 3px 0px 0px 0px inset');
   await expectAccessible(page);
 
   // Auto follows the browser, with no script.

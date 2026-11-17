@@ -39,6 +39,7 @@ const STUBS = {
   './style-tokens': './style-tokens.mjs',
   // Classic is tested in studio-classic.test.mjs.
   './classic': './stub-classic.mjs',
+  '@/components/profile/standard-profile': './stub-standard-profile.mjs',
 };
 function build(name, from) {
   const file = new URL(from, src);
@@ -92,6 +93,7 @@ stub(
 export const StyleSheet = (p) => createElement('i', { 'data-sheet': p.styleId });`,
 );
 stub('stub-classic.mjs', 'export const ClassicStudio = () => null;');
+stub('stub-standard-profile.mjs', 'export const StandardProfile = () => null;');
 build('style-tokens.mjs', 'style-tokens.ts');
 build('style-fonts.mjs', 'style-fonts.ts');
 build('parts.mjs', 'parts.tsx');
