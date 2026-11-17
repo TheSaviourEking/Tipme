@@ -345,3 +345,48 @@
   transition: none !important;
   animation: none !important;
 }
+
+/* The site's own header and footer on a styled page (owner, 17 Nov 2026, ruling P): the page's
+   neutrals, written on <html> by the page (style-tokens.ts chromeCss), take the place of the
+   site's paper tokens inside them, so they run into the page with no band or seam. "Claim your
+   username" keeps TipMe purple: it is the site's action, not the page's accent. */
+html:has(.studio[data-style]) {
+  background: var(--studio-bg);
+}
+
+html:has(.studio[data-style][data-mode='dark']) {
+  color-scheme: dark;
+}
+
+html:has(.studio[data-style]) :is(.site-header, .site-footer) {
+  --canvas: var(--studio-bg);
+  --surface-raised: var(--studio-card);
+  --surface-recessed: var(--studio-el2);
+  --surface-subtle: var(--studio-el2);
+  --text-primary: var(--studio-fg);
+  --text-secondary: var(--studio-fg2);
+  --edge-hairline: var(--studio-line);
+  --border-material: var(--studio-line);
+  --edge-light: transparent;
+  color: var(--studio-fg);
+}
+
+html:has(.studio[data-style]) .site-header .brand__mark path[fill='#000000'],
+html:has(.studio[data-style]) .site-footer .brand__mark path[fill='#000000'] {
+  fill: var(--studio-fg);
+}
+
+html:has(.studio[data-style])
+  :is(.site-header, .site-footer)
+  :is(.tm-button--secondary, .tm-surface, .footer-card, .who__item) {
+  box-shadow: none;
+}
+
+/* The phone menu's pinned action is the site's purple there too (Classic draws it in ink). */
+@media (max-width: 800px) {
+  html:has(.studio[data-style]) .site-nav .tm-button--primary {
+    border-color: transparent;
+    background: var(--surface-signature);
+    color: var(--surface-base);
+  }
+}

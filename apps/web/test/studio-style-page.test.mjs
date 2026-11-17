@@ -7,6 +7,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   DESIGN_CHECK_VERSION,
   STUDIO_FONTS,
+  STUDIO_STYLE_IDS,
+  contrastRatio,
   resolveStudio,
   studioSlotWidth,
   studioTokens,
@@ -334,4 +336,63 @@ test("the design check's photo slots are the widths Clear's CSS draws, and sizes
     sizes,
     `(min-width: 1024px) ${studioSlotWidth('clear', 'gallery', 1440)}px, (min-width: 768px) ${tile}px, ${tile}px`,
   );
+});
+
+// The site's header and footer on a styled page take the page's own neutrals (owner, ruling P):
+// the page writes them on <html> from the registry, so the chrome can never drift from it.
+const CHROME_KEYS = ['bg', 'card', 'el2', 'fg', 'fg2', 'line'];
+const chromeBlocks = (html) =>
+  [
+    ...html.matchAll(
+      /(@media \(prefers-color-scheme: ?dark\)\{)?html:has\(\.studio\[data-style\]\)\{([^}]*)\}/g,
+    ),
+  ].map((m) => ({
+    media: Boolean(m[1]),
+    tokens: Object.fromEntries(
+      [...m[2].matchAll(/--studio-([a-zA-Z0-9]+):([^;!]+)/g)].map((d) => [
+        d[1],
+        d[2].trim(),
+      ]),
+    ),
+  }));
+
+test("the site's header and footer get the page's neutrals from the registry, per mode", () => {
+  const tokens = studioTokens('clear', 'coral');
+  const pick = (t) => Object.fromEntries(CHROME_KEYS.map((k) => [k, t[k]]));
+  for (const mode of ['light', 'dark']) {
+    const blocks = chromeBlocks(
+      page({ document: doc({ mode, accent: 'coral' }) }),
+    );
+    assert.deepEqual(
+      blocks,
+      [{ media: false, tokens: pick(tokens[mode]) }],
+      mode,
+    );
+  }
+  // Auto: light, then dark inside prefers-color-scheme (pure CSS).
+  assert.deepEqual(chromeBlocks(page({ document: doc({ mode: 'auto' }) })), [
+    { media: false, tokens: pick(studioTokens('clear', null).light) },
+    { media: true, tokens: pick(studioTokens('clear', null).dark) },
+  ]);
+  // Neutrals only: the accent never reaches the site's chrome.
+  for (const { tokens: t } of chromeBlocks(page()))
+    assert.ok(!('acc' in t) && !('accText' in t));
+});
+
+test("text on the site's chrome keeps 4.5:1 in every style, light and dark", () => {
+  for (const style of STUDIO_STYLE_IDS.filter((s) => s !== 'classic'))
+    for (const mode of ['light', 'dark']) {
+      const t = studioTokens(style, null)[mode];
+      // Header and footer links on the page; footer card text; Sign in on the raised surface.
+      for (const [fg, bg, name] of [
+        [t.fg, t.bg, 'fg on bg'],
+        [t.fg2, t.bg, 'fg2 on bg'],
+        [t.fg, t.card, 'fg on card'],
+        [t.fg2, t.card, 'fg2 on card'],
+      ])
+        assert.ok(
+          contrastRatio(fg, bg) >= 4.5,
+          `${style} ${mode}: ${name} ${contrastRatio(fg, bg).toFixed(2)}`,
+        );
+    }
 });

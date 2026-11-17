@@ -23,7 +23,12 @@ import type { PublicProfile, PublicStudio } from '@tipme/contracts';
 import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
 import { StyleSheet } from './style-sheets';
-import { autoDarkCss, modeTokens, styleTokens } from './style-tokens';
+import {
+  autoDarkCss,
+  chromeCss,
+  modeTokens,
+  styleTokens,
+} from './style-tokens';
 
 export type { TipSkin } from '@/components/appreciation-form';
 
@@ -63,7 +68,9 @@ export function StudioStylePage({
     styleFontFaces(style) +
     (doc.mode === 'auto'
       ? autoDarkCss(modeTokens(style, palette, 'dark'))
-      : '');
+      : '') +
+    // The site's header and footer take the page's neutrals (owner, ruling P).
+    chromeCss(style, palette, doc.mode);
   return (
     <div
       className="studio"
