@@ -77,9 +77,9 @@ for (const tag of ['', ' @mobile'])
     expect(names(role)).toEqual(['Inter', 'Manrope']);
 
     // An amount key: every glyph (₦ and the figures) in Inter, with tabular figures.
-    const key = page.locator('.amount-options .money').first();
+    const key = page.locator('.amount-options .money span').first();
     await expect(key).toHaveText('₦1,000');
-    expect(await fontsDrawing(page, '.amount-options .money')).toEqual([
+    expect(await fontsDrawing(page, '.amount-options .money span')).toEqual([
       { familyName: 'Inter', isCustomFont: true, glyphCount: 6 },
     ]);
     const style = await key.evaluate((el) => {

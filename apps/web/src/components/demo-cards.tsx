@@ -278,14 +278,14 @@ export function PersonCard({
               ))}
             </div>
             <span
-              className="home-demo__tip"
+              className="home-demo__tip money"
               onClick={(event) => {
                 if (!canPlay() || !centred) return;
                 event.stopPropagation();
                 tip();
               }}
             >
-              Tip <span className="money">{label}</span>
+              Tip {label}
             </span>
           </div>
         </>

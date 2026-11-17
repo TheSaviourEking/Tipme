@@ -734,6 +734,7 @@ export function AppreciationForm({
               {presets.map((preset, index) => (
                 <AmountChoice
                   key={preset.minor}
+                  className="money"
                   ref={index === 0 ? firstChoice : undefined}
                   name={`amount-${id}`}
                   value={String(preset.minor)}
@@ -761,7 +762,7 @@ export function AppreciationForm({
                     track('amount_selected', { surface: 'profile', handle });
                   }}
                 >
-                  <span className="money">₦{preset.label}</span>
+                  ₦{preset.label}
                 </AmountChoice>
               ))}
             </div>

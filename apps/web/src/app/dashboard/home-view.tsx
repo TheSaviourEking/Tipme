@@ -30,6 +30,7 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
 import { withdrawableNow } from '@/lib/withdraw-state';
 import { Money } from '@/components/money';
+import { naira } from '@/lib/money';
 
 function Tile({
   label,
@@ -368,8 +369,8 @@ export default function DashboardHome() {
             href={`/dashboard/reports/${latestWeek.week}`}
           >
             <strong>Your week · {latestWeek.week}</strong>
-            <span className="week-teaser__figure">
-              <Money minor={latestWeek.data.totalNetMinor} />
+            <span className="week-teaser__figure money">
+              {naira(latestWeek.data.totalNetMinor)}
             </span>
             <span>
               from {latestWeek.data.tipCount}{' '}

@@ -122,7 +122,7 @@ test('the totals keep showing when a refresh fails', async ({
 const editorial = (locator: import('@playwright/test').Locator) =>
   locator.evaluate((element) => getComputedStyle(element).fontFamily);
 
-test('tips: each amount is set in the editorial face, and a desktop shows the totals beside the list', async ({
+test('tips: each amount is set in the money face (Inter), and a desktop shows the totals beside the list', async ({
   page,
   browser,
 }, testInfo) => {
@@ -133,11 +133,12 @@ test('tips: each amount is set in the editorial face, and a desktop shows the to
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/dashboard/tips');
   await expect(page.getByText('₦3,720 from 2 tips so far')).toBeVisible();
+  // The owner, 17 Nov 2026: money is set in Inter, which draws ₦ (DM Serif Display does not).
   expect(
-    await editorial(page.locator('.tip-row__money strong').first()),
-  ).toMatch(/dm ?serif/i);
-  expect(await editorial(page.locator('.tips-total strong'))).toMatch(
-    /dm ?serif/i,
+    await editorial(page.locator('.tip-row__money strong .money').first()),
+  ).toMatch(/^"?interMoney"?,/);
+  expect(await editorial(page.locator('.tips-total strong .money'))).toMatch(
+    /^"?interMoney"?,/,
   );
   await expect(page.locator('.tips-total strong')).toHaveText(/^₦[\d,]+$/);
   const aside = (await page.locator('.tips-aside').boundingBox())!;
