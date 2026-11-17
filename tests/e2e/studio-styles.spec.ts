@@ -99,7 +99,7 @@ for (const style of STYLES) {
     const standard = await read();
     const standardOther = await page
       .getByLabel(/^Other amount/)
-      .evaluate((i) => i.labels?.[0]?.textContent);
+      .evaluate((i) => (i as HTMLInputElement).labels?.[0]?.textContent);
     await page.getByLabel(/^Other amount/).fill('1,000');
     await standard.form.getByRole('button', { name: /^Tip/ }).click();
     const standardError = await standard.form
