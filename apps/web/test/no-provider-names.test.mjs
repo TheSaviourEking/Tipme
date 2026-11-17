@@ -10,7 +10,11 @@ import ts from 'typescript';
 // Identifiers (BachsPaymentAccountStatus) and comments are fine; text a user can read is not.
 const webRoot = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = join(webRoot, '..', '..');
-const roots = [join(webRoot, 'src'), join(repoRoot, 'packages/mail/src')];
+const roots = [
+  join(webRoot, 'src'),
+  join(repoRoot, 'packages/mail/src'),
+  join(repoRoot, 'packages/contracts/src'),
+];
 
 const exempt = [
   'apps/web/src/app/ops/',
@@ -20,8 +24,9 @@ const exempt = [
   'apps/web/src/app/preview-login/',
 ];
 // Provider ids the code compares and never shows, matched against a literal's whole text. These
-// are the only provider-id literals in the scanned files today.
-const allowedIds = new Set(['bachs-live', 'bachs-sandbox']);
+// are the only provider-id literals in the scanned files today. 'bachs' is the name recorded on
+// payment rows (packages/contracts/src/provider-names.ts); it is stored, never shown.
+const allowedIds = new Set(['bachs-live', 'bachs-sandbox', 'bachs']);
 // Staff-only text is out of scope on purpose: /ops, ops-client.ts and operator summaries such as
 // packages/database/src/operations/issues.ts may name providers.
 const extraFiles = [

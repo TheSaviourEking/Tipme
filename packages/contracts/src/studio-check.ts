@@ -58,7 +58,11 @@ export type StudioRuleId =
   | 'page-weight'
   | 'empty-block'
   | 'broken-video'
-  | 'missing-links';
+  | 'missing-links'
+  // Added by the styles design check (studio-check-v3.ts); the v1 check never returns them.
+  | 'pro-only'
+  | 'cover-photo'
+  | 'name-fallback';
 
 /** Rules that can block publishing, in the order issues are listed. */
 export const STUDIO_ERROR_RULES = [

@@ -40,5 +40,6 @@ export * from './studio-document-v1.js';
 export * from './studio-document.js';
 export * from './studio-layout.js';
 export * from './studio-check.js';
+export * from './studio-check-v3.js';
 export * from './studio-api.js';
 export * from './studio-styles.js';
