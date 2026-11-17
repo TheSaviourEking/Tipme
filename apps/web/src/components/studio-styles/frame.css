@@ -247,9 +247,11 @@
   display: none;
 }
 
-/* The phone's sticky Tip bar (§8). The form toggles data-bar from one IntersectionObserver;
-   the server renders it shown, so without JavaScript it always is. It steps aside while a typing
-   field has focus (the keyboard needs the room), and desktops have none. */
+/* The phone's sticky Tip bar (§8). It is out of sight until the form's one IntersectionObserver
+   sets data-bar="shown" (the in-page Tip has scrolled away), so it never paints over the page
+   before the script runs; without JavaScript there is none, and the in-page Tip is the page's
+   Tip. It steps aside while a typing field has focus (the keyboard needs the room), and
+   desktops have none. */
 .studio[data-style] .tip-bar {
   position: fixed;
   right: 0;
@@ -263,6 +265,19 @@
   background: var(--studio-bar);
   -webkit-backdrop-filter: saturate(1.8) blur(20px);
   backdrop-filter: saturate(1.8) blur(20px);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style] form[data-bar='shown'] .tip-bar {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
   transition:
     opacity 240ms ease-out,
     transform 240ms ease-out,
@@ -282,16 +297,6 @@
   font-size: 11px;
   line-height: 15px;
   text-align: center;
-}
-
-.studio[data-style] form[data-bar='hidden'] .tip-bar {
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(100%);
-  transition:
-    opacity 240ms ease-out,
-    transform 240ms ease-out,
-    visibility 0s linear 240ms;
 }
 
 .studio[data-style]:has(
@@ -328,8 +333,7 @@
     scroll-behavior: auto !important;
   }
 
-  .studio[data-style] .tip-bar,
-  .studio[data-style] form[data-bar='hidden'] .tip-bar {
+  .studio[data-style] .tip-bar {
     transform: none;
   }
 }
@@ -340,4 +344,49 @@
 .studio[data-style] form[data-submitting] *::after {
   transition: none !important;
   animation: none !important;
+}
+
+/* The site's own header and footer on a styled page (owner, 17 Nov 2026, ruling P): the page's
+   neutrals, written on <html> by the page (style-tokens.ts chromeCss), take the place of the
+   site's paper tokens inside them, so they run into the page with no band or seam. "Claim your
+   username" keeps TipMe purple: it is the site's action, not the page's accent. */
+html:has(.studio[data-style]) {
+  background: var(--studio-bg);
+}
+
+html:has(.studio[data-style][data-mode='dark']) {
+  color-scheme: dark;
+}
+
+html:has(.studio[data-style]) :is(.site-header, .site-footer) {
+  --canvas: var(--studio-bg);
+  --surface-raised: var(--studio-card);
+  --surface-recessed: var(--studio-el2);
+  --surface-subtle: var(--studio-el2);
+  --text-primary: var(--studio-fg);
+  --text-secondary: var(--studio-fg2);
+  --edge-hairline: var(--studio-line);
+  --border-material: var(--studio-line);
+  --edge-light: transparent;
+  color: var(--studio-fg);
+}
+
+html:has(.studio[data-style]) .site-header .brand__mark path[fill='#000000'],
+html:has(.studio[data-style]) .site-footer .brand__mark path[fill='#000000'] {
+  fill: var(--studio-fg);
+}
+
+html:has(.studio[data-style])
+  :is(.site-header, .site-footer)
+  :is(.tm-button--secondary, .tm-surface, .footer-card, .who__item) {
+  box-shadow: none;
+}
+
+/* The phone menu's pinned action is the site's purple there too (Classic draws it in ink). */
+@media (max-width: 800px) {
+  html:has(.studio[data-style]) .site-nav .tm-button--primary {
+    border-color: transparent;
+    background: var(--surface-signature);
+    color: var(--surface-base);
+  }
 }

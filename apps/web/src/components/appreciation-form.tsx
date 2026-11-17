@@ -480,8 +480,10 @@ export function AppreciationForm({
   }, [onProfile, closed, skin]);
 
   // A styled page's sticky Tip bar (§8): shown once the in-page Tip button scrolls away, hidden
-  // while it is on screen. The server renders it shown, so without JavaScript it always is. The
-  // attribute is written straight to the form, so scrolling never re-renders it.
+  // while it is on screen. The server sends no data-bar, and CSS keeps the bar out of sight until
+  // this sets it, so it never paints over the page before the script runs (and without
+  // JavaScript there is none). The attribute is written straight to the form, so scrolling never
+  // re-renders it.
   useEffect(() => {
     const host = form.current;
     const tip = host?.querySelector('.composer-action .composer-submit');
@@ -763,7 +765,7 @@ export function AppreciationForm({
         noValidate
         autoComplete="off"
         {...(submitting ? { 'data-submitting': '' } : {})}
-        {...(skin ? { 'data-skin': skin, 'data-bar': 'shown' } : {})}
+        {...(skin ? { 'data-skin': skin } : {})}
       >
         {onProfile ? (
           <h2>

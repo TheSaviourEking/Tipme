@@ -71,3 +71,30 @@ export function autoDarkCss(tokens: StudioTokenMap): string {
     .join('');
   return `@media (prefers-color-scheme: dark){.studio[data-mode="auto"]{${body}}}`;
 }
+
+/** The neutrals the site's own header and footer take on a styled page (owner, ruling P). */
+const CHROME_KEYS = ['bg', 'card', 'el2', 'fg', 'fg2', 'line'] as const;
+
+/**
+ * The page's neutrals on <html>, where the site's header and footer (outside `.studio`) can read
+ * them (frame.css maps the site's own tokens to these there). Neutrals only: the accent never
+ * reaches the chrome. Auto: light, then dark inside `prefers-color-scheme: dark`.
+ */
+export function chromeCss(
+  style: StudioStyleId,
+  palette: { light: StudioTokenMap; dark: StudioTokenMap },
+  mode: 'light' | 'dark' | 'auto',
+): string {
+  const block = (m: 'light' | 'dark') => {
+    const t = modeTokens(style, palette, m);
+    const own = Object.fromEntries(
+      CHROME_KEYS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]!]),
+    );
+    const body = Object.entries(styleTokens(own))
+      .map(([key, value]) => `${key}:${value};`)
+      .join('');
+    return `html:has(.studio[data-style]){${body}}`;
+  };
+  if (mode !== 'auto') return block(mode);
+  return `${block('light')}@media (prefers-color-scheme: dark){${block('dark')}}`;
+}
