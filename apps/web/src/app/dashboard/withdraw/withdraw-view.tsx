@@ -551,9 +551,9 @@ export default function WithdrawPage({
                   aria-busy={busy}
                 >
                   {amount ? (
-                    <>
+                    <span>
                       Withdraw <Money minor={amount} />
-                    </>
+                    </span>
                   ) : (
                     'Withdraw'
                   )}

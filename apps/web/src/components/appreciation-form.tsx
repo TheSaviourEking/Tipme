@@ -859,9 +859,9 @@ export function AppreciationForm({
             {submitting ? (
               'Starting your tip…'
             ) : amount ? (
-              <>
+              <span>
                 Tip <Money minor={amount} code={!onProfile} />
-              </>
+              </span>
             ) : (
               'Tip'
             )}{' '}

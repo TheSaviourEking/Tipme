@@ -290,9 +290,9 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
           aria-busy={busy}
         >
           {amount ? (
-            <>
+            <span>
               Withdraw <Money minor={amount} />
-            </>
+            </span>
           ) : (
             'Withdraw'
           )}

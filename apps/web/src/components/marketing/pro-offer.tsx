@@ -195,9 +195,9 @@ export function ProOffer({
         <div className="pro-foot" hidden={blockInView}>
           {billingOn && amount ? (
             getPro(
-              <>
+              <span>
                 Get Pro · <Money minor={amount} /> a month
-              </>,
+              </span>,
               'pro-foot__key',
             )
           ) : (

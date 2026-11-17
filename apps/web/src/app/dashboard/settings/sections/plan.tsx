@@ -238,13 +238,13 @@ export function ProPlan() {
   const paidMonth = pro?.source === 'paid' || Boolean(pro?.current);
   const buyLabel = price ? (
     paidMonth ? (
-      <>
+      <span>
         Pay for next month · <Money minor={price.amountMinor} />
-      </>
+      </span>
     ) : (
-      <>
+      <span>
         Get Pro · <Money minor={price.amountMinor} /> a month
-      </>
+      </span>
     )
   ) : (
     ''
