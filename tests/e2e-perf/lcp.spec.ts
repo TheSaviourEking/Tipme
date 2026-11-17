@@ -224,7 +224,7 @@ test('lab LCP sample: Studio pages', async ({ browser }) => {
 // Page Studio styles (spec 2026-11-17-page-studio-styles §4.3): each style's lab example at the
 // phone width (390 px), on the built web app. Same throttle, fresh contexts. Each style PR adds its
 // id.
-const LAB_STYLES = ['clear'];
+const LAB_STYLES = ['classic', 'clear'];
 
 test('lab LCP sample: Studio styles', async ({ browser }) => {
   test.setTimeout(240_000);

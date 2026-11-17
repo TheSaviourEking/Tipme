@@ -20,6 +20,7 @@
 import type { ReactNode } from 'react';
 import { preload } from 'react-dom';
 import type { PublicProfile, PublicStudio } from '@tipme/contracts';
+import { ClassicStudio } from './classic';
 import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
 import { StyleSheet } from './style-sheets';
@@ -90,5 +91,24 @@ export function StudioStylePage({
         <div className="studio-foot">{footer}</div>
       </div>
     </div>
+  );
+}
+
+/**
+ * The one entry for a published style (§13): Classic renders today's markup with its choices
+ * (ClassicStudio, §9.1); every other style renders the new frame. `identity` is TipMe's identity
+ * block, which only Classic uses (the new styles draw their own).
+ */
+export function renderStyled(
+  props: Parameters<typeof StudioStylePage>[0] & {
+    identity: ReactNode;
+    lead?: ReactNode;
+  },
+) {
+  const { identity, lead, ...rest } = props;
+  return props.studio.document.style === 'classic' ? (
+    <ClassicStudio {...rest} identity={identity} {...(lead ? { lead } : {})} />
+  ) : (
+    <StudioStylePage {...rest} />
   );
 }

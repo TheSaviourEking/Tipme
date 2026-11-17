@@ -26,3 +26,19 @@ for (const [style, width] of SHOTS)
       fullPage: true,
     });
   });
+
+// Classic's choices (PR 2b, §9.1): today's page in dark, with an accent and blocks.
+test('Classic at 390 dark with an accent and blocks', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=classic&mode=dark&accent=green');
+  await page.locator('[data-style="classic"]').waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForFunction(() =>
+    [...document.images].every((i) => i.loading === 'lazy' || i.complete),
+  );
+  await expect(page).toHaveScreenshot('studio-classic-390-dark-green.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    fullPage: true,
+  });
+});

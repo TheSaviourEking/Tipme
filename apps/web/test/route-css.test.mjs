@@ -195,30 +195,7 @@ const studioRules = (css) =>
     .join('');
 const gzip = (text) => gzipSync(text, { level: 9 }).length;
 
-test(
-  'a standard or Classic profile page downloads at most 8 KB gzip of Studio CSS',
-  {
-    skip:
-      !existsSync(routeManifest(profileRoute)) &&
-      'no production build (run pnpm build)',
-  },
-  () => {
-    const sheets = routeSheets(profileRoute);
-    const bytes = gzip(
-      sheets
-        .map((sheet) =>
-          studioRules(readFileSync(new URL(sheet, built), 'utf8')),
-        )
-        .join(''),
-    );
-    assert.ok(
-      bytes <= STUDIO_STANDARD_BUDGET,
-      `a standard /@username page downloads ${(bytes / 1024).toFixed(1)} KB gzip of Studio CSS (budget 8 KB). Per-style rules belong in the style's own sheet (studio-styles/style-sheets.tsx), not in a stylesheet the route links.`,
-    );
-  },
-);
-
-// The routes that render StudioStylePage: the lab now, the public page from PR 3a.
+// The routes that render a style: the lab now, the public page from PR 3a.
 const styledRoutes = ['dev/studio-lab', profileRoute];
 const styleSheetsSource = readFileSync(
   new URL('../src/components/studio-styles/style-sheets.tsx', import.meta.url),
@@ -227,6 +204,62 @@ const styleSheetsSource = readFileSync(
 const STYLES_WITH_SHEETS = [
   ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
 ].map((m) => m[1]);
+
+/** The Studio CSS every /@username page links with its route, gzip. */
+const routeStudioBytes = () =>
+  gzip(
+    routeSheets(profileRoute)
+      .map((sheet) => studioRules(readFileSync(new URL(sheet, built), 'utf8')))
+      .join(''),
+  );
+
+/** A style's dynamic sheet files (from the routes' loadable manifests), gzip, summed. */
+function styleSheetBytes(style) {
+  const entries = styledRoutes.flatMap((route) => {
+    const file = new URL(
+      `server/app/${route}/page/react-loadable-manifest.json`,
+      built,
+    );
+    if (!existsSync(file)) return [];
+    return Object.values(JSON.parse(readFileSync(file, 'utf8'))).map((e) =>
+      e.files.filter((f) => f.endsWith('.css')),
+    );
+  });
+  const marker = new RegExp(`\\[data-style=["']?${style}["']?\\]`);
+  const sheets = entries.find((files) =>
+    files.some((f) => marker.test(readFileSync(new URL(f, built), 'utf8'))),
+  );
+  assert.ok(sheets, `${style}: no built stylesheet holds its rules`);
+  return sheets.reduce(
+    (sum, f) => sum + gzip(readFileSync(new URL(f, built))),
+    0,
+  );
+}
+
+// A Classic page with choices (§4.3, §9.1) links the route's sheets plus classic.css, and stays
+// in the standard budget; a standard page (or Classic with every default) links only the route's.
+test(
+  'a standard or Classic profile page downloads at most 8 KB gzip of Studio CSS',
+  {
+    skip:
+      !existsSync(routeManifest(profileRoute)) &&
+      'no production build (run pnpm build)',
+  },
+  () => {
+    const standard = routeStudioBytes();
+    assert.ok(STYLES_WITH_SHEETS.includes('classic'), 'Classic has its sheet');
+    const classic = standard + styleSheetBytes('classic');
+    console.log(`STUDIO_STANDARD_CSS ${JSON.stringify({ standard, classic })}`);
+    assert.ok(
+      standard <= STUDIO_STANDARD_BUDGET,
+      `a standard /@username page downloads ${(standard / 1024).toFixed(1)} KB gzip of Studio CSS (budget 8 KB). Per-style rules belong in the style's own sheet (studio-styles/style-sheets.tsx), not in a stylesheet the route links.`,
+    );
+    assert.ok(
+      classic <= STUDIO_STANDARD_BUDGET,
+      `a Classic page downloads ${(classic / 1024).toFixed(1)} KB gzip of Studio CSS (budget 8 KB)`,
+    );
+  },
+);
 
 test(
   'a styled profile page downloads at most 12 KB gzip of Studio CSS',
@@ -237,36 +270,10 @@ test(
   },
   () => {
     assert.ok(STYLES_WITH_SHEETS.includes('clear'), 'Clear has its sheet');
-    // Each dynamic sheet's files, from the routes' loadable manifests.
-    const entries = styledRoutes.flatMap((route) => {
-      const file = new URL(
-        `server/app/${route}/page/react-loadable-manifest.json`,
-        built,
-      );
-      if (!existsSync(file)) return [];
-      return Object.values(JSON.parse(readFileSync(file, 'utf8'))).map((e) =>
-        e.files.filter((f) => f.endsWith('.css')),
-      );
-    });
-    const base = gzip(
-      routeSheets(profileRoute)
-        .map((sheet) =>
-          studioRules(readFileSync(new URL(sheet, built), 'utf8')),
-        )
-        .join(''),
-    );
-    for (const style of STYLES_WITH_SHEETS) {
-      const marker = new RegExp(`\\[data-style=["']?${style}["']?\\]`);
-      const sheets = entries.find((files) =>
-        files.some((f) => marker.test(readFileSync(new URL(f, built), 'utf8'))),
-      );
-      assert.ok(sheets, `${style}: no built stylesheet holds its rules`);
-      const bytes =
-        base +
-        sheets.reduce(
-          (sum, f) => sum + gzip(readFileSync(new URL(f, built))),
-          0,
-        );
+    const base = routeStudioBytes();
+    // Classic is held to the standard budget above.
+    for (const style of STYLES_WITH_SHEETS.filter((s) => s !== 'classic')) {
+      const bytes = base + styleSheetBytes(style);
       console.log(`STUDIO_STYLE_CSS ${JSON.stringify({ style, bytes })}`);
       assert.ok(
         bytes <= STUDIO_STYLED_BUDGET,

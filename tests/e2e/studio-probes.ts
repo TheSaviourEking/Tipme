@@ -102,22 +102,26 @@ export const encodeDoc = (doc: unknown) =>
  * sideways; an element that clips (overflow not visible) holds more than it shows; two blocks
  * overlap; or the tip rail overlaps the rows. TipMe's cover is tested on its own and skipped.
  */
-export async function geometryProblems(page: Page): Promise<string[]> {
+export async function geometryProblems(
+  page: Page,
+  // Classic renders today's page, whose root is `.profile-page` (spec §9.1).
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
+  return page.evaluate((scope) => {
     const out: string[] = [];
     const root = document.documentElement;
     if (root.scrollWidth > root.clientWidth)
       out.push(
         `page scrolls sideways (${root.scrollWidth} > ${root.clientWidth})`,
       );
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
+    const studio = document.querySelector(scope);
+    if (!studio) return [`no ${scope} on the page`];
     const label = (el: Element) =>
       `${el.tagName.toLowerCase()}${el.classList[0] ? `.${el.classList[0]}` : ''}`;
     for (const el of studio.querySelectorAll('*')) {
       if (
-        el.closest('.studio-cover') ||
+        el.closest('.studio-cover, .profile-cover') ||
         /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName)
       )
         continue;
@@ -170,7 +174,7 @@ export async function geometryProblems(page: Page): Promise<string[]> {
         out.push(`the tip rail overlaps ${part}`);
     }
     return out;
-  });
+  }, scope);
 }
 
 /**
@@ -178,9 +182,12 @@ export async function geometryProblems(page: Page): Promise<string[]> {
  * first opaque background behind it (inside `.studio-scrim`, the scrim over a white photo, its
  * worst case), at 4.5:1, or 3:1 for large text (≥24px, or ≥18.66px and bold).
  */
-export async function contrastProblems(page: Page): Promise<string[]> {
+export async function contrastProblems(
+  page: Page,
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
+  return page.evaluate((scope) => {
     type Rgba = [number, number, number, number];
     const parse = (c: string): Rgba | null => {
       const m =
@@ -235,8 +242,8 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       return colour;
     };
     const out: string[] = [];
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
+    const studio = document.querySelector(scope);
+    if (!studio) return [`no ${scope} on the page`];
     const walker = document.createTreeWalker(studio, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = node.textContent?.trim();
@@ -244,7 +251,9 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       if (
         !text ||
         !el ||
-        el.closest('.studio-cover, .sr-only, [aria-hidden="true"]')
+        el.closest(
+          '.studio-cover, .profile-cover, .sr-only, [aria-hidden="true"]',
+        )
       )
         continue;
       const box = el.getBoundingClientRect();
@@ -270,5 +279,5 @@ export async function contrastProblems(page: Page): Promise<string[]> {
         );
     }
     return out;
-  });
+  }, scope);
 }

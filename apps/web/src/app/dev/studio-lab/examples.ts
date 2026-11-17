@@ -703,6 +703,7 @@ const styleExample = (
 export const LAB_STYLE_EXAMPLES: Partial<
   Record<StudioStyleId, StudioDocument>
 > = {
+  classic: styleExample('classic', 'light'),
   clear: styleExample('clear', 'light'),
 };
 

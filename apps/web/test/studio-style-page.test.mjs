@@ -35,6 +35,8 @@ const STUBS = {
   './parts': './parts.mjs',
   './style-fonts': './style-fonts.mjs',
   './style-tokens': './style-tokens.mjs',
+  // Classic is tested in studio-classic.test.mjs.
+  './classic': './stub-classic.mjs',
 };
 function build(name, from) {
   const file = new URL(from, src);
@@ -87,6 +89,7 @@ stub(
   `import { createElement } from 'react';
 export const StyleSheet = (p) => createElement('i', { 'data-sheet': p.styleId });`,
 );
+stub('stub-classic.mjs', 'export const ClassicStudio = () => null;');
 build('style-tokens.mjs', 'style-tokens.ts');
 build('style-fonts.mjs', 'style-fonts.ts');
 build('parts.mjs', 'parts.tsx');
