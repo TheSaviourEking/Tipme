@@ -8,6 +8,7 @@ import {
   fontsOk,
   studioTypeScale,
 } from '../dist/index.js';
+import { LEGACY_BODY_WORD_FALLBACK } from './support/studio-legacy-body-fonts.mjs';
 
 const STEPS = ['compact', 'standard', 'roomy'];
 const ROLES = ['small', 'body', 'h3', 'h2', 'display'];
@@ -35,12 +36,17 @@ test('ids are unique and every font has at least the heading role', () => {
   for (const f of STUDIO_FONTS) assert.ok(f.roles.includes('heading'), f.id);
 });
 
-// These v1 body fonts lack some Hausa hooked letters, which became required with the styles. The v1
-// editor still offers them until PR 4c retires the v1 registry (plan ruling R3); the styles' own
-// faces (Inter, Linen Serif) draw everything.
-const LEGACY_BODY_WORD_FALLBACK = ['work-sans', 'nunito', 'source-serif-4'];
-
-test('a body font draws every required letter, so it never needs the word fallback', () => {
+test('a body font draws every required letter, so it never needs the word fallback (legacy v1 fonts excepted)', () => {
+  // The exception list is checked both ways, so a stale entry cannot hide a regression.
+  for (const id of LEGACY_BODY_WORD_FALLBACK) {
+    const f = STUDIO_FONTS.find((x) => x.id === id);
+    assert.ok(f?.roles.includes('body'), `${id} is a legacy body font`);
+    assert.equal(
+      f.wordFallback,
+      true,
+      `${id} is listed, so it needs wordFallback`,
+    );
+  }
   for (const f of STUDIO_FONTS)
     if (f.roles.includes('body') && !LEGACY_BODY_WORD_FALLBACK.includes(f.id)) {
       assert.equal(f.wordFallback, false, f.id);

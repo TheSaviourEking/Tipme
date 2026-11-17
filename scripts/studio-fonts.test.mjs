@@ -9,10 +9,9 @@ import {
   woff2CharacterMap,
   woff2NameStrings,
 } from '../apps/web/src/lib/font-cmap.ts';
+import { LEGACY_BODY_WORD_FALLBACK } from '../packages/contracts/test/support/studio-legacy-body-fonts.mjs';
 import { OUT_DIR, SOURCES, licenceName, outputName } from './studio-fonts.mjs';
 
-// v1 body fonts that lack some Hausa letters; the v1 editor keeps them until PR 4c (plan ruling R3).
-const LEGACY_BODY = ['work-sans', 'nunito', 'source-serif-4'];
 const PUBLIC = new URL('../apps/web/public', import.meta.url);
 const bytesOf = (path) => readFileSync(new URL(`.${path}`, `${PUBLIC.href}/`));
 const hexOf = (c) => `U+${c.toString(16).toUpperCase().padStart(4, '0')}`;
@@ -22,7 +21,7 @@ test('every library font draws every required character (body) or is marked word
     for (const file of f.files) {
       const map = woff2CharacterMap(bytesOf(file.path));
       const missing = STUDIO_REQUIRED_CODEPOINTS.filter((c) => !map.has(c));
-      if (f.roles.includes('body') && !LEGACY_BODY.includes(f.id))
+      if (f.roles.includes('body') && !LEGACY_BODY_WORD_FALLBACK.includes(f.id))
         assert.deepEqual(missing, [], `${f.id} misses ${missing.map(hexOf)}`);
       else if (missing.length)
         assert.ok(
@@ -110,14 +109,21 @@ test('no shipped family carries a Reserved Font Name it would need permission to
         `${f.name}: reserved font name "${name.trim()}"`,
       );
   }
-  for (const f of STUDIO_FONTS)
-    for (const file of f.files)
-      for (const record of woff2NameStrings(bytesOf(file.path)))
-        if (f.id === 'linen-serif')
-          assert.ok(
-            !/gentium/i.test(record) && !record.includes('SIL'),
-            `${file.path}: name record "${record}"`,
-          );
+  const linen = STUDIO_FONTS.find((f) => f.id === 'linen-serif');
+  assert.equal(linen.files.length, 3);
+  for (const file of linen.files) {
+    const records = woff2NameStrings(bytesOf(file.path));
+    assert.ok(records.length > 0, `${file.path} has no name records`);
+    assert.ok(
+      records.includes('Linen Serif'),
+      `${file.path}: no "Linen Serif"`,
+    );
+    for (const record of records)
+      assert.ok(
+        !/gentium/i.test(record) && !record.includes('SIL'),
+        `${file.path}: name record "${record}"`,
+      );
+  }
 });
 
 test('Linen Serif keeps the original copyright and Reserved Font Names in its licence text', () => {
