@@ -247,9 +247,11 @@
   display: none;
 }
 
-/* The phone's sticky Tip bar (§8). The form toggles data-bar from one IntersectionObserver;
-   the server renders it shown, so without JavaScript it always is. It steps aside while a typing
-   field has focus (the keyboard needs the room), and desktops have none. */
+/* The phone's sticky Tip bar (§8). It is out of sight until the form's one IntersectionObserver
+   sets data-bar="shown" (the in-page Tip has scrolled away), so it never paints over the page
+   before the script runs; without JavaScript there is none, and the in-page Tip is the page's
+   Tip. It steps aside while a typing field has focus (the keyboard needs the room), and
+   desktops have none. */
 .studio[data-style] .tip-bar {
   position: fixed;
   right: 0;
@@ -263,6 +265,19 @@
   background: var(--studio-bar);
   -webkit-backdrop-filter: saturate(1.8) blur(20px);
   backdrop-filter: saturate(1.8) blur(20px);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style] form[data-bar='shown'] .tip-bar {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
   transition:
     opacity 240ms ease-out,
     transform 240ms ease-out,
@@ -282,16 +297,6 @@
   font-size: 11px;
   line-height: 15px;
   text-align: center;
-}
-
-.studio[data-style] form[data-bar='hidden'] .tip-bar {
-  visibility: hidden;
-  opacity: 0;
-  transform: translateY(100%);
-  transition:
-    opacity 240ms ease-out,
-    transform 240ms ease-out,
-    visibility 0s linear 240ms;
 }
 
 .studio[data-style]:has(
@@ -328,8 +333,7 @@
     scroll-behavior: auto !important;
   }
 
-  .studio[data-style] .tip-bar,
-  .studio[data-style] form[data-bar='hidden'] .tip-bar {
+  .studio[data-style] .tip-bar {
     transform: none;
   }
 }

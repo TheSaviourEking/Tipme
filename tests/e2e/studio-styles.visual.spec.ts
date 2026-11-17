@@ -16,6 +16,10 @@ for (const [style, width] of SHOTS)
     await page.goto(`/dev/studio-lab?style=${style}&mode=light`);
     await page.locator('.studio[data-style]').waitFor();
     await page.evaluate(() => document.fonts.ready);
+    // The tip form has started and its observer has placed the phone's bar (data-bar).
+    await page
+      .locator('form[data-skin][data-bar]')
+      .waitFor({ state: 'attached' });
     // Photos are generated SVGs; wait for every one in view so the capture is stable.
     await page.waitForFunction(() =>
       [...document.images].every((i) => i.loading === 'lazy' || i.complete),
