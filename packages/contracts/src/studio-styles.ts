@@ -109,7 +109,12 @@ export const CLASSIC_PURPLE: { name: 'TipMe purple' } & ModePair = {
 
 export type StudioCoverType = 'yours' | 'gradient' | 'plain'; // 'yours' = the cover set in Settings
 
-/** The six every style has, plus the extras a style names in §9 (e.g. Clear's `track`, `thumb`). */
+/**
+ * The six every style has, plus the extras a style names in §9 (e.g. Clear's `track`, `thumb`).
+ * `control` is the unselected chip border where `line` is under the 3:1 non-text minimum (§4.2):
+ * the line's OKLCH hue and chroma, its lightness searched (darker in light, lighter in dark) to the
+ * nearest value that reaches 3:1 on both `bg` and `card`.
+ */
 export interface StudioNeutrals {
   bg: Hex;
   card: Hex;
@@ -211,6 +216,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#1d1d1f',
         fg2: '#6e6e73',
         line: '#e3e3e8',
+        control: '#8e8d92',
         track: '#e8e8ed',
         thumb: '#ffffff',
       },
@@ -221,6 +227,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#f5f5f7',
         fg2: '#a1a1a6',
         line: '#2e2e33',
+        control: '#66676c',
         track: '#1c1c1e',
         thumb: '#3a3a3f',
       },
@@ -246,6 +253,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#1c1b1a',
         fg2: '#686460',
         line: '#e4e1dc',
+        control: '#979490',
       },
       dark: {
         bg: '#141413',
@@ -254,6 +262,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#edebe8',
         fg2: '#a8a39d',
         line: '#2f2d2a',
+        control: '#696763',
       },
     },
   },
@@ -277,6 +286,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#16161a',
         fg2: '#64646c',
         line: '#dedee3',
+        control: '#8c8b90',
         chip: '#ffffff',
         scrimEnd: 'rgba(8,8,10,.86)',
       },
@@ -287,6 +297,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#f4f4f6',
         fg2: '#a3a3ad',
         line: '#2c2c33',
+        control: '#65656d',
         chip: '#1a1a1f',
         scrimEnd: '#0f0f12',
       },
@@ -347,6 +358,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#111111',
         fg2: '#6b6b6d',
         line: '#e2e2e2',
+        control: '#8e8e8e',
       },
       dark: {
         bg: '#121212',
@@ -355,6 +367,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#f5f5f5',
         fg2: '#a8a8aa',
         line: '#2e2e2e',
+        control: '#696868',
       },
     },
   },
@@ -411,6 +424,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#2b2520',
         fg2: '#6a5f55',
         line: '#e3d9c8',
+        control: '#948a7b',
         mat: '#fffdf8',
       },
       dark: {
@@ -420,6 +434,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#f1eadf',
         fg2: '#aea293',
         line: '#3a332b',
+        control: '#716961',
         mat: '#2e2923',
       },
     },
@@ -444,6 +459,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#171a20',
         fg2: '#5c5e62',
         line: '#e2e2e2',
+        control: '#8e8d8e',
       },
       dark: {
         bg: '#111214',
@@ -452,6 +468,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         fg: '#f2f3f5',
         fg2: '#a4a7ad',
         line: '#2d2e32',
+        control: '#66686c',
       },
     },
   },
@@ -511,8 +528,14 @@ const CHIP_ON_MIX = { light: 0.06, dark: 0.1 } as const;
 const chipOn = (acc: Hex, bg: Hex, mode: 'light' | 'dark') =>
   mixOklab(acc, CHIP_ON_MIX[mode], bg);
 
-/** Tiles' unselected chip ring: `color-mix(in srgb, accLabel 45%, acc)`, as the canvas draws it. */
-const tilesRing = (a: StudioAccentValues) => blend(a.label, 0.45, a.fill);
+/**
+ * Tiles' unselected chip ring: `color-mix(in srgb, accLabel 64%, acc)`. The canvas drew 45%, which
+ * measures 2.17–2.96 on `acc`; 64% is the smallest whole percent reaching 3:1 (§4.2 control
+ * borders) for every accent in both modes (lowest: Coral light, 3.05).
+ */
+export const STUDIO_TILES_RING_MIX = 0.64;
+const tilesRing = (a: StudioAccentValues) =>
+  blend(a.label, STUDIO_TILES_RING_MIX, a.fill);
 
 export interface StudioContrastPair {
   name: string;
@@ -547,9 +570,16 @@ export function studioContrastPairs(
   ];
   const add = (name: string, fg: Hex, bg: Hex, min: 3 | 4.5) =>
     pairs.push({ name, fg, bg, min });
+  // Unselected chips sit on bg (Linen's in the card, Stage's desktop in a card): prove both.
+  const chipBorder = (border: Hex) => {
+    add('unselected chip border on bg', border, n.bg, 3);
+    add('unselected chip border on card', border, n.card, 3);
+  };
 
   switch (style) {
     case 'classic': {
+      // No unselected-key border pair: Classic keeps today's keys byte for byte (§9.1), and they
+      // are raised by fill, gloss and shadow, not by a border.
       add('selected key label on fill', accLabel, acc, 4.5);
       // Link text sits on every Classic surface: canvas, raised, recessed and base (dark: base
       // is recessed).
@@ -558,11 +588,14 @@ export function studioContrastPairs(
       break;
     }
     case 'clear':
+      // The segmented track is the control; its edge is drawn in `control`.
+      chipBorder(n.control as Hex);
       add('segment label (fg) on track', n.fg, n.track as Hex, 4.5);
       add('accText on thumb', accText, n.thumb as Hex, 4.5);
       break;
     case 'journal':
     case 'linen': {
+      chipBorder(n.control as Hex);
       const on = chipOn(acc, n.bg, mode);
       // The selected chip: its label is fg, its 1.5 px border is accText (non-text, §4.2).
       add('selected chip label (fg) on chipOn', n.fg, on, 4.5);
@@ -570,22 +603,31 @@ export function studioContrastPairs(
       break;
     }
     case 'stage':
+      chipBorder(n.control as Hex);
       add('chip label (fg) on chip', n.fg, n.chip as Hex, 4.5);
       add('selected ring (accText) on chip', accText, n.chip as Hex, 3);
       break;
     case 'signboard':
+      chipBorder(n.ink as Hex);
       add('selected chip (bg) on ink', n.bg, n.ink as Hex, 4.5);
       add('band text (accLabel) on acc', accLabel, acc, 4.5);
       break;
     case 'sprint':
+      chipBorder(n.control as Hex);
       add('selected chip (accLabel) on acc', accLabel, acc, 4.5);
       break;
     case 'tiles':
       add('Tip and selected chip (acc) on accLabel', acc, accLabel, 4.5);
       add('chip label (accLabel) on acc', accLabel, acc, 4.5);
-      add('chip ring (accLabel 45%) on acc', tilesRing(accent), acc, 3);
+      add(
+        'unselected chip border (accLabel 64%) on acc',
+        tilesRing(accent),
+        acc,
+        3,
+      );
       break;
     case 'horizon':
+      chipBorder(n.control as Hex);
       add('selected ring (accText) on bg', accText, n.bg, 3);
       break;
   }

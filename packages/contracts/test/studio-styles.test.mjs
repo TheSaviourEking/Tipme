@@ -7,6 +7,7 @@ import {
   STUDIO_FREE_STYLES,
   STUDIO_STYLES,
   STUDIO_STYLE_IDS,
+  STUDIO_TILES_RING_MIX,
   accentValues,
   blend,
   contrastRatio,
@@ -382,6 +383,35 @@ test('every style × accent × mode meets its contrast minimums (exhaustive)', (
       }
   assert.equal(combinations, 162);
   assert.deepEqual(failures, []);
+});
+
+test('every style but Classic proves its unselected chip border at 3:1', () => {
+  const controls = {
+    clear: ['#8e8d92', '#66676c'],
+    journal: ['#979490', '#696763'],
+    stage: ['#8c8b90', '#65656d'],
+    sprint: ['#8e8e8e', '#696868'],
+    linen: ['#948a7b', '#716961'],
+    horizon: ['#8e8d8e', '#66686c'],
+  };
+  for (const [id, [light, dark]] of Object.entries(controls)) {
+    assert.equal(STUDIO_STYLES[id].neutrals.light.control, light, id);
+    assert.equal(STUDIO_STYLES[id].neutrals.dark.control, dark, id);
+  }
+  assert.equal(STUDIO_TILES_RING_MIX, 0.64);
+  for (const style of STUDIO_STYLE_IDS)
+    for (const mode of MODES) {
+      const borders = studioContrastPairs(
+        style,
+        accentValues(style, null, mode),
+        mode,
+      ).filter((p) => p.name.startsWith('unselected chip border'));
+      if (style === 'classic') assert.equal(borders.length, 0);
+      else {
+        assert.ok(borders.length >= 1, `${style} ${mode}`);
+        for (const p of borders) assert.equal(p.min, 3);
+      }
+    }
 });
 
 test('Classic is checked on every surface it puts link text on', () => {
