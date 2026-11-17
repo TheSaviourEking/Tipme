@@ -1,3 +1,9 @@
+# Current handoff: money in Inter and Inter as the backup letters (17 November 2026)
+
+- Branch `fix/inter-fallback-money`; PR into `dev`, not merged. Changed: `components/money.tsx` (new), ~45 web files (amounts through `<Money>` or the `money` class), `app/layout.tsx` (two next/font faces from `src/fonts/Inter-400-700.woff2`, inline `--font-manrope`/`--font-dm-serif` stacks via `lib/font-stack.ts`), `studio-theme.ts` stacks, `packages/ui` (`--font-money`, `.money`, `--text-tertiary` #6e6a63), mail layout amounts, DECISION-LOG, third-party register.
+- Passed (lane 6): web unit tests incl. `money-font.test.mjs` and `route-css.test.mjs` (home CSS 27.4 KB gzip, was 27.2), mail and ui tests, typecheck, lint, format; e2e `nigerian-letters` (burn-in 5x) and the affected specs (failures seen only as timeouts while the machine load average was 50 to 800; each rerun serially passed).
+- Left: Linux visual baselines from the CI artifact; amounts inside sentences built as strings (notices, chart tooltips) keep the interface face with ₦ from Inter.
+
 # Current handoff: the last tinted Notices (16 November 2026)
 
 - Branch `refactor/notice-to-design-law`; PR into `dev`, not merged. Changed: 55 web files (Notice → Slip / StandingWarning / LoadFailed), `load-failed.tsx` (`dense`), `packages/ui` (Notice and its CSS removed), CSS selectors that named `.tm-notice`, guard tests (`states-migration.test.mjs`, `packages/ui/test/states.test.mjs`), `ops-staff.spec.ts` (the "✓ " prefix is gone), DECISION-LOG.
