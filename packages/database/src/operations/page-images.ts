@@ -1,10 +1,11 @@
-import { and, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, ne } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import type { Database, Tx } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import {
   businessLogos,
   profileAvatars,
+  profileCoverRenditions,
   profileCovers,
   profiles,
 } from '../schema.js';
@@ -102,6 +103,112 @@ export async function moveRowsToStore(
         ),
       )
       .returning({ id: owner });
+    if (updated.length) moved += 1;
+    else await removeObjects(store, [objectKey]);
+  }
+  return moved;
+}
+
+/**
+ * Where a cover's rendition is kept in the object store: beside the cover, under the same page
+ * (`covers/<page>/<random>-640-<salt>.webp`). The salt makes every write a new key, so removing
+ * the objects of a write that lost a race can never remove another write's.
+ */
+export const renditionKeyOf = (coverKey: string, width: number, salt: string) =>
+  `${coverKey.replace(/\.webp$/, '')}-${width}-${salt}.webp`;
+export const newRenditionSalt = () => randomUUID().slice(0, 8);
+
+/**
+ * Deletes a page's cover renditions in this transaction and returns their object keys, to remove
+ * after the commit. Every path that removes or replaces a cover calls this before the cover row
+ * goes: the foreign key cascades too, but a cascade can't say which objects to remove.
+ */
+export async function deleteCoverRenditions(
+  tx: Tx,
+  profileId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .delete(profileCoverRenditions)
+    .where(eq(profileCoverRenditions.profileId, profileId))
+    .returning({ objectKey: profileCoverRenditions.objectKey });
+  return rows.flatMap((r) => (r.objectKey ? [r.objectKey] : []));
+}
+
+/** The widths stored for the page's current cover, narrowest first; none for an older cover. */
+export async function coverWidthsOf(
+  db: Database | Tx,
+  profileId: string,
+): Promise<number[]> {
+  const rows = await db
+    .select({ width: profileCoverRenditions.width })
+    .from(profileCoverRenditions)
+    .innerJoin(
+      profileCovers,
+      and(
+        eq(profileCovers.profileId, profileCoverRenditions.profileId),
+        eq(profileCovers.version, profileCoverRenditions.version),
+      ),
+    )
+    .where(eq(profileCoverRenditions.profileId, profileId))
+    .orderBy(asc(profileCoverRenditions.width));
+  return rows.map((r) => r.width);
+}
+
+/**
+ * After covers moved to the store: moves each rendition still in Postgres to a key beside its
+ * cover, one at a time. A rendition whose cover is still in Postgres (it lost a race) waits for the
+ * next run. Each row changes only if it is still the one copied.
+ */
+export async function moveRenditionsToStore(
+  db: Database,
+  store: PhotoStore,
+): Promise<number> {
+  const waiting = await db
+    .select({
+      profileId: profileCoverRenditions.profileId,
+      width: profileCoverRenditions.width,
+    })
+    .from(profileCoverRenditions)
+    .where(isNotNull(profileCoverRenditions.bytes));
+  let moved = 0;
+  for (const { profileId, width } of waiting) {
+    const [row] = await db
+      .select({
+        version: profileCoverRenditions.version,
+        bytes: profileCoverRenditions.bytes,
+        coverKey: profileCovers.objectKey,
+      })
+      .from(profileCoverRenditions)
+      .innerJoin(
+        profileCovers,
+        and(
+          eq(profileCovers.profileId, profileCoverRenditions.profileId),
+          eq(profileCovers.version, profileCoverRenditions.version),
+        ),
+      )
+      .where(
+        and(
+          eq(profileCoverRenditions.profileId, profileId),
+          eq(profileCoverRenditions.width, width),
+          isNotNull(profileCoverRenditions.bytes),
+          isNotNull(profileCovers.objectKey),
+        ),
+      );
+    if (!row?.coverKey) continue;
+    const objectKey = renditionKeyOf(row.coverKey, width, newRenditionSalt());
+    await store.put(objectKey, row.bytes!);
+    const updated = await db
+      .update(profileCoverRenditions)
+      .set({ bytes: null, objectKey })
+      .where(
+        and(
+          eq(profileCoverRenditions.profileId, profileId),
+          eq(profileCoverRenditions.width, width),
+          eq(profileCoverRenditions.version, row.version),
+          isNotNull(profileCoverRenditions.bytes),
+        ),
+      )
+      .returning({ width: profileCoverRenditions.width });
     if (updated.length) moved += 1;
     else await removeObjects(store, [objectKey]);
   }
