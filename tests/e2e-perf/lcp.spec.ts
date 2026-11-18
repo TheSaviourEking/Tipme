@@ -258,8 +258,12 @@ test('lab LCP sample: Studio pages', async ({ browser }) => {
 });
 
 // Stage and Horizon draw the cover photo as their likely LCP. The lab's "uploaded" cover
-// (?yours=upload) is a generated 2240 × 600 WebP like the API's, now with the API's 640, 1080 and
-// 1600 renditions in srcset (PR #279). See the report for the measured numbers (ruling X).
+// (?yours=upload) is a generated 2240 × 600 WebP like the API's, with the API's 640, 1080 and 1600
+// renditions in srcset (PR #279). Still parked (ruling X), measured 18 Nov 2026 on this branch:
+// Stage 3300–3424 ms with img.studio-cover__photo as the LCP. Its 488 px tall crop draws the 3.73:1
+// band 1822 CSS px wide, so the honest `sizes` selects the full file and no rendition helps; a
+// phone-shaped cover crop would. Horizon 1016–1060 ms, but its LCP is p.studio-bio: Chromium
+// leaves the full-viewport photo out. The 2000 ms budget stays as it is.
 test.fixme('lab LCP sample: Stage and Horizon on a real photo cover', async ({
   browser,
 }) => {
