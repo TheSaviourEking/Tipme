@@ -881,8 +881,10 @@ test('Horizon\'s two cover buttons: "Send a tip" goes to the Tip area, "See link
   const html = over('horizon');
   assert.match(
     html,
-    /<a class="studio-hero__tip" href="#studio-tip">Send a tip<\/a>/,
+    /<a class="studio-hero__tip" href="#studio-tip" data-tip-cta="">Send a tip<\/a>/,
   );
+  // Only Horizon marks a Tip action for the phone bar to wait for.
+  assert.doesNotMatch(over('stage'), /data-tip-cta/);
   assert.match(
     html,
     /<a class="studio-hero__links" href="#studio-links">See links<svg/,

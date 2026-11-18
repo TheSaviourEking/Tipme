@@ -299,7 +299,8 @@ export function StyleHero({
         </p>
         {horizon && (
           <div className="studio-hero__actions">
-            <a className="studio-hero__tip" href="#studio-tip">
+            {/* data-tip-cta: the phone's Tip bar stays down while this is in view (§8). */}
+            <a className="studio-hero__tip" href="#studio-tip" data-tip-cta="">
               Send a tip
             </a>
             {(profile.links?.length ?? 0) > 0 && (

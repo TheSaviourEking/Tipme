@@ -1072,3 +1072,36 @@ test('Horizon on desktop with no links puts the first block beside the Tip', asy
   const links = await box('.studio-links');
   expect(Math.round(links.left - lead.right)).toBe(80);
 });
+
+// Fix round 2 (controller ruling Y): Horizon's own "Send a tip" is a Tip action, so the phone's
+// bar stays down while it is in view too, and shows once it and the in-page Tip have both gone.
+test(`Horizon's phone bar waits until both "Send a tip" and the in-page Tip are out of view`, async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/dev/studio-lab?style=horizon');
+  await ready(page);
+  const form = page.locator('form[data-skin]');
+  const bar = page.locator('.tip-bar');
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  await expect(page.getByRole('link', { name: 'Send a tip' })).toBeInViewport();
+  await expect(bar).toBeHidden();
+  // Past the hero, with the in-page Tip on screen: still down.
+  await page.locator('.studio-tip .composer-submit').scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  // Past both: up.
+  await page.locator('.studio-foot').scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'shown');
+  await expect(bar).toBeVisible();
+  // Back to the top: down again.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  // Other styles keep §8's rule: Stage's bar shows as soon as its in-page Tip leaves.
+  await page.goto('/dev/studio-lab?style=stage');
+  await ready(page);
+  await page.locator('.studio-foot').scrollIntoViewIfNeeded();
+  await expect(page.locator('form[data-skin]')).toHaveAttribute(
+    'data-bar',
+    'shown',
+  );
+});
