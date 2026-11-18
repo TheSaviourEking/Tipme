@@ -103,7 +103,11 @@ export class OpsPlanFeesController {
     const answer = pendingOr(
       await requestSeriousAction(this.database.db, {
         name: 'plan_fees.change',
-        payload: { freeBps: body.freeBps, proBps: body.proBps },
+        payload: {
+          freeBps: body.freeBps,
+          proBps: body.proBps,
+          ...(body.confirmLargeChange ? { confirmLargeChange: true } : {}),
+        },
         actorId: ops.userId,
         grantId: ops.grantId,
         reason: body.reason,

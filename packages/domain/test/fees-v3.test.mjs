@@ -3,12 +3,16 @@ import { test } from 'node:test';
 import {
   CURRENT_FEE_POLICY,
   DEFAULT_PLAN_FEE_RATES,
+  FREE_WITHDRAWALS_PER_DAY,
+  PLAN_FEE_MAX_BPS,
+  PLAN_FEE_MIN_BPS,
   FEE_POLICY_V1,
   FEE_POLICY_V2_FREE,
   FEE_POLICY_V2_PRO,
   PROCESSING_INCLUDED_FEE_VERSIONS,
   feePolicyForPlan,
   planFeeRatesProblem,
+  lagosDayStart,
   planShareBps,
   priceTip,
 } from '../dist/index.js';
@@ -89,21 +93,31 @@ test('a staff-set per-account fee still wins below the plan rate, from the setti
   });
 });
 
-test('the rates must be whole basis points from 0 to 10000, and Pro never above Free', () => {
+test('each rate must be from 150 to 1000 basis points (1.5% to 10%), and Pro never above Free', () => {
+  assert.equal(PLAN_FEE_MIN_BPS, 150n);
+  assert.equal(PLAN_FEE_MAX_BPS, 1000n);
   assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 300n }), null);
-  assert.equal(planFeeRatesProblem({ freeBps: 0n, proBps: 0n }), null);
-  assert.equal(planFeeRatesProblem({ freeBps: 10000n, proBps: 10000n }), null);
+  assert.equal(planFeeRatesProblem({ freeBps: 150n, proBps: 150n }), null);
+  assert.equal(planFeeRatesProblem({ freeBps: 1000n, proBps: 1000n }), null);
   assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 500n }), null);
-  assert.equal(planFeeRatesProblem({ freeBps: -1n, proBps: 0n }), 'freeBps');
-  assert.equal(planFeeRatesProblem({ freeBps: 10001n, proBps: 0n }), 'freeBps');
-  assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: -1n }), 'proBps');
+  assert.equal(planFeeRatesProblem({ freeBps: 149n, proBps: 149n }), 'freeBps');
+  assert.equal(planFeeRatesProblem({ freeBps: 0n, proBps: 0n }), 'freeBps');
+  assert.equal(
+    planFeeRatesProblem({ freeBps: 1001n, proBps: 300n }),
+    'freeBps',
+  );
+  assert.equal(planFeeRatesProblem({ freeBps: 500n, proBps: 149n }), 'proBps');
+  assert.equal(
+    planFeeRatesProblem({ freeBps: 1000n, proBps: 1001n }),
+    'proBps',
+  );
   assert.equal(
     planFeeRatesProblem({ freeBps: 300n, proBps: 500n }),
     'proAboveFree',
   );
   // A rate that is out of bounds is refused before the Pro-above-Free rule.
   assert.throws(() =>
-    feePolicyForPlan('free', { freeBps: 20000n, proBps: 0n }),
+    feePolicyForPlan('free', { freeBps: 20000n, proBps: 300n }),
   );
 });
 
@@ -124,4 +138,13 @@ test('V3 versions count as "processing included"; V1 and V2 stay for history', (
     assert.ok(included(recorded), recorded);
   assert.equal(FEE_POLICY_V2_FREE.tipmeShareBps, 700n);
   assert.equal(FEE_POLICY_V2_PRO.tipmeShareBps, 500n);
+});
+
+test('a Lagos calendar day starts at 23:00 UTC the evening before', () => {
+  const start = (iso) => lagosDayStart(new Date(iso)).toISOString();
+  assert.equal(start('2026-11-18T12:00:00Z'), '2026-11-17T23:00:00.000Z');
+  assert.equal(start('2026-11-18T22:59:59.999Z'), '2026-11-17T23:00:00.000Z');
+  assert.equal(start('2026-11-18T23:00:00Z'), '2026-11-18T23:00:00.000Z');
+  assert.equal(start('2026-11-18T00:30:00Z'), '2026-11-17T23:00:00.000Z');
+  assert.equal(FREE_WITHDRAWALS_PER_DAY, 2);
 });

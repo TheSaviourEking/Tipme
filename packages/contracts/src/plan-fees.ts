@@ -7,14 +7,19 @@ import { opsReasonSchema } from './ops.js';
  * digits; the server is the only source of them.
  */
 
-/** Bounds for each rate, in basis points (0% to 100%). */
-export const PLAN_FEE_MIN_BPS = 0;
-export const PLAN_FEE_MAX_BPS = 10000;
+/** Bounds for each rate, in basis points (owner, 18 Nov 2026: 1.5% to 10%). */
+export const PLAN_FEE_MIN_BPS = 150;
+export const PLAN_FEE_MAX_BPS = 1000;
+/** A move of more than this, on either plan, needs an explicit confirm (`confirmLargeChange`). */
+export const PLAN_FEE_LARGE_CHANGE_BPS = 200;
 
 const bps = z
   .string()
-  .regex(/^(0|[1-9][0-9]{0,4})$/)
-  .refine((value) => Number(value) <= PLAN_FEE_MAX_BPS);
+  .regex(/^[1-9][0-9]{0,3}$/)
+  .refine(
+    (value) =>
+      Number(value) >= PLAN_FEE_MIN_BPS && Number(value) <= PLAN_FEE_MAX_BPS,
+  );
 
 /** `GET /v1/plan-fees`, for anyone: the rates new quotes use now. Copy reads these. */
 export interface PublicPlanFees {
@@ -54,9 +59,17 @@ export interface OpsPlanFees {
   business: { payoutFeeAbsorbed: boolean };
 }
 
-/** `POST /v1/ops/plan-fees`: new rates for new quotes, with a reason. Pro may not be above Free. */
+/**
+ * `POST /v1/ops/plan-fees`: new rates for new quotes, with a reason. Pro may not be above Free. A
+ * move of more than 200 bps on either plan from the rate in force is refused unless the request
+ * carries `confirmLargeChange: true` (the ops screen asks the person to confirm).
+ */
 export const opsPlanFeesChangeSchema = opsReasonSchema
-  .extend({ freeBps: bps, proBps: bps })
+  .extend({
+    freeBps: bps,
+    proBps: bps,
+    confirmLargeChange: z.literal(true).optional(),
+  })
   .strict()
   .refine((value) => Number(value.proBps) <= Number(value.freeBps), {
     message: 'Pro’s rate may not be above Free’s',

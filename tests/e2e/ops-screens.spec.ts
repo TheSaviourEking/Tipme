@@ -143,7 +143,7 @@ test('granting fee-free tips that waits reads as waiting, not as granted', async
     page
       .getByRole('main')
       .getByText(
-        /TipMe keeps 3% of each tip on Pro and 5% on Free, payment and withdrawal fees included \(set in Fees\)\. Withdrawals are free on both plans\. .*Pro billing/,
+        /TipMe keeps 3% of each tip on Pro and 5% on Free, payment and withdrawal fees included \(set in Fees\)\. The first 2 withdrawals each day are free\. .*Pro billing/,
       ),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Grant fee-free tips…' }).click();

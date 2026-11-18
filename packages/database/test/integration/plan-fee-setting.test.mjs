@@ -53,6 +53,8 @@ async function setup(t) {
 test('a freshly migrated database holds Free 500 and Pro 300, set by the owner, with an audit row', async (t) => {
   const database = await openTestDatabase();
   t.after(() => database.close());
+  // After a reset too: the same row and audit row the migration wrote (test-support.ts re-seeds them).
+  await database.reset();
   const rates = await planFeeRatesInForce(database.db);
   assert.equal(rates.freeBps, 500n);
   assert.equal(rates.proBps, 300n);
@@ -71,9 +73,34 @@ test('a freshly migrated database holds Free 500 and Pro 300, set by the owner, 
   assert.match(audit[0].reason, /"to":\{"freeBps":"500","proBps":"300"\}/);
 });
 
+test('a test reset re-seeds the same 500/300 row and audit row as the migration', async (t) => {
+  const db = await useDatabase(t);
+  await db.fresh();
+  const rates = await planFeeRatesInForce(db.db);
+  assert.deepEqual(
+    { free: rates.freeBps, pro: rates.proBps, source: rates.source },
+    { free: 500n, pro: 300n, source: 'setting' },
+  );
+  const history = await planFeeRateHistory(db.db);
+  assert.equal(history.length, 1);
+  assert.equal(history[0].id, '00000000-0000-4000-8000-000000000503');
+  assert.equal(history[0].setBy, null);
+  assert.match(history[0].reason, /18 Nov 2026/);
+  const { rows } = await db.pool.query(
+    `SELECT count(*)::int AS n FROM audit_events
+      WHERE action = 'plan_fees.changed' AND subject_id = $1`,
+    [history[0].id],
+  );
+  assert.equal(rows[0].n, 1);
+});
+
 test('with no stored rates the coded defaults apply: 5% and 3%', async (t) => {
   const { db, quote } = await setup(t);
-  // A test reset leaves the table empty: the fallback.
+  // The reset seeds the setting; emptying the table (a test-only opt-in) is the fallback path.
+  await db.pool.query('BEGIN');
+  await db.pool.query(`SET LOCAL tipme.allow_truncate = 'on'`);
+  await db.pool.query('TRUNCATE plan_fee_rates');
+  await db.pool.query('COMMIT');
   const rates = await planFeeRatesInForce(db.db);
   assert.deepEqual(
     { free: rates.freeBps, pro: rates.proBps, source: rates.source },
@@ -116,11 +143,11 @@ test('a per-account fee still wins below the set rate, and is capped at it above
   const capped = await quote();
   assert.equal(share(capped.breakdown), 35_000n);
   assert.equal(capped.feePolicyVersion, 'v3-free-350bps');
-  // Raised to 8%: the deal wins again.
-  await set(800n, 300n);
+  // Raised back to 5%: the deal wins again.
+  await set(500n, 300n);
   const deal = await quote();
   assert.equal(share(deal.breakdown), 40_000n);
-  assert.equal(deal.feePolicyVersion, 'v3-free-800bps-custom-400');
+  assert.equal(deal.feePolicyVersion, 'v3-free-500bps-custom-400');
   assert.equal((await pagePricing(db.db, ADA)).feeBps, 400);
 });
 
@@ -128,7 +155,7 @@ test('a quote made before a rate change keeps its fee through checkout and payme
   const { db, set, quote } = await setup(t);
   const before = await quote();
   assert.equal(share(before.breakdown), 50_000n);
-  await set(800n, 300n);
+  await set(700n, 300n);
   // What the partner is asked to charge is what the quote showed.
   const charge = await findQuoteCharge(db.db, before.quoteId);
   assert.equal(charge.platformFeeMinor + charge.providerFeeMinor, 50_000n);
@@ -173,7 +200,7 @@ test('a quote made before a rate change keeps its fee through checkout and payme
     { code: 'recipient_payable', side: 'credit', amount: '950000' },
   ]);
   // A new quote uses the new rate.
-  assert.equal(share((await quote()).breakdown), 80_000n);
+  assert.equal(share((await quote()).breakdown), 70_000n);
 });
 
 test('a rate change never rewrites a stored quote, tip or ledger row', async (t) => {
@@ -187,7 +214,7 @@ test('a rate change never rewrites a stored quote, tip or ledger row', async (t)
       )
     ).rows[0];
   const was = await snapshot();
-  await set(100n, 50n);
+  await set(300n, 200n);
   assert.deepEqual(await snapshot(), was);
   assert.ok(q.quoteId);
 });
@@ -197,8 +224,12 @@ test('out-of-range rates, and Pro above Free, are refused; the stored rates stay
   await set(450n, 250n);
   for (const [free, pro] of [
     [-1n, 0n],
-    [10001n, 0n],
-    [500n, -1n],
+    [0n, 0n],
+    [149n, 149n],
+    [1001n, 300n],
+    [10001n, 300n],
+    [500n, 149n],
+    [1000n, 1001n],
     [300n, 500n],
     // Unchanged.
     [450n, 250n],
@@ -225,10 +256,70 @@ test('the rates table is history: rows cannot be updated or deleted', async (t) 
        VALUES (gen_random_uuid(), 300, 500, now(), 'bad')`,
     ),
   );
-  await assert.rejects(
-    db.pool.query(
+  // Each rate is 150 to 1000 bps: the table itself refuses 149 and 1001 on either plan.
+  for (const [free, pro] of [
+    [10001, 300],
+    [1001, 300],
+    [500, 149],
+    [149, 149],
+    [500, 0],
+  ])
+    await assert.rejects(
+      db.pool.query(
+        `INSERT INTO plan_fee_rates (id, free_bps, pro_bps, effective_from, reason)
+         VALUES (gen_random_uuid(), $1, $2, now(), 'bad')`,
+        [free, pro],
+      ),
+      `${free}/${pro}`,
+    );
+  for (const [free, pro] of [
+    [150, 150],
+    [1000, 1000],
+  ])
+    await db.pool.query(
       `INSERT INTO plan_fee_rates (id, free_bps, pro_bps, effective_from, reason)
-       VALUES (gen_random_uuid(), 10001, 0, now(), 'bad')`,
-    ),
+       VALUES (gen_random_uuid(), $1, $2, now() + interval '1 day', 'edge')`,
+      [free, pro],
+    );
+});
+
+test('a move of more than 200 bps on either plan needs the explicit confirm; 200 does not', async (t) => {
+  const { db, staff } = await setup(t);
+  const change = (freeBps, proBps, confirmedLargeChange) =>
+    db.db.transaction((tx) =>
+      setPlanFeeRates(tx, {
+        freeBps,
+        proBps,
+        staffUserId: staff,
+        approvedBy: null,
+        reason: 'A big move',
+        now: new Date(),
+        ...(confirmedLargeChange === undefined ? {} : { confirmedLargeChange }),
+      }),
+    );
+  // From 500/300: Free +201, Free +300, and Free +400 with Pro +250 all need the confirm.
+  for (const [free, pro] of [
+    [701n, 300n],
+    [800n, 300n],
+    [900n, 550n],
+  ])
+    await assert.rejects(
+      change(free, pro),
+      (error) => error.code === 'PLAN_FEES_CONFIRM_REQUIRED',
+      `${free}/${pro}`,
+    );
+  await assert.rejects(
+    change(800n, 300n, false),
+    (error) => error.code === 'PLAN_FEES_CONFIRM_REQUIRED',
   );
+  assert.equal((await planFeeRatesInForce(db.db)).freeBps, 500n);
+  // Exactly 200 on a plan is not "more than 200".
+  await change(700n, 500n);
+  assert.equal((await planFeeRatesInForce(db.db)).freeBps, 700n);
+  // Confirmed, a big move goes through (and so does a big drop).
+  await change(1000n, 300n, true);
+  const rates = await planFeeRatesInForce(db.db);
+  assert.deepEqual([rates.freeBps, rates.proBps], [1000n, 300n]);
+  await change(500n, 300n, true);
+  assert.equal((await planFeeRatesInForce(db.db)).freeBps, 500n);
 });

@@ -49,6 +49,22 @@ test('@alone an owner asks to change the plan fees; it waits for a second person
     main.getByText('Pro’s fee can’t be higher than Free’s.'),
   ).toBeVisible();
 
+  // Each fee is from 1.5% to 10% (owner, 18 Nov 2026), refused on the screen.
+  await main.getByLabel('Free plan fee (%)').fill('12');
+  await main.getByRole('button', { name: 'Ask for approval' }).click();
+  await expect(
+    main.getByText('Each fee must be from 1.5% to 10%.'),
+  ).toBeVisible();
+
+  // A move of more than 2 percentage points needs the box ticked before anything is asked.
+  await main.getByLabel('Free plan fee (%)').fill('8');
+  await main.getByLabel('Pro plan fee (%)').fill('3');
+  await main.getByRole('button', { name: 'Ask for approval' }).click();
+  await expect(
+    main.getByText('Tick the box to confirm the big change.'),
+  ).toBeVisible();
+  await expect(main.getByLabel(/I confirm this big change/)).not.toBeChecked();
+
   await main.getByLabel('Free plan fee (%)').fill('4.5');
   await main.getByLabel('Pro plan fee (%)').fill('3');
   await main.getByRole('button', { name: 'Ask for approval' }).click();

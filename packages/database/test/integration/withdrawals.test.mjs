@@ -507,6 +507,8 @@ test('withdrawals through the provider', async (t) => {
         feeMinor: 5000n,
         // TipMe pays it for a person's page (owner, 18 Nov 2026): withdrawals are free.
         feePaidBy: 'tipme',
+        ordinalToday: 1,
+        freePerDay: 2,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
       const more = await quoteOf(withBalance(1800000n));

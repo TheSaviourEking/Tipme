@@ -91,6 +91,26 @@ export const percentOf = (bps: bigint | number): string => {
   return `${Math.floor(value / 100)}${frac ? `.${frac}` : ''}%`;
 };
 
+/** A move of more than this many bps on either plan needs an explicit confirm (owner, 18 Nov 2026). */
+export const PLAN_FEE_LARGE_CHANGE_BPS = 200n;
+
+/** True when either plan's rate moves by more than 200 bps (up or down) from the rate in force. */
+export function isLargePlanFeeChange(from: PlanFeeRates, to: PlanFeeRates) {
+  const moved = (a: bigint, b: bigint) =>
+    (a > b ? a - b : b - a) > PLAN_FEE_LARGE_CHANGE_BPS;
+  return moved(from.freeBps, to.freeBps) || moved(from.proBps, to.proBps);
+}
+
+/** Refuses a big move that was not explicitly confirmed (`confirmLargeChange: true` in the request). */
+export function requirePlanFeeConfirm(
+  from: PlanFeeRates,
+  to: PlanFeeRates,
+  confirmed: unknown,
+): void {
+  if (isLargePlanFeeChange(from, to) && confirmed !== true)
+    throw new OperationError('PLAN_FEES_CONFIRM_REQUIRED');
+}
+
 /** Parses the serious action's payload: whole basis points as digit strings, an allowed pair. */
 export function checkedPlanFeeRates(payload: {
   freeBps: unknown;
@@ -112,7 +132,8 @@ export function checkedPlanFeeRates(payload: {
 /**
  * Stores new rates from now, for new quotes only. Runs inside the serious action, so `approvedBy` is
  * the second person (or null when a lone admin acted alone, with the acted-alone alert). Refuses a
- * pair out of bounds, Pro above Free, or the pair already in force.
+ * pair out of bounds, Pro above Free, the pair already in force, or a move of more than 200 bps
+ * that was not confirmed.
  */
 export async function setPlanFeeRates(
   tx: Tx,
@@ -123,6 +144,8 @@ export async function setPlanFeeRates(
     approvedBy: string | null;
     reason: string;
     now: Date;
+    /** The explicit confirm for a move of more than 200 bps on either plan. */
+    confirmedLargeChange?: boolean;
   },
 ): Promise<{ id: string; freeBps: bigint; proBps: bigint }> {
   const rates = { freeBps: input.freeBps, proBps: input.proBps };
@@ -131,6 +154,7 @@ export async function setPlanFeeRates(
   const previous = await planFeeRatesInForce(tx, input.now);
   if (previous.freeBps === rates.freeBps && previous.proBps === rates.proBps)
     throw new OperationError('INVALID_INPUT');
+  requirePlanFeeConfirm(previous, rates, input.confirmedLargeChange);
   const id = newId();
   await tx.insert(planFeeRates).values({
     id,

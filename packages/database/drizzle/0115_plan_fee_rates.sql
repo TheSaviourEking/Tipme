@@ -7,8 +7,8 @@ CREATE TABLE "plan_fee_rates" (
 	"approved_by" uuid,
 	"reason" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "plan_fee_rates_free_bps" CHECK ("plan_fee_rates"."free_bps" BETWEEN 0 AND 10000),
-	CONSTRAINT "plan_fee_rates_pro_bps" CHECK ("plan_fee_rates"."pro_bps" BETWEEN 0 AND 10000),
+	CONSTRAINT "plan_fee_rates_free_bps" CHECK ("plan_fee_rates"."free_bps" BETWEEN 150 AND 1000),
+	CONSTRAINT "plan_fee_rates_pro_bps" CHECK ("plan_fee_rates"."pro_bps" BETWEEN 150 AND 1000),
 	CONSTRAINT "plan_fee_rates_pro_not_above_free" CHECK ("plan_fee_rates"."pro_bps" <= "plan_fee_rates"."free_bps"),
 	CONSTRAINT "plan_fee_rates_reason" CHECK (char_length("plan_fee_rates"."reason") > 0)
 );
@@ -40,3 +40,19 @@ SELECT gen_random_uuid(), NULL, 'plan_fees.changed', 'fees.manage', 'plan_fee_ra
        'Owner''s decision, 18 Nov 2026: Free 5% and Pro 3% per tip, payment and withdrawal fees included [change: {"from":{"freeBps":"700","proBps":"500"},"to":{"freeBps":"500","proBps":"300"},"approvedBy":null}]',
        clock_timestamp()
   FROM added;
+--> statement-breakpoint
+-- The owner's decision, 18 Nov 2026: a per-page fee deal (ADR-0014) that is no longer below the new
+-- plan rate can never apply, so it is cleared (Free pages at 500 bps and up, Pro pages at 300 and up);
+-- a lower deal stays. Like 0094, each cleared page gets one system audit row (before it is cleared).
+INSERT INTO audit_events (id, staff_user_id, action, permission, subject_type, subject_id, reason, created_at)
+SELECT gen_random_uuid(), NULL, 'fee.capped', 'fees.manage', 'profile', p.id::text,
+       'Owner''s pricing decision, 18 Nov 2026: per-page fees are capped at the plan''s rate (Free 5%, Pro 3%); this one is at or above its plan''s rate, so the plan''s rate applies [change: {"from":'
+         || p.custom_fee_bps || ',"to":null}]',
+       clock_timestamp()
+  FROM profiles p
+ WHERE (p.plan = 'pro' AND p.custom_fee_bps >= 300)
+    OR (p.plan <> 'pro' AND p.custom_fee_bps >= 500);
+--> statement-breakpoint
+UPDATE profiles SET custom_fee_bps = NULL
+ WHERE (plan = 'pro' AND custom_fee_bps >= 300)
+    OR (plan <> 'pro' AND custom_fee_bps >= 500);

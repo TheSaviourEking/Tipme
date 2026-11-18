@@ -3342,8 +3342,11 @@ export const planFeeRates = pgTable(
   },
   (table) => [
     index('plan_fee_rates_effective_from').on(table.effectiveFrom),
-    check('plan_fee_rates_free_bps', sql`${table.freeBps} BETWEEN 0 AND 10000`),
-    check('plan_fee_rates_pro_bps', sql`${table.proBps} BETWEEN 0 AND 10000`),
+    check(
+      'plan_fee_rates_free_bps',
+      sql`${table.freeBps} BETWEEN 150 AND 1000`,
+    ),
+    check('plan_fee_rates_pro_bps', sql`${table.proBps} BETWEEN 150 AND 1000`),
     check(
       'plan_fee_rates_pro_not_above_free',
       sql`${table.proBps} <= ${table.freeBps}`,

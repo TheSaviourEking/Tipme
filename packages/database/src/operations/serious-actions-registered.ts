@@ -66,6 +66,7 @@ import {
 } from './pro-price.js';
 import {
   checkedPlanFeeRates,
+  requirePlanFeeConfirm,
   percentOf,
   PLAN_FEES_CHANGE_ACTION,
   planFeeRatesInForce,
@@ -595,7 +596,11 @@ const proPriceChange = acting<{ amountMinor: string }>({
  * change, so a second person decides. Pinned on the rates in force, so a change made while this
  * waited makes it stale. Nobody is its subject: it applies to every new quote.
  */
-const planFeesChange = acting<{ freeBps: string; proBps: string }>({
+const planFeesChange = acting<{
+  freeBps: string;
+  proBps: string;
+  confirmLargeChange?: boolean;
+}>({
   name: PLAN_FEES_CHANGE_ACTION,
   permission: 'fees.manage',
   target: () => 'plan_fees',
@@ -610,6 +615,8 @@ const planFeesChange = acting<{ freeBps: string; proBps: string }>({
   describe: async (tx, payload) => {
     const to = checkedPlanFeeRates(payload);
     const from = await planFeeRatesInForce(tx);
+    // Asked at request time too, so a big move without the confirm never opens a request.
+    requirePlanFeeConfirm(from, to, payload.confirmLargeChange);
     return `Change TipMe’s fee from Free ${percentOf(from.freeBps)} and Pro ${percentOf(from.proBps)} to Free ${percentOf(to.freeBps)} and Pro ${percentOf(to.proBps)}, for new tips only`;
   },
   act: (tx, payload, context) => {
@@ -620,6 +627,7 @@ const planFeesChange = acting<{ freeBps: string; proBps: string }>({
       approvedBy: context.approverId ?? null,
       reason: context.reason,
       now: context.now,
+      confirmedLargeChange: payload.confirmLargeChange === true,
     }).then((set) => ({
       id: set.id,
       freeBps: String(set.freeBps),

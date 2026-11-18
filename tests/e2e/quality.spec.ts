@@ -236,7 +236,9 @@ test('the terms set out Free 5%, Pro 3%, free withdrawals and the NGN 2,000 mini
   await expect(fees).not.toContainText('₦4,500');
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
-  await expect(fees).toContainText('Withdrawals are free.');
+  await expect(fees).toContainText(
+    'The first 2 withdrawals each day (Lagos time) are free',
+  );
   await expect(fees).not.toContainText('₦9,950');
 });
 

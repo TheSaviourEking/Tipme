@@ -109,3 +109,81 @@ test('old deals at or above Free’s 7% are cleared with an audit row; lower dea
   assert.equal((await audit(ADA)).length, 1);
   assert.equal((await audit(TOBI)).length, 1);
 });
+
+test('per-page deals no longer below the plan rate are cleared with one audit row each (18 Nov 2026)', async (t) => {
+  // Free pages at 500 bps and up, Pro pages at 300 and up: they can never apply under Free 5% and
+  // Pro 3%, so they are cleared; lower deals stay. Each cleared page gets one system audit row.
+  const db = await useDatabase(t);
+  const dataStep = (await migration('0115_plan_fee_rates')).filter(
+    (statement) => statement.includes('custom_fee_bps'),
+  );
+  assert.ok(dataStep.length >= 2, 'the migration has a data step');
+  const cases = [
+    // [Ada: plan, deal, cleared?], [Tobi: plan, deal, cleared?]
+    [
+      ['free', 500, true],
+      ['pro', 300, true],
+    ],
+    [
+      ['free', 499, false],
+      ['pro', 299, false],
+    ],
+    [
+      ['free', 1000, true],
+      ['pro', 450, true],
+    ],
+    [
+      ['free', 0, false],
+      ['free', null, false],
+    ],
+  ];
+  for (const [ada, tobi] of cases) {
+    await db.fresh();
+    for (const [id, [plan, deal]] of [
+      [ADA, ada],
+      [TOBI, tobi],
+    ])
+      await db.pool.query(
+        `UPDATE profiles SET plan = $2, staff_pro = $3, custom_fee_bps = $4 WHERE id = $1`,
+        [id, plan, plan === 'pro', deal],
+      );
+    for (const statement of dataStep) await db.pool.query(statement);
+    for (const [id, [plan, deal, cleared]] of [
+      [ADA, ada],
+      [TOBI, tobi],
+    ]) {
+      const label = `${plan} ${deal}`;
+      const { rows } = await db.pool.query(
+        `SELECT custom_fee_bps FROM profiles WHERE id = $1`,
+        [id],
+      );
+      assert.equal(rows[0].custom_fee_bps, cleared ? null : deal, label);
+      const { rows: audit } = await db.pool.query(
+        `SELECT action, staff_user_id, permission, reason FROM audit_events
+          WHERE subject_type = 'profile' AND subject_id = $1`,
+        [id],
+      );
+      assert.equal(audit.length, cleared ? 1 : 0, label);
+      if (cleared) {
+        assert.equal(audit[0].action, 'fee.capped');
+        assert.equal(audit[0].staff_user_id, null);
+        assert.equal(audit[0].permission, 'fees.manage');
+        assert.match(audit[0].reason, /18 Nov 2026/);
+        assert.match(audit[0].reason, /Free 5%, Pro 3%/);
+        assert.match(
+          audit[0].reason,
+          new RegExp(`\\[change: \\{"from":${deal},"to":null\\}\\]`),
+        );
+      }
+    }
+    // Run again: nothing left to clear, no new audit rows.
+    for (const statement of dataStep) await db.pool.query(statement);
+    const { rows: again } = await db.pool.query(
+      `SELECT count(*)::int AS n FROM audit_events WHERE action = 'fee.capped'`,
+    );
+    assert.equal(
+      again[0].n,
+      [ada, tobi].filter(([, , cleared]) => cleared).length,
+    );
+  }
+});

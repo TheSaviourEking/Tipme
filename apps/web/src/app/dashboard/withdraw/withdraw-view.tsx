@@ -36,6 +36,7 @@ import {
   belowMinimum,
   TOO_SMALL,
   withdrawableNow,
+  withdrawDayNote,
   withdrawFee,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
@@ -359,6 +360,7 @@ export default function WithdrawPage({
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
+  const dayNote = withdrawDayNote(quote);
   // Ready with money to send: the lamp line and the bank chip say what the notice used to.
   const readyWithMoney = state.kind === 'ready' && withdrawable > BigInt(0);
   const notice = state.notice;
@@ -540,6 +542,11 @@ export default function WithdrawPage({
                       </dd>
                     </dl>
                   </section>
+                )}
+                {dayNote && (
+                  <p className="tm-hint" data-testid="withdrawal-day-note">
+                    {dayNote}
+                  </p>
                 )}
                 <Button
                   type="submit"

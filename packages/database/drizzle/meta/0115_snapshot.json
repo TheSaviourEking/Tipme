@@ -7345,11 +7345,11 @@
       "checkConstraints": {
         "plan_fee_rates_free_bps": {
           "name": "plan_fee_rates_free_bps",
-          "value": "\"plan_fee_rates\".\"free_bps\" BETWEEN 0 AND 10000"
+          "value": "\"plan_fee_rates\".\"free_bps\" BETWEEN 150 AND 1000"
         },
         "plan_fee_rates_pro_bps": {
           "name": "plan_fee_rates_pro_bps",
-          "value": "\"plan_fee_rates\".\"pro_bps\" BETWEEN 0 AND 10000"
+          "value": "\"plan_fee_rates\".\"pro_bps\" BETWEEN 150 AND 1000"
         },
         "plan_fee_rates_pro_not_above_free": {
           "name": "plan_fee_rates_pro_not_above_free",
@@ -8990,7 +8990,7 @@
         },
         "profiles_custom_fee_bps": {
           "name": "profiles_custom_fee_bps",
-          "value": "custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000"
+          "value": "custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 150 AND 1000"
         },
         "profiles_min_tip": {
           "name": "profiles_min_tip",

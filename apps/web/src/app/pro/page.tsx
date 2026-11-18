@@ -2,7 +2,8 @@ import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Container, ProBadge } from '@tipme/ui';
 import { ProOffer } from '@/components/marketing/pro-offer';
 import { formatNaira } from '@/lib/demo-amount';
-import type { PlanFeePercents } from '@/lib/fee-share';
+import { FREE_WITHDRAWALS_PER_DAY } from '@tipme/domain';
+import { FREE_WITHDRAWALS_COPY, type PlanFeePercents } from '@/lib/fee-share';
 import { getPlanFees } from '@/lib/plan-fees-api';
 import { marketingMetadata } from '@/lib/metadata';
 
@@ -109,7 +110,7 @@ const freeKeeps = ({ freePercent }: PlanFeePercents) => [
   `Receiving tips, with no monthly fee: TipMe keeps ${freePercent}% of each tip, payment and withdrawal fees included`,
   'Your page, username, photo and cover',
   'Your QR code in three looks, ready to print',
-  'Free withdrawals to your bank',
+  `${FREE_WITHDRAWALS_PER_DAY} free withdrawals a day to your bank`,
   'Your full tip history, and a CSV download',
   'Sign-in codes, recovery and security alerts',
   'Up to 3 social links',
@@ -128,7 +129,7 @@ const faq = ({ freePercent, proPercent }: PlanFeePercents) => [
   },
   {
     q: 'Does Pro change what TipMe keeps?',
-    a: `Yes. On Pro, TipMe keeps ${proPercent}% of each tip instead of ${freePercent}%, with payment and withdrawal fees included. The rate is set when a supporter sees the amount, so a tip already on its way keeps its rate. Withdrawals are free on both plans.`,
+    a: `Yes. On Pro, TipMe keeps ${proPercent}% of each tip instead of ${freePercent}%, with payment and withdrawal fees included. The rate is set when a supporter sees the amount, so a tip already on its way keeps its rate. ${FREE_WITHDRAWALS_COPY} This is the same on both plans.`,
   },
   {
     q: 'Does the Pro badge mean TipMe checked me?',

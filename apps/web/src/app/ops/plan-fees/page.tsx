@@ -23,6 +23,8 @@ import { when } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const PATH = '/v1/ops/plan-fees';
+// Matches PLAN_FEE_LARGE_CHANGE_BPS (contracts): the API refuses a bigger move without the flag.
+const LARGE_CHANGE_BPS = 200;
 
 const staffWord = (id: string | null) => (id ? `staff …${id.slice(-6)}` : '');
 
@@ -47,6 +49,8 @@ export default function PlanFeesPage() {
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // A move of more than 2 percentage points on either plan shows a box the person must tick.
+  const [bigMove, setBigMove] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
 
   const load = useCallback(async () => {
@@ -88,30 +92,56 @@ export default function PlanFeesPage() {
     const freeBps = percentToBps(String(data.get('free') ?? ''));
     const proBps = percentToBps(String(data.get('pro') ?? ''));
     const reason = String(data.get('reason') ?? '').trim();
+    const { minBps, maxBps } = state.limits;
+    const limits = `${bpsToPercent(minBps)} to ${bpsToPercent(maxBps)}`;
     if (freeBps === null || proBps === null)
       return setError(
-        'Write each fee as a percentage from 0 to 100, for example 5 or 4.5.',
+        `Write each fee as a percentage from ${limits}, for example 5 or 4.5.`,
       );
+    if (
+      freeBps < minBps ||
+      freeBps > maxBps ||
+      proBps < minBps ||
+      proBps > maxBps
+    )
+      return setError(`Each fee must be from ${limits}.`);
     if (proBps > freeBps)
       return setError('Pro’s fee can’t be higher than Free’s.');
     if (freeBps === current.freeBps && proBps === current.proBps)
       return setError('Choose fees different from the ones in use now.');
     if (reason.length < 10)
       return setError('Please write a reason of at least 10 characters.');
+    const big =
+      Math.abs(freeBps - current.freeBps) > LARGE_CHANGE_BPS ||
+      Math.abs(proBps - current.proBps) > LARGE_CHANGE_BPS;
+    setBigMove(big);
+    const confirmed = data.get('confirm-big') === 'on';
+    if (big && !confirmed)
+      return setError(
+        'That moves a fee by more than 2 percentage points. Tick the box to confirm the big change.',
+      );
     setBusy(true);
     setError('');
     const answer = await opsAct<OpsPlanFees>(PATH, {
       method: 'POST',
-      body: { freeBps: String(freeBps), proBps: String(proBps), reason },
+      body: {
+        freeBps: String(freeBps),
+        proBps: String(proBps),
+        reason,
+        ...(big ? { confirmLargeChange: true } : {}),
+      },
     });
     setBusy(false);
     if (answer.kind === 'refused')
       return setError(
         answer.code === 'VALIDATION_FAILED'
-          ? 'Check the fees: 0% to 100%, and Pro no higher than Free.'
-          : refusalWords(answer),
+          ? `Check the fees: ${bpsToPercent(minBps)} to ${bpsToPercent(maxBps)}, and Pro no higher than Free.`
+          : answer.code === 'PLAN_FEES_CONFIRM_REQUIRED'
+            ? 'That moves a fee by more than 2 percentage points. Tick the box to confirm the big change.'
+            : refusalWords(answer),
       );
     form.reset();
+    setBigMove(false);
     setOutcome(
       outcomeOf(
         answer,
@@ -162,7 +192,7 @@ export default function PlanFeesPage() {
                 id={`${id}-free`}
                 name="free"
                 label="Free plan fee (%)"
-                hint="For example 5 or 4.5."
+                hint="From 1.5 to 10, for example 5 or 4.5."
                 defaultValue={bpsToPercent(current.freeBps).replace('%', '')}
                 inputMode="decimal"
               />
@@ -181,6 +211,12 @@ export default function PlanFeesPage() {
                 hint="Recorded in the audit log with your name and the time."
                 maxLength={500}
               />
+              {bigMove && (
+                <label className="ops-recovery__confirm">
+                  <input type="checkbox" name="confirm-big" /> I confirm this
+                  big change (more than 2 percentage points on a plan)
+                </label>
+              )}
               {error && (
                 <Slip dense tone="error" title="Not done">
                   {error}

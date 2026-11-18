@@ -1,4 +1,13 @@
-import { DEFAULT_PLAN_FEE_RATES } from '@tipme/domain';
+import {
+  DEFAULT_PLAN_FEE_RATES,
+  FREE_WITHDRAWALS_PER_DAY,
+} from '@tipme/domain';
+
+/**
+ * Owner, 18 Nov 2026: the first withdrawals of each Lagos day are free; from the next one the partner's
+ * transfer fee comes off the amount. The number is FREE_WITHDRAWALS_PER_DAY (domain), written once.
+ */
+export const FREE_WITHDRAWALS_COPY = `The first ${FREE_WITHDRAWALS_PER_DAY} withdrawals each day are free.`;
 
 /**
  * TipMe's share per plan as percentages (owner, 18 Nov 2026: Free 5%, Pro 3%, payment and withdrawal

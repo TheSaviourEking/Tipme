@@ -61,7 +61,8 @@ export interface PlanFeeRates {
  * The owner's pricing, 18 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): TipMe Free keeps 5% of each
  * tip and TipMe Pro 3%, processing and withdrawal fees included (TipMe pays both from its share).
  * Staff can change the two rates at /ops/plan-fees (two people, audited); these are the coded
- * defaults, used when no rate was ever stored or the stored one can't be read.
+ * defaults, used only when no rate row exists or the stored one is invalid. A database error is not
+ * covered: the quote fails rather than price from defaults.
  */
 export const DEFAULT_PLAN_FEE_RATES: PlanFeeRates = {
   freeBps: 500n,
@@ -74,15 +75,20 @@ const V3_VERSION_PREFIX: Record<FeePlan, string> = {
   pro: 'v3-pro',
 };
 
+/** The owner's bounds, 18 Nov 2026: each plan's rate is from 1.5% to 10% (150 to 1000 bps). */
+export const PLAN_FEE_MIN_BPS = 150n;
+export const PLAN_FEE_MAX_BPS = 1000n;
+
 /**
  * Why a pair of plan rates is not allowed, or null when it is: each a whole number of basis points
- * from 0 to 10000, and Pro never above Free (the owner, 18 Nov 2026).
+ * from 150 to 1000 (1.5% to 10%), and Pro never above Free (the owner, 18 Nov 2026).
  */
 export function planFeeRatesProblem(rates: {
   freeBps: bigint;
   proBps: bigint;
 }): 'freeBps' | 'proBps' | 'proAboveFree' | null {
-  const inRange = (bps: bigint) => bps >= 0n && bps <= 10000n;
+  const inRange = (bps: bigint) =>
+    bps >= PLAN_FEE_MIN_BPS && bps <= PLAN_FEE_MAX_BPS;
   if (!inRange(rates.freeBps)) return 'freeBps';
   if (!inRange(rates.proBps)) return 'proBps';
   if (rates.proBps > rates.freeBps) return 'proAboveFree';
@@ -291,5 +297,24 @@ export function belowWithdrawalMinimum(
   return (
     chosenMinor < withdrawalMinimumMinor(policy) &&
     chosenMinor !== withdrawableMinor
+  );
+}
+
+/**
+ * Withdrawals from a person's page that are free each Lagos calendar day (owner, 18 Nov 2026): TipMe
+ * pays our payment partner's fee on the first this many. From the next one the user pays it from the
+ * amount. Businesses are not counted. The one place this number is written.
+ */
+export const FREE_WITHDRAWALS_PER_DAY = 2;
+
+/** Lagos is UTC+1 all year (no daylight saving). */
+const LAGOS_OFFSET_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+/** The instant the Lagos calendar day containing `now` began. */
+export function lagosDayStart(now: Date): Date {
+  const local = now.getTime() + LAGOS_OFFSET_MS;
+  return new Date(
+    local - (((local % DAY_MS) + DAY_MS) % DAY_MS) - LAGOS_OFFSET_MS,
   );
 }

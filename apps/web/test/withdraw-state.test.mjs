@@ -4,6 +4,7 @@ import {
   TOO_SMALL,
   belowMinimum,
   withdrawableNow,
+  withdrawDayNote,
   withdrawFee,
   withdrawSummary,
   withdrawLamp,
@@ -471,4 +472,42 @@ test('the withdraw screen shows “Free” for the fee when TipMe pays, and no f
   );
   assert.match(src, /figures\.feePaidBy === 'tipme' \? \(\s*'Free'/);
   assert.doesNotMatch(src, /Paid by TipMe/);
+});
+
+test('the 3rd withdrawal of the day says plainly that the transfer fee comes off it', () => {
+  const personal = (over) =>
+    ready({ feePaidBy: 'user', freePerDay: 2, ordinalToday: 3, ...over });
+  assert.equal(
+    withdrawDayNote(personal()),
+    'This is your 3rd withdrawal today, so the ₦50 transfer fee comes off it. Withdrawals are free twice a day.',
+  );
+  assert.match(
+    withdrawDayNote(personal({ ordinalToday: 4 })),
+    /your 4th withdrawal today/,
+  );
+  assert.match(
+    withdrawDayNote(personal({ ordinalToday: 11 })),
+    /your 11th withdrawal/,
+  );
+  assert.match(
+    withdrawDayNote(personal({ ordinalToday: 12 })),
+    /your 12th withdrawal/,
+  );
+  assert.match(
+    withdrawDayNote(personal({ ordinalToday: 23 })),
+    /your 23rd withdrawal/,
+  );
+  // The first two are free: no note. A business has no daily allowance: no note.
+  assert.equal(
+    withdrawDayNote(
+      ready({ feePaidBy: 'tipme', freePerDay: 2, ordinalToday: 2 }),
+    ),
+    null,
+  );
+  assert.equal(
+    withdrawDayNote(ready({ freePerDay: 0, ordinalToday: 1 })),
+    null,
+  );
+  assert.equal(withdrawDayNote(ready()), null);
+  assert.equal(withdrawDayNote({ state: 'no_destination' }), null);
 });
