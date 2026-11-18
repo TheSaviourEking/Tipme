@@ -2165,8 +2165,8 @@ export const profileCovers = pgTable(
 
 /**
  * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
- * `published` are StudioDocument JSON, written only after the strict schema accepted them; a
- * read always goes through `resolveStudio`. `rev` counts saves, so two tabs can't overwrite each
+ * `published` are StudioDocumentV1 JSON, written only after the strict schema accepted them; a
+ * read always goes through `resolveStudioV1`. `rev` counts saves, so two tabs can't overwrite each
  * other. Kept when Pro lapses (owner ruling): the standard page shows until Pro returns.
  */
 export const pageStudios = pgTable('page_studios', {

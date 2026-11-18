@@ -15,12 +15,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
-  studioDraftSchema,
+  studioDraftV1Schema,
   studioFocusSchema,
   studioImageFileName,
   studioPublishSchema,
   type ApiDataResponse,
-  type MyStudio,
+  type MyStudioV1,
   type StudioDraftRequest,
   type StudioFocusRequest,
   type StudioPublishRequest,
@@ -127,7 +127,7 @@ export class StudioController {
   @Header('Cache-Control', 'no-store')
   async get(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<MyStudio>> {
+  ): Promise<ApiDataResponse<MyStudioV1>> {
     return { data: await getMyStudio(this.database.db, auth.userId) };
   }
 
@@ -137,8 +137,8 @@ export class StudioController {
   @RateLimit('studio_drafts')
   async save(
     @CurrentUser() auth: AuthContext,
-    @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
-  ): Promise<ApiDataResponse<MyStudio>> {
+    @Body(new ZodValidationPipe(studioDraftV1Schema)) body: StudioDraftRequest,
+  ): Promise<ApiDataResponse<MyStudioV1>> {
     const studio = await saveStudioDraft(this.database.db, auth.userId, body);
     // Best effort, in the background: the next save or the publish sees the answer.
     void this.checkVideos(studioVideoUrls(studio.draft)).catch(() => undefined);
@@ -154,7 +154,7 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(studioPublishSchema))
     body: StudioPublishRequest,
-  ): Promise<ApiDataResponse<MyStudio>> {
+  ): Promise<ApiDataResponse<MyStudioV1>> {
     const current = await getMyStudio(this.database.db, auth.userId);
     if (current.access !== 'edit')
       throw new CodedHttpException(403, 'STUDIO_PRO_REQUIRED');
@@ -180,7 +180,7 @@ export class StudioController {
   @UseGuards(SessionGuard, CsrfGuard)
   async discard(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<MyStudio>> {
+  ): Promise<ApiDataResponse<MyStudioV1>> {
     return {
       data: await discardStudioDraft(this.database.db, auth.userId, this.store),
     };
@@ -193,7 +193,7 @@ export class StudioController {
   async upload(
     @CurrentUser() auth: AuthContext,
     @Req() request: Request,
-  ): Promise<ApiDataResponse<MyStudio> & { meta: { imageId: string } }> {
+  ): Promise<ApiDataResponse<MyStudioV1> & { meta: { imageId: string } }> {
     const upload = await readUpload(request);
     const { width, height, files } = await withSlot(async () => {
       const master = await masterOf(upload);
@@ -223,7 +223,7 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Param('imageId') imageId: string,
     @Body(new ZodValidationPipe(studioFocusSchema)) body: StudioFocusRequest,
-  ): Promise<ApiDataResponse<MyStudio>> {
+  ): Promise<ApiDataResponse<MyStudioV1>> {
     if (!UUID.test(imageId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const master = await studioImageMaster(
       this.database.db,

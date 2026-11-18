@@ -6,7 +6,7 @@ import {
   STUDIO_FONTS,
   STUDIO_LIMITS,
   studioCounts,
-  studioDocumentSchema,
+  studioDocumentV1Schema,
 } from '../packages/contracts/dist/index.js';
 import {
   IFY,
@@ -32,7 +32,7 @@ test('every lab example is a valid document', () => {
     ),
   };
   for (const [name, doc] of Object.entries(all)) {
-    const r = studioDocumentSchema.safeParse(doc);
+    const r = studioDocumentV1Schema.safeParse(doc);
     assert.equal(
       r.success,
       true,

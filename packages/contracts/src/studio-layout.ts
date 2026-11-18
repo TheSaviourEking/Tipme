@@ -9,11 +9,11 @@
  */
 import {
   columnCount,
-  type StudioBlock,
+  type StudioBlockV1,
   type StudioColumns,
-  type StudioDocument,
-  type StudioRow,
-} from './studio-document.js';
+  type StudioDocumentV1,
+  type StudioRowV1,
+} from './studio-document-v1.js';
 
 export const STUDIO_BREAKPOINTS = [320, 390, 768, 1024, 1440] as const;
 
@@ -45,7 +45,7 @@ export const STUDIO_SPANS: Record<StudioColumns, readonly number[]> = {
 
 /** The narrowest cell each block kind and variant can take without looking broken. */
 export const BLOCK_MIN_WIDTH: Record<
-  `${StudioBlock['kind']}:${string}`,
+  `${StudioBlockV1['kind']}:${string}`,
   number
 > = {
   'text:heading': 140,
@@ -94,7 +94,7 @@ export function spansAt(
 
 /** Width inside a row, after its background inset. */
 export function rowInner(
-  row: Pick<StudioRow, 'background'>,
+  row: Pick<StudioRowV1, 'background'>,
   viewport: number,
 ): number {
   const inset =
@@ -115,7 +115,7 @@ const gapAt = (viewport: number) =>
 
 /** CSS px of one cell. */
 export function cellWidthAt(
-  row: Pick<StudioRow, 'background' | 'columns'>,
+  row: Pick<StudioRowV1, 'background' | 'columns'>,
   cell: number,
   viewport: number,
 ): number {
@@ -129,7 +129,7 @@ export function cellWidthAt(
 
 /** Every cell's width at this screen width, keyed `rowId:cellIndex`. */
 export function cellWidths(
-  doc: Pick<StudioDocument, 'rows'>,
+  doc: Pick<StudioDocumentV1, 'rows'>,
   viewport: number,
 ): Record<string, number> {
   const out: Record<string, number> = {};
@@ -142,9 +142,9 @@ export function cellWidths(
 
 /** The blocks in a cell named `rowId:cellIndex`. */
 export function blocksIn(
-  doc: Pick<StudioDocument, 'rows'>,
+  doc: Pick<StudioDocumentV1, 'rows'>,
   cell: string,
-): StudioBlock[] {
+): StudioBlockV1[] {
   const [rowId, index] = cell.split(':');
   return doc.rows.find((r) => r.id === rowId)?.cells[Number(index)] ?? [];
 }

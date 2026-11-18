@@ -1,7 +1,7 @@
 import type {
   PublicProfile,
-  PublicStudio,
-  StudioDocument,
+  PublicStudioV1,
+  StudioDocumentV1,
 } from '@tipme/contracts';
 
 /** A Studio photo as the API serves it: /v1/studio-images/<page>/<image>/<version>. */
@@ -23,10 +23,10 @@ export function studioFor(
     labImages,
     campaign,
   }: { apiOrigin: string; labImages: boolean; campaign?: string },
-): PublicStudio | null {
+): PublicStudioV1 | null {
   const studio = profile.studio;
   if (!studio || campaign || profile.plan !== 'pro') return null;
-  const images: PublicStudio['images'] = {};
+  const images: PublicStudioV1['images'] = {};
   for (const [id, image] of Object.entries(studio.images)) {
     if (API_IMAGE.test(image.path))
       images[id] = { ...image, path: `${apiOrigin}${image.path}` };
@@ -42,7 +42,7 @@ export function studioFor(
  */
 export function identityFor(
   profile: PublicProfile,
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
 ): PublicProfile {
   const kinds = new Set(
     doc.rows.flatMap((row) => row.cells.flat().map((block) => block.kind)),

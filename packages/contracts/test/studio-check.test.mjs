@@ -3,18 +3,18 @@ import { test } from 'node:test';
 import fc from 'fast-check';
 import {
   BLOCK_MIN_WIDTH,
-  DESIGN_CHECK_VERSION,
+  DESIGN_CHECK_VERSION_V1,
   STUDIO_BREAKPOINTS,
   STUDIO_FIX_NEEDS_INPUT,
   STUDIO_FONTS,
-  applyStudioFix,
+  applyStudioFixV1,
   blocksIn,
   cellWidths,
-  checkDesign,
-  defaultStudioDocument,
+  checkDesignV1,
+  defaultStudioDocumentV1,
   sameIssue,
   studioColourName,
-  studioDocumentSchema,
+  studioDocumentV1Schema,
   studioEagerImages,
   studioIssueKeys,
   studioLargeText,
@@ -30,7 +30,7 @@ import {
   IMAGE_POOL,
   checkContext,
   imageFacts,
-  studioDocument,
+  studioDocumentV1Arb,
 } from './support/studio-arbitrary.mjs';
 
 const CTX = EXAMPLE_CONTEXT;
@@ -64,27 +64,28 @@ const withImage = (facts) => ({
   ...CTX,
   images: { ...CTX.images, [IMG]: facts },
 });
-const rulesOf = (d, ctx = CTX) => checkDesign(d, ctx).issues.map((i) => i.rule);
+const rulesOf = (d, ctx = CTX) =>
+  checkDesignV1(d, ctx).issues.map((i) => i.rule);
 const fixIds = (issue) => issue.fixes.map((f) => f.id);
 const automatic = (issue) =>
   issue.fixes.filter((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id));
 
 test('the curated examples pass, with their notices', () => {
   for (const [name, doc] of Object.entries({ KEMI, SULE, IFY })) {
-    assert.equal(studioDocumentSchema.safeParse(doc).success, true, name);
-    const result = checkDesign(doc, CTX);
+    assert.equal(studioDocumentV1Schema.safeParse(doc).success, true, name);
+    const result = checkDesignV1(doc, CTX);
     assert.deepEqual(
       result.issues,
       [],
       `${name}: ${JSON.stringify(result.issues)}`,
     );
-    assert.equal(result.version, DESIGN_CHECK_VERSION);
+    assert.equal(result.version, DESIGN_CHECK_VERSION_V1);
     assert.ok(
       result.weightBytes > 0 && result.weightBytes < 1_500_000,
       `${name} ${result.weightBytes}`,
     );
   }
-  const sule = checkDesign(SULE, CTX).notices.map((n) => n.message);
+  const sule = checkDesignV1(SULE, CTX).notices.map((n) => n.message);
   assert.ok(
     sule.includes(
       'Your yellow is too light for text on a light page. We’ll use it for highlights and for buttons with dark text, and a deeper shade of it for links and headings. Your page will still look yellow.',
@@ -93,7 +94,7 @@ test('the curated examples pass, with their notices', () => {
   );
   assert.ok(sule.some((m) => /shade behind the words on the photo/.test(m)));
   assert.ok(
-    checkDesign(IFY, CTX).notices.some(
+    checkDesignV1(IFY, CTX).notices.some(
       (n) =>
         n.rule === 'contrast' &&
         /pink is too light for small text/.test(n.message),
@@ -229,10 +230,13 @@ test('each rule fires on its minimal bad example', () => {
 });
 
 test('rules that the schema or engine already guarantee stay silent, and say what they fixed', () => {
-  const r = checkDesign(page(row('row00001', [[h2('blk00001', 'Ṣọlá')]])), CTX);
+  const r = checkDesignV1(
+    page(row('row00001', [[h2('blk00001', 'Ṣọlá')]])),
+    CTX,
+  );
   assert.deepEqual(r.issues, []);
   // Kemi's heading font is Fraunces, which has no Ṅ; Ṣọlá it draws. Manrope has no Ṣ.
-  const manrope = checkDesign(
+  const manrope = checkDesignV1(
     {
       ...page(row('row00001', [[h2('blk00001', 'Ṣọlá')]])),
       fonts: { heading: 'manrope', body: 'inter' },
@@ -254,16 +258,16 @@ test('a photo 640 wide in a 2-1 wide cell fails; the same photo in a 1-1 cell pa
     ...row('row00001', [[h2('blk00001'), photo('blk00002')], [h2('blk00003')]]),
     columns: '2-1',
   };
-  const [issue] = checkDesign(page(two), ctx).issues;
+  const [issue] = checkDesignV1(page(two), ctx).issues;
   assert.equal(issue?.rule, 'photo-resolution');
   assert.deepEqual(fixIds(issue), ['smaller-slot', 'replace-photo']);
   assert.equal(issue.fixes[0].label, 'Make the photo smaller');
   assert.match(issue.detail, /640 pixels wide, shown at up to 672/);
-  const fixed = applyStudioFix(page(two), issue, 'smaller-slot');
+  const fixed = applyStudioFixV1(page(two), issue, 'smaller-slot');
   assert.equal(fixed.rows[0].columns, '1-1');
-  assert.deepEqual(checkDesign(fixed, ctx).issues, []);
+  assert.deepEqual(checkDesignV1(fixed, ctx).issues, []);
   assert.deepEqual(
-    checkDesign(page({ ...two, columns: '1-1' }), ctx).issues,
+    checkDesignV1(page({ ...two, columns: '1-1' }), ctx).issues,
     [],
   );
 });
@@ -288,7 +292,7 @@ test('the weight estimate counts only photos in the first 1.5 screens and only t
     row('row00001', [[photo('blk00001')]]),
   );
   const noPhoto = page(filler(2), filler(3), filler(4));
-  const w = (d) => checkDesign(d, CTX).weightBytes;
+  const w = (d) => checkDesignV1(d, CTX).weightBytes;
   assert.ok(w(top) > w(page()), 'a photo at the top counts');
   assert.equal(w(low), w(noPhoto), 'a photo lower down loads lazily');
   const font = (id) => STUDIO_FONTS.find((f) => f.id === id).files[0].bytes;
@@ -329,7 +333,7 @@ test('colour names for the one-sentence notes', () => {
   // The coral accent the Studio suggests is named coral, never red.
   assert.equal(studioColourName('#ff7a59'), 'coral');
   assert.equal(studioColourName('#f08080'), 'coral');
-  const coralNotes = checkDesign({ ...KEMI, mode: 'light' }, CTX)
+  const coralNotes = checkDesignV1({ ...KEMI, mode: 'light' }, CTX)
     .notices.filter((n) => n.rule === 'contrast')
     .map((n) => n.message);
   assert.ok(
@@ -340,41 +344,49 @@ test('colour names for the one-sentence notes', () => {
   assert.equal(studioColourName('#6d4c41'), 'brown');
 });
 
-test('studioIssueKeys lists the same issues as checkDesign', () => {
+test('studioIssueKeys lists the same issues as checkDesignV1', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), checkContext(), (doc, ctx) => {
-      assert.deepEqual(
-        studioIssueKeys(doc, ctx),
-        checkDesign(doc, ctx).issues.map(({ rule, at }) => ({ rule, at })),
-      );
-    }),
+    fc.property(
+      studioDocumentV1Arb({ valid: true }),
+      checkContext(),
+      (doc, ctx) => {
+        assert.deepEqual(
+          studioIssueKeys(doc, ctx),
+          checkDesignV1(doc, ctx).issues.map(({ rule, at }) => ({ rule, at })),
+        );
+      },
+    ),
     { numRuns: runs(500), seed: seed() },
   );
 });
 
-test('checkDesign is pure and deterministic', () => {
+test('checkDesignV1 is pure and deterministic', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), checkContext(), (doc, ctx) => {
-      const before = structuredClone(doc);
-      const a = checkDesign(doc, ctx);
-      assert.deepEqual(doc, before);
-      assert.deepEqual(
-        checkDesign(structuredClone(doc), structuredClone(ctx)),
-        a,
-      );
-    }),
+    fc.property(
+      studioDocumentV1Arb({ valid: true }),
+      checkContext(),
+      (doc, ctx) => {
+        const before = structuredClone(doc);
+        const a = checkDesignV1(doc, ctx);
+        assert.deepEqual(doc, before);
+        assert.deepEqual(
+          checkDesignV1(structuredClone(doc), structuredClone(ctx)),
+          a,
+        );
+      },
+    ),
     { numRuns: runs(500), seed: seed() },
   );
 });
 
 test('every offered fix removes its issue and adds no new error', () => {
   const property = (doc, ctx) => {
-    const before = checkDesign(doc, ctx);
+    const before = checkDesignV1(doc, ctx);
     for (const issue of before.issues)
       for (const f of automatic(issue)) {
-        const next = applyStudioFix(doc, issue, f.id);
+        const next = applyStudioFixV1(doc, issue, f.id);
         assert.equal(
-          studioDocumentSchema.safeParse(next).success,
+          studioDocumentV1Schema.safeParse(next).success,
           true,
           `${issue.rule}/${f.id}`,
         );
@@ -391,46 +403,54 @@ test('every offered fix removes its issue and adds no new error', () => {
   };
   for (const [doc, ctx] of regressions('fixes')) property(doc, ctx);
   fc.assert(
-    fc.property(studioDocument({ valid: true }), checkContext(), property),
+    fc.property(studioDocumentV1Arb({ valid: true }), checkContext(), property),
     { numRuns: runs(2000), seed: seed() },
   );
 });
 
 test('repeatedly applying the first automatic fix reaches a passing page or only input-needing issues', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), checkContext(), (doc, ctx) => {
-      let d = doc;
-      let result = checkDesign(d, ctx);
-      const start = result.issues.length;
-      for (let step = 0; step <= start; step += 1) {
-        const issue = result.issues.find((i) => automatic(i).length > 0);
-        if (!issue) break;
-        d = applyStudioFix(d, issue, automatic(issue)[0].id);
-        const next = checkDesign(d, ctx);
-        assert.ok(
-          next.issues.length < result.issues.length,
-          'each fix leaves fewer issues',
-        );
-        result = next;
-      }
-      assert.ok(result.issues.every((i) => automatic(i).length === 0));
-    }),
+    fc.property(
+      studioDocumentV1Arb({ valid: true }),
+      checkContext(),
+      (doc, ctx) => {
+        let d = doc;
+        let result = checkDesignV1(d, ctx);
+        const start = result.issues.length;
+        for (let step = 0; step <= start; step += 1) {
+          const issue = result.issues.find((i) => automatic(i).length > 0);
+          if (!issue) break;
+          d = applyStudioFixV1(d, issue, automatic(issue)[0].id);
+          const next = checkDesignV1(d, ctx);
+          assert.ok(
+            next.issues.length < result.issues.length,
+            'each fix leaves fewer issues',
+          );
+          result = next;
+        }
+        assert.ok(result.issues.every((i) => automatic(i).length === 0));
+      },
+    ),
     { numRuns: runs(2000), seed: seed() },
   );
 });
 
 test('a passing document fits every breakpoint in the layout model', () => {
   fc.assert(
-    fc.property(studioDocument({ valid: true }), checkContext(), (doc, ctx) => {
-      if (checkDesign(doc, ctx).issues.length) return;
-      for (const w of STUDIO_BREAKPOINTS)
-        for (const [cell, width] of Object.entries(cellWidths(doc, w)))
-          for (const b of blocksIn(doc, cell))
-            assert.ok(
-              BLOCK_MIN_WIDTH[`${b.kind}:${b.variant}`] <= width,
-              `${b.kind}:${b.variant} in ${width}px at ${w}`,
-            );
-    }),
+    fc.property(
+      studioDocumentV1Arb({ valid: true }),
+      checkContext(),
+      (doc, ctx) => {
+        if (checkDesignV1(doc, ctx).issues.length) return;
+        for (const w of STUDIO_BREAKPOINTS)
+          for (const [cell, width] of Object.entries(cellWidths(doc, w)))
+            for (const b of blocksIn(doc, cell))
+              assert.ok(
+                BLOCK_MIN_WIDTH[`${b.kind}:${b.variant}`] <= width,
+                `${b.kind}:${b.variant} in ${width}px at ${w}`,
+              );
+      },
+    ),
     { numRuns: runs(2000), seed: seed() },
   );
 });
@@ -445,7 +465,7 @@ test('every block fits a single column on the narrowest phone, even on a coloure
     assert.ok(min <= narrowest, `${kind} ${min} > ${narrowest}`);
 });
 
-test('defaultStudioDocument passes the design check', () => {
+test('defaultStudioDocumentV1 passes the design check', () => {
   for (const profile of [
     { bio: 'Singer, Lagos', links: 3 },
     { bio: null, links: 0 },
@@ -457,7 +477,7 @@ test('defaultStudioDocument passes the design check', () => {
       profile: { bio: Boolean(profile.bio), links: profile.links },
     };
     assert.deepEqual(
-      checkDesign(defaultStudioDocument(profile), ctx).issues,
+      checkDesignV1(defaultStudioDocumentV1(profile), ctx).issues,
       [],
       JSON.stringify(profile),
     );

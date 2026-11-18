@@ -124,7 +124,13 @@ export async function geometryProblems(page: Page): Promise<string[]> {
       const box = el.getBoundingClientRect();
       if (box.width <= 1 || box.height <= 1) continue; // visually hidden or empty
       const cs = getComputedStyle(el);
-      if (cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) {
+      // A style's photo strip scrolls sideways by design (Clear, §9.2): it is focusable, and its
+      // own box must still fit the page, which the page check above proves.
+      if (
+        cs.overflowX !== 'visible' &&
+        el.scrollWidth > el.clientWidth + 1 &&
+        !el.matches('[data-strip]')
+      ) {
         // Name the widest thing inside, so a failure says what didn't fit.
         const widest = [...el.querySelectorAll('*')].reduce<
           [Element | null, number]

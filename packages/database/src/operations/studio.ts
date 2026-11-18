@@ -1,20 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import {
-  DESIGN_CHECK_VERSION,
+  DESIGN_CHECK_VERSION_V1,
   STUDIO_LIMITS,
-  checkDesign,
-  defaultStudioDocument,
+  checkDesignV1,
+  defaultStudioDocumentV1,
   deriveStudioPalette,
-  resolveStudio,
-  studioDocumentSchema,
+  resolveStudioV1,
+  studioDocumentV1Schema,
   visibleLinks,
-  type MyStudio,
+  type MyStudioV1,
   type PagePlan,
-  type PublicStudio,
+  type PublicStudioV1,
   type SocialLink,
-  type StudioBlock,
-  type StudioCheckContext,
-  type StudioDocument,
+  type StudioBlockV1,
+  type StudioCheckContextV1,
+  type StudioDocumentV1,
   type StudioIssue,
 } from '@tipme/contracts';
 import { and, eq, gt, inArray, ne, notInArray, sql } from 'drizzle-orm';
@@ -56,7 +56,7 @@ export const studioImagePathOf = (
 ) => `/v1/studio-images/${profileId}/${imageId}/${version}`;
 
 /** Every image id a document uses: photos, gallery photos and photo row backgrounds. */
-export function studioImageIds(doc: StudioDocument): Set<string> {
+export function studioImageIds(doc: StudioDocumentV1): Set<string> {
   const ids = new Set<string>();
   for (const row of doc.rows) {
     if (typeof row.background === 'object') ids.add(row.background.photo);
@@ -70,7 +70,7 @@ export function studioImageIds(doc: StudioDocument): Set<string> {
 }
 
 /** Every video link a document uses, for the server's video check. */
-export function studioVideoUrls(doc: StudioDocument): string[] {
+export function studioVideoUrls(doc: StudioDocumentV1): string[] {
   return [
     ...new Set(
       doc.rows.flatMap((row) =>
@@ -82,9 +82,9 @@ export function studioVideoUrls(doc: StudioDocument): string[] {
 
 /** The document without one photo: its blocks go, a gallery left empty goes, a row's photo goes. */
 export function withoutStudioImage(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   imageId: string,
-): StudioDocument {
+): StudioDocumentV1 {
   return {
     ...doc,
     rows: doc.rows.map((row) => ({
@@ -94,7 +94,7 @@ export function withoutStudioImage(
           ? 'page'
           : row.background,
       cells: row.cells.map((cell) =>
-        cell.flatMap((b): StudioBlock[] => {
+        cell.flatMap((b): StudioBlockV1[] => {
           if (b.kind === 'photo' && b.imageId === imageId) return [];
           if (b.kind !== 'gallery') return [b];
           const images = b.images.filter((i) => i.imageId !== imageId);
@@ -227,9 +227,9 @@ export function recordStudioVideoChecks(
 async function contextFor(
   db: Db,
   page: PageFacts,
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   images?: ImageFacts[],
-): Promise<StudioCheckContext> {
+): Promise<StudioCheckContextV1> {
   const all = images ?? (await imagesOf(db, page.id));
   const videos = await studioVideoChecksFor(db, studioVideoUrls(doc));
   return {
@@ -244,7 +244,7 @@ async function contextFor(
   };
 }
 
-async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
+async function myStudioOf(db: Db, profileId: string): Promise<MyStudioV1> {
   const page = await pageFacts(db, profileId);
   const [row] = await db
     .select()
@@ -252,16 +252,16 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
     .where(eq(pageStudios.profileId, profileId));
   const today = lagosToday();
   const draft = row
-    ? resolveStudio(row.draft, today)
-    : defaultStudioDocument({ bio: page.bio, links: linkCount(page) });
+    ? resolveStudioV1(row.draft, today)
+    : defaultStudioDocumentV1({ bio: page.bio, links: linkCount(page) });
   const images = await imagesOf(db, profileId);
   const context = await contextFor(db, page, draft, images);
   return {
     draft,
-    published: row?.published ? resolveStudio(row.published, today) : null,
+    published: row?.published ? resolveStudioV1(row.published, today) : null,
     rev: row?.rev ?? 0,
     publishedAt: row?.publishedAt?.toISOString() ?? null,
-    check: checkDesign(draft, context),
+    check: checkDesignV1(draft, context),
     context,
     images: images.map((i) => ({
       imageId: i.id,
@@ -276,7 +276,7 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
 }
 
 /** The owner's Studio: the draft, the published version, the check and the photos. */
-export function getMyStudio(db: Database, userId: string): Promise<MyStudio> {
+export function getMyStudio(db: Database, userId: string): Promise<MyStudioV1> {
   return guarded(async () => myStudioOf(db, await myPageId(db, userId)));
 }
 
@@ -317,18 +317,18 @@ async function dropUnused(
 }
 
 /**
- * Saves the draft (already accepted by `studioDocumentSchema`) if it was based on the latest
+ * Saves the draft (already accepted by `studioDocumentV1Schema`) if it was based on the latest
  * revision; STUDIO_DRAFT_STALE otherwise, keeping the newer one. Photos must be this page's own.
  */
 export function saveStudioDraft(
   db: Database,
   userId: string,
-  input: { rev: number; draft: StudioDocument },
-): Promise<MyStudio> {
+  input: { rev: number; draft: StudioDocumentV1 },
+): Promise<MyStudioV1> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     // The API's pipe checked it; checked again here, as nothing else may reach the column.
-    if (!studioDocumentSchema.safeParse(input.draft).success)
+    if (!studioDocumentV1Schema.safeParse(input.draft).success)
       throw new OperationError('STUDIO_DRAFT_INVALID');
     await db.transaction(async (tx) => {
       await lockProPage(tx, profileId);
@@ -372,8 +372,8 @@ export function saveStudioDraft(
 }
 
 export type PublishResult =
-  | { published: true; studio: MyStudio; handle: string }
-  | { published: false; studio: MyStudio; issues: StudioIssue[] };
+  | { published: true; studio: MyStudioV1; handle: string }
+  | { published: false; studio: MyStudioV1; issues: StudioIssue[] };
 
 /**
  * Publishes the draft when the design check passes with the server's facts; otherwise nothing
@@ -397,14 +397,17 @@ export function publishStudio(
         .for('update');
       if (!row || row.rev !== input.rev)
         throw new OperationError('STUDIO_DRAFT_STALE');
-      const draft = resolveStudio(row.draft, lagosToday());
-      const { issues } = checkDesign(draft, await contextFor(tx, page, draft));
+      const draft = resolveStudioV1(row.draft, lagosToday());
+      const { issues } = checkDesignV1(
+        draft,
+        await contextFor(tx, page, draft),
+      );
       if (issues.length) return { issues, keys: [] as string[] };
       await tx
         .update(pageStudios)
         .set({
           published: draft,
-          publishedCheckVersion: DESIGN_CHECK_VERSION,
+          publishedCheckVersion: DESIGN_CHECK_VERSION_V1,
           publishedAt: sql`now()`,
           updatedAt: sql`now()`,
         })
@@ -428,7 +431,7 @@ export function discardStudioDraft(
   db: Database,
   userId: string,
   store?: PhotoStore,
-): Promise<MyStudio> {
+): Promise<MyStudioV1> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const keys = await db.transaction(async (tx) => {
@@ -456,7 +459,7 @@ export function discardStudioDraft(
       return dropUnused(
         tx,
         profileId,
-        studioImageIds(resolveStudio(row.published, lagosToday())),
+        studioImageIds(resolveStudioV1(row.published, lagosToday())),
       );
     });
     await removeObjects(store, keys);
@@ -500,7 +503,7 @@ export function addStudioImage(
   userId: string,
   input: { width: number; height: number; files: StudioImageFiles },
   store?: PhotoStore,
-): Promise<{ studio: MyStudio; imageId: string }> {
+): Promise<{ studio: MyStudioV1; imageId: string }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const imageId = randomUUID();
@@ -593,7 +596,7 @@ export function setStudioFocus(
     files: StudioImageFiles;
   },
   store?: PhotoStore,
-): Promise<{ studio: MyStudio; handle: string; published: boolean }> {
+): Promise<{ studio: MyStudioV1; handle: string; published: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const rows = await putFiles(store, input.imageId, profileId, input.files);
@@ -640,7 +643,7 @@ export function setStudioFocus(
           .where(eq(pageStudios.profileId, profileId));
         published = Boolean(
           row?.published &&
-          studioImageIds(resolveStudio(row.published, lagosToday())).has(
+          studioImageIds(resolveStudioV1(row.published, lagosToday())).has(
             input.imageId,
           ),
         );
@@ -685,7 +688,7 @@ export function studioImageFile(
       );
     if (!row?.published) return null;
     if (
-      !studioImageIds(resolveStudio(row.published, lagosToday())).has(
+      !studioImageIds(resolveStudioV1(row.published, lagosToday())).has(
         input.imageId,
       )
     )
@@ -726,16 +729,16 @@ export function myStudioImageFile(
 export async function publicStudioFor(
   db: Db,
   page: PageFacts,
-): Promise<PublicStudio | undefined> {
+): Promise<PublicStudioV1 | undefined> {
   if (page.plan !== 'pro') return undefined;
   const [row] = await db
     .select({ published: pageStudios.published })
     .from(pageStudios)
     .where(eq(pageStudios.profileId, page.id));
   if (!row?.published) return undefined;
-  const document = resolveStudio(row.published, lagosToday());
+  const document = resolveStudioV1(row.published, lagosToday());
   const images = await imagesOf(db, page.id);
-  const { issues } = checkDesign(
+  const { issues } = checkDesignV1(
     document,
     await contextFor(db, page, document, images),
   );
@@ -756,7 +759,7 @@ export async function publicStudioFor(
           },
         ]),
     ),
-    checkVersion: DESIGN_CHECK_VERSION,
+    checkVersion: DESIGN_CHECK_VERSION_V1,
   };
 }
 
@@ -865,12 +868,12 @@ export function staffRemoveStudioImage(
           .update(pageStudios)
           .set({
             draft: withoutStudioImage(
-              resolveStudio(row.draft, today),
+              resolveStudioV1(row.draft, today),
               input.imageId,
             ),
             published: row.published
               ? withoutStudioImage(
-                  resolveStudio(row.published, today),
+                  resolveStudioV1(row.published, today),
                   input.imageId,
                 )
               : null,

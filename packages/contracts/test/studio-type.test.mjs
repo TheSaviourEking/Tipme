@@ -8,6 +8,7 @@ import {
   fontsOk,
   studioTypeScale,
 } from '../dist/index.js';
+import { LEGACY_BODY_WORD_FALLBACK } from './support/studio-legacy-body-fonts.mjs';
 
 const STEPS = ['compact', 'standard', 'roomy'];
 const ROLES = ['small', 'body', 'h3', 'h2', 'display'];
@@ -35,9 +36,19 @@ test('ids are unique and every font has at least the heading role', () => {
   for (const f of STUDIO_FONTS) assert.ok(f.roles.includes('heading'), f.id);
 });
 
-test('a body font draws every required letter, so it never needs the word fallback', () => {
+test('a body font draws every required letter, so it never needs the word fallback (legacy v1 fonts excepted)', () => {
+  // The exception list is checked both ways, so a stale entry cannot hide a regression.
+  for (const id of LEGACY_BODY_WORD_FALLBACK) {
+    const f = STUDIO_FONTS.find((x) => x.id === id);
+    assert.ok(f?.roles.includes('body'), `${id} is a legacy body font`);
+    assert.equal(
+      f.wordFallback,
+      true,
+      `${id} is listed, so it needs wordFallback`,
+    );
+  }
   for (const f of STUDIO_FONTS)
-    if (f.roles.includes('body')) {
+    if (f.roles.includes('body') && !LEGACY_BODY_WORD_FALLBACK.includes(f.id)) {
       assert.equal(f.wordFallback, false, f.id);
       assert.ok(f.bodyWeight, `${f.id} has no body weight`);
     }
@@ -45,7 +56,7 @@ test('a body font draws every required letter, so it never needs the word fallba
 
 test('each family is at most two files and each file carries its weights', () => {
   for (const f of STUDIO_FONTS) {
-    assert.ok(f.files.length >= 1 && f.files.length <= 2, f.id);
+    assert.ok(f.files.length >= 1 && f.files.length <= 3, f.id);
     const weights = f.files.flatMap((file) => {
       const [lo, hi = lo] = file.weight.split(' ').map(Number);
       return [[lo, hi]];
@@ -87,6 +98,32 @@ test('the required characters cover Yoruba and Igbo letters, tone marks and the 
     new Set(STUDIO_REQUIRED_CODEPOINTS).size,
     STUDIO_REQUIRED_CODEPOINTS.length,
   );
+});
+
+test('the required characters cover the Hausa hooked letters', () => {
+  for (const c of [0x253, 0x257, 0x199, 0x1b4, 0x181, 0x18a, 0x198, 0x1b3])
+    assert.ok(
+      STUDIO_REQUIRED_CODEPOINTS.includes(c),
+      `U+${c.toString(16).toUpperCase().padStart(4, '0')}`,
+    );
+});
+
+test('the style faces are registered with their files', () => {
+  const font = (id) => STUDIO_FONTS.find((f) => f.id === id);
+  for (const id of ['unbounded', 'anton', 'linen-serif'])
+    assert.ok(font(id), id);
+  const linen = font('linen-serif');
+  assert.equal(linen.files.length, 3);
+  assert.ok(linen.files.some((file) => file.style === 'italic'));
+  assert.deepEqual(
+    linen.files.map((file) => `${file.weight} ${file.style}`).sort(),
+    ['400 italic', '400 normal', '700 normal'],
+  );
+  const serif = font('source-serif-4');
+  assert.ok(serif.files.some((file) => file.style === 'italic'));
+  assert.equal(serif.wordFallback, true);
+  const [lo, hi] = font('inter').files[0].weight.split(' ').map(Number);
+  assert.ok(lo <= 400 && hi >= 800, 'Inter spans 400 to 800');
 });
 
 test('type scale: body ≥ 16, small ≥ 13, display at 320px ≤ 40, steps strictly increase', () => {

@@ -7,10 +7,14 @@
 import {
   STUDIO_FONTS,
   STUDIO_LIMITS as L,
-  type StudioBlock,
+  migrateStudioV1,
+  resolveStudioV1,
   type StudioDocument,
+  type StudioStyleId,
+  type StudioBlockV1,
+  type StudioDocumentV1,
   type StudioFontId,
-  type StudioRow,
+  type StudioRowV1,
 } from '@tipme/contracts';
 
 /** The lab's image ids, the same as the contracts test pool. */
@@ -30,7 +34,7 @@ const [STAGE, CUT1, CUT2, CUT3, CUT4, CUT5, CUT6, SHOP] = LAB_IMAGES as [
   string,
 ];
 
-const kemi: StudioDocument = {
+const kemi: StudioDocumentV1 = {
   v: 1,
   brand: ['#1d4e89', '#ff7a59'],
   mode: 'dark',
@@ -134,7 +138,7 @@ const kemi: StudioDocument = {
   ],
 };
 
-const sule: StudioDocument = {
+const sule: StudioDocumentV1 = {
   v: 1,
   brand: ['#f5c400'],
   mode: 'light',
@@ -240,7 +244,7 @@ const sule: StudioDocument = {
   ],
 };
 
-const ify: StudioDocument = {
+const ify: StudioDocumentV1 = {
   v: 1,
   brand: ['#e0457b'],
   mode: 'light',
@@ -298,8 +302,8 @@ const ify: StudioDocument = {
 };
 
 /** A block without its id, kind by kind. */
-type BlockDraft = StudioBlock extends infer B
-  ? B extends StudioBlock
+type BlockDraft = StudioBlockV1 extends infer B
+  ? B extends StudioBlockV1
     ? Omit<B, 'id'>
     : never
   : never;
@@ -307,9 +311,9 @@ type BlockDraft = StudioBlock extends infer B
 const id = (prefix: string, n: number) =>
   `${prefix}${String(n).padStart(8 - prefix.length, '0')}`;
 const base = (
-  rows: StudioRow[],
-  extra: Partial<StudioDocument> = {},
-): StudioDocument => ({
+  rows: StudioRowV1[],
+  extra: Partial<StudioDocumentV1> = {},
+): StudioDocumentV1 => ({
   v: 1,
   brand: ['#7a32f9'],
   mode: 'light',
@@ -321,9 +325,9 @@ const base = (
 });
 const row = (
   n: number,
-  cells: StudioBlock[][],
-  extra: Partial<StudioRow> = {},
-): StudioRow => ({
+  cells: StudioBlockV1[][],
+  extra: Partial<StudioRowV1> = {},
+): StudioRowV1 => ({
   id: id('row', n),
   columns: (['1', '1-1', '1-1-1'] as const)[cells.length - 1] ?? '1',
   spacing: 'm',
@@ -338,10 +342,10 @@ const fill = (n: number, word = 'Lorem') =>
     .trim();
 
 /** Every limit at once: 12 rows, 40 blocks, 24 photos, 3 videos, 6 events, 12 services, full text. */
-const max: StudioDocument = (() => {
+const max: StudioDocumentV1 = (() => {
   let b = 0;
   const blk = (block: BlockDraft) =>
-    ({ ...block, id: id('mx', ++b) }) as StudioBlock;
+    ({ ...block, id: id('mx', ++b) }) as StudioBlockV1;
   const heading = () =>
     blk({
       kind: 'text',
@@ -364,7 +368,7 @@ const max: StudioDocument = (() => {
         alt: fill(L.alt, 'Photo'),
       })),
     });
-  const rows: StudioRow[] = [
+  const rows: StudioRowV1[] = [
     row(1, [[heading(), para()]]),
     row(2, [[gallery(0)], [gallery(8)]], { columns: '1-1' }),
     row(3, [[gallery(16)]]),
@@ -585,14 +589,14 @@ const hostile = base(
 );
 
 /** One page per font: the font as heading, and as text where the library allows it. */
-export function fontSpecimen(fontId: StudioFontId): StudioDocument {
+export function fontSpecimen(fontId: StudioFontId): StudioDocumentV1 {
   const font = STUDIO_FONTS.find((f) => f.id === fontId) ?? STUDIO_FONTS[0]!;
   const body = font.roles.includes('body') ? font.id : 'inter';
   const text = (
     n: number,
     variant: 'heading' | 'lead' | 'paragraph',
     words: string,
-  ): StudioBlock =>
+  ): StudioBlockV1 =>
     variant === 'heading'
       ? {
           id: id('fnt', n),
@@ -649,3 +653,91 @@ export const STUDIO_EXAMPLES = {
   hostile,
 } as const;
 export type StudioExampleName = keyof typeof STUDIO_EXAMPLES | 'fonts';
+
+// ---------------------------------------------------------------------------------------------
+// Page Studio styles (spec 2026-11-17-page-studio-styles, PR 2a): v2 documents.
+
+/**
+ * One example per style drawn so far: its default accent (`null`), its natural mode, "Your cover"
+ * (the lab profile's generated cover photo), a text, a quote and three photos, with the profile's
+ * links on. Headings start each section, as on the canvas. Each style PR adds its own.
+ */
+const styleExample = (
+  style: StudioStyleId,
+  mode: StudioDocument['mode'],
+): StudioDocument => ({
+  v: 2,
+  style,
+  accent: null,
+  mode,
+  cover: 'yours',
+  blocks: [
+    { id: 'labhead1', kind: 'text', variant: 'heading', text: 'Studio diary' },
+    {
+      id: 'labtext1',
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'Eight songs, a four-piece band and a small room in Yaba. Tips pay for studio hours and the session players.',
+    },
+    {
+      id: 'labgall1',
+      kind: 'gallery',
+      images: [CUT1, CUT2, CUT3].map((imageId, i) => ({
+        imageId,
+        alt: [
+          'Rehearsal, warm stage light',
+          'Vocal booth under blue light',
+          'Morning session by the window',
+        ][i]!,
+      })),
+    },
+    { id: 'labhead2', kind: 'text', variant: 'heading', text: 'Kind words' },
+    {
+      id: 'labquot1',
+      kind: 'quote',
+      text: 'The best night of live music I’ve had in Lagos this year.',
+    },
+  ],
+});
+
+export const LAB_STYLE_EXAMPLES: Partial<
+  Record<StudioStyleId, StudioDocument>
+> = {
+  clear: styleExample('clear', 'light'),
+};
+
+/** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */
+export const LAB_LONG_NAMES = [
+  'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀',
+  'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí',
+  'Ɗanlami Ƙwairanga Ɓello',
+] as const;
+
+/** The v1 stress documents in v2 (§7.1's migration): every limit, the least, hostile text. */
+const migrated = (doc: StudioDocumentV1, style: StudioStyleId) => ({
+  ...migrateStudioV1(resolveStudioV1(doc, '2026-11-14')),
+  style,
+  accent: null,
+  cover: 'yours' as const,
+});
+
+/** `?example=styles-min|styles-max|long-names|hostile` (`&style=` picks the style, Clear first). */
+export function labStyleExample(
+  name: string,
+  style: StudioStyleId,
+): StudioDocument | null {
+  const base = LAB_STYLE_EXAMPLES[style];
+  if (!base) return null;
+  switch (name) {
+    case 'styles-min':
+      return { ...base, blocks: [] };
+    case 'styles-max':
+      return { ...migrated(max, style), mode: base.mode };
+    case 'long-names':
+      return base;
+    case 'hostile':
+      return { ...migrated(hostile, style), mode: base.mode };
+    default:
+      return null;
+  }
+}

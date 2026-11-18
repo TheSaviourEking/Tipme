@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import {
   STUDIO_IMAGE_SHAPES,
   apiErrorCodes,
-  studioDraftSchema,
+  studioDraftV1Schema,
   studioFocusSchema,
   studioImageFileName,
   studioPublishSchema,
@@ -23,7 +23,7 @@ test('Page Studio has its own error codes', () => {
 
 test('saving a draft takes the revision it was based on and a valid document', () => {
   assert.equal(
-    studioDraftSchema.safeParse({ rev: 3, draft: KEMI }).success,
+    studioDraftV1Schema.safeParse({ rev: 3, draft: KEMI }).success,
     true,
   );
   for (const bad of [
@@ -34,7 +34,7 @@ test('saving a draft takes the revision it was based on and a valid document', (
     { rev: 0, draft: KEMI, extra: true },
   ])
     assert.equal(
-      studioDraftSchema.safeParse(bad).success,
+      studioDraftV1Schema.safeParse(bad).success,
       false,
       JSON.stringify(bad).slice(0, 60),
     );

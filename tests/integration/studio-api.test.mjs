@@ -4,8 +4,8 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import {
-  DESIGN_CHECK_VERSION,
-  applyStudioFix,
+  DESIGN_CHECK_VERSION_V1,
+  applyStudioFixV1,
 } from '../../packages/contracts/dist/index.js';
 import {
   addStudioImage,
@@ -201,7 +201,7 @@ test('a Pro page saves a failing draft, cannot publish it, fixes it and publishe
     null,
     'the draft is kept, nothing published',
   );
-  const fixed = applyStudioFix(s.draft, s.check.issues[0], 'smaller-slot');
+  const fixed = applyStudioFixV1(s.draft, s.check.issues[0], 'smaller-slot');
   const s2 = (await json(await save(cookie, s.rev, fixed))).body.data;
   assert.deepEqual(s2.check.issues, []);
   const done = await json(await publish(cookie, s2.rev));
@@ -209,7 +209,7 @@ test('a Pro page saves a failing draft, cannot publish it, fixes it and publishe
   assert.deepEqual(done.body.data.published, fixed);
   const visible = await publicPage(handle);
   assert.deepEqual(visible.studio.document, fixed);
-  assert.equal(visible.studio.checkVersion, DESIGN_CHECK_VERSION);
+  assert.equal(visible.studio.checkVersion, DESIGN_CHECK_VERSION_V1);
   const image = visible.studio.images[imageId];
   assert.match(
     image.path,

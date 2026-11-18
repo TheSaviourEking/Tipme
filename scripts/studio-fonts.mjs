@@ -16,6 +16,14 @@
  *   pyftsubset <tmp>.ttf --flavor=woff2 --no-hinting --layout-features=<FEATURES>
  *              --unicodes=<UNICODES> --output-file=<out>.woff2
  *
+ * Page Studio styles (plan 2026-11-17-page-studio-styles, Task 1) add Unbounded, Anton, Source Serif 4
+ * italic, Gentium Book Plus and a wider Inter cut (400 to 800, plus `tnum` and `lnum` so money sets
+ * in tabular lining figures). Gentium Book Plus reserves the names "Gentium" and "SIL", so its three
+ * files ship as a Modified Version renamed "Linen Serif" (OFL 1.1 §3; name IDs 1, 4, 6 and 16 are
+ * rewritten and the copyright, trademark and unique-ID records, which carry those names, are
+ * dropped; the licence file beside them keeps the original copyright and RFN lines, which is how
+ * OFL 1.1 §2 asks for the notice).
+ *
  * Not shipped: IBM Plex Sans, Lora, Playfair Display and Libre Baskerville. Their licences reserve
  * the family's own name, and OFL 1.1 §3 bars a Modified Version (a subset is one) from using it
  * without the authors' written permission.
@@ -47,9 +55,11 @@ export const OUT_DIR = new URL(
 export const UNICODES =
   'U+0000-024F,U+0253,U+0257,U+02BC,U+02C6-02DD,U+0300-036F,U+1E00-1EFF,U+2000-206F,U+20A6,U+20AC,U+2122,U+2212';
 export const FEATURES = 'kern,liga,calt,ccmp,locl,mark,mkmk';
+/** Money is Inter with tabular, lining figures. */
+const INTER_FEATURES = `${FEATURES},tnum,lnum`;
 
 /**
- * One file per family. A family that can set body text keeps its `wght` axis from its text weight
+ * One entry per shipped file (`id` is the registry family, so a family can have several). A family that can set body text keeps its `wght` axis from its text weight
  * to its heading weight; a heading-only family is pinned to its heading weight. Other axes are
  * pinned at their defaults. `sha256` is the upstream file's.
  */
@@ -76,7 +86,8 @@ export const SOURCES = [
     family: 'Inter',
     dir: 'inter',
     file: 'Inter[opsz,wght].ttf',
-    weight: '400 700',
+    weight: '400 800',
+    features: INTER_FEATURES,
     sha256: '29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031',
   },
   {
@@ -135,9 +146,66 @@ export const SOURCES = [
     weight: '400 600',
     sha256: '97b2d4da6e3cb494b5a1e66ae176914d852ccabef49e0c02c0df25f3e39aca0b',
   },
+  {
+    id: 'source-serif-4',
+    family: 'SourceSerif4',
+    dir: 'sourceserif4',
+    file: 'SourceSerif4-Italic[opsz,wght].ttf',
+    weight: '400',
+    style: 'italic',
+    sha256: '15fbc7e4679489a501998c3669272637a6646388ef7e4bd77eebb5bf967a1f42',
+  },
+  {
+    id: 'unbounded',
+    family: 'Unbounded',
+    dir: 'unbounded',
+    file: 'Unbounded[wght].ttf',
+    weight: '600 700',
+    sha256: '323b511be380c8d474ef030686b71aedde501f8d9cd46da558b7c40454372c3f',
+  },
+  {
+    id: 'anton',
+    family: 'Anton',
+    dir: 'anton',
+    file: 'Anton-Regular.ttf',
+    weight: '400',
+    static: true,
+    sha256: 'a4ba3a92350ebb031da0cb47630ac49eb265082ca1bc0450442f4a83ab947cab',
+  },
+  ...[
+    [
+      'Regular',
+      '400',
+      'normal',
+      'fe7b64eeacc430fcf46836a6f0dfe00d2c5a15483ed36692a2a185cb23ec2a5c',
+    ],
+    [
+      'Bold',
+      '700',
+      'normal',
+      'b39c3fb12e2e15e2336f2ec6d051c778618ec25f7360bc4765bfe755b408c011',
+    ],
+    [
+      'Italic',
+      '400',
+      'italic',
+      '7a0ab4bd78701fa46d325e362654c41a47e2a0a5cb4a3eebc94dce89c2ee7df1',
+    ],
+  ].map(([face, weight, style, sha256]) => ({
+    id: 'linen-serif',
+    family: 'GentiumBookPlus',
+    dir: 'gentiumbookplus',
+    file: `GentiumBookPlus-${face}.ttf`,
+    weight,
+    style,
+    static: true,
+    rename: { family: 'Linen Serif', face },
+    sha256,
+  })),
 ];
 
-export const outputName = (s) => `${s.id}-${s.weight.replace(' ', '-')}.woff2`;
+export const outputName = (s) =>
+  `${s.id}-${s.weight.replace(' ', '-')}${s.style === 'italic' ? '-italic' : ''}.woff2`;
 export const licenceName = (s) => `OFL-${s.family}.txt`;
 
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
@@ -163,6 +231,29 @@ for path in sys.argv[1:]:
 print(json.dumps(out))
 `;
 
+// Modified Version rename (OFL 1.1 §3): sets name IDs 1, 4, 6 (and 16 where a family has it) to the
+// new family and drops the copyright (0) and unique ID (3) records, which carry the Reserved Font
+// Names. Subsetting then keeps only IDs 0 to 6, so no other record survives.
+const RENAME_PY = String.raw`
+import sys
+from fontTools.ttLib import TTFont
+path, out, family, face = sys.argv[1:5]
+f = TTFont(path)
+name = f['name']
+full = family if face == 'Regular' else family + ' ' + face
+for rec in list(name.names):
+    if rec.nameID in (0, 3, 7, 8, 9, 10, 11, 12, 13, 14) or rec.nameID >= 256:
+        name.removeNames(nameID=rec.nameID)
+for platform, enc, lang in ((3, 1, 0x409), (1, 0, 0)):
+    name.setName(family, 1, platform, enc, lang)
+    name.setName(face, 2, platform, enc, lang)
+    name.setName(full, 4, platform, enc, lang)
+    name.setName(family.replace(' ', '') + '-' + face, 6, platform, enc, lang)
+    if name.getName(16, platform, enc, lang):
+        name.setName(family, 16, platform, enc, lang)
+f.save(out)
+`;
+
 function build(python) {
   const work = mkdtempSync(join(tmpdir(), 'studio-fonts-'));
   mkdirSync(OUT_DIR, { recursive: true });
@@ -174,6 +265,7 @@ function build(python) {
     });
   return (async () => {
     const outputs = [];
+    const licences = new Set();
     for (const s of SOURCES) {
       const base = `https://raw.githubusercontent.com/google/fonts/${SOURCE_COMMIT}/ofl/${s.dir}/`;
       const response = await fetch(base + encodeURIComponent(s.file));
@@ -181,7 +273,7 @@ function build(python) {
       const bytes = Buffer.from(await response.arrayBuffer());
       if (sha256(bytes) !== s.sha256)
         throw new Error(`${s.id}: upstream sha256 changed`);
-      const source = join(work, `${s.id}.ttf`);
+      const source = join(work, outputName(s).replace('.woff2', '.ttf'));
       writeFileSync(source, bytes);
       let cut = source;
       if (!s.static) {
@@ -189,7 +281,7 @@ function build(python) {
         const pins = axes.map((a) =>
           a === 'wght' ? `wght=${s.weight.replace(' ', ':')}` : `${a}=drop`,
         );
-        cut = join(work, `${s.id}-instance.ttf`);
+        cut = join(work, outputName(s).replace('.woff2', '-instance.ttf'));
         run([
           '-m',
           'fontTools.varLib.instancer',
@@ -200,6 +292,14 @@ function build(python) {
           cut,
         ]);
       }
+      if (s.rename) {
+        const renamed = join(
+          work,
+          outputName(s).replace('.woff2', '-renamed.ttf'),
+        );
+        run(['-c', RENAME_PY, cut, renamed, s.rename.family, s.rename.face]);
+        cut = renamed;
+      }
       const out = new URL(outputName(s), OUT_DIR).pathname;
       run([
         '-m',
@@ -207,16 +307,19 @@ function build(python) {
         cut,
         '--flavor=woff2',
         '--no-hinting',
-        `--layout-features=${FEATURES}`,
+        `--layout-features=${s.features ?? FEATURES}`,
         `--unicodes=${UNICODES}`,
         `--output-file=${out}`,
       ]);
-      const licence = await fetch(`${base}OFL.txt`);
-      writeFileSync(
-        new URL(licenceName(s), OUT_DIR),
-        Buffer.from(await licence.arrayBuffer()),
-      );
-      outputs.push([s.id, out]);
+      if (!licences.has(licenceName(s))) {
+        licences.add(licenceName(s));
+        const licence = await fetch(`${base}OFL.txt`);
+        writeFileSync(
+          new URL(licenceName(s), OUT_DIR),
+          Buffer.from(await licence.arrayBuffer()),
+        );
+      }
+      outputs.push([outputName(s), out]);
     }
     const fallbacks = [
       '/System/Library/Fonts/Supplemental/Arial.ttf',
