@@ -218,7 +218,10 @@ test('every style rule is scoped to a styled Studio page', () => {
         own === 'classic'
           ? /^(:root:has\()?\.profile-page--studio\[data-style=['"]?classic['"]?\]/
           : own
-            ? new RegExp(`^\\.studio\\[data-style=['"]?${own}['"]?\\]`)
+            ? // Or the page's <html> while that style is shown (the site header over its cover).
+              new RegExp(
+                `^(html:has\\()?\\.studio\\[data-style=['"]?${own}['"]?\\]`,
+              )
             : /^(html:has\()?\.studio\[data-style\]/,
         `${file}: "${s}"`,
       );
