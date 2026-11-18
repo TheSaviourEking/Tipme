@@ -185,17 +185,24 @@ test.describe('a published Studio page', () => {
           over: document.querySelector('.studio[data-header]') !== null,
         };
       });
-      // A page that starts with a full-bleed cover has the header over it, transparent, until
-      // the hero has scrolled past (studio-header-over-cover.spec.ts); the others run it on bg.
+      // A page that starts with a full-bleed cover has the header over it, transparent, and
+      // frosted glass in the page's bg once the hero has scrolled past
+      // (studio-header-over-cover.spec.ts); the others run it on bg.
       if (c.over) {
         expect(c.header, handle).toBe('rgba(0, 0, 0, 0)');
         await page.evaluate(() =>
           window.scrollTo(0, document.documentElement.scrollHeight),
         );
-        await expect(page.locator('.site-header'), handle).toHaveCSS(
-          'background-color',
-          c.bg,
-        );
+        await expect
+          .poll(
+            () =>
+              page.locator('.site-header').evaluate((h) => {
+                const g = getComputedStyle(h, '::after');
+                return [g.opacity, /blur/.test(g.backdropFilter)];
+              }),
+            { message: handle },
+          )
+          .toEqual(['1', true]);
       } else expect(c.header, handle).toBe(c.bg);
       expect(c.footer, handle).toBe(c.bg);
       expect(c.html, handle).toBe(c.bg);

@@ -862,7 +862,9 @@
     }
 
     html:has(.studio[data-style='sprint'][data-header])
-      .site-header.site-header::before {
+      .site-header.site-header::before,
+    html:has(.studio[data-style='sprint'][data-header])
+      .site-header.site-header::after {
       display: none;
     }
 

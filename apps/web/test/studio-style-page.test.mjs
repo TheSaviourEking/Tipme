@@ -2149,7 +2149,7 @@ test("over Signboard's band the header takes the band's label colour, 4.5:1 on e
   );
 });
 
-test('the header holds its ink over the shade, then switches ink, bg and shade together, with no fade between', () => {
+test('the header holds its ink over the shade, then switches ink, glass and shade together, with no fade between', () => {
   const inside = supportsBlock(frameCss()).inside;
   /** A keyframes block's stops as [[percent…], declarations]. */
   const stops = (name) => {
@@ -2164,23 +2164,26 @@ test('the header holds its ink over the shade, then switches ink, bg and shade t
   };
   const head = stops('studio-head');
   const scrim = stops('studio-head-scrim');
+  const glass = stops('studio-head-glass');
   assert.equal(head.length, 2);
   assert.equal(scrim.length, 2);
+  assert.equal(glass.length, 2);
   const [[holdAt, hold], [endAt, end]] = head;
-  // Held from the top: the words in their over-the-cover ink on the full shade, no bg.
+  // Held from the top: the words in their over-the-cover ink on the full shade, no glass.
   assert.deepEqual(holdAt[0], 0);
-  assert.match(hold, /background-color: transparent;/);
   assert.match(hold, /--studio-head-ink: var\(--studio-head-over\);/);
   assert.deepEqual(scrim[0], [holdAt, 'opacity: 1;']);
+  assert.deepEqual(glass[0], [holdAt, 'opacity: 0;']);
   // Then everything changes inside one short step (no mid-way where light words meet a light
-  // bg): bg, the page's words, the purple "me", raised keys, no band ring, no shade.
+  // half-drawn glass): the glass, the page's words, the purple "me", raised keys, no band ring,
+  // no shade. The header's own bg stays transparent: the glass is its own layer.
   assert.deepEqual(endAt.at(-1), 100);
   assert.ok(
     endAt[0] - holdAt.at(-1) <= 3,
     `a ${endAt[0] - holdAt.at(-1)}% step`,
   );
+  assert.doesNotMatch(end, /background-color/);
   for (const want of [
-    'background-color: var(--studio-bg);',
     '--studio-head-ink: var(--studio-fg);',
     '--studio-head-me: #7a32f9;',
     '--surface-raised: var(--studio-card);',
@@ -2188,8 +2191,9 @@ test('the header holds its ink over the shade, then switches ink, bg and shade t
   ])
     assert.ok(end.includes(want), want);
   assert.deepEqual(scrim[1], [endAt, 'opacity: 0;']);
+  assert.deepEqual(glass[1], [endAt, 'opacity: 1;']);
   // Colours and opacity only.
-  for (const [, decls] of [...head, ...scrim])
+  for (const [, decls] of [...head, ...scrim, ...glass])
     for (const m of decls.matchAll(/([a-z-]+):/g))
       assert.match(
         m[1],
@@ -2206,6 +2210,60 @@ test('the header holds its ink over the shade, then switches ink, bg and shade t
     frameCss(),
     /@property --studio-head-ink \{\s*syntax: '<color>';/,
   );
+});
+
+// The owner (18 Nov 2026): "keep it fixed but kind of make it glassy when you scroll". Past the hero
+// the header is frosted glass: the page's bg, translucent, over a blur of what scrolls under it,
+// with a hairline. Its own layer (::after), so the phone menu (fixed, inside the header) is never
+// held inside a backdrop-filter's box.
+test('past the hero the header is frosted glass, at the lowest bg opacity that keeps its words 4.5:1 over anything', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  const flat = inside.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const glassRule =
+    /html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{([^}]*)\}/.exec(
+      flat,
+    );
+  assert.ok(glassRule, 'the glass layer');
+  const g = glassRule[1];
+  const alpha =
+    /background: color-mix\(in srgb, var\(--studio-bg\) (\d+)%, transparent\);/.exec(
+      g,
+    );
+  assert.ok(alpha, 'a translucent bg');
+  assert.match(g, /-webkit-backdrop-filter: blur\(\d+px\) saturate\([\d.]+\);/);
+  assert.match(g, / backdrop-filter: blur\(\d+px\) saturate\([\d.]+\);/);
+  assert.match(g, /border-bottom: 0\.5px solid var\(--studio-line\);/);
+  assert.match(g, /z-index: -1;/);
+  assert.match(g, /inset: 0;/);
+  // The words on the glass, blur ignored, over the worst there is beneath: pure black and pure
+  // white (a composite's luminance only grows with what is under it, so these bound every
+  // colour). Every style, both modes; and one percent less fails somewhere, so it is the lowest.
+  const passes = (pct) =>
+    STUDIO_STYLE_IDS.filter((s) => s !== 'classic').every((style) =>
+      ['light', 'dark'].every((mode) => {
+        const t = studioTokens(style, null)[mode];
+        return ['#000000', '#ffffff'].every(
+          (under) => contrastRatio(t.fg, blend(t.bg, pct / 100, under)) >= 4.5,
+        );
+      }),
+    );
+  const pct = Number(alpha[1]);
+  assert.ok(passes(pct), `${pct}% keeps 4.5:1`);
+  assert.ok(
+    !passes(pct - 1),
+    `${pct - 1}% would also pass: ${pct}% is not the lowest`,
+  );
+  // Without backdrop-filter, or with reduced transparency asked for, the glass is today's solid bg.
+  assert.match(
+    flat,
+    /@supports not \( ?\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\) ?\) \{ html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{ background: var\(--studio-bg\); \} \}/,
+  );
+  assert.match(
+    flat,
+    /@media \(prefers-reduced-transparency: reduce\) \{ html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{ background: var\(--studio-bg\); -webkit-backdrop-filter: none; backdrop-filter: none; \} \}/,
+  );
+  // The header itself never takes a backdrop-filter (it would hold the fixed phone menu inside it).
+  assert.doesNotMatch(flat, /\.site-header \{[^}]*backdrop-filter/);
 });
 
 test('a full-bleed cover photo is offered for the box it is drawn in, header strip included', () => {

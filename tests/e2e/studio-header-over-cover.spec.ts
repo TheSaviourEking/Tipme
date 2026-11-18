@@ -37,6 +37,26 @@ const CASES: Case[] = [
   },
 ];
 
+/**
+ * A computed colour as rgb() and alpha. Chromium serialises color-mix() in srgb as
+ * `color(srgb r g b / a)` with 0..1 channels.
+ */
+const rgba = (value: string) => {
+  const css = /^rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)$/.exec(value);
+  if (css)
+    return {
+      rgb: `rgb(${css[1]}, ${css[2]}, ${css[3]})`,
+      a: Number(css[4] ?? 1),
+    };
+  const srgb =
+    /^color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)(?: \/ ([\d.]+))?\)$/.exec(value);
+  if (!srgb) throw new Error(`not a colour: ${value}`);
+  const [r, g, b] = [srgb[1], srgb[2], srgb[3]].map((c) =>
+    Math.round(Number(c) * 255),
+  );
+  return { rgb: `rgb(${r}, ${g}, ${b})`, a: Number(srgb[4] ?? 1) };
+};
+
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The page's tokens as the browser resolves colours, and the header and hero as drawn. */
@@ -78,6 +98,18 @@ const state = (page: Page) =>
       wordmark: getComputedStyle(
         header.querySelector('.nav-shell > .brand path[fill="#7A32F9"]')!,
       ).fill,
+      // The frosted glass past the hero: the header's own layer (::after).
+      glass: (() => {
+        const g = getComputedStyle(header, '::after');
+        return {
+          display: g.display,
+          opacity: g.opacity,
+          background: g.backgroundColor,
+          blur: g.backdropFilter,
+          line: `${g.borderBottomWidth} ${g.borderBottomStyle} ${g.borderBottomColor}`,
+        };
+      })(),
+      line: resolve('--studio-line'),
     };
   });
 
@@ -98,10 +130,12 @@ for (const width of [390, 820, 1440])
         expect(top.background).toBe(top.bg);
         expect(top.heroTop).toBe(top.headerBottom);
         expect(top.wordmark).toBe('rgb(122, 50, 249)');
+        expect(top.glass.display).toBe('none');
         await expectAccessible(page);
         return;
       }
       expect(top.background).toBe('rgba(0, 0, 0, 0)');
+      expect(top.glass.opacity).toBe('0');
       // The cover runs up under the header.
       expect(top.heroTop).toBeLessThanOrEqual(0);
       expect(top.heroTop).toBeLessThanOrEqual(top.headerBottom);
@@ -124,17 +158,27 @@ for (const width of [390, 820, 1440])
       }
       await expectAccessible(page);
 
-      // Past the hero: the page's bg and words, the purple "me" (today's header again), and
-      // still at the top of the screen. Read together, once the scroll has been drawn.
+      // Past the hero: frosted glass (the owner: "keep it fixed but kind of make it glassy when
+      // you scroll"), today's words, the purple "me", still at the top of the screen. Read
+      // together, once the scroll has been drawn.
       await page.evaluate((y) => window.scrollTo(0, y), top.heroBottom + 40);
       await expect
         .poll(async () => {
           const s = await state(page);
-          return [s.background, s.color, s.wordmark];
+          return [s.background, s.color, s.wordmark, s.glass.opacity];
         })
-        .toEqual([top.bg, top.fg, 'rgb(122, 50, 249)']);
+        .toEqual(['rgba(0, 0, 0, 0)', top.fg, 'rgb(122, 50, 249)', '1']);
       const past = await state(page);
       expect(past.headerBottom).toBe(76);
+      // The page's bg, translucent, over a blur, with a hairline in the page's line colour.
+      expect(past.glass.blur).toMatch(/blur\(\d+px\)/);
+      const glass = rgba(past.glass.background);
+      expect(glass.a, past.glass.background).toBeLessThan(1);
+      expect(glass.rgb).toBe(past.bg);
+      // A hairline: 0.5 px, which a 1x screen draws as 1 px.
+      expect(past.glass.line).toMatch(
+        new RegExp(`^(0\\.5|1)px solid ${esc(past.line)}$`),
+      );
       if (band && width >= 801)
         await expect
           .poll(() =>
@@ -226,15 +270,22 @@ test('with reduced motion the header switches once the hero is gone, with no fad
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/dev/studio-lab?style=stage&mode=light');
   await page.locator('.studio[data-style]').waitFor();
-  const { heroBottom, bg } = await state(page);
-  // Inside the fade's range (the hero's foot 30 px under the header): still transparent.
+  const { heroBottom, fg } = await state(page);
+  // Inside the change's range (the hero's foot 30 px under the header): no glass yet.
   await page.evaluate((y) => window.scrollTo(0, y), heroBottom - 76 - 30);
   await expect
     .poll(async () => (await state(page)).heroBottom)
     .toBe(heroBottom);
-  expect((await state(page)).background).toBe('rgba(0, 0, 0, 0)');
+  const mid = await state(page);
+  expect([mid.glass.opacity, mid.color]).toEqual(['0', 'rgb(255, 255, 255)']);
+  // Once the hero has gone: the glass and today's words, at once.
   await page.evaluate((y) => window.scrollTo(0, y), heroBottom);
-  await expect.poll(async () => (await state(page)).background).toBe(bg);
+  await expect
+    .poll(async () => {
+      const s = await state(page);
+      return [s.glass.opacity, s.color];
+    })
+    .toEqual(['1', fg]);
 });
 
 test('pages that start on bg, Classic and pages without a style keep today’s header', async ({
@@ -270,4 +321,28 @@ test('pages that start on bg, Classic and pages without a style keep today’s h
     'rgb(243, 242, 238)',
   );
   expect(await page.locator('[data-header]').count()).toBe(0);
+});
+
+test('with reduced transparency asked for, the header past the hero is solid bg, not glass', async ({
+  page,
+}) => {
+  // Chromium has no Playwright switch for it yet: the media feature, set through the protocol.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setEmulatedMedia', {
+    features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }],
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/dev/studio-lab?style=stage&mode=light');
+  await page.locator('.studio[data-style]').waitFor();
+  expect(
+    await page.evaluate(
+      () => matchMedia('(prefers-reduced-transparency: reduce)').matches,
+    ),
+  ).toBe(true);
+  const { heroBottom, bg } = await state(page);
+  await page.evaluate((y) => window.scrollTo(0, y), heroBottom + 40);
+  await expect.poll(async () => (await state(page)).glass.opacity).toBe('1');
+  const past = await state(page);
+  expect(rgba(past.glass.background)).toEqual({ rgb: bg, a: 1 });
+  expect(past.glass.blur).toBe('none');
 });
