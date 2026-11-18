@@ -25,7 +25,8 @@ export interface StudioDraft {
   stale: boolean;
   /**
    * A save needed Pro (STUDIO_PRO_REQUIRED: the plan changed, or a change the server refuses on
-   * Free). The draft as last saved is kept, and nothing more is saved until a reload.
+   * Free). The screen goes back to the draft as last saved, and nothing more is saved until a
+   * reload.
    */
   proRequired: boolean;
   /** The server's facts: the plan, the cover set in Settings, whether there is a profile photo. */
@@ -120,6 +121,13 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
             blocked.current = true;
             setProRequired(true);
+            // The refused change never reached the server: show the draft as it was last saved,
+            // so the screen and the preview say what "kept as it was last saved" says.
+            const kept = JSON.parse(saved.current) as StudioDocument;
+            latest.current = kept;
+            setDraft(kept);
+            setSave('saved');
+            return;
           }
           setSave('failed');
           return;

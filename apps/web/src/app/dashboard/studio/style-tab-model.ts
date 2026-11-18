@@ -30,21 +30,25 @@ export const PHOTO_ACCENT_NAME = 'From your photo';
 
 /**
  * The document in another style (§10, "Switching style keeps everything the new style can use"):
- * an explicit accent, the mode and the blocks stay; the cover type stays when the new style offers
- * it, and is Your cover otherwise (Review Focus 5). An accent left at the style's own (null) stays
- * null, so each style opens in its own colour.
+ * an explicit accent, the mode and the blocks stay. The cover type is the person's last explicit
+ * choice (`wanted`, kept by the editor outside the document) when the new style offers it, else the
+ * document's when it does, else Your cover (Review Focus 5). So arrowing past Signboard or Sprint
+ * (no gradient) never loses a Gradient choice: the next style that offers it gets it back. An accent
+ * left at the style's own (null) stays null, so each style opens in its own colour.
  */
 export function withStyle(
   doc: StudioDocument,
   style: StudioStyleId,
+  wanted?: StudioCoverType,
 ): StudioDocument {
-  return {
-    ...doc,
-    style,
-    cover: STUDIO_STYLES[style].covers.includes(doc.cover)
-      ? doc.cover
-      : 'yours',
-  };
+  const offered = STUDIO_STYLES[style].covers;
+  const cover =
+    wanted && offered.includes(wanted)
+      ? wanted
+      : offered.includes(doc.cover)
+        ? doc.cover
+        : 'yours';
+  return { ...doc, style, cover };
 }
 
 /** The document with this accent; null is the style's own (TipMe purple on Classic, §9.1). */

@@ -116,6 +116,13 @@ test('a Pro person picks Stage, Rose and Dark, and the preview shows it', async 
     page.locator('.pst-section__head').filter({ hasText: 'Accent' }),
   ).toContainText('Rose');
 
+  // The frame is a picture: hidden from screen readers, out of the Tab order, described in text.
+  const frame = page.locator('iframe[title="Preview of your page"]').first();
+  await expect(frame).toHaveAttribute('aria-hidden', 'true');
+  await expect(frame).toHaveAttribute('tabindex', '-1');
+  await expect(page.locator('.pst-frame .sr-only').first()).toHaveText(
+    'Preview of your page',
+  );
   const shown = previewPage(page);
   await expect(shown).toHaveAttribute('data-style', 'stage');
   await expect(shown).toHaveAttribute('data-mode', 'dark');
@@ -259,6 +266,21 @@ test('the Cover control shows Your cover and Plain only for Signboard and Sprint
     await card(page, 'Clear').click();
     await choice(page, 'Cover', 'Gradient').click();
   }
+  // Arrow keys choose as they move: passing Sprint (no gradient) must not lose the Gradient choice.
+  await card(page, 'Clear').focus();
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowRight');
+  await expect(card(page, 'Sprint')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Cover', 'Your cover')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Cover', 'Gradient')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await card(page, 'Clear').click();
   await expect(
     page.getByRole('link', { name: 'Change your cover in Settings.' }),
   ).toHaveAttribute('href', '/dashboard/settings#cover');
@@ -287,6 +309,37 @@ test('Stage on a non-photo cover shows "Stage looks best with a cover photo. Add
   ).toBeVisible();
   await card(page, 'Clear').click();
   await expect(notice).toHaveCount(0);
+});
+
+test('a refused save puts back the draft as it was last saved', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  const frame = page.frameLocator('iframe[title="Preview of your page"]');
+  // Classic with every default: today's page in the preview.
+  await expect(frame.locator('.profile-page')).toBeVisible({ timeout: 20_000 });
+  // The server refuses the next save as needing Pro (as for a plan that changed meanwhile).
+  await page.route(`${API_ORIGIN}/v1/me/studio/draft`, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'STUDIO_PRO_REQUIRED' } }),
+        })
+      : route.continue(),
+  );
+  await card(page, 'Journal').click();
+  await expect(page.getByText('That change needs Pro')).toBeVisible({
+    timeout: 15_000,
+  });
+  // The screen matches "kept as it was last saved": Classic again, in the cards and the preview.
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('.pst-stage__name')).toHaveText('Classic');
+  await expect(frame.locator('.profile-page')).toBeVisible();
+  await expect(frame.locator('.studio')).toHaveCount(0);
+  expect((await savedDraft(page)).draft.style).toBe('classic');
 });
 
 test('a lapsed draft with a Pro style shows the issue on the Check tab; “Choose a free style” opens the cards', async ({

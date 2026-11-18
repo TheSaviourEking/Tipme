@@ -119,6 +119,9 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const [tab, setTab] = useState<Tab>('style');
   const [device, setDevice] = useState<PreviewDevice>('phone');
   const [target, setTarget] = useState<BlocksTarget | null>(null);
+  // The last cover type the person chose, outside the document: browsing styles that lack it
+  // (Signboard, Sprint) shows Your cover, and the next style that offers it gets it back.
+  const [coverChoice, setCoverChoice] = useState(initial.draft.cover);
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const cardsId = `${id}-cards`;
   const readOnly = studio.stale || studio.proRequired;
@@ -320,6 +323,8 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
                     photoAccent={photoAccent}
                     check={studio.check}
                     cardsId={cardsId}
+                    coverChoice={coverChoice}
+                    onCoverChoice={setCoverChoice}
                     {...(wide
                       ? {}
                       : {

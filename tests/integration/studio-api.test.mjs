@@ -896,8 +896,13 @@ test('every Studio route is 404 while the page_studio switch is off, and back at
       headers: browserHeaders(cookie),
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+  const release = async () =>
+    (await (await fetch(`${stack.api}/health/release`)).json()).data;
+  assert.equal((await release()).pageStudio, true);
   await setSwitch(database.pool, 'page_studio', false);
   try {
+    // The web's preview route (/studio-preview) reads this and answers 404 while it is off.
+    assert.equal((await release()).pageStudio, false);
     for (const [method, path, body] of [
       ['GET', '/v1/me/studio'],
       ['PUT', '/v1/me/studio/draft', { rev: 0, draft: v2() }],

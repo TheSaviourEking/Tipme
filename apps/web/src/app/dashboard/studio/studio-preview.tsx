@@ -132,6 +132,8 @@ export function StudioPreview({
       data-frame={frame}
       style={{ ['--pst-scale' as string]: String(scale) }}
     >
+      {/* The frame is a picture of the page: hidden from screen readers, which read this instead. */}
+      <p className="sr-only">Preview of your page</p>
       <div
         className="pst-frame__screen"
         style={{
@@ -144,6 +146,7 @@ export function StudioPreview({
           className="pst-frame__page"
           src="/studio-preview"
           title="Preview of your page"
+          aria-hidden="true"
           tabIndex={-1}
           width={page.w}
           height={page.h}

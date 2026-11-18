@@ -87,6 +87,20 @@ test('switching to a style without the current cover type selects Your cover', (
   assert.equal(withStyle(doc({ cover: 'plain' }), 'sprint').cover, 'plain');
 });
 
+test('browsing styles keeps the last cover choice: Clear+Gradient → Sprint → Journal restores Gradient', () => {
+  // The person chose Gradient on Clear; arrows then pass Sprint (no gradient) on the way to Journal.
+  const wanted = 'gradient';
+  const clear = doc({ cover: 'gradient' });
+  const sprint = withStyle(clear, 'sprint', wanted);
+  assert.equal(sprint.cover, 'yours', 'Sprint has no gradient: Your cover');
+  assert.ok(valid(sprint));
+  const journal = withStyle(sprint, 'journal', wanted);
+  assert.equal(journal.cover, 'gradient', 'Journal offers it again: restored');
+  assert.ok(valid(journal));
+  // Without a remembered choice, the document's own cover is used as before.
+  assert.equal(withStyle(sprint, 'journal').cover, 'yours');
+});
+
 test('choosing TipMe purple stores no accent', () => {
   const classic = doc({ style: 'classic', accent: 'green' });
   const purple = accentChoices('classic', 'pro')[0];

@@ -44,6 +44,7 @@ export class ReleaseInfoController {
       businessPro,
       businessSignup,
       businessOwners,
+      pageStudio,
       display,
     ] = await Promise.all([
       featureOn(this.database.db, 'analytics'),
@@ -51,6 +52,7 @@ export class ReleaseInfoController {
       featureOn(this.database.db, 'business_pro'),
       featureOn(this.database.db, 'business_signup'),
       featureOn(this.database.db, 'business_owners'),
+      featureOn(this.database.db, 'page_studio'),
       // The pilot notice and the launch time for the web (owner, 14 Nov 2026, #216). Never throws.
       displaySettingsNow(this.database.db),
     ]);
@@ -69,6 +71,7 @@ export class ReleaseInfoController {
         businessPro: business && businessPro,
         businessSignup: business && businessSignup,
         businessOwners: business && businessOwners,
+        pageStudio,
       },
     };
   }

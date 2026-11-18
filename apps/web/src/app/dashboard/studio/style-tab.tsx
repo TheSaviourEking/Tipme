@@ -5,6 +5,7 @@ import type {
   PhotoAccentFailed,
   PhotoAccentValues,
   StudioCheckResult,
+  StudioCoverType,
   StudioDocument,
   StudioMode,
 } from '@tipme/contracts';
@@ -48,6 +49,8 @@ export function StyleTab({
   onBlocks,
   readOnly,
   cardsId,
+  coverChoice,
+  onCoverChoice,
 }: {
   draft: StudioDocument;
   plan: 'free' | 'pro';
@@ -64,6 +67,9 @@ export function StyleTab({
   readOnly: boolean;
   /** The style cards' heading id, which the check's "Choose a free style" moves focus to. */
   cardsId: string;
+  /** The person's last explicit cover choice, kept by the editor outside the document. */
+  coverChoice: StudioCoverType;
+  onCoverChoice(cover: StudioCoverType): void;
 }) {
   const id = useId();
   const note = accentNote(draft, { plan, hasAvatar, photoAccent });
@@ -85,7 +91,7 @@ export function StyleTab({
           labelledBy={cardsId}
           bannerId={`${id}-pro`}
           readOnly={readOnly}
-          onChange={(style) => onChange(withStyle(draft, style))}
+          onChange={(style) => onChange(withStyle(draft, style, coverChoice))}
         />
         {plan !== 'pro' && (
           <Link className="pst-banner" href="/pro" id={`${id}-pro`}>
@@ -149,7 +155,10 @@ export function StyleTab({
           }))}
           value={draft.cover}
           readOnly={readOnly}
-          onChange={(cover) => onChange(withCover(draft, cover))}
+          onChange={(cover) => {
+            onCoverChoice(cover);
+            onChange(withCover(draft, cover));
+          }}
         />
         <p className="pst-note">
           <Link href={COVER_SETTING}>Change your cover in Settings.</Link>
