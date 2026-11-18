@@ -347,6 +347,23 @@ const wired = {
   'pro_price.change': async () => priceFixture('personal'),
   // Business Pro (plan Task A5): its own price, changed the same way.
   'business_pro_price.change': async () => priceFixture('business'),
+  // TipMe's fee per plan (owner, 18 Nov 2026): one basis point below the rates in force.
+  'plan_fees.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT free_bps, pro_bps FROM plan_fee_rates
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? [row.free_bps, row.pro_bps] : [500, 300];
+    };
+    const [free, pro] = await latest();
+    const next = [free - 1, Math.min(pro, free - 1)];
+    return {
+      payload: { freeBps: String(next[0]), proBps: String(next[1]) },
+      happened: async () =>
+        JSON.stringify(await latest()) === JSON.stringify(next),
+    };
+  },
   // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
   'pro.refund': async () => {
     const [{ id: userId }] = await q(

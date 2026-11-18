@@ -57,6 +57,8 @@ beforeEach(async () => {
   // An empty rates table (the reset truncates it): the coded defaults, Free 500 and Pro 300.
   await database.reset();
   await ops.ensureOwnerRole(database.db);
+  // Ada's page, for the quotes.
+  await ops.seedDemoProfiles(database.db);
 });
 
 const people = new Map();
