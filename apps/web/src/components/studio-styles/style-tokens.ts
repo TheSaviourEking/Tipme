@@ -35,6 +35,8 @@ const GRADIENT: Partial<
   >
 > = {
   clear: { light: [0.96, 0.9], dark: [0.28, 0.22] },
+  // Tiles (§9.7): "a soft two-tint accent tile at low chroma", Clear's two tints (builder's call).
+  tiles: { light: [0.96, 0.9], dark: [0.28, 0.22] },
   // Linen (§9.8): a warm accent tint at L .94 fading to bg. Dark mode isn't drawn: the tint starts
   // at L .30, just above Linen's dark bg, so the frame never glows (builder's call, as Clear's).
   linen: { light: [0.94, 'bg'], dark: [0.3, 'bg'] },

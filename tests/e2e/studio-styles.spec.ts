@@ -20,6 +20,9 @@ const STYLES = [
   'linen',
   'stage',
   'horizon',
+  'signboard',
+  'sprint',
+  'tiles',
 ] as const;
 const rootOf = (style: string) =>
   style === 'classic' ? '.profile-page' : '.studio';
@@ -68,6 +71,8 @@ for (const style of STYLES) {
   test(`${style} sets long names in one face without overflow at 320 and 390`, async ({
     page,
   }) => {
+    // Many page loads in one test: the burn-in runs it beside others.
+    test.setTimeout(120_000);
     for (const name of LONG_NAMES) {
       await page.setViewportSize({ width: 390, height: 900 });
       await page.goto(
@@ -466,32 +471,78 @@ const DRAWN = {
   events: '.studio-list',
 } as const;
 
-test("Journal, Linen, Stage and Horizon draw every block within the design check's slot, Journal's right column exactly", async ({
+// Signboard's first section sits in its left column on a desktop (§9.5): a short one leads, so
+// every kind is measured where the rest go, in the 600 column.
+const LEAD = [
+  { id: 'kindhed0', kind: 'text', variant: 'heading', text: 'First' },
+  { id: 'kindtxt0', kind: 'text', variant: 'paragraph', text: 'Hello.' },
+  { id: 'kindhed1', kind: 'text', variant: 'heading', text: 'The rest' },
+];
+const kindsFor = (style: string) => ({
+  ...ALL_KINDS,
+  style,
+  blocks:
+    style === 'signboard' ? [...LEAD, ...ALL_KINDS.blocks] : ALL_KINDS.blocks,
+});
+/** Where a style's column is the slot itself at 1440: drawn equal to the check, not merely within. */
+const EXACT: Partial<Record<string, readonly (keyof typeof DRAWN)[]>> = {
+  journal: ['text', 'quote', 'photo', 'gallery', 'video', 'services', 'events'],
+  signboard: [
+    'text',
+    'quote',
+    'photo',
+    'gallery',
+    'video',
+    'services',
+    'events',
+  ],
+  tiles: ['text', 'quote', 'photo', 'gallery', 'video', 'services', 'events'],
+};
+
+test("every new style draws every block within the design check's slot, and exactly where its column is the slot", async ({
   page,
 }) => {
+  test.setTimeout(120_000);
   const { contracts } = await studioModules();
-  for (const style of ['journal', 'linen', 'stage', 'horizon'] as const)
-    for (const width of [1024, 1440]) {
+  for (const style of [
+    'journal',
+    'linen',
+    'stage',
+    'horizon',
+    'signboard',
+    'sprint',
+    'tiles',
+  ] as const)
+    for (const width of [390, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(
-        `/dev/studio-lab?style=${style}&doc=${encodeDoc({ ...ALL_KINDS, style })}`,
+        `/dev/studio-lab?style=${style}&doc=${encodeDoc(kindsFor(style))}`,
       );
       await ready(page);
       for (const [kind, selector] of Object.entries(DRAWN) as [
         keyof typeof DRAWN,
         string,
       ][]) {
+        // The widest one drawn (a gallery's photos may differ), among those shown at this width.
         const drawn = await page
           .locator(`.studio-block[data-kind="${kind}"] ${selector}`)
-          .first()
-          .evaluate((el) => el.getBoundingClientRect().width);
+          .evaluateAll((els) =>
+            Math.max(
+              ...els
+                .filter((el) => (el as HTMLElement).offsetParent !== null)
+                .map((el) => el.getBoundingClientRect().width),
+            ),
+          );
+        expect(drawn, `${style} ${kind} at ${width} is shown`).toBeGreaterThan(
+          0,
+        );
         const slot = contracts.studioSlotWidth(style, kind, width) as number;
         expect(
           Math.round(drawn),
           `${style} ${kind} at ${width}`,
         ).toBeLessThanOrEqual(slot + 1);
-        // At 1440 Journal's right column is the slot itself: equal, not merely within.
-        if (style === 'journal' && width === 1440)
+        // At 1440 the column is the slot itself: equal, not merely within.
+        if (width === 1440 && EXACT[style]?.includes(kind))
           expect(
             Math.abs(Math.round(drawn) - slot),
             `${style} ${kind} at ${width}: ${drawn} vs ${slot}`,
@@ -503,7 +554,16 @@ test("Journal, Linen, Stage and Horizon draw every block within the design check
 // Narrow phones (fix round 1): every amount label fits inside its chip, unselected and selected
 // (650 is wider than 500), in every new style drawn so far. The chip's own box is
 // overflow: visible, so the layout probe can't see this.
-for (const style of ['clear', 'journal', 'linen', 'stage', 'horizon'] as const)
+for (const style of [
+  'clear',
+  'journal',
+  'linen',
+  'stage',
+  'horizon',
+  'signboard',
+  'sprint',
+  'tiles',
+] as const)
   test(`${style} fits every amount label inside its chip at 320 and 360`, async ({
     page,
   }) => {
@@ -539,6 +599,18 @@ for (const style of ['clear', 'journal', 'linen', 'stage', 'horizon'] as const)
             chip.text,
             `${style} at ${width}: “${chip.label}” ${j === i ? 'selected' : 'unselected'} is ${chip.text.toFixed(1)} px in ${chip.inner.toFixed(1)}`,
           ).toBeLessThanOrEqual(chip.inner + 0.5);
+      }
+      // Two by two or four across, every chip stays a full target (§4.4: 44, as drawn 48). The
+      // new styles' check; Clear's segments are its own (§9.2).
+      if (!['signboard', 'sprint', 'tiles'].includes(style)) continue;
+      const heights = await chips.evaluateAll((labels) =>
+        labels.map((l) =>
+          l.querySelector(':scope > span')!.getBoundingClientRect(),
+        ),
+      );
+      for (const r of heights) {
+        expect(r.height, `${style} at ${width}`).toBeGreaterThanOrEqual(44);
+        expect(r.width, `${style} at ${width}`).toBeGreaterThanOrEqual(44);
       }
     }
   });
@@ -778,6 +850,8 @@ for (const style of OVER)
 test('Stage and Horizon fall back to their gradient treatment when the cover is not a photo', async ({
   page,
 }) => {
+  // Many page loads in one test: the burn-in runs it beside others.
+  test.setTimeout(120_000);
   for (const style of OVER)
     for (const yours of ['design', 'automatic', 'animated'] as const)
       for (const mode of ['light', 'dark'] as const) {
@@ -1104,4 +1178,326 @@ test(`Horizon's phone bar waits until both "Send a tip" and the in-page Tip are 
     'data-bar',
     'shown',
   );
+});
+
+// Signboard, Sprint and Tiles (PR 2e, spec §9.5, §9.6, §9.7, §9.10).
+
+/** The name's size, line height and line count, and whether any word was split over two lines. */
+const nameLines = (page: Page) =>
+  page.locator('.studio-name').evaluate((h) => {
+    const cs = getComputedStyle(h);
+    const range = document.createRange();
+    const text = h.firstChild as Text;
+    const words: string[] = [];
+    let split = false;
+    // Words break at spaces and after hyphens; each must sit on one line.
+    const re = /[^\s-]+-?/g;
+    for (let m = re.exec(text.data); m; m = re.exec(text.data)) {
+      range.setStart(text, m.index);
+      range.setEnd(text, m.index + m[0].length);
+      const tops = new Set(
+        [...range.getClientRects()].map((r) => Math.round(r.top)),
+      );
+      if (tops.size > 1) {
+        split = true;
+        words.push(m[0]);
+      }
+    }
+    range.selectNodeContents(h);
+    const lines = new Set(
+      [...range.getClientRects()].map((r) => Math.round(r.top)),
+    ).size;
+    return {
+      size: parseFloat(cs.fontSize),
+      lineHeight: parseFloat(cs.lineHeight),
+      wrap: cs.textWrap || cs.getPropertyValue('text-wrap-style'),
+      lines,
+      split,
+      words,
+    };
+  });
+
+test('Sprint steps a three-line name from 64 to 52 px with line height 1.2', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=sprint');
+  await ready(page);
+  const short = await nameLines(page);
+  expect(short.size).toBe(64);
+  expect(short.lineHeight).toBe(76);
+  const name = 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀';
+  await page.goto(
+    `/dev/studio-lab?style=sprint&name=${encodeURIComponent(name)}`,
+  );
+  await ready(page);
+  const long = await nameLines(page);
+  expect(long.size).toBe(52);
+  expect(long.lineHeight).toBeCloseTo(52 * 1.2, 1);
+  expect(long.lines).toBe(3);
+  expect(long.split, long.words.join(', ')).toBe(false);
+  // Uppercase, Anton, nothing pokes out.
+  const h = page.locator('.studio-name');
+  await expect(h).toHaveCSS('text-transform', 'uppercase');
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test('Signboard steps names over 18 letters from 30 to 24 px and balances two lines; the avatar keeps its overlap', async ({
+  page,
+}) => {
+  const overlap = () =>
+    page.evaluate(() => {
+      const band = document
+        .querySelector('.studio-band')!
+        .getBoundingClientRect();
+      const avatar = document
+        .querySelector('.studio-identity .studio-avatar')!
+        .getBoundingClientRect();
+      return band.bottom - avatar.top;
+    });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=signboard');
+  await ready(page);
+  const short = await nameLines(page);
+  expect(short.size).toBe(30);
+  // The name sits in the accent band; the avatar box straddles the band's 2 px ink edge.
+  await expect(page.locator('.studio-band .studio-name')).toHaveCount(1);
+  const before = await overlap();
+  expect(before).toBeGreaterThanOrEqual(40);
+  const name = 'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí';
+  await page.goto(
+    `/dev/studio-lab?style=signboard&name=${encodeURIComponent(name)}`,
+  );
+  await ready(page);
+  const long = await nameLines(page);
+  expect(long.size).toBe(24);
+  expect(long.lines).toBe(2);
+  expect(long.wrap).toMatch(/balance/);
+  expect(long.split, long.words.join(', ')).toBe(false);
+  // The band grows with the name; the avatar's overlap is the same.
+  expect(Math.abs((await overlap()) - before)).toBeLessThanOrEqual(1);
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test('every other style steps a name down about 80% before a third line, with no mid-word break', async ({
+  page,
+}) => {
+  // Many page loads in one test: the burn-in runs it beside others.
+  test.setTimeout(120_000);
+  for (const style of ['tiles', 'signboard', 'sprint'] as const)
+    for (const name of LONG_NAMES)
+      for (const width of [320, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(
+          `/dev/studio-lab?style=${style}&name=${encodeURIComponent(name)}`,
+        );
+        await ready(page);
+        const got = await nameLines(page);
+        expect(got.split, `${style} ${name} at ${width}: ${got.words}`).toBe(
+          false,
+        );
+        expect(
+          await geometryProblems(page),
+          `${style} ${name} at ${width}`,
+        ).toEqual([]);
+      }
+  // Tiles' long name is about 80% of its 28 px.
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(
+    `/dev/studio-lab?style=tiles&name=${encodeURIComponent(LONG_NAMES[0]!)}`,
+  );
+  await ready(page);
+  const tiles = await nameLines(page);
+  expect(tiles.size / 28).toBeGreaterThanOrEqual(0.75);
+  expect(tiles.size / 28).toBeLessThanOrEqual(0.85);
+});
+
+test('Signboard and Sprint offer no gradient', async ({ page }) => {
+  const { contracts } = await studioModules();
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const style of ['signboard', 'sprint'] as const) {
+    expect(contracts.STUDIO_STYLES[style].covers).not.toContain('gradient');
+    // Asked for one, the page draws "Your cover" (the lab's photo), never a gradient.
+    await page.goto(`/dev/studio-lab?style=${style}&cover=gradient`);
+    await ready(page);
+    await expect(
+      page.locator('.studio-cover[data-cover="gradient"]'),
+    ).toHaveCount(0);
+    await expect(page.locator('.studio-cover[data-cover="photo"]')).toHaveCount(
+      1,
+    );
+  }
+});
+
+test('the Tip tile is first and two wide in Tiles, with "Send a tip" and "Goes to {first name}"', async ({
+  page,
+}) => {
+  for (const [width, columns] of [
+    [390, 2],
+    [1440, 4],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/dev/studio-lab?style=tiles');
+    await ready(page);
+    const grid = page.locator('.studio-grid');
+    const tile = grid.locator('.studio-tip');
+    await expect(
+      tile.getByRole('heading', { name: 'Send a tip' }),
+    ).toBeVisible();
+    await expect(tile.getByText('Goes to Kemi', { exact: true })).toBeVisible();
+    const layout = await grid.evaluate((g) => {
+      const cs = getComputedStyle(g);
+      const tip = g.querySelector('.studio-tip')!;
+      const tiles = [...g.querySelectorAll('.studio-link, .studio-tip')];
+      return {
+        columns: cs.gridTemplateColumns.split(' ').length,
+        span: getComputedStyle(tip).gridColumnStart,
+        first: tiles[0] === tip,
+        tipTop: tip.getBoundingClientRect().top,
+        linkTops: [...g.querySelectorAll('.studio-link')].map(
+          (l) => l.getBoundingClientRect().top,
+        ),
+        tipWidth: tip.getBoundingClientRect().width,
+        // The grid's own columns: its box less its padding (the phone's gutters).
+        gridWidth:
+          g.clientWidth -
+          parseFloat(cs.paddingLeft) -
+          parseFloat(cs.paddingRight),
+      };
+    });
+    expect(layout.columns, `${width}`).toBe(columns);
+    expect(layout.span, `${width}`).toBe('span 2');
+    expect(layout.first, `${width}`).toBe(true);
+    // Two of the grid's columns: half the phone's grid (all of it, gap 12) or half the desktop's.
+    const two = width === 390 ? layout.gridWidth : (layout.gridWidth - 16) / 2;
+    expect(Math.abs(layout.tipWidth - two), `${width}`).toBeLessThanOrEqual(1);
+    for (const top of layout.linkTops)
+      expect(top, `${width}: links follow the Tip tile`).toBeGreaterThanOrEqual(
+        layout.tipTop,
+      );
+    // Inside the tile the Tip is inverted (accLabel fill, acc text); the phone bar's is acc.
+    if (width === 390) {
+      const fill = (selector: string) =>
+        page.locator(selector).evaluate((el) => {
+          const cs = getComputedStyle(el);
+          return [cs.backgroundColor, cs.color];
+        });
+      const [inTile, inTileText] = await fill(
+        '.studio-tip .composer-action .composer-submit',
+      );
+      const [bar, barText] = await fill('.tip-bar__button');
+      expect(inTile).toBe(barText);
+      expect(inTileText).toBe(bar);
+    }
+  }
+});
+
+test("Signboard's Tip has the one hard shadow 3px 3px 0", async ({ page }) => {
+  for (const mode of ['light', 'dark'] as const) {
+    await page.setViewportSize({ width: 390, height: 900 });
+    await page.goto(`/dev/studio-lab?style=signboard&mode=${mode}`);
+    await ready(page);
+    const { contracts } = await studioModules();
+    const shadow = contracts.STUDIO_STYLES.signboard.neutrals[mode]
+      .shadow as string;
+    const rgb = `rgb(${[1, 3, 5].map((i) => parseInt(shadow.slice(i, i + 2), 16)).join(', ')})`;
+    const tip = page.locator('.studio-tip .composer-submit');
+    await expect(tip).toHaveCSS('box-shadow', `${rgb} 3px 3px 0px 0px`);
+    // Nothing else on the page casts a shadow (the phone bar repeats the same Tip).
+    const others = await page
+      .locator('.studio')
+      .evaluate((root) =>
+        [...root.querySelectorAll('*')]
+          .filter(
+            (el) =>
+              getComputedStyle(el).boxShadow !== 'none' &&
+              !el.matches('.studio-tip .composer-submit, .tip-bar__button'),
+          )
+          .map((el) => `${el.tagName.toLowerCase()}.${el.classList[0] ?? ''}`),
+      );
+    expect(others, mode).toEqual([]);
+  }
+});
+
+test('Signboard, Sprint and Tiles mark the selected amount by more than colour', async ({
+  page,
+}) => {
+  for (const style of ['signboard', 'sprint', 'tiles'] as const) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/dev/studio-lab?style=${style}`);
+    await ready(page);
+    await page.locator('.studio-tip .tm-amount-choice').nth(1).click();
+    const cue = (n: number) =>
+      page
+        .locator('.studio-tip .tm-amount-choice > span')
+        .nth(n)
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          const mark = getComputedStyle(el, '::after');
+          return {
+            weight: Number(cs.fontWeight),
+            mark:
+              mark.display !== 'none' &&
+              mark.content !== 'none' &&
+              parseFloat(mark.width) > 0,
+          };
+        });
+    const [selected, other] = [await cue(1), await cue(0)];
+    expect(
+      selected.weight - other.weight >= 100 || (selected.mark && !other.mark),
+      `${style}: ${JSON.stringify({ selected, other })}`,
+    ).toBe(true);
+  }
+});
+
+test('Signboard and Tiles draw focus 3 px out; inside the Tip tile the ring is accLabel', async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+  for (const style of ['signboard', 'tiles', 'sprint'] as const) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/dev/studio-lab?style=${style}`);
+    await ready(page);
+    const tokens = contracts.studioTokens(style, null).light;
+    // A link, from the keyboard.
+    await page.locator('.studio-link').first().focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    // Polled: the site eases outlines in, so a single read can land mid-way.
+    const ring = () =>
+      page.evaluate(() => {
+        const cs = getComputedStyle(document.activeElement!);
+        return [
+          cs.outlineStyle,
+          cs.outlineWidth,
+          cs.outlineOffset,
+          cs.outlineColor,
+        ];
+      });
+    await expect
+      .poll(ring, { message: style })
+      .toEqual([
+        'solid',
+        '2px',
+        style === 'sprint' ? '2px' : '3px',
+        rgb(tokens.accText as string),
+      ]);
+    // The in-page Tip, from the keyboard.
+    await page.locator('.studio-tip .composer-submit').focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    const tip = () =>
+      page.evaluate(() => {
+        const cs = getComputedStyle(document.activeElement!);
+        return [cs.outlineStyle, cs.outlineColor];
+      });
+    await expect
+      .poll(tip, { message: style })
+      .toEqual([
+        'solid',
+        rgb((style === 'tiles' ? tokens.tileFocus : tokens.accText) as string),
+      ]);
+  }
 });

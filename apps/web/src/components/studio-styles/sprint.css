@@ -1,0 +1,815 @@
+/* Sprint: "Fast, bold, all-caps energy" (spec 2026-11-17-page-studio-styles §9.6; canvas
+   "Sprint · phone", "Sprint · desktop"). Anton 400 for the name only, in capitals with no
+   tracking; Inter for everything else, section titles too. Radius 0 on photos, rows and the cover;
+   pills on chips and the Tip; a circle avatar. Photos run edge to edge. No shadows. 200 ms
+   cubic-bezier(.4, 0, .2, 1). */
+
+.studio[data-style='sprint'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: 0;
+}
+
+.studio[data-style='sprint']
+  :is(.studio-identity, .studio-tip, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The cover: "Your cover" edge to edge, unrounded, 440 tall; the name below it. Plain: none. */
+.studio[data-style='sprint'] .studio-cover {
+  height: 440px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='sprint'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+/* The identity: the name, then the 40 px avatar beside the handle, then the bio. */
+.studio[data-style='sprint'] .studio-identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: center;
+  padding-top: 24px;
+}
+
+.studio[data-style='sprint']
+  .studio-cover[data-cover='plain']
+  + .studio-identity {
+  padding-top: 48px;
+}
+
+.studio[data-style='sprint'] .studio-name {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  font-family: 'Studio Anton', 'Studio Anton Fallback', var(--studio-ui);
+  font-size: 64px;
+  font-weight: 400;
+  line-height: 76px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+/* A name that reaches three lines steps to 52 and opens to 1.2, so dots below never touch the
+   next line's accents (§9.10). A narrow phone takes it down with the column. */
+.studio[data-style='sprint'] .studio-name--long {
+  font-size: 52px;
+  line-height: 1.2;
+}
+
+@media (max-width: 359px) {
+  .studio[data-style='sprint'] .studio-name {
+    font-size: 52px;
+    line-height: 62px;
+  }
+
+  .studio[data-style='sprint'] .studio-name--long {
+    font-size: 42px;
+    line-height: 1.2;
+  }
+}
+
+.studio[data-style='sprint'] .studio-avatar {
+  grid-row: 2;
+  grid-column: 1;
+  width: 40px;
+  height: 40px;
+  margin-top: 16px;
+  font-size: 15px;
+}
+
+.studio[data-style='sprint'] .studio-meta {
+  grid-row: 2;
+  grid-column: 2;
+  margin-top: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='sprint'] :is(.studio-meta__sep, .studio-meta__role) {
+  color: var(--studio-fg2);
+}
+
+.studio[data-style='sprint'] :is(.studio-bio, .studio-celebration) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='sprint'] .studio-bio {
+  margin-top: 16px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.studio[data-style='sprint'] .studio-celebration {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* The Tip moment: pill chips 48 tall, 1.5 px control edge on bg; selected: acc with accLabel and
+   a weight up (§4.4). The Tip: a full-width 56 px pill. */
+.studio[data-style='sprint'] .studio-tip {
+  margin-top: 24px;
+}
+
+.studio[data-style='sprint'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='sprint'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+@media (max-width: 339px) {
+  .studio[data-style='sprint'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='sprint'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0;
+  border: 1.5px solid var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    transform 200ms var(--ease),
+    background-color 200ms var(--ease),
+    border-color 200ms var(--ease),
+    color 200ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='sprint'] .studio-tip .tm-amount-choice:hover > span {
+    border-color: var(--studio-fg);
+    background: var(--studio-bg);
+    transform: none;
+  }
+}
+
+.studio[data-style='sprint'] .studio-tip .tm-amount-choice input:active + span {
+  box-shadow: none;
+  transform: scale(0.96);
+}
+
+.studio[data-style='sprint']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-acc);
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font-weight: 600;
+}
+
+.studio[data-style='sprint']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='sprint']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='sprint'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='sprint'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 20px;
+  border-width: 1.5px;
+  border-radius: 999px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='sprint'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+  border-radius: 0;
+}
+
+.studio[data-style='sprint'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='sprint']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='sprint'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='sprint'] .studio-tip .composer-extras[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='sprint'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='sprint'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.studio[data-style='sprint']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  opacity: 1;
+  transform: none;
+  transition:
+    transform 200ms var(--ease),
+    opacity 200ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='sprint']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    opacity: 0.88;
+    transform: none;
+  }
+}
+
+.studio[data-style='sprint']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  transform: scale(0.98);
+}
+
+.studio[data-style='sprint'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='sprint']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='sprint'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='sprint'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 0;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: sections 48 apart, a title over each (Inter 20/26 600). */
+.studio[data-style='sprint'] .studio-grid {
+  display: grid;
+  gap: 48px;
+  margin-top: 48px;
+}
+
+.studio[data-style='sprint'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='sprint'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.studio[data-style='sprint'] .studio-title {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.015em;
+}
+
+/* Links: a numbered index, 1 px line above and below, rows 60 tall with a 24 px "01" column; on
+   hover the words slide 4 px. The number is drawn, not read (the link names the site). */
+.studio[data-style='sprint'] .studio-links__list {
+  border-top: 1px solid var(--studio-line);
+  counter-reset: link;
+}
+
+.studio[data-style='sprint'] .studio-links__list li {
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.studio[data-style='sprint'] .studio-link {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 60px;
+  color: var(--studio-fg);
+  text-decoration: none;
+}
+
+.studio[data-style='sprint'] .studio-link::before {
+  flex: none;
+  width: 24px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums lining-nums;
+  content: counter(link, decimal-leading-zero) / '';
+  counter-increment: link;
+}
+
+.studio[data-style='sprint'] .studio-link .link-badge {
+  display: none;
+}
+
+.studio[data-style='sprint'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+  transition: transform 200ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='sprint'] .studio-link:hover .studio-link__words {
+    transform: translateX(4px);
+  }
+}
+
+.studio[data-style='sprint'] .studio-link__title {
+  flex: none;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.015em;
+}
+
+.studio[data-style='sprint'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='sprint'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks. Text: plain 16/25. A quote: Inter 20/28 600. */
+.studio[data-style='sprint'] .studio-text {
+  display: grid;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 25px;
+}
+
+.studio[data-style='sprint'] .studio-quote p {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.015em;
+}
+
+/* Photos run edge to edge, unrounded: out of the gutters. */
+.studio[data-style='sprint'] .studio-photo {
+  margin-inline: calc(-1 * var(--gutter));
+}
+
+.studio[data-style='sprint'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.studio[data-style='sprint'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='sprint'] .studio-photo figcaption {
+  padding-inline: var(--gutter);
+}
+
+.studio[data-style='sprint'] .studio-video {
+  overflow: hidden;
+}
+
+/* A gallery: 2-up, 2 px gaps, edge to edge; an odd first photo takes the whole row (canvas). */
+.studio[data-style='sprint'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  margin-inline: calc(-1 * var(--gutter));
+}
+
+.studio[data-style='sprint'] .studio-strip li {
+  height: 194px;
+  overflow: hidden;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='sprint'] .studio-strip li:first-child:nth-last-child(odd) {
+  grid-column: 1 / -1;
+  height: 240px;
+}
+
+.studio[data-style='sprint'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: index rows, 1 px line above and below, like the links. */
+.studio[data-style='sprint'] .studio-list > ul,
+.studio[data-style='sprint'] ul.studio-list {
+  display: grid;
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='sprint'] .studio-list li {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 60px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.studio[data-style='sprint'] div.studio-list .studio-fine {
+  margin: 8px 0 0;
+}
+
+.studio[data-style='sprint'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='sprint'] .studio-list__title {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.015em;
+}
+
+.studio[data-style='sprint'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.studio[data-style='sprint'] .studio-price {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.studio[data-style='sprint'] .studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  background: var(--studio-card);
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='sprint'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 22px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='sprint'] .studio-foot {
+  margin-top: 48px;
+}
+
+.studio[data-style='sprint'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='sprint'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: solid bg, 1 px line top, padding 12/20/34. */
+.studio[data-style='sprint'] .tip-bar {
+  padding: 12px 20px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 1px solid var(--studio-line);
+  background: var(--studio-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+@media (min-width: 768px) {
+  .studio[data-style='sprint'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: a 720/720 split, 800 tall: the photo left; name, meta, bio and Tip right (padding
+   80/96/64/80). Then photo sections edge to edge, and the links and other sections in a grid of
+   the rest and 480, gap 120, padding 72/80. */
+@media (min-width: 1024px) {
+  .studio[data-style='sprint'] .studio-page {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .studio[data-style='sprint'] .studio-cover {
+    grid-row: 1 / 3;
+    grid-column: 1;
+    height: auto;
+    min-height: 800px;
+  }
+
+  .studio[data-style='sprint'] :is(.studio-identity, .studio-tip) {
+    grid-column: 2;
+    max-width: none;
+    margin: 0;
+    padding-inline: 80px 96px;
+  }
+
+  .studio[data-style='sprint'] .studio-identity {
+    grid-row: 1;
+    align-self: end;
+    padding-top: 80px;
+  }
+
+  .studio[data-style='sprint'] .studio-tip {
+    grid-row: 2;
+    max-width: calc(480px + 176px);
+    margin-top: 32px;
+    padding-bottom: 64px;
+  }
+
+  /* Plain: no photo; the name huge across the page, the Tip beneath it. */
+  .studio[data-style='sprint']:has(.studio-cover[data-cover='plain'])
+    :is(.studio-identity, .studio-tip) {
+    grid-column: 1 / -1;
+  }
+
+  .studio[data-style='sprint'] .studio-name {
+    /* 112 at 1440 (the board), and down with the half's width so a 9-letter word fits. */
+    font-size: clamp(56px, calc(10.6vw - 38px), 112px);
+    line-height: 1.18;
+  }
+
+  .studio[data-style='sprint'] .studio-name--long {
+    font-size: clamp(44px, 4.6vw, 72px);
+    line-height: 1.2;
+  }
+
+  .studio[data-style='sprint'] .studio-avatar {
+    width: 44px;
+    height: 44px;
+    margin-top: 24px;
+  }
+
+  .studio[data-style='sprint'] .studio-meta {
+    margin-top: 24px;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .studio[data-style='sprint'] .studio-bio {
+    max-width: 480px;
+    margin-top: 20px;
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='sprint'] .studio-grid {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 480px);
+    column-gap: 120px;
+    row-gap: 72px;
+    max-width: none;
+    margin-top: 2px;
+    padding-inline: 80px;
+  }
+
+  .studio[data-style='sprint']
+    .studio-grid:not(:has(> .studio-blocks > [data-media])) {
+    padding-top: 72px;
+  }
+
+  /* Photo sections run edge to edge, first, as the board draws them after the split. */
+  .studio[data-style='sprint'] .studio-section[data-media] {
+    grid-column: 1 / -1;
+    order: -1;
+    margin-inline: -80px;
+  }
+
+  .studio[data-style='sprint']
+    .studio-section[data-media]
+    > .studio-block[data-kind='text'] {
+    padding-inline: 80px;
+  }
+
+  .studio[data-style='sprint'] :is(.studio-photo, .studio-strip) {
+    margin-inline: 0;
+  }
+
+  .studio[data-style='sprint'] .studio-photo img {
+    max-height: 720px;
+  }
+
+  .studio[data-style='sprint'] .studio-strip {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .studio[data-style='sprint'] .studio-strip li,
+  .studio[data-style='sprint']
+    .studio-strip
+    li:first-child:nth-last-child(odd) {
+    grid-column: span 2;
+    height: 360px;
+  }
+
+  .studio[data-style='sprint']
+    .studio-strip
+    li:first-child:nth-last-child(3n + 1) {
+    grid-column: 1 / -1;
+  }
+
+  .studio[data-style='sprint']
+    .studio-strip
+    li:first-child:nth-last-child(3n + 2),
+  .studio[data-style='sprint']
+    .studio-strip
+    li:first-child:nth-last-child(3n + 2)
+    + li {
+    grid-column: span 3;
+  }
+
+  .studio[data-style='sprint'] :is(.studio-links, .studio-section) {
+    gap: 16px;
+  }
+
+  .studio[data-style='sprint'] .studio-title {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
+  .studio[data-style='sprint'] .studio-link {
+    min-height: 64px;
+  }
+
+  .studio[data-style='sprint'] .studio-link__title {
+    font-size: 20px;
+  }
+
+  .studio[data-style='sprint'] .studio-text {
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='sprint'] .studio-foot {
+    grid-row: 4;
+    grid-column: 1 / -1;
+    max-width: none;
+    margin-top: 64px;
+    padding-inline: 80px;
+  }
+}
+
+/* Reduced motion (§4.5): no scale or slide; colours and opacity may still fade. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='sprint']
+    :is(
+      .studio-tip .tm-amount-choice input:active + span,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button:active,
+      .studio-link:hover .studio-link__words
+    ) {
+    transform: none;
+  }
+
+  .studio[data-style='sprint'] .studio-link__words {
+    transition: none;
+  }
+
+  .studio[data-style='sprint']
+    :is(.studio-tip .composer-submit, .tip-bar__button) {
+    transition: opacity 200ms var(--ease);
+  }
+
+  .studio[data-style='sprint'] .studio-tip .tm-amount-choice > span {
+    transition:
+      background-color 200ms var(--ease),
+      border-color 200ms var(--ease),
+      color 200ms var(--ease);
+  }
+}

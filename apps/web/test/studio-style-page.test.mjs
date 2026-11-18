@@ -9,6 +9,7 @@ import {
   STUDIO_FONTS,
   STUDIO_HEADING_PX,
   STUDIO_STYLE_IDS,
+  STUDIO_TILES_RING_MIX,
   contrastRatio,
   resolveStudio,
   studioSlotWidth,
@@ -1181,4 +1182,553 @@ test('Horizon\'s Tip area shows a focus ring when "Send a tip" lands on it', () 
   );
   assert.match(focus, /outline: 2px solid var\(--studio-accText\);/);
   assert.doesNotMatch(focus, /outline: none/);
+});
+
+// Signboard, Sprint and Tiles (PR 2e, spec §9.5, §9.6, §9.7, §9.10).
+const NEW = ['signboard', 'sprint', 'tiles'];
+const styled = (style, { cover, mode, profile = {}, blocks } = {}) =>
+  renderToStaticMarkup(
+    createElement(StudioStylePage, {
+      studio: {
+        document: doc({
+          style,
+          ...(cover ? { cover } : {}),
+          ...(mode ? { mode } : {}),
+          ...(blocks ? { blocks } : {}),
+        }),
+        images: {
+          [IMG]: {
+            path: `/dev/studio-lab/image/${IMG}`,
+            width: 2400,
+            height: 1600,
+          },
+        },
+        palette: studioTokens(style, null),
+        checkVersion: DESIGN_CHECK_VERSION,
+      },
+      profile: {
+        handle: 'studiolab',
+        displayName: 'Kemi Adeyinka',
+        role: 'Singer, Lagos',
+        bio: 'I write songs about home.',
+        links: LINKS,
+        plan: 'pro',
+        cover: LAB_COVER,
+        ...profile,
+      },
+      tipBlock: createElement('form', { id: 'the-tip' }, 'TIP'),
+      footer: createElement('footer', { id: 'the-foot' }, 'FOOT'),
+      coverArt: createElement('div', { id: 'the-art' }),
+    }),
+  );
+const fontFiles = (html) =>
+  [...html.matchAll(/src:\s*url\('([^']+)'\)/g)].map((m) => m[1]);
+const fontPreloads = (html) =>
+  [
+    ...html.matchAll(/<link rel="preload"[^>]*href="([^"]+)"[^>]*as="font"/g),
+  ].map((m) => m[1]);
+
+test('Signboard sets the name in Unbounded, Sprint in Anton, Tiles in Inter: at most 2 families, 4 files, 200 KB, the name face preloaded', () => {
+  const inter = STUDIO_FONTS.find((f) => f.id === 'inter');
+  const face = {
+    signboard: STUDIO_FONTS.find((f) => f.id === 'unbounded'),
+    sprint: STUDIO_FONTS.find((f) => f.id === 'anton'),
+    tiles: null,
+  };
+  for (const style of NEW) {
+    const html = styled(style);
+    const files = fontFiles(html);
+    const want = [...inter.files, ...(face[style]?.files ?? [])];
+    assert.deepEqual(files.sort(), want.map((f) => f.path).sort(), style);
+    assert.ok(files.length <= 4, style);
+    assert.ok(
+      want.reduce((s, f) => s + f.bytes, 0) <= 200 * 1024,
+      `${style}: font bytes`,
+    );
+    assert.ok(
+      want.every((f) => f.bytes <= 100 * 1024),
+      `${style}: one file ≤ 100 KB`,
+    );
+    assert.deepEqual(
+      fontPreloads(html),
+      [(face[style] ?? inter).files[0].path],
+      style,
+    );
+  }
+  // Unbounded has no µ (§4.1): such a name is wholly Inter 700, and Inter is preloaded.
+  const micro = styled('signboard', { profile: { displayName: 'Kemi µ Ade' } });
+  assert.match(micro, /class="studio-name studio-name--fallback"/);
+  assert.deepEqual(fontPreloads(micro), [inter.files[0].path]);
+  // Sprint's titles and Tiles' are Inter; Sprint's Anton is the name only (§9.6).
+  assert.doesNotMatch(
+    declarations(sheet('sprint'), ".studio[data-style='sprint'] .studio-title"),
+    /font-family/,
+  );
+  assert.match(
+    declarations(sheet('sprint'), ".studio[data-style='sprint'] .studio-name"),
+    /font-family: 'Studio Anton', 'Studio Anton Fallback'/,
+  );
+  assert.match(
+    declarations(
+      sheet('signboard'),
+      ".studio[data-style='signboard'] :is(.studio-name, .studio-kicker, .studio-title)",
+    ),
+    /font-family: 'Studio Unbounded', 'Studio Unbounded Fallback'/,
+  );
+  assert.doesNotMatch(sheet('tiles'), /'Studio (?!Inter)/);
+});
+
+test("the design check measures Signboard's, Sprint's and Tiles' section titles at the size their CSS draws", () => {
+  for (const style of NEW)
+    assert.equal(
+      STUDIO_HEADING_PX[style],
+      px(
+        declarations(
+          sheet(style),
+          `.studio[data-style='${style}'] .studio-title`,
+        ),
+        'font-size',
+      ),
+      style,
+    );
+  // Signboard's are capitals, tracked +0.03 em (the check measures them so).
+  assert.match(
+    declarations(
+      sheet('signboard'),
+      ".studio[data-style='signboard'] .studio-title",
+    ),
+    /letter-spacing: 0\.03em;[\s\S]*text-transform: uppercase;/,
+  );
+});
+
+const stripSizes = (html) =>
+  /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(html)?.[1];
+const photoSizes = (html) =>
+  /<figure class="studio-photo"><img[^>]*sizes="([^"]+)"/.exec(html)?.[1];
+const PHOTO_BLOCK = {
+  id: 'phot0001',
+  kind: 'photo',
+  imageId: IMG,
+  alt: 'A stage',
+};
+
+test("the design check's photo slots are the widths Signboard's CSS draws, and sizes follows them", () => {
+  const css = sheet('signboard');
+  const root = ".studio[data-style='signboard']";
+  assert.equal(px(declarations(css, root), '--gutter'), 20);
+  const tablet = declarations(css, root, 'min-width: 768px');
+  assert.equal(px(tablet, '--gutter'), 24);
+  assert.equal(px(tablet, '--measure'), 720);
+  const strip = declarations(css, `${root} .studio-strip`);
+  const n = Number(/grid-template-columns: repeat\((\d+),/.exec(strip)[1]);
+  const gap = px(strip, 'gap');
+  assert.equal(n, 3);
+  assert.equal(gap, 8);
+  for (const v of [320, 390])
+    assert.equal(
+      studioSlotWidth('signboard', 'gallery', v),
+      Math.round((v - 40 - (n - 1) * gap) / n),
+      `${v}`,
+    );
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 800),
+    Math.round((720 - (n - 1) * gap) / n),
+  );
+  // Desktop: 440 | 80 | 600 in the 1120 content; the first section on the left, the rest right.
+  const cols =
+    /grid-template-columns:[^;]*minmax\(0, (\d+)px\) (\d+)px minmax\(0, (\d+)px\)/.exec(
+      declarations(css, `${root} .studio-page`, 'min-width: 1024px'),
+    );
+  assert.ok(cols, "Signboard's desktop columns");
+  assert.deepEqual(cols.slice(1).map(Number), [440, 80, 600]);
+  const right = Number(cols[3]);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('signboard', kind, 1440), right, kind);
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 1440),
+    Math.round((right - (n - 1) * gap) / n),
+  );
+  assert.equal(
+    stripSizes(styled('signboard')),
+    `(min-width: 1024px) ${studioSlotWidth('signboard', 'gallery', 1440)}px, (min-width: 768px) ${studioSlotWidth('signboard', 'gallery', 1023)}px, ${studioSlotWidth('signboard', 'gallery', 390)}px`,
+  );
+});
+
+test("the design check's photo slots are the widths Sprint's CSS draws: photos edge to edge, the rest in the 680 cell", () => {
+  const css = sheet('sprint');
+  const root = ".studio[data-style='sprint']";
+  assert.equal(px(declarations(css, root), '--gutter'), 20);
+  // Photos run edge to edge: out of the gutters, 2-up with 2 px gaps; an odd first takes the row.
+  const strip = declarations(css, `${root} .studio-strip`);
+  assert.match(strip, /margin-inline: calc\(-1 \* var\(--gutter\)\);/);
+  assert.match(strip, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.equal(px(strip, 'gap'), 2);
+  assert.match(
+    declarations(
+      css,
+      `${root} .studio-strip li:first-child:nth-last-child(odd)`,
+    ),
+    /grid-column: 1 \/ -1;/,
+  );
+  assert.match(
+    declarations(css, `${root} .studio-photo`),
+    /margin-inline: calc\(-1 \* var\(--gutter\)\);/,
+  );
+  for (const v of [320, 390, 800, 1440]) {
+    assert.equal(studioSlotWidth('sprint', 'photo', v), v);
+    assert.equal(studioSlotWidth('sprint', 'gallery', v), v);
+  }
+  // Desktop: a photo section is full-bleed; the rest sit in 1fr | 480, gap 120, padding 80.
+  const grid = declarations(css, `${root} .studio-grid`, 'min-width: 1024px');
+  assert.match(
+    grid,
+    /grid-template-columns: minmax\(0, 1fr\) minmax\(0, 480px\);/,
+  );
+  const left =
+    1440 - 2 * px(grid, 'padding-inline') - px(grid, 'column-gap') - 480;
+  for (const kind of ['text', 'quote', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('sprint', kind, 1440), left, kind);
+  assert.match(
+    declarations(
+      css,
+      `${root} .studio-section[data-media]`,
+      'min-width: 1024px',
+    ),
+    /grid-column: 1 \/ -1;/,
+  );
+  // Full-bleed photos ask for the screen.
+  const html = styled('sprint', { blocks: [...doc().blocks, PHOTO_BLOCK] });
+  assert.equal(stripSizes(html), '100vw');
+  assert.equal(photoSizes(html), '100vw');
+});
+
+test("the design check's photo slots are the widths Tiles' CSS draws, and sizes follows them", () => {
+  const css = sheet('tiles');
+  const root = ".studio[data-style='tiles']";
+  assert.equal(px(declarations(css, root), '--gutter'), 20);
+  const grid = declarations(css, `${root} .studio-grid`);
+  assert.match(grid, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  assert.equal(px(grid, 'gap'), 12);
+  for (const v of [320, 390])
+    assert.equal(
+      studioSlotWidth('tiles', 'gallery', v),
+      Math.round((v - 40 - 12) / 2),
+    );
+  // Desktop: a 340 rail, 72, then a 788 grid of 4 columns, gap 16 (the content is 1200).
+  const cols =
+    /grid-template-columns:[^;]*min\((\d+)px, [\d.]+vw\) (\d+)px minmax\(0, (\d+)px\)/.exec(
+      declarations(css, `${root} .studio-page`, 'min-width: 1024px'),
+    );
+  assert.ok(cols, "Tiles' desktop columns");
+  assert.deepEqual(cols.slice(1).map(Number), [340, 72, 788]);
+  const desk = declarations(css, `${root} .studio-grid`, 'min-width: 1024px');
+  assert.match(desk, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  const g = px(desk, 'gap');
+  assert.equal(g, 16);
+  const tile = Math.round((788 - 3 * g) / 4);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), tile);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('tiles', kind, 1440), 788, kind);
+  // Every block but a gallery's photos spans the grid's whole row.
+  assert.match(
+    declarations(css, `${root} .studio-block`),
+    /grid-column: 1 \/ -1;/,
+  );
+  assert.equal(
+    stripSizes(styled('tiles')),
+    `(min-width: 1024px) ${tile}px, (min-width: 768px) ${studioSlotWidth('tiles', 'gallery', 1023)}px, ${studioSlotWidth('tiles', 'gallery', 390)}px`,
+  );
+});
+
+test('Signboard sets the role and the name in the accent band, with the avatar and handle below', () => {
+  const html = styled('signboard', { cover: 'plain' });
+  assert.match(
+    html,
+    /<div class="studio-band"><p class="studio-kicker">Singer, Lagos<\/p><h1 id="studio-name" class="studio-name">Kemi Adeyinka<\/h1><\/div>/,
+  );
+  // The identity below holds the avatar, the handle (the role is in the band), the bio.
+  const identity =
+    /<header class="studio-identity"[^>]*>([\s\S]*?)<\/header>/.exec(html)[1];
+  assert.match(identity, /class="studio-avatar"/);
+  assert.match(identity, /@studiolab/);
+  assert.doesNotMatch(identity, /Singer, Lagos|<h1/);
+  assert.match(identity, /I write songs about home\./);
+  assert.equal(html.match(/<h1/g).length, 1);
+  // The band: acc fill, accLabel text, 72/20/76 (desktop 96/104), a 2 px ink rule.
+  const css = sheet('signboard');
+  const band = declarations(
+    css,
+    ".studio[data-style='signboard'] .studio-band",
+  );
+  assert.match(band, /background: var\(--studio-acc\);/);
+  assert.match(band, /color: var\(--studio-accLabel\);/);
+  assert.match(band, /padding: 72px var\(--gutter\) 76px;/);
+  assert.match(band, /border-bottom: 2px solid var\(--studio-ink\);/);
+  assert.match(
+    declarations(
+      css,
+      ".studio[data-style='signboard'] .studio-band",
+      'min-width: 1024px',
+    ),
+    /padding-block: 96px 104px;/,
+  );
+  // "Your cover" as a photo: full-bleed 16:9 above, the name in a short band below, never over it.
+  const photo = styled('signboard');
+  assert.ok(
+    photo.indexOf('data-cover="photo"') < photo.indexOf('class="studio-band"'),
+  );
+  assert.match(
+    declarations(
+      css,
+      ".studio[data-style='signboard'] .studio-cover[data-cover='photo']",
+    ),
+    /aspect-ratio: 16 \/ 9;/,
+  );
+});
+
+test('Signboard and Sprint offer no gradient', () => {
+  for (const style of ['signboard', 'sprint']) {
+    // The resolver draws "Your cover" instead, and the sheet has no gradient treatment.
+    assert.equal(doc({ style, cover: 'gradient' }).cover, 'yours', style);
+    assert.doesNotMatch(sheet(style), /gradient/, style);
+  }
+  assert.equal(doc({ style: 'tiles', cover: 'gradient' }).cover, 'gradient');
+});
+
+test("Signboard's first section leads its desktop's left column, drawn once per width", () => {
+  const html = styled('signboard');
+  // The left column holds the identity, the Tip and the first section's copy; the main column
+  // holds the links and every section, the first marked so a desktop hides it there.
+  const side =
+    /<div class="studio-side">([\s\S]*?)<div class="studio-grid">/.exec(html);
+  assert.ok(side, 'the left column');
+  assert.match(side[1], /<header class="studio-identity"/);
+  assert.match(side[1], /id="the-tip"/);
+  assert.match(
+    side[1],
+    /<div class="studio-blocks studio-blocks--lead"><div class="studio-section">[\s\S]*?News/,
+  );
+  const main = html.slice(html.indexOf('<div class="studio-grid">'));
+  assert.match(main, /<div class="studio-section" data-lead="">[\s\S]*?News/);
+  const css = sheet('signboard');
+  assert.match(
+    declarations(css, ".studio[data-style='signboard'] .studio-blocks--lead"),
+    /display: none;/,
+  );
+  const desk = (sel) =>
+    declarations(
+      css,
+      `.studio[data-style='signboard'] ${sel}`,
+      'min-width: 1024px',
+    );
+  assert.match(desk('.studio-blocks--lead'), /display: grid;/);
+  assert.match(desk('.studio-section[data-lead]'), /display: none;/);
+  // Other styles draw their blocks once.
+  assert.doesNotMatch(styled('tiles'), /studio-blocks--lead|data-lead/);
+});
+
+test('Sprint marks a section of photos only, so a desktop runs it edge to edge', () => {
+  const html = styled('sprint', {
+    blocks: [
+      { id: 'head0001', kind: 'text', variant: 'heading', text: 'News' },
+      { id: 'text0001', kind: 'text', variant: 'paragraph', text: 'Hi.' },
+      { id: 'head0002', kind: 'text', variant: 'heading', text: 'Photos' },
+      {
+        id: 'gall0001',
+        kind: 'gallery',
+        images: [{ imageId: IMG, alt: 'A stage at night' }],
+      },
+      PHOTO_BLOCK,
+    ],
+  });
+  const sections = [
+    ...html.matchAll(/<div class="studio-section"([^>]*)>/g),
+  ].map((m) => m[1]);
+  assert.deepEqual(sections, ['', ' data-media=""']);
+});
+
+test('the Tip tile is first and two wide in Tiles, with "Send a tip" and "Goes to {first name}"', () => {
+  const html = styled('tiles');
+  // In the tile grid, before the links; the form's own heading stays for screen readers.
+  const grid = html.slice(html.indexOf('<div class="studio-grid">'));
+  assert.ok(grid.indexOf('class="studio-tip"') >= 0, 'the Tip is in the grid');
+  assert.ok(
+    grid.indexOf('class="studio-tip"') < grid.indexOf('class="studio-links"'),
+  );
+  assert.equal(html.match(/class="studio-tip"/g).length, 1);
+  assert.match(
+    grid,
+    /<section class="studio-tip"[^>]*><div class="studio-tip__head"><h2 class="studio-tip__title">Send a tip<\/h2><p class="studio-tip__to">Goes to Kemi<\/p><\/div><form id="the-tip"/,
+  );
+  const css = sheet('tiles');
+  const tip = declarations(css, ".studio[data-style='tiles'] .studio-tip");
+  assert.match(tip, /grid-column: span 2;/);
+  assert.match(tip, /background: var\(--studio-acc\);/);
+  assert.match(tip, /color: var\(--studio-accLabel\);/);
+  assert.match(tip, /border-radius: 24px;/);
+  assert.match(tip, /padding: 20px;/);
+  // The in-tile Tip is inverted; the phone bar's is the normal acc (§9.7).
+  const inTile = declarations(
+    css,
+    ".studio[data-style='tiles'] .studio-tip .composer-action .composer-submit",
+  );
+  assert.match(inTile, /background: var\(--studio-accLabel\);/);
+  assert.match(inTile, /color: var\(--studio-acc\);/);
+  const bar = declarations(css, ".studio[data-style='tiles'] .tip-bar__button");
+  assert.match(bar, /background: var\(--studio-acc\);/);
+  assert.match(bar, /color: var\(--studio-accLabel\);/);
+  // Unselected chips: a 1.5 px inset ring of accLabel at the registry's proved mix.
+  assert.match(
+    declarations(
+      css,
+      ".studio[data-style='tiles'] .studio-tip .tm-amount-choice > span",
+    ),
+    new RegExp(
+      `box-shadow: inset 0 0 0 1\\.5px\\s+color-mix\\(in srgb, var\\(--studio-accLabel\\) ${Math.round(STUDIO_TILES_RING_MIX * 100)}%, var\\(--studio-acc\\)\\);`,
+    ),
+  );
+  // Other styles keep the Tip out of the grid and have no tile head.
+  assert.doesNotMatch(styled('sprint'), /studio-tip__head/);
+});
+
+test("Signboard's Tip has the one hard shadow 3px 3px 0, and no other shadow is drawn", () => {
+  const css = sheet('signboard');
+  const shadows = [...css.matchAll(/box-shadow: ([^;]+);/g)].map((m) => m[1]);
+  assert.ok(shadows.includes('3px 3px 0 var(--studio-shadow)'));
+  for (const s of shadows)
+    assert.match(
+      s,
+      /^(none|3px 3px 0 var\(--studio-shadow\)|4px 4px 0 var\(--studio-shadow\))$/,
+      s,
+    );
+  const tip = declarations(
+    css,
+    ".studio[data-style='signboard'] :is(.studio-tip .composer-submit, .tip-bar__button)",
+  );
+  assert.match(tip, /box-shadow: 3px 3px 0 var\(--studio-shadow\);/);
+  assert.match(tip, /border: 2px solid var\(--studio-ink\);/);
+  assert.match(tip, /font: 700 17px\/22px var\(--studio-ui\);/);
+  // Tiles' only shadow is its light tile shadow (none in dark, from the registry).
+  for (const s of [...sheet('tiles').matchAll(/box-shadow: ([^;]+);/g)].map(
+    (m) => m[1],
+  ))
+    assert.match(
+      s,
+      /^(none|var\(--studio-shadow\)|inset 0 0 0 1\.5px[\s\S]*)$/,
+      s,
+    );
+  // Sprint draws none.
+  for (const s of [...sheet('sprint').matchAll(/box-shadow: ([^;]+);/g)].map(
+    (m) => m[1],
+  ))
+    assert.equal(s, 'none');
+});
+
+test('long names step down in Signboard (over 18 letters, 30 to 24), Sprint (64 to 52, line height 1.2) and Tiles (about 80%)', () => {
+  const cls = (style, name) =>
+    /<h1[^>]*class="([^"]+)"/.exec(
+      styled(style, { profile: { displayName: name } }),
+    )[1];
+  // Signboard counts letters: 19 and up step down.
+  assert.equal(cls('signboard', 'Kemi Adeyinka'), 'studio-name');
+  assert.equal(
+    cls('signboard', 'Abcdefghi Abcdefghij'),
+    'studio-name studio-name--long',
+  );
+  assert.equal(cls('signboard', 'Abcdefghi Abcdefghi'), 'studio-name');
+  assert.equal(
+    cls('signboard', 'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí'),
+    'studio-name studio-name--long',
+  );
+  assert.equal(
+    cls('sprint', 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'),
+    'studio-name studio-name--long',
+  );
+  const name = (style, long = false) =>
+    declarations(
+      sheet(style),
+      `.studio[data-style='${style}'] .studio-name${long ? '--long' : ''}`,
+    );
+  assert.equal(px(name('signboard'), 'font-size'), 30);
+  assert.equal(px(name('signboard', true), 'font-size'), 24);
+  assert.match(name('signboard'), /text-wrap: balance;/);
+  assert.equal(px(name('sprint'), 'font-size'), 64);
+  assert.equal(px(name('sprint'), 'line-height'), 76);
+  assert.match(name('sprint'), /text-transform: uppercase;/);
+  assert.match(name('sprint'), /letter-spacing: 0;/);
+  assert.equal(px(name('sprint', true), 'font-size'), 52);
+  assert.match(name('sprint', true), /line-height: 1\.2;/);
+  assert.equal(px(name('tiles'), 'font-size'), 28);
+  const tiles = px(name('tiles', true), 'font-size');
+  assert.ok(tiles / 28 >= 0.75 && tiles / 28 <= 0.85, `${tiles}`);
+});
+
+test('a selected amount differs from the others by more than colour, in Signboard, Sprint and Tiles', () => {
+  for (const style of NEW) {
+    const css = sheet(style);
+    const chip = `.studio[data-style='${style}'] .studio-tip .tm-amount-choice`;
+    const off = Number(
+      /font-weight: (\d+)/.exec(declarations(css, `${chip} > span`))[1],
+    );
+    const on = Number(
+      /font-weight: (\d+)/.exec(
+        declarations(css, `${chip} input:checked + span`),
+      )?.[1],
+    );
+    assert.ok(on >= off + 100, `${style}: ${off} → ${on}`);
+  }
+});
+
+test('focus is 2 px, offset 3 in Signboard and Tiles (2 in Sprint); inside the Tip tile it is accLabel', () => {
+  for (const [style, offset] of [
+    ['signboard', 3],
+    ['tiles', 3],
+    ['sprint', 2],
+  ]) {
+    const css = sheet(style);
+    if (offset === 2) {
+      assert.doesNotMatch(css, /outline-offset: 3px/);
+      continue;
+    }
+    const focus = declarations(
+      css,
+      `.studio[data-style='${style}'] :is(a, button, summary, input, select, textarea):focus-visible`,
+    );
+    assert.match(focus, /outline: 2px solid var\(--studio-accText\);/, style);
+    assert.match(focus, new RegExp(`outline-offset: ${offset}px;`), style);
+  }
+  const inTile = declarations(
+    sheet('tiles'),
+    ".studio[data-style='tiles'] .studio-tip :is(a, button, summary, input, select, textarea):focus-visible",
+  );
+  assert.match(inTile, /outline-color: var\(--studio-tileFocus\);/);
+  for (const style of NEW)
+    assert.doesNotMatch(sheet(style), /outline: none/, style);
+});
+
+test('Signboard, Sprint and Tiles move as drawn, and under reduced motion only fade', () => {
+  const sb = sheet('signboard');
+  assert.match(sb, /120ms steps\(2\)/);
+  assert.doesNotMatch(sb, /\b(?!120)\d+ms/);
+  const sp = sheet('sprint');
+  assert.match(sp, /--ease: cubic-bezier\(0\.4, 0, 0\.2, 1\);/);
+  assert.doesNotMatch(sp, /\b(?!200)\d+ms/);
+  const tl = sheet('tiles');
+  assert.match(tl, /--ease: cubic-bezier\(0\.2, 0\.9, 0\.3, 1\.2\);/);
+  assert.doesNotMatch(tl, /\b(?!250)\d+ms/);
+  for (const style of NEW) {
+    const css = sheet(style);
+    // Only opacity, transform and colours move; never layout.
+    for (const m of css.matchAll(/transition:([^;]+);/g))
+      for (const part of m[1].split(','))
+        assert.match(
+          part.trim(),
+          /^(none|(transform|opacity|filter|background-color|border-color|color|box-shadow) \d+ms[\s\S]*)$/,
+          `${style}: ${part}`,
+        );
+    const reduced =
+      /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/.exec(css);
+    assert.ok(reduced, `${style}: a reduced-motion block`);
+    assert.match(reduced[1], /transform: none;/, style);
+  }
 });

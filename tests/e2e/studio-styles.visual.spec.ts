@@ -14,6 +14,12 @@ const SHOTS = [
   ['stage', 1440],
   ['horizon', 390],
   ['horizon', 1440],
+  ['signboard', 390],
+  ['signboard', 1440],
+  ['sprint', 390],
+  ['sprint', 1440],
+  ['tiles', 390],
+  ['tiles', 1440],
 ] as const;
 
 for (const [style, width] of SHOTS)

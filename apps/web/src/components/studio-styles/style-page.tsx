@@ -28,6 +28,7 @@ import {
 import { StandardProfile } from '@/components/profile/standard-profile';
 import { ClassicStudio } from './classic';
 import {
+  StyleBand,
   StyleBarName,
   StyleBlocks,
   StyleCover,
@@ -101,9 +102,23 @@ export function StudioStylePage({
     >
       {/* Linen's Tip moment is a titled card (§9.8). */}
       {style === 'linen' && <h2 className="studio-tip__title">Send a tip</h2>}
+      {/* Tiles' is the Tip tile, with the canvas's two lines (§9.7). */}
+      {style === 'tiles' && (
+        <div className="studio-tip__head">
+          <h2 className="studio-tip__title">Send a tip</h2>
+          <p className="studio-tip__to">Goes to {firstName}</p>
+        </div>
+      )}
       {tipBlock}
     </section>
   );
+  const cover = (
+    <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
+  );
+  const identity = (
+    <StyleIdentity styleId={style} profile={profile} firstName={firstName} />
+  );
+  const links = <StyleLinks links={profile.links ?? []} />;
   return (
     <div
       className="studio"
@@ -140,21 +155,45 @@ export function StudioStylePage({
               )}
             </div>
           </>
+        ) : style === 'signboard' ? (
+          // Signboard (§9.5): the band (the cover, or the short band under a photo cover), then a
+          // desktop's left column (identity, Tip, the first section) beside the links and the rest.
+          <>
+            {cover}
+            <StyleBand styleId={style} profile={profile} />
+            <div className="studio-side">
+              {identity}
+              {tip}
+              <StyleBlocks doc={doc} images={images} part="lead" />
+            </div>
+          </>
+        ) : style === 'tiles' ? (
+          // Tiles (§9.7): the cover (none when plain) and the Tip are tiles of the grid below.
+          identity
         ) : (
           <>
-            <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
-            <StyleIdentity
-              styleId={style}
-              profile={profile}
-              firstName={firstName}
-            />
+            {cover}
+            {identity}
             {tip}
           </>
         )}
-        <div className="studio-grid">
-          <StyleLinks links={profile.links ?? []} />
-          <StyleBlocks doc={doc} images={images} />
-        </div>
+        {style === 'tiles' ? (
+          <div className="studio-grid">
+            {cover}
+            {tip}
+            {links}
+            <StyleBlocks doc={doc} images={images} />
+          </div>
+        ) : (
+          <div className="studio-grid">
+            {links}
+            <StyleBlocks
+              doc={doc}
+              images={images}
+              lead={style === 'signboard'}
+            />
+          </div>
+        )}
         <div className="studio-foot">{footer}</div>
       </div>
       {(style === 'journal' || style === 'stage') && (

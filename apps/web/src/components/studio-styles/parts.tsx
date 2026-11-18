@@ -168,17 +168,69 @@ function heroCover(
 /**
  * Whether a name would take a third line at the style's phone size, so it steps down about 80%
  * (§9.10, builder's call): more than 26 letters, or a word (hyphens break) of more than 13.
+ * Signboard's wide face steps down sooner, over 18 letters (§9.10, canvas "Long names"), and so
+ * does Tiles' name, which shares its line with the avatar; Sprint's capitals at a word of 10.
  * Marks are not letters: "ọ́" counts once.
  */
-export function longName(name: string): boolean {
+export function longName(name: string, style?: StudioStyleId): boolean {
   const letters = name.normalize('NFD').replace(/\p{M}/gu, '');
+  const count = letters.replace(/[\s-]/g, '').length;
+  if (style === 'signboard' || style === 'tiles') return count > 18;
   const words = letters.split(/[\s-]+/);
+  // Sprint's Anton capitals are about 0.52 em each: at 64 px a 10-letter word fills the phone.
+  const word = style === 'sprint' ? 9 : 13;
   return (
-    letters.replace(/\s/g, '').length > 26 || words.some((w) => w.length > 13)
+    letters.replace(/\s/g, '').length > 26 || words.some((w) => w.length > word)
   );
 }
 
-/** Name, photo, meta (@username · role), Pro badge, bio and any shared moment. */
+/** The page's one h1: the name, wholly in Inter where the display face can't draw it (§4.1). */
+function StyleName({
+  styleId: style,
+  name,
+}: {
+  styleId: StudioStyleId;
+  name: string;
+}) {
+  return (
+    <h1
+      id="studio-name"
+      className={`studio-name${needsInter(style, name) ? ' studio-name--fallback' : ''}${longName(name, style) ? ' studio-name--long' : ''}`}
+    >
+      {name}
+    </h1>
+  );
+}
+
+/**
+ * Signboard's band (§9.5): the role as its small caps label and the name, in the accent. On a
+ * plain cover it is the cover; under a photo it is the short band below it, never over it.
+ */
+export function StyleBand({
+  styleId,
+  profile,
+}: {
+  styleId: StudioStyleId;
+  profile: PublicProfile;
+}) {
+  return (
+    <div className="studio-band">
+      {profile.role && (
+        <p
+          className={`studio-kicker${needsInter(styleId, profile.role) ? ' studio-kicker--fallback' : ''}`}
+        >
+          {profile.role}
+        </p>
+      )}
+      <StyleName styleId={styleId} name={profile.displayName} />
+    </div>
+  );
+}
+
+/**
+ * Name, photo, meta (@username · role), Pro badge, bio and any shared moment. Signboard's name and
+ * role sit in its band (StyleBand), so its identity holds the rest.
+ */
 export function StyleIdentity({
   styleId: style,
   profile,
@@ -188,7 +240,7 @@ export function StyleIdentity({
   profile: PublicProfile;
   firstName: string;
 }) {
-  const fallback = needsInter(style, profile.displayName);
+  const banded = style === 'signboard';
   // Journal shows this avatar on a desktop only (its phone avatar sits in the top row), so it is
   // not fetched eagerly there; it is never Journal's largest paint (the name is).
   const journal = style === 'journal';
@@ -203,15 +255,10 @@ export function StyleIdentity({
         sizes={journal ? '72px' : '(max-width: 1023px) 104px, 128px'}
         priority={!journal}
       />
-      <h1
-        id="studio-name"
-        className={`studio-name${fallback ? ' studio-name--fallback' : ''}${longName(profile.displayName) ? ' studio-name--long' : ''}`}
-      >
-        {profile.displayName}
-      </h1>
+      {!banded && <StyleName styleId={style} name={profile.displayName} />}
       <p className="studio-meta">
         <span className="studio-meta__handle">@{profile.handle}</span>
-        {profile.role && (
+        {!banded && profile.role && (
           <>
             <span className="studio-meta__sep"> · </span>
             <span className="studio-meta__role">{profile.role}</span>
@@ -443,6 +490,9 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
  */
 function sizesFor(style: StudioStyleId, kind: StudioBlock['kind']): string {
   const at = (viewport: number) => studioSlotWidth(style, kind, viewport);
+  // Sprint's photos run edge to edge at every width (§9.6): the slot is the screen.
+  if (style === 'sprint' && (kind === 'photo' || kind === 'gallery'))
+    return '100vw';
   // Classic is today's page (classic.css): two columns from 861 px, widest at 1200, then one
   // column of min(vw, 576) − 32, its photos 2-up with an 8 px gap.
   if (style === 'classic')
@@ -661,43 +711,69 @@ function Block({
 /**
  * The blocks in the person's order, in sections: a heading starts a new one (§9: each section is
  * a title over its blocks, and on desktop a cell of the style's grid). Blocks before the first
- * heading form a section of their own. Each style's CSS places them (§9 layouts).
+ * heading form a section of their own. Each style's CSS places them (§9 layouts). A section of
+ * lists only is `data-list` (a style may pair two); of photos only, `data-media` (Sprint's run
+ * edge to edge on a desktop).
+ *
+ * Signboard's desktop puts the first section in its left column, under the Tip, and the rest
+ * beside it (§9.5), while a phone keeps §8's order (the links first). One order can't be both, so
+ * `lead` marks the first section here (a desktop hides it) and `part="lead"` draws that section
+ * alone for the left column (shown on a desktop only). Each width shows one copy; the other is
+ * `display: none`, out of the accessibility tree, and its lazy photos are never fetched.
  */
 export function StyleBlocks({
   doc,
   images,
+  lead = false,
+  part = 'all',
 }: {
   doc: StudioDocument;
   images: Images;
+  lead?: boolean;
+  part?: 'all' | 'lead';
 }) {
-  const sections: { id: string; cells: ReactNode[]; list: boolean }[] = [];
+  const sections: {
+    id: string;
+    cells: ReactNode[];
+    list: boolean;
+    /** Photos only (and a heading): how many, or -1 once another kind joins. */
+    photos: number;
+  }[] = [];
   for (const block of doc.blocks) {
     // A plain function (no hooks): called here so an empty block leaves no empty cell.
     const shown = Block({ block, style: doc.style, images });
     if (!shown) continue;
     const heading = block.kind === 'text' && block.variant === 'heading';
     if (heading || !sections.length)
-      sections.push({ id: block.id, cells: [], list: true });
+      sections.push({ id: block.id, cells: [], list: true, photos: 0 });
     const section = sections.at(-1)!;
     // A list section holds only lists (and its heading): a style may pair two side by side.
     if (!heading && block.kind !== 'services' && block.kind !== 'events')
       section.list = false;
+    if (block.kind === 'photo' || block.kind === 'gallery') {
+      if (section.photos >= 0) section.photos += 1;
+    } else if (!heading) section.photos = -1;
     section.cells.push(
       <div key={block.id} className="studio-block" data-kind={block.kind}>
         {shown}
       </div>,
     );
   }
-  if (!sections.length) return null;
+  const shown = part === 'lead' ? sections.slice(0, 1) : sections;
+  if (!shown.length) return null;
   return (
-    <div className="studio-blocks">
-      {sections.map((section) => (
+    <div
+      className={`studio-blocks${part === 'lead' ? ' studio-blocks--lead' : ''}`}
+    >
+      {shown.map((section, i) => (
         <div
           key={section.id}
           className="studio-section"
           {...(section.list && section.cells.length > 1
             ? { 'data-list': '' }
             : {})}
+          {...(section.photos > 0 ? { 'data-media': '' } : {})}
+          {...(lead && part === 'all' && i === 0 ? { 'data-lead': '' } : {})}
         >
           {section.cells}
         </div>

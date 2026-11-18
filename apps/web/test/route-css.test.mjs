@@ -206,22 +206,11 @@ const STYLES_WITH_SHEETS = [
   ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
 ].map((m) => m[1]);
 
-// The styles still to be drawn (each later style PR removes its id). A style listed here must not
-// have a sheet yet, so the list can't go stale.
-const NOT_YET_DRAWN = ['signboard', 'sprint', 'tiles'];
-const DRAWN_STYLES = STUDIO_STYLE_IDS.filter(
-  (s) => s !== 'classic' && !NOT_YET_DRAWN.includes(s),
-);
+// Every style the registry has is drawn (PR 2e drew the last three): each has its own sheet.
+const DRAWN_STYLES = STUDIO_STYLE_IDS.filter((s) => s !== 'classic');
 
-test('every style the registry has, but those still to be drawn, has its own sheet', () => {
-  for (const style of NOT_YET_DRAWN) {
-    assert.ok(STUDIO_STYLE_IDS.includes(style), `${style} is a style`);
-    assert.ok(
-      !STYLES_WITH_SHEETS.includes(style),
-      `${style} has a sheet now: take it out of NOT_YET_DRAWN`,
-    );
-  }
-  for (const style of ['classic', ...DRAWN_STYLES])
+test('every style the registry has has its own sheet', () => {
+  for (const style of STUDIO_STYLE_IDS)
     assert.ok(STYLES_WITH_SHEETS.includes(style), `${style} has no sheet`);
 });
 

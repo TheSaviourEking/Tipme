@@ -1,0 +1,827 @@
+/* Signboard: "Sign-painter confidence" (spec 2026-11-17-page-studio-styles §9.5; canvas
+   "Signboard · phone", "Signboard · desktop"). Unbounded for the name (700), the band's label
+   (600 caps) and section titles (650 caps); Inter for the rest, the Tip label 700. Radius 10
+   everywhere, the avatar 16. 2 px ink edges; the accent band is the style's one accent exception
+   (§7.2) and the Tip's 3 px offset its one shadow (§8). 120 ms, chips in steps(2). */
+
+.studio[data-style='signboard'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --ease: cubic-bezier(0.3, 0.7, 0.4, 1);
+  letter-spacing: 0;
+}
+
+.studio[data-style='signboard'] :is(.studio-side, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+.studio[data-style='signboard']
+  :is(.studio-name, .studio-kicker, .studio-title) {
+  font-family:
+    'Studio Unbounded', 'Studio Unbounded Fallback', var(--studio-ui);
+}
+
+/* A name, label or title Unbounded can't draw is set wholly in Inter (§4.1). */
+.studio[data-style='signboard']
+  :is(
+    .studio-name--fallback,
+    .studio-kicker--fallback,
+    .studio-title--fallback
+  ) {
+  font-family: var(--studio-ui);
+}
+
+/* The cover. Plain: the band is the cover. "Your cover": full-bleed 16:9 above a short band. */
+.studio[data-style='signboard'] .studio-cover {
+  background: var(--studio-el2);
+}
+
+.studio[data-style='signboard'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+.studio[data-style='signboard'] .studio-cover[data-cover='art'] {
+  aspect-ratio: 16 / 9;
+}
+
+.studio[data-style='signboard'] .studio-cover[data-cover='photo'] {
+  aspect-ratio: 16 / 9;
+}
+
+/* The band: acc with accLabel, 72/20/76, a 2 px ink rule; the name in it, never over a photo. */
+.studio[data-style='signboard'] .studio-band {
+  padding: 72px var(--gutter) 76px;
+  border-bottom: 2px solid var(--studio-ink);
+  background: var(--studio-acc);
+  color: var(--studio-accLabel);
+}
+
+.studio[data-style='signboard']
+  .studio-cover:not([data-cover='plain'])
+  + .studio-band {
+  padding-top: 28px;
+  padding-bottom: 68px;
+}
+
+.studio[data-style='signboard'] .studio-kicker {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='signboard'] .studio-name {
+  margin-top: 12px;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 34px;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+
+.studio[data-style='signboard'] .studio-name:first-child {
+  margin-top: 0;
+}
+
+/* Over 18 letters the name steps to 24 and balances on two lines (§9.10); the band grows. */
+.studio[data-style='signboard'] .studio-name--long {
+  font-size: 24px;
+  line-height: 30px;
+}
+
+/* Under the band: the avatar box straddles its edge, the handle beside it, then the bio. */
+.studio[data-style='signboard'] .studio-identity {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: end;
+  margin-top: -44px;
+}
+
+.studio[data-style='signboard'] .studio-avatar {
+  width: 84px;
+  height: 84px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 16px;
+  background: var(--studio-bg);
+  font-size: 28px;
+}
+
+.studio[data-style='signboard'] .studio-avatar.avatar--initials {
+  background: var(--studio-el2);
+}
+
+.studio[data-style='signboard'] .studio-meta {
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+/* No shadow but the Tip's (§8), the Pro badge's included. */
+.studio[data-style='signboard'] .studio-pro {
+  box-shadow: none;
+}
+
+.studio[data-style='signboard'] :is(.studio-bio, .studio-celebration) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='signboard'] .studio-bio {
+  margin-top: 20px;
+  font-size: 17px;
+  line-height: 26px;
+}
+
+.studio[data-style='signboard'] .studio-celebration {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+/* Focus: 2 px accText, offset 3 (§4.4). */
+.studio[data-style='signboard']
+  :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 3px;
+}
+
+.studio[data-style='signboard'] .tm-choice input:focus-visible + span {
+  outline-offset: 3px;
+}
+
+/* The Tip moment: chips 48 tall, r10, 2 px ink on card; selected: ink with bg text, a weight
+   up (never by colour alone, §4.4). The Tip: 56 tall, r10, 2 px ink, acc, the hard shadow. */
+.studio[data-style='signboard'] .studio-tip {
+  margin-top: 24px;
+}
+
+.studio[data-style='signboard'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='signboard'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: Inter 700 and 800 need more room than four chips leave, so two by two. */
+@media (max-width: 359px) {
+  .studio[data-style='signboard'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='signboard'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    transform 120ms steps(2),
+    background-color 120ms steps(2);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='signboard'] .studio-tip .tm-amount-choice:hover > span {
+    background: var(--studio-el2);
+    transform: none;
+  }
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .tm-amount-choice
+  input:active
+  + span {
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-ink);
+  background: var(--studio-ink);
+  box-shadow: none;
+  color: var(--studio-bg);
+  font-weight: 800;
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 2px;
+}
+
+.studio[data-style='signboard'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.studio[data-style='signboard'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 16px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='signboard'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+}
+
+.studio[data-style='signboard'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='signboard'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 2px solid var(--studio-fg);
+  border-bottom: 2px solid var(--studio-fg);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  .composer-extras[open]
+  summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='signboard'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='signboard'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.studio[data-style='signboard']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 22px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-acc);
+  box-shadow: 3px 3px 0 var(--studio-shadow);
+  color: var(--studio-accLabel);
+  font: 700 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transform: none;
+  transition: transform 120ms var(--ease);
+}
+
+/* Hover: up and left 1 px on a 4 px shadow. Press: down 3 px onto the shadow, which goes. */
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='signboard']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: 4px 4px 0 var(--studio-shadow);
+    transform: translate(-1px, -1px);
+  }
+}
+
+.studio[data-style='signboard']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  transform: translate(3px, 3px);
+}
+
+.studio[data-style='signboard'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='signboard']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='signboard'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='signboard'] .studio-tip .tm-slip {
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: sections 40 apart, a title over each. */
+.studio[data-style='signboard'] .studio-grid {
+  display: grid;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.studio[data-style='signboard'] .studio-blocks {
+  display: contents;
+}
+
+/* The first section's desktop copy (StyleBlocks, part "lead"): a phone shows the one in order. */
+.studio[data-style='signboard'] .studio-blocks--lead {
+  display: none;
+}
+
+.studio[data-style='signboard'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.studio[data-style='signboard'] .studio-title {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 22px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* Links: ink buttons, 56 tall, r10, 2 px ink, card. */
+.studio[data-style='signboard'] .studio-links__list {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='signboard'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 16px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  text-decoration: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='signboard'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='signboard'] .studio-link .link-badge {
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--studio-fg);
+  font-size: 11px;
+}
+
+.studio[data-style='signboard'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.studio[data-style='signboard'] .studio-link__title {
+  flex: none;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.studio[data-style='signboard'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='signboard'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks: each in a 2 px ink r10 frame. Text and quotes on card, padding 18, 16/25. */
+.studio[data-style='signboard']
+  :is(.studio-card, .studio-photo img, .studio-video) {
+  box-sizing: border-box;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+}
+
+.studio[data-style='signboard'] .studio-card {
+  background: var(--studio-card);
+}
+
+.studio[data-style='signboard'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  font-size: 16px;
+  line-height: 25px;
+}
+
+.studio[data-style='signboard'] .studio-quote {
+  padding: 18px;
+}
+
+.studio[data-style='signboard'] .studio-quote p {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 27px;
+}
+
+.studio[data-style='signboard'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.studio[data-style='signboard'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='signboard'] .studio-video {
+  overflow: hidden;
+}
+
+/* Photos: 3-up, gap 8, 132 tall, each in its own frame. */
+.studio[data-style='signboard'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.studio[data-style='signboard'] .studio-strip li {
+  box-sizing: border-box;
+  height: 132px;
+  overflow: hidden;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='signboard'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows in one frame, 1 px ink between; the date in its own small frame. */
+.studio[data-style='signboard'] .studio-list > ul,
+.studio[data-style='signboard'] ul.studio-list {
+  display: grid;
+}
+
+.studio[data-style='signboard'] .studio-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px;
+}
+
+.studio[data-style='signboard'] .studio-list li + li {
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='signboard'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 16px 14px;
+}
+
+.studio[data-style='signboard'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='signboard'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.studio[data-style='signboard'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.studio[data-style='signboard'] .studio-price {
+  flex: none;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.studio[data-style='signboard'] .studio-date {
+  box-sizing: border-box;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--studio-ink);
+  border-radius: 10px;
+  background: var(--studio-bg);
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='signboard'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 22px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='signboard'] .studio-foot {
+  margin-top: 40px;
+}
+
+.studio[data-style='signboard'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='signboard'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: solid bg, 2 px ink top, padding 12/20/34. */
+.studio[data-style='signboard'] .tip-bar {
+  padding: 12px 20px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 2px solid var(--studio-ink);
+  background: var(--studio-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Tablet: one column, 24 px gutters, up to 720. */
+@media (min-width: 768px) {
+  .studio[data-style='signboard'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: the band spans the width (content 1120); then 440 px and the rest, gap 80. The left
+   column holds the avatar, handle, bio, Tip and the first section; the links and the rest go
+   right. */
+@media (min-width: 1024px) {
+  .studio[data-style='signboard'] {
+    --measure: 1120px;
+  }
+
+  .studio[data-style='signboard'] .studio-page {
+    display: grid;
+    grid-template-columns:
+      minmax(var(--gutter), 1fr) minmax(0, 440px) 80px minmax(0, 600px)
+      minmax(var(--gutter), 1fr);
+    align-items: start;
+  }
+
+  .studio[data-style='signboard'] .studio-cover {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    max-height: 560px;
+  }
+
+  .studio[data-style='signboard'] .studio-band {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    padding-block: 96px 104px;
+    padding-inline: max(var(--gutter), calc((100% - 1120px) / 2));
+  }
+
+  .studio[data-style='signboard']
+    .studio-cover:not([data-cover='plain'])
+    + .studio-band {
+    padding-top: 40px;
+    padding-bottom: 88px;
+  }
+
+  .studio[data-style='signboard'] .studio-kicker {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .studio[data-style='signboard'] .studio-name {
+    max-width: 900px;
+    margin-top: 16px;
+    font-size: 76px;
+    line-height: 80px;
+    letter-spacing: -0.025em;
+  }
+
+  .studio[data-style='signboard'] .studio-name--long {
+    font-size: 60px;
+    line-height: 66px;
+  }
+
+  .studio[data-style='signboard']
+    :is(.studio-side, .studio-grid, .studio-foot) {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='signboard'] .studio-side {
+    grid-row: 3;
+    grid-column: 2;
+    display: grid;
+  }
+
+  .studio[data-style='signboard'] .studio-identity {
+    column-gap: 16px;
+    margin-top: -56px;
+  }
+
+  .studio[data-style='signboard'] .studio-avatar {
+    width: 104px;
+    height: 104px;
+    font-size: 34px;
+  }
+
+  .studio[data-style='signboard'] .studio-meta {
+    margin-bottom: 6px;
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .studio[data-style='signboard'] .studio-bio {
+    margin-top: 24px;
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='signboard'] .studio-tip {
+    margin-top: 28px;
+  }
+
+  .studio[data-style='signboard'] .studio-blocks--lead {
+    display: grid;
+    margin-top: 56px;
+  }
+
+  .studio[data-style='signboard'] .studio-section[data-lead] {
+    display: none;
+  }
+
+  .studio[data-style='signboard'] .studio-grid {
+    grid-row: 3;
+    grid-column: 4;
+    gap: 48px;
+    margin-top: 0;
+    padding-top: 56px;
+  }
+
+  .studio[data-style='signboard'] :is(.studio-links, .studio-section) {
+    gap: 16px;
+  }
+
+  .studio[data-style='signboard'] .studio-title {
+    font-size: 16px;
+    line-height: 23px;
+  }
+
+  .studio[data-style='signboard'] .studio-strip li {
+    height: 200px;
+  }
+
+  .studio[data-style='signboard'] .studio-foot {
+    grid-row: 4;
+    grid-column: 2 / 5;
+    margin-top: 72px;
+  }
+}
+
+/* Reduced motion (§4.5): no transitions, no press travel or lift; the Tip keeps its shadow. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='signboard']
+    :is(
+      .studio-tip .tm-amount-choice > span,
+      .studio-tip .tm-amount-choice input:active + span
+    ) {
+    transform: none;
+    transition: none;
+  }
+
+  .studio[data-style='signboard']
+    :is(
+      .studio-tip .composer-submit,
+      .studio-tip .composer-submit:hover,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button,
+      .tip-bar__button:hover,
+      .tip-bar__button:active
+    ) {
+    box-shadow: 3px 3px 0 var(--studio-shadow);
+    transform: none;
+    transition: none;
+  }
+}
