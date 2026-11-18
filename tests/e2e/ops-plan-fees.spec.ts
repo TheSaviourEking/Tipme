@@ -14,7 +14,8 @@ const fitsWidth = (page: Page) =>
       document.documentElement.clientWidth,
   );
 
-test('an owner asks to change the plan fees; it waits for a second person, who can reject it', async ({
+// @alone: it asks for a change to the rates every page uses, so nothing may run beside it.
+test('@alone an owner asks to change the plan fees; it waits for a second person, who can reject it', async ({
   page,
   browser,
 }, testInfo) => {
@@ -65,9 +66,7 @@ test('an owner asks to change the plan fees; it waits for a second person, who c
   await card.getByRole('button', { name: 'Reject…' }).click();
   await card.getByLabel('Why reject it?').fill('Not agreed with the owner yet');
   await card.getByRole('button', { name: 'Reject request' }).click();
-  await expect(
-    second.page.getByText('Rejected. Nothing changed.'),
-  ).toBeVisible();
+  await expect(card).toHaveCount(0);
 
   await page.reload();
   await expect(live).toHaveText('Free 5% · Pro 3% of each tip');

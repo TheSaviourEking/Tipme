@@ -12,7 +12,7 @@ import {
   startStack,
 } from './helpers.mjs';
 
-// Free and Pro tipping (PR-012, PRD v1.1 proposed rules; pretend money). Free: 7% fee (owner, 12 Nov 2026; was 10%) with
+// Free and Pro tipping (PR-012, PRD v1.1 proposed rules; pretend money). Free: 5% fee (owner, 18 Nov 2026; 7% from 12 Nov, 10% before) with
 // processing included, ₦2,000 minimum tip and withdrawal. Pro (granted by staff): the page's own
 // preset amounts and minimum, never below ₦2,000.
 startTelemetry({
@@ -85,7 +85,7 @@ const STANDARD = {
   minMinor: '200000',
 };
 
-test('a Free page uses the standard amounts and fee: 7% with processing included, ₦2,000 minimum', async () => {
+test('a Free page uses the standard amounts and fee: 5% with processing included, ₦2,000 minimum', async () => {
   await livePage('+2348031260001', 'free_page');
   const page = await json(await call('GET', '/v1/profiles/free_page'));
   assert.deepEqual(page.tipAmounts, STANDARD);
@@ -94,14 +94,14 @@ test('a Free page uses the standard amounts and fee: 7% with processing included
   assert.equal(tooSmall.status, 400);
   // No maximum: supporters tip what they want (₦25,000,000 here).
   const large = await json(await quote('free_page', '2500000000'));
-  assert.equal(large.recipientNetMinor, '2325000000');
+  assert.equal(large.recipientNetMinor, '2375000000');
   const ok = await json(await quote('free_page', '1000000'));
-  assert.equal(ok.feePolicyVersion, 'v2-free-7pct');
+  assert.equal(ok.feePolicyVersion, 'v3-free-500bps');
   assert.equal(
     BigInt(ok.platformFeeMinor) + BigInt(ok.providerFeeMinor),
-    70000n,
+    50000n,
   );
-  assert.equal(ok.recipientNetMinor, '930000');
+  assert.equal(ok.recipientNetMinor, '950000');
 });
 
 test('a Free recipient cannot set amounts, even by calling the API directly', async () => {

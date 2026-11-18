@@ -220,22 +220,24 @@ test('responses carry baseline security headers', async ({ request }) => {
   }
 });
 
-test('the terms set out Free 7%, Pro 5% and the NGN 2,000 minimums', async ({
+test('the terms set out Free 5%, Pro 3%, free withdrawals and the NGN 2,000 minimums', async ({
   page,
 }) => {
   await page.goto('/legal/terms');
   const fees = page.getByRole('region', { name: 'Fees' });
   await expect(fees).toContainText('you pay exactly the amount you choose');
   await expect(fees).toContainText(
-    'TipMe keeps 7% of each tip on the Free plan, or 5% on TipMe Pro',
+    'TipMe keeps 5% of each tip on the Free plan, or 3% on TipMe Pro',
   );
   await expect(fees).toContainText(
-    'From a ₦5,000 tip, you receive ₦4,650 on Free, or ₦4,750 on Pro.',
+    'From a ₦5,000 tip, you receive ₦4,750 on Free, or ₦4,850 on Pro.',
   );
   await expect(fees).not.toContainText('10%');
   await expect(fees).not.toContainText('₦4,500');
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
+  await expect(fees).toContainText('Withdrawals are free.');
+  await expect(fees).not.toContainText('₦9,950');
 });
 
 // The owner, 14 Nov 2026: TipMe keeps its fee on a refund; on a chargeback TipMe bears its fee.
@@ -248,7 +250,7 @@ test('the terms say a refund gives back the tip minus TipMe’s fee, and a charg
     'the supporter gets back the tip minus TipMe’s fee. TipMe keeps its fee.',
   );
   await expect(refunds).toContainText(
-    'From a ₦10,000 tip, the supporter gets back ₦9,300 on Free, or ₦9,500 on Pro, and you give back what you received.',
+    'From a ₦10,000 tip, the supporter gets back ₦9,500 on Free, or ₦9,700 on Pro, and you give back what you received.',
   );
   await expect(refunds).toContainText(
     'you give back only what you received from the tip. TipMe bears its own fee.',

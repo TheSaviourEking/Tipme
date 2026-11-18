@@ -138,12 +138,12 @@ test('granting fee-free tips that waits reads as waiting, not as granted', async
     }),
   );
   await page.goto(`/ops/pages?handle=${handle}`);
-  // The intro states the current plans: Pro keeps 5%, Free 7%, billing sits behind a switch.
+  // The intro states the current plans: Pro keeps 3%, Free 5% (owner, 18 Nov 2026), billing behind a switch.
   await expect(
     page
       .getByRole('main')
       .getByText(
-        /TipMe keeps 5% of each tip on Pro and 7% on Free, processing included\. Withdrawals work the same on both plans\. .*Pro billing/,
+        /TipMe keeps 3% of each tip on Pro and 5% on Free, payment and withdrawal fees included \(set in Fees\)\. Withdrawals are free on both plans\. .*Pro billing/,
       ),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Grant fee-free tips…' }).click();

@@ -118,9 +118,9 @@ test('staff read the figures, ask once with a reason, and a second ask is refuse
     businessName: null,
     currency: 'NGN',
     grossMinor: '1000000',
-    feeMinor: '70000',
-    refundMinor: '930000',
-    personMinor: '930000',
+    feeMinor: '50000',
+    refundMinor: '950000',
+    personMinor: '950000',
     businessMinor: '0',
     refund: null,
   });
@@ -133,13 +133,13 @@ test('staff read the figures, ask once with a reason, and a second ask is refuse
   });
   assert.equal(asked.status, 200, await asked.clone().text());
   const { data } = await asked.json();
-  assert.equal(data.amountMinor, '930000');
+  assert.equal(data.amountMinor, '950000');
   assert.equal(data.actedAlone, true);
   const [row] = await q(
     `SELECT status, amount_minor FROM tip_refunds WHERE tip_id = $1`,
     [tipId],
   );
-  assert.deepEqual(row, { status: 'REQUESTED', amount_minor: '930000' });
+  assert.deepEqual(row, { status: 'REQUESTED', amount_minor: '950000' });
   const again = await call(stack.api, 'GET', `/v1/ops/tips/${tipId}/refund`);
   const facts = (await again.json()).data;
   assert.equal(facts.refusal, 'already');

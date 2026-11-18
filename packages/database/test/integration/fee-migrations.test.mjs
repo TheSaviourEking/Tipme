@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { createQuote, currentProPrice } from '../../dist/index.js';
 import { openTestDatabase } from '../../dist/test-support.js';
-import { ADA, TOBI, useDatabase } from './helpers.mjs';
+import { ADA, AT_12_NOV_PLAN_FEES, TOBI, useDatabase } from './helpers.mjs';
 
 // The owner's pricing, 12 Nov 2026, as data: Pro's default price becomes ₦5,000 a month through
 // the price history (never by editing 0087), and old per-page deals are capped at the plan's rate.
@@ -51,7 +51,8 @@ test('a freshly migrated database charges ₦5,000 for Pro, with ₦2,500 kept a
 });
 
 test('old deals at or above Free’s 7% are cleared with an audit row; lower deals stay', async (t) => {
-  const db = await useDatabase(t);
+  // The 12 Nov 2026 rates this migration was written for (Free 7%, Pro 5%).
+  const db = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   await db.fresh();
   // Ada: an old deal at 10% (now above every plan). Tobi: a Pro page with a 6% deal, between
   // Pro's 5% and Free's 7%: kept, and capped at 5% while Tobi is on Pro.

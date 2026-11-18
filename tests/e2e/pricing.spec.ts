@@ -19,11 +19,11 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
   await staff.getByLabel('Username').fill(handle);
   await staff.getByRole('button', { name: 'Find page' }).click();
   await expect(staff.getByRole('heading', { name: 'Pricing' })).toBeVisible();
-  await expect(staff.getByText('Free’s 7%, the plan’s rate')).toBeVisible();
+  await expect(staff.getByText('Free’s 5%, the plan’s rate')).toBeVisible();
 
-  // A deal only counts below the plan's rate (Free 7%, owner 12 Nov 2026).
+  // A deal only counts below the plan's rate (Free 5%, owner 18 Nov 2026).
   await staff.getByRole('button', { name: 'Set this page’s fee…' }).click();
-  await staff.getByLabel('New TipMe fee (%)').fill('6');
+  await staff.getByLabel('New TipMe fee (%)').fill('4');
   // Other cards on the page have reason fields too, so each is found by its own form.
   const formOf = (label: string) =>
     staff.locator('form').filter({ has: staff.getByLabel(label) });
@@ -32,7 +32,7 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
     .fill('Launch partner with a reduced fee');
   await staff.getByRole('button', { name: 'Set this page’s fee' }).click();
   await expect(
-    staff.getByText('The fee is now 6% for new tips.'),
+    staff.getByText('The fee is now 4% for new tips.'),
   ).toBeVisible();
   await expectAccessible(staff);
 
@@ -66,12 +66,12 @@ test('@alone staff set one page’s fee and grant a fee-free tip; each quote rem
         feeFree,
       });
     }).toPass({ timeout: 15_000 });
-  // 6% of ₦2,000 is TipMe's ₦120 share, processing included: ₦90 fee plus the ₦30
-  // processing estimate (1.5%). The recipient receives ₦1,880.
+  // 4% of ₦2,000 is TipMe's ₦80 share, processing included: ₦50 fee plus the ₦30
+  // processing estimate (1.5%). The recipient receives ₦1,920.
   await quoteFor({
-    platformFeeMinor: '9000',
+    platformFeeMinor: '5000',
     providerFeeMinor: '3000',
-    recipientNetMinor: '188000',
+    recipientNetMinor: '192000',
     feeFree: false,
   });
 

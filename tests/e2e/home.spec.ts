@@ -61,7 +61,7 @@ test("the tipping steps' chosen amount reads as chosen on the grey well", async 
 test('home states the fee and the minimum plainly', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.getByText('TipMe keeps 7% of each tip on Free, or 5% on Pro', {
+    page.getByText('TipMe keeps 5% of each tip on Free, or 3% on Pro', {
       exact: false,
     }),
   ).toBeVisible();

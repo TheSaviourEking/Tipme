@@ -81,15 +81,15 @@ test('a paid refund: staff read what the books will record, then take the tip ba
   const { issueId } = await reportedReversal(request, who.handle, {
     partnerReversalId,
     refundState: 'paid',
-    // The tip minus TipMe's 7% (owner, 14 Nov 2026: a refund keeps TipMe's fee).
-    refundedMinor: 930000n,
+    // The tip minus TipMe's 5% (owner, 14 and 18 Nov 2026: a refund keeps TipMe's fee).
+    refundedMinor: 950000n,
   });
   await enrolOwner(page, testInfo);
   await page.goto(`/ops/issues/${issueId}`);
   const section = page.getByRole('region', { name: 'Take back this tip' });
   const panel = section.getByTestId('tip-reverse');
   await expect(panel).toContainText(
-    'Our payment partner gave the supporter back NGN 9,300.00.',
+    'Our payment partner gave the supporter back NGN 9,500.00.',
   );
   await expect(panel).toContainText(`@${who.handle} gives back their part`);
   await expect(panel).toContainText('TipMe keeps its fee on a refund.');
@@ -99,7 +99,7 @@ test('a paid refund: staff read what the books will record, then take the tip ba
   );
   await expect(panel).not.toContainText(/bachs/i);
   await panel.getByRole('button', { name: 'Take back this tip…' }).click();
-  await expect(panel).toContainText('Amount: NGN 9,300.00');
+  await expect(panel).toContainText('Amount: NGN 9,500.00');
   // The dashboard check is asked for, not assumed.
   await panel
     .getByLabel('Why take this tip back?')
