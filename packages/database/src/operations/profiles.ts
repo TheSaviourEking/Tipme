@@ -87,7 +87,11 @@ import {
 import { mailOwner } from './account-mail.js';
 import { legacySocials } from './legacy-socials.js';
 import { proStatusOf, setStaffPro } from './pro-periods.js';
-import { removeObjects } from './page-images.js';
+import {
+  coverWidthsOf,
+  deleteCoverRenditions,
+  removeObjects,
+} from './page-images.js';
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
@@ -550,7 +554,12 @@ const toMine = async (
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
   avatarPath: row.profile.avatarPath,
-  cover: resolveCover(row.profile),
+  cover: resolveCover({
+    ...row.profile,
+    coverWidths: row.profile.coverPath
+      ? await coverWidthsOf(db, row.profile.id)
+      : [],
+  }),
   coverChoice: {
     design: row.profile.coverDesign,
     colour: row.profile.coverColour,
@@ -1028,7 +1037,12 @@ export function publicProfile(
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
       acceptingTips,
-      cover: resolveCover(profile),
+      cover: resolveCover({
+        ...profile,
+        coverWidths: profile.coverPath
+          ? await coverWidthsOf(db, profile.id)
+          : [],
+      }),
       plan: profile.plan as PagePlan,
       ...(options.recognition === true && profile.plan === 'pro'
         ? { recognition: true as const }
@@ -1166,6 +1180,7 @@ export function deleteAccount(
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
           });
+        photoKeys.push(...(await deleteCoverRenditions(tx, row.id)));
         await tx
           .delete(profileCovers)
           .where(eq(profileCovers.profileId, row.id))

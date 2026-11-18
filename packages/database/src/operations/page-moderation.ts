@@ -8,7 +8,7 @@ import { mailOwner } from './account-mail.js';
 import { recordAudit } from './audit.js';
 import { guarded, OperationError } from './errors.js';
 import type { MailSealing } from './mail-queue.js';
-import { removeObjects } from './page-images.js';
+import { deleteCoverRenditions, removeObjects } from './page-images.js';
 
 // Staff review a page's cover or photo and remove either alone (permission `pages.suspend`):
 // pausing the page is the only other tool, and it stops the person's tips too.
@@ -86,6 +86,10 @@ export function staffRemovePageImage(
       if (!page) throw new OperationError('PROFILE_NOT_FOUND');
       const had = input.image === 'cover' ? page.coverPath : page.avatarPath;
       if (!had) return { handle: page.handle, keys: [], changed: false };
+      const renditionKeys =
+        input.image === 'cover'
+          ? await deleteCoverRenditions(tx, input.profileId)
+          : [];
       const removed = await tx
         .delete(table)
         .where(eq(table.profileId, input.profileId))
@@ -113,7 +117,10 @@ export function staffRemovePageImage(
       });
       return {
         handle: page.handle,
-        keys: removed.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
+        keys: [
+          ...removed.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
+          ...renditionKeys,
+        ],
         changed: true,
       };
     });

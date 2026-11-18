@@ -1,15 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import {
+  COVER_RENDITION_WIDTHS,
   coverChoiceNeedsPro,
   type CoverDesignChoice,
   type MyProfile,
 } from '@tipme/contracts';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
-import { profileCovers, profiles } from '../schema.js';
+import { profileCoverRenditions, profileCovers, profiles } from '../schema.js';
 import { guarded, OperationError } from './errors.js';
-import { lockLivePage, myPageId, removeObjects } from './page-images.js';
+import {
+  deleteCoverRenditions,
+  lockLivePage,
+  myPageId,
+  newRenditionSalt,
+  removeObjects,
+  renditionKeyOf,
+} from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
 // Page covers. Stored and served exactly as page photos are (see avatars.ts): the bytes are
@@ -19,20 +27,48 @@ import { getMyProfile } from './profiles.js';
 export const coverPathOf = (profileId: string, version: number) =>
   `/v1/covers/${profileId}/${version}.webp`;
 
-/** Replaces the page's cover with already re-encoded WebP bytes; a new version, a new URL. */
+/** A smaller copy of a cover, already re-encoded on the server (apps/api cover-renditions.ts). */
+export interface CoverRenditionBytes {
+  width: number;
+  webp: Buffer;
+}
+
+const isRenditionWidth = (width: number) =>
+  (COVER_RENDITION_WIDTHS as readonly number[]).includes(width);
+
+/**
+ * Replaces the page's cover with already re-encoded WebP bytes; a new version, a new URL. Its
+ * renditions are kept where the cover is, under the same version; the last cover's go with it.
+ */
 export function setCover(
   db: Database,
   userId: string,
   webp: Buffer,
   store?: PhotoStore,
+  renditions: CoverRenditionBytes[] = [],
 ): Promise<MyProfile> {
   return guarded(async () => {
+    if (renditions.some((r) => !isRenditionWidth(r.width)))
+      throw new Error('not a cover rendition width');
     const profileId = await myPageId(db, userId);
     // Uploaded first: if this fails, nothing in the database changed.
     const objectKey = store ? `covers/${profileId}/${randomUUID()}.webp` : null;
-    if (store && objectKey) await store.put(objectKey, webp);
-    let previous: string | null = null;
+    const salt = newRenditionSalt();
+    const sized = renditions.map((r) => ({
+      ...r,
+      objectKey: objectKey ? renditionKeyOf(objectKey, r.width, salt) : null,
+    }));
+    const written: string[] = [];
+    let previous: string[] = [];
     try {
+      if (store && objectKey) {
+        await store.put(objectKey, webp);
+        written.push(objectKey);
+        for (const r of sized) {
+          await store.put(r.objectKey!, r.webp);
+          written.push(r.objectKey!);
+        }
+      }
       await db.transaction(async (tx) => {
         await lockLivePage(tx, profileId);
         const [old] = await tx
@@ -40,7 +76,10 @@ export function setCover(
           .from(profileCovers)
           .where(eq(profileCovers.profileId, profileId))
           .for('update');
-        previous = old?.objectKey ?? null;
+        previous = [
+          ...(old?.objectKey ? [old.objectKey] : []),
+          ...(await deleteCoverRenditions(tx, profileId)),
+        ];
         // The page's counter, never the cover row's: removing a cover deletes the row, and the
         // next cover must still get a URL no cache has seen.
         const [next] = await tx
@@ -59,16 +98,27 @@ export function setCover(
             target: profileCovers.profileId,
             set: { version, ...stored, createdAt: sql`now()` },
           });
+        if (sized.length)
+          await tx.insert(profileCoverRenditions).values(
+            sized.map((r) => ({
+              profileId,
+              version,
+              width: r.width,
+              ...(r.objectKey
+                ? { bytes: null, objectKey: r.objectKey }
+                : { bytes: r.webp, objectKey: null }),
+            })),
+          );
         await tx
           .update(profiles)
           .set({ coverPath: coverPathOf(profileId, version) })
           .where(eq(profiles.id, profileId));
       });
     } catch (error) {
-      if (objectKey) await removeObjects(store, [objectKey]);
+      await removeObjects(store, written);
       throw error;
     }
-    if (previous) await removeObjects(store, [previous]);
+    await removeObjects(store, previous);
     return getMyProfile(db, userId);
   });
 }
@@ -84,8 +134,10 @@ export function removeCover(
 ): Promise<{ profile: MyProfile; changed: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
+    const renditionKeys: string[] = [];
     const removed = await db.transaction(async (tx) => {
       await lockLivePage(tx, profileId);
+      renditionKeys.push(...(await deleteCoverRenditions(tx, profileId)));
       const rows = await tx
         .delete(profileCovers)
         .where(eq(profileCovers.profileId, profileId))
@@ -97,10 +149,10 @@ export function removeCover(
           .where(eq(profiles.id, profileId));
       return rows;
     });
-    await removeObjects(
-      store,
-      removed.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
-    );
+    await removeObjects(store, [
+      ...removed.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
+      ...renditionKeys,
+    ]);
     return {
       profile: await getMyProfile(db, userId),
       changed: removed.length > 0,
@@ -216,5 +268,183 @@ export function myCover(
     if (!row) return null;
     if (row.bytes) return row.bytes;
     return row.objectKey && store ? store.get(row.objectKey) : null;
+  });
+}
+
+/**
+ * A cover's rendition to serve, under exactly the cover's rules (`coverFor`): the current version
+ * only, only while the page is live and not paused. Null for a width that was never stored.
+ */
+export function coverRenditionFor(
+  db: Database,
+  input: { profileId: string; version: number; width: number },
+  store?: PhotoStore,
+): Promise<Buffer | null> {
+  return guarded(async () => {
+    if (!isRenditionWidth(input.width)) return null;
+    const [row] = await db
+      .select({
+        bytes: profileCoverRenditions.bytes,
+        objectKey: profileCoverRenditions.objectKey,
+      })
+      .from(profileCoverRenditions)
+      .innerJoin(
+        profileCovers,
+        and(
+          eq(profileCovers.profileId, profileCoverRenditions.profileId),
+          eq(profileCovers.version, profileCoverRenditions.version),
+        ),
+      )
+      .innerJoin(profiles, eq(profiles.id, profileCoverRenditions.profileId))
+      .where(
+        and(
+          eq(profileCoverRenditions.profileId, input.profileId),
+          eq(profileCoverRenditions.version, input.version),
+          eq(profileCoverRenditions.width, input.width),
+          eq(profiles.pageState, 'live'),
+          eq(profiles.status, 'active'),
+        ),
+      );
+    if (!row) return null;
+    if (row.bytes) return row.bytes;
+    return row.objectKey && store ? store.get(row.objectKey) : null;
+  });
+}
+
+// The backfill (apps/api/src/scripts/backfill-cover-renditions.ts): covers uploaded before
+// renditions existed get them, once, whatever the page's state (a paused page may come back).
+
+/** Covers with no renditions at all, oldest first: the backfill's work list. */
+export function coversWithoutRenditions(
+  db: Database,
+): Promise<{ profileId: string; version: number; inStore: boolean }[]> {
+  return guarded(async () => {
+    const rows = await db
+      .select({
+        profileId: profileCovers.profileId,
+        version: profileCovers.version,
+        objectKey: profileCovers.objectKey,
+      })
+      .from(profileCovers)
+      .leftJoin(
+        profileCoverRenditions,
+        eq(profileCoverRenditions.profileId, profileCovers.profileId),
+      )
+      .where(isNull(profileCoverRenditions.profileId))
+      .orderBy(profileCovers.createdAt);
+    return rows.map((r) => ({
+      profileId: r.profileId,
+      version: r.version,
+      inStore: r.objectKey !== null,
+    }));
+  });
+}
+
+/** A cover's stored bytes at this version, whatever the page's state; never served from here. */
+export function storedCover(
+  db: Database,
+  input: { profileId: string; version: number },
+  store?: PhotoStore,
+): Promise<Buffer | null> {
+  return guarded(async () => {
+    const [row] = await db
+      .select({
+        bytes: profileCovers.bytes,
+        objectKey: profileCovers.objectKey,
+      })
+      .from(profileCovers)
+      .where(
+        and(
+          eq(profileCovers.profileId, input.profileId),
+          eq(profileCovers.version, input.version),
+        ),
+      );
+    if (!row) return null;
+    if (row.bytes) return row.bytes;
+    return row.objectKey && store ? store.get(row.objectKey) : null;
+  });
+}
+
+/**
+ * Adds renditions to a cover that has none, where the cover is kept (the store when it is there).
+ * Writes nothing, and returns false, when the cover was replaced or removed meanwhile or already
+ * has renditions: so running twice, or beside an upload, is safe.
+ */
+export function addCoverRenditions(
+  db: Database,
+  input: {
+    profileId: string;
+    version: number;
+    renditions: CoverRenditionBytes[];
+  },
+  store?: PhotoStore,
+): Promise<boolean> {
+  return guarded(async () => {
+    if (input.renditions.some((r) => !isRenditionWidth(r.width)))
+      throw new Error('not a cover rendition width');
+    if (!input.renditions.length) return false;
+    const [cover] = await db
+      .select({ objectKey: profileCovers.objectKey })
+      .from(profileCovers)
+      .where(
+        and(
+          eq(profileCovers.profileId, input.profileId),
+          eq(profileCovers.version, input.version),
+        ),
+      );
+    if (!cover) return false;
+    if (cover.objectKey && !store)
+      throw new Error('this cover is in the object store: pass the store');
+    const salt = newRenditionSalt();
+    const sized = input.renditions.map((r) => ({
+      ...r,
+      objectKey: cover.objectKey
+        ? renditionKeyOf(cover.objectKey, r.width, salt)
+        : null,
+    }));
+    const written: string[] = [];
+    try {
+      for (const r of sized)
+        if (r.objectKey && store) {
+          await store.put(r.objectKey, r.webp);
+          written.push(r.objectKey);
+        }
+      const added = await db.transaction(async (tx) => {
+        const [still] = await tx
+          .select({ objectKey: profileCovers.objectKey })
+          .from(profileCovers)
+          .where(
+            and(
+              eq(profileCovers.profileId, input.profileId),
+              eq(profileCovers.version, input.version),
+            ),
+          )
+          .for('update');
+        // Replaced, or moved to the store, since it was read: the next run starts again.
+        if (!still || still.objectKey !== cover.objectKey) return false;
+        const [existing] = await tx
+          .select({ width: profileCoverRenditions.width })
+          .from(profileCoverRenditions)
+          .where(eq(profileCoverRenditions.profileId, input.profileId))
+          .limit(1);
+        if (existing) return false;
+        await tx.insert(profileCoverRenditions).values(
+          sized.map((r) => ({
+            profileId: input.profileId,
+            version: input.version,
+            width: r.width,
+            ...(r.objectKey
+              ? { bytes: null, objectKey: r.objectKey }
+              : { bytes: r.webp, objectKey: null }),
+          })),
+        );
+        return true;
+      });
+      if (!added) await removeObjects(store, written);
+      return added;
+    } catch (error) {
+      await removeObjects(store, written);
+      throw error;
+    }
   });
 }

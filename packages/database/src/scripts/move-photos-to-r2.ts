@@ -18,7 +18,7 @@ try {
     handle.db,
     createR2PhotoStore(settings),
   );
-  console.log(`Moved ${moved} photo(s) and cover(s) to R2.`);
+  console.log(`Moved ${moved} photo(s), cover(s) and cover size(s) to R2.`);
 } catch (error) {
   console.error(
     `Moving photos failed: ${(error as Error).message.replace(/postgres(ql)?:\/\/\S+/g, '<url>')}`,

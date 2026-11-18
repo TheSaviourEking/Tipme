@@ -16,8 +16,11 @@ import {
   removeCover,
   setAvatar,
   setCover,
+  staffRemovePageImage,
 } from '../../packages/database/dist/index.js';
 import { hasImageSignature } from '../../apps/api/dist/profiles/image-upload.js';
+import { backfillCoverRenditions } from '../../apps/api/dist/profiles/cover-backfill.js';
+import { photoLike } from '../../apps/api/test/photo-like.mjs';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
 
@@ -957,4 +960,350 @@ test('an automatic cover is never animated', async () => {
   const { profileId } = await userAndPage('anim_auto');
   await setPlan(profileId, 'pro');
   assert.equal((await publicPage('anim_auto')).cover.kind, 'design');
+});
+
+// Cover renditions (Studio styles spec §9.4/§9.9): an upload also writes the cover at 640, 1080
+// and 1600 wide, beside it, under the same rules. A cover from before has none and says so.
+const renditionRows = async (profileId) =>
+  (
+    await database.pool.query(
+      `SELECT width, version, bytes IS NOT NULL AS in_db, object_key
+         FROM profile_cover_renditions WHERE profile_id = $1 ORDER BY width`,
+      [profileId],
+    )
+  ).rows;
+const renditionPath = (path, width) =>
+  path.replace(/\.webp$/, `-${width}.webp`);
+const fakeRenditions = (label) =>
+  [640, 1080, 1600].map((width) => ({
+    width,
+    webp: fakeWebp(`${label}-${width}`),
+  }));
+
+test('an upload writes renditions, the public page lists them, and each is served like the cover', async () => {
+  const cookie = await livePage('+2348031290041', 'cover_sizes');
+  const { profileId } = await userAndPage('cover_sizes');
+  const response = await upload(cookie, await photoLike());
+  assert.equal(response.status, 200);
+  const { cover } = (await response.json()).data;
+  assert.deepEqual(cover.widths, [640, 1080, 1600]);
+  assert.deepEqual((await publicPage('cover_sizes')).cover, cover);
+  const version = versionOf(cover.path);
+  assert.deepEqual(
+    (await renditionRows(profileId)).map((r) => [r.width, r.version, r.in_db]),
+    [
+      [640, version, true],
+      [1080, version, true],
+      [1600, version, true],
+    ],
+  );
+  const full = await fetch(`${stack.api}${cover.path}`);
+  const sizes = { full: (await full.arrayBuffer()).byteLength };
+  for (const width of cover.widths) {
+    const served = await fetch(
+      `${stack.api}${renditionPath(cover.path, width)}`,
+    );
+    assert.equal(served.status, 200, `${width}`);
+    for (const header of [
+      'content-type',
+      'cache-control',
+      'content-security-policy',
+      'x-content-type-options',
+    ])
+      assert.equal(
+        served.headers.get(header),
+        full.headers.get(header),
+        header,
+      );
+    const bytes = Buffer.from(await served.arrayBuffer());
+    const meta = await sharp(bytes).metadata();
+    assert.equal(meta.format, 'webp');
+    assert.equal(meta.width, width);
+    assert.equal(meta.height, Math.round((width * 600) / 2240));
+    assert.equal(meta.exif, undefined);
+    sizes[width] = bytes.length;
+  }
+  assert.ok(sizes[640] <= 30_000, `640 is ${sizes[640]} bytes`);
+  console.log(`served cover bytes: ${JSON.stringify(sizes)}`);
+
+  // Unknown widths, and anything else that is not a rendition's name, are not found.
+  for (const name of ['641', '320', '2240', '0640', '640-640', 'w640'])
+    assert.equal(
+      (
+        await fetch(
+          `${stack.api}${cover.path.replace('.webp', `-${name}.webp`)}`,
+        )
+      ).status,
+      404,
+      name,
+    );
+  // The same access rules: not live, not served.
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'not_live' }),
+  });
+  assert.equal(
+    (await fetch(`${stack.api}${renditionPath(cover.path, 640)}`)).status,
+    404,
+  );
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'live' }),
+  });
+  // Replaced: the old version's renditions stop working, the new ones replace them.
+  const next = (await (await upload(cookie, await photo())).json()).data.cover;
+  assert.equal(
+    (await fetch(`${stack.api}${renditionPath(cover.path, 640)}`)).status,
+    404,
+  );
+  assert.equal(
+    (await fetch(`${stack.api}${renditionPath(next.path, 640)}`)).status,
+    200,
+  );
+  assert.deepEqual(
+    (await renditionRows(profileId)).map((r) => r.version),
+    [1, 1, 1].map(() => versionOf(next.path)),
+  );
+  // Removed: every rendition goes with the cover.
+  await fetch(`${stack.api}/v1/me/cover`, {
+    method: 'DELETE',
+    headers: browserHeaders(cookie),
+  });
+  assert.deepEqual(await renditionRows(profileId), []);
+  assert.equal(
+    (await fetch(`${stack.api}${renditionPath(next.path, 640)}`)).status,
+    404,
+  );
+});
+
+test('a cover from before renditions reports none, and its file still serves', async () => {
+  const cookie = await livePage('+2348031290042', 'cover_old');
+  const { profileId } = await userAndPage('cover_old');
+  const { cover } = (await (await upload(cookie, await photo())).json()).data;
+  // What every cover uploaded before this change looks like: no rendition rows.
+  await database.pool.query(
+    'DELETE FROM profile_cover_renditions WHERE profile_id = $1',
+    [profileId],
+  );
+  const shown = (await publicPage('cover_old')).cover;
+  assert.deepEqual(shown, { kind: 'photo', path: cover.path });
+  assert.equal('widths' in shown, false);
+  assert.equal((await myPage(cookie)).cover.widths, undefined);
+  assert.equal((await fetch(`${stack.api}${cover.path}`)).status, 200);
+});
+
+test('with a store, renditions sit beside the cover and every removal takes them', async () => {
+  await livePage('+2348031290043', 'cover_sizes_store');
+  const { profileId, userId } = await userAndPage('cover_sizes_store');
+  const store = memoryStore();
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('one'),
+    store,
+    fakeRenditions('one'),
+  );
+  const { object_key: key } = await coverRow(profileId);
+  const base = key.replace(/\.webp$/, '');
+  const rows = await renditionRows(profileId);
+  assert.deepEqual(
+    rows.map((r) => [r.width, r.in_db]),
+    [640, 1080, 1600].map((w) => [w, false]),
+  );
+  for (const r of rows)
+    assert.ok(
+      r.object_key.startsWith(`${base}-${r.width}-`) &&
+        /-[0-9a-f]{8}\.webp$/.test(r.object_key),
+      r.object_key,
+    );
+  assert.deepEqual(
+    [...store.objects.keys()].sort(),
+    [key, ...rows.map((r) => r.object_key)].sort(),
+  );
+  // Replaced: the old four go after the commit, the new four stay.
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('two'),
+    store,
+    fakeRenditions('two'),
+  );
+  assert.equal(store.objects.size, 4);
+  assert.deepEqual(
+    [...store.objects.values()].map(String).sort(),
+    ['two', 'two-640', 'two-1080', 'two-1600']
+      .map((l) => String(fakeWebp(l)))
+      .sort(),
+  );
+  // A replacement without renditions leaves none behind from the last cover.
+  await setCover(database.db, userId, fakeWebp('three'), store);
+  assert.equal(store.objects.size, 1);
+  assert.deepEqual(await renditionRows(profileId), []);
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('four'),
+    store,
+    fakeRenditions('four'),
+  );
+  await removeCover(database.db, userId, store);
+  assert.equal(store.objects.size, 0);
+  assert.deepEqual(await renditionRows(profileId), []);
+});
+
+test('staff removal and account deletion take the renditions too', async () => {
+  await livePage('+2348031290044', 'cover_sizes_mod');
+  const { profileId, userId } = await userAndPage('cover_sizes_mod');
+  const store = memoryStore();
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('x'),
+    store,
+    fakeRenditions('x'),
+  );
+  assert.equal(store.objects.size, 4);
+  const [{ id: staffUserId }] = (
+    await database.pool.query('SELECT id FROM users LIMIT 1')
+  ).rows;
+  const removed = await staffRemovePageImage(database.db, {
+    profileId,
+    staffUserId,
+    image: 'cover',
+    reason: 'Abusive image reported by a visitor, seen by staff',
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    store,
+  });
+  assert.equal(removed.changed, true);
+  assert.equal(store.objects.size, 0);
+  assert.deepEqual(await renditionRows(profileId), []);
+
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('y'),
+    store,
+    fakeRenditions('y'),
+  );
+  assert.equal(store.objects.size, 4);
+  await deleteAccount(database.db, {
+    userId,
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    photos: store,
+  });
+  assert.equal(store.objects.size, 0, 'every object went with the account');
+  assert.deepEqual(await renditionRows(profileId), []);
+});
+
+test('moving photos to the object store moves the renditions beside their cover', async () => {
+  await livePage('+2348031290045', 'cover_sizes_move');
+  const { profileId, userId } = await userAndPage('cover_sizes_move');
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('m'),
+    undefined,
+    fakeRenditions('m'),
+  );
+  assert.ok((await renditionRows(profileId)).every((r) => r.in_db));
+  const store = memoryStore();
+  await movePhotosToStore(database.db, store);
+  const { object_key: key } = await coverRow(profileId);
+  const base = key.replace(/\.webp$/, '');
+  const rows = await renditionRows(profileId);
+  assert.deepEqual(
+    rows.map((r) => [r.width, r.in_db]),
+    [640, 1080, 1600].map((w) => [w, false]),
+  );
+  for (const r of rows) {
+    assert.ok(r.object_key.startsWith(`${base}-${r.width}-`), r.object_key);
+    assert.deepEqual(store.objects.get(r.object_key), fakeWebp(`m-${r.width}`));
+  }
+  const before = store.objects.size;
+  await movePhotosToStore(database.db, store);
+  assert.equal(store.objects.size, before, 'running it again moves nothing');
+});
+
+test('the backfill is a dry run unless told, writes once, and skips what it cannot do', async () => {
+  const cookie = await livePage('+2348031290046', 'cover_backfill');
+  const { profileId, userId } = await userAndPage('cover_backfill');
+  const { cover } = (await (await upload(cookie, await photo())).json()).data;
+  await database.pool.query(
+    'DELETE FROM profile_cover_renditions WHERE profile_id = $1',
+    [profileId],
+  );
+  const lines = [];
+  const log = (line) => lines.push(line);
+  const dry = await backfillCoverRenditions(database.db, { log });
+  assert.equal(dry.write, false);
+  assert.ok(dry.candidates >= 1);
+  assert.equal(dry.written, 0);
+  assert.deepEqual(
+    await renditionRows(profileId),
+    [],
+    'a dry run writes nothing',
+  );
+
+  const real = await backfillCoverRenditions(database.db, { write: true, log });
+  assert.ok(real.written >= 1);
+  assert.deepEqual(
+    (await renditionRows(profileId)).map((r) => [r.width, r.version, r.in_db]),
+    [640, 1080, 1600].map((w) => [w, versionOf(cover.path), true]),
+  );
+  assert.deepEqual(
+    (await publicPage('cover_backfill')).cover.widths,
+    [640, 1080, 1600],
+  );
+  const served = await fetch(`${stack.api}${renditionPath(cover.path, 1080)}`);
+  assert.equal(served.status, 200);
+  assert.equal(
+    (await sharp(Buffer.from(await served.arrayBuffer())).metadata()).width,
+    1080,
+  );
+  // Again: nothing left to do.
+  const again = await backfillCoverRenditions(database.db, {
+    write: true,
+    log,
+  });
+  assert.equal(again.written, 0);
+  assert.equal(
+    (await renditionRows(profileId)).length,
+    3,
+    'nothing written twice',
+  );
+
+  // A cover in the object store, with no store given: skipped, never moved or broken.
+  await livePage('+2348031290047', 'cover_backfill_r2');
+  const other = await userAndPage('cover_backfill_r2');
+  const store = memoryStore();
+  await setCover(
+    database.db,
+    other.userId,
+    await sharp(await photo())
+      .resize(2240, 600)
+      .webp()
+      .toBuffer(),
+    store,
+  );
+  const skipped = await backfillCoverRenditions(database.db, {
+    write: true,
+    log,
+  });
+  assert.ok(skipped.skipped >= 1);
+  assert.deepEqual(await renditionRows(other.profileId), []);
+  const stored = await backfillCoverRenditions(database.db, {
+    write: true,
+    log,
+    store,
+  });
+  assert.ok(stored.written >= 1);
+  assert.equal(
+    store.objects.size,
+    4,
+    'the renditions sit beside it in the store',
+  );
+  // The log names pages by id only: no handle, name or phone.
+  assert.equal(lines.join('\n').includes('cover_backfill'), false);
 });

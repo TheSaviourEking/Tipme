@@ -20,6 +20,7 @@ import {
 } from '@tipme/contracts';
 import {
   coverFor,
+  coverRenditionFor,
   myCover,
   removeCover,
   setCover,
@@ -39,18 +40,22 @@ import { DatabaseProvider } from '../infra/database.js';
 import {
   imageVersion,
   readUpload,
-  reencodeTo,
   sendImage,
   sendPrivateImage,
   withSlot,
 } from './image-upload.js';
+import {
+  coverRenditionsOf,
+  renditionFile,
+  toCover,
+} from './cover-renditions.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
-// Page covers: 2240×600, twice the widest the page shows. The safeguards every upload gets are in
-// image-upload.ts, and uploads share the photo upload's rate limit and re-encoding slots.
-const toCover = reencodeTo(2240, 600);
+// Page covers: 2240×600, twice the widest the page shows, and smaller copies of it for the Studio
+// styles' srcset (cover-renditions.ts). The safeguards every upload gets are in image-upload.ts,
+// and uploads share the photo upload's rate limit and re-encoding slots.
 
 @Controller('v1')
 export class CoverController {
@@ -88,12 +93,16 @@ export class CoverController {
     @Req() request: Request,
   ): Promise<ApiDataResponse<MyProfile>> {
     const upload = await readUpload(request);
-    const webp = await withSlot(() => toCover(upload));
+    const { webp, renditions } = await withSlot(async () => {
+      const full = await toCover(upload);
+      return { webp: full, renditions: await coverRenditionsOf(full) };
+    });
     const updated = await setCover(
       this.database.db,
       auth.userId,
       webp,
       this.photos ?? undefined,
+      renditions,
     );
     this.revalidator.revalidate(updated.handle);
     void this.publishLive({
@@ -146,7 +155,10 @@ export class CoverController {
     return { data: profile };
   }
 
-  /** Public, but only for live pages. */
+  /**
+   * Public, but only for live pages: the cover (`<n>.webp`) or one of its renditions
+   * (`<n>-640.webp`), under the same rules and headers. Any other width is not found.
+   */
   @Get('covers/:profileId/:file')
   @Header('X-Content-Type-Options', 'nosniff')
   async serve(
@@ -154,6 +166,18 @@ export class CoverController {
     @Param('file') file: string,
     @Res() response: Response,
   ): Promise<void> {
+    const rendition = renditionFile(profileId, file);
+    if (rendition) {
+      sendImage(
+        response,
+        await coverRenditionFor(
+          this.database.db,
+          { profileId, ...rendition },
+          this.photos ?? undefined,
+        ),
+      );
+      return;
+    }
     const version = imageVersion(profileId, file);
     sendImage(
       response,

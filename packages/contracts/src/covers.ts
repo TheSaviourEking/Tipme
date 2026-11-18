@@ -239,8 +239,28 @@ export function coverPlay(p: {
   return isProAnimation(p.animation) || p.colour ? 'still' : 'once';
 }
 
+/**
+ * Smaller copies of an uploaded cover (2240×600), written beside it on upload, for `srcset` on the
+ * Studio styles that show the cover full-bleed on phones (Stage, Horizon: spec 2026-11-17 §9.4,
+ * §9.9), where it is the largest paint. A width at or above the cover's own is never made.
+ */
+export const COVER_RENDITION_WIDTHS = [640, 1080, 1600] as const;
+export type CoverRenditionWidth = (typeof COVER_RENDITION_WIDTHS)[number];
+
+/** `/v1/covers/<page>/<n>.webp` at a rendition's width: `/v1/covers/<page>/<n>-640.webp`. */
+export const coverRenditionPath = (path: string, width: CoverRenditionWidth) =>
+  path.replace(/\.webp$/, `-${width}.webp`);
+
 export type ResolvedCover =
-  | { kind: 'photo'; path: string }
+  | {
+      kind: 'photo';
+      path: string;
+      /**
+       * The renditions stored for this cover, narrowest first. Absent when there are none (a
+       * cover uploaded before renditions existed): use `path` alone.
+       */
+      widths?: CoverRenditionWidth[];
+    }
   | { kind: 'design'; design: string; colour?: string }
   | { kind: 'animated'; animation: string; colour?: string; play: CoverPlay };
 
@@ -248,13 +268,24 @@ export type ResolvedCover =
 export function resolveCover(p: {
   handle: string;
   coverPath: string | null;
+  /** The widths of the renditions stored for the uploaded cover, if any. */
+  coverWidths?: readonly number[];
   coverDesign: string | null;
   coverColour: string | null;
   coverAnimation?: string | null;
   coverMotion?: string | null;
   plan?: string;
 }): ResolvedCover {
-  if (p.coverPath) return { kind: 'photo', path: p.coverPath };
+  if (p.coverPath) {
+    const widths = COVER_RENDITION_WIDTHS.filter((w) =>
+      p.coverWidths?.includes(w),
+    );
+    return {
+      kind: 'photo',
+      path: p.coverPath,
+      ...(widths.length ? { widths } : {}),
+    };
+  }
   const animation = p.coverAnimation
     ? animationById(p.coverAnimation)
     : undefined;
