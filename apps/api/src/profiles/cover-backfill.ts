@@ -75,6 +75,8 @@ export async function backfillCoverRenditions(
       db,
       { ...cover, renditions },
       options.store,
+      // Before each write: if the run is killed mid-cover, these name the objects to delete.
+      (key) => log(`${label}: writing ${key}`),
     );
     if (added) {
       result.written += 1;

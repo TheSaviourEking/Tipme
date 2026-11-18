@@ -5,7 +5,7 @@ import {
   type CoverDesignChoice,
   type MyProfile,
 } from '@tipme/contracts';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import { profileCoverRenditions, profileCovers, profiles } from '../schema.js';
@@ -314,7 +314,7 @@ export function coverRenditionFor(
 // The backfill (apps/api/src/scripts/backfill-cover-renditions.ts): covers uploaded before
 // renditions existed get them, once, whatever the page's state (a paused page may come back).
 
-/** Covers with no renditions at all, oldest first: the backfill's work list. */
+/** Covers with no renditions for their current version, oldest first: the backfill's work list. */
 export function coversWithoutRenditions(
   db: Database,
 ): Promise<{ profileId: string; version: number; inStore: boolean }[]> {
@@ -326,9 +326,14 @@ export function coversWithoutRenditions(
         objectKey: profileCovers.objectKey,
       })
       .from(profileCovers)
+      // Rows for another version don't count (an older API replaced the cover during a
+      // blue/green overlap, not knowing about renditions): that cover still needs its own.
       .leftJoin(
         profileCoverRenditions,
-        eq(profileCoverRenditions.profileId, profileCovers.profileId),
+        and(
+          eq(profileCoverRenditions.profileId, profileCovers.profileId),
+          eq(profileCoverRenditions.version, profileCovers.version),
+        ),
       )
       .where(isNull(profileCoverRenditions.profileId))
       .orderBy(profileCovers.createdAt);
@@ -366,9 +371,15 @@ export function storedCover(
 }
 
 /**
- * Adds renditions to a cover that has none, where the cover is kept (the store when it is there).
- * Writes nothing, and returns false, when the cover was replaced or removed meanwhile or already
- * has renditions: so running twice, or beside an upload, is safe.
+ * Adds renditions to a cover that has none for its version, where the cover is kept (the store
+ * when it is there), and drops any rows left from another version (their objects are removed after
+ * the commit). Writes nothing, and returns false, when the cover was replaced or removed meanwhile
+ * or already has renditions: so running twice, or beside an upload, is safe.
+ *
+ * Locks the page first, as `setCover` and every removal path do (removeCover, the staff removal,
+ * account deletion): they delete the renditions and then the cover under that lock, and a write
+ * landing in between would have its rows cascade away and its objects stay in the bucket unseen.
+ * A deleted page is refused by the same lock.
  */
 export function addCoverRenditions(
   db: Database,
@@ -378,6 +389,8 @@ export function addCoverRenditions(
     renditions: CoverRenditionBytes[];
   },
   store?: PhotoStore,
+  /** Called with each object key before it is written, so a run killed mid-cover can be traced. */
+  beforePut: (objectKey: string) => void = () => {},
 ): Promise<boolean> {
   return guarded(async () => {
     if (input.renditions.some((r) => !isRenditionWidth(r.width)))
@@ -406,10 +419,18 @@ export function addCoverRenditions(
     try {
       for (const r of sized)
         if (r.objectKey && store) {
+          beforePut(r.objectKey);
           await store.put(r.objectKey, r.webp);
           written.push(r.objectKey);
         }
+      const stale: string[] = [];
       const added = await db.transaction(async (tx) => {
+        try {
+          await lockLivePage(tx, input.profileId);
+        } catch (error) {
+          if (error instanceof OperationError) return false;
+          throw error;
+        }
         const [still] = await tx
           .select({ objectKey: profileCovers.objectKey })
           .from(profileCovers)
@@ -422,6 +443,18 @@ export function addCoverRenditions(
           .for('update');
         // Replaced, or moved to the store, since it was read: the next run starts again.
         if (!still || still.objectKey !== cover.objectKey) return false;
+        const others = await tx
+          .delete(profileCoverRenditions)
+          .where(
+            and(
+              eq(profileCoverRenditions.profileId, input.profileId),
+              ne(profileCoverRenditions.version, input.version),
+            ),
+          )
+          .returning({ objectKey: profileCoverRenditions.objectKey });
+        stale.push(
+          ...others.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
+        );
         const [existing] = await tx
           .select({ width: profileCoverRenditions.width })
           .from(profileCoverRenditions)
@@ -440,6 +473,7 @@ export function addCoverRenditions(
         );
         return true;
       });
+      await removeObjects(store, stale);
       if (!added) await removeObjects(store, written);
       return added;
     } catch (error) {

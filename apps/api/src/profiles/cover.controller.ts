@@ -44,10 +44,14 @@ import {
   sendPrivateImage,
   withSlot,
 } from './image-upload.js';
+import type { Logger } from '@tipme/observability';
+import { LOGGER } from '../tokens.js';
 import {
+  COVER_RENDITIONS,
   coverRenditionsOf,
   renditionFile,
   toCover,
+  type CoverRendition,
 } from './cover-renditions.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
@@ -69,6 +73,14 @@ export class CoverController {
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
+    @Optional()
+    @Inject(LOGGER)
+    private readonly logger: Pick<Logger, 'warn'> | null = null,
+    @Optional()
+    @Inject(COVER_RENDITIONS)
+    private readonly renditionsOf: (
+      cover: Buffer,
+    ) => Promise<CoverRendition[]> = coverRenditionsOf,
   ) {}
 
   /** The owner's preview, which has to work before the page is live and while it's paused. */
@@ -95,15 +107,24 @@ export class CoverController {
     const upload = await readUpload(request);
     const { webp, renditions } = await withSlot(async () => {
       const full = await toCover(upload);
-      return { webp: full, renditions: await coverRenditionsOf(full) };
+      // The smaller copies are a speed-up, never a reason to refuse a good photo (a timeout under
+      // load, say): the cover is saved without them, and the backfill or the next upload fills in.
+      const sized = await this.renditionsOf(full).catch(() => null);
+      return { webp: full, renditions: sized };
     });
     const updated = await setCover(
       this.database.db,
       auth.userId,
       webp,
       this.photos ?? undefined,
-      renditions,
+      renditions ?? [],
     );
+    if (!renditions && updated.cover?.kind === 'photo')
+      // The page id only (from the cover's address): no handle, name or error text.
+      this.logger?.warn({
+        event: 'cover.renditions_failed',
+        profileId: updated.cover.path.split('/')[3],
+      });
     this.revalidator.revalidate(updated.handle);
     void this.publishLive({
       to: { user: auth.userId },

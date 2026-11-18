@@ -17,6 +17,9 @@ export const toCover = reencodeTo(2240, 600);
  */
 const RENDITION_QUALITY = 75;
 
+/** The rendition step, injectable so a test can make it fail (cover.controller.ts). */
+export const COVER_RENDITIONS = Symbol('COVER_RENDITIONS');
+
 export interface CoverRendition {
   width: CoverRenditionWidth;
   webp: Buffer;

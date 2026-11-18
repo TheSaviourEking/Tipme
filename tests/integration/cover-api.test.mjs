@@ -8,8 +8,11 @@ import {
   automaticColour,
   automaticCover,
 } from '../../packages/contracts/dist/index.js';
+import { Readable } from 'node:stream';
 import {
+  addCoverRenditions,
   coverFor,
+  coversWithoutRenditions,
   deleteAccount,
   mailSealing,
   movePhotosToStore,
@@ -20,6 +23,7 @@ import {
 } from '../../packages/database/dist/index.js';
 import { hasImageSignature } from '../../apps/api/dist/profiles/image-upload.js';
 import { backfillCoverRenditions } from '../../apps/api/dist/profiles/cover-backfill.js';
+import { CoverController } from '../../apps/api/dist/profiles/cover.controller.js';
 import { photoLike } from '../../apps/api/test/photo-like.mjs';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { WEB, browserHeaders, signIn, startStack } from './helpers.mjs';
@@ -1306,4 +1310,226 @@ test('the backfill is a dry run unless told, writes once, and skips what it cann
   );
   // The log names pages by id only: no handle, name or phone.
   assert.equal(lines.join('\n').includes('cover_backfill'), false);
+});
+
+// Review fixes (PR #279).
+const staffId = async () =>
+  (await database.pool.query('SELECT id FROM users LIMIT 1')).rows[0].id;
+/** Every object the store holds that no row names: what a race would leave behind. */
+const orphans = async (store) => {
+  const { rows } = await database.pool.query(
+    `SELECT object_key FROM profile_covers WHERE object_key IS NOT NULL
+     UNION ALL SELECT object_key FROM profile_cover_renditions WHERE object_key IS NOT NULL`,
+  );
+  const named = new Set(rows.map((r) => r.object_key));
+  return [...store.objects.keys()].filter((key) => !named.has(key));
+};
+
+test('a suspended page, or a cover staff removed, serves no rendition', async () => {
+  const cookie = await livePage('+2348031290051', 'cover_sizes_rules');
+  const { profileId } = await userAndPage('cover_sizes_rules');
+  const { cover } = (await (await upload(cookie, await photo())).json()).data;
+  const url = `${stack.api}${renditionPath(cover.path, 640)}`;
+  assert.equal((await fetch(url)).status, 200);
+  await database.pool.query(
+    `UPDATE profiles SET status = 'suspended', suspended_reason = 'Under review' WHERE id = $1`,
+    [profileId],
+  );
+  assert.equal((await fetch(url)).status, 404, 'suspended');
+  await database.pool.query(
+    `UPDATE profiles SET status = 'active', suspended_reason = NULL WHERE id = $1`,
+    [profileId],
+  );
+  assert.equal((await fetch(url)).status, 200);
+  await staffRemovePageImage(database.db, {
+    profileId,
+    staffUserId: await staffId(),
+    image: 'cover',
+    reason: 'Abusive image reported by a visitor, seen by staff',
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+  });
+  for (const width of [640, 1080, 1600])
+    assert.equal(
+      (await fetch(`${stack.api}${renditionPath(cover.path, width)}`)).status,
+      404,
+      `${width} after a staff removal`,
+    );
+});
+
+test('a backfill write waits for a removal holding the page, and leaves no object behind', async () => {
+  // The removal paths (removeCover, staffRemovePageImage, deleteAccount) all lock the page, delete
+  // the renditions, then the cover. A backfill committing in between would have its rows cascade
+  // away and its objects stay in the bucket unseen.
+  await livePage('+2348031290052', 'cover_race_hold');
+  const { profileId, userId } = await userAndPage('cover_race_hold');
+  const store = memoryStore();
+  await setCover(database.db, userId, fakeWebp('held'), store);
+  const { version } = await coverRow(profileId);
+  const removal = await database.pool.connect();
+  try {
+    await removal.query('BEGIN');
+    await removal.query('SELECT id FROM profiles WHERE id = $1 FOR UPDATE', [
+      profileId,
+    ]);
+    await removal.query(
+      'DELETE FROM profile_cover_renditions WHERE profile_id = $1',
+      [profileId],
+    );
+    const adding = addCoverRenditions(
+      database.db,
+      { profileId, version, renditions: fakeRenditions('late') },
+      store,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.deepEqual(
+      await renditionRows(profileId),
+      [],
+      'the backfill waits for the page',
+    );
+    await removal.query('DELETE FROM profile_covers WHERE profile_id = $1', [
+      profileId,
+    ]);
+    await removal.query('UPDATE profiles SET cover_path = NULL WHERE id = $1', [
+      profileId,
+    ]);
+    await removal.query('COMMIT');
+    assert.equal(await adding, false);
+  } finally {
+    removal.release();
+  }
+  // Only the removed cover's own object is left, for the removal to delete after its commit.
+  const left = await orphans(store);
+  assert.ok(
+    left.every((key) => !/-(640|1080|1600)-[0-9a-f]{8}\.webp$/.test(key)),
+    `rendition objects left: ${left.join(', ')}`,
+  );
+  assert.deepEqual(await renditionRows(profileId), []);
+});
+
+test('a backfill beside a removal, a staff removal or an account deletion leaves no orphan', async () => {
+  const paths = {
+    remove: (userId) => removeCover(database.db, userId, paths.store),
+    staff: async (_userId, profileId) =>
+      staffRemovePageImage(database.db, {
+        profileId,
+        staffUserId: await staffId(),
+        image: 'cover',
+        reason: 'Abusive image reported by a visitor, seen by staff',
+        sealing: mailSealing(Buffer.alloc(32, 7)),
+        store: paths.store,
+      }),
+    erase: (userId) =>
+      deleteAccount(database.db, {
+        userId,
+        sealing: mailSealing(Buffer.alloc(32, 7)),
+        photos: paths.store,
+      }),
+  };
+  let n = 0;
+  for (const name of ['remove', 'staff', 'erase'])
+    for (let round = 0; round < 4; round += 1) {
+      n += 1;
+      const handle = `cover_race_${name}_${round}`;
+      await livePage(`+23480312906${String(n).padStart(2, '0')}`, handle);
+      const { profileId, userId } = await userAndPage(handle);
+      paths.store = memoryStore();
+      await setCover(database.db, userId, fakeWebp(handle), paths.store);
+      const { version } = await coverRow(profileId);
+      await Promise.all([
+        addCoverRenditions(
+          database.db,
+          { profileId, version, renditions: fakeRenditions(handle) },
+          paths.store,
+        ).catch(() => false),
+        paths[name](userId, profileId),
+      ]);
+      assert.deepEqual(await orphans(paths.store), [], `${name} ${round}`);
+    }
+});
+
+test('a cover replaced by an older API keeps its stale rows out, and the backfill fills it', async () => {
+  // Blue/green: the old API replaces a cover without knowing renditions exist.
+  await livePage('+2348031290071', 'cover_bluegreen');
+  const { profileId, userId } = await userAndPage('cover_bluegreen');
+  const store = memoryStore();
+  const real = await sharp(await photo())
+    .resize(2240, 600)
+    .webp()
+    .toBuffer();
+  await setCover(database.db, userId, real, store, fakeRenditions('old'));
+  const staleKeys = (await renditionRows(profileId)).map((r) => r.object_key);
+  const newKey = `covers/${profileId}/00000000-0000-4000-8000-000000000001.webp`;
+  // As the old API does: the new object first, the old cover's object after the commit.
+  const oldKey = (await coverRow(profileId)).object_key;
+  await store.put(newKey, real);
+  await database.pool.query(
+    `WITH next AS (
+       UPDATE profiles SET cover_version = cover_version + 1,
+              cover_path = '/v1/covers/' || id || '/' || (cover_version + 1) || '.webp'
+        WHERE id = $1 RETURNING cover_version)
+     UPDATE profile_covers SET version = (SELECT cover_version FROM next), object_key = $2
+      WHERE profile_id = $1`,
+    [profileId, newKey],
+  );
+  store.objects.delete(oldKey);
+  const { version } = await coverRow(profileId);
+  assert.equal(
+    (await publicPage('cover_bluegreen')).cover.widths,
+    undefined,
+    'stale rows are never listed',
+  );
+  assert.ok(
+    (await coversWithoutRenditions(database.db)).some(
+      (c) => c.profileId === profileId && c.version === version,
+    ),
+    'a cover whose rows are for another version still needs filling',
+  );
+  const result = await backfillCoverRenditions(database.db, {
+    write: true,
+    store,
+    log: () => {},
+  });
+  assert.ok(result.written >= 1);
+  const rows = await renditionRows(profileId);
+  assert.deepEqual(
+    rows.map((r) => [r.width, r.version]),
+    [640, 1080, 1600].map((w) => [w, version]),
+  );
+  for (const key of staleKeys)
+    assert.equal(store.objects.has(key), false, `stale ${key} removed`);
+  assert.deepEqual(await orphans(store), []);
+});
+
+test('a rendition failure still saves the upload, with no renditions, and warns with the page id only', async () => {
+  await livePage('+2348031290072', 'cover_sizes_fail');
+  const { profileId, userId } = await userAndPage('cover_sizes_fail');
+  const warnings = [];
+  const controller = new CoverController(
+    { db: database.db },
+    { revalidate: () => {} },
+    null,
+    async () => undefined,
+    { warn: (entry) => warnings.push(entry), info() {}, error() {} },
+    async () => {
+      throw new Error('sharp: timeout');
+    },
+  );
+  const body = await photo();
+  const request = Readable.from([body]);
+  request.headers = {
+    'content-type': 'image/jpeg',
+    'content-length': String(body.length),
+  };
+  const { data } = await controller.upload({ userId }, request);
+  assert.equal(data.cover.kind, 'photo');
+  assert.equal(data.cover.widths, undefined);
+  assert.equal((await fetch(`${stack.api}${data.cover.path}`)).status, 200);
+  assert.deepEqual(await renditionRows(profileId), []);
+  assert.deepEqual(warnings, [{ event: 'cover.renditions_failed', profileId }]);
+  // The backfill fills it in later.
+  await backfillCoverRenditions(database.db, { write: true, log: () => {} });
+  assert.deepEqual(
+    (await publicPage('cover_sizes_fail')).cover.widths,
+    [640, 1080, 1600],
+  );
 });

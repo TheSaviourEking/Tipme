@@ -48,6 +48,9 @@ Measured on a generated test photo (`apps/api/test/photo-like.mjs`): full cover 
   migrate node apps/api/dist/scripts/backfill-cover-renditions.js --write
 ```
 
+- **A run killed mid-cover** (stopped, out of memory, lost connection) can leave up to three salted objects in R2 (`covers/<page>/<random>-<width>-<salt>.webp`) that no row names. The backfill logs each key (`writing <key>`) before it writes it: after an interrupted run, delete in Cloudflare any key logged for a cover that has no matching `object_key` in `profile_cover_renditions`. Running it again is still safe; it writes new keys.
+- **Blue/green overlap.** While the old API (from before renditions) and the new one both run, an upload or removal through the old one doesn't know about renditions. A replaced cover keeps rows for its previous version (never served or listed, and the next backfill drops them and their objects). A removal through the old API cascades the rows away and leaves their R2 objects unnamed. Keep the overlap short, and run the backfill after it.
+
 Pass the R2 variables only on a copy with R2 switched on; without them, covers kept in R2 are skipped and counted. Each line names a page by its id only. Without R2, the sizes add about 50 KB per cover to Postgres (dumps and WAL), on top of the cover itself: count them in the 500-cover threshold below.
 
 ## How it behaves
