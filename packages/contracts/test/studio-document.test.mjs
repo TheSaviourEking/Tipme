@@ -2,604 +2,455 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fc from 'fast-check';
 import {
-  STUDIO_DEFAULT_FONTS,
-  STUDIO_EMBED_ORIGINS,
   STUDIO_LIMITS,
-  STUDIO_SUPPORTER_WALL,
-  STUDIO_VIDEO_SITES,
-  cleanStudioParagraph,
-  cleanStudioText,
+  STUDIO_PRO_BLOCKS,
+  STUDIO_STYLES,
+  STUDIO_STYLE_IDS,
   defaultStudioDocument,
-  embedUrl,
-  parseVideoLink,
+  isClassicDefault,
   resolveStudio,
   studioDocumentSchema,
+  studioImageIdsOf,
 } from '../dist/index.js';
-import { regressions, runs, seed } from './support/pbt.mjs';
-import {
-  IMAGE_POOL,
-  TODAY,
-  studioDocument,
-  withBlock,
-} from './support/studio-arbitrary.mjs';
+import { runs, seed } from './support/pbt.mjs';
+import { TODAY, studioDocumentArb } from './support/studio-arbitrary.mjs';
+import { studioDocumentV1Arb } from './support/studio-arbitrary.mjs';
 
 const VALID = {
-  v: 1,
-  brand: ['#1d4e89'],
+  v: 2,
+  style: 'clear',
+  accent: 'blue',
   mode: 'light',
-  fonts: { heading: 'fraunces', body: 'inter' },
-  scale: 'standard',
-  corners: 'soft',
-  rows: [
+  cover: 'yours',
+  blocks: [
+    { id: 'blk00001', kind: 'text', variant: 'heading', text: 'Hello' },
     {
-      id: 'row00001',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'blk00001',
-            kind: 'text',
-            variant: 'heading',
-            level: 2,
-            text: 'Hello',
-          },
-        ],
-      ],
+      id: 'blk00002',
+      kind: 'photo',
+      imageId: '00000000-0000-4000-8000-000000000000',
+      alt: 'A photo',
     },
   ],
 };
 const ok = (d) => studioDocumentSchema.safeParse(d).success;
-const withRow = (extra) => ({
-  ...VALID,
-  rows: [{ ...VALID.rows[0], ...extra }],
+const withBlocks = (blocks) => ({ ...VALID, blocks });
+let n = 0;
+const bid = () => `b${String(n++).padStart(7, '0')}`;
+const IMG = '00000000-0000-4000-8000-000000000000';
+const paragraph = () => ({
+  id: bid(),
+  kind: 'text',
+  variant: 'paragraph',
+  text: 'x',
 });
-const rowOf = (cells, columns = '1') => ({
-  id: 'row00009',
-  columns,
-  spacing: 'm',
-  background: 'page',
-  cells,
+const photo = () => ({ id: bid(), kind: 'photo', imageId: IMG, alt: 'a' });
+const gallery = (count) => ({
+  id: bid(),
+  kind: 'gallery',
+  images: Array.from({ length: count }, () => ({ imageId: IMG, alt: 'a' })),
 });
-const many = (n, make) => Array.from({ length: n }, (_, i) => make(i));
-const bid = (i) => `b${String(i).padStart(7, '0')}`;
-const rid = (i) => `r${String(i).padStart(7, '0')}`;
+const video = () => ({
+  id: bid(),
+  kind: 'video',
+  url: 'https://youtu.be/9bZkp7q19f0',
+});
+const events = (count) => ({
+  id: bid(),
+  kind: 'events',
+  items: Array.from({ length: count }, () => ({
+    date: '2027-01-01',
+    title: 'Show',
+  })),
+});
+const services = (count) => ({
+  id: bid(),
+  kind: 'services',
+  items: Array.from({ length: count }, () => ({
+    name: 'Cut',
+    priceMinor: '500000',
+  })),
+});
 
-test('the valid example parses', () => {
+test('the valid v2 example parses', () => {
   assert.equal(ok(VALID), true);
 });
 
-test('no size, position or CSS can be stored', () => {
-  for (const bad of [
-    { ...VALID, css: 'x' },
-    withBlock(VALID, {
-      kind: 'text',
-      variant: 'heading',
-      level: 2,
-      text: 'x',
-      fontSize: 40,
-    }),
-    withRow({ x: 10 }),
-    withRow({ background: { photo: IMAGE_POOL[0], position: 'top' } }),
-    withRow({ background: '#ff0000' }),
+test('a v2 document stores only ids and enums', () => {
+  for (const extra of [
+    { brand: ['#7a32f9'] },
+    { fonts: { heading: 'manrope', body: 'inter' } },
+    { scale: 'standard' },
+    { corners: 'soft' },
+    { rows: [] },
   ])
-    assert.equal(ok(bad), false, JSON.stringify(bad).slice(0, 120));
-});
-
-test('three font families, or a display font as body, are refused', () => {
-  assert.equal(
-    ok({ ...VALID, fonts: { heading: 'fraunces', body: 'dm-serif-display' } }),
-    false,
-  );
-  assert.equal(
-    ok({
-      ...VALID,
-      fonts: { heading: 'fraunces', body: 'inter', extra: 'nunito' },
-    }),
-    false,
-  );
-  assert.equal(
-    ok({ ...VALID, fonts: { heading: 'comic-sans', body: 'inter' } }),
-    false,
-  );
-  assert.equal(
-    ok({ ...VALID, fonts: { heading: 'nunito', body: 'nunito' } }),
-    true,
-  );
-});
-
-test('brand colours are one or two lower-case #rrggbb; a second-colour row needs a second colour', () => {
-  assert.equal(ok({ ...VALID, brand: ['#1d4e89', '#ff7a59'] }), true);
-  for (const brand of [
-    [],
-    ['#1D4E89'],
-    ['red'],
-    ['#1d4e89', '#ff7a59', '#000000'],
-  ])
-    assert.equal(ok({ ...VALID, brand }), false, String(brand));
-  assert.equal(ok(withRow({ background: 'second' })), false);
-  assert.equal(
-    ok({ ...withRow({ background: 'second' }), brand: ['#1d4e89', '#ff7a59'] }),
-    true,
-  );
-});
-
-test('limits: 12 rows, 3 blocks per cell, 40 blocks, 9 photos per gallery, 24 per page, 3 videos, 6 events, 12 services', () => {
-  const L = STUDIO_LIMITS;
-  const heading = (i) => ({
-    id: bid(i),
-    kind: 'text',
-    variant: 'heading',
-    level: 2,
-    text: 'x',
-  });
-  const rows = (n, perCell, cols = '1-1-1') =>
-    many(n, (r) => ({
-      id: rid(r),
-      columns: cols,
-      spacing: 'm',
-      background: 'page',
-      cells: many(cols.split('-').length, (c) =>
-        many(perCell, (k) => heading(r * 100 + c * 10 + k)),
-      ),
-    }));
-  assert.equal(ok({ ...VALID, rows: rows(L.rows, 1, '1') }), true);
-  assert.equal(ok({ ...VALID, rows: rows(L.rows + 1, 1, '1') }), false);
-  assert.equal(
-    ok({ ...VALID, rows: rows(1, L.blocksPerCell + 1, '1') }),
-    false,
-  );
-  // 13 rows × 3 cells is past 12 rows; 12 rows of 1-1-1 with 2 blocks each is 72 > 40.
-  assert.equal(ok({ ...VALID, rows: rows(4, 3) }), true); // 36
-  assert.equal(ok({ ...VALID, rows: rows(5, 3) }), false); // 45
-  const image = (i) => ({
-    imageId: IMAGE_POOL[i % IMAGE_POOL.length],
-    alt: 'a',
-  });
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'gallery',
-        variant: 'grid',
-        images: many(L.galleryImages, image),
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'gallery',
-        variant: 'grid',
-        images: many(L.galleryImages + 1, image),
-      }),
-    ),
-    false,
-  );
-  const galleries = (n) => ({
-    ...VALID,
-    rows: [
-      rowOf(
-        many(3, (c) =>
-          many(Math.min(3, n), (k) => ({
-            id: bid(c * 10 + k),
-            kind: 'gallery',
-            variant: 'grid',
-            images: many(L.galleryImages, image),
-          })),
-        ),
-        '1-1-1',
-      ),
-    ],
-  });
-  assert.equal(ok(galleries(1)), false); // 3 × 9 = 27 photos > 24
-  const video = (i) => ({
-    id: bid(i),
-    kind: 'video',
-    variant: 'still',
-    url: 'https://youtu.be/dQw4w9WgXcQ',
-  });
-  assert.equal(ok({ ...VALID, rows: [rowOf([many(3, video)])] }), true);
-  assert.equal(
-    ok({ ...VALID, rows: [rowOf([many(3, video), [video(9)]], '1-1')] }),
-    false,
-  );
-  const events = (i, n) => ({
-    id: bid(i),
-    kind: 'events',
-    variant: 'list',
-    items: many(n, () => ({ date: '2026-12-01', title: 'Gig' })),
-  });
-  assert.equal(ok({ ...VALID, rows: [rowOf([[events(1, 6)]])] }), true);
-  assert.equal(
-    ok({ ...VALID, rows: [rowOf([[events(1, 4), events(2, 3)]])] }),
-    false,
-  );
-  const services = (i, n) => ({
-    id: bid(i),
-    kind: 'services',
-    variant: 'list',
-    items: many(n, () => ({ name: 'Cut', priceMinor: '500000' })),
-  });
-  assert.equal(ok({ ...VALID, rows: [rowOf([[services(1, 12)]])] }), true);
-  assert.equal(
-    ok({ ...VALID, rows: [rowOf([[services(1, 7), services(2, 6)]])] }),
-    false,
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'text',
-        variant: 'heading',
-        level: 2,
-        text: 'x'.repeat(L.headingText),
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'text',
-        variant: 'heading',
-        level: 2,
-        text: 'ẹ'.repeat(L.headingText),
-      }),
-    ),
-    true,
-    'counted in code points',
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'text',
-        variant: 'heading',
-        level: 2,
-        text: 'x'.repeat(L.headingText + 1),
-      }),
-    ),
-    false,
-  );
-});
-
-test('About and Links appear at most once; ids are unique', () => {
-  const about = (i) => ({ id: bid(i), kind: 'about', variant: 'plain' });
-  const links = (i) => ({ id: bid(i), kind: 'links', variant: 'buttons' });
-  assert.equal(ok({ ...VALID, rows: [rowOf([[about(1), links(2)]])] }), true);
-  assert.equal(ok({ ...VALID, rows: [rowOf([[about(1), about(2)]])] }), false);
-  assert.equal(
-    ok({ ...VALID, rows: [rowOf([[links(1)], [links(2)]], '1-1')] }),
-    false,
-  );
-  assert.equal(ok({ ...VALID, rows: [rowOf([[about(1), links(1)]])] }), false);
-  assert.equal(
-    ok({ ...VALID, rows: [{ ...rowOf([[about(1)]]), id: bid(1) }] }),
-    false,
-  );
-  assert.equal(
-    ok({ ...VALID, rows: [{ ...rowOf([[about(1)]]), id: 'Row-0001' }] }),
-    false,
-  );
-});
-
-test('prices are whole naira kobo strings', () => {
-  const price = (priceMinor) =>
-    ok(
-      withBlock(VALID, {
-        kind: 'services',
-        variant: 'list',
-        items: [{ name: 'Cut', priceMinor }],
-      }),
+    assert.equal(ok({ ...VALID, ...extra }), false, Object.keys(extra)[0]);
+  // Presentation choices a block could carry.
+  const base = {
+    photo: { kind: 'photo', imageId: IMG, alt: 'a' },
+    gallery: { kind: 'gallery', images: [] },
+    video: { kind: 'video', url: 'https://youtu.be/9bZkp7q19f0' },
+    services: { kind: 'services', items: [] },
+    events: { kind: 'events', items: [] },
+    quote: { kind: 'quote', text: 'x' },
+  };
+  for (const [kind, b] of Object.entries(base)) {
+    assert.equal(ok(withBlocks([{ id: 'aaaaaaaa', ...b }])), true, kind);
+    assert.equal(
+      ok(withBlocks([{ id: 'aaaaaaaa', ...b, variant: 'wide' }])),
+      false,
+      `${kind} variant`,
     );
-  assert.equal(price('100'), true);
-  assert.equal(price('800000'), true);
-  assert.equal(price('1000000000'), true);
-  for (const bad of [
-    '150',
-    '0',
-    '1000000100',
-    '-500',
-    '05000',
-    '50.00',
-    5000,
-    '',
-  ])
-    assert.equal(price(bad), false, String(bad));
-});
-
-test('events: real dates and 24-hour times; text only, no links', () => {
-  const ev = (item) =>
-    ok(
-      withBlock(VALID, {
-        kind: 'events',
-        variant: 'list',
-        items: [{ title: 'Gig', ...item }],
-      }),
-    );
-  assert.equal(ev({ date: '2026-12-01', time: '19:30' }), true);
-  assert.equal(ev({ date: '2028-02-29' }), true);
-  for (const bad of [
-    { date: '2026-02-30' },
-    { date: '2026-13-01' },
-    { date: '1/12/2026' },
-    { date: '2026-12-01', time: '7pm' },
-    { date: '2026-12-01', time: '24:00' },
-    { date: '2026-12-01', url: 'https://x' },
-  ])
-    assert.equal(ev(bad), false, JSON.stringify(bad));
-});
-
-test('paragraphs keep up to 3 paragraph breaks; other text is one line', () => {
-  const para = (text) =>
-    ok(withBlock(VALID, { kind: 'text', variant: 'paragraph', text }));
-  assert.equal(para('One.\n\nTwo.\n\nThree.\n\nFour.'), true);
-  assert.equal(para('One.\n\nTwo.\n\nThree.\n\nFour.\n\nFive.'), false);
-  assert.equal(para('One.\nTwo.'), false);
-  assert.equal(
-    cleanStudioParagraph(
-      ' One.\r\n\r\n\r\nTwo.\nstill two \n\n\n\nThree.\n\n4\n\n5 ',
-    ),
-    'One.\n\nTwo. still two\n\nThree.\n\n4',
-  );
-});
-
-test('studio text is cleaned of control and bidi characters', () => {
-  assert.equal(cleanStudioText(' Hi‮evil\u0007 '), 'Hievil');
-  assert.equal(cleanStudioText('a⁦b⁩c\u0085d'), 'abcd');
-  assert.equal(cleanStudioText('two\nlines\tand tab'), 'two lines and tab');
-  assert.equal(cleanStudioText('Ọlá'), 'Ọlá'.normalize('NFC'));
-  assert.equal(cleanStudioText('é'), 'é', 'NFC');
-});
-
-test('the heading level belongs to headings only', () => {
-  assert.equal(
-    ok(withBlock(VALID, { kind: 'text', variant: 'heading', text: 'x' })),
-    false,
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, {
-        kind: 'text',
-        variant: 'heading',
-        level: 1,
-        text: 'x',
-      }),
-    ),
-    false,
-  );
-  assert.equal(
-    ok(
-      withBlock(VALID, { kind: 'text', variant: 'lead', level: 3, text: 'x' }),
-    ),
-    false,
-  );
-});
-
-test('the supporter wall is refused until its own switch (Task 13)', () => {
-  assert.equal(STUDIO_SUPPORTER_WALL, false);
-  assert.equal(
-    ok(withBlock(VALID, { kind: 'supporters', variant: 'names' })),
-    false,
-  );
-});
-
-test('generated valid documents parse, and broken ones never do', () => {
-  fc.assert(
-    fc.property(studioDocument({ valid: true }), (d) => {
-      const r = studioDocumentSchema.safeParse(d);
-      assert.equal(r.success, true, JSON.stringify(r.error?.issues?.[0]));
-    }),
-    { numRuns: runs(2000), seed: seed() },
-  );
-  fc.assert(
-    fc.property(studioDocument({ valid: false }), (d) =>
-      assert.equal(ok(d), false),
-    ),
-    { numRuns: runs(2000), seed: seed() },
-  );
-});
-
-test('resolveStudio never throws, is idempotent and always yields a schema-valid document', () => {
-  for (const raw of regressions('resolve')) {
-    const r = resolveStudio(raw, TODAY);
-    assert.equal(ok(r), true);
-    assert.deepEqual(resolveStudio(r, TODAY), r);
   }
-  fc.assert(
-    fc.property(
-      fc.oneof(
-        fc.anything(),
-        studioDocument({ valid: false }),
-        studioDocument({ valid: true }),
-      ),
-      (g) => {
-        const r = resolveStudio(g, TODAY);
-        const parsed = studioDocumentSchema.safeParse(r);
-        assert.equal(
-          parsed.success,
-          true,
-          JSON.stringify(parsed.error?.issues?.[0]),
-        );
-        assert.deepEqual(resolveStudio(r, TODAY), r);
-      },
+  for (const kind of ['about', 'links'])
+    assert.equal(
+      ok(withBlocks([{ id: 'aaaaaaaa', kind, variant: 'plain' }])),
+      false,
+      kind,
+    );
+  assert.equal(ok(withBlocks([{ id: 'aaaaaaaa', kind: 'about' }])), false);
+  assert.equal(ok(withBlocks([{ id: 'aaaaaaaa', kind: 'links' }])), false);
+  const text = (extra) =>
+    withBlocks([
+      { id: 'aaaaaaaa', kind: 'text', variant: 'heading', text: 'x', ...extra },
+    ]);
+  assert.equal(ok(text({})), true);
+  assert.equal(ok(text({ level: 2 })), false, 'text level');
+  assert.equal(ok(text({ variant: 'lead' })), false, 'text lead');
+  assert.equal(
+    ok(
+      withBlocks([
+        { id: 'aaaaaaaa', kind: 'text', variant: 'paragraph', text: 'x' },
+      ]),
     ),
-    { numRuns: runs(2000), seed: seed() },
+    true,
   );
 });
 
-test('every generated valid document survives a JSON round trip, and resolveStudio leaves it as it is', () => {
-  fc.assert(
-    fc.property(studioDocument({ valid: true }), (d) => {
-      assert.deepEqual(JSON.parse(JSON.stringify(d)), d);
-      assert.deepEqual(resolveStudio(d, TODAY), d);
-    }),
-    { numRuns: runs(2000), seed: seed() },
+test('limits: 40 blocks, 24 photos, 9 per gallery, 3 videos, 6 events, 12 services', () => {
+  assert.equal(STUDIO_LIMITS.blocks, 40);
+  const rep = (make, count) => Array.from({ length: count }, make);
+  const cases = [
+    ['blocks', (c) => rep(paragraph, c), 40],
+    ['photos', (c) => rep(photo, c), 24],
+    ['gallery photos', (c) => [gallery(c)], 9],
+    ['page photos across galleries', (c) => rep(() => gallery(8), c / 8), 24],
+    ['videos', (c) => rep(video, c), 3],
+    ['events', (c) => [events(c)], 6],
+    ['services', (c) => [services(c)], 12],
+  ];
+  for (const [name, make, limit] of cases) {
+    assert.equal(ok(withBlocks(make(limit))), true, `${name} at ${limit}`);
+    const over = name.startsWith('page photos')
+      ? [...make(limit), photo()]
+      : make(limit + 1);
+    assert.equal(ok(withBlocks(over)), false, `${name} over ${limit}`);
+  }
+});
+
+test('ids are unique and a cover the style offers is required by the schema', () => {
+  const dup = { ...paragraph(), id: 'aaaaaaaa' };
+  assert.equal(ok(withBlocks([dup, dup])), false);
+  assert.equal(ok({ ...VALID, style: 'sprint', cover: 'gradient' }), false);
+  assert.equal(ok({ ...VALID, style: 'sprint', cover: 'plain' }), true);
+});
+
+test('a cover type the style does not offer resolves to Your cover', () => {
+  for (const style of ['sprint', 'signboard']) {
+    assert.equal(STUDIO_STYLES[style].covers.includes('gradient'), false);
+    const out = resolveStudio({ ...VALID, style, cover: 'gradient' }, TODAY);
+    assert.equal(out.cover, 'yours', style);
+    assert.equal(out.style, style);
+  }
+  // A cover the style does offer is kept.
+  assert.equal(
+    resolveStudio({ ...VALID, style: 'sprint', cover: 'plain' }, TODAY).cover,
+    'plain',
+  );
+  assert.equal(
+    resolveStudio({ ...VALID, style: 'stage', cover: 'gradient' }, TODAY).cover,
+    'gradient',
   );
 });
 
-test('resolveStudio keeps a page readable after a font is retired', () => {
-  const r = resolveStudio(
-    { ...VALID, fonts: { heading: 'lora', body: 'libre-baskerville' } },
-    TODAY,
+test('resolveStudio never throws, is idempotent and always yields a schema-valid v2 document', () => {
+  const anything = fc.oneof(
+    fc.json().map((s) => JSON.parse(s)),
+    fc.anything(),
   );
-  assert.deepEqual(r.fonts, STUDIO_DEFAULT_FONTS);
-  assert.deepEqual(r.rows, VALID.rows);
-  const display = resolveStudio(
-    { ...VALID, fonts: { heading: 'fraunces', body: 'dm-serif-display' } },
-    TODAY,
-  );
-  assert.deepEqual(display.fonts, {
-    heading: 'fraunces',
-    body: STUDIO_DEFAULT_FONTS.body,
+  const check = (raw) => {
+    const once = resolveStudio(raw, TODAY);
+    assert.equal(studioDocumentSchema.safeParse(once).success, true);
+    assert.deepEqual(resolveStudio(once, TODAY), once);
+    assert.deepEqual(resolveStudio(structuredClone(raw), TODAY), once);
+  };
+  fc.assert(fc.property(studioDocumentArb({ valid: true }), check), {
+    numRuns: 300,
   });
+  fc.assert(fc.property(studioDocumentArb({ valid: false }), check), {
+    numRuns: 300,
+  });
+  fc.assert(fc.property(studioDocumentV1Arb({ valid: true }), check), {
+    numRuns: 300,
+  });
+  fc.assert(fc.property(studioDocumentV1Arb({ valid: false }), check), {
+    numRuns: 200,
+  });
+  fc.assert(fc.property(anything, check), { numRuns: 500 });
+  for (const raw of [null, undefined, 3, 'x', [], {}, { v: 2 }, { v: 1 }])
+    check(raw);
 });
 
-test('resolveStudio replaces what it cannot use and trims from the end', () => {
-  assert.deepEqual(
-    resolveStudio({ ...VALID, brand: ['nope', 'also'] }, TODAY).brand,
-    ['#7a32f9'],
-  );
-  assert.deepEqual(
-    resolveStudio({ ...VALID, brand: ['#1D4E89'] }, TODAY).brand,
-    ['#1d4e89'],
-  );
-  assert.equal(resolveStudio({ ...VALID, mode: 'neon' }, TODAY).mode, 'light');
-  const withUnknown = {
-    ...VALID,
-    rows: [
+test('a rich document with every optional field round-trips through resolveStudio unchanged', () => {
+  const rich = {
+    v: 2,
+    style: 'stage',
+    accent: 'photo',
+    mode: 'auto',
+    cover: 'gradient',
+    blocks: [
+      { id: 'rich0001', kind: 'text', variant: 'heading', text: 'Ẹ káàbọ̀' },
       {
-        ...VALID.rows[0],
-        cells: [
-          [
-            { id: 'blk00002', kind: 'embed', html: '<b>' },
-            ...VALID.rows[0].cells[0],
-          ],
+        id: 'rich0002',
+        kind: 'text',
+        variant: 'paragraph',
+        text: 'One.\n\nTwo.\n\nThree.\n\nFour.',
+      },
+      {
+        id: 'rich0003',
+        kind: 'photo',
+        imageId: IMG,
+        alt: '',
+        decorative: true,
+        caption: 'Caption',
+      },
+      {
+        id: 'rich0004',
+        kind: 'gallery',
+        images: [
+          { imageId: IMG, alt: 'One', decorative: true },
+          { imageId: '11111111-1111-4111-8111-111111111111', alt: 'Two' },
         ],
+      },
+      {
+        id: 'rich0005',
+        kind: 'video',
+        url: 'https://youtu.be/9bZkp7q19f0',
+        caption: 'Clip',
+      },
+      {
+        id: 'rich0006',
+        kind: 'services',
+        items: [
+          {
+            name: 'Cut',
+            detail: 'Skin fade',
+            priceMinor: '500000',
+            from: true,
+          },
+          { name: 'Beard', priceMinor: '200000' },
+        ],
+      },
+      {
+        id: 'rich0007',
+        kind: 'events',
+        items: [
+          {
+            date: TODAY,
+            time: '19:30',
+            title: 'Show',
+            place: 'Lekki',
+            note: 'Doors 7',
+          },
+          { date: '2027-01-01', title: 'Later' },
+        ],
+      },
+      { id: 'rich0008', kind: 'quote', text: 'Thank you' },
+    ],
+  };
+  assert.equal(studioDocumentSchema.safeParse(rich).success, true);
+  assert.deepEqual(resolveStudio(rich, TODAY), rich);
+});
+
+test('a heading cut at the limit is still a clean line (regression, seed -131580715)', () => {
+  const doc = {
+    v: 2,
+    style: 'classic',
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [
+      {
+        id: '00a0000a',
+        kind: 'text',
+        variant: 'heading',
+        text: `${'W'.repeat(50)}      ${'W'.repeat(15)} Ọlápéjú`,
       },
     ],
   };
-  assert.deepEqual(resolveStudio(withUnknown, TODAY).rows, VALID.rows);
-  const rows = many(15, (i) => ({
-    ...VALID.rows[0],
-    id: rid(i),
-    cells: [[{ ...VALID.rows[0].cells[0][0], id: bid(i) }]],
-  }));
-  assert.deepEqual(
-    resolveStudio({ ...VALID, rows }, TODAY).rows.map((r) => r.id),
-    rows.slice(0, 12).map((r) => r.id),
-  );
-  const long = resolveStudio(
-    withBlock(VALID, {
-      kind: 'text',
-      variant: 'heading',
-      level: 2,
-      text: ` ${'y'.repeat(200)}‮ `,
+  assert.equal(studioDocumentSchema.safeParse(doc).success, true);
+  assert.deepEqual(resolveStudio(doc, TODAY), doc);
+  // The same text with a trailing space is what the generator used to make: refused.
+  const spaced = structuredClone(doc);
+  spaced.blocks[0].text += ' ';
+  assert.equal(studioDocumentSchema.safeParse(spaced).success, false);
+});
+
+test('every generated valid v2 document is accepted, and broken ones never are', () => {
+  fc.assert(
+    fc.property(studioDocumentArb({ valid: true }), (d) => {
+      assert.equal(studioDocumentSchema.safeParse(d).success, true);
+      assert.deepEqual(resolveStudio(JSON.parse(JSON.stringify(d)), TODAY), d);
     }),
+    { numRuns: runs(2000), seed: seed() },
+  );
+  fc.assert(
+    fc.property(studioDocumentArb({ valid: false }), (d) =>
+      assert.equal(studioDocumentSchema.safeParse(d).success, false),
+    ),
+    { numRuns: 300 },
+  );
+});
+
+test('resolveStudio replaces what it cannot use and trims from the end', () => {
+  const out = resolveStudio(
+    {
+      v: 2,
+      style: 'neon',
+      accent: 'magenta',
+      mode: 'neon',
+      cover: 'video',
+      blocks: [
+        { id: 'blk00001', kind: 'about' },
+        { id: 'blk00002', kind: 'links' },
+        { id: 'blk00003', kind: 'text', variant: 'lead', text: 'Hi' },
+        {
+          id: 'blk00004',
+          kind: 'text',
+          variant: 'heading',
+          level: 2,
+          text: 'H',
+        },
+        { id: 'blk00004', kind: 'quote', variant: 'band', text: 'Q' },
+        { kind: 'photo', imageId: 'not-a-uuid', alt: 'x' },
+        { kind: 'supporters', id: 'blk00005' },
+      ],
+    },
     TODAY,
   );
-  assert.equal(
-    long.rows[0].cells[0][0].text,
-    'y'.repeat(STUDIO_LIMITS.headingText),
+  assert.equal(out.style, 'classic');
+  assert.equal(out.accent, null);
+  assert.equal(out.mode, 'light');
+  assert.equal(out.cover, 'yours');
+  assert.deepEqual(
+    out.blocks.map((b) => [b.kind, b.variant]),
+    [
+      ['text', 'paragraph'],
+      ['text', 'heading'],
+      ['quote', undefined],
+    ],
   );
-  assert.equal(resolveStudio(null, TODAY).rows.length, 0);
-  assert.equal(resolveStudio('<script>', TODAY).v, 1);
+  assert.equal(new Set(out.blocks.map((b) => b.id)).size, 3);
+  assert.equal('level' in out.blocks[1], false);
+
+  const many = resolveStudio(
+    {
+      ...VALID,
+      blocks: [
+        ...Array.from({ length: 30 }, photo),
+        gallery(9),
+        ...Array.from({ length: 5 }, video),
+        events(8),
+        services(14),
+        ...Array.from({ length: 30 }, paragraph),
+      ],
+    },
+    '2026-01-01',
+  );
+  assert.equal(studioDocumentSchema.safeParse(many).success, true);
+  assert.equal(many.blocks.filter((b) => b.kind === 'photo').length, 24);
+  assert.equal(many.blocks.filter((b) => b.kind === 'video').length, 3);
+  assert.equal(many.blocks.length, 40);
 });
 
 test('resolveStudio hides events that have passed (Lagos date)', () => {
-  const doc = withBlock(VALID, {
-    kind: 'events',
-    variant: 'list',
-    items: [
-      { date: '2026-11-13', title: 'Yesterday' },
-      { date: '2026-11-14', title: 'Today' },
-      { date: '2026-11-15', title: 'Tomorrow' },
-    ],
-  });
-  const titles = resolveStudio(doc, '2026-11-14').rows[0].cells[0][0].items.map(
-    (e) => e.title,
+  const doc = withBlocks([
+    {
+      id: 'blk00001',
+      kind: 'events',
+      items: [
+        { date: '2026-11-13', title: 'Past' },
+        { date: TODAY, title: 'Today' },
+      ],
+    },
+  ]);
+  const out = resolveStudio(doc, TODAY);
+  assert.deepEqual(
+    out.blocks[0].items.map((i) => i.title),
+    ['Today'],
   );
-  assert.deepEqual(titles, ['Today', 'Tomorrow']);
 });
 
-test('video links: only allow-listed sites; Instagram and look-alike hosts refused', () => {
-  assert.deepEqual(STUDIO_VIDEO_SITES, ['youtube', 'tiktok', 'audiomack']);
-  assert.deepEqual(parseVideoLink('https://youtu.be/dQw4w9WgXcQ'), {
-    site: 'youtube',
-    id: 'dQw4w9WgXcQ',
+test('the default document is Classic with nothing chosen', () => {
+  assert.deepEqual(defaultStudioDocument(), {
+    v: 2,
+    style: 'classic',
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [],
   });
-  assert.deepEqual(
-    parseVideoLink('https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10'),
-    { site: 'youtube', id: 'dQw4w9WgXcQ' },
+  assert.equal(
+    studioDocumentSchema.safeParse(defaultStudioDocument()).success,
+    true,
   );
-  assert.deepEqual(parseVideoLink('https://m.youtube.com/shorts/dQw4w9WgXcQ'), {
-    site: 'youtube',
-    id: 'dQw4w9WgXcQ',
-  });
-  assert.deepEqual(
-    parseVideoLink(
-      'https://www.tiktok.com/@ifyplays/video/7301234567890123456',
-    ),
-    { site: 'tiktok', id: '7301234567890123456' },
-  );
-  assert.deepEqual(
-    parseVideoLink('https://audiomack.com/kemisings/song/lagos-rain'),
-    { site: 'audiomack', id: 'kemisings/song/lagos-rain' },
-  );
-  for (const bad of [
-    'https://www.instagram.com/reel/abc/',
-    'https://youtube.com.evil.example/watch?v=x',
-    'https://youtube.com.evil.example/watch?v=dQw4w9WgXcQ',
-    'https://evil.example/youtu.be/dQw4w9WgXcQ',
-    'http://youtu.be/dQw4w9WgXcQ',
-    'https://user:pw@youtu.be/dQw4w9WgXcQ',
-    'https://youtu.be:8443/dQw4w9WgXcQ',
-    'https://www.youtube.com/watch?v=short',
-    'https://www.tiktok.com/@x/video/abc',
-    'https://audiomack.com/kemisings/album/lagos',
-    'javascript:alert(1)',
-    'not a url',
-  ])
-    assert.equal(parseVideoLink(bad), null, bad);
+  assert.notEqual(defaultStudioDocument(), defaultStudioDocument());
+  assert.deepEqual(resolveStudio(null, TODAY), defaultStudioDocument());
 });
 
-test('embeds load from the listed origins only', () => {
-  assert.equal(
-    embedUrl({ site: 'youtube', id: 'dQw4w9WgXcQ' }),
-    'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
-  );
-  assert.equal(
-    embedUrl({ site: 'tiktok', id: '7301234567890123456' }),
-    'https://www.tiktok.com/embed/v2/7301234567890123456',
-  );
-  assert.equal(
-    embedUrl({ site: 'audiomack', id: 'kemisings/song/lagos-rain' }),
-    'https://audiomack.com/embed/kemisings/song/lagos-rain',
-  );
-  for (const v of [
-    { site: 'youtube', id: 'dQw4w9WgXcQ' },
-    { site: 'tiktok', id: '1' },
-    { site: 'audiomack', id: 'a/song/b' },
-  ])
-    assert.ok(STUDIO_EMBED_ORIGINS.includes(new URL(embedUrl(v)).origin));
-});
-
-test('defaultStudioDocument is a valid starter page in the default fonts', () => {
-  for (const profile of [
-    { bio: 'Singer, Lagos', links: 3 },
-    { bio: null, links: 0 },
-    { bio: '', links: 2 },
-  ]) {
-    const d = defaultStudioDocument(profile);
-    assert.equal(ok(d), true);
-    assert.deepEqual(d.fonts, STUDIO_DEFAULT_FONTS);
+test('isClassicDefault is true only for it', () => {
+  assert.equal(isClassicDefault(defaultStudioDocument()), true);
+  const changed = [
+    { style: 'clear' },
+    { accent: 'ink' },
+    { mode: 'auto' },
+    { mode: 'dark' },
+    { cover: 'plain' },
+    { blocks: [paragraph()] },
+  ];
+  for (const c of changed)
     assert.equal(
-      d.rows.some((r) => r.cells.flat().some((b) => b.kind === 'about')),
-      Boolean(profile.bio),
+      isClassicDefault({ ...defaultStudioDocument(), ...c }),
+      false,
+      JSON.stringify(c).slice(0, 40),
     );
+  for (const style of STUDIO_STYLE_IDS.filter((s) => s !== 'classic'))
     assert.equal(
-      d.rows.some((r) => r.cells.flat().some((b) => b.kind === 'links')),
-      profile.links > 0,
+      isClassicDefault({ ...defaultStudioDocument(), style }),
+      false,
     );
-  }
+});
+
+test('the Pro blocks and the images a document uses', () => {
+  assert.deepEqual(
+    [...STUDIO_PRO_BLOCKS],
+    ['photo', 'gallery', 'video', 'services', 'events'],
+  );
+  const doc = withBlocks([
+    paragraph(),
+    photo(),
+    {
+      id: bid(),
+      kind: 'gallery',
+      images: [
+        { imageId: '11111111-1111-4111-8111-111111111111', alt: 'a' },
+        { imageId: IMG, alt: 'b' },
+      ],
+    },
+    video(),
+  ]);
+  assert.deepEqual(
+    [...studioImageIdsOf(doc)].sort(),
+    [IMG, '11111111-1111-4111-8111-111111111111'].sort(),
+  );
+  assert.equal(studioImageIdsOf(defaultStudioDocument()).size, 0);
 });

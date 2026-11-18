@@ -2,7 +2,7 @@ import {
   STUDIO_GRID,
   cellWidthAt,
   mainWidth,
-  type StudioRow,
+  type StudioRowV1,
 } from '@tipme/contracts';
 import { StudioBlockView, type StudioRenderContext } from './studio-blocks';
 import { studioImageSources } from './studio-theme';
@@ -16,7 +16,7 @@ export function StudioRowView({
   row,
   ctx,
 }: {
-  row: StudioRow;
+  row: StudioRowV1;
   ctx: StudioRenderContext;
 }) {
   const photo =

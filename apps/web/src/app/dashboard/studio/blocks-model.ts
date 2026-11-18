@@ -10,18 +10,18 @@ import {
   cleanStudioText,
   columnCount,
   studioCounts,
-  type StudioBlock,
-  type StudioBlockKind,
+  type StudioBlockV1,
+  type StudioBlockKindV1,
   type StudioColumns,
-  type StudioDocument,
+  type StudioDocumentV1,
   type StudioIssue,
-  type StudioRow,
+  type StudioRowV1,
   type StudioRowBackground,
   type StudioSpacing,
 } from '@tipme/contracts';
 
-type Kind = Exclude<StudioBlockKind, 'supporters'>;
-type Block<K extends StudioBlockKind> = Extract<StudioBlock, { kind: K }>;
+type Kind = Exclude<StudioBlockKindV1, 'supporters'>;
+type Block<K extends StudioBlockKindV1> = Extract<StudioBlockV1, { kind: K }>;
 
 /** "Add a block", in the board's order; About comes back here once removed. */
 export const ADD_KINDS: readonly { kind: Kind; label: string; hint: string }[] =
@@ -37,7 +37,7 @@ export const ADD_KINDS: readonly { kind: Kind; label: string; hint: string }[] =
     { kind: 'about', label: 'About', hint: 'your bio' },
   ];
 
-export const KIND_LABEL: Record<StudioBlockKind, string> = {
+export const KIND_LABEL: Record<StudioBlockKindV1, string> = {
   text: 'Text',
   photo: 'Photo',
   gallery: 'Gallery',
@@ -84,7 +84,7 @@ const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
 /** Every row and block id on the page. */
-function idsOf(doc: StudioDocument): Set<string> {
+function idsOf(doc: StudioDocumentV1): Set<string> {
   return new Set(
     doc.rows.flatMap((r) => [r.id, ...r.cells.flat().map((b) => b.id)]),
   );
@@ -92,7 +92,7 @@ function idsOf(doc: StudioDocument): Set<string> {
 
 /** A new id the page doesn't use yet (8 lower-case letters or digits, as the schema asks). */
 export function freshId(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   also: ReadonlySet<string> = new Set(),
 ): string {
   const used = idsOf(doc);
@@ -105,10 +105,10 @@ export function freshId(
 }
 
 const mapRow = (
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
-  fn: (row: StudioRow) => StudioRow,
-): StudioDocument => ({
+  fn: (row: StudioRowV1) => StudioRowV1,
+): StudioDocumentV1 => ({
   ...doc,
   rows: doc.rows.map((r) => (r.id === rowId ? fn(r) : r)),
 });
@@ -117,14 +117,14 @@ const mapRow = (
 // Rows
 
 /** Why no row can be added, or null. */
-export function rowReason(doc: StudioDocument): string | null {
+export function rowReason(doc: StudioDocumentV1): string | null {
   return doc.rows.length >= L.rows
     ? `Your page has ${L.rows} rows, the most it can have.`
     : null;
 }
 
 /** A new empty row at the end (one column, page background); unchanged at the limit. */
-export function addRow(doc: StudioDocument): StudioDocument {
+export function addRow(doc: StudioDocumentV1): StudioDocumentV1 {
   if (rowReason(doc)) return doc;
   return {
     ...doc,
@@ -141,16 +141,19 @@ export function addRow(doc: StudioDocument): StudioDocument {
   };
 }
 
-export function removeRow(doc: StudioDocument, rowId: string): StudioDocument {
+export function removeRow(
+  doc: StudioDocumentV1,
+  rowId: string,
+): StudioDocumentV1 {
   return { ...doc, rows: doc.rows.filter((r) => r.id !== rowId) };
 }
 
 /** The row at `from` moved to `to`; unchanged when either is off the list or they are equal. */
 export function moveRow(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   from: number,
   to: number,
-): StudioDocument {
+): StudioDocumentV1 {
   const n = doc.rows.length;
   if (from === to || from < 0 || to < 0 || from >= n || to >= n) return doc;
   const rows = [...doc.rows];
@@ -168,10 +171,10 @@ export const movedWords = (from: number, to: number, total: number) =>
  * dropped columns into the ones kept, in reading order. Returns the reason when they don't fit.
  */
 export function withColumns(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
   columns: StudioColumns,
-): StudioDocument | string {
+): StudioDocumentV1 | string {
   const row = doc.rows.find((r) => r.id === rowId);
   if (!row) return doc;
   const n = columnCount(columns);
@@ -180,7 +183,7 @@ export function withColumns(
     const over = blocks.length - n * L.blocksPerCell;
     return `This row has ${blocks.length} blocks, and ${n === 1 ? 'one column holds' : `${n} columns hold`} ${n * L.blocksPerCell}. Remove ${plural(over, 'block')} or move them to another row first.`;
   }
-  const cells: StudioBlock[][] = Array.from({ length: n }, (_, i) => [
+  const cells: StudioBlockV1[][] = Array.from({ length: n }, (_, i) => [
     ...(row.cells[i] ?? []),
   ]);
   for (const block of row.cells.slice(n).flat()) {
@@ -191,19 +194,19 @@ export function withColumns(
 }
 
 export const withSpacing = (
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
   spacing: StudioSpacing,
 ) => mapRow(doc, rowId, (r) => ({ ...r, spacing }));
 
 export const withBackground = (
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
   background: StudioRowBackground,
 ) => mapRow(doc, rowId, (r) => ({ ...r, background }));
 
 /** "2 : 1 · 3 blocks", the row's line in the rows list. */
-export function rowSummary(row: StudioRow): string {
+export function rowSummary(row: StudioRowV1): string {
   const n = row.cells.flat().length;
   return `${COLUMN_LABEL[row.columns]} · ${n === 0 ? 'empty' : plural(n, 'block')}`;
 }
@@ -216,7 +219,7 @@ export function newBlock(
   kind: Kind,
   id: string,
   given: { imageId?: string; url?: string } = {},
-): StudioBlock {
+): StudioBlockV1 {
   switch (kind) {
     case 'text':
       return { id, kind, variant: 'paragraph', text: '' };
@@ -250,7 +253,7 @@ export function newBlock(
  * The same limits the schema and the API enforce (owner ruling 3).
  */
 export function addReasons(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
   cell: number,
   profile: { bio: boolean; links: number },
@@ -286,11 +289,11 @@ export function addReasons(
 }
 
 export function addBlock(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   rowId: string,
   cell: number,
-  block: StudioBlock,
-): StudioDocument {
+  block: StudioBlockV1,
+): StudioDocumentV1 {
   return mapRow(doc, rowId, (r) => ({
     ...r,
     cells: r.cells.map((c, i) => (i === cell ? [...c, block] : c)),
@@ -298,7 +301,7 @@ export function addBlock(
 }
 
 /** Where a block is: row index, column and place in the column. */
-export function findBlock(doc: StudioDocument, blockId: string) {
+export function findBlock(doc: StudioDocumentV1, blockId: string) {
   for (const [r, row] of doc.rows.entries())
     for (const [c, cell] of row.cells.entries()) {
       const k = cell.findIndex((b) => b.id === blockId);
@@ -308,9 +311,9 @@ export function findBlock(doc: StudioDocument, blockId: string) {
 }
 
 export function removeBlock(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   blockId: string,
-): StudioDocument {
+): StudioDocumentV1 {
   return {
     ...doc,
     rows: doc.rows.map((r) => ({
@@ -321,10 +324,10 @@ export function removeBlock(
 }
 
 export function updateBlock(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   blockId: string,
-  fn: (block: StudioBlock) => StudioBlock,
-): StudioDocument {
+  fn: (block: StudioBlockV1) => StudioBlockV1,
+): StudioDocumentV1 {
   return {
     ...doc,
     rows: doc.rows.map((r) =>
@@ -347,10 +350,10 @@ export type BlockMove = 'up' | 'down' | 'left' | 'right';
  * can't go there (an end, or a full column).
  */
 export function moveBlock(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   blockId: string,
   to: BlockMove,
-): StudioDocument | null {
+): StudioDocumentV1 | null {
   const at = findBlock(doc, blockId);
   if (!at) return null;
   const cells = at.row.cells.map((c) => [...c]);
@@ -410,7 +413,7 @@ export const koboToNaira = (kobo: string) =>
   (BigInt(kobo) / BigInt(100)).toLocaleString('en-NG');
 
 /** The block's line in its column: its first words, or what it holds. */
-export function blockSummary(block: StudioBlock): string {
+export function blockSummary(block: StudioBlockV1): string {
   switch (block.kind) {
     case 'text':
     case 'quote':
@@ -444,7 +447,7 @@ export function blockSummary(block: StudioBlock): string {
 }
 
 /** True when removing the block would lose something the person wrote or chose. */
-export function hasContent(block: StudioBlock): boolean {
+export function hasContent(block: StudioBlockV1): boolean {
   switch (block.kind) {
     case 'text':
     case 'quote':

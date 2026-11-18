@@ -1,5 +1,5 @@
 {
-  "id": "52e02c4f-7bd4-4c87-a7ba-c70f905bde70",
+  "id": "1187b6bb-1216-475a-81d7-f1386d001b84",
   "prevId": "bfb2f4f0-d0d7-4be9-853e-892f0024bb95",
   "version": "7",
   "dialect": "postgresql",
@@ -3379,160 +3379,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.handle_handover_links": {
-      "name": "handle_handover_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "reservation_id": {
-          "name": "reservation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "handle_lower": {
-          "name": "handle_lower",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_sha256": {
-          "name": "token_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "expires_at": {
-          "name": "expires_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "used_at": {
-          "name": "used_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "used_by": {
-          "name": "used_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_at": {
-          "name": "cancelled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancelled_by": {
-          "name": "cancelled_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "cancel_reason": {
-          "name": "cancel_reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "handle_handover_links_open": {
-          "name": "handle_handover_links_open",
-          "columns": [
-            {
-              "expression": "reservation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "used_at IS NULL AND cancelled_at IS NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "handle_handover_links_reservation_id_handle_reservations_id_fk": {
-          "name": "handle_handover_links_reservation_id_handle_reservations_id_fk",
-          "tableFrom": "handle_handover_links",
-          "tableTo": "handle_reservations",
-          "columnsFrom": ["reservation_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "handle_handover_links_created_by_users_id_fk": {
-          "name": "handle_handover_links_created_by_users_id_fk",
-          "tableFrom": "handle_handover_links",
-          "tableTo": "users",
-          "columnsFrom": ["created_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "handle_handover_links_used_by_users_id_fk": {
-          "name": "handle_handover_links_used_by_users_id_fk",
-          "tableFrom": "handle_handover_links",
-          "tableTo": "users",
-          "columnsFrom": ["used_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "handle_handover_links_cancelled_by_users_id_fk": {
-          "name": "handle_handover_links_cancelled_by_users_id_fk",
-          "tableFrom": "handle_handover_links",
-          "tableTo": "users",
-          "columnsFrom": ["cancelled_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "handle_handover_links_token_sha256_unique": {
-          "name": "handle_handover_links_token_sha256_unique",
-          "nullsNotDistinct": false,
-          "columns": ["token_sha256"]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "handle_handover_links_outcome": {
-          "name": "handle_handover_links_outcome",
-          "value": "(\"handle_handover_links\".\"used_at\" IS NULL OR \"handle_handover_links\".\"cancelled_at\" IS NULL) AND (\"handle_handover_links\".\"used_at\" IS NULL) = (\"handle_handover_links\".\"used_by\" IS NULL) AND (\"handle_handover_links\".\"cancelled_at\" IS NULL) = (\"handle_handover_links\".\"cancel_reason\" IS NULL)"
-        },
-        "handle_handover_links_expiry": {
-          "name": "handle_handover_links_expiry",
-          "value": "\"handle_handover_links\".\"expires_at\" > \"handle_handover_links\".\"created_at\""
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.handle_holds": {
       "name": "handle_holds",
       "schema": "",
@@ -3621,12 +3467,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "handed_over_to": {
-          "name": "handed_over_to",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -3671,15 +3511,6 @@
           "tableFrom": "handle_reservations",
           "tableTo": "users",
           "columnsFrom": ["released_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "handle_reservations_handed_over_to_profiles_id_fk": {
-          "name": "handle_reservations_handed_over_to_profiles_id_fk",
-          "tableFrom": "handle_reservations",
-          "tableTo": "profiles",
-          "columnsFrom": ["handed_over_to"],
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
@@ -8460,6 +8291,80 @@
         "profile_avatars_one_place": {
           "name": "profile_avatars_one_place",
           "value": "(bytes IS NULL) <> (object_key IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.profile_cover_renditions": {
+      "name": "profile_cover_renditions",
+      "schema": "",
+      "columns": {
+        "profile_id": {
+          "name": "profile_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "version": {
+          "name": "version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "bytes": {
+          "name": "bytes",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "profile_cover_renditions_profile_id_profile_covers_profile_id_fk": {
+          "name": "profile_cover_renditions_profile_id_profile_covers_profile_id_fk",
+          "tableFrom": "profile_cover_renditions",
+          "tableTo": "profile_covers",
+          "columnsFrom": ["profile_id"],
+          "columnsTo": ["profile_id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "profile_cover_renditions_profile_id_width_pk": {
+          "name": "profile_cover_renditions_profile_id_width_pk",
+          "columns": ["profile_id", "width"]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "profile_cover_renditions_one_place": {
+          "name": "profile_cover_renditions_one_place",
+          "value": "(bytes IS NULL) <> (object_key IS NULL)"
+        },
+        "profile_cover_renditions_width": {
+          "name": "profile_cover_renditions_width",
+          "value": "width IN (640, 1080, 1600)"
         }
       },
       "isRLSEnabled": false

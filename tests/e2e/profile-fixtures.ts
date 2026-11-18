@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import type { PublicProfile } from '../../packages/contracts/src/profiles';
-import type { StudioDocument } from '../../packages/contracts/src/studio-document';
+import type { StudioDocumentV1 } from '../../packages/contracts/src/studio-document-v1';
 import { API_ORIGIN, E2E_REVALIDATE_SECRET } from './stack';
 
 // The e2e API runs one payment mode, and a web instance keeps its mode for a minute. So the page's
@@ -68,10 +68,10 @@ export async function studioFixtures() {
     import('../../packages/contracts/test/fixtures/studio-examples.mjs'),
     import('../../packages/contracts/test/support/studio-arbitrary.mjs'),
   ]);
-  const docs: Record<StudioHandle, StudioDocument> = {
-    studiokemi: examples.KEMI as StudioDocument,
-    studiosule: examples.SULE as StudioDocument,
-    studioify: examples.IFY as StudioDocument,
+  const docs: Record<StudioHandle, StudioDocumentV1> = {
+    studiokemi: examples.KEMI as StudioDocumentV1,
+    studiosule: examples.SULE as StudioDocumentV1,
+    studioify: examples.IFY as StudioDocumentV1,
   };
   /**
    * A Pro page with a published design, as the API sends it while the switch is on (plan Task 8).
@@ -80,7 +80,7 @@ export async function studioFixtures() {
    */
   const studioPage = (
     handle: string,
-    document: StudioDocument,
+    document: StudioDocumentV1,
     extra: Partial<PublicProfile> = {},
   ): PublicProfile =>
     page(handle, {
@@ -103,7 +103,7 @@ export async function studioFixtures() {
             { path: `/dev/studio-lab/image/${id}`, width: 2400, height: 1600 },
           ]),
         ),
-        checkVersion: contracts.DESIGN_CHECK_VERSION,
+        checkVersion: contracts.DESIGN_CHECK_VERSION_V1,
       },
       ...extra,
     });

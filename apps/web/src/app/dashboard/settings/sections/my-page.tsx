@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type { HandleStatus, MyProfile, MyStudio } from '@tipme/contracts';
+import type { HandleStatus, MyProfile, MyStudioV1 } from '@tipme/contracts';
 import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -99,7 +99,7 @@ export function StudioEntry() {
   const [entry, setEntry] = useState<ReturnType<typeof studioEntry>>(null);
   useEffect(() => {
     let current = true;
-    void apiFetch<MyStudio>('/v1/me/studio').then((result) => {
+    void apiFetch<MyStudioV1>('/v1/me/studio').then((result) => {
       if (current)
         setEntry(
           studioEntry(

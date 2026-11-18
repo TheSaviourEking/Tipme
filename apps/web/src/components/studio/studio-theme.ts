@@ -10,7 +10,7 @@ import {
   STUDIO_SPACING,
   contrastRatio,
   studioTypeScale,
-  type StudioDocument,
+  type StudioDocumentV1,
   type StudioFont,
   type StudioPalette,
   type StudioTokens,
@@ -105,7 +105,7 @@ export function studioFontStack(font: StudioFont): string {
  * `[data-mode="auto"]` when the visitor prefers dark (studio.css).
  */
 export function studioStyle(
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   palette: StudioPalette,
 ): Style {
   const style: Style = {};
@@ -138,7 +138,7 @@ export function studioStyle(
  * `@font-face` rules for this page's families only (one file each, at most two), plus a local
  * fallback face per family scaled to the same width and line box, so the swap barely moves text.
  */
-export function studioFontFaces(fonts: StudioDocument['fonts']): string {
+export function studioFontFaces(fonts: StudioDocumentV1['fonts']): string {
   const families = [...new Set([fonts.heading, fonts.body])].map(studioFont);
   return families
     .map((f) => {

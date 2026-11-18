@@ -97,74 +97,102 @@ export async function layoutSnapshot(page: Page) {
 export const encodeDoc = (doc: unknown) =>
   deflateRawSync(Buffer.from(JSON.stringify(doc))).toString('base64url');
 
+/** Where a drawn ellipsis is never excused: names, amounts and Tip labels (Ruling V). */
+export const NEVER_TRUNCATED =
+  '.studio-name, .profile-name, .tm-amount-choice, .composer-submit, .tip-bar__button';
+
 /**
  * Layout faults on a Studio page, as labels (empty when there are none): the page scrolls
  * sideways; an element that clips (overflow not visible) holds more than it shows; two blocks
  * overlap; or the tip rail overlaps the rows. TipMe's cover is tested on its own and skipped.
  */
-export async function geometryProblems(page: Page): Promise<string[]> {
+export async function geometryProblems(
+  page: Page,
+  // Classic renders today's page, whose root is `.profile-page` (spec §9.1).
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
-    const out: string[] = [];
-    const root = document.documentElement;
-    if (root.scrollWidth > root.clientWidth)
-      out.push(
-        `page scrolls sideways (${root.scrollWidth} > ${root.clientWidth})`,
-      );
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
-    const label = (el: Element) =>
-      `${el.tagName.toLowerCase()}${el.classList[0] ? `.${el.classList[0]}` : ''}`;
-    for (const el of studio.querySelectorAll('*')) {
-      if (
-        el.closest('.studio-cover') ||
-        /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName)
-      )
-        continue;
-      const box = el.getBoundingClientRect();
-      if (box.width <= 1 || box.height <= 1) continue; // visually hidden or empty
-      const cs = getComputedStyle(el);
-      if (cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) {
-        // Name the widest thing inside, so a failure says what didn't fit.
-        const widest = [...el.querySelectorAll('*')].reduce<
-          [Element | null, number]
-        >(
-          (best, child) => {
-            const w = child.getBoundingClientRect().width;
-            return w > best[1] ? [child, w] : best;
-          },
-          [null, 0],
-        );
+  return page.evaluate(
+    ([scope, NEVER_TRUNCATED]) => {
+      const out: string[] = [];
+      const root = document.documentElement;
+      if (root.scrollWidth > root.clientWidth)
         out.push(
-          `${label(el)} overflows sideways (${el.scrollWidth} > ${el.clientWidth}; widest: ${widest[0] ? label(widest[0]) : '?'} ${Math.round(widest[1])})`,
+          `page scrolls sideways (${root.scrollWidth} > ${root.clientWidth})`,
         );
+      const studio = document.querySelector(scope);
+      if (!studio) return [`no ${scope} on the page`];
+      const label = (el: Element) =>
+        `${el.tagName.toLowerCase()}${el.classList[0] ? `.${el.classList[0]}` : ''}`;
+      for (const el of studio.querySelectorAll('*')) {
+        if (
+          el.closest('.studio-cover, .profile-cover') ||
+          /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName)
+        )
+          continue;
+        const box = el.getBoundingClientRect();
+        if (box.width <= 1 || box.height <= 1) continue; // visually hidden or empty
+        const cs = getComputedStyle(el);
+        // A style's photo strip scrolls sideways by design (Clear, §9.2): it is focusable, and its
+        // own box must still fit the page, which the page check above proves.
+        // A one-line ellipsis is a drawn truncation, not a fault, only where the markup opts in
+        // with data-truncate (§9.10: the bar's name; link titles and handles). Never on a name, an
+        // amount or a Tip label: clipping there is always reported (Ruling V).
+        const ellipsis =
+          el.matches('[data-truncate]') &&
+          !el.closest(NEVER_TRUNCATED) &&
+          cs.textOverflow === 'ellipsis' &&
+          cs.whiteSpace === 'nowrap';
+        if (
+          cs.overflowX !== 'visible' &&
+          el.scrollWidth > el.clientWidth + 1 &&
+          !el.matches('[data-strip]') &&
+          !ellipsis
+        ) {
+          // Name the widest thing inside, so a failure says what didn't fit.
+          const widest = [...el.querySelectorAll('*')].reduce<
+            [Element | null, number]
+          >(
+            (best, child) => {
+              const w = child.getBoundingClientRect().width;
+              return w > best[1] ? [child, w] : best;
+            },
+            [null, 0],
+          );
+          out.push(
+            `${label(el)} overflows sideways (${el.scrollWidth} > ${el.clientWidth}; widest: ${widest[0] ? label(widest[0]) : '?'} ${Math.round(widest[1])})`,
+          );
+        }
+        if (cs.overflowY === 'hidden' && el.scrollHeight > el.clientHeight + 1)
+          out.push(
+            `${label(el)} clips its content (${el.scrollHeight} > ${el.clientHeight})`,
+          );
       }
-      if (cs.overflowY === 'hidden' && el.scrollHeight > el.clientHeight + 1)
-        out.push(
-          `${label(el)} clips its content (${el.scrollHeight} > ${el.clientHeight})`,
-        );
-    }
-    const boxes = [...studio.querySelectorAll('.studio-cell > *')].map(
-      (el) => ({
-        el,
-        r: el.getBoundingClientRect(),
-      }),
-    );
-    const meet = (a: DOMRect, b: DOMRect) =>
-      Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
-    for (let i = 0; i < boxes.length; i += 1)
-      for (let j = i + 1; j < boxes.length; j += 1)
-        if (meet(boxes[i]!.r, boxes[j]!.r))
-          out.push(`${label(boxes[i]!.el)} overlaps ${label(boxes[j]!.el)}`);
-    const rail = studio.querySelector('.studio-rail')?.getBoundingClientRect();
-    for (const part of ['.studio-rows', '.studio-identity']) {
-      const r = studio.querySelector(part)?.getBoundingClientRect();
-      if (rail && r && r.height > 1 && meet(rail, r))
-        out.push(`the tip rail overlaps ${part}`);
-    }
-    return out;
-  });
+      const boxes = [...studio.querySelectorAll('.studio-cell > *')].map(
+        (el) => ({
+          el,
+          r: el.getBoundingClientRect(),
+        }),
+      );
+      const meet = (a: DOMRect, b: DOMRect) =>
+        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+      for (let i = 0; i < boxes.length; i += 1)
+        for (let j = i + 1; j < boxes.length; j += 1)
+          if (meet(boxes[i]!.r, boxes[j]!.r))
+            out.push(`${label(boxes[i]!.el)} overlaps ${label(boxes[j]!.el)}`);
+      const rail = studio
+        .querySelector('.studio-rail')
+        ?.getBoundingClientRect();
+      for (const part of ['.studio-rows', '.studio-identity']) {
+        const r = studio.querySelector(part)?.getBoundingClientRect();
+        if (rail && r && r.height > 1 && meet(rail, r))
+          out.push(`the tip rail overlaps ${part}`);
+      }
+      return out;
+    },
+    [scope, NEVER_TRUNCATED] as const,
+  );
 }
 
 /**
@@ -172,9 +200,12 @@ export async function geometryProblems(page: Page): Promise<string[]> {
  * first opaque background behind it (inside `.studio-scrim`, the scrim over a white photo, its
  * worst case), at 4.5:1, or 3:1 for large text (≥24px, or ≥18.66px and bold).
  */
-export async function contrastProblems(page: Page): Promise<string[]> {
+export async function contrastProblems(
+  page: Page,
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
+  return page.evaluate((scope) => {
     type Rgba = [number, number, number, number];
     const parse = (c: string): Rgba | null => {
       const m =
@@ -229,8 +260,8 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       return colour;
     };
     const out: string[] = [];
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
+    const studio = document.querySelector(scope);
+    if (!studio) return [`no ${scope} on the page`];
     const walker = document.createTreeWalker(studio, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = node.textContent?.trim();
@@ -238,7 +269,9 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       if (
         !text ||
         !el ||
-        el.closest('.studio-cover, .sr-only, [aria-hidden="true"]')
+        el.closest(
+          '.studio-cover, .profile-cover, .sr-only, [aria-hidden="true"]',
+        )
       )
         continue;
       const box = el.getBoundingClientRect();
@@ -264,5 +297,5 @@ export async function contrastProblems(page: Page): Promise<string[]> {
         );
     }
     return out;
-  });
+  }, scope);
 }

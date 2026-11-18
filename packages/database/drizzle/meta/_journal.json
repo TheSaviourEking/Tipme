@@ -803,8 +803,15 @@
     {
       "idx": 114,
       "version": "7",
-      "when": 1795000290472,
-      "tag": "0114_username_handover_links",
+      "when": 1794990733667,
+      "tag": "0114_cover_renditions",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1795023506696,
+      "tag": "0115_username_handover_links",
       "breakpoints": true
     }
   ]

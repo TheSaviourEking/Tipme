@@ -24,11 +24,11 @@ test('no studio component renders raw HTML or builds a style from user content',
       assert.match(m[1], /^\s*studioStyle\(/, `${file}: style={${m[1]}}`);
     assert.doesNotMatch(src, /\beval\(|new Function\(/, file);
   }
-  // One client island, the video player, plus the stylesheet loader (it renders nothing; it keeps
-  // studio.css off the /@username route so a prefetch never preloads it, studio-styles.tsx).
+  // The stylesheet loader (it renders nothing; it keeps studio.css off the /@username route so a
+  // prefetch never preloads it, studio-styles.tsx). The video island moved to studio-styles/.
   assert.deepEqual(
     code.filter(([, src]) => /^['"]use client['"]/m.test(src)).map(([f]) => f),
-    ['studio-sheet.tsx', 'studio-styles.tsx', 'video-embed.tsx'],
+    ['studio-sheet.tsx', 'studio-styles.tsx'],
   );
   assert.match(read('studio-sheet.tsx'), /return null;/);
 });
@@ -115,4 +115,103 @@ test('the services block ends with the fixed line the owner set (16 Nov 2026)', 
   );
   // The plan's first wording called a tip "thanks"; money is "tips" in TipMe's copy.
   assert.doesNotMatch(blocks, /Tips here are thanks/);
+});
+
+// Page Studio styles (spec 2026-11-17-page-studio-styles §13): the same source rules for the style
+// renderer. Its only inline style is the token map (styleTokens), built from the registry; its
+// only client code is the video island, the per-style stylesheet loader and the sheets themselves.
+const STYLES_DIR = new URL(
+  '../apps/web/src/components/studio-styles/',
+  import.meta.url,
+);
+const styleFiles = readdirSync(STYLES_DIR, { recursive: true })
+  .map(String)
+  .filter((f) => /\.(tsx?|css)$/.test(f));
+const readStyle = (f) => readFileSync(new URL(f, STYLES_DIR), 'utf8');
+
+test('no style component renders raw HTML or builds a style from user content', () => {
+  const styleCode = styleFiles
+    .filter((f) => /\.tsx?$/.test(f))
+    .map((f) => [f, readStyle(f)]);
+  assert.ok(styleCode.some(([f]) => f === 'style-page.tsx'));
+  for (const [file, src] of styleCode) {
+    assert.doesNotMatch(
+      src,
+      /dangerouslySetInnerHTML|innerHTML|insertAdjacentHTML|document\.write/,
+      file,
+    );
+    // The `style` prop only (not `data-style`), and only from the token map.
+    for (const m of src.matchAll(/(?<![\w-])style=\{([^}]*)\}/g))
+      assert.match(m[1], /^\s*styleTokens\(/, `${file}: style={${m[1]}}`);
+    assert.doesNotMatch(src, /\beval\(|new Function\(/, file);
+  }
+  assert.deepEqual(
+    styleCode
+      .filter(([, src]) => /^['"]use client['"]/m.test(src))
+      .map(([f]) => f.replaceAll('\\', '/'))
+      .sort(),
+    [
+      'sheets/classic.tsx',
+      'sheets/clear.tsx',
+      'sheets/journal.tsx',
+      'sheets/linen.tsx',
+      'style-sheets.tsx',
+      'video-embed.tsx',
+    ],
+  );
+  // A sheet renders nothing: importing it brings the style's CSS.
+  assert.match(readStyle('sheets/clear.tsx'), /return null;/);
+  assert.match(readStyle('sheets/classic.tsx'), /return null;/);
+  assert.match(readStyle('sheets/journal.tsx'), /return null;/);
+  assert.match(readStyle('sheets/linen.tsx'), /return null;/);
+  // The old renderer uses the shared video island.
+  assert.match(
+    read('studio-blocks.tsx'),
+    /from '\.\.\/studio-styles\/video-embed'/,
+  );
+});
+
+/** A selector list split at its own commas, not those inside :is() or :has(). */
+const topLevel = (list) => {
+  const out = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    if (list[i] === '(') depth += 1;
+    if (list[i] === ')') depth -= 1;
+    if (list[i] === ',' && depth === 0) {
+      out.push(list.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  return [...out, list.slice(start).trim()];
+};
+
+test('every style rule is scoped to a styled Studio page', () => {
+  for (const file of styleFiles.filter((f) => f.endsWith('.css'))) {
+    const selectors = [
+      ...readStyle(file)
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .matchAll(/([^{}]+)\{/g),
+    ]
+      .map((m) => m[1].trim())
+      .filter((s) => !s.startsWith('@'))
+      // Keyframe steps are not selectors.
+      .filter((s) => !/^(from|to|[\d.]+%)$/.test(s))
+      .flatMap(topLevel);
+    assert.ok(selectors.length > 10, `${file} has its rules`);
+    const own = file === 'frame.css' ? '' : file.replace('.css', '');
+    for (const s of selectors)
+      assert.match(
+        s,
+        // Classic is today's page with its choices (§9.1): its root is the profile's <main>,
+        // and its tokens sit on :root while that page is shown.
+        own === 'classic'
+          ? /^(:root:has\()?\.profile-page--studio\[data-style=['"]?classic['"]?\]/
+          : own
+            ? new RegExp(`^\\.studio\\[data-style=['"]?${own}['"]?\\]`)
+            : /^(html:has\()?\.studio\[data-style\]/,
+        `${file}: "${s}"`,
+      );
+  }
 });

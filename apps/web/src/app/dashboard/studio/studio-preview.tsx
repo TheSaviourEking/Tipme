@@ -1,15 +1,15 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  DESIGN_CHECK_VERSION,
+  DESIGN_CHECK_VERSION_V1,
   STUDIO_SPACING,
   deriveStudioPalette,
   resolveCover,
   studioTypeScale,
   type MyProfile,
   type PublicProfile,
-  type PublicStudio,
-  type StudioDocument,
+  type PublicStudioV1,
+  type StudioDocumentV1,
   type StudioImage,
 } from '@tipme/contracts';
 import { ProBadge } from '@tipme/ui';
@@ -62,7 +62,7 @@ export function StudioPreview({
   grid = false,
   outlineRow = -1,
 }: {
-  draft: StudioDocument;
+  draft: StudioDocumentV1;
   images: StudioImage[];
   profile: MyProfile;
   device: PreviewDevice;
@@ -88,7 +88,7 @@ export function StudioPreview({
     () => deriveStudioPalette(draft.brand),
     [draft.brand],
   );
-  const studio: PublicStudio = {
+  const studio: PublicStudioV1 = {
     document: draft,
     palette,
     images: Object.fromEntries(
@@ -97,7 +97,7 @@ export function StudioPreview({
         { path: apiUrl(i.path), width: i.width, height: i.height },
       ]),
     ),
-    checkVersion: DESIGN_CHECK_VERSION,
+    checkVersion: DESIGN_CHECK_VERSION_V1,
   };
   const shown: PublicProfile = {
     handle: profile.handle,

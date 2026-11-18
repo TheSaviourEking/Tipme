@@ -7633,7 +7633,10 @@
                               "outfit",
                               "nunito",
                               "fraunces",
-                              "source-serif-4"
+                              "source-serif-4",
+                              "unbounded",
+                              "anton",
+                              "linen-serif"
                             ]
                           },
                           "body": {
@@ -7648,7 +7651,10 @@
                               "outfit",
                               "nunito",
                               "fraunces",
-                              "source-serif-4"
+                              "source-serif-4",
+                              "unbounded",
+                              "anton",
+                              "linen-serif"
                             ]
                           }
                         },

@@ -8,7 +8,7 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { MyStudio, StudioIssue } from '@tipme/contracts';
+import type { MyStudioV1, StudioIssue } from '@tipme/contracts';
 import { Button, EmptySlip, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { LoadFailed } from '@/components/dashboard/load-failed';
@@ -57,10 +57,10 @@ export function StudioEditorRoute() {
     | { state: 'loading' }
     | { state: 'off' }
     | { state: 'failed' }
-    | { state: 'ready'; studio: MyStudio }
+    | { state: 'ready'; studio: MyStudioV1 }
   >({ state: 'loading' });
   const read = useCallback(async () => {
-    const result = await apiFetch<MyStudio>('/v1/me/studio');
+    const result = await apiFetch<MyStudioV1>('/v1/me/studio');
     if (result.ok) setAnswer({ state: 'ready', studio: result.data });
     else if (result.status === 404) setAnswer({ state: 'off' });
     else setAnswer({ state: 'failed' });
@@ -128,7 +128,7 @@ export function StudioEditorRoute() {
   return <StudioEditor initial={studio} />;
 }
 
-function StudioEditor({ initial }: { initial: MyStudio }) {
+function StudioEditor({ initial }: { initial: MyStudioV1 }) {
   const id = useId();
   const { profile } = useRecipient();
   const studio = useStudioDraft(initial);

@@ -16,11 +16,12 @@ async function lcp(
     ReturnType<import('@playwright/test').BrowserContext['storageState']>
   >,
   url: string,
+  viewport?: { width: number; height: number },
 ): Promise<number> {
   const use = test.info().project.use;
   const context = await browser.newContext({
     baseURL: use.baseURL,
-    viewport: use.viewport,
+    viewport: viewport ?? use.viewport,
     userAgent: use.userAgent,
     deviceScaleFactor: use.deviceScaleFactor,
     isMobile: use.isMobile,
@@ -218,4 +219,30 @@ test('lab LCP sample: Studio pages', async ({ browser }) => {
   } finally {
     await stack.stop();
   }
+});
+
+// Page Studio styles (spec 2026-11-17-page-studio-styles §4.3): each style's lab example at the
+// phone width (390 px), on the built web app. Same throttle, fresh contexts. Each style PR adds its
+// id.
+const LAB_STYLES = ['classic', 'clear', 'journal', 'linen'];
+
+test('lab LCP sample: Studio styles', async ({ browser }) => {
+  test.setTimeout(240_000);
+  const context = await browser.newContext();
+  const state = await context.storageState();
+  await context.close();
+  const urls = LAB_STYLES.map((style) => `/dev/studio-lab?style=${style}`);
+  // Warm only the server: every sample below starts with an empty browser cache.
+  for (const url of urls) await fetch(`${WEB_ORIGIN}${url}`);
+  const samples: Record<string, number[]> = {};
+  for (let run = 0; run < 3; run += 1)
+    for (const url of urls)
+      (samples[url] ??= []).push(
+        await lcp(browser, state, url, { width: 390, height: 844 }),
+      );
+  console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
+  console.log(`LCP_STYLES ${JSON.stringify(samples)}`);
+  for (const [url, ms] of Object.entries(samples))
+    for (const sample of ms)
+      expect(sample, `${url} LCP ${sample}ms`).toBeLessThan(2000);
 });
