@@ -5,11 +5,14 @@ import {
   CLAIM_BUTTON_LABEL,
   CLAIM_CHECK_DELAY_MS,
   CLAIM_FORMAT_HINT,
+  CLAIM_FORMAT_HINT_SHORT,
+  CLAIM_PAUSE_MS,
   ClaimChecker,
   claimCandidate,
   claimMessage,
   stateFromResult,
 } from '../src/lib/claim-check.ts';
+import { handleFromSearch } from '../src/lib/handle-hint.ts';
 
 // Home's claim field (owner, 18 Nov 2026): "Claim username", a live check once they stop typing,
 // and a nudge on the button when the name is free.
@@ -22,6 +25,9 @@ test('the claim button says "Claim username"', () => {
   );
   assert.match(source, /CLAIM_BUTTON_LABEL/);
   assert.doesNotMatch(source, /Get tipped/);
+  // The live check owns validation: the browser's own pattern would refuse "@kemi" it calls free.
+  assert.match(source, /noValidate/);
+  assert.doesNotMatch(source, /pattern=/);
   // Home passes no other words: the nav keeps "Get tipped", this form does not.
   const home = readFileSync(
     new URL('../src/app/page.tsx', import.meta.url),
@@ -41,6 +47,10 @@ test('only a name that can pass the handle rule is checked, lowercased', () => {
     handle: 'kemi_cuts',
   });
   assert.deepEqual(claimCandidate('@Ada2'), { kind: 'check', handle: 'ada2' });
+  // What the form sends is this cleaned name, so these reach sign-up as "kemi".
+  assert.deepEqual(claimCandidate('@kemi'), { kind: 'check', handle: 'kemi' });
+  assert.deepEqual(claimCandidate(' kemi '), { kind: 'check', handle: 'kemi' });
+  assert.equal(handleFromSearch('?handle=kemi'), 'kemi');
 });
 
 test('each answer maps to its state, and failures say nothing', () => {
@@ -90,7 +100,10 @@ test('the messages are plain, and a reserved name is never called reserved', () 
     'That username isn’t available.',
   );
   assert.doesNotMatch(claimMessage({ kind: 'reserved' }), /reserv|brand/i);
-  assert.equal(claimMessage({ kind: 'invalid' }), CLAIM_FORMAT_HINT);
+  // On screen, a hint short enough for one line on a phone; the field's title keeps the full rule.
+  assert.equal(claimMessage({ kind: 'invalid' }), CLAIM_FORMAT_HINT_SHORT);
+  assert.equal(CLAIM_FORMAT_HINT_SHORT, '3–30 letters, numbers or underscores');
+  assert.ok(CLAIM_FORMAT_HINT_SHORT.length <= 40);
   assert.equal(
     CLAIM_FORMAT_HINT,
     '3 to 30 letters, numbers or underscores. Capitals become lowercase.',
@@ -195,9 +208,10 @@ test('an answered name is not asked again; a failed one is', async (t) => {
   assert.equal(calls.length, 3, 'the failed name is asked again');
 });
 
-test('once rate limited, it stops asking and stays quiet', async (t) => {
-  mock.timers.enable({ apis: ['setTimeout'] });
+test('once rate limited, it stops asking for a minute, quietly, then asks again', async (t) => {
+  mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   t.after(() => mock.timers.reset());
+  assert.ok(CLAIM_PAUSE_MS >= 60_000);
   const { checker, states, calls } = harness();
   checker.input('kemi');
   mock.timers.tick(CLAIM_CHECK_DELAY_MS);
@@ -207,6 +221,11 @@ test('once rate limited, it stops asking and stays quiet', async (t) => {
   mock.timers.tick(CLAIM_CHECK_DELAY_MS);
   assert.equal(calls.length, 1);
   assert.equal(claimMessage(states.at(-1)), '');
+  mock.timers.tick(CLAIM_PAUSE_MS);
+  checker.input('kemi_cut');
+  mock.timers.tick(CLAIM_CHECK_DELAY_MS);
+  assert.equal(calls.length, 2, 'asks again once the minute is over');
+  assert.equal(calls[1].handle, 'kemi_cut');
 });
 
 test('dispose cancels the timer and the request', (t) => {

@@ -109,9 +109,15 @@ test('a name that breaks the rule shows the format hint, without asking', async 
   });
   await page.goto('/');
   await field(page).fill('no-dashes');
-  await expect(status(page)).toHaveText(
+  // A short hint on screen; the field's title keeps the whole rule.
+  await expect(status(page)).toHaveText('3–30 letters, numbers or underscores');
+  await expect(field(page)).toHaveAttribute(
+    'title',
     '3 to 30 letters, numbers or underscores. Capitals become lowercase.',
   );
+  // Submitting it stays here, with the hint, rather than the browser's own bubble.
+  await button(page).click();
+  await expect(page).toHaveURL(/\/$/);
   expect(asked).toHaveLength(0);
 });
 
@@ -182,4 +188,47 @@ test('on a phone the field, the words and the button stay on the screen', async 
   const words = (await status(page).boundingBox())!;
   const go = (await button(page).boundingBox())!;
   expect(words.y).toBeLessThan(go.y);
+});
+
+for (const [label, typed] of [
+  ['a leading @', (handle: string) => `@${handle}`],
+  ['spaces around it', (handle: string) => ` ${handle} `],
+] as const) {
+  test(`a name with ${label} is checked and sent to sign-up cleaned`, async ({
+    page,
+  }, testInfo) => {
+    const { handle } = identity(testInfo);
+    await page.goto('/');
+    await field(page).fill(typed(handle));
+    await expect(status(page)).toHaveText(`@${handle} is available`);
+    await button(page).click();
+    await expect(page).toHaveURL(new RegExp(`/sign-up\\?handle=${handle}$`));
+    await expect(page.getByLabel('Email address')).toBeVisible();
+  });
+}
+
+test('on a phone the hint never moves the button', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const before = (await button(page).boundingBox())!.y;
+  await field(page).fill('no-dashes');
+  await expect(status(page)).toHaveText('3–30 letters, numbers or underscores');
+  expect((await button(page).boundingBox())!.y).toBe(before);
+});
+
+test('a name typed before the page is ready is still checked', async ({
+  page,
+}, testInfo) => {
+  const { handle } = identity(testInfo);
+  // Hold the page's scripts, type, then let them run.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/_next/static/**/*.js', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto('/', { waitUntil: 'commit' });
+  await field(page).fill(handle);
+  release();
+  await expect(status(page)).toHaveText(`@${handle} is available`);
 });

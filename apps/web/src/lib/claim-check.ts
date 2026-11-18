@@ -17,6 +17,12 @@ export const CLAIM_FORMAT_HINT =
  */
 export const CLAIM_CHECK_DELAY_MS = 450;
 
+/** After a 429, how long the field stays quiet before checking again (the limit's window). */
+export const CLAIM_PAUSE_MS = 60_000;
+
+/** The hint shown under the field: one line on a phone. The field's title keeps the full rule. */
+export const CLAIM_FORMAT_HINT_SHORT = '3–30 letters, numbers or underscores';
+
 // The domain's handle rule (packages/domain/src/handles.ts), as in handle-hint.ts.
 const HANDLE = /^[a-z0-9_]{3,30}$/;
 
@@ -44,7 +50,7 @@ export type ClaimState =
   | { kind: 'invalid' }
   /** The check failed (a lost connection, a 5xx): say nothing; sign-up still validates. */
   | { kind: 'unknown' }
-  /** Rate limited: stop asking for this visit, quietly. */
+  /** Rate limited: stop asking for a minute, quietly. */
   | { kind: 'paused' };
 
 export type AvailabilityAnswer = SessionResult<{
@@ -78,7 +84,7 @@ export function claimMessage(state: ClaimState): string {
     case 'reserved':
       return 'That username isn’t available.';
     case 'invalid':
-      return CLAIM_FORMAT_HINT;
+      return CLAIM_FORMAT_HINT_SHORT;
     default:
       return '';
   }
@@ -103,7 +109,7 @@ export interface ClaimCheckerOptions {
 export class ClaimChecker {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private inFlight: AbortController | undefined;
-  private paused = false;
+  private pausedUntil = 0;
   private readonly answers = new Map<string, Settled>();
 
   private readonly options: ClaimCheckerOptions;
@@ -130,7 +136,8 @@ export class ClaimChecker {
     this.cancel();
   }
 
-  private cancel() {
+  /** Drops the pending pause and any request in flight. */
+  cancel(): void {
     clearTimeout(this.timer);
     this.timer = undefined;
     this.inFlight?.abort();
@@ -149,7 +156,7 @@ export class ClaimChecker {
       this.options.onChange(known);
       return;
     }
-    if (this.paused) {
+    if (Date.now() < this.pausedUntil) {
       this.options.onChange({ kind: 'paused' });
       return;
     }
@@ -161,7 +168,8 @@ export class ClaimChecker {
         if (abort.signal.aborted) return;
         this.inFlight = undefined;
         const state = stateFromResult(handle, result);
-        if (state.kind === 'paused') this.paused = true;
+        if (state.kind === 'paused')
+          this.pausedUntil = Date.now() + CLAIM_PAUSE_MS;
         else if (state.kind !== 'unknown')
           this.answers.set(handle, state as Settled);
         this.options.onChange(state);
