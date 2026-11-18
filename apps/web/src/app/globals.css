@@ -616,6 +616,7 @@ body:has(main[data-area='recipient']) > .site-footer {
 
 .home-claim {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.625rem;
 }
 
@@ -655,6 +656,130 @@ body:has(main[data-area='recipient']) > .site-footer {
   min-height: 60px;
   padding-inline: 1.75rem;
   white-space: nowrap;
+}
+
+/* The live check (owner, 18 Nov 2026): a mark at the field's end and a line of words below. */
+.home-claim__mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  margin-inline-start: 0.5rem;
+}
+
+.home-claim__check {
+  width: 1.375rem;
+  height: 1.375rem;
+}
+
+.home-claim__check circle {
+  fill: var(--state-success);
+}
+
+.home-claim__check path {
+  fill: none;
+  stroke: var(--surface-base);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.home-claim__spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border-material);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+}
+
+/* One line is always kept for the words, so an answer never moves the page. */
+.home-claim__status {
+  flex-basis: 100%;
+  min-height: 1.3125rem;
+  margin: -0.125rem 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.home-claim__status[data-state='available'] {
+  color: var(--state-success);
+}
+
+/* A free name lights the button in the brand purple: the reduced-motion version of the nudge too. */
+.home-claim__go[data-ready='true'] {
+  position: relative;
+  border-color: color-mix(
+    in srgb,
+    var(--brand-primary),
+    var(--text-primary) 16%
+  );
+  background:
+    linear-gradient(rgb(255 255 255 / 20%), transparent 34%),
+    var(--surface-signature);
+  box-shadow: var(--shadow-raised-signature);
+}
+
+/* The glow is its own layer, so the nudge moves only opacity and transform. */
+.home-claim__go[data-ready='true']::after {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 0 6px rgb(122 50 249 / 28%);
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .home-claim__spinner {
+    animation: home-claim-spin 0.8s linear infinite;
+  }
+
+  /* Once when the name comes up free, and once more a few seconds later; never a loop. */
+  .home-claim__go[data-ready='true'] {
+    animation:
+      home-claim-lift 420ms var(--ease-physical) 1,
+      home-claim-lift-again 420ms var(--ease-physical) 4s 1;
+  }
+
+  .home-claim__go[data-ready='true']::after {
+    animation:
+      home-claim-glow 420ms ease-out 1,
+      home-claim-glow-again 420ms ease-out 4s 1;
+  }
+}
+
+@keyframes home-claim-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes home-claim-lift {
+  40% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes home-claim-lift-again {
+  40% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes home-claim-glow {
+  40% {
+    opacity: 1;
+  }
+}
+
+@keyframes home-claim-glow-again {
+  40% {
+    opacity: 1;
+  }
 }
 
 .home-note {
@@ -1268,6 +1393,18 @@ body:has(main[data-area='recipient']) > .site-footer {
 @media (max-width: 40rem) {
   .home-claim {
     flex-direction: column;
+    /* One column: a wrapping column would size to its widest item and overflow the screen. */
+    flex-wrap: nowrap;
+  }
+
+  /* The words sit under the field, above the button. */
+  .home-claim__status {
+    flex-basis: auto;
+    order: 1;
+  }
+
+  .home-claim__go {
+    order: 2;
   }
 
   .home-claim__field,
@@ -1713,6 +1850,19 @@ body:has(main[data-area='recipient']) > .site-footer {
 
   .home-claim__field:focus-within {
     outline-color: Highlight;
+  }
+
+  .home-claim__check circle {
+    fill: CanvasText;
+  }
+
+  .home-claim__check path {
+    stroke: Canvas;
+  }
+
+  .home-claim__go[data-ready='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
   }
 }
 
