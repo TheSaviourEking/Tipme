@@ -352,9 +352,8 @@ export default function WithdrawPage({
     chosen !== null &&
     chosen <= withdrawable &&
     !belowWithdrawalMinimum(chosen, withdrawable);
-  // Users pay the transfer fee from the amount (owner, 12 Nov 2026): what arrives is the amount
-  // less the fee, and the whole amount leaves the balance. Only an amount that sends something
-  // gets figures.
+  // A person's withdrawals are free (owner, 18 Nov 2026): what arrives is the amount. Under the
+  // user-pays rule it is the amount less the fee. Only an amount that sends something gets figures.
   const figures =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
@@ -519,7 +518,7 @@ export default function WithdrawPage({
                       <dd data-testid="transfer-fee">
                         {figures ? (
                           figures.feePaidBy === 'tipme' ? (
-                            'Paid by TipMe'
+                            'Free'
                           ) : (
                             <Money minor={figures.feeMinor} />
                           )

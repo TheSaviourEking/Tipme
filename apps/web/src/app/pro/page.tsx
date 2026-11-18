@@ -2,7 +2,8 @@ import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Container, ProBadge } from '@tipme/ui';
 import { ProOffer } from '@/components/marketing/pro-offer';
 import { formatNaira } from '@/lib/demo-amount';
-import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import type { PlanFeePercents } from '@/lib/fee-share';
+import { getPlanFees } from '@/lib/plan-fees-api';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
@@ -103,11 +104,12 @@ const GROUPS: { title: string; line: string; items: Item[] }[] = [
   },
 ];
 
-const FREE_KEEPS = [
-  `Receiving tips, with no monthly fee: TipMe keeps ${FREE_SHARE_PERCENT}% of each tip`,
+/** What Free keeps, at the live rates (owner, 18 Nov 2026). */
+const freeKeeps = ({ freePercent }: PlanFeePercents) => [
+  `Receiving tips, with no monthly fee: TipMe keeps ${freePercent}% of each tip, payment and withdrawal fees included`,
   'Your page, username, photo and cover',
   'Your QR code in three looks, ready to print',
-  'Withdrawals to your bank',
+  'Free withdrawals to your bank',
   'Your full tip history, and a CSV download',
   'Sign-in codes, recovery and security alerts',
   'Up to 3 social links',
@@ -115,7 +117,7 @@ const FREE_KEEPS = [
   'Your weekly report, and this week’s totals',
 ];
 
-const FAQ = [
+const faq = ({ freePercent, proPercent }: PlanFeePercents) => [
   {
     q: 'Can I cancel any time?',
     a: 'Yes. Pro stays on until the end of the month you paid for, then your page goes back to Free. No charge after that.',
@@ -126,7 +128,7 @@ const FAQ = [
   },
   {
     q: 'Does Pro change what TipMe keeps?',
-    a: `Yes. On Pro, TipMe keeps ${PRO_SHARE_PERCENT}% of each tip instead of ${FREE_SHARE_PERCENT}%, processing included. The rate is set when a supporter sees the amount, so a tip already on its way keeps its rate. Withdrawals work the same on both plans.`,
+    a: `Yes. On Pro, TipMe keeps ${proPercent}% of each tip instead of ${freePercent}%, with payment and withdrawal fees included. The rate is set when a supporter sees the amount, so a tip already on its way keeps its rate. Withdrawals are free on both plans.`,
   },
   {
     q: 'Does the Pro badge mean TipMe checked me?',
@@ -155,7 +157,8 @@ const Tick = () => (
  * The page that sells Pro, built to the ProPage board. The price is never in this code: the offer
  * reads the one staff set. Until buying is switched on, the offer says Pro is coming soon to buy.
  */
-export default function ProPage() {
+export default async function ProPage() {
+  const fees = await getPlanFees();
   return (
     <main id="main" tabIndex={-1} className="pro-sell marketing-page">
       <Container>
@@ -174,8 +177,8 @@ export default function ProPage() {
             </p>
           </div>
           <ProOffer
-            freePercent={FREE_SHARE_PERCENT}
-            proPercent={PRO_SHARE_PERCENT}
+            freePercent={fees.freePercent}
+            proPercent={fees.proPercent}
           />
         </section>
       </Container>
@@ -218,7 +221,7 @@ export default function ProPage() {
             TipMe — Receive appreciation. These are never behind Pro.
           </p>
           <ul className="pro-sell__keep">
-            {FREE_KEEPS.map((line) => (
+            {freeKeeps(fees).map((line) => (
               <li key={line}>
                 <Tick />
                 {line}
@@ -232,7 +235,7 @@ export default function ProPage() {
             Questions
           </h2>
           <div>
-            {FAQ.map(({ q, a }) => (
+            {faq(fees).map(({ q, a }) => (
               <details key={q} className="pro-sell__q">
                 <summary>{q}</summary>
                 <p>{a}</p>

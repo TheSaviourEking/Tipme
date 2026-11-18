@@ -367,10 +367,14 @@ test('the fee line says who pays the transfer fee, and nothing when there is non
     withdrawFee(ready()),
     'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
-  // While an unused top-up TipMe already sent can pay it.
+  // Owner, 18 Nov 2026: a person's withdrawals are free (TipMe pays). The API sends no fee for them.
+  assert.equal(
+    withdrawFee(ready({ feePaidBy: 'tipme', feeMinor: '0' })),
+    'Withdrawals are free: you receive the whole amount.',
+  );
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme' })),
-    'TipMe pays the ₦50 transfer fee this time.',
+    'Withdrawals are free: you receive the whole amount.',
   );
   assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
   assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
@@ -402,12 +406,16 @@ test('the summary: withdraw ₦10,000, the ₦50 fee, you receive ₦9,950 (owne
     feePaidBy: 'user',
     receiveMinor: 175_000n,
   });
-  // TipMe pays: what arrives is the amount.
+  // TipMe pays (owner, 18 Nov 2026): a ₦0 fee for the user, and what arrives is the amount.
   assert.deepEqual(withdrawSummary(ready({ feePaidBy: 'tipme' }), 180_000n), {
-    feeMinor: 5000n,
+    feeMinor: 0n,
     feePaidBy: 'tipme',
     receiveMinor: 180_000n,
   });
+  assert.deepEqual(
+    withdrawSummary(ready({ feePaidBy: 'tipme', feeMinor: '0' }), 1_000_000n),
+    { feeMinor: 0n, feePaidBy: 'tipme', receiveMinor: 1_000_000n },
+  );
   // Nothing would arrive.
   assert.equal(withdrawSummary(ready(), 5000n), null);
   assert.equal(withdrawSummary(null, 5000n), null);
@@ -443,4 +451,24 @@ test('the fee line names its source plainly, never the partner, and a different 
   assert.match(FEE_DIFFERENCE_NOTE, /your balance/);
   for (const text of [withdrawFee(ready()), FEE_DIFFERENCE_NOTE])
     assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
+});
+
+test('a person’s ready notice says withdrawals are free, with no fee figure (owner, 18 Nov 2026)', () => {
+  const view = of(ready({ feePaidBy: 'tipme', feeMinor: '0' }));
+  assert.equal(view.canWithdraw, true);
+  assert.equal(
+    view.notice.body,
+    'You can withdraw ₦1,800 to GTBank ••1234. Withdrawals are free: you receive the whole amount.',
+  );
+  assert.doesNotMatch(view.notice.body, /₦50|transfer fee/);
+});
+
+test('the withdraw screen shows “Free” for the fee when TipMe pays, and no fee-difference note', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(
+    new URL('../src/app/dashboard/withdraw/withdraw-view.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(src, /figures\.feePaidBy === 'tipme' \? \(\s*'Free'/);
+  assert.doesNotMatch(src, /Paid by TipMe/);
 });

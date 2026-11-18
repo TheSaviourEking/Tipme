@@ -194,17 +194,18 @@ export function withdrawState(input: {
 }
 
 /**
- * Who pays the transfer fee, when the quote has one (owner, 12 Nov 2026): the user, from the amount
- * they withdraw; or TipMe, while an unused top-up it already sent can pay it. Null for no fee or no
- * ready quote.
+ * The fee line, when there is one. A person's page: withdrawals are free (owner, 18 Nov 2026), TipMe
+ * pays the partner's transfer fee, and the API reports no fee for them. Under the user-pays rule
+ * (businesses, owner 12 Nov 2026) the fee comes off the amount. Null for no fee or no ready quote.
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,
 ): string | null {
-  if (quote?.state !== 'ready' || quote.feeMinor === '0') return null;
-  return quote.feePaidBy === 'tipme'
-    ? `TipMe pays the ${formatNaira(quote.feeMinor)} transfer fee this time.`
-    : `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
+  if (quote?.state !== 'ready') return null;
+  if (quote.feePaidBy === 'tipme')
+    return 'Withdrawals are free: you receive the whole amount.';
+  if (quote.feeMinor === '0') return null;
+  return `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
 }
 
 /**
@@ -215,8 +216,8 @@ export const FEE_DIFFERENCE_NOTE =
   'If our payment partner charges a different fee, the difference is taken from or added back to your balance.';
 
 /**
- * The summary for an amount chosen: the fee, who pays it, and what arrives (withdraw ₦10,000, receive
- * ₦9,950 when the user pays). Null when there is no ready quote or nothing would arrive.
+ * The summary for an amount chosen: the user's fee, who pays it, and what arrives (withdraw ₦10,000,
+ * receive ₦10,000 when TipMe pays; ₦9,950 under the user-pays rule). Null when there is no ready quote or nothing would arrive.
  */
 export function withdrawSummary(
   quote: WithdrawalQuoteResponse | null,
@@ -227,8 +228,10 @@ export function withdrawSummary(
   receiveMinor: bigint;
 } | null {
   if (quote?.state !== 'ready') return null;
-  const feeMinor = BigInt(quote.feeMinor);
-  const receiveMinor = quote.feePaidBy === 'user' ? chosen - feeMinor : chosen;
+  // What the user pays: nothing when TipMe pays the fee (owner, 18 Nov 2026).
+  const feeMinor =
+    quote.feePaidBy === 'user' ? BigInt(quote.feeMinor) : BigInt(0);
+  const receiveMinor = chosen - feeMinor;
   if (receiveMinor <= BigInt(0)) return null;
   return { feeMinor, feePaidBy: quote.feePaidBy, receiveMinor };
 }

@@ -15791,6 +15791,112 @@
         "x-tipme-permission": "payouts.resolve"
       }
     },
+    "/v1/ops/plan-fees": {
+      "get": {
+        "operationId": "OpsPlanFees.state",
+        "tags": [
+          "OpsPlanFees"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      },
+      "post": {
+        "operationId": "OpsPlanFees.change",
+        "tags": [
+          "OpsPlanFees"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "freeBps": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,4})$"
+                  },
+                  "proBps": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,4})$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "freeBps",
+                  "proBps"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      }
+    },
     "/v1/ops/pro-price": {
       "get": {
         "operationId": "OpsProPrice.state",
@@ -18822,6 +18928,37 @@
             "session": []
           }
         ]
+      }
+    },
+    "/v1/plan-fees": {
+      "get": {
+        "operationId": "PlanFees.rates",
+        "tags": [
+          "PlanFees"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public"
       }
     },
     "/v1/pro/price": {

@@ -42,7 +42,7 @@ import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { apiFetch } from '@/lib/session-client';
-import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import { usePlanFees } from '@/lib/use-plan-fees';
 import { naira } from '@/lib/money';
 import { CURRENT_FEE_POLICY } from '@tipme/domain';
 
@@ -392,6 +392,7 @@ function UsernameCard({ handle }: { handle: string }) {
 }
 
 export default function OpsPagesPage() {
+  const { freePercent, proPercent } = usePlanFees();
   const id = useId();
   const copy = paymentModeCopy(usePaymentMode());
   const access = useOpsAccess();
@@ -486,9 +487,9 @@ export default function OpsPagesPage() {
       <p className="tm-hint">
         Pro lets a recipient choose their own tip amounts and minimum (never
         below <span className="money">{MINIMUM_TIP_TEXT}</span>) and change
-        their username. TipMe keeps {PRO_SHARE_PERCENT}% of each tip on Pro and{' '}
-        {FREE_SHARE_PERCENT}% on Free, processing included. Withdrawals work the
-        same on both plans. {copy.opsBilling}
+        their username. TipMe keeps {proPercent}% of each tip on Pro and{' '}
+        {freePercent}% on Free, payment and withdrawal fees included (set in
+        Fees). Withdrawals are free on both plans. {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField
