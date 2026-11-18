@@ -234,6 +234,56 @@ test.describe('a published Studio page', () => {
     }
   });
 
+  test('the update notice sits above the Tip bar on a styled page, as on Classic @mobile', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    // A newer build on the server: the open page offers a refresh (update-notice.spec.ts).
+    await page.route('**/api/version', (route) =>
+      route.fulfill({
+        json: { version: 'a-newer-build' },
+        headers: { 'cache-control': 'no-store' },
+      }),
+    );
+    for (const [handle, bar] of [
+      ['styleclear', 'form[data-skin] .tip-bar'],
+      ['stylesprint', 'form[data-skin] .tip-bar'],
+      ['styleclassic', '.profile-composer .composer-action'],
+    ] as const) {
+      await page.goto(`${stack.origin}/@${handle}`);
+      const notice = page
+        .getByRole('status')
+        .filter({ hasText: 'TipMe has been updated.' });
+      await expect
+        .poll(async () => {
+          await page.evaluate(() =>
+            document.dispatchEvent(new Event('visibilitychange')),
+          );
+          return notice.isVisible();
+        })
+        .toBe(true);
+      // Far down the page, where a styled page's bar is up.
+      await page.evaluate(() =>
+        scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: 'instant',
+        }),
+      );
+      await expect(page.locator(bar), handle).toBeVisible();
+      await expect
+        .poll(() =>
+          page.evaluate((sel) => {
+            const n = document
+              .querySelector('.update-notice')!
+              .getBoundingClientRect();
+            const b = document.querySelector(sel)!.getBoundingClientRect();
+            return Math.round(b.top - n.bottom);
+          }, bar),
+        )
+        .toBeGreaterThanOrEqual(0);
+    }
+  });
+
   test('each style shows links once, in its place, and none without links', async ({
     page,
   }) => {
@@ -487,14 +537,13 @@ test.describe('a published Studio page', () => {
     browser,
   }) => {
     // Each page in a fresh context, so every script it needs is counted, none from the cache.
-    // On a phone: a styled page shows the site's header (ruling P), and on a desktop Next.js
-    // prefetches the route its "Pro" link opens (about 5 KB of /pro's own script), which is the
-    // header's, not the style's; the standard page hides that header. On a phone the links sit in
-    // the closed menu, so what is counted is what the page itself needs.
-    const script = async (path: string) => {
-      const context = await browser.newContext({
-        viewport: { width: 390, height: 844 },
-      });
+    // At a phone's width and at the desktop default: a styled page shows the site's header
+    // (ruling P), whose links must not prefetch other routes' script on a profile page.
+    const script = async (
+      path: string,
+      viewport: { width: number; height: number },
+    ) => {
+      const context = await browser.newContext({ viewport });
       try {
         const loaded = await load(
           await context.newPage(),
@@ -511,18 +560,23 @@ test.describe('a published Studio page', () => {
         await context.close();
       }
     };
-    const standard = await script('/@propage');
-    for (const handle of STYLE_HANDLES) {
-      const designed = await script(`/@${handle}`);
-      // The files only this page loads, so a failure says what grew.
-      const own = [...designed.files].filter(([f]) => !standard.files.has(f));
-      console.log(
-        `STUDIO_SCRIPT ${JSON.stringify({ handle, designed: designed.bytes, standard: standard.bytes, own })}`,
-      );
-      expect(
-        designed.bytes - standard.bytes,
-        `${handle}: ${designed.bytes} bytes of script; the standard page ${standard.bytes}`,
-      ).toBeLessThanOrEqual(3 * 1024);
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 1280, height: 720 },
+    ]) {
+      const standard = await script('/@propage', viewport);
+      for (const handle of STYLE_HANDLES) {
+        const designed = await script(`/@${handle}`, viewport);
+        // The files only this page loads, so a failure says what grew.
+        const own = [...designed.files].filter(([f]) => !standard.files.has(f));
+        console.log(
+          `STUDIO_SCRIPT ${JSON.stringify({ width: viewport.width, handle, designed: designed.bytes, standard: standard.bytes, own })}`,
+        );
+        expect(
+          designed.bytes - standard.bytes,
+          `${handle} at ${viewport.width}: ${designed.bytes} bytes of script; the standard page ${standard.bytes}`,
+        ).toBeLessThanOrEqual(3 * 1024);
+      }
     }
   });
 
@@ -615,6 +669,8 @@ test.describe('a published Studio page', () => {
   });
 
   test('CLS during font swap stays ≤ 0.05', async ({ page }) => {
+    // Twelve pages at two widths.
+    test.setTimeout(360_000);
     for (const handle of [...STUDIO_HANDLES, ...STYLE_HANDLES])
       for (const width of [390, 1440]) {
         await page.setViewportSize({ width, height: 900 });
@@ -689,6 +745,8 @@ async function publishDesign(page: Page, handle: string) {
 test('with the switch on, a Pro page’s published design is its public page', async ({
   page,
 }, testInfo) => {
+  // Signs up, publishes through the API, then waits for the cached page.
+  test.setTimeout(90_000);
   const who = await signUpRecipient(page, testInfo);
   await publishDesign(page, who.handle);
   await expect(async () => {

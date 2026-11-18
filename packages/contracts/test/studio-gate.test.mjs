@@ -176,6 +176,33 @@ test('a lapsed free style keeps its style and drops the photo accent and Pro blo
   );
 });
 
+test('Free shows only text and quote blocks: a kind outside that list never leaks', () => {
+  // The supporter wall is not Pro-listed (STUDIO_PRO_BLOCKS) and is refused for now; §12.5 lets
+  // Free show text and quote only, so any other kind stays hidden on Free.
+  const supporters = { id: 'blk00009', kind: 'supporters' };
+  for (const style of ['journal', 'stage']) {
+    const shown = studioShown(
+      doc({
+        style,
+        blocks: [heading('blk00001'), supporters, quote('blk00003')],
+      }),
+      'free',
+    );
+    assert.deepEqual(
+      shown.blocks.map((b) => b.kind),
+      ['text', 'quote'],
+      style,
+    );
+  }
+  assert.equal(
+    studioShown(doc({ style: 'classic', blocks: [supporters] }), 'free'),
+    null,
+  );
+  // Pro shows the document as it is.
+  const pro = doc({ blocks: [supporters] });
+  assert.equal(studioShown(pro, 'pro'), pro);
+});
+
 test('what a Free page shows never holds anything Pro, and is never the Classic default', () => {
   fc.assert(
     fc.property(

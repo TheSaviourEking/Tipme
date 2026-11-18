@@ -23,6 +23,12 @@ type Plan = 'free' | 'pro';
 const isPro = (b: StudioBlock) => STUDIO_PRO_BLOCKS.includes(b.kind);
 
 /**
+ * The blocks a Free page shows (§12.5): text and quote, and nothing else. An allowlist, so a kind
+ * added later (the supporter wall) stays hidden on Free until it is placed here on purpose.
+ */
+const FREE_SHOWN: readonly StudioBlock['kind'][] = ['text', 'quote'];
+
+/**
  * What the public page shows for this plan (§12.5), or null for the standard page. Pro: the
  * document. Free with a Pro style: Classic, with their accent (the photo accent becomes Classic's
  * purple), their mode, their cover where Classic offers it, and their text and quote blocks in
@@ -46,7 +52,7 @@ export function studioShown(
     cover: STUDIO_STYLES[style].covers.includes(doc.cover)
       ? doc.cover
       : 'yours',
-    blocks: doc.blocks.filter((b) => !isPro(b)),
+    blocks: doc.blocks.filter((b) => FREE_SHOWN.includes(b.kind)),
   };
   if (isClassicDefault(shown)) return null;
   // Nothing hidden: the document itself, so a caller can tell nothing changed.

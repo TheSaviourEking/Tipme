@@ -542,6 +542,12 @@ export function publishStudio(
       if (issues.length) return { issues, keys: [] as string[] };
       const pro = proItemsOf(version);
       const needsPro = pro.style || pro.photoAccent || pro.blockIds.length > 0;
+      // Backup, not the gate: the plan above was read under the page's row lock, which a plan
+      // change also takes (recomputePlan), so it can't change before this commits, and the check
+      // has already refused Pro on Free (tested: "a plan change during publish cannot put a Pro
+      // style live"). The write still requires Pro, as setThanks does, in case anything ever
+      // changes the plan without that lock; it can't be reached while the lock holds.
+
       const written = await tx
         .update(pageStudios)
         .set({

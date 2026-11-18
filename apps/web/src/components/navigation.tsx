@@ -5,6 +5,7 @@ import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Container, Surface } from '@tipme/ui';
 import { Brand } from './brand';
 import { GuestActions, NavAccount } from './nav-account';
+import { NavLink, onProfilePage } from './nav-link';
 
 /**
  * Who the product is for. Individuals is open; the other two say so and are not links until
@@ -48,12 +49,15 @@ function MenuIcon({ path }: { path: string }) {
 
 /** Reading the address makes a page wait for the browser, so it sits in its own boundary. */
 function ProLink({ onClick }: { onClick(): void }) {
-  const onPro = usePathname() === '/pro';
+  const pathname = usePathname();
+  const onPro = pathname === '/pro';
   return (
     <Link
       href="/pro"
       aria-current={onPro ? 'page' : undefined}
       onClick={onClick}
+      // No prefetch of /pro's script from a profile page (nav-link.tsx).
+      {...(onProfilePage(pathname) ? { prefetch: false } : {})}
     >
       Pro
     </Link>
@@ -179,9 +183,9 @@ export function Navigation({
             </Button>
           </div>
           {/* The steps live on Home (the owner, 3 Nov 2026); on Home the page glides down to them. */}
-          <Link href="/#how-it-works" onClick={close}>
+          <NavLink href="/#how-it-works" onClick={close}>
             How it works
-          </Link>
+          </NavLink>
           <div
             ref={whoGroup}
             className={`who ${whoOpen ? 'is-open' : ''}`}
@@ -223,7 +227,7 @@ export function Navigation({
                 {WHO.map((choice) => (
                   <li key={choice.title}>
                     {choice.href ? (
-                      <Link
+                      <NavLink
                         href={choice.href}
                         className="who__item"
                         data-who-item
@@ -237,7 +241,7 @@ export function Navigation({
                             <span>{choice.text}</span>
                           </>
                         )}
-                      </Link>
+                      </NavLink>
                     ) : (
                       <div className="who__item" data-who-item>
                         <strong>{choice.title}</strong>
@@ -249,7 +253,13 @@ export function Navigation({
               </ul>
             </Surface>
           </div>
-          <Suspense fallback={<Link href="/pro">Pro</Link>}>
+          <Suspense
+            fallback={
+              <Link href="/pro" prefetch={false}>
+                Pro
+              </Link>
+            }
+          >
             <ProLink onClick={close} />
           </Suspense>
           {/* Sign in and Claim your username, or, signed in, Go to my dashboard (NavAccount). Before

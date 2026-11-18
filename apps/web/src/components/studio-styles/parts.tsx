@@ -3,6 +3,7 @@ import {
   RENDITION_WIDTHS,
   SOCIAL_PLATFORMS,
   STUDIO_IMAGE_ASPECT,
+  COVER_SIZE,
   coverRenditionPath,
   embedUrl,
   linkHandle,
@@ -44,9 +45,6 @@ const API_COVER = /^\/v1\/covers\/[0-9a-f-]+\/\d+\.webp$/;
 const LAB_COVER = /^\/dev\/studio-lab\/image\/[0-9a-f-]{36}$/;
 /** The lab's stand-in for an uploaded cover: one file, like the API's. */
 const LAB_UPLOAD = /^\/dev\/studio-lab\/cover\/\d+\.webp$/;
-
-/** The size every uploaded cover is stored at (the API's `toCover`, 2240 × 600). */
-const UPLOADED_COVER = { width: 2240, height: 600 } as const;
 
 /** A cover photo's own pixel size, where it is known (the lab's generated covers). */
 export type CoverSize = { width: number; height: number };
@@ -96,10 +94,10 @@ function coverPhoto(
       src: at(coverRenditionPath(cover.path, narrow)),
       srcSet: [
         ...widths.map((w) => `${at(coverRenditionPath(cover.path, w))} ${w}w`),
-        `${at(cover.path)} ${UPLOADED_COVER.width}w`,
+        `${at(cover.path)} ${COVER_SIZE.width}w`,
       ].join(', '),
       // Drawn at the band's own shape: a tall crop shows it far wider than the screen.
-      sizes: coverSizes(style, UPLOADED_COVER.width / UPLOADED_COVER.height),
+      sizes: coverSizes(style, COVER_SIZE.width / COVER_SIZE.height),
     };
   }
   if (!LAB_COVER.test(cover.path)) return null;
