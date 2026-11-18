@@ -45,7 +45,7 @@ const LAB_COVER = /^\/dev\/studio-lab\/image\/[0-9a-f-]{36}$/;
 /** The lab's stand-in for an uploaded cover: one file, like the API's. */
 const LAB_UPLOAD = /^\/dev\/studio-lab\/cover\/\d+\.webp$/;
 
-/** The size every uploaded cover is stored at (apps/api cover-renditions.ts `toCover`). */
+/** The size every uploaded cover is stored at (the API's `toCover`, 2240 × 600). */
 const UPLOADED_COVER = { width: 2240, height: 600 } as const;
 
 /** A cover photo's own pixel size, where it is known (the lab's generated covers). */
