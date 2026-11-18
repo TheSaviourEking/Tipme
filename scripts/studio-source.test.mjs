@@ -205,8 +205,8 @@ test('every style rule is scoped to a styled Studio page', () => {
     ]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'))
-      // Keyframe steps are not selectors.
-      .filter((s) => !/^(from|to|[\d.]+%)$/.test(s))
+      // Keyframe steps are not selectors (`0%, 85%` included).
+      .filter((s) => !/^(from|to|[\d.]+%)(\s*,\s*(from|to|[\d.]+%))*$/.test(s))
       .flatMap(topLevel);
     assert.ok(selectors.length > 10, `${file} has its rules`);
     const own = file === 'frame.css' ? '' : file.replace('.css', '');
@@ -225,5 +225,19 @@ test('every style rule is scoped to a styled Studio page', () => {
             : /^(html:has\()?\.studio\[data-style\]/,
         `${file}: "${s}"`,
       );
+    // `html:has(a, b)` matches a page with either: one stray selector in that list would reach
+    // pages the rule never meant (a standard page, Classic). One selector inside it, always.
+    for (const s of selectors.filter((x) => x.startsWith('html:has('))) {
+      let depth = 0;
+      for (const ch of s.slice('html:has('.length)) {
+        if (ch === ')' && depth === 0) break;
+        if (ch === '(') depth += 1;
+        if (ch === ')') depth -= 1;
+        assert.ok(
+          !(ch === ',' && depth === 0),
+          `${file}: one selector inside html:has(): "${s}"`,
+        );
+      }
+    }
   }
 });

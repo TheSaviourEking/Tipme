@@ -8,14 +8,36 @@ import { expectAccessible } from './helpers';
 // scroll-driven animation, which Chromium runs. Sprint's desktop keeps today's header (its photo is
 // the left half, beside the name).
 
-type Case = { style: string; query: string; band?: boolean };
+type Case = { style: string; label: string; query: string; band?: boolean };
 const CASES: Case[] = [
-  { style: 'stage', query: 'style=stage&mode=light' },
-  { style: 'horizon', query: 'style=horizon&mode=light' },
-  { style: 'sprint', query: 'style=sprint&mode=light' },
-  { style: 'signboard', query: 'style=signboard&mode=light', band: true },
-  { style: 'signboard', query: 'style=signboard&mode=light&cover=yours' },
+  { style: 'stage', label: 'stage', query: 'style=stage&mode=light' },
+  {
+    style: 'stage',
+    label: 'stage (gradient)',
+    query: 'style=stage&mode=light&cover=gradient',
+  },
+  { style: 'horizon', label: 'horizon', query: 'style=horizon&mode=light' },
+  { style: 'sprint', label: 'sprint', query: 'style=sprint&mode=light' },
+  {
+    style: 'signboard',
+    label: 'signboard (band)',
+    query: 'style=signboard&mode=light',
+    band: true,
+  },
+  {
+    style: 'signboard',
+    label: 'signboard (photo)',
+    query: 'style=signboard&mode=light&cover=yours',
+  },
+  { style: 'clear', label: 'clear (photo)', query: 'style=clear&mode=light' },
+  {
+    style: 'clear',
+    label: 'clear (cover art)',
+    query: 'style=clear&mode=light&yours=design',
+  },
 ];
+
+const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** The page's tokens as the browser resolves colours, and the header and hero as drawn. */
 const state = (page: Page) =>
@@ -59,9 +81,11 @@ const state = (page: Page) =>
     };
   });
 
-for (const width of [390, 1440])
-  for (const { style, query, band } of CASES) {
-    const name = `${style}${band ? ' (band)' : query.includes('yours') ? ' (photo)' : ''} at ${width}`;
+// A phone, a tablet (the wide header's links over the cover; Sprint's cover still edge to edge)
+// and a desktop.
+for (const width of [390, 820, 1440])
+  for (const { style, label, query, band } of CASES) {
+    const name = `${label} at ${width}`;
     test(`the header sits over the cover at the top of ${name}, solid once past`, async ({
       page,
     }) => {
@@ -69,7 +93,7 @@ for (const width of [390, 1440])
       await page.goto(`/dev/studio-lab?${query}`);
       await page.locator('.studio[data-style]').waitFor();
       const top = await state(page);
-      if (style === 'sprint' && width === 1440) {
+      if (style === 'sprint' && width >= 1024) {
         // Desktop Sprint: today's header, solid in bg above the half-width photo.
         expect(top.background).toBe(top.bg);
         expect(top.heroTop).toBe(top.headerBottom);
@@ -85,29 +109,67 @@ for (const width of [390, 1440])
       const ink = band ? top.accLabel : 'rgb(255, 255, 255)';
       expect(top.color).toBe(ink);
       expect(top.wordmark).toBe(ink);
-      // Every key and word ends where the unit test proves the scrim (64 px).
-      expect(top.keysBottom).toBeLessThanOrEqual(64);
-      if (width === 1440)
-        // "Claim your username" stays TipMe purple.
-        await expect(page.locator('.site-header .nav-claim')).toHaveCSS(
-          'background-color',
-          'rgb(122, 50, 249)',
-        );
+      // Every key and word ends where the unit test proves the scrim (72 px; the site's links
+      // wrap to two lines on a tablet).
+      expect(top.keysBottom).toBeLessThanOrEqual(72);
+      if (width >= 801) {
+        // "Claim your username" stays TipMe purple; over the band it has a ring in the band's
+        // label colour, so its edge shows on a band as light as it.
+        const claim = page.locator('.site-header .nav-claim');
+        await expect(claim).toHaveCSS('background-color', 'rgb(122, 50, 249)');
+        if (band)
+          expect(
+            await claim.evaluate((el) => getComputedStyle(el).boxShadow),
+          ).toMatch(new RegExp(`^${esc(top.accLabel)} 0px 0px 0px 2px, `));
+      }
       await expectAccessible(page);
 
-      // Past the hero: the page's bg and words, and still at the top of the screen.
+      // Past the hero: the page's bg and words, the purple "me" (today's header again), and
+      // still at the top of the screen. Read together, once the scroll has been drawn.
       await page.evaluate((y) => window.scrollTo(0, y), top.heroBottom + 40);
       await expect
-        .poll(async () => (await state(page)).background)
-        .toBe(top.bg);
+        .poll(async () => {
+          const s = await state(page);
+          return [s.background, s.color, s.wordmark];
+        })
+        .toEqual([top.bg, top.fg, 'rgb(122, 50, 249)']);
       const past = await state(page);
-      expect(past.color).toBe(past.fg);
-      // Today's header again: the purple "me".
-      expect(past.wordmark).toBe('rgb(122, 50, 249)');
       expect(past.headerBottom).toBe(76);
+      if (band && width >= 801)
+        await expect
+          .poll(() =>
+            page
+              .locator('.site-header .nav-claim')
+              .evaluate((el) => getComputedStyle(el).boxShadow),
+          )
+          .toMatch(/^rgba\(0, 0, 0, 0\) 0px 0px 0px 2px, /);
       await expectAccessible(page);
     });
   }
+
+// The sticky header covers the top 76 px: a Tip button scrolled under it is out of sight, so the
+// phone's Tip bar shows (the bar's observer leaves the header's strip out of the screen).
+for (const query of ['style=stage&mode=light', 'style=horizon&mode=light'])
+  test(`the Tip bar shows once the in-page Tip is under the header (${query})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/dev/studio-lab?${query}`);
+    const form = page.locator('form[data-skin]');
+    await form.waitFor();
+    await expect(form).toHaveAttribute('data-bar', 'hidden');
+    const tip = form.locator('.composer-action .composer-submit');
+    // The button's foot 12 px above the header's: wholly under the header, still in the window.
+    await tip.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      window.scrollBy({ top: box.bottom - (76 - 12), behavior: 'instant' });
+    });
+    expect(
+      await tip.evaluate((el) => Math.round(el.getBoundingClientRect().bottom)),
+    ).toBe(64);
+    await expect(form).toHaveAttribute('data-bar', 'shown');
+    await expect(page.locator('.tip-bar')).toBeVisible();
+  });
 
 test('the phone menu opened over a cover is the solid page panel, in the page’s words', async ({
   page,

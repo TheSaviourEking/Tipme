@@ -676,6 +676,12 @@ const over = (style, { cover = 'yours', mode, profile = {}, coverSize } = {}) =>
     }),
   );
 const { STYLE_COVER } = await import(new URL('parts.mjs', out));
+/** The site header's height (globals.css), which a cover runs up under on a styled page. */
+const NAV_HEIGHT = Number(
+  /--nav-height: (\d+)px;/.exec(
+    readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8'),
+  )[1],
+);
 
 /** A CSS linear-gradient's stops as [alpha, position 0..1], from the bottom (`to top`). */
 function scrimStops(decls, scrimEnd) {
@@ -765,9 +771,11 @@ test("text over a Stage or Horizon photo sits on the spec's scrim: at least 55% 
       `.studio[data-style='${style}'] .studio-scrim`,
     );
     assert.match(words, /color: #fff;/, `${style}: white words`);
-    // The cover's own height is the one StyleCover sizes its photo for (phone, desktop).
+    // The cover's own height, plus the header it runs up under (frame.css), is the one
+    // StyleCover sizes its photo for (phone, desktop).
     assert.equal(
-      px(declarations(css, `.studio[data-style='${style}']`), '--tall'),
+      px(declarations(css, `.studio[data-style='${style}']`), '--tall') +
+        NAV_HEIGHT,
       STYLE_COVER[style].tall,
     );
     assert.equal(
@@ -778,12 +786,12 @@ test("text over a Stage or Horizon photo sits on the spec's scrim: at least 55% 
           'min-width: 1024px',
         ),
         '--tall',
-      ),
+      ) + NAV_HEIGHT,
       STYLE_COVER[style].desktopTall,
     );
   }
-  assert.deepEqual(STYLE_COVER.stage, { tall: 488, desktopTall: 640 });
-  assert.deepEqual(STYLE_COVER.horizon, { tall: 640, desktopTall: 836 });
+  assert.deepEqual(STYLE_COVER.stage, { tall: 564, desktopTall: 716 });
+  assert.deepEqual(STYLE_COVER.horizon, { tall: 716, desktopTall: 912 });
 });
 
 test('Stage and Horizon put the words over the photo, white, on the scrim, with no avatar', () => {
@@ -2009,7 +2017,8 @@ test('every header-over-cover rule waits for scroll-driven animation support, in
   );
   for (const m of inside.matchAll(/(?:^|[;{}])\s*([^;{}@]+?)\s*\{/g)) {
     const sel = m[1].trim();
-    if (/^(from|to|\d+%)$/.test(sel)) continue;
+    // Keyframe stops (`0%, 85%`) are not selectors.
+    if (/^(from|to|\d+%)(\s*,\s*(from|to|\d+%))*$/.test(sel)) continue;
     for (const one of sel.split(/,(?![^(]*\))/))
       assert.match(
         one.trim(),
@@ -2036,11 +2045,12 @@ function headerScrim(decls) {
     });
 }
 
-// The header's words and keys end 60 px down (16 px + a 44 px key in the 76 px bar); e2e measures
-// it. The scrim is proved to there, with 4 px to spare.
-const HEADER_TEXT_BOTTOM = 64;
+// The header's words and keys end 60 px down (16 px + a 44 px key in the 76 px bar); where the
+// site's links wrap to two lines (801 to about 1000 px) they reach 64. e2e measures it. The scrim
+// is proved to 72 px.
+const HEADER_TEXT_BOTTOM = 72;
 
-test('the header over a cover is white on a scrim of at least 55% black wherever its words sit: 4.5:1', () => {
+test('the header over a cover is white on a scrim of at least 58% black wherever its words sit: 4.5:1', () => {
   const inside = supportsBlock(frameCss()).inside;
   const flat = inside.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
   const rule = (sel) => {
@@ -2076,7 +2086,7 @@ test('the header over a cover is white on a scrim of at least 55% black wherever
   };
   for (let y = 0; y <= HEADER_TEXT_BOTTOM; y += 1) {
     const a = alphaAtPx(y);
-    assert.ok(a >= 0.55, `${a.toFixed(3)} black at ${y} px`);
+    assert.ok(a >= 0.58, `${a.toFixed(3)} black at ${y} px`);
     // White words over the scrim over a white photo, the worst cover there is.
     const under = blend('#08080a', a, '#ffffff');
     assert.ok(
@@ -2085,15 +2095,18 @@ test('the header over a cover is white on a scrim of at least 55% black wherever
     );
   }
   // The words are white; the wordmark is drawn in them (its purple would vanish on a photo).
-  assert.match(rule(`${over} .site-header`), /--studio-head-ink: #fff;/);
+  assert.match(rule(`${over} .site-header`), /--studio-head-over: #fff;/);
   assert.match(
     rule(
       'html:has(.studio[data-style][data-header]) .site-header .nav-shell > .brand .brand__mark path',
     ),
     /fill: currentColor;/,
   );
-  // "Claim your username" keeps TipMe purple: nothing here restyles the primary key.
-  assert.doesNotMatch(inside, /tm-button--primary|nav-claim/);
+  // "Claim your username" keeps TipMe purple: nothing here changes its fill or words; the one
+  // rule on it is the ring that keeps its edge on Signboard's band.
+  assert.doesNotMatch(inside, /tm-button--primary/);
+  for (const m of flat.matchAll(/([^{}]*nav-claim[^{}]*)\{([^}]*)\}/g))
+    assert.match(m[2].trim(), /^box-shadow: [^;]+;$/, m[1]);
 });
 
 test("over Signboard's band the header takes the band's label colour, 4.5:1 on every accent", () => {
@@ -2123,38 +2136,116 @@ test("over Signboard's band the header takes the band's label colour, 4.5:1 on e
   );
   for (const { tokens } of chromeBlocks(page()))
     assert.ok(!('accLabel' in tokens));
+  const band = supportsBlock(frameCss()).inside;
   assert.match(
-    supportsBlock(frameCss()).inside,
-    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-ink: var\(--studio-accLabel\);/,
+    band,
+    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-over: var\(--studio-accLabel\);\s*--studio-head-ring: var\(--studio-accLabel\);/,
+  );
+  // On a wide screen the purple key sits on the band, which can be as light as it (1.0:1 on some
+  // accents): a 2 px ring in the band's label colour keeps its edge while the header is over it.
+  assert.match(
+    band.replace(/\s+/g, ' '),
+    /@media \(min-width: 801px\) \{[^@]*html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \.nav-claim \{ box-shadow: 0 0 0 2px var\(--studio-head-ring\),[^;]+; \}/,
   );
 });
 
-test('the header changes colour and opacity on scroll only, and switches without motion when asked', () => {
+test('the header holds its ink over the shade, then switches ink, bg and shade together, with no fade between', () => {
   const inside = supportsBlock(frameCss()).inside;
-  const frames = /@keyframes studio-head \{([\s\S]*?)\n {2}\}/.exec(inside);
-  assert.ok(frames, 'the header keyframes');
-  // Colours only: the background, the ink and the custom colours the header's keys read.
-  for (const m of frames[1].matchAll(/([a-z-]+):/g))
-    assert.match(
-      m[1],
-      /^(background-color|--studio-head-ink|--studio-head-me|--surface-raised|--edge-hairline|--border-material)$/,
-      m[1],
-    );
-  const scrim = /@keyframes studio-head-scrim \{([\s\S]*?)\n {2}\}/.exec(
-    inside,
+  /** A keyframes block's stops as [[percent…], declarations]. */
+  const stops = (name) => {
+    const block = new RegExp(
+      `@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`,
+    ).exec(inside);
+    assert.ok(block, name);
+    return [...block[1].matchAll(/([\d%,\s]+)\{([^}]*)\}/g)].map((m) => [
+      m[1].split(',').map((p) => Number.parseFloat(p)),
+      m[2].replace(/\s+/g, ' ').trim(),
+    ]);
+  };
+  const head = stops('studio-head');
+  const scrim = stops('studio-head-scrim');
+  assert.equal(head.length, 2);
+  assert.equal(scrim.length, 2);
+  const [[holdAt, hold], [endAt, end]] = head;
+  // Held from the top: the words in their over-the-cover ink on the full shade, no bg.
+  assert.deepEqual(holdAt[0], 0);
+  assert.match(hold, /background-color: transparent;/);
+  assert.match(hold, /--studio-head-ink: var\(--studio-head-over\);/);
+  assert.deepEqual(scrim[0], [holdAt, 'opacity: 1;']);
+  // Then everything changes inside one short step (no mid-way where light words meet a light
+  // bg): bg, the page's words, the purple "me", raised keys, no band ring, no shade.
+  assert.deepEqual(endAt.at(-1), 100);
+  assert.ok(
+    endAt[0] - holdAt.at(-1) <= 3,
+    `a ${endAt[0] - holdAt.at(-1)}% step`,
   );
-  assert.ok(scrim);
-  for (const m of scrim[1].matchAll(/([a-z-]+):/g))
-    assert.equal(m[1], 'opacity');
+  for (const want of [
+    'background-color: var(--studio-bg);',
+    '--studio-head-ink: var(--studio-fg);',
+    '--studio-head-me: #7a32f9;',
+    '--surface-raised: var(--studio-card);',
+    '--studio-head-ring: transparent;',
+  ])
+    assert.ok(end.includes(want), want);
+  assert.deepEqual(scrim[1], [endAt, 'opacity: 0;']);
+  // Colours and opacity only.
+  for (const [, decls] of [...head, ...scrim])
+    for (const m of decls.matchAll(/([a-z-]+):/g))
+      assert.match(
+        m[1],
+        /^(opacity|background-color|--studio-head-ink|--studio-head-me|--studio-head-ring|--surface-raised|--edge-hairline|--border-material)$/,
+        m[1],
+      );
   const reduced =
     /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n {2}\}/.exec(
       inside,
     );
   assert.ok(reduced, 'a reduced-motion block');
   assert.match(reduced[1], /animation-timing-function: steps\(1, end\);/);
-  // The ink is a registered colour, so it interpolates instead of flipping half way.
   assert.match(
     frameCss(),
     /@property --studio-head-ink \{\s*syntax: '<color>';/,
+  );
+});
+
+test('a full-bleed cover photo is offered for the box it is drawn in, header strip included', () => {
+  const img = (html) =>
+    /<img class="studio-cover__photo"[^>]*sizes="([^"]+)"/.exec(html)?.[1];
+  const w = (h) => Math.ceil((h * 16) / 9);
+  const clear = sheet('clear');
+  const phone = px(
+    declarations(clear, ".studio[data-style='clear'] .studio-cover"),
+    'height',
+  );
+  const desk = px(
+    declarations(
+      clear,
+      ".studio[data-style='clear'] .studio-cover",
+      'min-width: 1024px',
+    ),
+    'height',
+  );
+  assert.equal(
+    img(over('clear')),
+    `(min-width: 1024px) max(100vw, ${w(desk + NAV_HEIGHT)}px), max(100vw, ${w(phone + NAV_HEIGHT)}px)`,
+  );
+  const sprint = px(
+    declarations(sheet('sprint'), ".studio[data-style='sprint'] .studio-cover"),
+    'height',
+  );
+  assert.equal(
+    img(over('sprint')),
+    `(min-width: 1024px) 100vw, max(100vw, ${w(sprint + NAV_HEIGHT)}px)`,
+  );
+  const cap = /height: min\(56\.25vw, (\d+)px\);/.exec(
+    declarations(
+      sheet('signboard'),
+      ".studio[data-style='signboard'] .studio-cover[data-cover='photo']",
+    ),
+  );
+  assert.ok(cap);
+  assert.equal(
+    img(over('signboard')),
+    `max(100vw, calc(min(100vw, ${w(Number(cap[1]))}px) + ${w(NAV_HEIGHT)}px))`,
   );
 });
