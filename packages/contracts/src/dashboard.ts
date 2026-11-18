@@ -130,11 +130,13 @@ export type WithdrawalQuote =
       withdrawableMinor: string;
       ledgerMinor: string;
       providerMinor: string;
-      /** The partner's transfer fee on a withdrawal. */
+      /** The transfer fee the user pays on a withdrawal: '0' when TipMe pays it. */
       feeMinor: string;
       /**
-       * Who pays it (owner, 12 Nov 2026): 'user' takes it from the amount chosen (withdraw ₦10,000,
-       * receive ₦9,950); 'tipme' while an unused top-up TipMe already sent can pay it.
+       * Who pays the partner's fee. 'tipme' for every new withdrawal from a person's page (owner, 18
+       * Nov 2026: withdrawals are free), and for a business while the `business_payout_fee_absorbed`
+       * switch is on or an unused top-up can pay it; 'user' takes it from the amount chosen (withdraw
+       * ₦10,000, receive ₦9,950), a business's rule since 12 Nov 2026.
        */
       feePaidBy: 'user' | 'tipme';
       destination: { bankName: string; last4: string };

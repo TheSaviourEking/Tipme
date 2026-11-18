@@ -50,6 +50,7 @@ import {
 } from '../schema.js';
 import { balanceIn, businessBalanceIn } from './balance.js';
 import { freeFeeCredit } from './fee-credits.js';
+import { readFeatureSwitch } from './feature-switches.js';
 import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
@@ -1626,7 +1627,7 @@ async function quoteFor(
   if (read.state === 'setup_needed') return read;
   const providerMinor = notNegative(read.availableMinor - queuedMinor);
   const feePaidBy = await guarded(() =>
-    feePayerFor(db, route, input.provider.name, read.feeMinor),
+    feePayerFor(db, owner, route, input.provider.name, read.feeMinor),
   );
   return {
     state: 'ready',
@@ -1642,15 +1643,27 @@ async function quoteFor(
 }
 
 /**
- * Who pays the partner's fee on a withdrawal asked for now (owner, 12 Nov 2026): the user, from the
- * amount, unless an unused top-up TipMe already sent to this account can pay it (fee-credits.ts).
+ * Who pays the partner's fee on a withdrawal asked for now. A person's own page: TipMe, always (owner,
+ * 18 Nov 2026: "All the fees are absorbed in these - incoming and withdrawal fees"). The whole amount
+ * is sent, TipMe tops the fee up from the platform payment reserve before the payout (coverFee, or an
+ * unused top-up), and books the partner's real fee as its own cost when the payout is paid. A
+ * business is unchanged until the owner says otherwise: it pays from the amount (owner, 12 Nov 2026),
+ * unless an unused top-up TipMe already sent to its account can pay it (fee-credits.ts). A payout
+ * keeps the rule it was asked under (`fee_payer`), so one asked for before this release finishes as
+ * it was asked.
  */
 async function feePayerFor(
   db: Database | Tx,
+  owner: MoneyOwner,
   route: { accountReference: string | null },
   providerName: string,
   feeMinor: bigint,
 ): Promise<'user' | 'tipme'> {
+  if (!('businessId' in owner)) return 'tipme';
+  // Staff may switch TipMe paying a business's fee on (`business_payout_fee_absorbed`, a money
+  // switch: two people, audited). Read uncached, so a quote and the request agree with the switch.
+  if (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
+    return 'tipme';
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
     accountRef: route.accountReference,
@@ -1823,10 +1836,12 @@ async function requestFor(
       // cannot withdraw, or an account they cannot close.
       if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
-      // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and
-      // nothing can be sent when the amount is not more than the fee.
+      // A person's page: TipMe pays the fee and the whole amount is sent (owner, 18 Nov 2026). A
+      // business: the fee comes off the amount chosen (owner, 12 Nov 2026), and nothing can be sent
+      // when the amount is not more than the fee.
       const feePayer = await feePayerFor(
         tx,
+        owner,
         route,
         providerName,
         read.feeMinor,
