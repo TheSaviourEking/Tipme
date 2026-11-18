@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
+import { STUDIO_STYLE_IDS } from '@tipme/contracts';
 
 // The home page's first paint waits for its whole stylesheet. Dashboard and admin styles live in
 // their own stylesheets (app/dashboard/dashboard.css, app/ops/ops.css), loaded only there (15 Nov
@@ -205,6 +206,25 @@ const STYLES_WITH_SHEETS = [
   ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
 ].map((m) => m[1]);
 
+// The styles still to be drawn (each later style PR removes its id). A style listed here must not
+// have a sheet yet, so the list can't go stale.
+const NOT_YET_DRAWN = ['stage', 'signboard', 'sprint', 'tiles', 'horizon'];
+const DRAWN_STYLES = STUDIO_STYLE_IDS.filter(
+  (s) => s !== 'classic' && !NOT_YET_DRAWN.includes(s),
+);
+
+test('every style the registry has, but those still to be drawn, has its own sheet', () => {
+  for (const style of NOT_YET_DRAWN) {
+    assert.ok(STUDIO_STYLE_IDS.includes(style), `${style} is a style`);
+    assert.ok(
+      !STYLES_WITH_SHEETS.includes(style),
+      `${style} has a sheet now: take it out of NOT_YET_DRAWN`,
+    );
+  }
+  for (const style of ['classic', ...DRAWN_STYLES])
+    assert.ok(STYLES_WITH_SHEETS.includes(style), `${style} has no sheet`);
+});
+
 /** The Studio CSS every /@username page links with its route, gzip. */
 const routeStudioBytes = () =>
   gzip(
@@ -269,10 +289,14 @@ test(
       'no production build (run pnpm build)',
   },
   () => {
-    assert.ok(STYLES_WITH_SHEETS.includes('clear'), 'Clear has its sheet');
     const base = routeStudioBytes();
-    // Classic is held to the standard budget above.
-    for (const style of STYLES_WITH_SHEETS.filter((s) => s !== 'classic')) {
+    // Every style in the registry but Classic (held to the standard budget above), so a style
+    // drawn without a sheet fails here instead of passing unmeasured.
+    for (const style of DRAWN_STYLES) {
+      assert.ok(
+        STYLES_WITH_SHEETS.includes(style),
+        `${style} has its sheet in style-sheets.tsx`,
+      );
       const bytes = base + styleSheetBytes(style);
       console.log(`STUDIO_STYLE_CSS ${JSON.stringify({ style, bytes })}`);
       assert.ok(

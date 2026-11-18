@@ -11,6 +11,8 @@ import type { StudioStyleId } from '@tipme/contracts';
 const SHEETS: Partial<Record<StudioStyleId, ReturnType<typeof dynamic>>> = {
   classic: dynamic(() => import('./sheets/classic')),
   clear: dynamic(() => import('./sheets/clear')),
+  journal: dynamic(() => import('./sheets/journal')),
+  linen: dynamic(() => import('./sheets/linen')),
 };
 
 export function StyleSheet({ styleId }: { styleId: StudioStyleId }) {

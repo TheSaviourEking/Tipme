@@ -21,12 +21,19 @@ const VALUE = /^[#a-zA-Z0-9(),.%\s-]+$/;
 /**
  * The gradient cover's two stops (§9.2 "Gradient": two tints of the accent at low chroma). The
  * lightness pairs are the spec's; the chroma is the accent's, capped at 0.035 so the tint stays
- * quiet (builder's call). Styles without a gradient cover are absent.
+ * quiet (builder's call). `'bg'` ends on the page's own bg. Styles whose gradient cover is not an
+ * accent tint (Journal's is flat `el2`) are absent.
  */
 const GRADIENT: Partial<
-  Record<StudioStyleId, { light: [number, number]; dark: [number, number] }>
+  Record<
+    StudioStyleId,
+    { light: [number, number | 'bg']; dark: [number, number | 'bg'] }
+  >
 > = {
   clear: { light: [0.96, 0.9], dark: [0.28, 0.22] },
+  // Linen (§9.8): a warm accent tint at L .94 fading to bg. Dark mode isn't drawn: the tint starts
+  // at L .30, just above Linen's dark bg, so the frame never glows (builder's call, as Clear's).
+  linen: { light: [0.94, 'bg'], dark: [0.3, 'bg'] },
 };
 const GRADIENT_CHROMA = 0.035;
 
@@ -40,7 +47,9 @@ function withDerived(
   if (!stops || !acc || !isHex(acc)) return tokens;
   const { c, h } = hexToOklch(acc);
   const chroma = Math.min(c, GRADIENT_CHROMA);
-  const [from, to] = stops.map((l) => oklchToHex({ l, c: chroma, h }));
+  const [from, to] = stops.map((l) =>
+    l === 'bg' ? tokens.bg! : oklchToHex({ l, c: chroma, h }),
+  );
   return { ...tokens, coverFrom: from!, coverTo: to! };
 }
 
