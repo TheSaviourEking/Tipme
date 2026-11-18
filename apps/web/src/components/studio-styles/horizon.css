@@ -216,13 +216,16 @@
   background-color: rgb(10 10 12 / 62%);
 }
 
-/* The Tip area takes focus from "Send a tip"; it is a landing place, not a control. */
+/* The Tip area takes focus from "Send a tip": a ring in the accent shows where it landed
+   (WCAG 2.4.7), clear of the chips. */
 .studio[data-style='horizon'] .studio-tip {
   scroll-margin-top: 24px;
+  border-radius: 4px;
 }
 
 .studio[data-style='horizon'] .studio-tip:focus {
-  outline: none;
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 8px;
 }
 
 /* Below the cover: the bio, then the Tip moment. */
@@ -322,12 +325,27 @@
   color: var(--studio-fg);
 }
 
+.studio[data-style='horizon'] .studio-tip .tm-amount-choice > span {
+  position: relative;
+}
+
+/* And a 6 px accText dot in its corner: Horizon has no heavier weight to step to (400 and 500
+   only), so the choice is marked by shape too, never by colour alone (§4.4). */
 .studio[data-style='horizon']
   .studio-tip
   .tm-amount-choice
   input:checked
   + span::after {
-  display: none;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--studio-accText);
+  content: '';
 }
 
 .studio[data-style='horizon']
@@ -866,5 +884,32 @@
     grid-row: 4;
     grid-column: 2 / 5;
     margin-top: 80px;
+  }
+
+  /* No links: the first section takes their place beside the Tip, its title over its blocks
+     (§9.9: the right column holds the first block); the rest follow, split as before. */
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    .studio-blocks {
+    display: contents;
+  }
+
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    :is(.studio-section, .studio-foot) {
+    grid-row: auto;
+    grid-column: 2 / 5;
+    margin-top: 80px;
+  }
+
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    .studio-section:first-child {
+    display: flex;
+    flex-direction: column;
+    grid-row: 2;
+    grid-column: 4;
+    margin-top: 0;
+    padding-top: 80px;
   }
 }

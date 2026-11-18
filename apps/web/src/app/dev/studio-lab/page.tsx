@@ -77,8 +77,9 @@ const today = () =>
  * Page Studio styles (v2, spec 2026-11-17-page-studio-styles), rendered by StudioStylePage:
  *   ?style=<id> (LAB_STYLE_EXAMPLES), &mode=light|dark|auto, &accent=<id>, &cover=yours|gradient|plain,
  *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1,
- *   &yours=photo|small|design|automatic|animated (the Settings cover: the generated photo, the same
- *   photo said to be 640 × 360, a design, the automatic one, an animation)
+ *   &yours=photo|small|upload|design|automatic|animated (the Settings cover: the generated photo,
+ *   the same photo said to be 640 × 360, a generated 2240 × 600 WebP stored like the API's, a
+ *   design, the automatic one, an animation)
  *   ?example=styles-min|styles-max|long-names (&style=<id>, Clear by default), or
  *   ?example=hostile&style=<id> (v2; without &style it is the v1 document)
  */
@@ -274,12 +275,13 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     pick(one('yours'), [
       'photo',
       'small',
+      'upload',
       'design',
       'automatic',
       'animated',
     ] as const) ?? 'photo';
   const settingsCover =
-    yours === 'photo' || yours === 'small'
+    yours === 'photo' || yours === 'small' || yours === 'upload'
       ? null
       : resolveCover({
           handle,
@@ -290,6 +292,8 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
           plan,
         });
   if (settingsCover) profile.cover = settingsCover;
+  if (yours === 'upload')
+    profile.cover = { kind: 'photo', path: '/dev/studio-lab/cover/1.webp' };
   const coverSize =
     yours === 'small'
       ? { width: 640, height: 360 }
@@ -311,7 +315,7 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     videos: {},
     profile: { name, bio, links: links.length },
     plan,
-    coverKind: yours === 'small' ? 'photo' : yours,
+    coverKind: yours === 'small' || yours === 'upload' ? 'photo' : yours,
     hasAvatar: false,
   });
   const styled = renderStyled({

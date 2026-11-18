@@ -1129,3 +1129,54 @@ test("Stage's phone bar carries the avatar, the name and the handle beside the T
   );
   assert.doesNotMatch(over('horizon'), /studio-barname/);
 });
+
+// Fix round 1 (PR 2d review).
+test("the lab's uploaded cover is one file, like the API's, still eager and high priority", () => {
+  for (const style of ['stage', 'horizon']) {
+    const html = over(style, {
+      profile: {
+        cover: { kind: 'photo', path: '/dev/studio-lab/cover/1.webp' },
+      },
+    });
+    const tag = /<img class="studio-cover__photo"[^>]*>/.exec(html)?.[0] ?? '';
+    assert.match(tag, / src="\/dev\/studio-lab\/cover\/1\.webp"/, style);
+    assert.doesNotMatch(tag, /srcset/i, style);
+    assert.match(tag, /fetchpriority="high"/i, style);
+    assert.match(tag, /loading="eager"/, style);
+  }
+});
+
+test('a selected amount differs from the others by more than colour, in Stage and Horizon', () => {
+  const chip = (style) =>
+    `.studio[data-style='${style}'] .studio-tip .tm-amount-choice`;
+  // Stage: the label steps up in weight.
+  const stage = sheet('stage');
+  const off = Number(
+    /font-weight: (\d+)/.exec(
+      declarations(stage, `${chip('stage')} > span`),
+    )[1],
+  );
+  const on = Number(
+    /font-weight: (\d+)/.exec(
+      declarations(stage, `${chip('stage')} input:checked + span`),
+    )?.[1],
+  );
+  assert.ok(on >= off + 150, `Stage: ${off} → ${on}`);
+  // Horizon (400 and 500 only): a dot marks the chosen chip.
+  const dot = declarations(
+    sheet('horizon'),
+    `${chip('horizon')} input:checked + span::after`,
+  );
+  assert.match(dot, /content: '';/);
+  assert.match(dot, /width: 6px;/);
+  assert.doesNotMatch(dot, /display: none/);
+});
+
+test('Horizon\'s Tip area shows a focus ring when "Send a tip" lands on it', () => {
+  const focus = declarations(
+    sheet('horizon'),
+    ".studio[data-style='horizon'] .studio-tip:focus",
+  );
+  assert.match(focus, /outline: 2px solid var\(--studio-accText\);/);
+  assert.doesNotMatch(focus, /outline: none/);
+});

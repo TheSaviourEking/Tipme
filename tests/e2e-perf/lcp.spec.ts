@@ -225,13 +225,19 @@ test('lab LCP sample: Studio pages', async ({ browser }) => {
 // phone width (390 px), on the built web app. Same throttle, fresh contexts. Each style PR adds its
 // id.
 const LAB_STYLES = ['classic', 'clear', 'journal', 'linen', 'stage', 'horizon'];
+const PHOTO_LCP = ['stage', 'horizon'];
 
 test('lab LCP sample: Studio styles', async ({ browser }) => {
   test.setTimeout(240_000);
   const context = await browser.newContext();
   const state = await context.storageState();
   await context.close();
-  const urls = LAB_STYLES.map((style) => `/dev/studio-lab?style=${style}`);
+  // Stage and Horizon draw the photo as their likely LCP: they open on the lab's uploaded cover, a
+  // generated 2240 × 600 WebP like the API's (the generated SVG is too flat to be a candidate).
+  const urls = LAB_STYLES.map(
+    (style) =>
+      `/dev/studio-lab?style=${style}${PHOTO_LCP.includes(style) ? '&yours=upload' : ''}`,
+  );
   // Warm only the server: every sample below starts with an empty browser cache.
   for (const url of urls) await fetch(`${WEB_ORIGIN}${url}`);
   const samples: Record<string, number[]> = {};
@@ -242,6 +248,14 @@ test('lab LCP sample: Studio styles', async ({ browser }) => {
       );
   console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
   console.log(`LCP_STYLES ${JSON.stringify(samples)}`);
+  // Their photo is what the visitor waits for: it must be the element measured.
+  for (const style of PHOTO_LCP) {
+    const url = urls[LAB_STYLES.indexOf(style)]!;
+    for (const element of elements[url] ?? [])
+      expect(element, `${url} LCP element`).toMatch(
+        /^img\.studio-cover__photo /,
+      );
+  }
   for (const [url, ms] of Object.entries(samples))
     for (const sample of ms)
       expect(sample, `${url} LCP ${sample}ms`).toBeLessThan(2000);

@@ -983,3 +983,92 @@ test("Stage's desktop puts the bio, the Tip and the handle in a 400 px card besi
   await expect(page.locator('.studio-lead .studio-lead__handle')).toBeHidden();
   await expect(page.locator('.studio-hero .studio-meta__handle')).toBeVisible();
 });
+
+// Fix round 1 (PR 2d review): §4.4 never by colour alone; WCAG 2.4.7 focus visible; §9.9 the
+// right column holds the first block when there are no links.
+test('Stage and Horizon mark the selected amount by more than colour', async ({
+  page,
+}) => {
+  for (const style of OVER) {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/dev/studio-lab?style=${style}`);
+    await ready(page);
+    await page.locator('.studio-tip .tm-amount-choice').nth(1).click();
+    const cue = (n: number) =>
+      page
+        .locator('.studio-tip .tm-amount-choice > span')
+        .nth(n)
+        .evaluate((el) => {
+          const cs = getComputedStyle(el);
+          const dot = getComputedStyle(el, '::after');
+          return {
+            weight: cs.fontWeight,
+            dot:
+              dot.display !== 'none' &&
+              dot.content !== 'none' &&
+              parseFloat(dot.width) > 0,
+          };
+        });
+    const [selected, other] = [await cue(1), await cue(0)];
+    expect(
+      selected.weight !== other.weight || selected.dot !== other.dot,
+      `${style}: ${JSON.stringify({ selected, other })}`,
+    ).toBe(true);
+  }
+});
+
+test(`Horizon's Tip area shows its focus when reached from "Send a tip" by keyboard`, async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/dev/studio-lab?style=horizon');
+  await ready(page);
+  await page.getByRole('link', { name: 'Send a tip' }).focus();
+  await page.keyboard.press('Enter');
+  const tip = page.locator('#studio-tip');
+  await expect(tip).toBeFocused();
+  const ring = await tip.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return {
+      style: cs.outlineStyle,
+      width: parseFloat(cs.outlineWidth),
+      shadow: cs.boxShadow,
+    };
+  });
+  expect(
+    (ring.style !== 'none' && ring.width >= 2) || ring.shadow !== 'none',
+    JSON.stringify(ring),
+  ).toBe(true);
+});
+
+test('Horizon on desktop with no links puts the first block beside the Tip', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=horizon&links=0');
+  await ready(page);
+  const box = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top };
+      });
+  const [lead, first, second] = await Promise.all([
+    box('.studio-lead'),
+    box('.studio-section >> nth=0'),
+    box('.studio-section >> nth=1'),
+  ]);
+  expect(Math.round(first.left - lead.right)).toBe(80);
+  expect(Math.round(first.right - first.left)).toBe(520);
+  expect(Math.abs(first.top - lead.top)).toBeLessThanOrEqual(1);
+  // The rest follow below, split as before.
+  expect(Math.round(second.left)).toBe(Math.round(lead.left));
+  expect(await geometryProblems(page)).toEqual([]);
+  // With links, the links hold that place.
+  await page.goto('/dev/studio-lab?style=horizon');
+  await ready(page);
+  const links = await box('.studio-links');
+  expect(Math.round(links.left - lead.right)).toBe(80);
+});

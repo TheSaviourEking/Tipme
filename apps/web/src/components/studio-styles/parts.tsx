@@ -41,6 +41,8 @@ type Shape = keyof typeof STUDIO_IMAGE_ASPECT;
 /** An uploaded cover (the API's) or the lab's generated one; anything else is not a photo here. */
 const API_COVER = /^\/v1\/covers\/[0-9a-f-]+\/\d+\.webp$/;
 const LAB_COVER = /^\/dev\/studio-lab\/image\/[0-9a-f-]{36}$/;
+/** The lab's stand-in for an uploaded cover: one file, like the API's. */
+const LAB_UPLOAD = /^\/dev\/studio-lab\/cover\/\d+\.webp$/;
 
 /** A cover photo's own pixel size, where it is known (the lab's generated covers). */
 export type CoverSize = { width: number; height: number };
@@ -78,6 +80,7 @@ function coverPhoto(
   if (cover?.kind !== 'photo') return null;
   // The API's cover is one file, already the size it was cut to.
   if (API_COVER.test(cover.path)) return { src: `${API_ORIGIN}${cover.path}` };
+  if (LAB_UPLOAD.test(cover.path)) return { src: cover.path };
   if (!LAB_COVER.test(cover.path)) return null;
   // Renditions of the photo's 16:9 crop, never wider than the photo allows (no upscaling); the
   // smallest is always offered.

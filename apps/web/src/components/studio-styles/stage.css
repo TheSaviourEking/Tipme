@@ -268,12 +268,14 @@
   transform: scale(0.95);
 }
 
-/* Selected: the 1 px edge turns accText and a 0.5 px inset completes the 1.5 px ring. */
+/* Selected: the 1 px edge turns accText and a 0.5 px inset completes the 1.5 px ring; the label
+   steps up to 800, so the choice never shows by colour alone (§4.4). */
 .studio[data-style='stage'] .studio-tip .tm-amount-choice input:checked + span {
   border-color: var(--studio-accText);
   background: var(--studio-chip);
   box-shadow: inset 0 0 0 0.5px var(--studio-accText);
   color: var(--studio-fg);
+  font-weight: 800;
 }
 
 .studio[data-style='stage']
