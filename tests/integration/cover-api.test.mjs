@@ -1228,7 +1228,7 @@ test('moving photos to the object store moves the renditions beside their cover'
 
 test('the backfill is a dry run unless told, writes once, and skips what it cannot do', async () => {
   const cookie = await livePage('+2348031290046', 'cover_backfill');
-  const { profileId, userId } = await userAndPage('cover_backfill');
+  const { profileId } = await userAndPage('cover_backfill');
   const { cover } = (await (await upload(cookie, await photo())).json()).data;
   await database.pool.query(
     'DELETE FROM profile_cover_renditions WHERE profile_id = $1',
