@@ -374,17 +374,19 @@ test('every Pro block kind is gated on Free', () => {
   }
 });
 
-test('a draft save takes a v1 or a v2 document', () => {
-  for (const draft of [
-    KEMI,
-    doc({ style: 'journal', blocks: [heading('blk00001')] }),
-  ])
-    assert.equal(studioDraftSchema.safeParse({ rev: 1, draft }).success, true);
+test('a draft save takes a v2 document only; a v1 draft is refused (ruling R1, PR 4a)', () => {
+  assert.equal(
+    studioDraftSchema.safeParse({
+      rev: 1,
+      draft: doc({ style: 'journal', blocks: [heading('blk00001')] }),
+    }).success,
+    true,
+  );
   for (const bad of [
+    { rev: 0, draft: KEMI },
     { rev: 0, draft: { ...doc(), v: 3 } },
     { rev: 0, draft: { ...doc(), css: 'x' } },
     { rev: 0, draft: { ...doc(), style: 'sprint', cover: 'gradient' } },
-    { rev: 0, draft: { ...KEMI, css: 'x' } },
     { rev: 0, draft: doc(), extra: true },
   ])
     assert.equal(

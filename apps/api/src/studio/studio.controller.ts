@@ -20,7 +20,7 @@ import {
   studioImageFileName,
   studioPublishSchema,
   type ApiDataResponse,
-  type MyStudioV1,
+  type MyStudio,
   type StudioDraftRequest,
   type StudioFocusRequest,
   type StudioPublishRequest,
@@ -132,7 +132,7 @@ export class StudioController {
   @Header('Cache-Control', 'no-store')
   async get(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<MyStudioV1>> {
+  ): Promise<ApiDataResponse<MyStudio>> {
     return { data: await getMyStudio(this.database.db, auth.userId) };
   }
 
@@ -143,16 +143,14 @@ export class StudioController {
   async save(
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
-  ): Promise<ApiDataResponse<MyStudioV1>> {
+  ): Promise<ApiDataResponse<MyStudio>> {
     let studio = await saveStudioDraft(this.database.db, auth.userId, body);
     // "From your photo" (§6): computed when a save picks it and nothing is stored for the current
     // photo (`photoAccent` is null for a value, or a fallback, made from an older photo), so the
     // editor's answer and the page have it. With no photo there is nothing to sample.
     if (
-      studio.draft.v === 2 &&
       studio.draft.accent === 'photo' &&
       studio.photoAccent === null &&
-      'hasAvatar' in studio.context &&
       studio.context.hasAvatar
     ) {
       await this.photoAccent.refresh(auth.userId);
@@ -172,7 +170,7 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(studioPublishSchema))
     body: StudioPublishRequest,
-  ): Promise<ApiDataResponse<MyStudioV1>> {
+  ): Promise<ApiDataResponse<MyStudio>> {
     // Any plan may publish; the check (with the plan read under the lock) refuses Pro on Free.
     const current = await getMyStudio(this.database.db, auth.userId);
     // Awaited here (each site has 3 seconds), so a gone video can't be published.
@@ -197,7 +195,7 @@ export class StudioController {
   @UseGuards(SessionGuard, CsrfGuard)
   async discard(
     @CurrentUser() auth: AuthContext,
-  ): Promise<ApiDataResponse<MyStudioV1>> {
+  ): Promise<ApiDataResponse<MyStudio>> {
     return {
       data: await discardStudioDraft(this.database.db, auth.userId, this.store),
     };
@@ -210,7 +208,7 @@ export class StudioController {
   async upload(
     @CurrentUser() auth: AuthContext,
     @Req() request: Request,
-  ): Promise<ApiDataResponse<MyStudioV1> & { meta: { imageId: string } }> {
+  ): Promise<ApiDataResponse<MyStudio> & { meta: { imageId: string } }> {
     const upload = await readUpload(request);
     const { width, height, files } = await withSlot(async () => {
       const master = await masterOf(upload);
@@ -240,7 +238,7 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Param('imageId') imageId: string,
     @Body(new ZodValidationPipe(studioFocusSchema)) body: StudioFocusRequest,
-  ): Promise<ApiDataResponse<MyStudioV1>> {
+  ): Promise<ApiDataResponse<MyStudio>> {
     if (!UUID.test(imageId)) throw new CodedHttpException(404, 'NOT_FOUND');
     const master = await studioImageMaster(
       this.database.db,
