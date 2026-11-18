@@ -266,7 +266,7 @@ export async function studioFixtures() {
       { plan: 'free' },
     ),
   ];
-  return { contracts, docs, context: examples.EXAMPLE_CONTEXT, pages };
+  return { contracts, docs, pages };
 }
 
 export const LONG_NAME =

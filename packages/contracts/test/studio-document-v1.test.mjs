@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fc from 'fast-check';
 import {
-  STUDIO_DEFAULT_FONTS,
   STUDIO_EMBED_ORIGINS,
   STUDIO_LIMITS,
   STUDIO_SUPPORTER_WALL,
@@ -22,6 +21,10 @@ import {
   studioDocumentV1Arb,
   withBlock,
 } from './support/studio-arbitrary.mjs';
+
+// What the v1 editor used for a new page, and for a font it no longer offered (frozen in
+// studio-document-v1.ts).
+const DEFAULT_FONTS = { heading: 'manrope', body: 'inter' };
 
 const VALID = {
   v: 1,
@@ -126,7 +129,8 @@ test('brand colours are one or two lower-case #rrggbb; a second-colour row needs
 });
 
 test('limits: 12 rows, 3 blocks per cell, 40 blocks, 9 photos per gallery, 24 per page, 3 videos, 6 events, 12 services', () => {
-  const L = STUDIO_LIMITS;
+  // The v1 row and cell limits left STUDIO_LIMITS in PR 4b but still apply to a stored v1 row.
+  const L = { ...STUDIO_LIMITS, rows: 12, blocksPerCell: 3 };
   const heading = (i) => ({
     id: bid(i),
     kind: 'text',
@@ -443,7 +447,7 @@ test('resolveStudioV1 keeps a page readable after a font is retired', () => {
     { ...VALID, fonts: { heading: 'lora', body: 'libre-baskerville' } },
     TODAY,
   );
-  assert.deepEqual(r.fonts, STUDIO_DEFAULT_FONTS);
+  assert.deepEqual(r.fonts, DEFAULT_FONTS);
   assert.deepEqual(r.rows, VALID.rows);
   const display = resolveStudioV1(
     { ...VALID, fonts: { heading: 'fraunces', body: 'dm-serif-display' } },
@@ -451,7 +455,7 @@ test('resolveStudioV1 keeps a page readable after a font is retired', () => {
   );
   assert.deepEqual(display.fonts, {
     heading: 'fraunces',
-    body: STUDIO_DEFAULT_FONTS.body,
+    body: DEFAULT_FONTS.body,
   });
 });
 
@@ -596,7 +600,7 @@ test('defaultStudioDocumentV1 is a valid starter page in the default fonts', () 
   ]) {
     const d = defaultStudioDocumentV1(profile);
     assert.equal(ok(d), true);
-    assert.deepEqual(d.fonts, STUDIO_DEFAULT_FONTS);
+    assert.deepEqual(d.fonts, DEFAULT_FONTS);
     assert.equal(
       d.rows.some((r) => r.cells.flat().some((b) => b.kind === 'about')),
       Boolean(profile.bio),

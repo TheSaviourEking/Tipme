@@ -1,11 +1,10 @@
 /**
- * Page Studio lab examples (plan Task 6). Kemi, Sule and Ify are the StudioExamples board, the same
- * documents as packages/contracts/test/fixtures/studio-examples.mjs (scripts/studio-lab.test.mjs
- * holds the two equal). The others push the renderer: every limit, the least, nothing, hostile
- * text, and a specimen per font. Sample people and generated images only.
+ * Page Studio lab examples. `max` and `hostile` are v1 stress documents (every limit; long unbroken
+ * words, emoji, right-to-left and Yoruba text) that the styles lab migrates to v2 (`labStyleExample`);
+ * the v1 renderer and its other examples (Kemi, Sule, Ify, a specimen per font) went with PR 4b.
+ * The style examples are v2. Sample people and generated images only.
  */
 import {
-  STUDIO_FONTS,
   STUDIO_LIMITS as L,
   migrateStudioV1,
   resolveStudioV1,
@@ -13,7 +12,6 @@ import {
   type StudioStyleId,
   type StudioBlockV1,
   type StudioDocumentV1,
-  type StudioFontId,
   type StudioRowV1,
 } from '@tipme/contracts';
 
@@ -23,283 +21,15 @@ export const LAB_IMAGES = Array.from(
   (_, i) =>
     `0000${i.toString(16).padStart(4, '0')}-0000-4000-8000-000000000000`,
 );
-const [STAGE, CUT1, CUT2, CUT3, CUT4, CUT5, CUT6, SHOP] = LAB_IMAGES as [
+// The generated photos the examples use (ids 0 to 3 and 7 of the pool).
+const [STAGE, CUT1, CUT2, CUT3] = LAB_IMAGES as [
   string,
   string,
   string,
   string,
-  string,
-  string,
-  string,
-  string,
+  ...string[],
 ];
-
-const kemi: StudioDocumentV1 = {
-  v: 1,
-  brand: ['#1d4e89', '#ff7a59'],
-  mode: 'dark',
-  fonts: { heading: 'fraunces', body: 'inter' },
-  scale: 'standard',
-  corners: 'soft',
-  rows: [
-    {
-      id: 'kemirow1',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'kemiblk1',
-            kind: 'text',
-            variant: 'lead',
-            text: 'Every tip goes into studio time for the next record. New single out in December.',
-          },
-        ],
-      ],
-    },
-    {
-      id: 'kemirow2',
-      columns: '1-1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'kemiblk2',
-            kind: 'photo',
-            variant: 'wide',
-            imageId: STAGE,
-            alt: 'Kemi singing at a studio night in Yaba',
-            caption: 'Studio night, Yaba',
-          },
-        ],
-        [
-          {
-            id: 'kemiblk3',
-            kind: 'text',
-            variant: 'heading',
-            level: 2,
-            text: 'Events',
-          },
-          {
-            id: 'kemiblk4',
-            kind: 'events',
-            variant: 'list',
-            items: [
-              {
-                date: '2026-11-15',
-                time: '20:00',
-                title: 'Live set, Lekki',
-                place: 'Hard Rock Cafe',
-              },
-              {
-                date: '2026-11-28',
-                time: '19:00',
-                title: 'Acoustic evening',
-                place: 'Terra Kulture',
-              },
-            ],
-          },
-        ],
-      ],
-    },
-    {
-      id: 'kemirow3',
-      columns: '1',
-      spacing: 'm',
-      background: 'card',
-      cells: [
-        [
-          {
-            id: 'kemiblk5',
-            kind: 'text',
-            variant: 'heading',
-            level: 3,
-            text: 'Watch',
-          },
-          {
-            id: 'kemiblk6',
-            kind: 'video',
-            variant: 'still',
-            url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-            caption: '“Lagos Rain”',
-          },
-        ],
-      ],
-    },
-    {
-      id: 'kemirow4',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [[{ id: 'kemiblk7', kind: 'about', variant: 'plain' }]],
-    },
-  ],
-};
-
-const sule: StudioDocumentV1 = {
-  v: 1,
-  brand: ['#f5c400'],
-  mode: 'light',
-  fonts: { heading: 'space-grotesk', body: 'inter' },
-  scale: 'standard',
-  corners: 'square',
-  rows: [
-    {
-      id: 'sulerow1',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'suleblk1',
-            kind: 'text',
-            variant: 'heading',
-            level: 2,
-            text: 'Services and prices',
-          },
-          {
-            id: 'suleblk2',
-            kind: 'services',
-            variant: 'cards',
-            items: [
-              { name: 'Skin fade', detail: '45 minutes', priceMinor: '800000' },
-              {
-                name: 'Beard shape',
-                detail: '20 minutes',
-                priceMinor: '400000',
-              },
-              {
-                name: 'Kids’ cut',
-                detail: '30 minutes',
-                priceMinor: '500000',
-                from: true,
-              },
-            ],
-          },
-        ],
-      ],
-    },
-    {
-      id: 'sulerow2',
-      columns: '1',
-      spacing: 'm',
-      background: 'colour',
-      cells: [
-        [
-          {
-            id: 'suleblk3',
-            kind: 'quote',
-            variant: 'band',
-            text: 'Open Tue to Sat, 9 am to 7 pm. Walk-ins welcome.',
-          },
-        ],
-      ],
-    },
-    {
-      id: 'sulerow3',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'suleblk4',
-            kind: 'text',
-            variant: 'heading',
-            level: 2,
-            text: 'Recent cuts',
-          },
-          {
-            id: 'suleblk5',
-            kind: 'gallery',
-            variant: 'grid',
-            images: [CUT1, CUT2, CUT3, CUT4, CUT5, CUT6].map((imageId, i) => ({
-              imageId,
-              alt: `A finished cut, photo ${i + 1}`,
-            })),
-          },
-        ],
-      ],
-    },
-    {
-      id: 'sulerow4',
-      columns: '1',
-      spacing: 'l',
-      background: { photo: SHOP },
-      cells: [
-        [
-          {
-            id: 'suleblk6',
-            kind: 'text',
-            variant: 'heading',
-            level: 3,
-            text: 'Fades, Wuse 2',
-          },
-        ],
-      ],
-    },
-  ],
-};
-
-const ify: StudioDocumentV1 = {
-  v: 1,
-  brand: ['#e0457b'],
-  mode: 'light',
-  fonts: { heading: 'nunito', body: 'nunito' },
-  scale: 'roomy',
-  corners: 'round',
-  rows: [
-    {
-      id: 'ifyrow01',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [[{ id: 'ifyblk01', kind: 'links', variant: 'buttons' }]],
-    },
-    {
-      id: 'ifyrow02',
-      columns: '1',
-      spacing: 'm',
-      background: 'card',
-      cells: [
-        [
-          {
-            id: 'ifyblk02',
-            kind: 'quote',
-            variant: 'plain',
-            text: 'Next stream: Friday 9 pm. Bring snacks.',
-          },
-        ],
-      ],
-    },
-    {
-      id: 'ifyrow03',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [
-          {
-            id: 'ifyblk03',
-            kind: 'text',
-            variant: 'heading',
-            level: 2,
-            text: 'Thank you, Ọlá and everyone',
-          },
-          {
-            id: 'ifyblk04',
-            kind: 'text',
-            variant: 'paragraph',
-            text: 'Cosy games and loud laughs, live four nights a week.\n\nSay hi in chat.',
-          },
-        ],
-      ],
-    },
-  ],
-};
+const SHOP = LAB_IMAGES[7]!;
 
 /** A block without its id, kind by kind. */
 type BlockDraft = StudioBlockV1 extends infer B
@@ -341,7 +71,7 @@ const fill = (n: number, word = 'Lorem') =>
     .slice(0, n)
     .trim();
 
-/** Every limit at once: 12 rows, 40 blocks, 24 photos, 3 videos, 6 events, 12 services, full text. */
+/** Every v1 limit at once: 12 rows, 40 blocks, 24 photos, 3 videos, 6 events, 12 services, full text. */
 const max: StudioDocumentV1 = (() => {
   let b = 0;
   const blk = (block: BlockDraft) =>
@@ -487,21 +217,6 @@ const max: StudioDocumentV1 = (() => {
   return base(rows, { brand: ['#1d4e89', '#ff7a59'] });
 })();
 
-const min = base([
-  row(1, [
-    [
-      {
-        id: 'min00001',
-        kind: 'text',
-        variant: 'heading',
-        level: 2,
-        text: 'Hi',
-      },
-    ],
-  ]),
-]);
-const empty = base([]);
-
 /** Long unbroken words, emoji, right-to-left and Yoruba text in every text place. */
 const LONG = 'W'.repeat(60);
 const hostile = base(
@@ -587,72 +302,6 @@ const hostile = base(
     scale: 'roomy',
   },
 );
-
-/** One page per font: the font as heading, and as text where the library allows it. */
-export function fontSpecimen(fontId: StudioFontId): StudioDocumentV1 {
-  const font = STUDIO_FONTS.find((f) => f.id === fontId) ?? STUDIO_FONTS[0]!;
-  const body = font.roles.includes('body') ? font.id : 'inter';
-  const text = (
-    n: number,
-    variant: 'heading' | 'lead' | 'paragraph',
-    words: string,
-  ): StudioBlockV1 =>
-    variant === 'heading'
-      ? {
-          id: id('fnt', n),
-          kind: 'text',
-          variant,
-          level: 2,
-          text: words.normalize('NFC'),
-        }
-      : {
-          id: id('fnt', n),
-          kind: 'text',
-          variant,
-          text: words.normalize('NFC'),
-        };
-  return base(
-    [
-      row(1, [
-        [
-          text(1, 'heading', `${font.name}: Ọlápéjú, Ṣẹ́gun, Chukwuemeka Ụzọ`),
-          text(
-            2,
-            'lead',
-            'The quick brown fox jumps over the lazy dog. ₦12,500',
-          ),
-        ],
-      ]),
-      row(2, [
-        [
-          text(
-            3,
-            'paragraph',
-            'Ẹ kú àbọ̀. Every tip goes into studio time. Ńdewo! “Quotes”, dashes – and — ellipses…',
-          ),
-          {
-            id: id('fnt', 4),
-            kind: 'quote',
-            variant: 'plain',
-            text: 'Thank you, Ọlá'.normalize('NFC'),
-          },
-        ],
-      ]),
-    ],
-    { fonts: { heading: font.id, body } },
-  );
-}
-
-export const STUDIO_EXAMPLES = {
-  kemi,
-  sule,
-  ify,
-  max,
-  min,
-  empty,
-  hostile,
-} as const;
-export type StudioExampleName = keyof typeof STUDIO_EXAMPLES | 'fonts';
 
 // ---------------------------------------------------------------------------------------------
 // Page Studio styles (spec 2026-11-17-page-studio-styles, PR 2a): v2 documents.

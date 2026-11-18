@@ -11,11 +11,23 @@
 import { z } from 'zod';
 import { type Hex, type StudioMode } from './studio-colour.js';
 import {
+  ID,
+  TIME,
+  UUID,
   cleanStudioParagraph,
+  fit,
+  isDate,
+  isKobo,
+  isLine,
+  isObj,
+  isParagraph,
+  optional,
+  without,
+} from './studio-document-shared.js';
+import {
   parseVideoLink,
   resolveStudioV1,
   STUDIO_MODES,
-  studioDocumentShared as shared,
   type StudioBlockV1,
   type StudioDocumentV1,
   type StudioImageRef,
@@ -31,9 +43,6 @@ import {
   type StudioTokenMap,
 } from './studio-styles.js';
 import { nearestCuratedAccent } from './studio-photo-accent.js';
-
-const { ID, UUID, TIME, fit, isLine, isParagraph, isDate, isKobo } = shared;
-const { isObj, optional, without } = shared;
 
 // ---------------------------------------------------------------------------------------------
 // Types

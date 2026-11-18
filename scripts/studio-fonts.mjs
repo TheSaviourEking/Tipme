@@ -24,6 +24,11 @@
  * dropped; the licence file beside them keeps the original copyright and RFN lines, which is how
  * OFL 1.1 §2 asks for the notice).
  *
+ * Page Studio styles PR 4b (plan Task 13) retired the v1 editor, so the faces only it offered
+ * (Manrope, Work Sans, Space Grotesk, Bricolage Grotesque, Outfit, Nunito and Fraunces) are no
+ * longer built or shipped. Classic's Manrope and DM Serif Display come from `apps/web/src/fonts/`
+ * through next/font; DM Serif Display stays here because Classic names it as its display face.
+ *
  * Not shipped: IBM Plex Sans, Lora, Playfair Display and Libre Baskerville. Their licences reserve
  * the family's own name, and OFL 1.1 §3 bars a Modified Version (a subset is one) from using it
  * without the authors' written permission.
@@ -65,14 +70,6 @@ const INTER_FEATURES = `${FEATURES},tnum,lnum`;
  */
 export const SOURCES = [
   {
-    id: 'manrope',
-    family: 'Manrope',
-    dir: 'manrope',
-    file: 'Manrope[wght].ttf',
-    weight: '700',
-    sha256: '3ae11c49db0455a3cc33e37d380f20fdb8c7f8b41dc07625c177e3d87a9d6ae6',
-  },
-  {
     id: 'dm-serif-display',
     family: 'DMSerifDisplay',
     dir: 'dmserifdisplay',
@@ -89,54 +86,6 @@ export const SOURCES = [
     weight: '400 800',
     features: INTER_FEATURES,
     sha256: '29160a80ff49ddcab2c97711247e08b1fab27a484a329ce8b813d820dc559031',
-  },
-  {
-    id: 'work-sans',
-    family: 'WorkSans',
-    dir: 'worksans',
-    file: 'WorkSans[wght].ttf',
-    weight: '400 600',
-    sha256: 'f50f61f2ba738e239442d40bf1069adb195c224b6a5a73a581fc2f3ed62a9f63',
-  },
-  {
-    id: 'space-grotesk',
-    family: 'SpaceGrotesk',
-    dir: 'spacegrotesk',
-    file: 'SpaceGrotesk[wght].ttf',
-    weight: '600',
-    sha256: 'acad6de1fc93436f5c0f1f4137751ef04f1aea3063e7036535970ffcfbd79f72',
-  },
-  {
-    id: 'bricolage-grotesque',
-    family: 'BricolageGrotesque',
-    dir: 'bricolagegrotesque',
-    file: 'BricolageGrotesque[opsz,wdth,wght].ttf',
-    weight: '700',
-    sha256: '413e7357809ddd12fd80a96a8a396de0e401638d4acd3cb3e37532f0472ac682',
-  },
-  {
-    id: 'outfit',
-    family: 'Outfit',
-    dir: 'outfit',
-    file: 'Outfit[wght].ttf',
-    weight: '600',
-    sha256: 'fc7287273e66929776e2ba54f144fe699080bec29f61bf649d70d871468aeade',
-  },
-  {
-    id: 'nunito',
-    family: 'Nunito',
-    dir: 'nunito',
-    file: 'Nunito[wght].ttf',
-    weight: '400 700',
-    sha256: 'bb55a5ca5c2042335b3991af27c4d0705d0ef41cac6164ac737fd8f2a1e85207',
-  },
-  {
-    id: 'fraunces',
-    family: 'Fraunces',
-    dir: 'fraunces',
-    file: 'Fraunces[SOFT,WONK,opsz,wght].ttf',
-    weight: '600',
-    sha256: '177ff6c0f14e5550a3c624247cd1189611d4eb65d000b14944c63d967958abbb',
   },
   {
     id: 'source-serif-4',

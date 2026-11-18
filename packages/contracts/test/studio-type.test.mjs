@@ -1,14 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  STUDIO_DEFAULT_FONTS,
   STUDIO_FONTS,
   STUDIO_REQUIRED_CODEPOINTS,
   STUDIO_SPACING,
-  fontsOk,
+  STUDIO_STYLES,
+  STUDIO_STYLE_IDS,
   studioTypeScale,
 } from '../dist/index.js';
-import { LEGACY_BODY_WORD_FALLBACK } from './support/studio-legacy-body-fonts.mjs';
 
 const STEPS = ['compact', 'standard', 'roomy'];
 const ROLES = ['small', 'body', 'h3', 'h2', 'display'];
@@ -36,22 +35,31 @@ test('ids are unique and every font has at least the heading role', () => {
   for (const f of STUDIO_FONTS) assert.ok(f.roles.includes('heading'), f.id);
 });
 
-test('a body font draws every required letter, so it never needs the word fallback (legacy v1 fonts excepted)', () => {
-  // The exception list is checked both ways, so a stale entry cannot hide a regression.
-  for (const id of LEGACY_BODY_WORD_FALLBACK) {
-    const f = STUDIO_FONTS.find((x) => x.id === id);
-    assert.ok(f?.roles.includes('body'), `${id} is a legacy body font`);
-    assert.equal(
-      f.wordFallback,
-      true,
-      `${id} is listed, so it needs wordFallback`,
-    );
-  }
+test('a body font draws every required letter, so it never needs the word fallback', () => {
   for (const f of STUDIO_FONTS)
-    if (f.roles.includes('body') && !LEGACY_BODY_WORD_FALLBACK.includes(f.id)) {
+    if (f.roles.includes('body')) {
       assert.equal(f.wordFallback, false, f.id);
       assert.ok(f.bodyWeight, `${f.id} has no body weight`);
     }
+});
+
+test('the registry is the faces the styles use (the v1 editor’s other fonts were retired in PR 4b)', () => {
+  // Inter sets every UI, body and money face; each style adds at most its own display face.
+  const used = new Set([
+    'inter',
+    ...STUDIO_STYLE_IDS.map((s) => STUDIO_STYLES[s].displayFont).filter(
+      Boolean,
+    ),
+  ]);
+  assert.deepEqual(STUDIO_FONTS.map((f) => f.id).sort(), [...used].sort());
+  assert.deepEqual(STUDIO_FONTS.map((f) => f.id).sort(), [
+    'anton',
+    'dm-serif-display',
+    'inter',
+    'linen-serif',
+    'source-serif-4',
+    'unbounded',
+  ]);
 });
 
 test('each family is at most two files and each file carries its weights', () => {
@@ -175,19 +183,4 @@ test('spacing steps are fixed', () => {
     m: { min: 24, max: 48 },
     l: { min: 40, max: 80 },
   });
-});
-
-test('fontsOk refuses a display font as body and allows one family for both', () => {
-  const display = STUDIO_FONTS.find((f) => f.category === 'display');
-  const both = STUDIO_FONTS.find((f) => f.roles.includes('body'));
-  assert.equal(fontsOk(display.id, display.id), false);
-  assert.equal(fontsOk(both.id, display.id), false);
-  assert.equal(fontsOk(display.id, both.id), true);
-  assert.equal(fontsOk(both.id, both.id), true);
-  assert.equal(fontsOk('comic-sans', both.id), false);
-  assert.equal(
-    fontsOk(STUDIO_DEFAULT_FONTS.heading, STUDIO_DEFAULT_FONTS.body),
-    true,
-  );
-  assert.equal(STUDIO_DEFAULT_FONTS.heading, 'manrope');
 });
