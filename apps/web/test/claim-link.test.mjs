@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CLAIM_LINK_KEY,
+  stateAfterRefusedClaim,
   claimRefusalWords,
   claimCodeFrom,
   claimLinkUrl,
@@ -124,4 +125,10 @@ test('review: a refused claim says why in plain words', () => {
     'X',
   ])
     assert.equal(/[\u2013\u2014]/.test(claimRefusalWords(code, 409)), false);
+});
+
+test('review N1: after a refused claim, an open link is never offered again', () => {
+  assert.equal(stateAfterRefusedClaim('open'), 'cancelled');
+  for (const state of ['used', 'expired', 'cancelled', 'invalid'])
+    assert.equal(stateAfterRefusedClaim(state), state);
 });

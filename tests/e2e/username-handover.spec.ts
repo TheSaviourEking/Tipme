@@ -288,3 +288,39 @@ test('a staff account found for a handover says so, and Give is not offered', as
   ).toHaveCount(0);
   await expectAccessible(page);
 });
+
+// Security review N1: a link whose maker loses access says so plainly, and Claim isn't offered again.
+test('a link whose maker lost access says it no longer works, with no claim loop @mobile', async ({
+  page,
+}, testInfo) => {
+  const digits = identity(testInfo).handle.slice(4);
+  const { name, path } = await claimLinkFor('lost', digits);
+  const who = identity({ ...testInfo, workerIndex: 6 });
+  await page.goto(path);
+  await expect(
+    page.getByRole('heading', { name: `@${name} is waiting for you.` }),
+  ).toBeVisible();
+  await signInWithEmail(page, `lost.${who.email}`, null);
+  await expect(
+    page.getByRole('heading', { name: `Claim @${name}` }),
+  ).toBeVisible();
+  // Meanwhile the staff member who made it loses usernames.manage, by a path that cancels nothing.
+  await sql(
+    `UPDATE staff SET revoked_at = now() WHERE user_id = (SELECT id FROM users WHERE lower(email) = lower($1))`,
+    [`staff.${name}@example.com`],
+  );
+  await page.getByRole('button', { name: `Claim @${name}` }).click();
+  await expect(
+    page.getByRole('heading', { name: 'This link no longer works' }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Claim @/ })).toHaveCount(0);
+  await expect(page.getByRole('main')).not.toContainText(`@${name}`);
+  expect(await fitsViewport(page)).toBe(true);
+  // Opened again, the preview agrees and names nothing.
+  await page.goto('/');
+  await page.goto(path);
+  await expect(
+    page.getByRole('heading', { name: 'This link no longer works' }),
+  ).toBeVisible();
+  await expect(page.getByRole('main')).not.toContainText(name);
+});

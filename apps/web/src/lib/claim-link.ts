@@ -106,3 +106,14 @@ export function claimRefusalWords(code: string, status: number): string {
       return 'We couldn’t claim it. Please try again.';
   }
 }
+
+/**
+ * What to show after the server refused a claim on this code: the link's state now, except that an
+ * "open" answer still can't be claimed, so it reads as cancelled. Claim is never offered twice for
+ * the same refusal (security review of PR #280: no loop between preview and claim).
+ */
+export function stateAfterRefusedClaim(
+  state: ClaimLinkPreview['state'],
+): Exclude<ClaimLinkPreview['state'], 'open'> {
+  return state === 'open' ? 'cancelled' : state;
+}

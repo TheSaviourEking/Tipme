@@ -14,6 +14,7 @@ import {
   claimPreviewWords,
   claimRefusalWords,
   clearClaimLink,
+  stateAfterRefusedClaim,
   takeClaimCode,
 } from '@/lib/claim-link';
 import { markClaimed } from '@/lib/claim-moment';
@@ -136,7 +137,17 @@ export function ClaimView() {
       return;
     }
     if (result.code === 'CLAIM_LINK_INVALID') {
-      await look(code);
+      // Show what the link is now, but never offer Claim again for this refusal: an "open" answer
+      // here still can't be claimed, so it reads as cancelled (no loop).
+      const now = await apiFetch<ClaimLinkPreview>(
+        '/v1/handles/claim-link/preview',
+        { method: 'POST', body: { code } },
+      );
+      clearClaimLink();
+      setView({
+        step: 'closed',
+        state: now.ok ? stateAfterRefusedClaim(now.data.state) : 'invalid',
+      });
       return;
     }
     setError(claimRefusalWords(result.code, result.status));

@@ -913,6 +913,10 @@ test('review: a link stops working once its maker is no longer staff holding use
   const claimer = await user(database);
   // The permission taken away (another role): refused, and nothing changes.
   await asStaff(database, staffId, ['search.view']);
+  // N1: the preview agrees with the claim, and no longer names the username.
+  assert.deepEqual(await previewHandoverLink(database.db, codeOf(created)), {
+    state: 'cancelled',
+  });
   await rejects(
     claimViaHandoverLink(database.db, {
       userId: claimer,
@@ -1160,4 +1164,32 @@ test('review: a sign-up for the same account during a no-page claim: one wins, n
     ).previous,
     'own_choice_x',
   );
+});
+
+test('review N1: only staff holding usernames.manage make links or give names, in the database too', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_actor',
+    reason: REASON,
+  });
+  const outsider = await user(database);
+  await rejects(
+    createHandoverLink(database.db, {
+      staffId: outsider,
+      name: 'brand_actor',
+      reason: REASON,
+    }),
+    'PERMISSION_NOT_HELD',
+  );
+  await rejects(
+    assignUsername(database.db, {
+      staffId: outsider,
+      name: 'brand_actor',
+      userId: await user(database),
+      reason: REASON,
+    }),
+    'PERMISSION_NOT_HELD',
+  );
+  assert.equal(await database.count('handle_handover_links'), 0);
 });

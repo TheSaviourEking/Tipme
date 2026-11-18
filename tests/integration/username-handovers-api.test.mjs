@@ -518,9 +518,11 @@ test('review: removing a link maker from staff, or a role without usernames.mana
     { reason: 'Left the team this week' },
   );
   assert.equal(removed.status, 200, await removed.clone().text());
-  assert.deepEqual(await json(await preview(codeIn((await json(made)).path))), {
+  const first = await json(made);
+  assert.deepEqual(await json(await preview(codeIn(first.path))), {
     state: 'cancelled',
   });
+  assert.equal((await cancelledAudit(first.link.id)).length, 1);
 
   const movedPhone = '+2348031290095';
   const mover = await opsSignIn(stack.api, database.db, movedPhone);
@@ -556,6 +558,90 @@ test('review: removing a link maker from staff, or a role without usernames.mana
   assert.deepEqual(await json(await preview(codeIn(second.path))), {
     state: 'cancelled',
   });
+});
+
+/** A signed-in staff member on a custom role that manages usernames, and a claim link they made. */
+async function makerOnRole(phone, roleId, name) {
+  const maker = await opsSignIn(stack.api, database.db, phone);
+  await q(
+    `INSERT INTO roles (id, name) VALUES ($1, $1) ON CONFLICT DO NOTHING`,
+    [roleId],
+  );
+  await q(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ($1, 'usernames.manage') ON CONFLICT DO NOTHING`,
+    [roleId],
+  );
+  await q(
+    `UPDATE staff SET role_id = $2 WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $1)`,
+    [phone, roleId],
+  );
+  const [{ id }] = await q(`SELECT id FROM users WHERE phone_e164 = $1`, [
+    phone,
+  ]);
+  await reserve(name);
+  const made = await call(
+    'POST',
+    `/v1/ops/usernames/${name}/handover-link`,
+    maker.cookie,
+    { reason: REASON },
+  );
+  assert.equal(made.status, 201);
+  const link = await json(made);
+  assert.equal((await json(await preview(codeIn(link.path)))).state, 'open');
+  return { id, link };
+}
+
+const cancelledAudit = (linkId) =>
+  q(
+    `SELECT reason FROM audit_events WHERE action = 'username.handover_link_cancelled' AND reason LIKE $1`,
+    [`%${linkId}%`],
+  );
+
+test("review N1: editing a role so it no longer manages usernames ends its holders' links, audited", async () => {
+  const { link } = await makerOnRole(
+    '+2348031290094',
+    'makers_n1a',
+    'api_n1_role',
+  );
+  const edited = await call(
+    'PATCH',
+    '/v1/ops/staff/roles/makers_n1a',
+    staff.cookie,
+    {
+      permissions: ['search.view'],
+      reason: 'This desk no longer hands out names',
+    },
+  );
+  assert.equal(edited.status, 200, await edited.clone().text());
+  assert.deepEqual(await json(await preview(codeIn(link.path))), {
+    state: 'cancelled',
+  });
+  const [audit] = await cancelledAudit(link.link.id);
+  assert.ok(audit, 'audited');
+  assert.match(audit.reason, /staff access changed/i);
+});
+
+test("review N1: a personal removal of usernames.manage ends that person's links, audited", async () => {
+  const { id, link } = await makerOnRole(
+    '+2348031290093',
+    'makers_n1b',
+    'api_n1_personal',
+  );
+  const changed = await call(
+    'PUT',
+    `/v1/ops/staff/${id}/access`,
+    staff.cookie,
+    {
+      additions: [],
+      removals: ['usernames.manage'],
+      reason: 'Not handing out names any more',
+    },
+  );
+  assert.equal(changed.status, 200, await changed.clone().text());
+  assert.deepEqual(await json(await preview(codeIn(link.path))), {
+    state: 'cancelled',
+  });
+  assert.equal((await cancelledAudit(link.link.id)).length, 1);
 });
 
 // Last: it uses up this address's allowance.

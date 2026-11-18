@@ -32,6 +32,7 @@ import {
   checkedReason,
   isActiveStaff,
   readStaffAccess,
+  readStaffAccessOf,
   withAuditChange,
 } from './staff.js';
 import { pendingTakeBacks } from './username-take-backs.js';
@@ -176,30 +177,71 @@ export async function cancelOpenHandoverLinks(
 }
 
 /**
- * Ends every open claim link a staff member made, when they leave staff or lose usernames.manage
- * (security review of PR #280). A claim checks the maker's access too, so this keeps the screens
- * honest rather than being the only guard. `actorId` is who made the staff change.
+ * Ends every open claim link whose maker is no longer staff holding usernames.manage, after a staff
+ * change (removal, a role move, a role edit, a personal removal; security review of PR #280). Each
+ * one is audited as `username.handover_link_cancelled`, "staff access changed". A claim and a preview
+ * check the maker's access too, so a change made some other way still stops the link working.
+ * `actorId` is who made the staff change. Run after the change, in its transaction.
  */
-export async function cancelHandoverLinksOf(
+export async function endLinksOfStaffWithoutAccess(
   tx: Tx,
-  input: { makerId: string; actorId: string; reason: string; now: Date },
+  input: { actorId: string; now: Date },
 ): Promise<number> {
-  const cancelled = await tx
-    .update(handleHandoverLinks)
-    .set({
-      cancelledAt: input.now,
-      cancelledBy: input.actorId,
-      cancelReason: input.reason,
+  const open = await tx
+    .select({
+      id: handleHandoverLinks.id,
+      name: handleHandoverLinks.handleLower,
+      reservationId: handleHandoverLinks.reservationId,
+      makerId: handleHandoverLinks.createdBy,
     })
+    .from(handleHandoverLinks)
     .where(
       and(
-        eq(handleHandoverLinks.createdBy, input.makerId),
         isNull(handleHandoverLinks.usedAt),
         isNull(handleHandoverLinks.cancelledAt),
       ),
-    )
-    .returning({ id: handleHandoverLinks.id });
-  return cancelled.length;
+    );
+  if (open.length === 0) return 0;
+  const access = await readStaffAccessOf(tx, [
+    ...new Set(open.map((link) => link.makerId)),
+  ]);
+  const ending = open.filter(
+    (link) => !access.get(link.makerId)?.permissions.has(PERMISSION),
+  );
+  for (const link of ending) {
+    await tx
+      .update(handleHandoverLinks)
+      .set({
+        cancelledAt: input.now,
+        cancelledBy: input.actorId,
+        cancelReason: 'Staff access changed',
+      })
+      .where(eq(handleHandoverLinks.id, link.id));
+    await recordAudit(tx, {
+      staffUserId: input.actorId,
+      action: 'username.handover_link_cancelled',
+      permission: PERMISSION,
+      subjectType: 'username',
+      subjectId: link.name,
+      reason: withAuditChange(
+        'Staff access changed: its maker no longer manages usernames',
+        {
+          reservationId: link.reservationId,
+          linkId: link.id,
+          makerId: link.makerId,
+        },
+      ),
+      now: input.now,
+    });
+  }
+  return ending.length;
+}
+
+/** Only staff holding usernames.manage act here, whatever the route checked first. */
+async function assertManages(tx: Tx, staffId: string): Promise<void> {
+  const access = await readStaffAccess(tx, staffId);
+  if (!access?.permissions.has(PERMISSION))
+    throw new OperationError('PERMISSION_NOT_HELD');
 }
 
 /**
@@ -216,6 +258,7 @@ export function createHandoverLink(
     const key = keyOf(input.name);
     const reason = checkedReason(input.reason);
     return db.transaction(async (tx) => {
+      await assertManages(tx, input.staffId);
       await lockName(tx, key);
       const reservation = await lockedReservation(tx, key);
       if (!reservation) throw new OperationError('USERNAME_NOT_RESERVED');
@@ -343,9 +386,13 @@ export function previewHandoverLink(
   return guarded(async () => {
     const link = await linkByCode(db, code);
     if (!link) return { state: 'invalid' };
+    // A link whose maker no longer manages usernames can't be claimed, so it reads as cancelled and
+    // names nothing, as the claim answers (security review of PR #280).
+    const maker = await readStaffAccess(db, link.createdBy);
     const state = stateOf(
       link,
-      await reservationActive(db, link.reservationId),
+      (await reservationActive(db, link.reservationId)) &&
+        maker?.permissions.has(PERMISSION) === true,
       now,
     );
     return state === 'open'
@@ -617,6 +664,7 @@ export function assignUsername(
       throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
     try {
       return await db.transaction(async (tx) => {
+        await assertManages(tx, input.staffId);
         const page = await lockedAccount(tx, input.userId);
         await lockName(tx, key);
         const reservation = await lockedReservation(tx, key);
