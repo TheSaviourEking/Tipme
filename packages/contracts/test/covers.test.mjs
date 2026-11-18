@@ -14,6 +14,8 @@ import {
   coverPlay,
   isProAnimation,
   resolveCover,
+  COVER_RENDITION_WIDTHS,
+  coverRenditionPath,
 } from '../dist/index.js';
 
 const HEARTS = ['scattered', 'large', 'dark', 'outline', 'ripple', 'rising'];
@@ -498,4 +500,34 @@ test('the choice schema refuses a design and an animation together, a motion wit
   );
   assert.equal(ok({ design: null, animation: 'drift', colour: 'nope' }), false);
   assert.equal(ok({ design: null, animation: null }), true);
+});
+
+// Cover renditions (Studio styles Stage and Horizon, spec §9.4/§9.9): smaller copies of an uploaded
+// cover, for srcset. Old covers have none, and then the cover carries no `widths` at all.
+test('cover renditions: fixed widths, a path beside the original, listed only when stored', () => {
+  assert.deepEqual([...COVER_RENDITION_WIDTHS], [640, 1080, 1600]);
+  const path = '/v1/covers/0d7f6d2c-6a51-4c0a-9d3e-6b9f3c2a1e00/3.webp';
+  assert.equal(
+    coverRenditionPath(path, 640),
+    '/v1/covers/0d7f6d2c-6a51-4c0a-9d3e-6b9f3c2a1e00/3-640.webp',
+  );
+  assert.deepEqual(resolveCover(page({ coverPath: path })), {
+    kind: 'photo',
+    path,
+  });
+  assert.deepEqual(resolveCover(page({ coverPath: path, coverWidths: [] })), {
+    kind: 'photo',
+    path,
+  });
+  assert.deepEqual(
+    resolveCover(page({ coverPath: path, coverWidths: [1600, 640, 1080] })),
+    { kind: 'photo', path, widths: [640, 1080, 1600] },
+  );
+  // A width outside the list is never reported, so no caller asks for an address that 404s.
+  assert.deepEqual(
+    resolveCover(page({ coverPath: path, coverWidths: [640, 999] })),
+    { kind: 'photo', path, widths: [640] },
+  );
+  // Widths mean nothing without a photo.
+  assert.equal(resolveCover(page({ coverWidths: [640] })).kind, 'design');
 });

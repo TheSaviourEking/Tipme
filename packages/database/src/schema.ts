@@ -2164,6 +2164,35 @@ export const profileCovers = pgTable(
 );
 
 /**
+ * Smaller copies of a page's uploaded cover (640, 1080 and 1600 wide, `COVER_RENDITION_WIDTHS`),
+ * re-encoded on the server from the stored cover, for `srcset` on the Studio styles that show it
+ * full-bleed. Shaped like `studio_image_files`: in Postgres or in R2, exactly one of the two, and
+ * always where the cover itself is. `version` is the cover's: a row for another version is never
+ * served. A cover uploaded before these existed has none, so the read model reports none.
+ */
+export const profileCoverRenditions = pgTable(
+  'profile_cover_renditions',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profileCovers.profileId, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    width: integer('width').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.width] }),
+    check(
+      'profile_cover_renditions_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+    check('profile_cover_renditions_width', sql`width IN (640, 1080, 1600)`),
+  ],
+);
+
+/**
  * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
  * `published` are StudioDocumentV1 JSON, written only after the strict schema accepted them; a
  * read always goes through `resolveStudioV1`. `rev` counts saves, so two tabs can't overwrite each
