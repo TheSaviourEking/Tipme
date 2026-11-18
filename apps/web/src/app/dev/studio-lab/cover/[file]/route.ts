@@ -8,7 +8,8 @@ import { studioLabOpen } from '../../lab-gate';
  * cover the API stores, so Stage and Horizon can be measured with a photo as their LCP (the
  * generated SVG covers are too flat to be a candidate). It is generated, not a photograph: soft
  * stage lights with grain, drawn from a seeded random source and encoded with sharp at quality 70
- * (132 KB). No person or third-party picture.
+ * (132 KB). No person or third-party picture. Like the API's, it has renditions at 640, 1080
+ * and 1600 wide (`1-640.webp`…), made the way the API makes them (sharp, WebP quality 75).
  */
 export async function GET(
   _: Request,
@@ -16,9 +17,13 @@ export async function GET(
 ) {
   if (!studioLabOpen()) notFound();
   const { file } = await params;
-  if (file !== '1.webp') notFound();
+  const m = /^1(-640|-1080|-1600)?\.webp$/.exec(file);
+  if (!m) notFound();
   const bytes = await readFile(
-    join(process.cwd(), 'src/app/dev/studio-lab/cover/upload.webp'),
+    join(
+      process.cwd(),
+      `src/app/dev/studio-lab/cover/upload${m[1] ?? ''}.webp`,
+    ),
   );
   return new Response(new Uint8Array(bytes), {
     headers: {

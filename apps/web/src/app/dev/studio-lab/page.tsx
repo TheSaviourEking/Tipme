@@ -77,9 +77,10 @@ const today = () =>
  * Page Studio styles (v2, spec 2026-11-17-page-studio-styles), rendered by StudioStylePage:
  *   ?style=<id> (LAB_STYLE_EXAMPLES), &mode=light|dark|auto, &accent=<id>, &cover=yours|gradient|plain,
  *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1,
- *   &yours=photo|small|upload|design|automatic|animated (the Settings cover: the generated photo,
- *   the same photo said to be 640 × 360, a generated 2240 × 600 WebP stored like the API's, a
- *   design, the automatic one, an animation)
+ *   &yours=photo|small|upload|single|design|automatic|animated (the Settings cover: the generated
+ *   photo, the same photo said to be 640 × 360, a generated 2240 × 600 WebP stored like the API's
+ *   with its 640/1080/1600 renditions, the same file without renditions, a design, the automatic
+ *   one, an animation)
  *   ?example=styles-min|styles-max|long-names (&style=<id>, Clear by default), or
  *   ?example=hostile&style=<id> (v2; without &style it is the v1 document)
  */
@@ -276,12 +277,16 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
       'photo',
       'small',
       'upload',
+      'single',
       'design',
       'automatic',
       'animated',
     ] as const) ?? 'photo';
   const settingsCover =
-    yours === 'photo' || yours === 'small' || yours === 'upload'
+    yours === 'photo' ||
+    yours === 'small' ||
+    yours === 'upload' ||
+    yours === 'single'
       ? null
       : resolveCover({
           handle,
@@ -292,7 +297,14 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
           plan,
         });
   if (settingsCover) profile.cover = settingsCover;
+  // The API's shape for an uploaded cover with its renditions (or, ?yours=single, without).
   if (yours === 'upload')
+    profile.cover = {
+      kind: 'photo',
+      path: '/dev/studio-lab/cover/1.webp',
+      widths: [640, 1080, 1600],
+    };
+  if (yours === 'single')
     profile.cover = { kind: 'photo', path: '/dev/studio-lab/cover/1.webp' };
   const coverSize =
     yours === 'small'
@@ -315,7 +327,10 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     videos: {},
     profile: { name, bio, links: links.length },
     plan,
-    coverKind: yours === 'small' || yours === 'upload' ? 'photo' : yours,
+    coverKind:
+      yours === 'small' || yours === 'upload' || yours === 'single'
+        ? 'photo'
+        : yours,
     hasAvatar: false,
   });
   const styled = renderStyled({

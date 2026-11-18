@@ -4,7 +4,9 @@ import {
   applyStudioFixV1,
   checkDesignV1,
   type MyStudioV1,
+  type StudioCheckContextV1,
   type StudioCheckResult,
+  type StudioDocument,
   type StudioDocumentV1,
   type StudioImage,
   type StudioIssue,
@@ -12,14 +14,26 @@ import {
 import { apiFetch } from '@/lib/session-client';
 import { checkShown, type SaveState } from './studio-editor-model';
 
+/**
+ * An answer this editor can edit: a v1 draft with the v1 facts. During the two-format period
+ * (styles plan ruling R1) the server may hold a v2 draft (saved by a direct API call); this editor
+ * can't open it and offers to reload instead.
+ */
+export type MyStudioOld = MyStudioV1 & {
+  draft: StudioDocumentV1;
+  context: StudioCheckContextV1;
+};
+export const editableHere = (studio: MyStudioV1): studio is MyStudioOld =>
+  studio.draft.v === 1;
+
 /** Edits settle this long before the draft is saved (plan Task 9). */
 const SAVE_AFTER_MS = 800;
 
 export interface StudioDraft {
   draft: StudioDocumentV1;
   rev: number;
-  /** The published version, as the server last said. */
-  published: StudioDocumentV1 | null;
+  /** The published version, as the server last said (always v2 now). */
+  published: StudioDocument | null;
   save: SaveState;
   /** Another tab or device saved first (STUDIO_DRAFT_STALE): nothing more is saved here. */
   stale: boolean;
@@ -50,7 +64,7 @@ export interface StudioDraft {
  * based on. Saving never needs a passing check; only publishing will (G3). Undo, discard and
  * publish come with G3.
  */
-export function useStudioDraft(initial: MyStudioV1): StudioDraft {
+export function useStudioDraft(initial: MyStudioOld): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
   const [published, setPublished] = useState(initial.published);
   const [context, setContext] = useState(initial.context);
@@ -74,7 +88,7 @@ export function useStudioDraft(initial: MyStudioV1): StudioDraft {
   const blocked = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const adopt = useCallback((studio: MyStudioV1) => {
+  const adopt = useCallback((studio: MyStudioOld) => {
     rev.current = studio.rev;
     setShownRev(studio.rev);
     setPublished(studio.published);
@@ -114,6 +128,12 @@ export function useStudioDraft(initial: MyStudioV1): StudioDraft {
           return;
         }
         saved.current = body;
+        if (!editableHere(result.data)) {
+          blocked.current = true;
+          setStale(true);
+          setSave('failed');
+          return;
+        }
         adopt(result.data);
       }
     } finally {
@@ -166,13 +186,19 @@ export function useStudioDraft(initial: MyStudioV1): StudioDraft {
     const imageId = added.imageId;
     imagesNow.current = result.data.images;
     setImages(result.data.images);
-    setContext(result.data.context);
+    if (editableHere(result.data)) setContext(result.data.context);
     return { imageId };
   }, []);
 
   const reload = useCallback(async () => {
     const result = await apiFetch<MyStudioV1>('/v1/me/studio');
     if (!result.ok) return;
+    if (!editableHere(result.data)) {
+      // A v2 draft: this editor can't open it; the page offers to reload.
+      blocked.current = true;
+      setStale(true);
+      return;
+    }
     clearTimeout(timer.current);
     blocked.current = result.data.access !== 'edit';
     latest.current = result.data.draft;
