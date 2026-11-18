@@ -1502,12 +1502,49 @@ test('the Tiles grid closes its rows: count rules for links and photos, and a ti
   ];
   const beside = (o) =>
     (styled('tiles', { blocks, ...o }).match(/data-beside=""/g) ?? []).length;
+  // No photo: the first section goes whole, its heading over its words (fix round 2).
   assert.equal(beside({ cover: 'plain', profile: { links: [] } }), 1);
   assert.match(
     styled('tiles', { blocks, cover: 'plain', profile: { links: [] } }),
-    /<div class="studio-block" data-kind="text" data-beside="">/,
+    /<div class="studio-section"[^>]* data-beside=""><div class="studio-block" data-kind="text"><h2/,
+  );
+  // A photo alone under its heading takes the heading with it.
+  const lone = styled('tiles', {
+    blocks: [
+      ...blocks,
+      { id: 'head0002', kind: 'text', variant: 'heading', text: 'Photos' },
+      PHOTO_BLOCK,
+    ],
+    cover: 'plain',
+    profile: { links: [] },
+  });
+  assert.match(
+    lone,
+    /<div class="studio-section"[^>]* data-beside=""><div class="studio-block" data-kind="text"><h2[^>]*>Photos/,
   );
   assert.equal(beside({ cover: 'plain' }), 0);
+  // With a photo on the page, the photo goes beside the Tip, not the first text (fix round 2).
+  const withPhoto = styled('tiles', {
+    blocks: [...blocks, PHOTO_BLOCK],
+    cover: 'plain',
+    profile: { links: [] },
+  });
+  assert.match(
+    withPhoto,
+    /<div class="studio-block" data-kind="photo" data-beside="">/,
+  );
+  assert.equal(withPhoto.match(/data-beside=""/g).length, 1);
+  // Text beside the Tip keeps its own height (top-aligned), a photo fills the Tip's.
+  assert.match(
+    declarations(
+      sheet('tiles'),
+      ".studio[data-style='tiles'] .studio-section[data-beside]",
+      'min-width: 1024px',
+    ),
+    /align-self: start;/,
+  );
+  // The links' title row sizes to its content (WCAG 1.4.4), never a fixed height.
+  assert.doesNotMatch(sheet('tiles'), /grid-template-rows: \d+px/);
   assert.equal(beside({ cover: 'gradient', profile: { links: [] } }), 0);
 });
 

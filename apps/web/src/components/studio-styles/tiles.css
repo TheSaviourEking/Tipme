@@ -829,13 +829,14 @@
     grid-row: 1 / span 2;
   }
 
-  /* Then the first row is the links' one-line title (15/20), so the Tip tile's extra height goes
-     to the links' row and nothing opens above the title. */
+  /* Then the first row is the links' title, sized to its text (it grows with text zoom, WCAG
+     1.4.4), and the second row is flexible: the Tip tile spans a flexible row, so it isn't counted
+     when the title's row is sized, and its extra height goes to the links, not above the title. */
   .studio[data-style='tiles']
     .studio-grid:has(.studio-links):not(
       :has(> .studio-cover:not([data-cover='plain']))
     ) {
-    grid-template-rows: 20px;
+    grid-template-rows: auto 1fr;
   }
 
   .studio[data-style='tiles'] .studio-cover {
@@ -850,14 +851,39 @@
     grid-column: 3 / 5;
   }
 
-  /* It fills the Tip tile's height, whatever it holds. */
-  .studio[data-style='tiles'] .studio-block[data-beside] > *,
+  /* A photo, gallery or video fills the Tip tile's height. */
+  .studio[data-style='tiles']
+    .studio-block[data-beside]:is(
+      [data-kind='photo'],
+      [data-kind='gallery'],
+      [data-kind='video']
+    )
+    > *,
   .studio[data-style='tiles']
     .studio-block[data-beside]
     :is(.studio-photo img, .studio-video) {
     box-sizing: border-box;
     height: 100%;
     aspect-ratio: auto;
+  }
+
+  /* A whole section beside the Tip (its heading over its blocks): one column of tiles at the
+     top of the row, its own height, so no empty card stretches beside the Tip. */
+  .studio[data-style='tiles'] .studio-section[data-beside] {
+    display: grid;
+    grid-row: 1;
+    grid-column: 3 / 5;
+    align-self: start;
+    align-content: start;
+    gap: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-section[data-beside] > .studio-block {
+    grid-column: auto;
+  }
+
+  .studio[data-style='tiles'] .studio-section[data-beside] .studio-title {
+    margin-top: 0;
   }
 
   .studio[data-style='tiles'] .studio-links > .studio-title {
@@ -979,13 +1005,15 @@
     aspect-ratio: 386 / 185;
   }
 
-  /* A gallery beside the Tip is two across, as on a phone. */
-  .studio[data-style='tiles'] .studio-block[data-beside] .studio-strip {
+  /* A gallery beside the Tip (on its own or in its section) is two across, as on a phone. */
+  .studio[data-style='tiles']
+    :is(.studio-block, .studio-section)[data-beside]
+    .studio-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .studio[data-style='tiles']
-    .studio-block[data-beside]
+    :is(.studio-block, .studio-section)[data-beside]
     .studio-strip
     li:last-child {
     grid-column: auto;
@@ -993,7 +1021,7 @@
   }
 
   .studio[data-style='tiles']
-    .studio-block[data-beside]
+    :is(.studio-block, .studio-section)[data-beside]
     .studio-strip
     li:last-child:nth-child(odd) {
     grid-column: 1 / -1;

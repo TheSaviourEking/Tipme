@@ -780,17 +780,19 @@ export function StyleBlocks({
   images: Images;
   lead?: boolean;
   part?: 'all' | 'lead';
-  /** Tiles with neither a cover tile nor links: the first block (not a heading) sits beside the
-   * Tip tile, so the grid's first row is closed (fix round 1). */
+  /** Tiles with neither a cover tile nor links: something sits beside the Tip tile, so the grid's
+   * first row is closed (fix rounds 1 and 2): the first photo (else the first gallery) when its
+   * heading keeps other blocks under it; otherwise that photo's whole section; and with no photo,
+   * the first section whole, its heading over its words. A heading is never left alone. */
   beside?: boolean;
 }) {
   // Sprint's photos run edge to edge (§9.6, ruling AC): a photo or gallery never shares a section
   // with text, so it can leave the column.
   const split = doc.style === 'sprint';
-  let besideDone = !beside;
+  type Entry = { block: StudioBlock; shown: ReactNode; heading: boolean };
   const sections: {
     id: string;
-    cells: ReactNode[];
+    entries: Entry[];
     list: boolean;
     /** Photos only (and a heading): how many, or -1 once another kind joins. */
     photos: number;
@@ -809,31 +811,32 @@ export function StyleBlocks({
       // A photo after other blocks, or another block after photos, starts its own section.
       (media ? last.photos < 0 : last.photos > 0);
     if (heading || !sections.length || cut)
-      sections.push({
-        id: block.id,
-        cells: [],
-        list: true,
-        photos: 0,
-      });
+      sections.push({ id: block.id, entries: [], list: true, photos: 0 });
     const section = sections.at(-1)!;
-    const besideThis = !besideDone && !heading;
-    if (besideThis) besideDone = true;
     // A list section holds only lists (and its heading): a style may pair two side by side.
     if (!heading && block.kind !== 'services' && block.kind !== 'events')
       section.list = false;
-    if (block.kind === 'photo' || block.kind === 'gallery') {
+    if (media) {
       if (section.photos >= 0) section.photos += 1;
     } else if (!heading) section.photos = -1;
-    section.cells.push(
-      <div
-        key={block.id}
-        className="studio-block"
-        data-kind={block.kind}
-        {...(besideThis ? { 'data-beside': '' } : {})}
-      >
-        {shown}
-      </div>,
-    );
+    section.entries.push({ block, shown, heading });
+  }
+  // What sits beside Tiles' Tip tile: a block id, or a whole section's id.
+  let besideBlock: string | undefined;
+  let besideSection: string | undefined;
+  if (beside && sections.length) {
+    const all = sections.flatMap((sec) => sec.entries.map((e) => ({ sec, e })));
+    const photo =
+      all.find(({ e }) => e.block.kind === 'photo') ??
+      all.find(({ e }) => e.block.kind === 'gallery');
+    if (photo) {
+      const headed = photo.sec.entries.some((e) => e.heading);
+      const others = photo.sec.entries.filter(
+        (e) => !e.heading && e !== photo.e,
+      ).length;
+      if (!headed || others > 0) besideBlock = photo.e.block.id;
+      else besideSection = photo.sec.id;
+    } else besideSection = sections[0]!.id;
   }
   const shown = part === 'lead' ? sections.slice(0, 1) : sections;
   if (!shown.length) return null;
@@ -845,13 +848,23 @@ export function StyleBlocks({
         <div
           key={section.id}
           className="studio-section"
-          {...(section.list && section.cells.length > 1
+          {...(section.list && section.entries.length > 1
             ? { 'data-list': '' }
             : {})}
           {...(section.photos > 0 ? { 'data-media': '' } : {})}
           {...(lead && part === 'all' && i === 0 ? { 'data-lead': '' } : {})}
+          {...(section.id === besideSection ? { 'data-beside': '' } : {})}
         >
-          {section.cells}
+          {section.entries.map(({ block, shown: cell }) => (
+            <div
+              key={block.id}
+              className="studio-block"
+              data-kind={block.kind}
+              {...(block.id === besideBlock ? { 'data-beside': '' } : {})}
+            >
+              {cell}
+            </div>
+          ))}
         </div>
       ))}
     </div>

@@ -1801,3 +1801,126 @@ test('Sprint with a plain cover fills its desktop hero: the name on the left, th
   expect(tip.top).toBeLessThan(name.bottom + 400);
   expect(await geometryProblems(page)).toEqual([]);
 });
+
+// Fix round 2 (PR 2e review).
+
+const tilesDoc = (blocks: unknown[]) =>
+  encodeDoc({
+    v: 2,
+    style: 'tiles',
+    accent: null,
+    mode: 'light',
+    cover: 'plain',
+    blocks,
+  });
+const besideBoxes = (page: Page) =>
+  page.evaluate(() => {
+    const g = document.querySelector('.studio-grid')!;
+    const tip = g.querySelector('.studio-tip')!.getBoundingClientRect();
+    const block = g.querySelector('[data-beside]') as HTMLElement | null;
+    // A block's own card, or a whole section (its heading over its blocks).
+    const section = block?.classList.contains('studio-section') ?? false;
+    const inner = (
+      section ? block : block?.firstElementChild
+    )?.getBoundingClientRect();
+    return {
+      kind: section ? 'section' : (block?.dataset.kind ?? null),
+      tip: { top: tip.top, height: tip.height },
+      inner: inner ? { top: inner.top, height: inner.height } : null,
+    };
+  });
+
+test('Tiles with no links puts a photo beside the Tip tile when the page has one', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const doc = tilesDoc([
+    { id: 'tilehed1', kind: 'text', variant: 'heading', text: 'Studio diary' },
+    {
+      id: 'tiletxt1',
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'Eight songs.',
+    },
+    { id: 'tilepho1', kind: 'photo', imageId: IMG(2), alt: 'A stage' },
+  ]);
+  await page.goto(`/dev/studio-lab?style=tiles&links=0&doc=${doc}`);
+  await ready(page);
+  const got = await besideBoxes(page);
+  expect(got.kind).toBe('photo');
+  // The photo fills the Tip tile's height; the row is closed.
+  expect(Math.abs(got.inner!.height - got.tip.height)).toBeLessThanOrEqual(1);
+  expect(await gridHoles(page, '.studio-grid')).toEqual([]);
+});
+
+test('Tiles with no links and no photo sets text beside the Tip at its own height, not an empty card', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const doc = tilesDoc([
+    { id: 'tilehed1', kind: 'text', variant: 'heading', text: 'Studio diary' },
+    {
+      id: 'tiletxt1',
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'Eight songs and a small room.',
+    },
+    { id: 'tilequo1', kind: 'quote', text: 'Sing it again.' },
+  ]);
+  await page.goto(`/dev/studio-lab?style=tiles&links=0&doc=${doc}`);
+  await ready(page);
+  const got = await besideBoxes(page);
+  // The first section goes whole (its heading stays over its words), never a lone card.
+  expect(got.kind).toBe('section');
+  await expect(
+    page.locator('.studio-section[data-beside] .studio-title'),
+  ).toHaveText('Studio diary');
+  // Top-aligned with the Tip, sized to its words: far shorter than the Tip tile.
+  expect(Math.abs(got.inner!.top - got.tip.top)).toBeLessThanOrEqual(1);
+  expect(got.inner!.height).toBeLessThan(got.tip.height * 0.6);
+  // No heading is left without its blocks.
+  const orphans = await page.evaluate(
+    () =>
+      [...document.querySelectorAll('.studio-blocks .studio-section')].filter(
+        (sec) =>
+          sec.querySelectorAll('.studio-block').length ===
+          sec.querySelectorAll('.studio-block--heading').length,
+      ).length,
+  );
+  expect(orphans).toBe(0);
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test("Tiles' links title grows with the text and never overlaps the link tiles (WCAG 1.4.4)", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=tiles');
+  await ready(page);
+  // Text at 200%: the title's own 15/21 doubles to 30/42 (a text-only zoom does the same to it).
+  await page.addStyleTag({
+    content:
+      ".studio[data-style='tiles'] .studio-links > .studio-title { font-size: 30px !important; line-height: 42px !important; }",
+  });
+  const measure = () =>
+    page.evaluate(() => {
+      const t = document
+        .querySelector('.studio-links > .studio-title')!
+        .getBoundingClientRect();
+      const l = document
+        .querySelector('.studio-links__list li')!
+        .getBoundingClientRect();
+      const tip = document
+        .querySelector('.studio-tip')!
+        .getBoundingClientRect();
+      return {
+        titleHeight: Math.round(t.height),
+        // The title clears the first link tile, and doesn't poke above the Tip tile.
+        clearsLinks: t.bottom <= l.top + 0.5,
+        alignedWithTip: Math.abs(t.top - tip.top) <= 1,
+      };
+    });
+  await expect
+    .poll(measure)
+    .toEqual({ titleHeight: 42, clearsLinks: true, alignedWithTip: true });
+});
