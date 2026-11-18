@@ -2210,6 +2210,12 @@ export const pageStudios = pgTable('page_studios', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  /**
+   * "From your photo" (styles spec §5.3, §6): a `PhotoAccent` the server computed from the
+   * profile photo (`avatarVersion` names which), or the curated fallback when no colour passed.
+   * Written only by the server; read through `photoAccentOf`, so a stale or invalid value is none.
+   */
+  photoAccent: jsonb('photo_accent'),
 });
 
 /**

@@ -5,6 +5,8 @@ import {
   checkDesign,
   checkDesignV1,
   defaultStudioDocumentV1,
+  photoAccentOf,
+  photoAccentSchema,
   proItemsOf,
   resolveCover,
   resolveStudio,
@@ -18,6 +20,7 @@ import {
   visibleLinks,
   type MyStudioV1,
   type PagePlan,
+  type PhotoAccent,
   type PublicStudio,
   type SocialLink,
   type StudioBlock,
@@ -28,11 +31,22 @@ import {
   type StudioDocumentV1,
   type StudioIssue,
 } from '@tipme/contracts';
-import { and, eq, gt, inArray, ne, notInArray, sql } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import {
   pageStudios,
+  profileAvatars,
   profiles,
   studioImageFiles,
   studioImages,
@@ -163,6 +177,8 @@ interface PageFacts {
   /** The display name, for the check's name-fallback notice. */
   name: string;
   hasAvatar: boolean;
+  /** The profile photo a stored photo accent must have come from; null without a photo. */
+  avatar: { avatarVersion: number } | null;
   /** The cover set in Settings, as the v3 check reads it. */
   coverKind: StudioCheckContext['coverKind'];
 }
@@ -179,6 +195,7 @@ async function pageFacts(db: Db, profileId: string): Promise<PageFacts> {
       socialsPublic: profiles.socialsPublic,
       displayName: profiles.displayName,
       avatarPath: profiles.avatarPath,
+      avatarVersion: profiles.avatarVersion,
       coverPath: profiles.coverPath,
       coverDesign: profiles.coverDesign,
       coverAnimation: profiles.coverAnimation,
@@ -375,6 +392,7 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudioV1> {
     // The old editor's gate, unchanged until it moves to v2 (ruling R1).
     access: page.plan === 'pro' ? 'edit' : row ? 'lapsed' : 'preview',
     plan: page.plan === 'pro' ? 'pro' : 'free',
+    photoAccent: photoAccentOf(row?.photoAccent ?? null, page.avatar),
   };
 }
 
@@ -910,7 +928,10 @@ export async function publicStudioFor(
   page: PageFacts,
 ): Promise<PublicStudio | undefined> {
   const [row] = await db
-    .select({ published: pageStudios.published })
+    .select({
+      published: pageStudios.published,
+      photoAccent: pageStudios.photoAccent,
+    })
     .from(pageStudios)
     .where(eq(pageStudios.profileId, page.id));
   if (!row?.published) return undefined;
@@ -928,8 +949,14 @@ export async function publicStudioFor(
   const used = studioImageIdsOf(document);
   return {
     document,
-    // The photo accent's own values come with Task 11; until then it shows the style's own.
-    palette: studioTokens(document.style, document.accent),
+    // "From your photo" (§6): the stored values for the current photo, or their fallback. With
+    // no photo, or one newer than the stored values, the style's own accent: never a stale one.
+    // On Free `studioShown` has already set the photo accent back to the style's own.
+    palette: studioTokens(
+      document.style,
+      document.accent,
+      photoAccentOf(row.photoAccent, page.avatar),
+    ),
     images: Object.fromEntries(
       images
         .filter((i) => used.has(i.id))
@@ -981,6 +1008,7 @@ export function studioPageFacts(row: {
   socialsPublic: boolean;
   displayName: string;
   avatarPath: string | null;
+  avatarVersion: number;
   coverPath: string | null;
   coverDesign: string | null;
   coverAnimation: string | null;
@@ -993,8 +1021,114 @@ export function studioPageFacts(row: {
     links: row.socialsPublic ? row.links : [],
     name: row.displayName,
     hasAvatar: row.avatarPath !== null,
+    avatar:
+      row.avatarPath !== null ? { avatarVersion: row.avatarVersion } : null,
     coverKind: coverKindOf(row),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// "From your photo" (styles spec §6). The API samples the profile photo and stores what
+// `pickPhotoAccent` made of it; only the server writes the column, and only for the photo it
+// sampled. Reads go through `photoAccentOf`, so a value for an older photo is never shown.
+
+/**
+ * The page's profile photo, to compute its photo accent from: its bytes and version. Null when
+ * the page has no Studio row (nothing would use it) or no photo.
+ */
+export function studioPhotoSource(
+  db: Database,
+  userId: string,
+  store?: PhotoStore,
+): Promise<{ profileId: string; avatarVersion: number; webp: Buffer } | null> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    const [row] = await db
+      .select({
+        version: profileAvatars.version,
+        bytes: profileAvatars.bytes,
+        objectKey: profileAvatars.objectKey,
+      })
+      .from(profileAvatars)
+      .innerJoin(
+        pageStudios,
+        eq(pageStudios.profileId, profileAvatars.profileId),
+      )
+      .where(eq(profileAvatars.profileId, profileId));
+    if (!row) return null;
+    const webp =
+      row.bytes ??
+      (row.objectKey && store ? await store.get(row.objectKey) : null);
+    return webp ? { profileId, avatarVersion: row.version, webp } : null;
+  });
+}
+
+/**
+ * Stores the photo accent computed from photo `avatarVersion`, only while that is still the
+ * page's photo (a newer upload or a removal in the meantime wins). Returns whether it was stored.
+ */
+export function setPhotoAccent(
+  db: Database,
+  profileId: string,
+  avatarVersion: number,
+  accent: PhotoAccent,
+): Promise<boolean> {
+  return guarded(async () => {
+    // Only the server's own values reach the column, and from there the page's CSS.
+    const value = photoAccentSchema.parse(accent);
+    if ('source' in value && value.avatarVersion !== avatarVersion)
+      throw new OperationError('STUDIO_DRAFT_INVALID');
+    const written = await db
+      .update(pageStudios)
+      .set({ photoAccent: value })
+      .where(
+        and(
+          eq(pageStudios.profileId, profileId),
+          inArray(
+            pageStudios.profileId,
+            db
+              .select({ id: profiles.id })
+              .from(profiles)
+              .where(
+                and(
+                  eq(profiles.id, profileId),
+                  eq(profiles.avatarVersion, avatarVersion),
+                  isNotNull(profiles.avatarPath),
+                ),
+              ),
+          ),
+        ),
+      )
+      .returning({ id: pageStudios.profileId });
+    return written.length > 0;
+  });
+}
+
+/**
+ * Clears the page's photo accent once its photo is gone; a photo uploaded in the meantime keeps
+ * the accent stored for it.
+ */
+export function clearPhotoAccent(db: Database, userId: string): Promise<void> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    await db
+      .update(pageStudios)
+      .set({ photoAccent: null })
+      .where(
+        and(
+          eq(pageStudios.profileId, profileId),
+          inArray(
+            pageStudios.profileId,
+            db
+              .select({ id: profiles.id })
+              .from(profiles)
+              .where(
+                and(eq(profiles.id, profileId), isNull(profiles.avatarPath)),
+              ),
+          ),
+        ),
+      );
+  });
 }
 
 /** One Studio photo's master as staff see it, whatever the page's state; audited. */
