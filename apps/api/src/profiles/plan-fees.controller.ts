@@ -1,6 +1,7 @@
 import { Controller, Get, Header, Inject } from '@nestjs/common';
 import type { ApiDataResponse, PublicPlanFees } from '@tipme/contracts';
 import { planFeeRatesInForce } from '@tipme/database';
+import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { DatabaseProvider } from '../infra/database.js';
 
 /**
@@ -15,6 +16,7 @@ export class PlanFeesController {
   ) {}
 
   @Get()
+  @RateLimit('plan_fees')
   @Header('Cache-Control', 'public, max-age=60')
   async rates(): Promise<ApiDataResponse<PublicPlanFees>> {
     const rates = await planFeeRatesInForce(this.database.db);

@@ -218,6 +218,22 @@ export async function openTestDatabase(): Promise<TestDatabase> {
            VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now() - interval '1 second', 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now() - interval '1 second'),
                   ('00000000-0000-4000-8000-000000500000', 500000, 'NGN', now(), 'Owner''s pricing decision, 12 Nov 2026: Pro is ₦5,000 a month', now())`,
       );
+      // And the plan fee rates 0115 seeds (owner, 18 Nov 2026): Free 500 and Pro 300 bps with the
+      // system audit row, so suites run on the "setting" path production uses. Same id and text.
+      await client.query(
+        `WITH added AS (
+           INSERT INTO plan_fee_rates (id, free_bps, pro_bps, effective_from, set_by, approved_by, reason, created_at)
+           VALUES ('00000000-0000-4000-8000-000000000503', 500, 300, clock_timestamp(), NULL, NULL,
+             'Owner''s decision, 18 Nov 2026: Free 5% and Pro 3% per tip, payment and withdrawal fees included',
+             clock_timestamp())
+           RETURNING id
+         )
+         INSERT INTO audit_events (id, staff_user_id, action, permission, subject_type, subject_id, reason, created_at)
+         SELECT gen_random_uuid(), NULL, 'plan_fees.changed', 'fees.manage', 'plan_fee_rates', added.id::text,
+                'Owner''s decision, 18 Nov 2026: Free 5% and Pro 3% per tip, payment and withdrawal fees included [change: {"from":{"freeBps":"700","proBps":"500"},"to":{"freeBps":"500","proBps":"300"},"approvedBy":null}]',
+                clock_timestamp()
+           FROM added`,
+      );
       // And the launch Business Pro price (Business Pro A1), ₦7,000 a month.
       await client.query(
         `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, plan, reason, created_at)

@@ -99,6 +99,15 @@ const ask = (actorId, freeBps, proBps) =>
     reason: REASON,
     services: services(),
   });
+const askConfirmed = (actorId, freeBps, proBps) =>
+  ops.requestSeriousAction(database.db, {
+    name: 'plan_fees.change',
+    payload: { freeBps, proBps, confirmLargeChange: true },
+    actorId,
+    grantId: people.get(actorId).grantId,
+    reason: REASON,
+    services: services(),
+  });
 const approve = (requestId, actorId) =>
   ops.approveRequest(database.db, {
     requestId,
@@ -173,7 +182,7 @@ test('an owner reads the rates, their source, the business payout rule and no wa
     source: 'default',
     effectiveFrom: null,
   });
-  assert.deepEqual(data.limits, { minBps: 0, maxBps: 10000 });
+  assert.deepEqual(data.limits, { minBps: 150, maxBps: 1000 });
   assert.equal(data.waitingRequestId, null);
   assert.deepEqual(data.business, { payoutFeeAbsorbed: false });
   // Pro above Free is refused before anything is asked.
@@ -233,7 +242,7 @@ test('on approval new quotes use the new rate, a quote shown before keeps its fe
   assert.equal(history.setBy, asker);
   assert.equal(history.approvedBy, approver);
   const [audit] = await q(
-    `SELECT staff_user_id, permission, reason FROM audit_events WHERE action = 'plan_fees.changed'`,
+    `SELECT staff_user_id, permission, reason FROM audit_events WHERE action = 'plan_fees.changed' ORDER BY created_at DESC LIMIT 1`,
   );
   assert.equal(audit.staff_user_id, asker);
   assert.equal(audit.permission, 'fees.manage');
@@ -261,7 +270,7 @@ test('a lone admin runs it alone, with the acted-alone alert, as every money swi
     1,
   );
   const [audit] = await q(
-    `SELECT reason FROM audit_events WHERE action = 'plan_fees.changed'`,
+    `SELECT reason FROM audit_events WHERE action = 'plan_fees.changed' ORDER BY created_at DESC LIMIT 1`,
   );
   assert.match(audit.reason, /"approvedBy":null/);
 });
@@ -282,8 +291,12 @@ test('a request goes stale when the rates changed while it waited', async () => 
 test('out-of-range rates, Pro above Free and unchanged rates are refused INVALID_INPUT', async () => {
   const lone = await person();
   for (const [free, pro] of [
-    ['10001', '0'],
-    ['-1', '0'],
+    ['10001', '300'],
+    ['1001', '300'],
+    ['149', '149'],
+    ['500', '149'],
+    ['0', '0'],
+    ['-1', '300'],
     ['300', '500'],
     ['5.5', '3'],
     ['500', '300'],
@@ -294,6 +307,23 @@ test('out-of-range rates, Pro above Free and unchanged rates are refused INVALID
       `${free}/${pro}`,
     );
   assert.deepEqual(await rates(), [500n, 300n]);
+});
+
+test('a move of more than 200 bps is refused without the explicit confirm, and runs with it', async () => {
+  const lone = await person();
+  // 500 to 701 on Free is 201 bps: refused, nothing stored, no request left waiting.
+  await assert.rejects(
+    ask(lone, '701', '300'),
+    (error) => error.code === 'PLAN_FEES_CONFIRM_REQUIRED',
+  );
+  assert.deepEqual(await rates(), [500n, 300n]);
+  assert.equal(await ops.waitingPlanFeesRequest(database.db), null);
+  // Exactly 200 needs no confirm.
+  assert.equal((await ask(lone, '700', '300')).state, 'ran');
+  assert.deepEqual(await rates(), [700n, 300n]);
+  // A big move with the flag goes through.
+  assert.equal((await askConfirmed(lone, '1000', '300')).state, 'ran');
+  assert.deepEqual(await rates(), [1000n, 300n]);
 });
 
 test('the business payout fee switch is a money switch: a change waits for a second person', async () => {
