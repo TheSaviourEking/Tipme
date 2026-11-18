@@ -1,0 +1,761 @@
+/* Linen: "Morning light on paper" (spec 2026-11-17-page-studio-styles §9.8; canvas "Linen · phone",
+   "Linen · desktop"). Linen Serif (Gentium Book Plus, renamed) for the name (400), the "Send a tip"
+   title (700) and section titles (italic 400); Inter for the rest. Radii 20 (cards, the framed
+   cover, the Tip card) and 14 (chips, the Tip, link cards, photos), plus the circle avatar. The
+   one shadow-like line is the mat's 1 px warm underline, as drawn. */
+
+.studio[data-style='linen'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --serif: 'Studio Linen Serif', 'Studio Linen Serif Fallback', Georgia, serif;
+  --ease: ease-out;
+  letter-spacing: 0;
+}
+
+.studio[data-style='linen'] .studio-page {
+  box-sizing: border-box;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: 0 var(--gutter);
+}
+
+/* Cover, framed: inset 16 from the screen's edge, in a mat (1 px line, r20, padding 6), the
+   photo r14 and 204 tall. The gradient is a warm accent tint fading to bg in the same frame. */
+.studio[data-style='linen'] .studio-cover {
+  box-sizing: border-box;
+  height: 218px;
+  margin: 16px calc(16px - var(--gutter)) 0;
+  padding: 6px;
+  border: 1px solid var(--studio-line);
+  border-radius: 20px;
+  background: var(--studio-mat);
+  box-shadow: 0 1px 0 rgb(80 50 20 / 4%);
+}
+
+.studio[data-style='linen'] .studio-cover__photo,
+.studio[data-style='linen'] .studio-cover .profile-cover,
+.studio[data-style='linen'] .studio-cover[data-cover='gradient']::before {
+  inset: 6px;
+  width: calc(100% - 12px);
+  height: calc(100% - 12px);
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.studio[data-style='linen'] .studio-cover[data-cover='gradient']::before {
+  position: absolute;
+  background: linear-gradient(
+    180deg,
+    var(--studio-coverFrom),
+    var(--studio-coverTo)
+  );
+  content: '';
+}
+
+.studio[data-style='linen'] .studio-cover__fade,
+.studio[data-style='linen'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+/* Identity: the 56 px avatar beside the meta (two lines: handle; role), then the name 40/44 400
+   and the bio 17/26. */
+.studio[data-style='linen'] .studio-identity {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  column-gap: 14px;
+  align-items: center;
+  margin-top: 24px;
+}
+
+.studio[data-style='linen']
+  .studio-page:has(.studio-cover[data-cover='plain']) {
+  padding-top: 24px;
+}
+
+.studio[data-style='linen'] .studio-avatar {
+  grid-row: 1;
+  grid-column: 1;
+  width: 56px;
+  height: 56px;
+  font-size: 20px;
+}
+
+.studio[data-style='linen'] .studio-meta {
+  grid-row: 1;
+  grid-column: 2;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.studio[data-style='linen'] .studio-meta__sep {
+  display: none;
+}
+
+.studio[data-style='linen'] .studio-meta__role {
+  display: block;
+}
+
+.studio[data-style='linen']
+  :is(.studio-name, .studio-bio, .studio-celebration) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='linen'] .studio-name {
+  margin-top: 16px;
+  font-family: var(--serif);
+  font-size: 40px;
+  font-weight: 400;
+  line-height: 44px;
+  letter-spacing: -0.01em;
+}
+
+/* A name that would take a third line steps down about 80% (§9.10). */
+.studio[data-style='linen'] .studio-name--long {
+  font-size: 32px;
+  line-height: 36px;
+}
+
+.studio[data-style='linen'] .studio-bio {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 26px;
+}
+
+.studio[data-style='linen'] .studio-celebration {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 6px 12px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* The Tip moment: a "Send a tip" card (card, 1 px line, r20, padding 20). Chips 48 tall, r14;
+   the Tip 52 tall, r14. */
+.studio[data-style='linen'] .studio-tip {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--studio-line);
+  border-radius: 20px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='linen'] .studio-tip__title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 28px;
+}
+
+.studio[data-style='linen'] .studio-tip form {
+  display: grid;
+  gap: 14px;
+}
+
+.studio[data-style='linen'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.studio[data-style='linen'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0 4px;
+  border: 1px solid var(--studio-control);
+  border-radius: 14px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    background-color 300ms var(--ease),
+    border-color 300ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='linen'] .studio-tip .tm-amount-choice:hover > span {
+    border-color: var(--studio-fg2);
+    transform: none;
+  }
+}
+
+.studio[data-style='linen'] .studio-tip .tm-amount-choice input:active + span {
+  background: var(--studio-el2);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Selected: a 1.5 px accText border on chipOn, fg text at 650 (never colour alone). */
+.studio[data-style='linen'] .studio-tip .tm-amount-choice input:checked + span {
+  border: 1.5px solid var(--studio-accText);
+  background: var(--studio-chipOn);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-weight: 650;
+}
+
+.studio[data-style='linen']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='linen']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='linen'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='linen'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 14px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='linen'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+}
+
+.studio[data-style='linen'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='linen']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='linen'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='linen'] .studio-tip .composer-extras[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='linen'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='linen'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.studio[data-style='linen']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transform: none;
+  transition:
+    filter 300ms var(--ease),
+    transform 300ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='linen']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    filter: brightness(1.06);
+    transform: none;
+  }
+}
+
+/* Press: 1 px down, a little darker. */
+.studio[data-style='linen']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  filter: brightness(0.95);
+  transform: translateY(1px);
+}
+
+.studio[data-style='linen'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='linen']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='linen'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 14px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='linen'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: one column of sections, 40 apart; an italic serif title over each. */
+.studio[data-style='linen'] .studio-grid {
+  display: grid;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.studio[data-style='linen'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='linen'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.studio[data-style='linen'] .studio-title {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 30px;
+  letter-spacing: -0.005em;
+}
+
+/* Links: bordered two-up, 64 tall, r14, card, 1 px line; an odd last one spans the row. */
+.studio[data-style='linen'] .studio-links__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.studio[data-style='linen'] .studio-links__list li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='linen'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 64px;
+  padding: 0 14px;
+  border: 1px solid var(--studio-line);
+  border-radius: 14px;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: background-color 300ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='linen'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='linen'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio[data-style='linen'] .studio-link__title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='linen'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='linen'] .studio-link__chevron {
+  display: none;
+}
+
+/* Blocks. Text: card r20, 1 px line, padding 20, 16/26. */
+.studio[data-style='linen'] .studio-card {
+  border: 1px solid var(--studio-line);
+  border-radius: 20px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='linen'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.studio[data-style='linen'] .studio-quote {
+  padding: 20px;
+}
+
+.studio[data-style='linen'] .studio-quote p {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 28px;
+}
+
+.studio[data-style='linen'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  object-fit: cover;
+}
+
+.studio[data-style='linen'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='linen'] .studio-video {
+  overflow: hidden;
+  border: 1px solid var(--studio-line);
+  border-radius: 20px;
+}
+
+/* Photos: 3fr / 2fr, gap 8, r14; the first of every three takes two rows. */
+.studio[data-style='linen'] .studio-strip {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  grid-auto-rows: 112px;
+  gap: 8px;
+}
+
+.studio[data-style='linen'] .studio-strip li {
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='linen'] .studio-strip li:nth-child(3n + 1) {
+  grid-row: span 2;
+}
+
+.studio[data-style='linen'] .studio-strip li:only-child {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='linen'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows in one card, 1 px lines between, money tabular on the right. */
+.studio[data-style='linen'] :is(div.studio-list > ul, ul.studio-list) {
+  display: grid;
+}
+
+.studio[data-style='linen'] .studio-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 20px;
+}
+
+.studio[data-style='linen'] .studio-list li + li {
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='linen'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 20px 16px;
+}
+
+.studio[data-style='linen'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.studio[data-style='linen'] .studio-list__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.studio[data-style='linen'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='linen'] .studio-price {
+  flex: none;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.studio[data-style='linen'] .studio-date {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  width: 44px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.studio[data-style='linen'] .studio-date__day {
+  color: var(--studio-fg);
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 26px;
+  letter-spacing: 0;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='linen'] .studio-foot {
+  margin-top: 40px;
+}
+
+.studio[data-style='linen'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='linen'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: bar + blur(16px), a 1 px line, padding 12/16/34. */
+.studio[data-style='linen'] .tip-bar {
+  padding: 12px 16px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 1px solid var(--studio-line);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* Tablet: one column, 24 px gutters, up to 720. */
+@media (min-width: 768px) {
+  .studio[data-style='linen'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+
+  .studio[data-style='linen'] .studio-cover {
+    margin-inline: 0;
+  }
+}
+
+/* Desktop: 1120 wide. The framed cover (600, 420 tall) beside the identity and the Tip card, gap
+   72; the links full width, one row of up to 5; then the blocks in 600 px and the rest. Below
+   1200 the cover's column gives way first, so the Tip card keeps room for its chips. */
+@media (min-width: 1024px) {
+  .studio[data-style='linen'] {
+    --measure: 1120px;
+  }
+
+  .studio[data-style='linen'] .studio-page {
+    display: grid;
+    grid-template-columns: minmax(0, 600px) minmax(360px, 1fr);
+    grid-template-rows: auto 1fr auto auto;
+    column-gap: 72px;
+    align-items: start;
+    padding-top: 72px;
+  }
+
+  .studio[data-style='linen'] .studio-cover {
+    grid-row: 1 / 3;
+    grid-column: 1;
+    height: 434px;
+    margin: 0;
+  }
+
+  .studio[data-style='linen'] .studio-identity {
+    grid-row: 1;
+    grid-column: 2;
+    grid-template-columns: 64px minmax(0, 1fr);
+    margin-top: 0;
+    padding-top: 16px;
+  }
+
+  .studio[data-style='linen'] .studio-tip {
+    grid-row: 2;
+    grid-column: 2;
+    margin-top: 28px;
+  }
+
+  /* No cover: the identity and the Tip card take the 600 px column. */
+  .studio[data-style='linen']
+    .studio-page:has(.studio-cover[data-cover='plain'])
+    :is(.studio-identity, .studio-tip) {
+    grid-column: 1;
+  }
+
+  .studio[data-style='linen']
+    .studio-page:has(.studio-cover[data-cover='plain']) {
+    padding-top: 56px;
+  }
+
+  .studio[data-style='linen'] .studio-avatar {
+    width: 64px;
+    height: 64px;
+    font-size: 22px;
+  }
+
+  .studio[data-style='linen'] .studio-meta {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .studio[data-style='linen'] .studio-name {
+    margin-top: 24px;
+    font-size: 56px;
+    line-height: 60px;
+    letter-spacing: -0.015em;
+  }
+
+  .studio[data-style='linen'] .studio-name--long {
+    font-size: 46px;
+    line-height: 50px;
+  }
+
+  .studio[data-style='linen'] .studio-bio {
+    margin-top: 16px;
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='linen'] .studio-grid {
+    grid-row: 3;
+    grid-column: 1 / -1;
+    gap: 56px;
+    margin-top: 72px;
+  }
+
+  .studio[data-style='linen'] .studio-blocks {
+    display: grid;
+    grid-template-columns: minmax(0, 600px) minmax(360px, 1fr);
+    gap: 56px 72px;
+    align-items: start;
+  }
+
+  .studio[data-style='linen'] :is(.studio-links, .studio-section) {
+    gap: 16px;
+  }
+
+  .studio[data-style='linen'] .studio-title {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  .studio[data-style='linen'] .studio-links__list {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .studio[data-style='linen'] .studio-links__list li:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .studio[data-style='linen'] .studio-strip {
+    grid-auto-rows: 166px;
+  }
+
+  .studio[data-style='linen'] .studio-foot {
+    grid-row: 4;
+    grid-column: 1 / -1;
+    margin-top: 64px;
+  }
+}
+
+/* Reduced motion (§4.5): no press travel; colours and filters may still fade. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='linen']
+    :is(.studio-tip .composer-submit, .tip-bar__button):active {
+    transform: none;
+  }
+
+  .studio[data-style='linen']
+    :is(.studio-tip .composer-submit, .tip-bar__button) {
+    transition: filter 300ms var(--ease);
+  }
+}

@@ -6,6 +6,10 @@ import { expect, test } from '@playwright/test';
 const SHOTS = [
   ['clear', 390],
   ['clear', 1440],
+  ['journal', 390],
+  ['journal', 1440],
+  ['linen', 390],
+  ['linen', 1440],
 ] as const;
 
 for (const [style, width] of SHOTS)

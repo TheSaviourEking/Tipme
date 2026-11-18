@@ -658,19 +658,20 @@ export type StudioExampleName = keyof typeof STUDIO_EXAMPLES | 'fonts';
 // Page Studio styles (spec 2026-11-17-page-studio-styles, PR 2a): v2 documents.
 
 /**
- * One example per style drawn so far: its default accent (`null`), its natural mode, "Your cover"
- * (the lab profile's generated cover photo), a text, a quote and three photos, with the profile's
+ * One example per style drawn so far: its default accent (`null`), its natural mode, its default
+ * cover ("Your cover" is the lab profile's generated cover photo; Journal's is plain), a text, a quote and three photos, with the profile's
  * links on. Headings start each section, as on the canvas. Each style PR adds its own.
  */
 const styleExample = (
   style: StudioStyleId,
   mode: StudioDocument['mode'],
+  cover: StudioDocument['cover'] = 'yours',
 ): StudioDocument => ({
   v: 2,
   style,
   accent: null,
   mode,
-  cover: 'yours',
+  cover,
   blocks: [
     { id: 'labhead1', kind: 'text', variant: 'heading', text: 'Studio diary' },
     {
@@ -705,6 +706,9 @@ export const LAB_STYLE_EXAMPLES: Partial<
 > = {
   classic: styleExample('classic', 'light'),
   clear: styleExample('clear', 'light'),
+  // Journal's default cover is plain (§9.3): the page opens on its top row, as the board draws it.
+  journal: styleExample('journal', 'light', 'plain'),
+  linen: styleExample('linen', 'light'),
 };
 
 /** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */

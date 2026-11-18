@@ -1,13 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport } from './helpers';
-import { contrastProblems, geometryProblems, settled } from './studio-probes';
+import {
+  contrastProblems,
+  geometryProblems,
+  settled,
+  studioModules,
+} from './studio-probes';
 
 // Page Studio styles, PR 2a (spec 2026-11-17-page-studio-styles §8, §9, §13, §14.3). Each style's
 // lab example (LAB_STYLE_EXAMPLES: default accent, natural mode, a generated cover photo, a text,
 // a quote, three photos, links on) renders through the real StudioStylePage around the real tip
 // form. Only the styles drawn so far are listed; each later style PR adds its id here. Classic
 // (PR 2b, §9.1) is today's page with its choices: its root is `main.profile-page`, its form today's.
-const STYLES = ['classic', 'clear'] as const;
+const STYLES = ['classic', 'clear', 'journal', 'linen'] as const;
 const rootOf = (style: string) =>
   style === 'classic' ? '.profile-page' : '.studio';
 const WIDTHS = [320, 390, 768, 1024, 1440];
@@ -309,4 +314,164 @@ test('classic takes an accent, dark or auto, and a cover type', async ({
     expect(panel!.top, `${width}`).toBeGreaterThanOrEqual(header!.bottom);
     expect(await geometryProblems(page, '.profile-page')).toEqual([]);
   }
+});
+
+// Journal and Linen (PR 2c, §9.3, §9.8, §9.10).
+const familyOf = (selector: string, page: Page) =>
+  page
+    .locator(selector)
+    .first()
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+
+test('Journal sets a Hausa name wholly in Inter 700 and the rest of the page in Source Serif 4', async ({
+  page,
+}) => {
+  const name = 'Ɗanlami Ƙwairanga Ɓello';
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(
+    `/dev/studio-lab?style=journal&name=${encodeURIComponent(name)}`,
+  );
+  await ready(page);
+  const heading = page.getByRole('heading', { level: 1, name });
+  const face = await heading.evaluate((h) => {
+    const all = [h, ...h.querySelectorAll('*')].map((el) => {
+      const cs = getComputedStyle(el);
+      return `${cs.fontFamily}|${cs.fontWeight}`;
+    });
+    return [...new Set(all)];
+  });
+  // One face for the whole name: Studio Inter at 700, never a letter-by-letter mix.
+  expect(face).toHaveLength(1);
+  expect(face[0]).toMatch(/^"?Studio Inter"?,/);
+  expect(face[0]).toMatch(/\|700$/);
+  // The rest keeps the style: the bio and the section titles in Source Serif 4.
+  expect(await familyOf('.studio-bio', page)).toMatch(
+    /^"?Studio Source Serif 4"?,/,
+  );
+  expect(await familyOf('.studio-title', page)).toMatch(
+    /^"?Studio Source Serif 4"?,/,
+  );
+  // The face really loaded (not a fallback standing in).
+  expect(
+    await page.evaluate(() =>
+      document.fonts.check("20px 'Studio Source Serif 4'"),
+    ),
+  ).toBe(true);
+});
+
+test('Journal on desktop puts the first block in the left column', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=journal');
+  await ready(page);
+  const box = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      });
+  const [identity, tip, links, first, second, top] = await Promise.all([
+    box('.studio-identity'),
+    box('.studio-tip'),
+    box('.studio-links'),
+    box('.studio-section >> nth=0'),
+    box('.studio-section >> nth=1'),
+    box('.studio-top'),
+  ]);
+  // The left column (420): identity, Tip, links, then the first block.
+  for (const part of [tip, links, first]) {
+    expect(Math.round(part.left)).toBe(Math.round(identity.left));
+    expect(Math.round(part.right - part.left)).toBe(420);
+  }
+  expect(first.top).toBeGreaterThan(links.bottom);
+  // The other blocks flow in the right column, 96 px across, from the top of the split.
+  expect(Math.round(second.left)).toBe(Math.round(identity.right) + 96);
+  expect(second.top).toBeLessThan(links.top);
+  // The top row spans the whole 1120 content width.
+  expect(Math.round(top.right - top.left)).toBe(1120);
+  // On a desktop the top row carries the handle, and the avatar sits above the name (72 px).
+  await expect(page.locator('.studio-top .studio-top__handle')).toBeVisible();
+  await expect(page.locator('.studio-top .studio-avatar')).toBeHidden();
+  const avatar = await box('.studio-identity .studio-avatar');
+  expect(Math.round(avatar.right - avatar.left)).toBe(72);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.locator('.studio-top .studio-avatar')).toBeVisible();
+  await expect(page.locator('.studio-top .studio-top__handle')).toBeHidden();
+  await expect(page.locator('.studio-identity .studio-avatar')).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+test('Linen frames a photo cover with a mat and no caption', async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  const mat = contracts.STUDIO_STYLES.linen.neutrals.light.mat as string;
+  const rgb = (hex: string) =>
+    `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+  for (const [width, frameWidth, photoHeight] of [
+    [390, 358, 204],
+    [1440, 600, 420],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/dev/studio-lab?style=linen');
+    await ready(page);
+    const cover = page.locator('.studio-cover[data-cover="photo"]');
+    const frame = await cover.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return {
+        left: r.left,
+        width: r.width,
+        background: cs.backgroundColor,
+        border: `${cs.borderTopWidth} ${cs.borderTopStyle}`,
+        radius: cs.borderTopLeftRadius,
+        padding: cs.paddingTop,
+      };
+    });
+    expect(frame.background, `${width}`).toBe(rgb(mat));
+    expect(frame.border, `${width}`).toBe('1px solid');
+    expect(frame.radius, `${width}`).toBe('20px');
+    expect(frame.padding, `${width}`).toBe('6px');
+    expect(Math.round(frame.width), `${width}`).toBe(frameWidth);
+    if (width === 390) expect(Math.round(frame.left)).toBe(16);
+    const photo = await cover.locator('img').evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return {
+        height: r.height,
+        radius: getComputedStyle(el).borderTopLeftRadius,
+      };
+    });
+    expect(Math.round(photo.height), `${width}`).toBe(photoHeight);
+    expect(photo.radius, `${width}`).toBe('14px');
+    // The canvas's italic caption has no data source and is left out (§9.8).
+    await expect(page.locator('.studio-cover figcaption')).toHaveCount(0);
+    await expect(page.locator('.studio-cover')).toHaveText('');
+  }
+});
+
+test('chipOn follows the accent', async ({ page }) => {
+  const { contracts } = await studioModules();
+  const want = contracts.studioTokens('journal', 'rose').light.chipOn as string;
+  const channels = (hex: string) =>
+    [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=journal&accent=rose');
+  await ready(page);
+  await page.locator('.tm-amount-choice').first().click();
+  const got = await page
+    .locator('.tm-amount-choice input:checked + span')
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  const rgb = /rgb\((\d+), (\d+), (\d+)\)/.exec(got);
+  expect(rgb, got).not.toBeNull();
+  const ours = rgb!.slice(1, 4).map(Number);
+  // The Task 2 OKLab mix of Rose on Journal's bg, within one unit per channel.
+  channels(want).forEach((v, i) =>
+    expect(Math.abs(ours[i]! - v), `${got} vs ${want}`).toBeLessThanOrEqual(1),
+  );
+  // And it is Rose's tint, not Green's (the board's default).
+  expect(want).not.toBe(contracts.studioTokens('journal', null).light.chipOn);
 });

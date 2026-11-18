@@ -130,10 +130,15 @@ export async function geometryProblems(
       const cs = getComputedStyle(el);
       // A style's photo strip scrolls sideways by design (Clear, §9.2): it is focusable, and its
       // own box must still fit the page, which the page check above proves.
+      // A one-line ellipsis is a drawn truncation, not a fault (§9.10: the bar's name; the link
+      // handles in Linen's two-up cards): it shows that more text is there.
+      const ellipsis =
+        cs.textOverflow === 'ellipsis' && cs.whiteSpace === 'nowrap';
       if (
         cs.overflowX !== 'visible' &&
         el.scrollWidth > el.clientWidth + 1 &&
-        !el.matches('[data-strip]')
+        !el.matches('[data-strip]') &&
+        !ellipsis
       ) {
         // Name the widest thing inside, so a failure says what didn't fit.
         const widest = [...el.querySelectorAll('*')].reduce<

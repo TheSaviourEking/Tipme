@@ -153,6 +153,8 @@ test('no style component renders raw HTML or builds a style from user content', 
     [
       'sheets/classic.tsx',
       'sheets/clear.tsx',
+      'sheets/journal.tsx',
+      'sheets/linen.tsx',
       'style-sheets.tsx',
       'video-embed.tsx',
     ],
@@ -160,6 +162,8 @@ test('no style component renders raw HTML or builds a style from user content', 
   // A sheet renders nothing: importing it brings the style's CSS.
   assert.match(readStyle('sheets/clear.tsx'), /return null;/);
   assert.match(readStyle('sheets/classic.tsx'), /return null;/);
+  assert.match(readStyle('sheets/journal.tsx'), /return null;/);
+  assert.match(readStyle('sheets/linen.tsx'), /return null;/);
   // The old renderer uses the shared video island.
   assert.match(
     read('studio-blocks.tsx'),

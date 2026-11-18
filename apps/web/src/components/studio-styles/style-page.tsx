@@ -26,7 +26,14 @@ import {
 } from '@tipme/contracts';
 import { StandardProfile } from '@/components/profile/standard-profile';
 import { ClassicStudio } from './classic';
-import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
+import {
+  StyleBarName,
+  StyleBlocks,
+  StyleCover,
+  StyleIdentity,
+  StyleLinks,
+  StyleTop,
+} from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
 import { StyleSheet } from './style-sheets';
 import {
@@ -87,6 +94,7 @@ export function StudioStylePage({
       <style>{css}</style>
       <StyleSheet styleId={style} />
       <div className="studio-page">
+        {style === 'journal' && <StyleTop profile={profile} />}
         <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
         <StyleIdentity
           styleId={style}
@@ -94,14 +102,21 @@ export function StudioStylePage({
           firstName={firstName}
         />
         <section className="studio-tip" aria-label={`Tip ${firstName}`}>
+          {/* Linen's Tip moment is a titled card (§9.8). */}
+          {style === 'linen' && (
+            <h2 className="studio-tip__title">Send a tip</h2>
+          )}
           {tipBlock}
         </section>
         <div className="studio-grid">
           <StyleLinks links={profile.links ?? []} />
-          <StyleBlocks doc={doc} images={images} />
+          <StyleBlocks doc={doc} images={images} split={style === 'journal'} />
         </div>
         <div className="studio-foot">{footer}</div>
       </div>
+      {style === 'journal' && (
+        <StyleBarName styleId={style} profile={profile} />
+      )}
     </div>
   );
 }

@@ -229,14 +229,15 @@ const number = (n: number) =>
 
 /**
  * Heading size at 320 px, per style (builder's call within §9; it only feeds the width check).
- * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css): Clear's
- * phone section title is 20/26 (§9.2).
+ * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css; apps/web
+ * test studio-style-page holds them): Clear's phone section title is 20/26 (§9.2), Journal's
+ * 22/29 (§9.3), Linen's 24/30 (§9.8).
  */
 export const STUDIO_HEADING_PX: Record<StudioStyleId, number> = {
   // classic.css .studio-title: 2rem at every width (apps/web test studio-classic holds it).
   classic: 32,
   clear: 20,
-  journal: 24,
+  journal: 22,
   stage: 24,
   signboard: 22,
   sprint: 28,

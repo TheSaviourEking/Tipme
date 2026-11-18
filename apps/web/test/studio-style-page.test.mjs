@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import {
   DESIGN_CHECK_VERSION,
   STUDIO_FONTS,
+  STUDIO_HEADING_PX,
   STUDIO_STYLE_IDS,
   contrastRatio,
   resolveStudio,
@@ -400,4 +401,227 @@ test("text on the site's chrome keeps 4.5:1 in every style, light and dark", () 
           `${style} ${mode}: ${name} ${contrastRatio(fg, bg).toFixed(2)}`,
         );
     }
+});
+
+// Journal and Linen (PR 2c, spec §9.3, §9.8).
+const sheet = (style) => readFileSync(new URL(`${style}.css`, src), 'utf8');
+/** The declarations of the first rule whose selector ends with `selector` (outside media). */
+const declarations = (css, selector, media = null) => {
+  const body = media
+    ? (new RegExp(`@media \\(${media}\\) \\{([\\s\\S]*?)\\n\\}`).exec(
+        css,
+      )?.[1] ?? '')
+    : css.replace(/@media[^{]*\{[\s\S]*?\n\}/g, '');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Selectors as Prettier wraps them: compare with runs of whitespace as one space.
+  const flat = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const rule = new RegExp(`(?:^|\\}) ?${escaped} \\{([^}]*)\\}`).exec(flat);
+  assert.ok(rule, `${selector}${media ? ` in ${media}` : ''}`);
+  return rule[1];
+};
+const px = (decls, prop) => {
+  const m = new RegExp(`(?:^|[;\\s])${prop}: (\\d+)px`).exec(decls);
+  assert.ok(m, `${prop} in ${decls}`);
+  return Number(m[1]);
+};
+
+test("the design check measures Journal's and Linen's section titles at the size their CSS draws", () => {
+  for (const style of ['journal', 'linen']) {
+    const title = declarations(
+      sheet(style),
+      `.studio[data-style='${style}'] .studio-title`,
+    );
+    assert.equal(STUDIO_HEADING_PX[style], px(title, 'font-size'), style);
+  }
+});
+
+test("the design check's photo slots are the widths Journal's CSS draws, and sizes follows them", () => {
+  const css = sheet('journal');
+  // Phone: one column with 20 px gutters; tablet 24 px gutters up to 720.
+  assert.equal(
+    px(declarations(css, ".studio[data-style='journal']"), '--gutter'),
+    20,
+  );
+  const tablet = declarations(
+    css,
+    ".studio[data-style='journal']",
+    'min-width: 768px',
+  );
+  assert.equal(px(tablet, '--gutter'), 24);
+  assert.equal(px(tablet, '--measure'), 720);
+  // The 3-up grid and its gap.
+  const strip = declarations(
+    css,
+    ".studio[data-style='journal'] .studio-strip",
+  );
+  const n = Number(/grid-template-columns: repeat\((\d+),/.exec(strip)[1]);
+  const gap = px(strip, 'gap');
+  for (const v of [320, 390])
+    assert.equal(
+      studioSlotWidth('journal', 'gallery', v),
+      Math.round((v - 40 - (n - 1) * gap) / n),
+      `${v}px`,
+    );
+  assert.equal(
+    studioSlotWidth('journal', 'gallery', 800),
+    Math.round((720 - (n - 1) * gap) / n),
+  );
+  // Desktop: content 1120, a 420 px column, gap 96; the other blocks in the rest, text max 520.
+  const desk = declarations(
+    css,
+    ".studio[data-style='journal']",
+    'min-width: 1024px',
+  );
+  const content = px(desk, '--measure');
+  const split = declarations(
+    css,
+    ".studio[data-style='journal'] .studio-page",
+    'min-width: 1024px',
+  );
+  const left = Number(/grid-template-columns: (\d+)px/.exec(split)[1]);
+  const colGap = px(split, 'column-gap');
+  const rest = content - left - colGap;
+  assert.equal(studioSlotWidth('journal', 'photo', 1440), rest);
+  assert.equal(studioSlotWidth('journal', 'services', 1440), rest);
+  const text = declarations(
+    css,
+    ".studio[data-style='journal'] .studio-blocks__rest :is(.studio-text, .studio-quote)",
+    'min-width: 1024px',
+  );
+  assert.equal(studioSlotWidth('journal', 'text', 1440), px(text, 'max-width'));
+  assert.equal(
+    studioSlotWidth('journal', 'gallery', 1440),
+    Math.round((rest - (n - 1) * gap) / n),
+  );
+  // The rendered photos ask for exactly those widths.
+  const html = page({ document: doc({ style: 'journal' }) });
+  const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.equal(
+    sizes,
+    `(min-width: 1024px) ${studioSlotWidth('journal', 'gallery', 1440)}px, (min-width: 768px) ${studioSlotWidth('journal', 'gallery', 1023)}px, ${studioSlotWidth('journal', 'gallery', 390)}px`,
+  );
+});
+
+test("the design check's photo slots are the widths Linen's CSS draws, and sizes follows them", () => {
+  const css = sheet('linen');
+  assert.equal(
+    px(declarations(css, ".studio[data-style='linen']"), '--gutter'),
+    20,
+  );
+  const tablet = declarations(
+    css,
+    ".studio[data-style='linen']",
+    'min-width: 768px',
+  );
+  assert.equal(px(tablet, '--gutter'), 24);
+  assert.equal(px(tablet, '--measure'), 720);
+  // Photos: 3fr / 2fr, gap 8; the check takes the larger photo.
+  const strip = declarations(css, ".studio[data-style='linen'] .studio-strip");
+  assert.match(strip, /grid-template-columns: 3fr 2fr/);
+  const gap = px(strip, 'gap');
+  for (const v of [320, 390])
+    assert.equal(
+      studioSlotWidth('linen', 'gallery', v),
+      Math.round(((v - 40 - gap) * 3) / 5),
+      `${v}px`,
+    );
+  // Desktop: content 1120, the blocks in a 600 px column beside the rest, gap 72.
+  const desk = declarations(
+    css,
+    ".studio[data-style='linen']",
+    'min-width: 1024px',
+  );
+  assert.equal(px(desk, '--measure'), 1120);
+  const blocks = declarations(
+    css,
+    ".studio[data-style='linen'] .studio-blocks",
+    'min-width: 1024px',
+  );
+  const column = Number(
+    /grid-template-columns: minmax\(0, (\d+)px\)/.exec(blocks)[1],
+  );
+  for (const kind of ['text', 'photo', 'services'])
+    assert.equal(studioSlotWidth('linen', kind, 1440), column, kind);
+  assert.equal(
+    studioSlotWidth('linen', 'gallery', 1440),
+    Math.round(((column - gap) * 3) / 5),
+  );
+  const html = page({ document: doc({ style: 'linen' }) });
+  const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
+    html,
+  )?.[1];
+  assert.equal(
+    sizes,
+    `(min-width: 1024px) ${studioSlotWidth('linen', 'gallery', 1440)}px, (min-width: 768px) ${studioSlotWidth('linen', 'gallery', 1023)}px, ${studioSlotWidth('linen', 'gallery', 390)}px`,
+  );
+});
+
+test('Linen emits Inter and its three Linen Serif files, at most 4 files and 200 KB, and preloads only the name face', () => {
+  const html = page({ document: doc({ style: 'linen' }) });
+  const files = [...html.matchAll(/src:\s*url\('([^']+)'\)/g)].map((m) => m[1]);
+  const linen = STUDIO_FONTS.find((f) => f.id === 'linen-serif');
+  const inter = STUDIO_FONTS.find((f) => f.id === 'inter');
+  assert.deepEqual(
+    files.sort(),
+    [...inter.files, ...linen.files].map((f) => f.path).sort(),
+  );
+  assert.ok(files.length <= 4);
+  const bytes = [...inter.files, ...linen.files].reduce(
+    (s, f) => s + f.bytes,
+    0,
+  );
+  assert.ok(bytes <= 200 * 1024, `${bytes} bytes`);
+  assert.match(html, /font-family:'Studio Linen Serif'/);
+  const preloads = [
+    ...html.matchAll(/<link rel="preload"[^>]*href="([^"]+)"[^>]*as="font"/g),
+  ].map((m) => m[1]);
+  assert.deepEqual(preloads, ['/fonts/studio/linen-serif-400.woff2']);
+});
+
+test("Journal opens on its top row: the role as the label, the avatar, and the handle for a desktop's right side", () => {
+  const html = page({ document: doc({ style: 'journal', cover: 'plain' }) });
+  const top = /<div class="studio-top">([\s\S]*?)<\/div>/.exec(html);
+  assert.ok(top, 'a top row');
+  assert.match(top[1], /<p class="studio-kicker">Singer, Lagos<\/p>/);
+  assert.match(top[1], /class="studio-avatar studio-avatar--top"/);
+  assert.match(top[1], /<p class="studio-top__handle">@studiolab<\/p>/);
+  // Before the cover and the identity; the identity keeps its own (desktop) avatar.
+  assert.ok(
+    html.indexOf('class="studio-top"') < html.indexOf('class="studio-cover'),
+  );
+  assert.match(
+    html,
+    /<header class="studio-identity"[\s\S]*?class="studio-avatar"/,
+  );
+  // No top row on the other styles.
+  assert.doesNotMatch(page(), /studio-top/);
+});
+
+test("Journal's phone bar carries the name and handle beside the Tip, out of the accessibility tree", () => {
+  const html = page({ document: doc({ style: 'journal' }) });
+  assert.match(
+    html,
+    /<div class="studio-barname" aria-hidden="true"><p class="studio-barname__name">Kemi Adeyinka<\/p><p class="studio-barname__handle">@studiolab<\/p><\/div>/,
+  );
+  // A Hausa name is set wholly in Inter there too.
+  const hausa = page({
+    document: doc({ style: 'journal' }),
+    profile: { displayName: 'Ɗanlami Ƙwairanga Ɓello' },
+  });
+  assert.match(
+    hausa,
+    /class="studio-barname__name studio-barname__name--fallback"/,
+  );
+  assert.doesNotMatch(page(), /studio-barname/);
+});
+
+test('Linen titles its Tip card "Send a tip"', () => {
+  const html = page({ document: doc({ style: 'linen' }) });
+  assert.match(
+    html,
+    /<section class="studio-tip"[^>]*><h2 class="studio-tip__title">Send a tip<\/h2><form id="the-tip"/,
+  );
+  assert.doesNotMatch(page(), /Send a tip/);
 });
