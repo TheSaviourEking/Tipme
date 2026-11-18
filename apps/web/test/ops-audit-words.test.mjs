@@ -89,6 +89,18 @@ const CASES = [
   [
     'username.handover_link_cancelled',
     'mtn',
+    {
+      reservationId: A,
+      linkId: B,
+      makerId: A,
+      triggeredBy: B,
+      trigger: 'staff.role_updated',
+    },
+    'Claim link …00c3d4 for reservation …00a1b2; ended automatically after a role edit by staff …00c3d4',
+  ],
+  [
+    'username.handover_link_cancelled',
+    'mtn',
     { reservationId: A, linkId: B },
     'Claim link …00c3d4 for reservation …00a1b2',
   ],

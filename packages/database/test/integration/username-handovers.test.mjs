@@ -10,6 +10,7 @@ import {
   checkUsername,
   claimViaHandoverLink,
   createHandoverLink,
+  endLinksOfStaffWithoutAccess,
   findHandoverAccounts,
   previewHandoverLink,
   releaseUsername,
@@ -1192,4 +1193,115 @@ test('review N1: only staff holding usernames.manage make links or give names, i
     'PERMISSION_NOT_HELD',
   );
   assert.equal(await database.count('handle_handover_links'), 0);
+});
+
+test('review N2: a claim committing during a staff-change cleanup keeps its link used, and the change succeeds', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_n2',
+    reason: REASON,
+  });
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'brand_n2',
+    reason: REASON,
+  });
+  const claimer = await user(database);
+  // The claim holds the link row: it has written "used" and not yet committed.
+  const claim = new pg.Client({ connectionString: database.url });
+  await claim.connect();
+  await claim.query('BEGIN');
+  await claim.query(
+    `UPDATE handle_handover_links SET used_at = now(), used_by = $1 WHERE id = $2`,
+    [claimer, created.link.id],
+  );
+  // The staff change: the maker loses usernames.manage, then the cleanup, in one transaction.
+  let done = false;
+  const change = database.db
+    .transaction(async (tx) => {
+      await tx.execute(
+        `UPDATE staff SET revoked_at = now() WHERE user_id = '${staffId}'`,
+      );
+      return endLinksOfStaffWithoutAccess(tx, {
+        actorId: staffId,
+        trigger: 'staff.removed',
+        now: new Date(),
+      });
+    })
+    .then(
+      (value) => ({ ok: value }),
+      (error) => ({ error }),
+    )
+    .finally(() => {
+      done = true;
+    });
+  // Either it skips the held row and finishes, or it waits on it: then the claim commits.
+  for (let i = 0; i < 200 && !done; i++) {
+    const { rows } = await database.pool.query(
+      `SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND datname = current_database()`,
+    );
+    if (rows[0].n >= 1) break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  await claim.query('COMMIT');
+  await claim.end();
+  const result = await change;
+  assert.ok(
+    'ok' in result,
+    String(result.error?.cause?.code ?? result.error?.code ?? result.error),
+  );
+  const { rows } = await database.pool.query(
+    `SELECT used_at IS NOT NULL AS used, cancelled_at IS NOT NULL AS cancelled FROM handle_handover_links WHERE id = $1`,
+    [created.link.id],
+  );
+  assert.deepEqual(rows, [{ used: true, cancelled: false }]);
+  const audit = await database.pool.query(
+    `SELECT 1 FROM audit_events WHERE action = 'username.handover_link_cancelled' AND reason LIKE $1`,
+    [`%${created.link.id}%`],
+  );
+  assert.equal(audit.rowCount, 0);
+});
+
+test('review N2: an automatic cancellation is recorded as TipMe acting, naming the trigger', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_n2b',
+    reason: REASON,
+  });
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'brand_n2b',
+    reason: REASON,
+  });
+  const actor = await user(database);
+  await database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE user_id = $1`,
+    [staffId],
+  );
+  const ended = await database.db.transaction((tx) =>
+    endLinksOfStaffWithoutAccess(tx, {
+      actorId: actor,
+      trigger: 'staff.access_changed',
+      now: new Date(),
+    }),
+  );
+  assert.equal(ended, 1);
+  const { rows } = await database.pool.query(
+    `SELECT staff_user_id, reason FROM audit_events WHERE action = 'username.handover_link_cancelled' AND reason LIKE $1`,
+    [`%${created.link.id}%`],
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].staff_user_id, null);
+  assert.ok(
+    rows[0].reason.startsWith(
+      'Ended automatically: the person who made it no longer holds usernames.manage.',
+    ),
+  );
+  assert.ok(rows[0].reason.includes(`"triggeredBy":"${actor}"`));
+  assert.ok(rows[0].reason.includes('"trigger":"staff.access_changed"'));
+  assert.deepEqual(await previewHandoverLink(database.db, codeOf(created)), {
+    state: 'cancelled',
+  });
 });

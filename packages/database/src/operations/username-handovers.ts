@@ -176,16 +176,26 @@ export async function cancelOpenHandoverLinks(
   return cancelled?.id ?? null;
 }
 
+/** The staff changes that can take usernames.manage away, and so end claim links. */
+export type StaffAccessTrigger =
+  | 'staff.removed'
+  | 'staff.role_changed'
+  | 'staff.role_updated'
+  | 'staff.access_changed';
+
 /**
  * Ends every open claim link whose maker is no longer staff holding usernames.manage, after a staff
- * change (removal, a role move, a role edit, a personal removal; security review of PR #280). Each
- * one is audited as `username.handover_link_cancelled`, "staff access changed". A claim and a preview
- * check the maker's access too, so a change made some other way still stops the link working.
- * `actorId` is who made the staff change. Run after the change, in its transaction.
+ * change, in its transaction (security review of PR #280). TipMe acts here, not the person who made
+ * the change, so each `username.handover_link_cancelled` row has no staff member and names the
+ * trigger (controller ruling). A claim and a preview check the maker's access too.
+ *
+ * A claim may be using a link at this moment: rows another transaction holds are skipped, and the
+ * update repeats the open condition, so a link that became used is left alone and not audited.
+ * Otherwise the outcome check (used and cancelled at once) would abort the whole staff change.
  */
 export async function endLinksOfStaffWithoutAccess(
   tx: Tx,
-  input: { actorId: string; now: Date },
+  input: { actorId: string; trigger: StaffAccessTrigger; now: Date },
 ): Promise<number> {
   const open = await tx
     .select({
@@ -200,41 +210,52 @@ export async function endLinksOfStaffWithoutAccess(
         isNull(handleHandoverLinks.usedAt),
         isNull(handleHandoverLinks.cancelledAt),
       ),
-    );
+    )
+    .for('update', { skipLocked: true });
   if (open.length === 0) return 0;
   const access = await readStaffAccessOf(tx, [
     ...new Set(open.map((link) => link.makerId)),
   ]);
-  const ending = open.filter(
-    (link) => !access.get(link.makerId)?.permissions.has(PERMISSION),
-  );
-  for (const link of ending) {
-    await tx
+  let ended = 0;
+  for (const link of open) {
+    if (access.get(link.makerId)?.permissions.has(PERMISSION)) continue;
+    const [cancelled] = await tx
       .update(handleHandoverLinks)
       .set({
         cancelledAt: input.now,
-        cancelledBy: input.actorId,
+        cancelledBy: null,
         cancelReason: 'Staff access changed',
       })
-      .where(eq(handleHandoverLinks.id, link.id));
+      .where(
+        and(
+          eq(handleHandoverLinks.id, link.id),
+          isNull(handleHandoverLinks.usedAt),
+          isNull(handleHandoverLinks.cancelledAt),
+        ),
+      )
+      .returning({ id: handleHandoverLinks.id });
+    if (!cancelled) continue;
+    ended += 1;
     await recordAudit(tx, {
-      staffUserId: input.actorId,
+      staffUserId: null,
       action: 'username.handover_link_cancelled',
       permission: PERMISSION,
       subjectType: 'username',
       subjectId: link.name,
       reason: withAuditChange(
-        'Staff access changed: its maker no longer manages usernames',
+        'Ended automatically: the person who made it no longer holds usernames.manage.',
         {
           reservationId: link.reservationId,
           linkId: link.id,
           makerId: link.makerId,
+          triggeredBy: input.actorId,
+          trigger: input.trigger,
         },
       ),
       now: input.now,
     });
   }
-  return ending.length;
+  return ended;
 }
 
 /** Only staff holding usernames.manage act here, whatever the route checked first. */

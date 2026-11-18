@@ -96,6 +96,14 @@ const was = (previous: unknown): string =>
     ? `which was @${previous}`
     : 'a new page';
 
+/** The staff change that ended claim links automatically (username handover). */
+const TRIGGER_WORDS: Record<string, string> = {
+  'staff.removed': 'a removal from staff',
+  'staff.role_changed': 'a role move',
+  'staff.role_updated': 'a role edit',
+  'staff.access_changed': 'a change to personal access',
+};
+
 /** Joins the parts that apply, skipping empty ones. */
 const parts = (...items: (string | false | null | undefined)[]): string =>
   items.filter(Boolean).join('; ');
@@ -153,7 +161,12 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
       c.replacedLinkId ? `replaced link ${short(c.replacedLinkId)}` : null,
     ),
   'username.handover_link_cancelled': (c) =>
-    `Claim link ${short(c.linkId)} for reservation ${short(c.reservationId)}`,
+    parts(
+      `Claim link ${short(c.linkId)} for reservation ${short(c.reservationId)}`,
+      typeof c.trigger === 'string'
+        ? `ended automatically after ${TRIGGER_WORDS[c.trigger] ?? words(c.trigger)} by ${staff(c.triggeredBy)}`
+        : null,
+    ),
   'username.claimed_via_link': (c) =>
     parts(
       `Claimed through link ${short(c.linkId)} (reservation ${short(c.reservationId)}) by page ${short(c.profileId)}, ${was(c.previous)}`,

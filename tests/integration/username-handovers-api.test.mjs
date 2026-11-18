@@ -593,7 +593,7 @@ async function makerOnRole(phone, roleId, name) {
 
 const cancelledAudit = (linkId) =>
   q(
-    `SELECT reason FROM audit_events WHERE action = 'username.handover_link_cancelled' AND reason LIKE $1`,
+    `SELECT reason FROM audit_events WHERE action = 'username.handover_link_cancelled' AND staff_user_id IS NULL AND reason LIKE $1`,
     [`%${linkId}%`],
   );
 
@@ -618,7 +618,11 @@ test("review N1: editing a role so it no longer manages usernames ends its holde
   });
   const [audit] = await cancelledAudit(link.link.id);
   assert.ok(audit, 'audited');
-  assert.match(audit.reason, /staff access changed/i);
+  assert.match(
+    audit.reason,
+    /^Ended automatically: the person who made it no longer holds usernames\.manage\./,
+  );
+  assert.match(audit.reason, /"trigger":"staff\.role_updated"/);
 });
 
 test("review N1: a personal removal of usernames.manage ends that person's links, audited", async () => {

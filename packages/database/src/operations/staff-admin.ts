@@ -403,6 +403,7 @@ export function updateRole(
       // Claim links whose maker no longer manages usernames end, audited (security review).
       await endLinksOfStaffWithoutAccess(tx, {
         actorId: actor.id,
+        trigger: 'staff.role_updated',
         now: new Date(),
       });
       await alertStaffChange(tx, 'role_updated', actor.id, {
@@ -576,6 +577,7 @@ export function setPersonalAccess(
       // Claim links whose maker no longer manages usernames end, audited (security review).
       await endLinksOfStaffWithoutAccess(tx, {
         actorId: actor.id,
+        trigger: 'staff.access_changed',
         now: new Date(),
       });
       await alertStaffChange(tx, 'access_changed', actor.id, {
@@ -652,6 +654,7 @@ export function changeRole(
       // Claim links whose maker no longer manages usernames end, audited (security review).
       await endLinksOfStaffWithoutAccess(tx, {
         actorId: actor.id,
+        trigger: 'staff.role_changed',
         now: new Date(),
       });
       await recordAudit(tx, {
@@ -1135,7 +1138,11 @@ export function removeStaff(
       await dropOpsAccess(tx, userId, now);
       const cleared = await clearOverrides(tx, userId);
       // Claim links whose maker no longer manages usernames end, audited (security review).
-      await endLinksOfStaffWithoutAccess(tx, { actorId: actor.id, now });
+      await endLinksOfStaffWithoutAccess(tx, {
+        actorId: actor.id,
+        trigger: 'staff.removed',
+        now,
+      });
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,
