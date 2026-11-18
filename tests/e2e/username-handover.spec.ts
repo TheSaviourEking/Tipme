@@ -45,6 +45,17 @@ async function claimLinkFor(prefix: string, digits: string) {
       `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
       [`staff.${name}@example.com`],
     );
+    // A link works only while its maker is staff holding usernames.manage (security review).
+    await sql(
+      `INSERT INTO roles (id, name) VALUES ('e2e_usernames', 'e2e_usernames') ON CONFLICT DO NOTHING`,
+    );
+    await sql(
+      `INSERT INTO role_permissions (role_id, permission) VALUES ('e2e_usernames', 'usernames.manage') ON CONFLICT DO NOTHING`,
+    );
+    await sql(
+      `INSERT INTO staff (user_id, role_id, granted_at, enrolled_at) VALUES ($1, 'e2e_usernames', now(), now())`,
+      [staff!.id],
+    );
     await ops.reserveUsername(db, { staffId: staff!.id, name, reason: REASON });
     const made = await ops.createHandoverLink(db, {
       staffId: staff!.id,
@@ -232,6 +243,11 @@ test('staff give a reserved name to an account found by email, with no email sho
       exact: false,
     }),
   ).toBeVisible();
+  await expect(
+    checkCard(page).getByText('We email them to say so, without your reason.', {
+      exact: false,
+    }),
+  ).toBeVisible();
   await expectAccessible(page);
   await checkCard(page)
     .getByLabel(`Why give @${name} to this account?`)
@@ -245,4 +261,30 @@ test('staff give a reserved name to an account found by email, with no email sho
   await expect(checkCard(page).getByText(`@${name}’s username.`)).toBeVisible();
   await page.goto(`/@${old}`);
   await expect(page).toHaveURL(new RegExp(`/@${name}$`));
+});
+
+// Security review of PR #280: no active staff account receives a handed-over name.
+test('a staff account found for a handover says so, and Give is not offered', async ({
+  page,
+}, testInfo) => {
+  const owner = await enrolOwner(page, testInfo);
+  const digits = identity(testInfo).handle.slice(4);
+  const name = await reservedName(owner.email, 'staffno', digits);
+  await page.goto('/ops/usernames');
+  await checkName(page, name);
+  await checkCard(page)
+    .getByRole('button', { name: 'Give to an account…' })
+    .click();
+  // The owner's own account: staff.
+  await checkCard(page).getByLabel('Their username or email').fill(owner.email);
+  await checkCard(page).getByRole('button', { name: 'Find' }).click();
+  await expect(
+    checkCard(page).getByText(
+      'Staff accounts can’t receive a username this way.',
+    ),
+  ).toBeVisible();
+  await expect(
+    checkCard(page).getByRole('button', { name: new RegExp(`^Give @${name}`) }),
+  ).toHaveCount(0);
+  await expectAccessible(page);
 });

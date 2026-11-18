@@ -25,8 +25,16 @@ import { recordAudit } from './audit.js';
 import { maskEmail, normaliseEmail } from './email-address.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import { newId } from './ids.js';
+import { mailOwner } from './account-mail.js';
+import type { MailSealing } from './mail-queue.js';
 import { opsPageByHandle } from './profiles.js';
-import { checkedReason, withAuditChange } from './staff.js';
+import {
+  checkedReason,
+  isActiveStaff,
+  readStaffAccess,
+  withAuditChange,
+} from './staff.js';
+import { pendingTakeBacks } from './username-take-backs.js';
 
 /*
  * Username handover (owner's approval, 18 Nov 2026; reservation spec, "Handover"). A reserved name
@@ -165,6 +173,33 @@ export async function cancelOpenHandoverLinks(
     .where(openLinkOf(input.reservationId))
     .returning({ id: handleHandoverLinks.id });
   return cancelled?.id ?? null;
+}
+
+/**
+ * Ends every open claim link a staff member made, when they leave staff or lose usernames.manage
+ * (security review of PR #280). A claim checks the maker's access too, so this keeps the screens
+ * honest rather than being the only guard. `actorId` is who made the staff change.
+ */
+export async function cancelHandoverLinksOf(
+  tx: Tx,
+  input: { makerId: string; actorId: string; reason: string; now: Date },
+): Promise<number> {
+  const cancelled = await tx
+    .update(handleHandoverLinks)
+    .set({
+      cancelledAt: input.now,
+      cancelledBy: input.actorId,
+      cancelReason: input.reason,
+    })
+    .where(
+      and(
+        eq(handleHandoverLinks.createdBy, input.makerId),
+        isNull(handleHandoverLinks.usedAt),
+        isNull(handleHandoverLinks.cancelledAt),
+      ),
+    )
+    .returning({ id: handleHandoverLinks.id });
+  return cancelled.length;
 }
 
 /**
@@ -326,17 +361,25 @@ export function previewHandoverLink(
 /** The account's page row, locked first (the lock order above); null when it has none. */
 async function lockedAccount(tx: Tx, userId: string) {
   const [account] = await tx
-    .select({ id: users.id, deletedAt: users.deletedAt })
+    .select({ id: users.id })
     .from(users)
     .where(eq(users.id, userId));
-  if (!account || account.deletedAt)
-    throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
-  const [page] = await tx
-    .select()
-    .from(profiles)
-    .where(eq(profiles.userId, userId))
-    .for('update');
-  return page ?? null;
+  if (!account) throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+  const pageRow = () =>
+    tx.select().from(profiles).where(eq(profiles.userId, userId)).for('update');
+  const [page] = await pageRow();
+  if (page) return page;
+  // No page yet: the account's row, so two handovers to one account take turns. FOR NO KEY UPDATE,
+  // not FOR UPDATE: a sign-up's new page checks its reference to the account with KEY SHARE after
+  // inserting, and FOR UPDATE would deadlock with it. A sign-up that lands first wins; this one then
+  // meets profiles_user_id_unique and answers HANDOVER_ACCOUNT_CHANGED (try again).
+  await tx
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.id, userId))
+    .for('no key update');
+  const [made] = await pageRow();
+  return made ?? null;
 }
 
 /**
@@ -358,8 +401,31 @@ async function handOver(
   },
 ): Promise<Omit<UsernameHandedOver, 'name'>> {
   const { key, page, now } = input;
+  // A word added to TipMe's own list after the name was reserved is never handed out.
+  if (isReservedHandle(key)) throw new OperationError('USERNAME_BUILT_IN');
+  const [account] = await tx
+    .select({ status: users.status, deletedAt: users.deletedAt })
+    .from(users)
+    .where(eq(users.id, input.userId));
+  if (!account || account.deletedAt || account.status !== 'active')
+    throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+  // No active staff account receives a name (controller ruling, security review of PR #280):
+  // nobody gives a name to themselves, and two staff can't pass one between them.
+  if (await isActiveStaff(tx, input.userId))
+    throw new OperationError('HANDOVER_STAFF_ACCOUNT');
   if (page) {
-    if (page.pageState === 'deleted' || page.rehearsalRunId)
+    if (
+      page.pageState === 'deleted' ||
+      page.rehearsalRunId ||
+      page.status === 'suspended'
+    )
+      throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+    // A take-back of one of its names waiting for a second person, as the Usernames check reads it.
+    if (
+      (await pendingTakeBacks(tx, now)).some(
+        (request) => request.profileId === page.id,
+      )
+    )
       throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
     // A take-back of one of its names is under way: that finishes first (or is cancelled).
     const [takeBack] = await tx
@@ -416,12 +482,30 @@ async function handOver(
   };
 }
 
-/** A unique violation here is a write that took no lock (an older release): the name is not free. */
+/** The constraint a database refusal names, if any. */
+function constraintOf(error: unknown): string | undefined {
+  for (let current: unknown = error, depth = 0; current && depth < 5; depth++) {
+    const name = (current as { constraint?: unknown }).constraint;
+    if (typeof name === 'string') return name;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+/**
+ * A unique violation here: the account got a page some other way at that moment (worth trying
+ * again), or a write that took no lock (an older release) means the name is not free.
+ */
 const raced = (
   error: unknown,
   code: 'CLAIM_LINK_INVALID' | 'USERNAME_NOT_RESERVED',
 ) => {
-  if (sqlStateOf(error) === '23505') throw new OperationError(code);
+  if (sqlStateOf(error) === '23505')
+    throw new OperationError(
+      constraintOf(error) === 'profiles_user_id_unique'
+        ? 'HANDOVER_ACCOUNT_CHANGED'
+        : code,
+    );
   throw error;
 };
 
@@ -433,7 +517,13 @@ const raced = (
  */
 export function claimViaHandoverLink(
   db: Database,
-  input: { userId: string; code: string; now?: Date },
+  input: {
+    userId: string;
+    code: string;
+    now?: Date;
+    /** LIVE_CHECKOUT_HANDLES: a listed page that is renamed loses live checkout, so it is recorded. */
+    liveCheckoutHandles?: readonly string[];
+  },
 ): Promise<UsernameHandedOver> {
   const now = input.now ?? new Date();
   return guarded(async () => {
@@ -456,6 +546,10 @@ export function claimViaHandoverLink(
           reservation.id !== link.reservationId ||
           stateOf(link, true, now) !== 'open'
         )
+          throw new OperationError('CLAIM_LINK_INVALID');
+        // A link lasts only while its maker is still staff holding the permission.
+        const maker = await readStaffAccess(tx, link.createdBy);
+        if (!maker?.permissions.has(PERMISSION))
           throw new OperationError('CLAIM_LINK_INVALID');
         const result = await handOver(tx, {
           key,
@@ -482,6 +576,10 @@ export function claimViaHandoverLink(
             linkCreatedBy: link.createdBy,
             profileId: result.profileId,
             previous: result.previous,
+            ...(result.previous &&
+            input.liveCheckoutHandles?.includes(result.previous)
+              ? { liveCheckoutListed: true }
+              : {}),
           }),
           now,
         });
@@ -507,6 +605,8 @@ export function assignUsername(
     userId: string;
     reason: string;
     now?: Date;
+    /** To email the person their new username; absent only where no mail key is at hand. */
+    sealing?: MailSealing;
   },
 ): Promise<UsernameHandedOver> {
   const now = input.now ?? new Date();
@@ -536,6 +636,15 @@ export function assignUsername(
           reason: 'The username was given to an account',
           now,
         });
+        // The person is told, in fixed words: never the staff reason (controller ruling).
+        if (input.sealing)
+          await mailOwner(tx, input.sealing, {
+            userId: input.userId,
+            type: 'username_assigned',
+            data: { new: key, old: result.previous },
+            dedupeKey: `username_assigned.${reservation.id}`,
+            now,
+          });
         await recordAudit(tx, {
           staffUserId: input.staffId,
           action: 'username.assigned',
@@ -626,5 +735,7 @@ async function accountOf(
     userId,
     foundBy,
     page: page ? await opsPageByHandle(db, page.handleLower) : null,
+    // Staff accounts can't receive a name: the screen says so instead of offering Give.
+    staff: await isActiveStaff(db, userId),
   };
 }

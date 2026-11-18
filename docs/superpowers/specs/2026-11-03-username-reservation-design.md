@@ -442,3 +442,17 @@ The owner approved this in chat on 18 Nov 2026. Every rule below is the owner's 
 - Refused, changing nothing: a name a page holds (it is never reserved), a name still in a deleted page's 90-day hold (the hold protects that page's old links), a deleted or release-check page, a page with a take-back under way, a deleted account.
 - Releasing a reservation, or giving the name to an account, ends its open link.
 - The staff screen shows the open link's end and maker, never its code. The Overview's staff activity lists `username.assigned`.
+
+### 14.1 Security review fixes (18 Nov 2026)
+
+An independent review of PR #280 found the token handling, locks, race tests, preview and audit sound, and asked for these. The two marked "controller ruling" are the controller's decisions; the rest are builder's calls.
+
+- **No active staff account receives a handed-over name** (controller ruling), by assignment or by link: `HANDOVER_STAFF_ACCOUNT`. It also stops two staff passing a name between them. The account search marks staff accounts and the screen says "Staff accounts can't receive a username this way." instead of offering Give.
+- **The person whose username changed is told** (controller ruling): on assignment, email `username_assigned` in fixed words ("TipMe changed your username to @x. Your old link @old still leads to your page."), never the reason; their open dashboards get `profile.changed`. The staff confirm says they will be emailed.
+- A claim link works only while its maker is still staff holding `usernames.manage`; removing them or moving them to a role without it cancels their open links.
+- Finding an account by email also needs `search.view`; the lookup's audit records the user ids found, never the query.
+- Refused: a blocked account (`users.status` not active), a suspended page, a page whose take-back waits for a second person, and a word added to `RESERVED_HANDLES` after it was reserved.
+- An account with no page: its row is locked `FOR NO KEY UPDATE` before the name, so two handovers to it take turns. Not `FOR UPDATE`, which deadlocks with a sign-up's foreign-key check (shown by a test); a sign-up that lands first wins and the handover answers `HANDOVER_ACCOUNT_CHANGED` (try again).
+- A claim that renames a page listed in `LIVE_CHECKOUT_HANDLES` is recorded in its audit; the link panel reminds staff to update the list.
+- `username.handover_link_created` is on the Overview's staff activity.
+- Rate limits stay per address only: guessing a 120-bit code isn't practical, so counting per code adds nothing (controller's call).

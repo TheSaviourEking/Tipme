@@ -109,6 +109,8 @@ export type OperationErrorCode =
   | 'HANDOVER_LINK_NOT_FOUND'
   | 'HANDOVER_ACCOUNT_UNAVAILABLE'
   | 'CLAIM_LINK_INVALID'
+  | 'HANDOVER_STAFF_ACCOUNT'
+  | 'HANDOVER_ACCOUNT_CHANGED'
   // TipMe for businesses (PR B0). NOT_A_MANAGER and NO_MEMBERSHIP answer as "not found".
   | 'NOT_A_MANAGER'
   | 'NO_MEMBERSHIP'

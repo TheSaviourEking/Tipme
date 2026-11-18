@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import pg from 'pg';
 import {
   assignUsername,
+  mailSealing,
+  openSecret,
   cancelHandoverLink,
   checkUsername,
   claimViaHandoverLink,
@@ -52,10 +54,33 @@ async function withPage(database, handle, extra = {}) {
   return { userId, profileId };
 }
 
+/** Active staff in a role of the given permissions (a link's maker must hold usernames.manage). */
+async function asStaff(database, userId, permissions = ['usernames.manage']) {
+  const role = `handover_${permissions.join('_').replace(/\W/g, '_') || 'none'}`;
+  await database.pool.query(
+    `INSERT INTO roles (id, name) VALUES ($1, $1) ON CONFLICT DO NOTHING`,
+    [role],
+  );
+  for (const permission of permissions)
+    await database.pool.query(
+      `INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [role, permission],
+    );
+  await database.pool.query(
+    `INSERT INTO staff (user_id, role_id, granted_at, enrolled_at) VALUES ($1, $2, now(), now())
+     ON CONFLICT (user_id) DO UPDATE SET role_id = $2, revoked_at = NULL`,
+    [userId, role],
+  );
+  return userId;
+}
+
 async function setup(t) {
   const database = await useDatabase(t);
   await database.fresh();
-  const staffId = await user(database, { email: 'ops.lead@example.com' });
+  const staffId = await asStaff(
+    database,
+    await user(database, { email: 'ops.lead@example.com' }),
+  );
   return { database, staffId };
 }
 
@@ -452,7 +477,9 @@ test('staff find an account by its current username or exact email, with no emai
   assert.equal(byEmail[0].userId, kemi.userId);
   assert.equal(byEmail[0].foundBy, 'email');
   const bare = await findHandoverAccounts(database.db, 'no.page@example.com');
-  assert.deepEqual(bare, [{ userId: noPage, foundBy: 'email', page: null }]);
+  assert.deepEqual(bare, [
+    { userId: noPage, foundBy: 'email', page: null, staff: false },
+  ]);
   // Exact email only, never a part of one; no email, phone or balance in any answer.
   assert.deepEqual(await findHandoverAccounts(database.db, 'kemi.find@'), []);
   assert.deepEqual(await findHandoverAccounts(database.db, 'example.com'), []);
@@ -781,4 +808,356 @@ test('race: a sign-up claiming the name while it is handed over is refused until
     `SELECT user_id FROM profiles WHERE handle_lower = 'race_sign'`,
   );
   assert.deepEqual(rows, [{ user_id: claimer }]);
+});
+
+// Security review fixes (PR #280).
+
+const sealing = mailSealing(Buffer.alloc(32, 7));
+
+test('review: no active staff account receives a handed-over name, by assignment or by link', async (t) => {
+  const { database, staffId } = await setup(t);
+  await withPage(database, 'staff_own_page');
+  const [{ user_id: ownStaff }] = (
+    await database.pool.query(
+      `SELECT user_id FROM profiles WHERE handle_lower = 'staff_own_page'`,
+    )
+  ).rows;
+  await asStaff(database, ownStaff);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_staff',
+    reason: REASON,
+  });
+  // To themselves, and to a colleague.
+  await rejects(
+    assignUsername(database.db, {
+      staffId,
+      name: 'brand_staff',
+      userId: staffId,
+      reason: REASON,
+    }),
+    'HANDOVER_STAFF_ACCOUNT',
+  );
+  await rejects(
+    assignUsername(database.db, {
+      staffId,
+      name: 'brand_staff',
+      userId: ownStaff,
+      reason: REASON,
+    }),
+    'HANDOVER_STAFF_ACCOUNT',
+  );
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'brand_staff',
+    reason: REASON,
+  });
+  await rejects(
+    claimViaHandoverLink(database.db, {
+      userId: staffId,
+      code: codeOf(created),
+    }),
+    'HANDOVER_STAFF_ACCOUNT',
+  );
+  await rejects(
+    claimViaHandoverLink(database.db, {
+      userId: ownStaff,
+      code: codeOf(created),
+    }),
+    'HANDOVER_STAFF_ACCOUNT',
+  );
+  assert.equal(
+    (await previewHandoverLink(database.db, codeOf(created))).state,
+    'open',
+  );
+  assert.equal(
+    (await checkUsername(database.db, 'brand_staff')).state,
+    'reserved',
+  );
+  // Former staff are ordinary accounts again.
+  await database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE user_id = $1`,
+    [ownStaff],
+  );
+  assert.equal(
+    (
+      await assignUsername(database.db, {
+        staffId,
+        name: 'brand_staff',
+        userId: ownStaff,
+        reason: REASON,
+      })
+    ).handle,
+    'brand_staff',
+  );
+  // The account search says who is staff, so the screen can say so before anyone tries.
+  const [found] = await findHandoverAccounts(
+    database.db,
+    'ops.lead@example.com',
+  );
+  assert.equal(found.staff, true);
+});
+
+test('review: a link stops working once its maker is no longer staff holding usernames.manage', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_gone',
+    reason: REASON,
+  });
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'brand_gone',
+    reason: REASON,
+  });
+  const claimer = await user(database);
+  // The permission taken away (another role): refused, and nothing changes.
+  await asStaff(database, staffId, ['search.view']);
+  await rejects(
+    claimViaHandoverLink(database.db, {
+      userId: claimer,
+      code: codeOf(created),
+    }),
+    'CLAIM_LINK_INVALID',
+  );
+  // Removed from staff: refused too.
+  await asStaff(database, staffId);
+  await database.pool.query(
+    `UPDATE staff SET revoked_at = now() WHERE user_id = $1`,
+    [staffId],
+  );
+  await rejects(
+    claimViaHandoverLink(database.db, {
+      userId: claimer,
+      code: codeOf(created),
+    }),
+    'CLAIM_LINK_INVALID',
+  );
+  assert.equal(
+    (await checkUsername(database.db, 'brand_gone')).state,
+    'reserved',
+  );
+  // Back with the permission, the same link works.
+  await asStaff(database, staffId);
+  assert.equal(
+    (
+      await claimViaHandoverLink(database.db, {
+        userId: claimer,
+        code: codeOf(created),
+      })
+    ).handle,
+    'brand_gone',
+  );
+});
+
+test('review: a suspended page or a blocked account takes no name, by link or assignment', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_susp',
+    reason: REASON,
+  });
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'brand_susp',
+    reason: REASON,
+  });
+  const paused = await withPage(database, 'paused_page');
+  await database.pool.query(
+    `UPDATE profiles SET status = 'suspended' WHERE id = $1`,
+    [paused.profileId],
+  );
+  const blocked = await withPage(database, 'blocked_acct');
+  await database.pool.query(
+    `UPDATE users SET status = 'suspended' WHERE id = $1`,
+    [blocked.userId],
+  );
+  const bare = await user(database);
+  await database.pool.query(
+    `UPDATE users SET status = 'suspended' WHERE id = $1`,
+    [bare],
+  );
+  for (const userId of [paused.userId, blocked.userId, bare]) {
+    await rejects(
+      assignUsername(database.db, {
+        staffId,
+        name: 'brand_susp',
+        userId,
+        reason: REASON,
+      }),
+      'HANDOVER_ACCOUNT_UNAVAILABLE',
+    );
+    await rejects(
+      claimViaHandoverLink(database.db, { userId, code: codeOf(created) }),
+      'HANDOVER_ACCOUNT_UNAVAILABLE',
+    );
+  }
+  assert.equal(
+    (await checkUsername(database.db, 'brand_susp')).state,
+    'reserved',
+  );
+});
+
+test('review: a page whose take-back waits for a second person takes no name', async (t) => {
+  const { database, staffId } = await setup(t);
+  const kemi = await withPage(database, 'kemi_waiting');
+  await database.pool.query(
+    `INSERT INTO approval_requests (id, action, payload, summary, permission, requested_by, reason, status, created_at, expires_at)
+     VALUES ($1, 'username.take_back', $2, 'Take kemi_waiting back', 'usernames.manage', $3, 'A brand asked for it', 'pending', now(), now() + interval '1 day')`,
+    [
+      randomUUID(),
+      JSON.stringify({
+        profileId: kemi.profileId,
+        name: 'kemi_waiting',
+        kind: 'current',
+        category: 'ordinary',
+        noticeDays: 7,
+      }),
+      staffId,
+    ],
+  );
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_wait',
+    reason: REASON,
+  });
+  await rejects(
+    assignUsername(database.db, {
+      staffId,
+      name: 'brand_wait',
+      userId: kemi.userId,
+      reason: REASON,
+    }),
+    'HANDOVER_ACCOUNT_UNAVAILABLE',
+  );
+});
+
+test('review: a built-in word is never handed out, even through a link made before it joined the list', async (t) => {
+  const { database, staffId } = await setup(t);
+  // As if 'admin' had been reserved and linked before it became a built-in word.
+  const reservationId = randomUUID();
+  await database.pool.query(
+    `INSERT INTO handle_reservations (id, handle_lower, source, reason, reserved_by, reserved_at) VALUES ($1, 'admin', 'staff', 'Old', $2, now())`,
+    [reservationId, staffId],
+  );
+  const code = 'ADMINADMINADMINADMINADMI';
+  await database.pool.query(
+    `INSERT INTO handle_handover_links (id, reservation_id, handle_lower, token_sha256, created_by, created_at, expires_at)
+     VALUES ($1, $2, 'admin', $3, $4, now(), now() + interval '1 day')`,
+    [randomUUID(), reservationId, sha256(code), staffId],
+  );
+  await rejects(
+    claimViaHandoverLink(database.db, { userId: await user(database), code }),
+    'USERNAME_BUILT_IN',
+  );
+  assert.equal(
+    await database.count(`profiles WHERE handle_lower = 'admin'`),
+    0,
+  );
+});
+
+test('review: giving a name emails the person fixed words, never the reason', async (t) => {
+  const { database, staffId } = await setup(t);
+  const kemi = await withPage(database, 'kemi_mailed', {
+    email: 'kemi.mailed@example.com',
+  });
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'brand_mail',
+    reason: REASON,
+  });
+  await assignUsername(database.db, {
+    staffId,
+    name: 'brand_mail',
+    userId: kemi.userId,
+    reason: 'Secret internal reason about the brand deal',
+    sealing,
+  });
+  const { rows } = await database.pool.query(
+    `SELECT user_id, data_sealed FROM mail_messages WHERE type = 'username_assigned'`,
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].user_id, kemi.userId);
+  const data = JSON.parse(openSecret(sealing.key, rows[0].data_sealed));
+  assert.deepEqual(data, { new: 'brand_mail', old: 'kemi_mailed' });
+  assert.ok(!JSON.stringify(data).includes('Secret'));
+});
+
+test('review: a sign-up for the same account during a no-page claim: one wins, never a deadlock', async (t) => {
+  const { database, staffId } = await setup(t);
+  await reserveUsername(database.db, {
+    staffId,
+    name: 'race_self',
+    reason: REASON,
+  });
+  const created = await createHandoverLink(database.db, {
+    staffId,
+    name: 'race_self',
+    reason: REASON,
+  });
+  const claimer = await user(database);
+  const { claimHandle } = await import('../../dist/index.js');
+  const settle = (promise) =>
+    promise.then(
+      (value) => ({ status: 'fulfilled', value }),
+      (reason) => ({ status: 'rejected', reason }),
+    );
+  const holder = new pg.Client({ connectionString: database.url });
+  await holder.connect();
+  let claim;
+  let own;
+  try {
+    await holder.query('BEGIN');
+    await holder.query(
+      `SELECT pg_advisory_xact_lock(hashtext('tipme.handle:race_self'))`,
+    );
+    // The claim takes the account, then queues behind the name.
+    const handed = settle(
+      claimViaHandoverLink(database.db, {
+        userId: claimer,
+        code: codeOf(created),
+      }),
+    );
+    let queued = 0;
+    for (let i = 0; i < 200 && queued < 1; i++) {
+      queued = (
+        await database.pool.query(
+          `SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event = 'advisory' AND datname = current_database()`,
+        )
+      ).rows[0].n;
+      if (queued < 1) await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(queued, 1);
+    // Meanwhile the same account signs up with a name of its own in another tab: it isn't held up.
+    own = await settle(
+      claimHandle(database.db, { userId: claimer, handle: 'own_choice_x' }),
+    );
+    await holder.query('COMMIT');
+    claim = await handed;
+  } finally {
+    await holder.end();
+  }
+  assert.equal(own.status, 'fulfilled');
+  assert.equal(claim.status, 'rejected');
+  // A refusal to try again (the account changed), not a deadlock or a dead link.
+  assert.equal(claim.reason.code, 'HANDOVER_ACCOUNT_CHANGED');
+  const { rows } = await database.pool.query(
+    `SELECT handle_lower FROM profiles WHERE user_id = $1`,
+    [claimer],
+  );
+  assert.deepEqual(rows, [{ handle_lower: 'own_choice_x' }]);
+  assert.equal(
+    (await checkUsername(database.db, 'race_self')).state,
+    'reserved',
+  );
+  // Trying again now renames their new page.
+  assert.equal(
+    (
+      await claimViaHandoverLink(database.db, {
+        userId: claimer,
+        code: codeOf(created),
+      })
+    ).previous,
+    'own_choice_x',
+  );
 });

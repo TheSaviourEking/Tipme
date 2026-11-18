@@ -178,6 +178,9 @@ const messages: Record<ApiErrorCode, string> = {
   HANDOVER_ACCOUNT_UNAVAILABLE: 'This account can’t take a username right now.',
   CLAIM_LINK_INVALID:
     'This claim link doesn’t work any more. Ask the TipMe team for a new one.',
+  HANDOVER_STAFF_ACCOUNT: 'Staff accounts can’t receive a username this way.',
+  HANDOVER_ACCOUNT_CHANGED:
+    'The account changed while this was happening. Nothing changed; try again.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -419,6 +422,8 @@ const operationErrors: Partial<
   },
   // Unknown, used, expired or cancelled: one answer; the preview says which, to the code's holder.
   CLAIM_LINK_INVALID: { status: 404, code: 'CLAIM_LINK_INVALID' },
+  HANDOVER_STAFF_ACCOUNT: { status: 409, code: 'HANDOVER_STAFF_ACCOUNT' },
+  HANDOVER_ACCOUNT_CHANGED: { status: 409, code: 'HANDOVER_ACCOUNT_CHANGED' },
   // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
   APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
   CHANGELOG_EDITED_ELSEWHERE: {

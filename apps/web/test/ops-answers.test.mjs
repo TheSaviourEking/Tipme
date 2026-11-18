@@ -256,3 +256,14 @@ test('the handover refusals and activity have plain words, with no em dash', asy
   ])
     assert.equal(/[\u2013\u2014]/.test(text), false, text);
 });
+
+test('review: a staff account and a changed account each have plain words', () => {
+  assert.match(
+    refusalWords({ status: 409, code: 'HANDOVER_STAFF_ACCOUNT' }),
+    /^Staff accounts can’t receive a username this way\./,
+  );
+  assert.match(
+    refusalWords({ status: 409, code: 'HANDOVER_ACCOUNT_CHANGED' }),
+    /changed while.*try again/i,
+  );
+});

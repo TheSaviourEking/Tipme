@@ -233,6 +233,8 @@ export interface OpsHandoverAccount {
   page: OpsPage | null;
   /** The API fills this from LIVE_CHECKOUT_HANDLES: a renamed page loses live checkout. */
   liveCheckoutListed?: boolean;
+  /** An active staff account: it can't receive a handed-over name (security review, PR #280). */
+  staff: boolean;
 }
 
 export const opsHandoverAssignSchema = z

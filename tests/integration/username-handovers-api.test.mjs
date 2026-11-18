@@ -6,6 +6,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   WEB,
   browserHeaders,
+  openEventStream,
   opsSignIn,
   signIn,
   startStack,
@@ -36,6 +37,9 @@ before(async () => {
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_OPS_REQUEST_PER_HOUR: '10000',
       RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR: String(CLAIM_LIMIT),
+      LIVE_UPDATES_ENABLED: 'true',
+      LIVE_HEARTBEAT_MS: '1000',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
     },
   });
   staff = await opsSignIn(stack.api, database.db, '+2348031290099');
@@ -372,6 +376,186 @@ test('the code never reaches a log, the audit log, analytics or a trace', async 
     spans.getFinishedSpans().map((span) => span.attributes),
   );
   assert.equal(traced.includes(claimCode), false, 'spans');
+});
+
+// Security review fixes (PR #280).
+
+const find = (cookie, query) =>
+  call('POST', '/v1/ops/usernames/handover-accounts', cookie, { query });
+
+test('review: a staff account receives no name, by assignment or by link (409)', async () => {
+  await reserve('api_staff_x');
+  const [me] = await q(
+    `SELECT id FROM users WHERE phone_e164 = '+2348031290099'`,
+  );
+  await q(
+    `UPDATE users SET email = 'ops.self@example.com', email_verified_at = now() WHERE id = $1`,
+    [me.id],
+  );
+  const [found] = await json(await find(staff.cookie, 'ops.self@example.com'));
+  assert.equal(found.staff, true);
+  const self = await call(
+    'POST',
+    '/v1/ops/usernames/api_staff_x/assign',
+    staff.cookie,
+    {
+      userId: me.id,
+      reason: 'Trying to give it to myself',
+    },
+  );
+  assert.equal(self.status, 409);
+  assert.equal(await code(self), 'HANDOVER_STAFF_ACCOUNT');
+  const made = await json(await makeLink('api_staff_x'));
+  const claimed = await claim(codeIn(made.path), staff.sessionCookie);
+  assert.equal(claimed.status, 409);
+  assert.equal(await code(claimed), 'HANDOVER_STAFF_ACCOUNT');
+  assert.deepEqual(await json(await preview(codeIn(made.path))), {
+    state: 'open',
+    name: 'api_staff_x',
+    expiresAt: made.link.expiresAt,
+  });
+});
+
+test('review: the email search needs search.view too, and the audit names who was found, not the query', async () => {
+  const phone = nextPhone();
+  const { cookie } = await signIn(stack.api, phone);
+  await call('POST', '/v1/me/page', cookie, { handle: 'api_found_r' });
+  await q(
+    `UPDATE users SET email = 'found.r@example.com', email_verified_at = now() WHERE phone_e164 = $1`,
+    [phone],
+  );
+  const [{ id: foundId }] = await q(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [phone],
+  );
+  const onlyNames = await opsSignIn(stack.api, database.db, '+2348031290097');
+  await q(
+    `INSERT INTO roles (id, name) VALUES ('usernames_only_r', 'usernames_only_r') ON CONFLICT DO NOTHING`,
+  );
+  await q(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ('usernames_only_r', 'usernames.manage') ON CONFLICT DO NOTHING`,
+  );
+  await q(
+    `UPDATE staff SET role_id = 'usernames_only_r' WHERE user_id = (SELECT id FROM users WHERE phone_e164 = '+2348031290097')`,
+  );
+  const byEmail = await find(onlyNames.cookie, 'found.r@example.com');
+  assert.equal(byEmail.status, 403);
+  assert.equal(await code(byEmail), 'FORBIDDEN');
+  const byName = await find(onlyNames.cookie, 'api_found_r');
+  assert.equal(byName.status, 200);
+  assert.equal((await json(byName))[0].userId, foundId);
+  const [audit] = await q(
+    `SELECT subject_id, reason FROM audit_events WHERE action = 'username.account_lookup' ORDER BY seq DESC LIMIT 1`,
+  );
+  assert.match(audit.subject_id, /^\d+ characters$/);
+  assert.ok(audit.reason.includes(foundId));
+  assert.ok(!audit.reason.includes('api_found_r'));
+  const all = await q(
+    `SELECT reason FROM audit_events WHERE action = 'username.account_lookup'`,
+  );
+  for (const row of all)
+    assert.ok(!(row.reason ?? '').includes('found.r@'), 'query in the audit');
+});
+
+test('review: giving a name emails the person and tells their open dashboards', async (t) => {
+  await reserve('api_told');
+  const phone = nextPhone();
+  const { cookie } = await signIn(stack.api, phone);
+  await call('POST', '/v1/me/page', cookie, { handle: 'api_told_old' });
+  await q(
+    `UPDATE users SET email = 'told@example.com', email_verified_at = now() WHERE phone_e164 = $1`,
+    [phone],
+  );
+  const [{ id: userId }] = await q(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [phone],
+  );
+  const stream = await openEventStream(`${stack.api}/v1/me/events`, {
+    cookie,
+    origin: WEB,
+  });
+  t.after(() => stream.close());
+  assert.equal(stream.status, 200);
+  await stream.waitFor(/^data: \{"type":"ready"\}$/);
+  const given = await call(
+    'POST',
+    '/v1/ops/usernames/api_told/assign',
+    staff.cookie,
+    {
+      userId,
+      reason: 'Their brand team asked by email today',
+    },
+  );
+  assert.equal(given.status, 200);
+  await stream.waitFor(/^data: \{"type":"profile.changed"\}$/);
+  const mails = await q(
+    `SELECT type FROM mail_messages WHERE user_id = $1 AND type = 'username_assigned'`,
+    [userId],
+  );
+  assert.equal(mails.length, 1);
+  stream.close();
+});
+
+test('review: removing a link maker from staff, or a role without usernames.manage, ends their links', async () => {
+  const removedPhone = '+2348031290096';
+  const maker = await opsSignIn(stack.api, database.db, removedPhone);
+  await reserve('api_maker_a');
+  const made = await call(
+    'POST',
+    '/v1/ops/usernames/api_maker_a/handover-link',
+    maker.cookie,
+    { reason: REASON },
+  );
+  assert.equal(made.status, 201);
+  const [{ id: makerId }] = await q(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [removedPhone],
+  );
+  const removed = await call(
+    'POST',
+    `/v1/ops/staff/${makerId}/remove`,
+    staff.cookie,
+    { reason: 'Left the team this week' },
+  );
+  assert.equal(removed.status, 200, await removed.clone().text());
+  assert.deepEqual(await json(await preview(codeIn((await json(made)).path))), {
+    state: 'cancelled',
+  });
+
+  const movedPhone = '+2348031290095';
+  const mover = await opsSignIn(stack.api, database.db, movedPhone);
+  await reserve('api_maker_b');
+  const second = await json(
+    await call(
+      'POST',
+      '/v1/ops/usernames/api_maker_b/handover-link',
+      mover.cookie,
+      { reason: REASON },
+    ),
+  );
+  const [{ id: moverId }] = await q(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [movedPhone],
+  );
+  await q(
+    `INSERT INTO roles (id, name) VALUES ('no_names_r', 'no_names_r') ON CONFLICT DO NOTHING`,
+  );
+  await q(
+    `INSERT INTO role_permissions (role_id, permission) VALUES ('no_names_r', 'search.view') ON CONFLICT DO NOTHING`,
+  );
+  const changed = await call(
+    'PUT',
+    `/v1/ops/staff/${moverId}/role`,
+    staff.cookie,
+    {
+      roleId: 'no_names_r',
+      reason: 'Moving to the search desk',
+    },
+  );
+  assert.equal(changed.status, 200, await changed.clone().text());
+  assert.deepEqual(await json(await preview(codeIn(second.path))), {
+    state: 'cancelled',
+  });
 });
 
 // Last: it uses up this address's allowance.

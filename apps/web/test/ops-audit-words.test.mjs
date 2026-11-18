@@ -75,6 +75,18 @@ const CASES = [
     'Claim link …00c3d4 for reservation …00a1b2, until 2 December 2026; replaced link …00a1b2',
   ],
   [
+    'username.account_lookup',
+    '12 characters',
+    { by: 'email', found: [A] },
+    'Looked up by email; found account …00a1b2',
+  ],
+  [
+    'username.account_lookup',
+    '5 characters',
+    { by: 'username', found: [] },
+    'Looked up by username; found nobody',
+  ],
+  [
     'username.handover_link_cancelled',
     'mtn',
     { reservationId: A, linkId: B },

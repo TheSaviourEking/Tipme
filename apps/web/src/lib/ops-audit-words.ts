@@ -159,6 +159,12 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
       `Claimed through link ${short(c.linkId)} (reservation ${short(c.reservationId)}) by page ${short(c.profileId)}, ${was(c.previous)}`,
       `link made by ${staff(c.linkCreatedBy)}`,
     ),
+  'username.account_lookup': (c) =>
+    `Looked up by ${words(text(c.by))}; found ${
+      list(c.found).length === 0
+        ? 'nobody'
+        : `account ${list(c.found).join(', ')}`
+    }`,
   'username.assigned': (c) =>
     parts(
       `Given to page ${short(c.profileId)}, ${was(c.previous)} (reservation ${short(c.reservationId)})`,

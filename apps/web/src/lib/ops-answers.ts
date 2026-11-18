@@ -178,6 +178,10 @@ const REFUSALS: Record<string, string> = {
     'A deleted page’s hold on this username hasn’t ended yet. Nothing changed; try again after it ends.',
   HANDOVER_LINK_NOT_FOUND:
     'This username has no open claim link. Nothing changed.',
+  HANDOVER_STAFF_ACCOUNT:
+    'Staff accounts can’t receive a username this way. Nothing changed.',
+  HANDOVER_ACCOUNT_CHANGED:
+    'The account changed while this was happening. Nothing changed; try again.',
   HANDOVER_ACCOUNT_UNAVAILABLE:
     'This account can’t take a username right now: it may be deleted, a release-check page, or have a take-back under way. Nothing changed.',
   TAKE_BACK_CLOSED: 'This take-back has already finished',

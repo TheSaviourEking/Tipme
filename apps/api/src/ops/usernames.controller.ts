@@ -42,6 +42,7 @@ import {
   createHandoverLink,
   findHandoverAccounts,
   recordAudit,
+  withAuditChange,
   checkUsername,
   listUsernames,
   releaseUsername,
@@ -55,6 +56,7 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -83,6 +85,7 @@ export class OpsUsernamesController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {}
 
   @Get()
@@ -278,15 +281,24 @@ export class OpsUsernamesController {
     @Body(new ZodValidationPipe(opsHandoverAccountsQuerySchema))
     body: OpsHandoverAccountsQuery,
   ): Promise<ApiDataResponse<OpsHandoverAccount[]>> {
+    // Looking an account up by email is a staff search, so it also takes search.view (review).
+    const byEmail = body.query.includes('@') && !body.query.startsWith('@');
+    if (byEmail && !ops.permissions.has('search.view'))
+      throw new CodedHttpException(403, 'FORBIDDEN');
+    const listed = this.config.LIVE_CHECKOUT_HANDLES;
+    const accounts = await findHandoverAccounts(this.database.db, body.query);
+    // Who was found, never what was typed (it could be an email address).
     await recordAudit(this.database.db, {
       staffUserId: ops.userId,
       action: 'username.account_lookup',
       permission: 'usernames.manage',
       subjectType: 'search',
       subjectId: `${body.query.length} characters`,
+      reason: withAuditChange('Looked up an account for a handover', {
+        by: byEmail ? 'email' : 'username',
+        found: accounts.map((account) => account.userId),
+      }),
     });
-    const listed = this.config.LIVE_CHECKOUT_HANDLES;
-    const accounts = await findHandoverAccounts(this.database.db, body.query);
     return {
       data: accounts.map((account) => ({
         ...account,
@@ -316,10 +328,16 @@ export class OpsUsernamesController {
       name,
       userId: body.userId,
       reason: body.reason,
+      sealing: this.sealing,
     });
     // After the commit: the old page address now redirects, and the name is a page.
     if (given.previous) this.revalidator.revalidateGone(given.previous);
     this.revalidator.revalidate(given.handle);
+    // Their open dashboards re-read their profile (never awaited, never thrown).
+    void this.publishLive({
+      to: { user: body.userId },
+      type: 'profile.changed',
+    });
     return { data: given };
   }
 }

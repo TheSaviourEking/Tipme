@@ -90,3 +90,19 @@ export function claimPreviewWords(
       };
   }
 }
+
+/** Why a claim was refused, in plain words (a link that isn't open is shown by its preview). */
+export function claimRefusalWords(code: string, status: number): string {
+  if (status === 429)
+    return 'There have been a lot of tries from here. Wait an hour, then try again.';
+  switch (code) {
+    case 'HANDOVER_STAFF_ACCOUNT':
+      return 'You’re signed in with a TipMe staff account, and staff accounts can’t receive a username this way. Sign in with the account that should have it.';
+    case 'HANDOVER_ACCOUNT_CHANGED':
+      return 'Your account changed while this was happening. Nothing was claimed; try again.';
+    case 'HANDOVER_ACCOUNT_UNAVAILABLE':
+      return 'Your account can’t take this username right now. Contact the TipMe team and they’ll sort it out with you.';
+    default:
+      return 'We couldn’t claim it. Please try again.';
+  }
+}

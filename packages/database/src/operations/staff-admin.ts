@@ -60,6 +60,7 @@ import {
   type StaffAccess,
   withAuditChange,
 } from './staff.js';
+import { cancelHandoverLinksOf } from './username-handovers.js';
 import { closePendingRequestsOf } from './serious-actions.js';
 
 const MANAGE = 'staff.manage';
@@ -638,6 +639,14 @@ export function changeRole(
       if (moved.length === 0) throw new OperationError('STAFF_CHANGED');
       const cleared =
         input.roleId === 'owner' ? await clearOverrides(tx, userId) : {};
+      // Their claim links end with the permission that made them (security review, PR #280).
+      if (!after.permissions.has('usernames.manage'))
+        await cancelHandoverLinksOf(tx, {
+          makerId: userId,
+          actorId: actor.id,
+          reason: 'Their role no longer manages usernames',
+          now: new Date(),
+        });
       await recordAudit(tx, {
         staffUserId: actor.id,
         action: 'staff.role_changed',
@@ -1118,6 +1127,13 @@ export function removeStaff(
       if (removed.length === 0) throw new OperationError('STAFF_CHANGED');
       await dropOpsAccess(tx, userId, now);
       const cleared = await clearOverrides(tx, userId);
+      // Their claim links end with their access (security review, PR #280).
+      await cancelHandoverLinksOf(tx, {
+        makerId: userId,
+        actorId: actor.id,
+        reason: 'They are no longer staff',
+        now,
+      });
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,

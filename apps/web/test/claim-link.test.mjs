@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CLAIM_LINK_KEY,
+  claimRefusalWords,
   claimCodeFrom,
   claimLinkUrl,
   claimPreviewWords,
@@ -101,4 +102,26 @@ test('a broken claim link in the address bar wins over one kept earlier: it says
   assert.equal(takeClaimCode(), null);
   assert.equal(location.hash, '');
   assert.equal(store.has(CLAIM_LINK_KEY), false);
+});
+
+test('review: a refused claim says why in plain words', () => {
+  assert.match(
+    claimRefusalWords('HANDOVER_STAFF_ACCOUNT', 409),
+    /staff account/i,
+  );
+  assert.match(
+    claimRefusalWords('HANDOVER_ACCOUNT_CHANGED', 409),
+    /try again/i,
+  );
+  assert.match(
+    claimRefusalWords('HANDOVER_ACCOUNT_UNAVAILABLE', 409),
+    /contact the TipMe team/i,
+  );
+  assert.match(claimRefusalWords('RATE_LIMITED', 429), /wait an hour/i);
+  for (const code of [
+    'HANDOVER_STAFF_ACCOUNT',
+    'HANDOVER_ACCOUNT_CHANGED',
+    'X',
+  ])
+    assert.equal(/[\u2013\u2014]/.test(claimRefusalWords(code, 409)), false);
 });

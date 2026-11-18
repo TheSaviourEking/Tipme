@@ -12,6 +12,7 @@ import { AuthStage } from '@/components/account/auth-stage';
 import { EmailCodeForm } from '@/components/account/email-code-form';
 import {
   claimPreviewWords,
+  claimRefusalWords,
   clearClaimLink,
   takeClaimCode,
 } from '@/lib/claim-link';
@@ -138,13 +139,7 @@ export function ClaimView() {
       await look(code);
       return;
     }
-    setError(
-      result.status === 429
-        ? 'There have been a lot of tries from here. Wait an hour, then try again.'
-        : result.code === 'HANDOVER_ACCOUNT_UNAVAILABLE'
-          ? 'Your account can’t take this username right now. Contact the TipMe team and they’ll sort it out with you.'
-          : 'We couldn’t claim it. Please try again.',
-    );
+    setError(claimRefusalWords(result.code, result.status));
   };
 
   if (view.step === 'checking')

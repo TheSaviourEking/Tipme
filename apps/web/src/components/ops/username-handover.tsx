@@ -130,7 +130,15 @@ export function HandoverLinkPanel({
       ) : (
         <p className="tm-hint">
           No claim link. Make one for the person who should have @{name}. It
-          works once, for 14 days, and you send it yourself.
+          works once, for 14 days, and you send it yourself. Staff accounts
+          can’t claim it.
+        </p>
+      )}
+      {(open || shown) && (
+        <p className="tm-hint">
+          We don’t know their account until they claim. If they already have a
+          page listed for live checkout (LIVE_CHECKOUT_HANDLES), it loses live
+          checkout when its username changes: update the list afterwards.
         </p>
       )}
       {shown && (
@@ -331,7 +339,12 @@ export function GiveToAccount({
           Check the spelling, or make a claim link for them instead.
         </Slip>
       )}
-      {account && (
+      {account?.staff && (
+        <Slip dense tone="neutral" title="A staff account">
+          Staff accounts can’t receive a username this way.
+        </Slip>
+      )}
+      {account && !account.staff && (
         <form className="ops-reason" onSubmit={(e) => void give(e)}>
           <dl className="ops-facts">
             <div>
@@ -345,8 +358,8 @@ export function GiveToAccount({
           </dl>
           <p>
             {account.page
-              ? `@${account.page.handle}’s username becomes @${name}. @${account.page.handle} keeps leading to their page, and their tips, balance and plan don’t change. It doesn’t use one of their username changes.`
-              : `This account gets a page at @${name}. It isn’t live until they set it up.`}
+              ? `@${account.page.handle}’s username becomes @${name}. @${account.page.handle} keeps leading to their page, and their tips, balance and plan don’t change. It doesn’t use one of their username changes. We email them to say so, without your reason.`
+              : `This account gets a page at @${name}. It isn’t live until they set it up. We email them to say so, without your reason.`}
           </p>
           {account.liveCheckoutListed && (
             <StandingWarning dense title="Listed for live checkout">

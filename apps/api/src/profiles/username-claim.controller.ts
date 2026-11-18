@@ -23,6 +23,7 @@ import {
   type AuthContext,
 } from '../auth/session.guard.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
+import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
@@ -58,6 +59,7 @@ export class ClaimLinkPreviewController {
 export class UsernameClaimController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
+    @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
     @Inject(ServerEvents) private readonly events: ServerEvents,
@@ -72,9 +74,12 @@ export class UsernameClaimController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(claimLinkCodeSchema)) body: ClaimLinkCode,
   ): Promise<ApiDataResponse<UsernameClaimed>> {
+    const listed = this.config.LIVE_CHECKOUT_HANDLES;
     const claimed = await claimViaHandoverLink(this.database.db, {
       userId: auth.userId,
       code: body.code,
+      // A listed page that is renamed loses live checkout: the audit records it.
+      ...(Array.isArray(listed) ? { liveCheckoutHandles: listed } : {}),
     });
     if (claimed.previous) this.revalidator.revalidateGone(claimed.previous);
     this.revalidator.revalidate(claimed.handle);
