@@ -64,6 +64,7 @@ import {
 } from '../profiles/image-upload.js';
 import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { StudioPhotoAccent } from './photo-accent.js';
 import { masterOf, renditionsOf } from './studio-crops.js';
 import { StudioEnabledGuard } from './studio-switch.js';
 import {
@@ -94,6 +95,8 @@ export class StudioController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(StudioPhotoAccent)
+    private readonly photoAccent: StudioPhotoAccent,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
@@ -141,7 +144,19 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
   ): Promise<ApiDataResponse<MyStudioV1>> {
-    const studio = await saveStudioDraft(this.database.db, auth.userId, body);
+    let studio = await saveStudioDraft(this.database.db, auth.userId, body);
+    // "From your photo" (§6): computed when a save first picks it (none stored for this photo
+    // yet), so the editor's answer and the page have it. With no photo there is nothing to sample.
+    if (
+      studio.draft.v === 2 &&
+      studio.draft.accent === 'photo' &&
+      studio.photoAccent === null &&
+      'hasAvatar' in studio.context &&
+      studio.context.hasAvatar
+    ) {
+      await this.photoAccent.refresh(auth.userId);
+      studio = await getMyStudio(this.database.db, auth.userId);
+    }
     // Best effort, in the background: the next save or the publish sees the answer.
     void this.checkVideos(studioVideoUrls(studio.draft)).catch(() => undefined);
     return { data: studio };
