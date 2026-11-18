@@ -142,6 +142,10 @@ export async function photoAccentFor(
   }
 }
 
+/** The sampler `StudioPhotoAccent` uses; a test may provide its own (PHOTO_ACCENT_SAMPLER). */
+export type PhotoAccentSampler = (webp: Buffer) => Promise<Hex[]>;
+export const PHOTO_ACCENT_SAMPLER = Symbol('PHOTO_ACCENT_SAMPLER');
+
 /**
  * Keeps the stored photo accent in step with the profile photo. Only while Page Studio is on (the
  * `page_studio` switch), and only for a page with a Studio row. Never throws: the caller's change
@@ -157,6 +161,10 @@ export class StudioPhotoAccent {
     @Optional()
     @Inject(LOGGER)
     private readonly logger: Pick<Logger, 'warn'> | null = null,
+    /** Replaceable in tests (integration replaces it on the instance to make sampling fail). */
+    @Optional()
+    @Inject(PHOTO_ACCENT_SAMPLER)
+    public sample: PhotoAccentSampler = sampleAvatarColours,
   ) {}
 
   /** After the photo changed or a save picked "From your photo": recompute, or clear. */
@@ -175,26 +183,36 @@ export class StudioPhotoAccent {
         return;
       }
       profileId = source.profileId;
-      const accent = await withSlot(() =>
-        photoAccentFor(source.webp, {
-          log: this.logger,
+      const webp = source.webp;
+      const accent = webp
+        ? await withSlot(() =>
+            photoAccentFor(webp, {
+              sample: this.sample,
+              log: this.logger,
+              profileId: source.profileId,
+            }),
+          )
+        : null;
+      if (!webp)
+        this.logger?.warn({
+          event: 'studio.photo_accent_failed',
           profileId: source.profileId,
-        }),
-      );
-      // Not sampled: nothing is stored, and the value for the older photo is never read again
-      // (`photoAccentOf` checks the photo's version), so the page shows the style's own accent.
-      if (!accent) return;
+        });
+      // Not sampled (or the photo's bytes are missing): cleared for this photo, never left with
+      // the older photo's value, so the page shows the style's own accent.
       await setPhotoAccent(
         db,
         source.profileId,
         source.avatarVersion,
-        'failed' in accent
-          ? accent
-          : {
-              source: 'avatar',
-              avatarVersion: source.avatarVersion,
-              ...accent,
-            },
+        accent === null
+          ? null
+          : 'failed' in accent
+            ? { ...accent, avatarVersion: source.avatarVersion }
+            : {
+                source: 'avatar',
+                avatarVersion: source.avatarVersion,
+                ...accent,
+              },
       );
     } catch {
       this.logger?.warn({ event: 'studio.photo_accent_failed', profileId });

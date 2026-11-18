@@ -27,15 +27,23 @@ export interface PhotoAccentValues {
   light: StudioAccentValues;
   dark: StudioAccentValues;
 }
-/** No sampled colour passed: the page uses this curated accent, and the editor says so. */
+/**
+ * No sampled colour passed: the page uses this curated accent, and the editor says so.
+ * `nothingSampled`: the photo gave no clear colour at all (a smooth gradient, say), so the editor
+ * doesn't blame contrast.
+ */
 export interface PhotoAccentFailed {
   failed: true;
   fallback: StudioCuratedAccentId;
+  nothingSampled?: true;
 }
-/** What `page_studios.photo_accent` holds. */
+/**
+ * What `page_studios.photo_accent` holds. Both kinds name the photo they came from
+ * (`avatarVersion`), so a newer photo never inherits either.
+ */
 export type PhotoAccent =
   | ({ source: 'avatar'; avatarVersion: number } & PhotoAccentValues)
-  | PhotoAccentFailed;
+  | ({ avatarVersion: number } & PhotoAccentFailed);
 
 /**
  * §6 step 3: the curated fill band (light L .45–.55, dark L .75–.82), chroma capped at .16; §6
@@ -50,10 +58,11 @@ export const PHOTO_ACCENT_BAND = {
 
 /**
  * §6 step 2, "low-chroma skin oranges" (builder's call on the numbers): hues 20°–90° under chroma
- * .12, which holds the skin tones from very dark to very light, and brown hair, while a clearly
- * orange or yellow garment (chroma .15 and up) stays a candidate.
+ * .13. Measured on the Monk scale 1–10 and warm-lit skin as photos show it, medium and deep skin
+ * reaches C .124 (light skin stays under .11), so the cut leaves a margin for every skin tone
+ * alike, and brown hair; a clearly orange, red or golden garment (C .147 and up) stays a candidate.
  */
-const SKIN = { from: 20, to: 90, chroma: 0.12 } as const;
+const SKIN = { from: 20, to: 90, chroma: 0.13 } as const;
 
 /** The labels §7.3 uses: white first in light, the dark labels first in dark. */
 const LABELS: Record<'light' | 'dark', readonly Hex[]> = {
@@ -173,7 +182,10 @@ function valuesFor(colour: Hex, mode: Mode): StudioAccentValues | null {
 
 /**
  * §6 steps 2–6: the first candidate (most dominant first) that passes everything in both modes,
- * or `{ failed: true, fallback }` with the curated accent nearest the most dominant colour.
+ * or `{ failed: true, fallback }` with the curated accent nearest the most dominant colour that
+ * survived the grey and skin filters, or Ink when none did. A dropped colour never chooses it, so
+ * a portrait's fallback never depends on the person's skin. Nothing to try at all is
+ * `nothingSampled`.
  */
 export function pickPhotoAccent(
   candidates: readonly Hex[],
@@ -182,16 +194,20 @@ export function pickPhotoAccent(
     .filter((c): c is Hex => typeof c === 'string' && isHex(c.toLowerCase()))
     .map((c) => c.toLowerCase() as Hex)
     .slice(0, MAX_CANDIDATES);
+  if (colours.length === 0)
+    return { failed: true, fallback: 'ink', nothingSampled: true };
+  let survivor: Hex | null = null;
   for (const colour of colours) {
     const { c, h } = hexToOklch(colour);
     if (c < PHOTO_ACCENT_BAND.grey || isSkin(c, h)) continue;
+    survivor ??= colour;
     const light = valuesFor(colour, 'light');
     const dark = light && valuesFor(colour, 'dark');
     if (light && dark) return { light, dark };
   }
   return {
     failed: true,
-    fallback: colours[0] ? nearestCuratedAccent(colours[0]) : 'ink',
+    fallback: survivor ? nearestCuratedAccent(survivor) : 'ink',
   };
 }
 
@@ -220,12 +236,14 @@ export const photoAccentSchema = z.union([
   z.strictObject({
     failed: z.literal(true),
     fallback: z.enum(curatedIds),
+    avatarVersion: z.number().int().min(0),
+    nothingSampled: z.literal(true).optional(),
   }),
 ]);
 
 /**
- * The stored photo accent as the page and the editor read it: only a valid value, and, for
- * sampled values, only for the avatar they were sampled from. No avatar, or a newer one, is null,
+ * The stored photo accent as the page and the editor read it: only a valid value, and only for
+ * the avatar it was made from (sampled values and fallbacks alike). No avatar, or a newer one, is null,
  * so a page never shows a stale accent: it shows the style's default until the new one is stored.
  */
 export function photoAccentOf(
@@ -236,8 +254,13 @@ export function photoAccentOf(
   const parsed = photoAccentSchema.safeParse(stored);
   if (!parsed.success) return null;
   const value = parsed.data;
-  if ('failed' in value) return { failed: true, fallback: value.fallback };
   if (value.avatarVersion !== avatar.avatarVersion) return null;
+  if ('failed' in value)
+    return {
+      failed: true,
+      fallback: value.fallback,
+      ...(value.nothingSampled ? { nothingSampled: true as const } : {}),
+    };
   return { light: value.light, dark: value.dark };
 }
 
@@ -246,5 +269,7 @@ export function photoAccentNotice(
   photo: PhotoAccentValues | PhotoAccentFailed | null,
 ): string | null {
   if (!photo || !('failed' in photo)) return null;
+  if (photo.nothingSampled)
+    return `We couldn't find a clear colour in your photo, so your page uses ${STUDIO_ACCENTS[photo.fallback].name}.`;
   return `Your photo's colours didn't pass our contrast check, so your page uses ${STUDIO_ACCENTS[photo.fallback].name}.`;
 }

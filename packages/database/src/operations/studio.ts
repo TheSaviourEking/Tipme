@@ -1033,14 +1033,19 @@ export function studioPageFacts(row: {
 // sampled. Reads go through `photoAccentOf`, so a value for an older photo is never shown.
 
 /**
- * The page's profile photo, to compute its photo accent from: its bytes and version. Null when
- * the page has no Studio row (nothing would use it) or no photo.
+ * The page's profile photo, to compute its photo accent from: its version and bytes (null when
+ * they can't be read, e.g. an object store without the object). Null when the page has no Studio
+ * row (nothing would use it) or no photo.
  */
 export function studioPhotoSource(
   db: Database,
   userId: string,
   store?: PhotoStore,
-): Promise<{ profileId: string; avatarVersion: number; webp: Buffer } | null> {
+): Promise<{
+  profileId: string;
+  avatarVersion: number;
+  webp: Buffer | null;
+} | null> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const [row] = await db
@@ -1059,24 +1064,25 @@ export function studioPhotoSource(
     const webp =
       row.bytes ??
       (row.objectKey && store ? await store.get(row.objectKey) : null);
-    return webp ? { profileId, avatarVersion: row.version, webp } : null;
+    return { profileId, avatarVersion: row.version, webp: webp ?? null };
   });
 }
 
 /**
- * Stores the photo accent computed from photo `avatarVersion`, only while that is still the
- * page's photo (a newer upload or a removal in the meantime wins). Returns whether it was stored.
+ * Stores the photo accent computed from photo `avatarVersion`, or clears it (null: that photo
+ * could not be sampled), only while that is still the page's photo (a newer upload or a removal
+ * in the meantime wins). Returns whether it was written.
  */
 export function setPhotoAccent(
   db: Database,
   profileId: string,
   avatarVersion: number,
-  accent: PhotoAccent,
+  accent: PhotoAccent | null,
 ): Promise<boolean> {
   return guarded(async () => {
     // Only the server's own values reach the column, and from there the page's CSS.
-    const value = photoAccentSchema.parse(accent);
-    if ('source' in value && value.avatarVersion !== avatarVersion)
+    const value = accent === null ? null : photoAccentSchema.parse(accent);
+    if (value && value.avatarVersion !== avatarVersion)
       throw new OperationError('STUDIO_DRAFT_INVALID');
     const written = await db
       .update(pageStudios)

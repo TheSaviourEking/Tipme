@@ -124,3 +124,59 @@ test('sampling is bounded: a huge input is refused, not decoded', async () => {
     .toBuffer();
   await assert.rejects(sampleAvatarColours(huge));
 });
+
+test('a light face and a deep face on grey give the same fallback', async () => {
+  // Monk scale 4 and 8 as flat generated faces on a grey background: no person.
+  const face = async (skin) =>
+    photoAccentFor(
+      await toAvatar(
+        await sharp({
+          create: {
+            width: 600,
+            height: 600,
+            channels: 3,
+            background: { r: 128, g: 128, b: 128 },
+          },
+        })
+          .composite([
+            {
+              input: Buffer.from(
+                `<svg width="600" height="600"><ellipse cx="300" cy="300" rx="190" ry="240" fill="${skin}"/></svg>`,
+              ),
+              top: 0,
+              left: 0,
+            },
+          ])
+          .png()
+          .toBuffer(),
+      ),
+    );
+  const light = await face('#eadaba');
+  const deep = await face('#604134');
+  assert.deepEqual(light, deep);
+  assert.deepEqual(light, { failed: true, fallback: 'ink' });
+});
+
+test('a photo with no clear colour says so, not that contrast failed', async () => {
+  // A smooth two-way gradient: no colour box holds 1% of the pixels.
+  const n = 512;
+  const raw = Buffer.alloc(n * n * 3);
+  for (let y = 0; y < n; y += 1)
+    for (let x = 0; x < n; x += 1) {
+      const i = (y * n + x) * 3;
+      raw[i] = x / 2;
+      raw[i + 1] = y / 2;
+      raw[i + 2] = 128;
+    }
+  const gradient = await sharp(raw, {
+    raw: { width: n, height: n, channels: 3 },
+  })
+    .webp()
+    .toBuffer();
+  assert.deepEqual(await sampleAvatarColours(gradient), []);
+  assert.deepEqual(await photoAccentFor(gradient), {
+    failed: true,
+    fallback: 'ink',
+    nothingSampled: true,
+  });
+});

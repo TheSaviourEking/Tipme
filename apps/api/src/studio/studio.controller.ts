@@ -145,8 +145,9 @@ export class StudioController {
     @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
   ): Promise<ApiDataResponse<MyStudioV1>> {
     let studio = await saveStudioDraft(this.database.db, auth.userId, body);
-    // "From your photo" (§6): computed when a save first picks it (none stored for this photo
-    // yet), so the editor's answer and the page have it. With no photo there is nothing to sample.
+    // "From your photo" (§6): computed when a save picks it and nothing is stored for the current
+    // photo (`photoAccent` is null for a value, or a fallback, made from an older photo), so the
+    // editor's answer and the page have it. With no photo there is nothing to sample.
     if (
       studio.draft.v === 2 &&
       studio.draft.accent === 'photo' &&
