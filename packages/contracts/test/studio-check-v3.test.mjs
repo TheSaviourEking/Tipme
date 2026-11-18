@@ -373,17 +373,13 @@ test("Signboard's, Sprint's and Tiles' photo slots are the widths their CSS draw
   for (const kind of ['text', 'quote', 'video', 'services', 'events'])
     assert.equal(studioSlotWidth('sprint', kind, 1440), 680, kind);
   // Tiles (§9.7): a 2-column grid, gap 12, below 1024; on a desktop a 340 rail, gap 72 (the
-  // canvas), and a 788 px 4-column grid, gap 16. Photos, text and lists take the grid's width,
-  // a gallery photo one tile.
-  assert.equal(
-    studioSlotWidth('tiles', 'gallery', 390),
-    Math.round((350 - 12) / 2),
-  );
+  // canvas), and a 788 px 4-column grid, gap 16. Photos, text and lists take the grid's width.
+  // A gallery photo is one tile, but the last of a row closes it (fix round 1): on a phone an odd
+  // last photo is 2 wide, on a desktop the last of 4n + 1 spans all four. The widest is the slot.
+  assert.equal(studioSlotWidth('tiles', 'gallery', 390), 350);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 800), 720);
   assert.equal(studioSlotWidth('tiles', 'photo', 390), 350);
-  assert.equal(
-    studioSlotWidth('tiles', 'gallery', 1440),
-    Math.round((788 - 48) / 4),
-  );
+  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), 788);
   for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
     assert.equal(studioSlotWidth('tiles', kind, 1440), 788, kind);
 });

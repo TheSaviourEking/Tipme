@@ -182,7 +182,14 @@ export function StudioStylePage({
             {cover}
             {tip}
             {links}
-            <StyleBlocks doc={doc} images={images} />
+            {/* With neither a cover tile nor links, the first block sits beside the Tip tile. */}
+            <StyleBlocks
+              doc={doc}
+              images={images}
+              beside={
+                doc.cover === 'plain' && (profile.links?.length ?? 0) === 0
+              }
+            />
           </div>
         ) : (
           <div className="studio-grid">

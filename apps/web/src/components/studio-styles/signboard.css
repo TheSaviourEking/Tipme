@@ -35,7 +35,8 @@
   font-family: var(--studio-ui);
 }
 
-/* The cover. Plain: the band is the cover. "Your cover": full-bleed 16:9 above a short band. */
+/* The cover. Plain: the band is the cover. "Your cover": full-bleed, 16:9 up to 560 tall (the
+   photo crops to it, object-fit: cover), above a short band. */
 .studio[data-style='signboard'] .studio-cover {
   background: var(--studio-el2);
 }
@@ -45,11 +46,13 @@
 }
 
 .studio[data-style='signboard'] .studio-cover[data-cover='art'] {
-  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: min(56.25vw, 560px);
 }
 
 .studio[data-style='signboard'] .studio-cover[data-cover='photo'] {
-  aspect-ratio: 16 / 9;
+  width: 100%;
+  height: min(56.25vw, 560px);
 }
 
 /* The band: acc with accLabel, 72/20/76, a 2 px ink rule; the name in it, never over a photo. */
@@ -688,7 +691,6 @@
   .studio[data-style='signboard'] .studio-cover {
     grid-row: 1;
     grid-column: 1 / -1;
-    max-height: 560px;
   }
 
   .studio[data-style='signboard'] .studio-band {

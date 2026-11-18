@@ -184,6 +184,13 @@ export function longName(name: string, style?: StudioStyleId): boolean {
   );
 }
 
+/**
+ * A name with marks above or below its letters (ọ́, ẹ, ṣ…). Sprint's capitals at 64/76 or 52/1.2
+ * let a dot below touch the next line's acute (ruling AB; e2e measures the ink), so such a name
+ * opens its line height. A name with none keeps the spec's 64/76.
+ */
+const MARKED = /\p{M}/u;
+
 /** The page's one h1: the name, wholly in Inter where the display face can't draw it (§4.1). */
 function StyleName({
   styleId: style,
@@ -195,7 +202,7 @@ function StyleName({
   return (
     <h1
       id="studio-name"
-      className={`studio-name${needsInter(style, name) ? ' studio-name--fallback' : ''}${longName(name, style) ? ' studio-name--long' : ''}`}
+      className={`studio-name${needsInter(style, name) ? ' studio-name--fallback' : ''}${longName(name, style) ? ' studio-name--long' : ''}${style === 'sprint' && MARKED.test(name.normalize('NFD')) ? ' studio-name--marks' : ''}`}
     >
       {name}
     </h1>
@@ -500,6 +507,47 @@ function sizesFor(style: StudioStyleId, kind: StudioBlock['kind']): string {
   return `(min-width: 1024px) ${at(1440)}px, (min-width: 768px) ${at(1023)}px, ${at(390)}px`;
 }
 
+/**
+ * A gallery photo's `sizes` where a style draws photos of one gallery at different widths
+ * (fix round 1): the photo that closes a row is wider than the rest.
+ * - Tiles (tiles.css): a 2-column grid below 1024 (gap 12), an odd last photo spanning both; on a
+ *   desktop 4 columns of 185 (gap 16), the last spanning what its row has left. The widest is the
+ *   design check's slot.
+ * - Sprint (sprint.css): edge to edge, 2-up below 1024 with an odd first photo taking the row; on
+ *   a desktop 3-up, the first of 3n + 1 taking the row and the first two of 3n + 2 halving it.
+ */
+function gallerySizes(
+  style: StudioStyleId,
+  index: number,
+  count: number,
+): string {
+  if (style === 'tiles') {
+    const tile = (column: number, n: number, gap: number) =>
+      Math.round((column - (n - 1) * gap) / n);
+    const desk = studioSlotWidth('tiles', 'gallery', 1440);
+    const deskTile = tile(desk, 4, 16);
+    const left = count % 4;
+    const span = index === count - 1 && left ? 5 - left : 1;
+    const wide = index === count - 1 && count % 2 === 1;
+    const at = (v: number) => {
+      const column = studioSlotWidth('tiles', 'gallery', v);
+      return wide ? column : tile(column, 2, 12);
+    };
+    return `(min-width: 1024px) ${span * deskTile + (span - 1) * 16}px, (min-width: 768px) ${at(1023)}px, ${at(390)}px`;
+  }
+  if (style === 'sprint') {
+    const phone = index === 0 && count % 2 === 1 ? 100 : 50;
+    const desk =
+      count % 3 === 1 && index === 0
+        ? 100
+        : count % 3 === 2 && index < 2
+          ? 50
+          : 34;
+    return `(min-width: 1024px) ${desk}vw, ${phone}vw`;
+  }
+  return sizesFor(style, 'gallery');
+}
+
 function Photo({
   images,
   imageId,
@@ -629,7 +677,7 @@ function Block({
                 imageId={image.imageId}
                 alt={image.decorative ? '' : image.alt}
                 shape="tall"
-                sizes={sizesFor(style, 'gallery')}
+                sizes={gallerySizes(style, i, shown.length)}
               />
             </li>
           ))}
@@ -726,12 +774,20 @@ export function StyleBlocks({
   images,
   lead = false,
   part = 'all',
+  beside = false,
 }: {
   doc: StudioDocument;
   images: Images;
   lead?: boolean;
   part?: 'all' | 'lead';
+  /** Tiles with neither a cover tile nor links: the first block (not a heading) sits beside the
+   * Tip tile, so the grid's first row is closed (fix round 1). */
+  beside?: boolean;
 }) {
+  // Sprint's photos run edge to edge (§9.6, ruling AC): a photo or gallery never shares a section
+  // with text, so it can leave the column.
+  const split = doc.style === 'sprint';
+  let besideDone = !beside;
   const sections: {
     id: string;
     cells: ReactNode[];
@@ -744,9 +800,24 @@ export function StyleBlocks({
     const shown = Block({ block, style: doc.style, images });
     if (!shown) continue;
     const heading = block.kind === 'text' && block.variant === 'heading';
-    if (heading || !sections.length)
-      sections.push({ id: block.id, cells: [], list: true, photos: 0 });
+    const media = block.kind === 'photo' || block.kind === 'gallery';
+    const last = sections.at(-1);
+    const cut =
+      split &&
+      !heading &&
+      last !== undefined &&
+      // A photo after other blocks, or another block after photos, starts its own section.
+      (media ? last.photos < 0 : last.photos > 0);
+    if (heading || !sections.length || cut)
+      sections.push({
+        id: block.id,
+        cells: [],
+        list: true,
+        photos: 0,
+      });
     const section = sections.at(-1)!;
+    const besideThis = !besideDone && !heading;
+    if (besideThis) besideDone = true;
     // A list section holds only lists (and its heading): a style may pair two side by side.
     if (!heading && block.kind !== 'services' && block.kind !== 'events')
       section.list = false;
@@ -754,7 +825,12 @@ export function StyleBlocks({
       if (section.photos >= 0) section.photos += 1;
     } else if (!heading) section.photos = -1;
     section.cells.push(
-      <div key={block.id} className="studio-block" data-kind={block.kind}>
+      <div
+        key={block.id}
+        className="studio-block"
+        data-kind={block.kind}
+        {...(besideThis ? { 'data-beside': '' } : {})}
+      >
         {shown}
       </div>,
     );

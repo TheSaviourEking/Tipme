@@ -480,8 +480,10 @@ export function AppreciationForm({
   }, [onProfile, closed, skin]);
 
   // A styled page's sticky Tip bar (§8): shown once the in-page Tip button scrolls away, hidden
-  // while it is on screen, and while any other Tip action the page marks `data-tip-cta` is on
-  // screen too (Horizon's "Send a tip" over its cover). The server sends no data-bar, and CSS
+  // while it is on screen, while any other Tip action the page marks `data-tip-cta` is on screen
+  // (Horizon's "Send a tip" over its cover), and while the page's name is (ruling AA: the bar never
+  // covers the name, e.g. under a tall cover). Both are looked up in this form's own page. The
+  // server sends no data-bar, and CSS
   // keeps the bar out of sight until this sets it, so it never paints over the page before the
   // script runs (and without JavaScript there is none). The attribute is written straight to the
   // form, so scrolling never re-renders it.
@@ -495,7 +497,11 @@ export function AppreciationForm({
       for (const entry of entries) seen.set(entry.target, entry.isIntersecting);
       host.dataset.bar = [...seen.values()].some(Boolean) ? 'hidden' : 'shown';
     });
-    for (const target of [tip, ...document.querySelectorAll('[data-tip-cta]')])
+    const page = host.closest('.studio') ?? document;
+    for (const target of [
+      tip,
+      ...page.querySelectorAll('[data-tip-cta], .studio-name'),
+    ])
       observer.observe(target);
     return () => observer.disconnect();
   }, [skin, closed]);

@@ -125,8 +125,9 @@ const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   // and 480, gap 120 (680 and 480). A video is not a photo: it takes the 680 cell.
   sprint: { text: 680, media: 680, list: 680, tile: 1440, bleed: true },
   // Content 1200: a 340 px rail, gap 72 (the canvas), a 4-column grid (788), gap 16: a tile is
-  // 185. Photos, video, text and lists take the grid's whole width (builder's call on spans).
-  tiles: { text: 788, media: 788, list: 788, tile: 185 },
+  // 185. Photos, video, text and lists take the grid's whole width (builder's call on spans). A
+  // gallery photo is a tile, but the last one closes its row: the last of 4n + 1 spans all 788.
+  tiles: { text: 788, media: 788, list: 788, tile: 788 },
   // Content 1120: 600 px and the rest; photos 3fr/2fr, gap 8.
   linen: { text: 600, media: 600, list: 600, tile: 355 },
   // Content 1040: 440 px, gap 80, the right column (520), where every block sits (builder's
@@ -211,14 +212,14 @@ export function studioSlotWidth(
       : Math.min(screen - 2 * TABLET_GUTTER, TABLET_MAX);
   if (kind !== 'gallery') return column;
   // One gallery photo on a phone or tablet: Clear's and Stage's strips of fixed tiles (§9.2,
-  // §9.4), Journal 3-up (gap 6), Horizon and Signboard 3-up (gap 8), Tiles 2-up (gap 12), Linen
-  // 3fr/2fr (gap 8, the larger).
+  // §9.4), Journal 3-up (gap 6), Horizon and Signboard 3-up (gap 8), Tiles 2-up (gap 12, an odd
+  // last photo spanning both: the column), Linen 3fr/2fr (gap 8, the larger).
   if (style === 'clear') return CLEAR_STRIP_TILE;
   if (style === 'stage') return STAGE_STRIP_TILE;
   if (style === 'journal') return Math.round((column - 12) / 3);
   if (style === 'horizon' || style === 'signboard')
     return Math.round((column - 16) / 3);
-  if (style === 'tiles') return Math.round((column - 12) / 2);
+  if (style === 'tiles') return column;
   return Math.round(((column - 8) * 3) / 5);
 }
 

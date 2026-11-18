@@ -478,11 +478,31 @@ const LEAD = [
   { id: 'kindtxt0', kind: 'text', variant: 'paragraph', text: 'Hello.' },
   { id: 'kindhed1', kind: 'text', variant: 'heading', text: 'The rest' },
 ];
+// A gallery whose widest photo is the slot: Tiles' last photo of five spans the whole 4-column
+// row; Sprint's first of four takes the whole row on a desktop.
+const galleryOf = (n: number) => ({
+  id: 'kindgal1',
+  kind: 'gallery',
+  images: Array.from({ length: n }, (_, i) => ({
+    imageId: IMG(3 + i),
+    alt: `Photo ${i}`,
+  })),
+});
 const kindsFor = (style: string) => ({
   ...ALL_KINDS,
   style,
-  blocks:
-    style === 'signboard' ? [...LEAD, ...ALL_KINDS.blocks] : ALL_KINDS.blocks,
+  blocks: [
+    ...(style === 'signboard' ? LEAD : []),
+    ...ALL_KINDS.blocks.map((b) =>
+      b.kind !== 'gallery'
+        ? b
+        : style === 'tiles'
+          ? galleryOf(5)
+          : style === 'sprint'
+            ? galleryOf(4)
+            : b,
+    ),
+  ],
 });
 /** Where a style's column is the slot itself at 1440: drawn equal to the check, not merely within. */
 const EXACT: Partial<Record<string, readonly (keyof typeof DRAWN)[]>> = {
@@ -497,6 +517,9 @@ const EXACT: Partial<Record<string, readonly (keyof typeof DRAWN)[]>> = {
     'events',
   ],
   tiles: ['text', 'quote', 'photo', 'gallery', 'video', 'services', 'events'],
+  // Sprint's photos run edge to edge: each photo block, and a gallery's widest photo, is the
+  // screen (§9.6, ruling AC).
+  sprint: ['photo', 'gallery'],
 };
 
 test("every new style draws every block within the design check's slot, and exactly where its column is the slot", async ({
@@ -564,10 +587,12 @@ for (const style of [
   'sprint',
   'tiles',
 ] as const)
-  test(`${style} fits every amount label inside its chip at 320 and 360`, async ({
+  test(`${style} fits every amount label inside its chip at 320, 360 and 375`, async ({
     page,
   }) => {
-    for (const width of [320, 360]) {
+    // Three widths, every chip clicked at each.
+    test.setTimeout(120_000);
+    for (const width of [320, 360, 375]) {
       await page.setViewportSize({ width, height: 800 });
       await page.goto(`/dev/studio-lab?style=${style}`);
       await ready(page);
@@ -579,10 +604,19 @@ for (const style of [
           labels.map((label) => {
             const span = label.querySelector(':scope > span')!;
             const cs = getComputedStyle(span);
+            // An inset ring (box-shadow: inset 0 0 0 Npx) is drawn inside the chip: the label must
+            // clear it too.
+            const insetRings = [
+              ...cs.boxShadow.matchAll(
+                /(-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px (-?[\d.]+)px inset/g,
+              ),
+            ].map((m) => Math.max(0, parseFloat(m[4]!)));
+            const inset = insetRings.length ? Math.max(...insetRings) : 0;
             const inner =
               span.clientWidth -
               parseFloat(cs.paddingLeft) -
-              parseFloat(cs.paddingRight);
+              parseFloat(cs.paddingRight) -
+              2 * inset;
             const range = document.createRange();
             range.selectNodeContents(span);
             const text = range.getBoundingClientRect().width;
@@ -1217,7 +1251,7 @@ const nameLines = (page: Page) =>
     };
   });
 
-test('Sprint steps a three-line name from 64 to 52 px with line height 1.2', async ({
+test('Sprint steps a three-line name from 64 to 52 px and opens its line height', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 900 });
@@ -1233,7 +1267,8 @@ test('Sprint steps a three-line name from 64 to 52 px with line height 1.2', asy
   await ready(page);
   const long = await nameLines(page);
   expect(long.size).toBe(52);
-  expect(long.lineHeight).toBeCloseTo(52 * 1.2, 1);
+  // The spec's 1.2, opened further so dots below clear the next line's accents (ruling AB).
+  expect(long.lineHeight).toBeGreaterThan(52 * 1.2);
   expect(long.lines).toBe(3);
   expect(long.split, long.words.join(', ')).toBe(false);
   // Uppercase, Anton, nothing pokes out.
@@ -1366,7 +1401,8 @@ test('the Tip tile is first and two wide in Tiles, with "Send a tip" and "Goes t
       };
     });
     expect(layout.columns, `${width}`).toBe(columns);
-    expect(layout.span, `${width}`).toBe('span 2');
+    // Placed at columns 1–2 on a desktop (start 1), spanning 2 on a phone; the width proves both.
+    expect(['span 2', '1'], `${width}`).toContain(layout.span);
     expect(layout.first, `${width}`).toBe(true);
     // Two of the grid's columns: half the phone's grid (all of it, gap 12) or half the desktop's.
     const two = width === 390 ? layout.gridWidth : (layout.gridWidth - 16) / 2;
@@ -1500,4 +1536,268 @@ test('Signboard and Tiles draw focus 3 px out; inside the Tip tile the ring is a
         rgb((style === 'tiles' ? tokens.tileFocus : tokens.accText) as string),
       ]);
   }
+});
+
+// Fix round 1 (PR 2e review).
+
+test('the phone bar stays down while the name is in view (ruling AA): Sprint with a long name', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const name = 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀';
+  await page.goto(
+    `/dev/studio-lab?style=sprint&name=${encodeURIComponent(name)}`,
+  );
+  await ready(page);
+  const form = page.locator('form[data-skin]');
+  // On load the in-page Tip is below the fold, but the name is in view: no bar over it.
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  await expect(page.locator('.tip-bar')).toBeHidden();
+  // Past the name, with the in-page Tip on screen: still down.
+  await page.locator('.studio-tip .composer-submit').scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'hidden');
+  // Past both: up.
+  await page.locator('.studio-foot').scrollIntoViewIfNeeded();
+  await expect(form).toHaveAttribute('data-bar', 'shown');
+  await expect(page.locator('.tip-bar')).toBeVisible();
+  // Every new style waits on its own name the same way.
+  for (const style of ['signboard', 'tiles', 'clear']) {
+    await page.goto(`/dev/studio-lab?style=${style}`);
+    await ready(page);
+    await page.locator('.studio-name').scrollIntoViewIfNeeded();
+    await expect(page.locator('form[data-skin]'), style).toHaveAttribute(
+      'data-bar',
+      'hidden',
+    );
+  }
+});
+
+test("Signboard's photo cover runs edge to edge, 16:9 up to 560 tall", async ({
+  page,
+}) => {
+  for (const width of [390, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/dev/studio-lab?style=signboard&cover=yours');
+    await ready(page);
+    const box = await page
+      .locator('.studio-cover[data-cover="photo"]')
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const img = el.querySelector('img')!.getBoundingClientRect();
+        return {
+          left: r.left,
+          width: r.width,
+          height: r.height,
+          img: [img.width, img.height],
+          page: document.documentElement.clientWidth,
+        };
+      });
+    expect(Math.round(box.left), `${width}`).toBe(0);
+    expect(Math.round(box.width), `${width}`).toBe(box.page);
+    expect(Math.round(box.height), `${width}`).toBe(
+      Math.round(Math.min(box.page * 0.5625, 560)),
+    );
+    expect(box.img.map(Math.round), `${width}`).toEqual([
+      Math.round(box.width),
+      Math.round(box.height),
+    ]);
+  }
+});
+
+/** Every row of a grid is filled: no cell left empty between its tiles (spans included). */
+const gridHoles = (page: Page, grid: string) =>
+  page.locator(grid).evaluate((g) => {
+    const cs = getComputedStyle(g);
+    const left = g.getBoundingClientRect().left + parseFloat(cs.paddingLeft);
+    const width =
+      g.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const gap = parseFloat(cs.columnGap) || 0;
+    // The grid's own items, through display: contents wrappers.
+    const items: Element[] = [];
+    const walk = (el: Element) => {
+      for (const child of el.children) {
+        const d = getComputedStyle(child).display;
+        if (d === 'contents') walk(child);
+        else if (d !== 'none') items.push(child);
+      }
+    };
+    walk(g);
+    const boxes = items.map((el) => el.getBoundingClientRect());
+    const rows = [...new Set(boxes.map((b) => Math.round(b.top)))].sort(
+      (a, b) => a - b,
+    );
+    const out: string[] = [];
+    for (const top of rows) {
+      const y = top + 1;
+      const spans = boxes
+        .filter((b) => b.top <= y && b.bottom > y)
+        .map((b) => [b.left - left, b.right - left] as const)
+        .sort((a, b) => a[0] - b[0]);
+      let reach = 0;
+      for (const [l, r] of spans) {
+        if (l - reach > gap + 2)
+          out.push(
+            `row at ${top}: empty ${Math.round(reach)}–${Math.round(l)}`,
+          );
+        reach = Math.max(reach, r);
+      }
+      if (width - reach > 2)
+        out.push(
+          `row at ${top}: empty ${Math.round(reach)}–${Math.round(width)}`,
+        );
+    }
+    return out;
+  });
+
+test('the Tiles grid closes every row: 3, 4 or 5 links and 1, 2 or 3 photos, at 1440 and 390', async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const docFor = (photos: number) =>
+    encodeDoc({
+      v: 2,
+      style: 'tiles',
+      accent: null,
+      mode: 'light',
+      cover: 'plain',
+      blocks: [
+        {
+          id: 'tilehed1',
+          kind: 'text',
+          variant: 'heading',
+          text: 'Studio diary',
+        },
+        {
+          id: 'tiletxt1',
+          kind: 'text',
+          variant: 'paragraph',
+          text: 'Eight songs.',
+        },
+        {
+          id: 'tilegal1',
+          kind: 'gallery',
+          images: Array.from({ length: photos }, (_, i) => ({
+            imageId: IMG(3 + i),
+            alt: `Photo ${i}`,
+          })),
+        },
+      ],
+    });
+  for (const width of [1440, 390])
+    for (const links of [3, 4, 5])
+      for (const photos of [1, 2, 3]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(
+          `/dev/studio-lab?style=tiles&links=${links}&doc=${docFor(photos)}`,
+        );
+        await ready(page);
+        const where = `${links} links, ${photos} photos at ${width}`;
+        expect(await gridHoles(page, '.studio-grid'), where).toEqual([]);
+        expect(await gridHoles(page, '.studio-strip'), where).toEqual([]);
+      }
+  // With no links, the cover (or the first photo) sits beside the Tip tile.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const query of ['links=0', 'links=0&cover=yours', 'cover=yours']) {
+    await page.goto(`/dev/studio-lab?style=tiles&${query}`);
+    await ready(page);
+    expect(await gridHoles(page, '.studio-grid'), query).toEqual([]);
+    // What sits beside the Tip fills its height (the card inside, not only its cell).
+    const [tip, beside] = await page.evaluate(() => {
+      const g = document.querySelector('.studio-grid')!;
+      const tile = g.querySelector('.studio-tip')!.getBoundingClientRect();
+      const next =
+        g.querySelector('.studio-block[data-beside] > *') ??
+        g.querySelector(':scope > .studio-cover:not([data-cover="plain"])');
+      return [tile.height, next ? next.getBoundingClientRect().height : 0];
+    });
+    if (query.startsWith('links=0'))
+      expect(
+        Math.abs(tip - beside),
+        `${query}: ${tip} vs ${beside}`,
+      ).toBeLessThanOrEqual(1);
+  }
+});
+
+test("Sprint's long name keeps its accents clear of the line above (§9.10, ruling AB)", async ({
+  page,
+}) => {
+  for (const [width, name] of [
+    [390, 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'],
+    [320, 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'],
+    [1440, 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'],
+    [390, 'Ẹniọlá Ọ̀ṣúnbíyìí'],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(
+      `/dev/studio-lab?style=sprint&name=${encodeURIComponent(name)}`,
+    );
+    await ready(page);
+    // The ink of each rendered line (canvas metrics in the name's own face and size): the lowest
+    // mark of a line must stay above the highest mark of the next.
+    const gaps = await page.locator('.studio-name').evaluate((h) => {
+      const cs = getComputedStyle(h);
+      const text = h.firstChild as Text;
+      const range = document.createRange();
+      const lines = new Map<number, string>();
+      const re = /[^\s]+/g;
+      for (let m = re.exec(text.data); m; m = re.exec(text.data)) {
+        // Each hyphen-split part, since a line may break after a hyphen.
+        const parts = m[0].split(/(?<=-)/);
+        let at = m.index;
+        for (const part of parts) {
+          range.setStart(text, at);
+          range.setEnd(text, at + part.length);
+          const top = Math.round(range.getClientRects()[0]!.top);
+          lines.set(
+            top,
+            `${lines.get(top) ?? ''}${lines.has(top) && !lines.get(top)!.endsWith('-') ? ' ' : ''}${part}`,
+          );
+          at += part.length;
+        }
+      }
+      const ctx = document.createElement('canvas').getContext('2d')!;
+      ctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      const ink = [...lines.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, t]) => ctx.measureText(t.toUpperCase()));
+      const lh = parseFloat(cs.lineHeight);
+      return ink.slice(1).map((next, i) => ({
+        gap:
+          lh - ink[i]!.actualBoundingBoxDescent - next.actualBoundingBoxAscent,
+        size: parseFloat(cs.fontSize),
+        lh,
+      }));
+    });
+    expect(gaps.length, `${name} at ${width} wraps`).toBeGreaterThan(0);
+    for (const g of gaps)
+      expect(
+        g.gap,
+        `${name} at ${width}: ${JSON.stringify(g)}`,
+      ).toBeGreaterThanOrEqual(2);
+  }
+});
+
+test('Sprint with a plain cover fills its desktop hero: the name on the left, the Tip on the right', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=sprint&cover=plain');
+  await ready(page);
+  const box = (sel: string) =>
+    page
+      .locator(sel)
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      });
+  const [name, tip] = await Promise.all([
+    box('.studio-name'),
+    box('.studio-tip'),
+  ]);
+  expect(name.right).toBeLessThanOrEqual(720);
+  expect(tip.left).toBeGreaterThanOrEqual(720);
+  // Side by side, not stacked.
+  expect(tip.top).toBeLessThan(name.bottom + 400);
+  expect(await geometryProblems(page)).toEqual([]);
 });

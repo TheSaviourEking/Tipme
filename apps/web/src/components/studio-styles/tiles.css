@@ -241,8 +241,9 @@
   margin: 0;
 }
 
-/* Narrow phones: the tile's padding leaves four chips too little room, so two by two, 44 tall. */
-@media (max-width: 359px) {
+/* Phones below 390: the tile's padding and the chips' inset ring leave four chips too little
+   room, so two by two, 44 tall. */
+@media (max-width: 389px) {
   .studio[data-style='tiles'] .studio-tip .amount-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -610,8 +611,15 @@
 }
 
 .studio[data-style='tiles'] .studio-strip li {
+  align-self: stretch;
   aspect-ratio: 1;
   background: var(--studio-el2);
+}
+
+/* An odd last photo spans both columns, so no row is left half empty (fix round 1). */
+.studio[data-style='tiles'] .studio-strip li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  aspect-ratio: 350 / 169;
 }
 
 .studio[data-style='tiles'] .studio-strip img {
@@ -804,25 +812,66 @@
     margin-top: 0;
   }
 
+  /* The first row is closed (fix round 1, the board's TilesDesktop): beside the 2-wide Tip tile
+     sits the cover tile; else the links' title and two link tiles (the Tip then spans two rows);
+     else the first block. */
   .studio[data-style='tiles'] .studio-tip {
+    grid-row: 1;
+    grid-column: 1 / 3;
     padding: 24px;
   }
 
+  .studio[data-style='tiles']
+    .studio-grid:has(.studio-links):not(
+      :has(> .studio-cover:not([data-cover='plain']))
+    )
+    .studio-tip {
+    grid-row: 1 / span 2;
+  }
+
+  /* Then the first row is the links' one-line title (15/20), so the Tip tile's extra height goes
+     to the links' row and nothing opens above the title. */
+  .studio[data-style='tiles']
+    .studio-grid:has(.studio-links):not(
+      :has(> .studio-cover:not([data-cover='plain']))
+    ) {
+    grid-template-rows: 20px;
+  }
+
   .studio[data-style='tiles'] .studio-cover {
-    grid-column: span 2;
+    grid-row: 1;
+    grid-column: 3 / 5;
     aspect-ratio: auto;
     min-height: 172px;
   }
 
-  /* With links, the Tip tile takes two rows: the links' title, then two link tiles beside it. */
-  .studio[data-style='tiles'] .studio-grid:has(.studio-links) .studio-tip {
-    grid-row: span 2;
+  .studio[data-style='tiles'] .studio-block[data-beside] {
+    grid-row: 1;
+    grid-column: 3 / 5;
+  }
+
+  /* It fills the Tip tile's height, whatever it holds. */
+  .studio[data-style='tiles'] .studio-block[data-beside] > *,
+  .studio[data-style='tiles']
+    .studio-block[data-beside]
+    :is(.studio-photo img, .studio-video) {
+    box-sizing: border-box;
+    height: 100%;
+    aspect-ratio: auto;
   }
 
   .studio[data-style='tiles'] .studio-links > .studio-title {
     grid-column: span 2;
     align-self: end;
     margin-top: 0;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links
+    > .studio-title {
+    grid-column: 1 / -1;
+    margin-top: 16px;
   }
 
   .studio[data-style='tiles'] .studio-title {
@@ -853,9 +902,102 @@
     grid-column: auto;
   }
 
+  /* The last link closes its row. Beside the Tip go two links; then rows of four. */
+  .studio[data-style='tiles'] .studio-links__list li:only-child {
+    grid-column: span 2;
+  }
+
+  .studio[data-style='tiles']
+    .studio-links__list
+    li:last-child:nth-child(4n + 3) {
+    grid-column: span 4;
+  }
+
+  .studio[data-style='tiles'] .studio-links__list li:last-child:nth-child(4n) {
+    grid-column: span 3;
+  }
+
+  .studio[data-style='tiles']
+    .studio-links__list
+    li:last-child:nth-child(4n + 5) {
+    grid-column: span 2;
+  }
+
+  /* With the cover beside the Tip, the links start their own rows of four. */
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n) {
+    grid-column: auto;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 1) {
+    grid-column: span 4;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 2) {
+    grid-column: span 3;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 3) {
+    grid-column: span 2;
+  }
+
+  /* A gallery: 4 across; its last photo spans what its row has left (the design check's slot is
+     the widest, 788, and each photo's sizes says its own width). */
   .studio[data-style='tiles'] .studio-strip {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(odd) {
+    grid-column: auto;
+    aspect-ratio: 1;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 1) {
+    grid-column: span 4;
+    aspect-ratio: 788 / 185;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 2) {
+    grid-column: span 3;
+    aspect-ratio: 587 / 185;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 3) {
+    grid-column: span 2;
+    aspect-ratio: 386 / 185;
+  }
+
+  /* A gallery beside the Tip is two across, as on a phone. */
+  .studio[data-style='tiles'] .studio-block[data-beside] .studio-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio[data-style='tiles']
+    .studio-block[data-beside]
+    .studio-strip
+    li:last-child {
+    grid-column: auto;
+    aspect-ratio: 1;
+  }
+
+  .studio[data-style='tiles']
+    .studio-block[data-beside]
+    .studio-strip
+    li:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    aspect-ratio: 2 / 1;
   }
 
   .studio[data-style='tiles'] .studio-photo img {

@@ -1398,7 +1398,8 @@ test("the design check's photo slots are the widths Sprint's CSS draws: photos e
   );
   // Full-bleed photos ask for the screen.
   const html = styled('sprint', { blocks: [...doc().blocks, PHOTO_BLOCK] });
-  assert.equal(stripSizes(html), '100vw');
+  // One photo in a gallery takes the whole row at every width.
+  assert.equal(stripSizes(html), '(min-width: 1024px) 100vw, 100vw');
   assert.equal(photoSizes(html), '100vw');
 });
 
@@ -1409,11 +1410,9 @@ test("the design check's photo slots are the widths Tiles' CSS draws, and sizes 
   const grid = declarations(css, `${root} .studio-grid`);
   assert.match(grid, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   assert.equal(px(grid, 'gap'), 12);
+  // A gallery photo is one tile; the last of a row closes it, so the widest is the column.
   for (const v of [320, 390])
-    assert.equal(
-      studioSlotWidth('tiles', 'gallery', v),
-      Math.round((v - 40 - 12) / 2),
-    );
+    assert.equal(studioSlotWidth('tiles', 'gallery', v), v - 40);
   // Desktop: a 340 rail, 72, then a 788 grid of 4 columns, gap 16 (the content is 1200).
   const cols =
     /grid-template-columns:[^;]*min\((\d+)px, [\d.]+vw\) (\d+)px minmax\(0, (\d+)px\)/.exec(
@@ -1426,7 +1425,7 @@ test("the design check's photo slots are the widths Tiles' CSS draws, and sizes 
   const g = px(desk, 'gap');
   assert.equal(g, 16);
   const tile = Math.round((788 - 3 * g) / 4);
-  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), tile);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), 788);
   for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
     assert.equal(studioSlotWidth('tiles', kind, 1440), 788, kind);
   // Every block but a gallery's photos spans the grid's whole row.
@@ -1434,10 +1433,149 @@ test("the design check's photo slots are the widths Tiles' CSS draws, and sizes 
     declarations(css, `${root} .studio-block`),
     /grid-column: 1 \/ -1;/,
   );
-  assert.equal(
-    stripSizes(styled('tiles')),
-    `(min-width: 1024px) ${tile}px, (min-width: 768px) ${studioSlotWidth('tiles', 'gallery', 1023)}px, ${studioSlotWidth('tiles', 'gallery', 390)}px`,
+  // Each photo asks for the width it is drawn at: a tile, or the span that closes its row.
+  const sizesOf = (n) =>
+    [
+      ...styled('tiles', {
+        blocks: [
+          {
+            id: 'gall0001',
+            kind: 'gallery',
+            images: Array.from({ length: n }, () => ({
+              imageId: IMG,
+              alt: 'A',
+            })),
+          },
+        ],
+      }).matchAll(/<li><img[^>]*sizes="([^"]+)"/g),
+    ].map((m) => m[1]);
+  const at = (desk, tablet, phone) =>
+    `(min-width: 1024px) ${desk}px, (min-width: 768px) ${tablet}px, ${phone}px`;
+  const span = (k) => k * tile + (k - 1) * g;
+  // Three photos: the third spans two columns on a desktop and the whole row on a phone.
+  assert.deepEqual(sizesOf(3), [
+    at(tile, 354, 169),
+    at(tile, 354, 169),
+    at(span(2), 720, 350),
+  ]);
+  // Five: the fifth spans all four on a desktop (the slot), and the row on a phone.
+  assert.equal(sizesOf(5)[4], at(788, 720, 350));
+  assert.equal(sizesOf(4)[3], at(tile, 354, 169));
+  assert.equal(sizesOf(2)[1], at(span(3), 354, 169));
+});
+
+test('the Tiles grid closes its rows: count rules for links and photos, and a tile beside the Tip', () => {
+  const css = sheet('tiles');
+  const desk = (sel) =>
+    declarations(
+      css,
+      `.studio[data-style='tiles'] ${sel}`,
+      'min-width: 1024px',
+    );
+  // Links beside the Tip (no cover): two there, then rows of four, the last closing its row.
+  assert.match(
+    desk('.studio-links__list li:last-child:nth-child(4n + 3)'),
+    /grid-column: span 4;/,
   );
+  assert.match(
+    desk('.studio-links__list li:last-child:nth-child(4n)'),
+    /grid-column: span 3;/,
+  );
+  // A gallery's last photo spans what its row has left.
+  assert.match(
+    desk('.studio-strip li:last-child:nth-child(4n + 1)'),
+    /grid-column: span 4;/,
+  );
+  // The cover, or the first block when there is neither a cover nor links, sits beside the Tip.
+  assert.match(desk('.studio-block[data-beside]'), /grid-column: 3 \/ 5;/);
+  assert.match(
+    declarations(
+      css,
+      ".studio[data-style='tiles'] .studio-strip li:last-child:nth-child(odd)",
+    ),
+    /grid-column: 1 \/ -1;/,
+  );
+  // The page marks that first block only when nothing else can sit there.
+  const blocks = [
+    { id: 'head0001', kind: 'text', variant: 'heading', text: 'News' },
+    { id: 'text0001', kind: 'text', variant: 'paragraph', text: 'Hi.' },
+  ];
+  const beside = (o) =>
+    (styled('tiles', { blocks, ...o }).match(/data-beside=""/g) ?? []).length;
+  assert.equal(beside({ cover: 'plain', profile: { links: [] } }), 1);
+  assert.match(
+    styled('tiles', { blocks, cover: 'plain', profile: { links: [] } }),
+    /<div class="studio-block" data-kind="text" data-beside="">/,
+  );
+  assert.equal(beside({ cover: 'plain' }), 0);
+  assert.equal(beside({ cover: 'gradient', profile: { links: [] } }), 0);
+});
+
+test('Sprint gives every photo block a section of its own, so it runs edge to edge (ruling AC)', () => {
+  const html = styled('sprint', {
+    blocks: [
+      { id: 'head0001', kind: 'text', variant: 'heading', text: 'News' },
+      { id: 'text0001', kind: 'text', variant: 'paragraph', text: 'Hi.' },
+      {
+        id: 'gall0001',
+        kind: 'gallery',
+        images: [1, 2, 3].map(() => ({ imageId: IMG, alt: 'A' })),
+      },
+      { id: 'text0002', kind: 'text', variant: 'paragraph', text: 'After.' },
+    ],
+  });
+  const sections = [
+    ...html.matchAll(/<div class="studio-section"([^>]*)>/g),
+  ].map((m) => m[1]);
+  assert.deepEqual(sections, ['', ' data-media=""', '']);
+  // Each photo asks for what it is drawn at: an odd first takes the row on a phone; on a
+  // desktop three share it.
+  const sizes = [...html.matchAll(/<li><img[^>]*sizes="([^"]+)"/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(sizes, [
+    '(min-width: 1024px) 34vw, 100vw',
+    '(min-width: 1024px) 34vw, 50vw',
+    '(min-width: 1024px) 34vw, 50vw',
+  ]);
+  // Other styles keep a mixed section whole.
+  const clear = styled('clear', {
+    blocks: [
+      { id: 'text0001', kind: 'text', variant: 'paragraph', text: 'Hi.' },
+      PHOTO_BLOCK,
+    ],
+  });
+  assert.equal(clear.match(/class="studio-section"/g).length, 1);
+});
+
+test("Signboard's photo cover is full-bleed, 16:9 up to 560 tall", () => {
+  const css = sheet('signboard');
+  const cover = declarations(
+    css,
+    ".studio[data-style='signboard'] .studio-cover[data-cover='photo']",
+  );
+  assert.match(cover, /width: 100%;/);
+  assert.match(cover, /height: min\(56\.25vw, 560px\);/);
+  assert.doesNotMatch(css, /max-height: 560px/);
+});
+
+test("Sprint's plain cover puts the Tip in the right half of a desktop hero", () => {
+  const plain = declarations(
+    sheet('sprint'),
+    ".studio[data-style='sprint']:has(.studio-cover[data-cover='plain']) .studio-tip",
+    'min-width: 1024px',
+  );
+  assert.match(plain, /grid-column: 2;/);
+});
+
+test("the sticky bar's observer also waits on the page's own name (ruling AA)", () => {
+  const form = readFileSync(
+    new URL('../src/components/appreciation-form.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(form, /host\.closest\('\.studio'\)/);
+  assert.match(form, /querySelectorAll\('\[data-tip-cta\], \.studio-name'\)/);
+  assert.doesNotMatch(form, /document\.querySelectorAll\('\[data-tip-cta\]'\)/);
 });
 
 test('Signboard sets the role and the name in the accent band, with the avatar and handle below', () => {
@@ -1482,7 +1620,7 @@ test('Signboard sets the role and the name in the accent band, with the avatar a
       css,
       ".studio[data-style='signboard'] .studio-cover[data-cover='photo']",
     ),
-    /aspect-ratio: 16 \/ 9;/,
+    /height: min\(56\.25vw, 560px\);/,
   );
 });
 
@@ -1624,7 +1762,7 @@ test("Signboard's Tip has the one hard shadow 3px 3px 0, and no other shadow is 
     assert.equal(s, 'none');
 });
 
-test('long names step down in Signboard (over 18 letters, 30 to 24), Sprint (64 to 52, line height 1.2) and Tiles (about 80%)', () => {
+test('long names step down in Signboard (over 18 letters, 30 to 24), Sprint (64 to 52 at 1.2, names with marks opened further) and Tiles (about 80%)', () => {
   const cls = (style, name) =>
     /<h1[^>]*class="([^"]+)"/.exec(
       styled(style, { profile: { displayName: name } }),
@@ -1640,9 +1778,9 @@ test('long names step down in Signboard (over 18 letters, 30 to 24), Sprint (64 
     cls('signboard', 'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí'),
     'studio-name studio-name--long',
   );
-  assert.equal(
+  assert.match(
     cls('sprint', 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'),
-    'studio-name studio-name--long',
+    /^studio-name studio-name--long/,
   );
   const name = (style, long = false) =>
     declarations(
@@ -1658,6 +1796,15 @@ test('long names step down in Signboard (over 18 letters, 30 to 24), Sprint (64 
   assert.match(name('sprint'), /letter-spacing: 0;/);
   assert.equal(px(name('sprint', true), 'font-size'), 52);
   assert.match(name('sprint', true), /line-height: 1\.2;/);
+  // A name with marks opens further, whatever its size (ruling AB; e2e measures the ink).
+  const marks = declarations(
+    sheet('sprint'),
+    ".studio[data-style='sprint'] .studio-name.studio-name--marks",
+  );
+  assert.ok(Number(/line-height: ([\d.]+);/.exec(marks)[1]) >= 1.35, marks);
+  assert.match(cls('sprint', 'Ẹniọlá Bámidélé'), /studio-name--marks/);
+  assert.doesNotMatch(cls('sprint', 'Kemi Adeyinka'), /studio-name--marks/);
+  assert.doesNotMatch(cls('tiles', 'Ẹniọlá Bámidélé'), /studio-name--marks/);
   assert.equal(px(name('tiles'), 'font-size'), 28);
   const tiles = px(name('tiles', true), 'font-size');
   assert.ok(tiles / 28 >= 0.75 && tiles / 28 <= 0.85, `${tiles}`);
