@@ -170,6 +170,17 @@ export function StyleCover({
   );
 }
 
+/** What the cover slot draws: the person's photo, today's cover art, or the style's own. */
+export type CoverKind = 'photo' | 'art' | 'gradient' | 'plain';
+
+export function coverKind(
+  doc: StudioDocument,
+  cover: PublicProfile['cover'],
+): CoverKind {
+  if (doc.cover !== 'yours') return doc.cover;
+  return coverPhoto(cover, doc.style) ? 'photo' : 'art';
+}
+
 /** The treatment a needsPhoto style draws: its photo, or its gradient for any other cover (§13). */
 function heroCover(
   doc: StudioDocument,

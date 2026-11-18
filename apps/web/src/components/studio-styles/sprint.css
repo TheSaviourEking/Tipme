@@ -834,3 +834,56 @@
       color 200ms var(--ease);
   }
 }
+
+/* The header over the cover (frame.css), on a phone and tablet, where the cover runs edge to edge
+   under it. On a desktop the photo is the left half beside the name: a scrim there would grey the
+   page's half too, and the menu would cross the photo's edge, so the header stays today's, solid
+   in bg (the same values frame.css gives it, put back). */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  @media (max-width: 1023px) {
+    .studio[data-style='sprint'][data-header] .studio-cover {
+      box-sizing: content-box;
+      padding-top: var(--nav-height);
+    }
+  }
+
+  @media (min-width: 1024px) {
+    html:has(.studio[data-style='sprint'][data-header])
+      .site-header.site-header {
+      --studio-head-ink: var(--studio-fg);
+      --text-primary: var(--studio-fg);
+      --surface-raised: var(--studio-card);
+      --edge-hairline: var(--studio-line);
+      --border-material: var(--studio-line);
+      position: relative;
+      margin-bottom: 0;
+      background: var(--canvas);
+      animation: none;
+    }
+
+    html:has(.studio[data-style='sprint'][data-header])
+      .site-header.site-header::before {
+      display: none;
+    }
+
+    html:has(.studio[data-style='sprint'][data-header])
+      .site-header.site-header
+      .nav-shell
+      > .brand
+      .brand__mark
+      path[fill='#7A32F9'] {
+      fill: #7a32f9;
+    }
+
+    html:has(.studio[data-style='sprint'][data-header])
+      .site-header.site-header
+      :is(
+        .nav-shell > .brand,
+        .menu-toggle,
+        .site-nav > a,
+        .who__button
+      ):focus-visible {
+      outline-color: var(--brand-primary);
+    }
+  }
+}

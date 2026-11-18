@@ -9,8 +9,12 @@ import {
   STUDIO_FONTS,
   STUDIO_HEADING_PX,
   STUDIO_STYLE_IDS,
+  STUDIO_ACCENT_IDS,
   STUDIO_TILES_RING_MIX,
+  blend,
   contrastRatio,
+  oklchToHex,
+  pickPhotoAccent,
   resolveStudio,
   studioSlotWidth,
   studioTokens,
@@ -1915,4 +1919,242 @@ test('Signboard, Sprint and Tiles move as drawn, and under reduced motion only f
     assert.ok(reduced, `${style}: a reduced-motion block`);
     assert.match(reduced[1], /transform: none;/, style);
   }
+});
+
+// The site header over the cover (owner, 18 Nov 2026: "this header should be transparent or blend
+// into the theme on the hero"). A page that starts with a full-bleed cover marks its root
+// `data-header`; the frame then lays the header over the cover, transparent, its words white on a
+// soft dark scrim (or, over Signboard's band, the band's own label colour), and gives it back the
+// page's bg once the hero has scrolled past, with a scroll-driven animation inside @supports.
+const headerOf = (html) =>
+  /<div class="studio"[^>]*?data-header="([a-z]+)"/.exec(html)?.[1];
+
+test('the header sits over the cover only where the page starts with a full-bleed cover', () => {
+  const art = { cover: null };
+  const want = [
+    ['stage', 'yours', {}, 'over'],
+    ['stage', 'yours', art, 'over'], // no photo: Stage's deep gradient, dark at the top
+    ['stage', 'gradient', {}, 'over'],
+    ['stage', 'plain', {}, undefined],
+    ['horizon', 'yours', {}, 'over'],
+    ['horizon', 'gradient', {}, undefined], // the name on card, no cover
+    ['horizon', 'plain', {}, undefined],
+    ['sprint', 'yours', {}, 'over'],
+    ['sprint', 'yours', art, 'over'],
+    ['sprint', 'plain', {}, undefined],
+    ['signboard', 'yours', {}, 'over'],
+    ['signboard', 'yours', art, 'over'],
+    ['signboard', 'plain', {}, 'band'], // the band is the cover
+    ['clear', 'yours', {}, 'over'],
+    ['clear', 'yours', art, 'over'],
+    ['clear', 'gradient', {}, undefined], // a pale tint beside bg: the bg header already blends
+    ['clear', 'plain', {}, undefined],
+    // Their pages start on bg: Journal's top rule, Linen's framed cover, Tiles' identity.
+    ['journal', 'yours', {}, undefined],
+    ['linen', 'yours', {}, undefined],
+    ['tiles', 'yours', {}, undefined],
+  ];
+  for (const [style, cover, profile, mode] of want)
+    assert.equal(
+      headerOf(over(style, { cover, profile })),
+      mode,
+      `${style} ${cover}${profile.cover === null ? ' (cover art)' : ''}`,
+    );
+});
+
+/** The Studio CSS inside the header's @supports block, and everything outside it. */
+const SUPPORTS =
+  '@supports (animation-timeline: view()) and (timeline-scope: none)';
+function supportsBlock(css) {
+  const at = css.indexOf(SUPPORTS);
+  if (at < 0) return { inside: '', outside: css };
+  let depth = 0;
+  for (let i = css.indexOf('{', at); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}' && (depth -= 1) === 0)
+      return {
+        inside: css.slice(at, i + 1),
+        outside: css.slice(0, at) + css.slice(i + 1),
+      };
+  }
+  throw new Error('unclosed @supports');
+}
+const frameCss = () => readFileSync(new URL('frame.css', src), 'utf8');
+
+test('every header-over-cover rule waits for scroll-driven animation support, in Studio CSS only', () => {
+  const files = ['frame', ...STUDIO_STYLE_IDS.filter((s) => s !== 'classic')];
+  for (const name of files) {
+    const css = name === 'frame' ? frameCss() : sheet(name);
+    const { outside } = supportsBlock(css);
+    // Outside the block a browser without scroll timelines keeps today's solid header.
+    assert.doesNotMatch(
+      outside.replace(/\/\*[\s\S]*?\*\//g, ''),
+      /data-header|studio-hero-timeline/,
+      `${name}: header-over-cover rule outside @supports`,
+    );
+  }
+  assert.match(
+    supportsBlock(frameCss()).inside,
+    /animation-timeline: --studio-hero;/,
+  );
+  const globals = readFileSync(
+    new URL('../src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(globals, /data-header|studio-hero/);
+  // Every selector in the block is scoped to a styled page.
+  const inside = supportsBlock(frameCss()).inside.replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  for (const m of inside.matchAll(/(?:^|[;{}])\s*([^;{}@]+?)\s*\{/g)) {
+    const sel = m[1].trim();
+    if (/^(from|to|\d+%)$/.test(sel)) continue;
+    for (const one of sel.split(/,(?![^(]*\))/))
+      assert.match(
+        one.trim(),
+        /^html:has\(\.studio\[data-style\]\[data-header/,
+        `scoped: ${one.trim()}`,
+      );
+  }
+});
+
+/** A to-bottom gradient's stops as [alpha, px], from the header's top edge. */
+function headerScrim(decls) {
+  const g = /linear-gradient\(\s*to bottom,([\s\S]*?)\);/.exec(decls);
+  assert.ok(g, `a to-bottom gradient in ${decls}`);
+  return g[1]
+    .split(/,(?![^(]*\))/)
+    .map((p) => p.trim())
+    .map((part) => {
+      const at = /(\d+)px$/.exec(part);
+      assert.ok(at, `a px stop: ${part}`);
+      if (/^transparent/.test(part)) return [0, Number(at[1])];
+      const rgba = /rgba\(\s*8,\s*8,\s*10,\s*([\d.]+)\)/.exec(part);
+      assert.ok(rgba, part);
+      return [Number(rgba[1]), Number(at[1])];
+    });
+}
+
+// The header's words and keys end 60 px down (16 px + a 44 px key in the 76 px bar); e2e measures
+// it. The scrim is proved to there, with 4 px to spare.
+const HEADER_TEXT_BOTTOM = 64;
+
+test('the header over a cover is white on a scrim of at least 55% black wherever its words sit: 4.5:1', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  const flat = inside.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const rule = (sel) => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`(?:^|[{}]) ?${esc} \\{([^}]*)\\}`).exec(flat);
+    assert.ok(m, sel);
+    return m[1];
+  };
+  const over = "html:has(.studio[data-style][data-header='over'])";
+  const scrim = rule(`${over} .site-header::before`);
+  const stops = headerScrim(scrim);
+  // It starts at the header's top edge, spans the screen, and fades to nothing below the header.
+  assert.equal(stops[0][1], 0);
+  assert.equal(stops.at(-1)[0], 0);
+  assert.match(scrim, /inset: 0 0 auto;/);
+  const height = /height: calc\(var\(--nav-height\) \+ (\d+)px\);/.exec(scrim);
+  assert.ok(height, 'the scrim runs past the header');
+  assert.ok(
+    stops.at(-1)[1] <= 76 + Number(height[1]),
+    'the fade ends inside the scrim',
+  );
+  assert.ok(
+    stops[0][0] >= 0.45 && stops[0][0] <= 0.65,
+    'about half black at the top',
+  );
+  const alphaAtPx = (y) => {
+    for (let i = 1; i < stops.length; i += 1) {
+      const [a0, p0] = stops[i - 1];
+      const [a1, p1] = stops[i];
+      if (y <= p1) return a0 + ((a1 - a0) * (y - p0)) / (p1 - p0 || 1);
+    }
+    return 0;
+  };
+  for (let y = 0; y <= HEADER_TEXT_BOTTOM; y += 1) {
+    const a = alphaAtPx(y);
+    assert.ok(a >= 0.55, `${a.toFixed(3)} black at ${y} px`);
+    // White words over the scrim over a white photo, the worst cover there is.
+    const under = blend('#08080a', a, '#ffffff');
+    assert.ok(
+      contrastRatio('#ffffff', under) >= 4.5,
+      `${y} px: ${contrastRatio('#ffffff', under)}`,
+    );
+  }
+  // The words are white; the wordmark is drawn in them (its purple would vanish on a photo).
+  assert.match(rule(`${over} .site-header`), /--studio-head-ink: #fff;/);
+  assert.match(
+    rule(
+      'html:has(.studio[data-style][data-header]) .site-header .nav-shell > .brand .brand__mark path',
+    ),
+    /fill: currentColor;/,
+  );
+  // "Claim your username" keeps TipMe purple: nothing here restyles the primary key.
+  assert.doesNotMatch(inside, /tm-button--primary|nav-claim/);
+});
+
+test("over Signboard's band the header takes the band's label colour, 4.5:1 on every accent", () => {
+  const accents = [null, ...STUDIO_ACCENT_IDS.filter((a) => a !== 'photo')];
+  const palettes = accents.map((a) => [
+    String(a),
+    studioTokens('signboard', a),
+  ]);
+  // "From your photo": accents picked round the hue circle, as the photo picker makes them.
+  for (let h = 0; h < 360; h += 15) {
+    const photo = pickPhotoAccent([oklchToHex({ l: 0.55, c: 0.14, h })]);
+    if (!('failed' in photo))
+      palettes.push([`photo ${h}`, studioTokens('signboard', 'photo', photo)]);
+  }
+  assert.ok(palettes.length > 12);
+  for (const [name, p] of palettes)
+    for (const mode of ['light', 'dark']) {
+      const t = p[mode];
+      const ratio = contrastRatio(t.accLabel, t.acc);
+      assert.ok(ratio >= 4.5, `${name} ${mode}: ${ratio.toFixed(2)}`);
+    }
+  // The page writes the label colour where the header can read it (Signboard only).
+  const blocks = chromeBlocks(over('signboard', { cover: 'plain' }));
+  assert.equal(
+    blocks[0].tokens.accLabel,
+    studioTokens('signboard', null).light.accLabel,
+  );
+  for (const { tokens } of chromeBlocks(page()))
+    assert.ok(!('accLabel' in tokens));
+  assert.match(
+    supportsBlock(frameCss()).inside,
+    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-ink: var\(--studio-accLabel\);/,
+  );
+});
+
+test('the header changes colour and opacity on scroll only, and switches without motion when asked', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  const frames = /@keyframes studio-head \{([\s\S]*?)\n {2}\}/.exec(inside);
+  assert.ok(frames, 'the header keyframes');
+  // Colours only: the background, the ink and the custom colours the header's keys read.
+  for (const m of frames[1].matchAll(/([a-z-]+):/g))
+    assert.match(
+      m[1],
+      /^(background-color|--studio-head-ink|--studio-head-me|--surface-raised|--edge-hairline|--border-material)$/,
+      m[1],
+    );
+  const scrim = /@keyframes studio-head-scrim \{([\s\S]*?)\n {2}\}/.exec(
+    inside,
+  );
+  assert.ok(scrim);
+  for (const m of scrim[1].matchAll(/([a-z-]+):/g))
+    assert.equal(m[1], 'opacity');
+  const reduced =
+    /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n {2}\}/.exec(
+      inside,
+    );
+  assert.ok(reduced, 'a reduced-motion block');
+  assert.match(reduced[1], /animation-timing-function: steps\(1, end\);/);
+  // The ink is a registered colour, so it interpolates instead of flipping half way.
+  assert.match(
+    frameCss(),
+    /@property --studio-head-ink \{\s*syntax: '<color>';/,
+  );
 });

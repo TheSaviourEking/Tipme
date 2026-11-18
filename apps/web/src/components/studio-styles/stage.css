@@ -1006,3 +1006,21 @@
       filter 180ms var(--ease);
   }
 }
+
+/* The header over the cover (frame.css): the hero runs up under the header, so the words stay
+   where they were and the photo, or the deep gradient, fills the header's place too. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='stage'][data-header] .studio-hero[data-cover='photo'] {
+    min-height: calc(var(--tall) + var(--nav-height));
+  }
+
+  .studio[data-style='stage'][data-header] .studio-hero::before {
+    top: calc(var(--tall) + var(--nav-height) - 108px);
+  }
+
+  .studio[data-style='stage'][data-header]
+    .studio-cover[data-cover='gradient'] {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+}

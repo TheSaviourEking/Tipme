@@ -836,3 +836,16 @@
     animation-name: studio-clear-fade;
   }
 }
+
+/* The header over the cover (frame.css): the cover runs up under the header, its fade still the
+   lower 60% of the part below it. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='clear'][data-header] .studio-cover {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+
+  .studio[data-style='clear'][data-header] .studio-cover__fade {
+    height: calc((100% - var(--nav-height)) * 0.6);
+  }
+}
