@@ -4,21 +4,39 @@ import { notFound } from 'next/navigation';
 import { connection } from 'next/server';
 import { inflateRawSync } from 'node:zlib';
 import {
+  STUDIO_ACCENT_IDS,
+  STUDIO_COVER_TYPES,
   STUDIO_FONTS,
+  STUDIO_STYLE_IDS,
+  checkDesign,
   deriveStudioPalette,
   resolveCover,
+  resolveStudio,
   resolveStudioV1,
+  studioTokens,
+  visibleLinks,
+  DESIGN_CHECK_VERSION,
   DESIGN_CHECK_VERSION_V1,
   type PublicProfile,
   type SocialLink,
+  type StudioDocument,
   type StudioFontId,
+  type StudioStyleId,
 } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { ProfileCover } from '@/components/profile/cover';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ReportPage } from '@/components/report-page';
 import { StudioPage } from '@/components/studio/studio-page';
-import { LAB_IMAGES, STUDIO_EXAMPLES, fontSpecimen } from './examples';
+import { StudioStylePage } from '@/components/studio-styles/style-page';
+import {
+  LAB_IMAGES,
+  LAB_LONG_NAMES,
+  LAB_STYLE_EXAMPLES,
+  STUDIO_EXAMPLES,
+  fontSpecimen,
+  labStyleExample,
+} from './examples';
 import { studioLabOpen } from './lab-gate';
 
 // A harness that renders whatever document the test sends: always rendered on request.
@@ -56,6 +74,11 @@ const today = () =>
  *   ?example=kemi|sule|ify|max|min|empty|hostile, or ?example=fonts&font=<id>
  *   ?doc=<base64url deflate-raw JSON, at most 12 KB>
  *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8, &today=YYYY-MM-DD
+ * Page Studio styles (v2, spec 2026-11-17-page-studio-styles), rendered by StudioStylePage:
+ *   ?style=<id> (LAB_STYLE_EXAMPLES), &mode=light|dark|auto, &accent=<id>, &cover=yours|gradient|plain,
+ *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1
+ *   ?example=styles-min|styles-max|long-names (&style=<id>, Clear by default), or
+ *   ?example=hostile&style=<id> (v2; without &style it is the v1 document)
  */
 export default async function StudioLabPage({ searchParams }: Props) {
   // Rendered per request: the lab reads today's Lagos date (to keep today's events), which
@@ -64,8 +87,13 @@ export default async function StudioLabPage({ searchParams }: Props) {
   if (!studioLabOpen()) notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? q[k] : undefined);
-  let raw: unknown;
   const example = one('example');
+  if (
+    one('style') !== undefined ||
+    (example && ['styles-min', 'styles-max', 'long-names'].includes(example))
+  )
+    return <StyleLab one={one} />;
+  let raw: unknown;
   if (example === 'fonts') {
     const font = STUDIO_FONTS.find((f) => f.id === one('font'));
     if (!font) notFound();
@@ -166,6 +194,150 @@ export default async function StudioLabPage({ searchParams }: Props) {
           </footer>
         }
       />
+    </main>
+  );
+}
+
+const pick = <T extends string>(
+  value: string | undefined,
+  from: readonly T[],
+): T | undefined =>
+  value !== undefined && (from as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined;
+
+function decodeDoc(doc: string): unknown {
+  if (!doc || doc.length > 16_384) notFound();
+  try {
+    return JSON.parse(
+      inflateRawSync(Buffer.from(doc, 'base64url'), {
+        maxOutputLength: 1_000_000,
+      }).toString('utf8'),
+    );
+  } catch {
+    notFound();
+  }
+}
+
+/**
+ * The styles harness (PR 2a): a v2 document through StudioStylePage, around the real tip form
+ * with its style's skin, with the design check's notices listed under the page. The lab's
+ * profile has a generated cover photo and no avatar (initials), so no person's picture is used.
+ */
+function StyleLab({ one }: { one: (k: string) => string | undefined }) {
+  const style = pick(one('style') ?? 'clear', STUDIO_STYLE_IDS);
+  if (!style || style === 'classic') notFound();
+  const example = one('example');
+  const docParam = one('doc');
+  let document: StudioDocument | null;
+  if (docParam) document = resolveStudio(decodeDoc(docParam), today());
+  else if (example) document = labStyleExample(example, style);
+  else document = LAB_STYLE_EXAMPLES[style] ?? null;
+  if (!document) notFound();
+  document = { ...document, style };
+  const mode = pick(one('mode'), ['light', 'dark', 'auto'] as const);
+  if (mode) document.mode = mode;
+  const accent = pick(one('accent'), STUDIO_ACCENT_IDS);
+  if (accent) document.accent = accent;
+  const cover = pick(one('cover'), STUDIO_COVER_TYPES);
+  if (cover) document.cover = cover;
+  // Run through the resolver again, so a cover the style doesn't offer becomes "Your cover".
+  document = resolveStudio(document, today());
+  const bio = one('bio') !== '0';
+  const handle = 'studiolab';
+  const plan = 'pro' as const;
+  const links = visibleLinks(
+    LINKS.slice(0, Math.max(0, Math.min(8, Number(one('links') ?? 5) || 0))),
+    plan,
+  );
+  const name =
+    one('name') ??
+    (example === 'long-names' ? LAB_LONG_NAMES[0] : 'Kemi Adeyinka');
+  const profile: PublicProfile = {
+    handle,
+    displayName: name,
+    role: 'Singer and songwriter, Lagos',
+    ...(bio
+      ? {
+          bio: 'I write songs about home and the people in it. Every tip goes into studio time.',
+        }
+      : {}),
+    links,
+    plan,
+    acceptingTips: true,
+    cover: { kind: 'photo', path: `/dev/studio-lab/image/${LAB_IMAGES[29]}` },
+  };
+  const firstName = name.split(/\s+/)[0] ?? name;
+  const images = Object.fromEntries(
+    LAB_IMAGES.map((id) => [
+      id,
+      { path: `/dev/studio-lab/image/${id}`, width: 2400, height: 1600 },
+    ]),
+  );
+  const check = checkDesign(document, {
+    images: Object.fromEntries(
+      LAB_IMAGES.map((id) => [
+        id,
+        { width: 2400, height: 1600, bytes: 120_000 },
+      ]),
+    ),
+    videos: {},
+    profile: { name, bio, links: links.length },
+    plan,
+    coverKind: 'photo',
+    hasAvatar: false,
+  });
+  return (
+    <main id="main" tabIndex={-1} className="studio-lab">
+      <StudioStylePage
+        studio={{
+          document,
+          images,
+          palette: studioTokens(style as StudioStyleId, document.accent),
+          checkVersion: DESIGN_CHECK_VERSION,
+        }}
+        profile={profile}
+        coverArt={
+          <ProfileCover
+            cover={resolveCover({
+              handle,
+              coverPath: null,
+              coverDesign: null,
+              coverColour: null,
+            })}
+            priority
+          />
+        }
+        tipBlock={
+          <AppreciationForm
+            surface="profile"
+            paymentMode="test"
+            recipient={firstName}
+            handle={handle}
+            skin={style}
+          />
+        }
+        footer={
+          <footer className="profile-foot">
+            <div className="profile-foot__quiet">
+              <ReportPage handle={handle} />
+              <Link href="/legal/privacy">Privacy</Link>
+              <Link href="/legal/terms">Terms</Link>
+            </div>
+          </footer>
+        }
+      />
+      {check.notices.length + check.issues.length > 0 && (
+        <aside className="studio-lab-check" aria-label="Design check">
+          <ul>
+            {[...check.issues, ...check.notices].map((item, i) => (
+              <li key={i} data-rule={item.rule}>
+                {item.message}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
     </main>
   );
 }

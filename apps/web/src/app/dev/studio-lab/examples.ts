@@ -7,6 +7,10 @@
 import {
   STUDIO_FONTS,
   STUDIO_LIMITS as L,
+  migrateStudioV1,
+  resolveStudioV1,
+  type StudioDocument,
+  type StudioStyleId,
   type StudioBlockV1,
   type StudioDocumentV1,
   type StudioFontId,
@@ -649,3 +653,91 @@ export const STUDIO_EXAMPLES = {
   hostile,
 } as const;
 export type StudioExampleName = keyof typeof STUDIO_EXAMPLES | 'fonts';
+
+// ---------------------------------------------------------------------------------------------
+// Page Studio styles (spec 2026-11-17-page-studio-styles, PR 2a): v2 documents.
+
+/**
+ * One example per style drawn so far: its default accent (`null`), its natural mode, "Your cover"
+ * (the lab profile's generated cover photo), a text, a quote and three photos, with the profile's
+ * links on. Headings start each section, as on the canvas. Each style PR adds its own.
+ */
+const styleExample = (
+  style: StudioStyleId,
+  mode: StudioDocument['mode'],
+): StudioDocument => ({
+  v: 2,
+  style,
+  accent: null,
+  mode,
+  cover: 'yours',
+  blocks: [
+    { id: 'labhead1', kind: 'text', variant: 'heading', text: 'Studio diary' },
+    {
+      id: 'labtext1',
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'Eight songs, a four-piece band and a small room in Yaba. Tips pay for studio hours and the session players.',
+    },
+    {
+      id: 'labgall1',
+      kind: 'gallery',
+      images: [CUT1, CUT2, CUT3].map((imageId, i) => ({
+        imageId,
+        alt: [
+          'Rehearsal, warm stage light',
+          'Vocal booth under blue light',
+          'Morning session by the window',
+        ][i]!,
+      })),
+    },
+    { id: 'labhead2', kind: 'text', variant: 'heading', text: 'Kind words' },
+    {
+      id: 'labquot1',
+      kind: 'quote',
+      text: 'The best night of live music I’ve had in Lagos this year.',
+    },
+  ],
+});
+
+export const LAB_STYLE_EXAMPLES: Partial<
+  Record<StudioStyleId, StudioDocument>
+> = {
+  clear: styleExample('clear', 'light'),
+};
+
+/** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */
+export const LAB_LONG_NAMES = [
+  'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀',
+  'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí',
+  'Ɗanlami Ƙwairanga Ɓello',
+] as const;
+
+/** The v1 stress documents in v2 (§7.1's migration): every limit, the least, hostile text. */
+const migrated = (doc: StudioDocumentV1, style: StudioStyleId) => ({
+  ...migrateStudioV1(resolveStudioV1(doc, '2026-11-14')),
+  style,
+  accent: null,
+  cover: 'yours' as const,
+});
+
+/** `?example=styles-min|styles-max|long-names|hostile` (`&style=` picks the style, Clear first). */
+export function labStyleExample(
+  name: string,
+  style: StudioStyleId,
+): StudioDocument | null {
+  const base = LAB_STYLE_EXAMPLES[style];
+  if (!base) return null;
+  switch (name) {
+    case 'styles-min':
+      return { ...base, blocks: [] };
+    case 'styles-max':
+      return { ...migrated(max, style), mode: base.mode };
+    case 'long-names':
+      return base;
+    case 'hostile':
+      return { ...migrated(hostile, style), mode: base.mode };
+    default:
+      return null;
+  }
+}

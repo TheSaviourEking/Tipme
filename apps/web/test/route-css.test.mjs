@@ -163,3 +163,115 @@ test('studio.css loads only through the dynamic sheet, never with the /@username
   );
   assert.match(studio('studio-page.tsx'), /<StudioStyles \/>/);
 });
+
+// Page Studio styles (spec 2026-11-17-page-studio-styles §4.3). Every style's rules ship in their
+// own stylesheet behind next/dynamic (components/studio-styles/style-sheets.tsx: frame.css plus the
+// style's own file), linked only in the HTML of a page that renders that style. So a standard or
+// Classic /@username page downloads only what its route links (no Studio rules today), and a
+// styled page that plus its style's sheet. Both are measured on the production build.
+const STUDIO_STANDARD_BUDGET = 8 * 1024;
+const STUDIO_STYLED_BUDGET = 12 * 1024;
+const routeManifest = (route) =>
+  new URL(`server/app/${route}/page_client-reference-manifest.js`, built);
+const profileRoute = 'people/[handle]';
+
+/** The stylesheets a route links on every visit, from its client reference manifest. */
+function routeSheets(route) {
+  const scope = {};
+  new Function('globalThis', readFileSync(routeManifest(route), 'utf8'))(scope);
+  const manifest = Object.values(scope.__RSC_MANIFEST ?? {})[0];
+  assert.ok(manifest, `${route}: a client reference manifest`);
+  const css =
+    manifest.entryCSSFiles[`[project]/apps/web/src/app/${route}/page`];
+  assert.ok(css?.length, `${route}: its stylesheets`);
+  return css.map((f) => f.path);
+}
+
+/** The Studio rules in a stylesheet (selectors scoped to a Studio page), as text. */
+const studioRules = (css) =>
+  rules(css)
+    .filter(({ key }) => /\.studio\b|\.profile-page--studio\b/.test(key))
+    .map(({ key, body }) => `${key}{${body}}`)
+    .join('');
+const gzip = (text) => gzipSync(text, { level: 9 }).length;
+
+test(
+  'a standard or Classic profile page downloads at most 8 KB gzip of Studio CSS',
+  {
+    skip:
+      !existsSync(routeManifest(profileRoute)) &&
+      'no production build (run pnpm build)',
+  },
+  () => {
+    const sheets = routeSheets(profileRoute);
+    const bytes = gzip(
+      sheets
+        .map((sheet) =>
+          studioRules(readFileSync(new URL(sheet, built), 'utf8')),
+        )
+        .join(''),
+    );
+    assert.ok(
+      bytes <= STUDIO_STANDARD_BUDGET,
+      `a standard /@username page downloads ${(bytes / 1024).toFixed(1)} KB gzip of Studio CSS (budget 8 KB). Per-style rules belong in the style's own sheet (studio-styles/style-sheets.tsx), not in a stylesheet the route links.`,
+    );
+  },
+);
+
+// The routes that render StudioStylePage: the lab now, the public page from PR 3a.
+const styledRoutes = ['dev/studio-lab', profileRoute];
+const styleSheetsSource = readFileSync(
+  new URL('../src/components/studio-styles/style-sheets.tsx', import.meta.url),
+  'utf8',
+);
+const STYLES_WITH_SHEETS = [
+  ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
+].map((m) => m[1]);
+
+test(
+  'a styled profile page downloads at most 12 KB gzip of Studio CSS',
+  {
+    skip:
+      !existsSync(routeManifest(profileRoute)) &&
+      'no production build (run pnpm build)',
+  },
+  () => {
+    assert.ok(STYLES_WITH_SHEETS.includes('clear'), 'Clear has its sheet');
+    // Each dynamic sheet's files, from the routes' loadable manifests.
+    const entries = styledRoutes.flatMap((route) => {
+      const file = new URL(
+        `server/app/${route}/page/react-loadable-manifest.json`,
+        built,
+      );
+      if (!existsSync(file)) return [];
+      return Object.values(JSON.parse(readFileSync(file, 'utf8'))).map((e) =>
+        e.files.filter((f) => f.endsWith('.css')),
+      );
+    });
+    const base = gzip(
+      routeSheets(profileRoute)
+        .map((sheet) =>
+          studioRules(readFileSync(new URL(sheet, built), 'utf8')),
+        )
+        .join(''),
+    );
+    for (const style of STYLES_WITH_SHEETS) {
+      const marker = new RegExp(`\\[data-style=["']?${style}["']?\\]`);
+      const sheets = entries.find((files) =>
+        files.some((f) => marker.test(readFileSync(new URL(f, built), 'utf8'))),
+      );
+      assert.ok(sheets, `${style}: no built stylesheet holds its rules`);
+      const bytes =
+        base +
+        sheets.reduce(
+          (sum, f) => sum + gzip(readFileSync(new URL(f, built))),
+          0,
+        );
+      console.log(`STUDIO_STYLE_CSS ${JSON.stringify({ style, bytes })}`);
+      assert.ok(
+        bytes <= STUDIO_STYLED_BUDGET,
+        `a ${style} page downloads ${(bytes / 1024).toFixed(1)} KB gzip of Studio CSS (budget 12 KB)`,
+      );
+    }
+  },
+);

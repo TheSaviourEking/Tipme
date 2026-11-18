@@ -303,6 +303,12 @@ test("photo rules use the style's slot widths", () => {
   // Clear: a 440 px column on desktop, 350 px on a phone.
   assert.equal(studioSlotWidth('clear', 'photo', 1440), (920 - 40) / 2);
   assert.equal(studioSlotWidth('clear', 'photo', 390), 390 - 40);
+  // Clear's photos as its CSS draws them (§9.2): a 150 px strip up to 1023 px, then a 3-up
+  // square grid in the 440 column, gap 8 (apps/web test studio-style-page holds the CSS to it).
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('clear', 'gallery', v), 150, `${v}`);
+  assert.equal(studioSlotWidth('clear', 'gallery', 1024), 141);
+  assert.equal(studioSlotWidth('clear', 'gallery', 1440), 141);
   // As in v1: 1x at the widest screen, no density factor and no cap.
   assert.equal(widest('clear'), 440);
   assert.equal(widest('stage'), 720);
