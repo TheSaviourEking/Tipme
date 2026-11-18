@@ -13,6 +13,8 @@ const SHEETS: Partial<Record<StudioStyleId, ReturnType<typeof dynamic>>> = {
   clear: dynamic(() => import('./sheets/clear')),
   journal: dynamic(() => import('./sheets/journal')),
   linen: dynamic(() => import('./sheets/linen')),
+  stage: dynamic(() => import('./sheets/stage')),
+  horizon: dynamic(() => import('./sheets/horizon')),
 };
 
 export function StyleSheet({ styleId }: { styleId: StudioStyleId }) {

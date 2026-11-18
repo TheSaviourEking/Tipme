@@ -297,6 +297,40 @@ test("Classic's section title is measured at the size classic.css draws", () => 
   // 2rem at every width (classic.css .studio-title).
   assert.equal(STUDIO_HEADING_PX.classic, 32);
   assert.equal(STUDIO_HEADING_PX.clear, 20);
+  // Stage's phone section title is 22/28 (§9.4), Horizon's 18/24 (§9.9): apps/web test
+  // studio-style-page holds both to stage.css and horizon.css.
+  assert.equal(STUDIO_HEADING_PX.stage, 22);
+  assert.equal(STUDIO_HEADING_PX.horizon, 18);
+});
+
+test("Stage's and Horizon's photo slots are the widths their CSS draws", () => {
+  // Stage (§9.4): a strip of 156 px tiles on a phone and tablet; on a desktop the 720 main column
+  // with photos 3-up, gap 8 (the canvas's StageDesktop "Backstage" grid).
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('stage', 'gallery', v), 156, `${v}`);
+  assert.equal(
+    studioSlotWidth('stage', 'gallery', 1440),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(studioSlotWidth('stage', 'photo', 1440), 720);
+  // Horizon (§9.9): 3-up at 3:4, gap 8 on a phone and tablet; on a desktop the 520 column, gap 16.
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 390),
+    Math.round((350 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 320),
+    Math.round((280 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 800),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 1440),
+    Math.round((520 - 32) / 3),
+  );
+  assert.equal(studioSlotWidth('horizon', 'photo', 1440), 520);
 });
 
 test("photo rules use the style's slot widths", () => {

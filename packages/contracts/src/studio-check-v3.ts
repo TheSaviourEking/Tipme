@@ -116,8 +116,8 @@ const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   clear: { text: 440, media: 440, list: 440, tile: 141 },
   // Content 1120: a 420 px column, gap 96, the rest (604); text maxes at 520; photos 3-up, gap 6.
   journal: { text: 520, media: 604, list: 604, tile: 197 },
-  // Content 1200: a 400 px rail, gap 80, the main column.
-  stage: { text: 720, media: 720, list: 720, tile: 356 },
+  // Content 1200: a 400 px rail, gap 80, the main column (720); photos 3-up, gap 8.
+  stage: { text: 720, media: 720, list: 720, tile: 235 },
   // Content 1120: 440 px, gap 80, the rest.
   signboard: { text: 600, media: 600, list: 600, tile: 296 },
   // After the split, photos run full-bleed; the other blocks take the rest of 1440 beside 480.
@@ -126,8 +126,9 @@ const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   tiles: { text: 820, media: 402, list: 820, tile: 193 },
   // Content 1120: 600 px and the rest; photos 3fr/2fr, gap 8.
   linen: { text: 600, media: 600, list: 600, tile: 355 },
-  // Content 1040: 440 px, gap 80, the right column.
-  horizon: { text: 520, media: 520, list: 520, tile: 256 },
+  // Content 1040: 440 px, gap 80, the right column (520), where every block sits (builder's
+  // call); photos 3-up, gap 16.
+  horizon: { text: 520, media: 520, list: 520, tile: 163 },
 };
 
 /**
@@ -163,6 +164,8 @@ function classicSlot(kind: StudioBlockKind, screen: number): number {
 
 /** Clear's phone and tablet photo strip: 150×200 tiles (clear.css `.studio-strip li`). */
 const CLEAR_STRIP_TILE = 150;
+/** Stage's: 156×208 tiles (§9.4; stage.css `.studio-strip li`). */
+const STAGE_STRIP_TILE = 156;
 const PHONE_GUTTER = 20;
 const TABLET_GUTTER = 24;
 const TABLET_MAX = 720;
@@ -201,10 +204,13 @@ export function studioSlotWidth(
       ? screen - 2 * PHONE_GUTTER
       : Math.min(screen - 2 * TABLET_GUTTER, TABLET_MAX);
   if (kind !== 'gallery') return column;
-  // One gallery photo on a phone or tablet: Clear's strip of fixed 150 px tiles (§9.2), Journal
-  // 3-up (gap 6), Tiles 2-up (gap 12), Linen 3fr/2fr (gap 8, the larger), the rest 2-up (gap 8).
+  // One gallery photo on a phone or tablet: Clear's and Stage's strips of fixed tiles (§9.2,
+  // §9.4), Journal 3-up (gap 6), Horizon 3-up (gap 8), Tiles 2-up (gap 12), Linen 3fr/2fr (gap 8,
+  // the larger), the rest 2-up (gap 8).
   if (style === 'clear') return CLEAR_STRIP_TILE;
+  if (style === 'stage') return STAGE_STRIP_TILE;
   if (style === 'journal') return Math.round((column - 12) / 3);
+  if (style === 'horizon') return Math.round((column - 16) / 3);
   if (style === 'tiles') return Math.round((column - 12) / 2);
   if (style === 'linen') return Math.round(((column - 8) * 3) / 5);
   return Math.round((column - 8) / 2);
@@ -231,19 +237,19 @@ const number = (n: number) =>
  * Heading size at 320 px, per style (builder's call within §9; it only feeds the width check).
  * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css; apps/web
  * test studio-style-page holds them): Clear's phone section title is 20/26 (§9.2), Journal's
- * 22/29 (§9.3), Linen's 24/30 (§9.8).
+ * 22/29 (§9.3), Stage's 22/28 (§9.4), Linen's 24/30 (§9.8), Horizon's 18/24 (§9.9).
  */
 export const STUDIO_HEADING_PX: Record<StudioStyleId, number> = {
   // classic.css .studio-title: 2rem at every width (apps/web test studio-classic holds it).
   classic: 32,
   clear: 20,
   journal: 22,
-  stage: 24,
+  stage: 22,
   signboard: 22,
   sprint: 28,
   tiles: 22,
   linen: 24,
-  horizon: 24,
+  horizon: 18,
 };
 
 function copy(doc: StudioDocument): StudioDocument {

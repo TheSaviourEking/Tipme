@@ -42,40 +42,98 @@ type Shape = keyof typeof STUDIO_IMAGE_ASPECT;
 const API_COVER = /^\/v1\/covers\/[0-9a-f-]+\/\d+\.webp$/;
 const LAB_COVER = /^\/dev\/studio-lab\/image\/[0-9a-f-]{36}$/;
 
+/** A cover photo's own pixel size, where it is known (the lab's generated covers). */
+export type CoverSize = { width: number; height: number };
+
+/**
+ * The styles that set the identity over a full-bleed cover photo (§9.4, §9.9), and how tall that
+ * photo is on a phone and from 1024 px (stage.css, horizon.css `--tall`; a unit test holds the two
+ * equal). They need a photo (`needsPhoto`): any other cover draws their gradient treatment.
+ */
+export const STYLE_COVER: Partial<
+  Record<StudioStyleId, { tall: number; desktopTall: number }>
+> = {
+  stage: { tall: 488, desktopTall: 640 },
+  horizon: { tall: 640, desktopTall: 836 },
+};
+
+/**
+ * `sizes` for a cover photo: full-bleed, and in a tall crop the 16:9 rendition is drawn wider than
+ * the screen (object-fit: cover fills the height), so the slot is the wider of the two.
+ */
+function coverSizes(style: StudioStyleId): string {
+  const tall = STYLE_COVER[style];
+  if (!tall) return '100vw';
+  const aspect = STUDIO_IMAGE_ASPECT.wide;
+  const phone = Math.ceil(tall.tall * aspect);
+  const desk = Math.ceil(tall.desktopTall * aspect);
+  return `(min-width: ${desk}px) 100vw, (min-width: 1024px) ${desk}px, (min-width: ${phone}px) 100vw, ${phone}px`;
+}
+
 function coverPhoto(
   cover: PublicProfile['cover'],
-): { src: string; srcSet?: string } | null {
+  style: StudioStyleId,
+  size?: CoverSize,
+): { src: string; srcSet?: string; sizes?: string } | null {
   if (cover?.kind !== 'photo') return null;
+  // The API's cover is one file, already the size it was cut to.
   if (API_COVER.test(cover.path)) return { src: `${API_ORIGIN}${cover.path}` };
-  if (LAB_COVER.test(cover.path))
-    return {
-      src: `${cover.path}/wide-960`,
-      srcSet: RENDITION_WIDTHS.map((w) => `${cover.path}/wide-${w} ${w}w`).join(
-        ', ',
-      ),
-    };
-  return null;
+  if (!LAB_COVER.test(cover.path)) return null;
+  // Renditions of the photo's 16:9 crop, never wider than the photo allows (no upscaling); the
+  // smallest is always offered.
+  const usable = size
+    ? Math.min(size.width, size.height * STUDIO_IMAGE_ASPECT.wide)
+    : Infinity;
+  const widths = RENDITION_WIDTHS.filter((w, i) => i === 0 || w <= usable);
+  const src = widths.filter((w) => w <= 960).at(-1) ?? widths[0] ?? 480;
+  return {
+    src: `${cover.path}/wide-${src}`,
+    srcSet: widths.map((w) => `${cover.path}/wide-${w} ${w}w`).join(', '),
+    sizes: coverSizes(style),
+  };
+}
+
+/** The cover photo: the likely LCP, so eager and high priority; cropped by the style's CSS. */
+function CoverPhoto({
+  photo,
+}: {
+  photo: NonNullable<ReturnType<typeof coverPhoto>>;
+}) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- the cover's own file, already sized
+    <img
+      className="studio-cover__photo"
+      src={photo.src}
+      {...(photo.srcSet ? { srcSet: photo.srcSet, sizes: photo.sizes } : {})}
+      alt=""
+      loading="eager"
+      fetchPriority="high"
+      decoding="async"
+    />
+  );
 }
 
 /**
- * The cover slot. "Your cover" is the one set in Settings: a photo in the style's photo treatment
- * (the likely LCP, so eager and high priority), anything else as today's cover art. Gradient and
- * plain are drawn by the style's CSS from its tokens.
+ * The cover slot. "Your cover" is the one set in Settings: a photo in the style's photo treatment,
+ * anything else as today's cover art. Gradient and plain are drawn by the style's CSS from its
+ * tokens.
  */
 export function StyleCover({
   doc,
   cover,
   coverArt,
+  coverSize,
 }: {
   doc: StudioDocument;
   cover: PublicProfile['cover'];
   coverArt: ReactNode;
+  coverSize?: CoverSize;
 }) {
   if (doc.cover !== 'yours')
     return (
       <div className="studio-cover" data-cover={doc.cover} aria-hidden="true" />
     );
-  const photo = coverPhoto(cover);
+  const photo = coverPhoto(cover, doc.style, coverSize);
   if (!photo)
     return (
       <div className="studio-cover" data-cover="art">
@@ -84,19 +142,24 @@ export function StyleCover({
     );
   return (
     <div className="studio-cover" data-cover="photo">
-      {/* eslint-disable-next-line @next/next/no-img-element -- the cover's own file, already sized */}
-      <img
-        className="studio-cover__photo"
-        src={photo.src}
-        {...(photo.srcSet ? { srcSet: photo.srcSet, sizes: '100vw' } : {})}
-        alt=""
-        loading="eager"
-        fetchPriority="high"
-        decoding="async"
-      />
+      <CoverPhoto photo={photo} />
       <div className="studio-cover__fade" />
     </div>
   );
+}
+
+/** The treatment a needsPhoto style draws: its photo, or its gradient for any other cover (§13). */
+function heroCover(
+  doc: StudioDocument,
+  cover: PublicProfile['cover'],
+  coverSize?: CoverSize,
+) {
+  if (doc.cover === 'plain') return { kind: 'plain' as const, photo: null };
+  const photo =
+    doc.cover === 'yours' ? coverPhoto(cover, doc.style, coverSize) : null;
+  return photo
+    ? { kind: 'photo' as const, photo }
+    : { kind: 'gradient' as const, photo: null };
 }
 
 /**
@@ -164,6 +227,100 @@ export function StyleIdentity({
 }
 
 /**
+ * Stage's and Horizon's identity (§9.4, §9.9): over a photo cover the label (Stage: the role), the
+ * name and the meta sit at the photo's foot, white, on the style's scrim (`studio-scrim`), with no
+ * avatar. A gradient or plain cover (and any cover that is not a photo) draws the style's own
+ * treatment in the page's colours: Stage's plain one and both of Horizon's carry the avatar.
+ * Horizon adds two buttons, plain links (no script): "Send a tip" to the Tip area, which takes
+ * focus, and "See links" to the links, absent without links. The bio follows, in the lead.
+ */
+export function StyleHero({
+  doc,
+  profile,
+  coverSize,
+}: {
+  doc: StudioDocument;
+  profile: PublicProfile;
+  coverSize?: CoverSize;
+}) {
+  const style = doc.style;
+  const { kind, photo } = heroCover(doc, profile.cover, coverSize);
+  const horizon = style === 'horizon';
+  const avatar = horizon ? kind !== 'photo' : kind === 'plain';
+  const size = horizon ? 96 : 112;
+  return (
+    <header
+      className="studio-identity studio-hero"
+      data-cover={kind}
+      aria-labelledby="studio-name"
+    >
+      {photo ? (
+        <div className="studio-cover" data-cover="photo">
+          <CoverPhoto photo={photo} />
+        </div>
+      ) : (
+        <div className="studio-cover" data-cover={kind} aria-hidden="true" />
+      )}
+      <div className={`studio-hero__words${photo ? ' studio-scrim' : ''}`}>
+        {avatar && (
+          <AvatarImage
+            className="studio-avatar"
+            src={profile.avatarPath ?? ''}
+            name={profile.displayName}
+            width={256}
+            height={256}
+            sizes={`${size}px`}
+            priority
+          />
+        )}
+        {!horizon && profile.role && (
+          <p className="studio-kicker">{profile.role}</p>
+        )}
+        <h1
+          id="studio-name"
+          className={`studio-name${longName(profile.displayName) ? ' studio-name--long' : ''}`}
+        >
+          {profile.displayName}
+        </h1>
+        <p className="studio-meta">
+          <span className="studio-meta__handle">@{profile.handle}</span>
+          {horizon && profile.role && (
+            <>
+              <span className="studio-meta__sep"> · </span>
+              <span className="studio-meta__role">{profile.role}</span>
+            </>
+          )}
+          {profile.plan === 'pro' && (
+            <ProBadge explain className="studio-pro" />
+          )}
+        </p>
+        {horizon && (
+          <div className="studio-hero__actions">
+            <a className="studio-hero__tip" href="#studio-tip">
+              Send a tip
+            </a>
+            {(profile.links?.length ?? 0) > 0 && (
+              <a className="studio-hero__links" href="#studio-links">
+                See links
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M6.5 9.5L12 15l5.5-5.5" />
+                </svg>
+              </a>
+            )}
+          </div>
+        )}
+      </div>
+    </header>
+  );
+}
+
+/**
  * Journal's top row (§9.3): the page opens on a category label (the person's role) with the
  * 40 px avatar on a phone, or the handle on a desktop, over a 1 px rule. Each breakpoint shows
  * one of the two avatars and one handle (CSS), so only one of each is ever in the tree.
@@ -186,7 +343,8 @@ export function StyleTop({ profile }: { profile: PublicProfile }) {
 }
 
 /**
- * The name and handle on the phone's Tip bar (Journal, §9.3; §9.10: one line, ellipsis). It sits
+ * The name and handle on the phone's Tip bar (Journal §9.3, Stage §9.4 with the avatar; §9.10: one
+ * line, ellipsis). It sits
  * beside the form's bar and shows only while the bar does (CSS); it repeats the page's heading,
  * so it stays out of the accessibility tree.
  */
@@ -199,6 +357,17 @@ export function StyleBarName({
 }) {
   return (
     <div className="studio-barname" aria-hidden="true">
+      {/* Stage's bar leads with the 36 px avatar (§9.4). */}
+      {styleId === 'stage' && (
+        <AvatarImage
+          className="studio-avatar studio-barname__avatar"
+          src={profile.avatarPath ?? ''}
+          name={profile.displayName}
+          width={80}
+          height={80}
+          sizes="36px"
+        />
+      )}
       <p
         className={`studio-barname__name${needsInter(styleId, profile.displayName) ? ' studio-barname__name--fallback' : ''}`}
         data-truncate=""
@@ -216,7 +385,11 @@ export function StyleBarName({
 export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
   if (!links.length) return null;
   return (
-    <section className="studio-links" aria-labelledby="studio-links-title">
+    <section
+      className="studio-links"
+      id="studio-links"
+      aria-labelledby="studio-links-title"
+    >
       <h2 id="studio-links-title" className="studio-title">
         Find me elsewhere
       </h2>
@@ -493,14 +666,19 @@ export function StyleBlocks({
   doc: StudioDocument;
   images: Images;
 }) {
-  const sections: { id: string; cells: ReactNode[] }[] = [];
+  const sections: { id: string; cells: ReactNode[]; list: boolean }[] = [];
   for (const block of doc.blocks) {
     // A plain function (no hooks): called here so an empty block leaves no empty cell.
     const shown = Block({ block, style: doc.style, images });
     if (!shown) continue;
     const heading = block.kind === 'text' && block.variant === 'heading';
-    if (heading || !sections.length) sections.push({ id: block.id, cells: [] });
-    sections.at(-1)!.cells.push(
+    if (heading || !sections.length)
+      sections.push({ id: block.id, cells: [], list: true });
+    const section = sections.at(-1)!;
+    // A list section holds only lists (and its heading): a style may pair two side by side.
+    if (!heading && block.kind !== 'services' && block.kind !== 'events')
+      section.list = false;
+    section.cells.push(
       <div key={block.id} className="studio-block" data-kind={block.kind}>
         {shown}
       </div>,
@@ -510,7 +688,13 @@ export function StyleBlocks({
   return (
     <div className="studio-blocks">
       {sections.map((section) => (
-        <div key={section.id} className="studio-section">
+        <div
+          key={section.id}
+          className="studio-section"
+          {...(section.list && section.cells.length > 1
+            ? { 'data-list': '' }
+            : {})}
+        >
           {section.cells}
         </div>
       ))}

@@ -709,6 +709,9 @@ export const LAB_STYLE_EXAMPLES: Partial<
   // Journal's default cover is plain (§9.3): the page opens on its top row, as the board draws it.
   journal: styleExample('journal', 'light', 'plain'),
   linen: styleExample('linen', 'light'),
+  // Stage is dark-first (§9.4); Horizon light (§9.9). Both open on "Your cover", the photo.
+  stage: styleExample('stage', 'dark'),
+  horizon: styleExample('horizon', 'light'),
 };
 
 /** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */

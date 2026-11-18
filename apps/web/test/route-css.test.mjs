@@ -208,7 +208,7 @@ const STYLES_WITH_SHEETS = [
 
 // The styles still to be drawn (each later style PR removes its id). A style listed here must not
 // have a sheet yet, so the list can't go stale.
-const NOT_YET_DRAWN = ['stage', 'signboard', 'sprint', 'tiles', 'horizon'];
+const NOT_YET_DRAWN = ['signboard', 'sprint', 'tiles'];
 const DRAWN_STYLES = STUDIO_STYLE_IDS.filter(
   (s) => s !== 'classic' && !NOT_YET_DRAWN.includes(s),
 );

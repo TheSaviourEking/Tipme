@@ -13,7 +13,14 @@ import {
 // a quote, three photos, links on) renders through the real StudioStylePage around the real tip
 // form. Only the styles drawn so far are listed; each later style PR adds its id here. Classic
 // (PR 2b, §9.1) is today's page with its choices: its root is `main.profile-page`, its form today's.
-const STYLES = ['classic', 'clear', 'journal', 'linen'] as const;
+const STYLES = [
+  'classic',
+  'clear',
+  'journal',
+  'linen',
+  'stage',
+  'horizon',
+] as const;
 const rootOf = (style: string) =>
   style === 'classic' ? '.profile-page' : '.studio';
 const WIDTHS = [320, 390, 768, 1024, 1440];
@@ -459,11 +466,11 @@ const DRAWN = {
   events: '.studio-list',
 } as const;
 
-test("Journal and Linen draw every block within the design check's slot, Journal's right column exactly", async ({
+test("Journal, Linen, Stage and Horizon draw every block within the design check's slot, Journal's right column exactly", async ({
   page,
 }) => {
   const { contracts } = await studioModules();
-  for (const style of ['journal', 'linen'] as const)
+  for (const style of ['journal', 'linen', 'stage', 'horizon'] as const)
     for (const width of [1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(
@@ -496,7 +503,7 @@ test("Journal and Linen draw every block within the design check's slot, Journal
 // Narrow phones (fix round 1): every amount label fits inside its chip, unselected and selected
 // (650 is wider than 500), in every new style drawn so far. The chip's own box is
 // overflow: visible, so the layout probe can't see this.
-for (const style of ['clear', 'journal', 'linen'] as const)
+for (const style of ['clear', 'journal', 'linen', 'stage', 'horizon'] as const)
   test(`${style} fits every amount label inside its chip at 320 and 360`, async ({
     page,
   }) => {
@@ -647,4 +654,332 @@ test('chipOn follows the accent', async ({ page }) => {
   );
   // And it is Rose's tint, not Green's (the board's default).
   expect(want).not.toBe(contracts.studioTokens('journal', null).light.chipOn);
+});
+
+// Stage and Horizon (PR 2d, §9.4, §9.9, §4.2, §13): the identity over a full-bleed cover photo.
+const OVER = ['stage', 'horizon'] as const;
+
+/**
+ * Every text run over the photo: its colour, and the scrim's black at the run's top (the least it
+ * gets), read from the scrim's own computed gradient and box; plus the run's contrast in white
+ * over that scrim over a white photo, the worst case (Horizon's glass adds its own layers).
+ */
+const overPhotoText = (page: Page) =>
+  page.evaluate(() => {
+    const words = document.querySelector('.studio-scrim')!;
+    const scrim = getComputedStyle(words, '::before');
+    const box = words.getBoundingClientRect();
+    const height = parseFloat(scrim.height);
+    const bottom = box.bottom;
+    // Chrome may give a `to top` gradient back as the same gradient drawn downwards.
+    const up = /^linear-gradient\(to top/.test(scrim.backgroundImage);
+    const stops = [
+      ...scrim.backgroundImage.matchAll(
+        /rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)(?: ([\d.]+)%)?/g,
+      ),
+    ].map((m, i, all) => ({
+      a: m[4] === undefined ? 1 : Number(m[4]),
+      at:
+        m[5] !== undefined ? Number(m[5]) / 100 : i === all.length - 1 ? 1 : 0,
+    }));
+    /** The scrim's black at `rise`: the share of its height above its foot. */
+    const alphaAt = (rise: number) => {
+      const f = up ? rise : 1 - rise;
+      for (let i = 1; i < stops.length; i += 1)
+        if (f <= stops[i]!.at)
+          return (
+            stops[i - 1]!.a +
+            ((stops[i]!.a - stops[i - 1]!.a) * (f - stops[i - 1]!.at)) /
+              (stops[i]!.at - stops[i - 1]!.at || 1)
+          );
+      return stops.at(-1)!.a;
+    };
+    const lum = (v: number) => {
+      const c = v / 255;
+      return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const runs: {
+      text: string;
+      colour: string;
+      black: number;
+      ratio: number;
+      large: boolean;
+      name: boolean;
+    }[] = [];
+    const walker = document.createTreeWalker(words, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const el = n.parentElement!;
+      const text = n.textContent!.trim();
+      if (!text || el.closest('.studio-pro, .studio-hero__tip')) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      const r = range.getBoundingClientRect();
+      if (r.height < 1) continue;
+      const cs = getComputedStyle(el);
+      const black = alphaAt((bottom - r.top) / height);
+      // White over (scrim over a white photo), then the glass if the run sits on it.
+      let grey = 255 * (1 - black);
+      if (el.closest('.studio-hero__links'))
+        grey = (grey * (1 - 0.32) + 10 * 0.32) * (1 - 0.14) + 255 * 0.14;
+      const ratio = 1.05 / (lum(grey) + 0.05);
+      const size = parseFloat(cs.fontSize);
+      runs.push({
+        text: text.slice(0, 24),
+        colour: cs.color,
+        black,
+        ratio,
+        large: size >= 24 || (size >= 18.66 && Number(cs.fontWeight) >= 700),
+        name: Boolean(el.closest('.studio-name')),
+      });
+    }
+    return { gradient: scrim.backgroundImage, runs };
+  });
+
+for (const style of OVER)
+  test(`${style}: text over a photo sits on its scrim, white only`, async ({
+    page,
+  }) => {
+    for (const [width, name] of [
+      [390, 'Kemi Adeyinka'],
+      [320, 'Olúwadámilọ́lá Ọ̀ṣúnfúnmiláyọ̀-Adébáyọ̀'],
+      [1440, 'Kemi Adeyinka'],
+      [1440, 'Chukwuemeka Ọ̀kọ̀nkwọ́-Adéyẹmí Ọ̀ṣúnfúnmiláyọ̀'],
+    ] as const)
+      for (const mode of ['light', 'dark'] as const) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(
+          `/dev/studio-lab?style=${style}&mode=${mode}&name=${encodeURIComponent(name)}`,
+        );
+        await ready(page);
+        await settled(page);
+        const { gradient, runs } = await overPhotoText(page);
+        const at = `${width} ${mode} ${name}`;
+        // The name's backing is the scrim gradient, over the photo.
+        expect(gradient, at).toMatch(/^linear-gradient\(/);
+        await expect(
+          page.locator('.studio-hero[data-cover="photo"] .studio-cover__photo'),
+        ).toBeVisible();
+        // At least the name and one line of meta or label.
+        expect(runs.length, at).toBeGreaterThanOrEqual(2);
+        for (const run of runs) {
+          expect(run.colour, `${at}: “${run.text}”`).toBe('rgb(255, 255, 255)');
+          expect(
+            run.black,
+            `${at}: “${run.text}” on ${run.black.toFixed(3)} black`,
+          ).toBeGreaterThanOrEqual(run.name ? 0.42 : 0.55);
+          expect(
+            run.ratio,
+            `${at}: “${run.text}” ${run.ratio.toFixed(2)}:1 over a white photo`,
+          ).toBeGreaterThanOrEqual(run.large ? 3 : 4.5);
+        }
+      }
+  });
+
+test('Stage and Horizon fall back to their gradient treatment when the cover is not a photo', async ({
+  page,
+}) => {
+  for (const style of OVER)
+    for (const yours of ['design', 'automatic', 'animated'] as const)
+      for (const mode of ['light', 'dark'] as const) {
+        await page.setViewportSize({ width: 390, height: 900 });
+        await page.goto(
+          `/dev/studio-lab?style=${style}&yours=${yours}&mode=${mode}`,
+        );
+        await ready(page);
+        const at = `${style} ${yours} ${mode}`;
+        await expect(
+          page.locator('.studio-hero[data-cover="gradient"]'),
+          at,
+        ).toHaveCount(1);
+        await expect(
+          page.locator(
+            '.studio-cover__photo, .studio .profile-cover, .studio-scrim',
+          ),
+          at,
+        ).toHaveCount(0);
+        // The check says why: the style needs a photo.
+        await expect(
+          page.locator('.studio-lab-check [data-rule="cover-photo"]'),
+          at,
+        ).toHaveCount(1);
+        // The words are in the page's own colours, readable.
+        expect(await contrastProblems(page), at).toEqual([]);
+        expect(await geometryProblems(page), at).toEqual([]);
+      }
+  // Gradient and plain chosen outright: clean too, light and dark, phone and desktop.
+  for (const style of OVER)
+    for (const cover of ['gradient', 'plain'] as const)
+      for (const mode of ['light', 'dark'] as const)
+        for (const width of [390, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.goto(
+            `/dev/studio-lab?style=${style}&cover=${cover}&mode=${mode}`,
+          );
+          await ready(page);
+          const at = `${style} ${cover} ${mode} ${width}`;
+          await expect(
+            page.locator(`.studio-hero[data-cover="${cover}"]`),
+            at,
+          ).toHaveCount(1);
+          expect(await contrastProblems(page), at).toEqual([]);
+          expect(await geometryProblems(page), at).toEqual([]);
+          if (width === 390) await expectAccessible(page);
+        }
+});
+
+test(`Horizon's "Send a tip" scrolls to and focuses the Tip area; "See links" scrolls to the links and is absent without links`, async ({
+  page,
+}) => {
+  for (const width of [390, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/dev/studio-lab?style=horizon');
+    await ready(page);
+    const inView = (selector: string) =>
+      page.locator(selector).evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top >= 0 && r.top < window.innerHeight;
+      });
+    expect(await inView('.studio-tip'), `${width}`).toBe(false);
+    await page.getByRole('link', { name: 'Send a tip' }).click();
+    await expect(page.locator('#studio-tip')).toBeFocused();
+    await expect.poll(() => inView('.studio-tip'), `${width}`).toBe(true);
+    // From there the keyboard moves on into the amounts.
+    await page.keyboard.press('Tab');
+    await expect(
+      page.locator('.studio-tip .tm-amount-choice input').first(),
+    ).toBeFocused();
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByRole('link', { name: 'See links' }).click();
+    await expect.poll(() => inView('#studio-links'), `${width}`).toBe(true);
+    // The glass link's focus ring is white (§4.4).
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.getByRole('link', { name: 'See links' }).focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+    expect(
+      await page
+        .getByRole('link', { name: 'See links' })
+        .evaluate((el) => getComputedStyle(el).outlineColor),
+    ).toBe('rgb(255, 255, 255)');
+  }
+  await page.goto('/dev/studio-lab?style=horizon&links=0');
+  await ready(page);
+  await expect(page.getByRole('link', { name: 'Send a tip' })).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'See links' })).toHaveCount(0);
+  await expect(page.locator('#studio-links')).toHaveCount(0);
+});
+
+test('a small cover photo is never upscaled', async ({ page }) => {
+  const width = (src: string) => Number(/wide-(\d+)$/.exec(src)?.[1]);
+  for (const style of OVER)
+    for (const viewport of [390, 1440]) {
+      await page.setViewportSize({ width: viewport, height: 900 });
+      await page.goto(`/dev/studio-lab?style=${style}&yours=small`);
+      await ready(page);
+      const photo = page.locator('.studio-cover__photo');
+      await expect(photo).toHaveJSProperty('complete', true);
+      const chosen = await photo.evaluate(
+        (i) => (i as HTMLImageElement).currentSrc,
+      );
+      expect(
+        width(chosen),
+        `${style} at ${viewport}: ${chosen}`,
+      ).toBeLessThanOrEqual(640);
+      // Cropped by the style: cover, the upper third; and fetched first.
+      expect(
+        await photo.evaluate((i) => {
+          const cs = getComputedStyle(i);
+          return [
+            cs.objectFit,
+            cs.objectPosition,
+            i.getAttribute('fetchpriority'),
+          ];
+        }),
+      ).toEqual(['cover', '50% 33%', 'high']);
+    }
+  // A large photo is offered at its sharpest for a wide screen.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=stage');
+  await ready(page);
+  await expect(page.locator('.studio-cover__photo')).toHaveJSProperty(
+    'complete',
+    true,
+  );
+  expect(
+    width(
+      await page
+        .locator('.studio-cover__photo')
+        .evaluate((i) => (i as HTMLImageElement).currentSrc),
+    ),
+  ).toBe(1440);
+});
+
+test('the Stage glow appears only in dark mode', async ({ page }) => {
+  const glow = () =>
+    page
+      .locator('.studio-hero')
+      .evaluate((el) => getComputedStyle(el, '::before').backgroundImage);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=stage&mode=dark');
+  await ready(page);
+  expect(await glow()).toMatch(/^radial-gradient\(/);
+  await page.goto('/dev/studio-lab?style=stage&mode=light');
+  await ready(page);
+  expect(await glow()).toBe('none');
+  // Auto follows the browser, with no script.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.goto('/dev/studio-lab?style=stage&mode=auto');
+  await ready(page);
+  expect(await glow()).toMatch(/^radial-gradient\(/);
+  await page.emulateMedia({ colorScheme: 'light' });
+  await expect.poll(glow).toBe('none');
+  // Behind a photo only: a gradient cover has none.
+  await page.goto('/dev/studio-lab?style=stage&mode=dark&cover=gradient');
+  await ready(page);
+  expect(
+    await page
+      .locator('.studio-hero')
+      .evaluate((el) => getComputedStyle(el, '::before').display),
+  ).toBe('none');
+  // Horizon has none.
+  await page.goto('/dev/studio-lab?style=horizon&mode=dark');
+  await ready(page);
+  expect(
+    await page
+      .locator('.studio-hero')
+      .evaluate((el) => getComputedStyle(el, '::before').backgroundImage),
+  ).toBe('none');
+});
+
+test("Stage's desktop puts the bio, the Tip and the handle in a 400 px card beside the main column", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/dev/studio-lab?style=stage');
+  await ready(page);
+  const box = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      });
+  const [lead, links, name] = await Promise.all([
+    box('.studio-lead'),
+    box('.studio-links'),
+    box('.studio-name'),
+  ]);
+  expect(Math.round(lead.right - lead.left)).toBe(400);
+  expect(Math.round(links.left - lead.right)).toBe(80);
+  expect(Math.round(links.right - links.left)).toBeLessThanOrEqual(720);
+  expect(Math.round(name.left)).toBe(Math.round(lead.left));
+  await expect(page.locator('.studio-lead .studio-bio')).toBeVisible();
+  await expect(page.locator('.studio-lead .studio-lead__handle')).toHaveText(
+    '@studiolab',
+  );
+  await expect(page.locator('.studio-hero .studio-meta__handle')).toBeHidden();
+  await page.setViewportSize({ width: 390, height: 900 });
+  await expect(page.locator('.studio-lead .studio-lead__handle')).toBeHidden();
+  await expect(page.locator('.studio-hero .studio-meta__handle')).toBeVisible();
 });

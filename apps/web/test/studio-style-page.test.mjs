@@ -642,3 +642,490 @@ test('Linen titles its Tip card "Send a tip"', () => {
   );
   assert.doesNotMatch(page(), /Send a tip/);
 });
+
+// Stage and Horizon (PR 2d, spec §9.4, §9.9, §13): the identity over a full-bleed cover photo.
+const LAB_COVER = { kind: 'photo', path: `/dev/studio-lab/image/${IMG}` };
+const over = (style, { cover = 'yours', mode, profile = {}, coverSize } = {}) =>
+  renderToStaticMarkup(
+    createElement(StudioStylePage, {
+      studio: {
+        document: doc({ style, cover, ...(mode ? { mode } : {}) }),
+        images: {},
+        palette: studioTokens(style, null),
+        checkVersion: DESIGN_CHECK_VERSION,
+      },
+      profile: {
+        handle: 'studiolab',
+        displayName: 'Kemi Adeyinka',
+        role: 'Singer, Lagos',
+        bio: 'I write songs about home.',
+        links: LINKS,
+        plan: 'pro',
+        cover: LAB_COVER,
+        ...profile,
+      },
+      ...(coverSize ? { coverSize } : {}),
+      tipBlock: createElement('form', { id: 'the-tip' }, 'TIP'),
+      footer: createElement('footer', { id: 'the-foot' }, 'FOOT'),
+      coverArt: createElement('div', { id: 'the-art' }),
+    }),
+  );
+const { STYLE_COVER } = await import(new URL('parts.mjs', out));
+
+/** A CSS linear-gradient's stops as [alpha, position 0..1], from the bottom (`to top`). */
+function scrimStops(decls, scrimEnd) {
+  const g = /linear-gradient\(\s*to top,([\s\S]*?)\);/.exec(decls);
+  assert.ok(g, `a to-top gradient in ${decls}`);
+  const parts = g[1].split(/,(?![^(]*\))/).map((p) => p.trim());
+  return parts.map((part, i) => {
+    const pos = /(\d+(?:\.\d+)?)%$/.exec(part);
+    const at = pos ? Number(pos[1]) / 100 : i === parts.length - 1 ? 1 : 0;
+    if (/^transparent/.test(part)) return [0, at];
+    if (/var\(--studio-scrimEnd\)/.test(part)) return [scrimEnd, at];
+    const rgba = /rgba\(\s*[\d.]+,\s*[\d.]+,\s*[\d.]+,\s*([\d.]+)\)/.exec(part);
+    assert.ok(rgba, part);
+    return [Number(rgba[1]), at];
+  });
+}
+const alphaAt = (stops, f) => {
+  for (let i = 1; i < stops.length; i += 1) {
+    const [a0, p0] = stops[i - 1];
+    const [a1, p1] = stops[i];
+    if (f <= p1) return a0 + ((a1 - a0) * (f - p0)) / (p1 - p0 || 1);
+  }
+  return stops.at(-1)[0];
+};
+const scrimAlpha = (value) =>
+  value.startsWith('#') ? 1 : Number(/,\s*([\d.]+)\)$/.exec(value)[1]);
+
+test("text over a Stage or Horizon photo sits on the spec's scrim: at least 55% black wherever text sits", () => {
+  const spec = {
+    // §9.4: lower 75%; scrimEnd 0%, .8 12%, .66 38%, .3 68%, transparent.
+    stage: {
+      lower: 0.75,
+      alphas: [null, 0.8, 0.66, 0.3, 0],
+      at: [0, 0.12, 0.38, 0.68, 1],
+    },
+    // §9.9: lower 70%; .7 0%, .62 45%, .3 72%, transparent.
+    horizon: {
+      lower: 0.7,
+      alphas: [0.7, 0.62, 0.3, 0],
+      at: [0, 0.45, 0.72, 1],
+    },
+  };
+  for (const [style, want] of Object.entries(spec)) {
+    const css = sheet(style);
+    const scrim = declarations(
+      css,
+      `.studio[data-style='${style}'] .studio-scrim::before`,
+    );
+    // The scrim's least alpha at its 0% stop (Stage's scrimEnd is .86 light, opaque dark).
+    const ends = ['light', 'dark'].map((m) =>
+      scrimAlpha(studioTokens(style, null)[m].scrimEnd ?? 'rgba(0,0,0,1)'),
+    );
+    const stops = scrimStops(scrim, Math.min(...ends));
+    assert.deepEqual(
+      stops.map(([, at]) => at),
+      want.at,
+      `${style} stop positions`,
+    );
+    want.alphas.forEach((a, i) => {
+      if (a !== null) assert.equal(stops[i][0], a, `${style} stop ${i}`);
+    });
+    // Its height: the spec's share of the cover, or more when the words are taller (a long name),
+    // so the top of the words is never above the point where the scrim reaches 55%.
+    const height =
+      /height: max\(calc\(var\(--tall\) \* ([\d.]+)\), (\d+)%\)/.exec(scrim);
+    assert.ok(height, `${style}: the scrim's height rule`);
+    assert.equal(Number(height[1]), want.lower, `${style}: lower share`);
+    const top = 100 / Number(height[2]);
+    const least = alphaAt(stops, top);
+    assert.ok(
+      least >= 0.55,
+      `${style}: ${least.toFixed(3)} black at the top of the words`,
+    );
+    // White text on that scrim over a white photo: 4.5:1 at the top, the worst place.
+    const grey = Math.round(255 * (1 - least));
+    const hex = `#${grey.toString(16).padStart(2, '0').repeat(3)}`;
+    assert.ok(
+      contrastRatio('#ffffff', hex) >= 4.5,
+      `${style}: ${contrastRatio('#ffffff', hex)}`,
+    );
+    // The scrim spans the whole cover's width under the words; the words are white only.
+    assert.match(scrim, /left: 0;/);
+    assert.match(scrim, /right: 0;/);
+    assert.match(scrim, /bottom: 0;/);
+    const words = declarations(
+      css,
+      `.studio[data-style='${style}'] .studio-scrim`,
+    );
+    assert.match(words, /color: #fff;/, `${style}: white words`);
+    // The cover's own height is the one StyleCover sizes its photo for (phone, desktop).
+    assert.equal(
+      px(declarations(css, `.studio[data-style='${style}']`), '--tall'),
+      STYLE_COVER[style].tall,
+    );
+    assert.equal(
+      px(
+        declarations(
+          css,
+          `.studio[data-style='${style}']`,
+          'min-width: 1024px',
+        ),
+        '--tall',
+      ),
+      STYLE_COVER[style].desktopTall,
+    );
+  }
+  assert.deepEqual(STYLE_COVER.stage, { tall: 488, desktopTall: 640 });
+  assert.deepEqual(STYLE_COVER.horizon, { tall: 640, desktopTall: 836 });
+});
+
+test('Stage and Horizon put the words over the photo, white, on the scrim, with no avatar', () => {
+  for (const style of ['stage', 'horizon']) {
+    const html = over(style);
+    const hero =
+      /<header class="studio-identity studio-hero"[^>]*data-cover="photo"[^>]*>([\s\S]*?)<\/header>/.exec(
+        html,
+      );
+    assert.ok(hero, `${style}: the hero header`);
+    assert.match(hero[1], /<div class="studio-cover" data-cover="photo">/);
+    assert.match(hero[1], /<div class="studio-hero__words studio-scrim">/);
+    assert.match(
+      hero[1],
+      /<h1 id="studio-name" class="studio-name">Kemi Adeyinka<\/h1>/,
+    );
+    assert.doesNotMatch(
+      hero[1],
+      /studio-avatar/,
+      `${style}: no avatar over a photo`,
+    );
+    // The bio sits below the cover, with the Tip.
+    assert.doesNotMatch(hero[1], /studio-bio/);
+    assert.match(
+      html,
+      /<div class="studio-lead">[\s\S]*?<p class="studio-bio">I write songs about home\.<\/p>[\s\S]*?<form id="the-tip"/,
+    );
+    // The order: hero, lead (bio, Tip), links, blocks, footer.
+    const at = (m) => html.indexOf(m);
+    const order = [
+      at('studio-hero'),
+      at('class="studio-lead"'),
+      at('id="the-tip"'),
+      at('class="studio-links"'),
+      at('class="studio-blocks'),
+      at('id="the-foot"'),
+    ];
+    assert.ok(
+      order.every((i) => i >= 0),
+      `${style}: ${order}`,
+    );
+    assert.deepEqual(
+      [...order].sort((a, b) => a - b),
+      order,
+      style,
+    );
+  }
+  // Stage's label over the photo is the role; Horizon has none.
+  assert.match(over('stage'), /<p class="studio-kicker">Singer, Lagos<\/p>/);
+  assert.doesNotMatch(over('horizon'), /studio-kicker/);
+});
+
+test('Stage and Horizon fall back to their gradient treatment when the cover is not a photo', () => {
+  const covers = [
+    { kind: 'design', design: 'scattered', colour: 'neutral' },
+    { kind: 'design', design: 'dark' },
+    { kind: 'animated', animation: 'drift', play: 'once' },
+    undefined,
+  ];
+  for (const style of ['stage', 'horizon'])
+    for (const cover of covers) {
+      const html = over(style, { profile: { cover } });
+      assert.match(
+        html,
+        /<header class="studio-identity studio-hero"[^>]*data-cover="gradient"/,
+        `${style} ${cover?.kind}`,
+      );
+      assert.match(
+        html,
+        /<div class="studio-cover" data-cover="gradient" aria-hidden="true"><\/div>/,
+      );
+      // Not today's cover art, and no scrim or photo: the words are in the page's own colours.
+      const m =
+        /id="the-art"|class="[^"]*studio-scrim|studio-cover__photo/.exec(html);
+      assert.equal(m, null, `${style} ${cover?.kind}: ${m?.[0]}`);
+    }
+  // Stage's plain cover has a 112 px avatar above the name; its gradient none. Horizon's gradient
+  // and plain both centre a 96 px avatar on card.
+  assert.match(
+    over('stage', { cover: 'plain' }),
+    /data-cover="plain"[\s\S]*?class="studio-avatar"[\s\S]*?<h1/,
+  );
+  const heroOf = (html) =>
+    /<header class="studio-identity studio-hero"[\s\S]*?<\/header>/.exec(
+      html,
+    )?.[0] ?? '';
+  assert.doesNotMatch(
+    heroOf(over('stage', { cover: 'gradient' })),
+    /studio-avatar/,
+  );
+  for (const cover of ['gradient', 'plain'])
+    assert.match(
+      over('horizon', { cover }),
+      /studio-hero__words"><img class="studio-avatar"[\s\S]*?<h1/,
+      cover,
+    );
+});
+
+test('Horizon\'s two cover buttons: "Send a tip" goes to the Tip area, "See links" to the links, and is absent without links', () => {
+  const html = over('horizon');
+  assert.match(
+    html,
+    /<a class="studio-hero__tip" href="#studio-tip">Send a tip<\/a>/,
+  );
+  assert.match(
+    html,
+    /<a class="studio-hero__links" href="#studio-links">See links<svg/,
+  );
+  // The targets: the Tip area takes focus (tabindex -1), the links section has the id.
+  const tip = /<section class="studio-tip"[^>]*>/.exec(html)?.[0] ?? '';
+  assert.match(tip, / id="studio-tip"/);
+  assert.match(tip, / tabindex="-1"/i);
+  assert.match(tip, / aria-label="Tip Kemi"/);
+  // Only Horizon's Tip area takes focus from a link.
+  assert.doesNotMatch(over('stage'), /id="studio-tip"/);
+  assert.match(html, /<section class="studio-links" id="studio-links"/);
+  const none = over('horizon', { profile: { links: [] } });
+  assert.match(none, /Send a tip<\/a>/);
+  assert.doesNotMatch(none, /See links|studio-links/);
+  // On a gradient or plain cover the same two buttons, with "See links" outlined (CSS).
+  assert.match(
+    over('horizon', { cover: 'plain' }),
+    /href="#studio-links">See links/,
+  );
+  // Stage has no cover buttons.
+  assert.doesNotMatch(over('stage'), /studio-hero__tip|See links/);
+});
+
+test('the cover photo is cropped by the style: high priority, sized for its tall crop, never upscaled', () => {
+  const img = (html) =>
+    /<img class="studio-cover__photo"[^>]*>/.exec(html)?.[0] ?? '';
+  for (const style of ['stage', 'horizon']) {
+    const { tall, desktopTall } = STYLE_COVER[style];
+    // A 16:9 rendition cropped to fill the slot is drawn 16/9 as wide as the slot is tall.
+    const phone = Math.ceil((tall * 16) / 9);
+    const desk = Math.ceil((desktopTall * 16) / 9);
+    const tag = img(over(style, { coverSize: { width: 2400, height: 1600 } }));
+    assert.match(tag, /fetchpriority="high"/i);
+    assert.match(tag, /loading="eager"/);
+    assert.match(
+      tag,
+      new RegExp(
+        `sizes="\\(min-width: ${desk}px\\) 100vw, \\(min-width: 1024px\\) ${desk}px, \\(min-width: ${phone}px\\) 100vw, ${phone}px"`,
+      ),
+    );
+    assert.match(
+      tag,
+      /srcset="[^"]*wide-480 480w, [^"]*wide-960 960w, [^"]*wide-1440 1440w"/i,
+    );
+    // A 640 × 360 photo is offered at 480 only: no rendition is wider than the photo.
+    const small = img(over(style, { coverSize: { width: 640, height: 360 } }));
+    assert.match(small, /srcset="[^"]*wide-480 480w"/i);
+    assert.match(small, / src="[^"]*wide-480"/);
+  }
+  // The crop keeps the upper third (no focal point is stored for a Settings cover).
+  const frame = readFileSync(new URL('frame.css', src), 'utf8');
+  assert.match(
+    declarations(frame, '.studio[data-style] .studio-cover__photo'),
+    /object-position: 50% 33%;/,
+  );
+});
+
+test("the design check measures Stage's and Horizon's section titles at the size their CSS draws, and their slots", () => {
+  for (const style of ['stage', 'horizon'])
+    assert.equal(
+      STUDIO_HEADING_PX[style],
+      px(
+        declarations(
+          sheet(style),
+          `.studio[data-style='${style}'] .studio-title`,
+        ),
+        'font-size',
+      ),
+      style,
+    );
+  // Stage: a strip of fixed tiles below 1024; on a desktop a 400 rail, gap 80, the main column,
+  // photos 3-up.
+  const stage = sheet('stage');
+  const tile = px(
+    declarations(stage, ".studio[data-style='stage'] .studio-strip li"),
+    'width',
+  );
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('stage', 'gallery', v), tile, `${v}`);
+  const desk = declarations(
+    stage,
+    ".studio[data-style='stage'] .studio-page",
+    'min-width: 1024px',
+  );
+  const cols =
+    /grid-template-columns:[^;]*minmax\(0, (\d+)px\) (\d+)px minmax\(0, (\d+)px\)/.exec(
+      desk,
+    );
+  assert.ok(cols, `Stage's desktop columns in ${desk}`);
+  assert.deepEqual(cols.slice(1).map(Number), [400, 80, 720]);
+  const main = Number(cols[3]);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('stage', kind, 1440), main, kind);
+  const strip = declarations(
+    stage,
+    ".studio[data-style='stage'] .studio-strip",
+    'min-width: 1024px',
+  );
+  const n = Number(/grid-template-columns: repeat\((\d+),/.exec(strip)[1]);
+  assert.equal(
+    studioSlotWidth('stage', 'gallery', 1440),
+    Math.round((main - (n - 1) * px(strip, 'gap')) / n),
+  );
+  // Horizon: 3-up, gap 8 below 1024; on a desktop 440, gap 80, every block in the right column.
+  const horizon = sheet('horizon');
+  const hstrip = declarations(
+    horizon,
+    ".studio[data-style='horizon'] .studio-strip",
+  );
+  const hn = Number(/grid-template-columns: repeat\((\d+),/.exec(hstrip)[1]);
+  const hgap = px(hstrip, 'gap');
+  for (const v of [320, 390])
+    assert.equal(
+      studioSlotWidth('horizon', 'gallery', v),
+      Math.round((v - 40 - (hn - 1) * hgap) / hn),
+      `${v}`,
+    );
+  const hdesk = declarations(
+    horizon,
+    ".studio[data-style='horizon'] .studio-page",
+    'min-width: 1024px',
+  );
+  const hcols =
+    /grid-template-columns:[^;]*minmax\(0, (\d+)px\) (\d+)px minmax\(0, (\d+)px\)/.exec(
+      hdesk,
+    );
+  assert.ok(hcols, `Horizon's desktop columns in ${hdesk}`);
+  assert.deepEqual(hcols.slice(1).map(Number), [440, 80, 520]);
+  const right = Number(hcols[3]);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('horizon', kind, 1440), right, kind);
+  const hdstrip = declarations(
+    horizon,
+    ".studio[data-style='horizon'] .studio-strip",
+    'min-width: 1024px',
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 1440),
+    Math.round((right - (hn - 1) * px(hdstrip, 'gap')) / hn),
+  );
+  // The rendered photos ask for those widths.
+  for (const style of ['stage', 'horizon']) {
+    const html = page({ document: doc({ style }) });
+    const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
+      html,
+    )?.[1];
+    assert.equal(
+      sizes,
+      `(min-width: 1024px) ${studioSlotWidth(style, 'gallery', 1440)}px, (min-width: 768px) ${studioSlotWidth(style, 'gallery', 1023)}px, ${studioSlotWidth(style, 'gallery', 390)}px`,
+    );
+  }
+});
+
+test("Stage's glow is dark only, the accent, and never costs the bio its contrast", () => {
+  const css = sheet('stage');
+  const glow = declarations(
+    css,
+    ".studio[data-style='stage'] .studio-hero::before",
+  );
+  assert.match(glow, /height: 260px;/);
+  assert.match(
+    glow,
+    /radial-gradient\(\s*50% 50% at 50% 30%,\s*color-mix\(in srgb, var\(--studio-glow\) 28%, transparent\),\s*transparent\s*\)/,
+  );
+  assert.match(glow, /filter: blur\(10px\);/);
+  // The registry: the accent's fill in dark, none in light (the rule then draws nothing).
+  for (const accent of [null, 'ink', 'amber']) {
+    const t = studioTokens('stage', accent);
+    assert.equal(t.light.glow, 'none');
+    assert.equal(t.dark.glow, t.dark.acc);
+  }
+  // Its centre sits 30% down its 260 px, `top` above the cover's foot; the bio starts the lead's
+  // padding below that foot. There the glow is at most 28% × (1 − distance / 130), straight
+  // falloff (a blur doesn't raise a straight ramp). fg2 on bg under it keeps 4.5:1 for every accent.
+  const top = Number(/top: calc\(var\(--tall\) - (\d+)px\);/.exec(glow)?.[1]);
+  assert.ok(top > 0, 'the glow is placed from the cover foot');
+  const lead = px(
+    declarations(css, ".studio[data-style='stage'] .studio-lead"),
+    'padding-top',
+  );
+  const distance = lead + (top - 0.3 * 260);
+  const strength = 0.28 * Math.max(0, 1 - distance / 130);
+  const mix = (a, b, t) =>
+    `#${[1, 3, 5]
+      .map((i) =>
+        Math.round(
+          parseInt(a.slice(i, i + 2), 16) * t +
+            parseInt(b.slice(i, i + 2), 16) * (1 - t),
+        )
+          .toString(16)
+          .padStart(2, '0'),
+      )
+      .join('')}`;
+  for (const accent of [
+    'ink',
+    'blue',
+    'lagoon',
+    'green',
+    'violet',
+    'rose',
+    'coral',
+    'amber',
+  ]) {
+    const t = studioTokens('stage', accent).dark;
+    const under = mix(t.acc, t.bg, strength);
+    assert.ok(
+      contrastRatio(t.fg2, under) >= 4.5,
+      `${accent}: fg2 ${contrastRatio(t.fg2, under).toFixed(2)} on ${under}`,
+    );
+  }
+});
+
+test('Stage and Horizon set everything in Inter (Horizon 400 and 500 only), and preload Inter', () => {
+  const inter = STUDIO_FONTS.find((f) => f.id === 'inter');
+  for (const style of ['stage', 'horizon']) {
+    const html = over(style);
+    const families = [...html.matchAll(/font-family:\s*'([^']+)'/g)]
+      .map((m) => m[1])
+      .filter((f) => !f.endsWith(' Fallback'));
+    assert.deepEqual([...new Set(families)], ['Studio Inter'], style);
+    const preloads = [
+      ...html.matchAll(/<link rel="preload"[^>]*href="([^"]+)"[^>]*as="font"/g),
+    ].map((m) => m[1]);
+    assert.deepEqual(preloads, [inter.files[0].path], style);
+    assert.doesNotMatch(
+      sheet(style),
+      /font-family: var\(--serif\)|'Studio (?!Inter)/,
+      style,
+    );
+  }
+  const weights = [
+    ...sheet('horizon').matchAll(/font(?:-weight)?: (\d{3})/g),
+  ].map((m) => Number(m[1]));
+  assert.ok(weights.length > 0);
+  assert.deepEqual([...new Set(weights)].sort(), [400, 500]);
+});
+
+test("Stage's phone bar carries the avatar, the name and the handle beside the Tip, out of the accessibility tree", () => {
+  const html = over('stage');
+  assert.match(
+    html,
+    /<div class="studio-barname" aria-hidden="true"><img class="studio-avatar studio-barname__avatar"[^>]*><p class="studio-barname__name" data-truncate="">Kemi Adeyinka<\/p><p class="studio-barname__handle" data-truncate="">@studiolab<\/p><\/div>/,
+  );
+  assert.doesNotMatch(over('horizon'), /studio-barname/);
+});

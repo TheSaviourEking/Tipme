@@ -20,6 +20,7 @@
 import type { ReactNode } from 'react';
 import { preload } from 'react-dom';
 import {
+  STUDIO_STYLES,
   isClassicDefault,
   type PublicProfile,
   type PublicStudio,
@@ -30,9 +31,11 @@ import {
   StyleBarName,
   StyleBlocks,
   StyleCover,
+  StyleHero,
   StyleIdentity,
   StyleLinks,
   StyleTop,
+  type CoverSize,
 } from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
 import { StyleSheet } from './style-sheets';
@@ -57,12 +60,15 @@ export function StudioStylePage({
   tipBlock,
   footer,
   coverArt,
+  coverSize,
 }: {
   studio: PublicStudio;
   profile: PublicProfile;
   tipBlock: ReactNode;
   footer: ReactNode;
   coverArt: ReactNode;
+  /** The cover photo's own size, when known, so no rendition wider than it is offered. */
+  coverSize?: CoverSize;
 }) {
   const { document: doc, images, palette } = studio;
   const style = doc.style;
@@ -84,6 +90,20 @@ export function StudioStylePage({
       : '') +
     // The site's header and footer take the page's neutrals (owner, ruling P).
     chromeCss(style, palette, doc.mode);
+  // Stage and Horizon set the identity over a full-bleed cover photo (§9.4, §9.9).
+  const overPhoto = STUDIO_STYLES[style].needsPhoto;
+  const tip = (
+    <section
+      className="studio-tip"
+      aria-label={`Tip ${firstName}`}
+      // Horizon's "Send a tip" lands here and moves focus to the Tip area.
+      {...(style === 'horizon' ? { id: 'studio-tip', tabIndex: -1 } : {})}
+    >
+      {/* Linen's Tip moment is a titled card (§9.8). */}
+      {style === 'linen' && <h2 className="studio-tip__title">Send a tip</h2>}
+      {tipBlock}
+    </section>
+  );
   return (
     <div
       className="studio"
@@ -95,26 +115,49 @@ export function StudioStylePage({
       <StyleSheet styleId={style} />
       <div className="studio-page">
         {style === 'journal' && <StyleTop profile={profile} />}
-        <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
-        <StyleIdentity
-          styleId={style}
-          profile={profile}
-          firstName={firstName}
-        />
-        <section className="studio-tip" aria-label={`Tip ${firstName}`}>
-          {/* Linen's Tip moment is a titled card (§9.8). */}
-          {style === 'linen' && (
-            <h2 className="studio-tip__title">Send a tip</h2>
-          )}
-          {tipBlock}
-        </section>
+        {overPhoto ? (
+          <>
+            <StyleHero
+              doc={doc}
+              profile={profile}
+              {...(coverSize ? { coverSize } : {})}
+            />
+            {/* Below the cover: the bio with the Tip (Stage's desktop card holds both, and the
+                handle; Horizon's desktop column titles them "Send a tip"). */}
+            <div className="studio-lead">
+              {style === 'horizon' && (
+                <h2 className="studio-lead__title">Send a tip</h2>
+              )}
+              {profile.bio && <p className="studio-bio">{profile.bio}</p>}
+              {profile.celebration && (
+                <p className="studio-celebration">
+                  Celebrating {firstName}’s {profile.celebration.label}
+                </p>
+              )}
+              {tip}
+              {style === 'stage' && (
+                <p className="studio-lead__handle">@{profile.handle}</p>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
+            <StyleIdentity
+              styleId={style}
+              profile={profile}
+              firstName={firstName}
+            />
+            {tip}
+          </>
+        )}
         <div className="studio-grid">
           <StyleLinks links={profile.links ?? []} />
           <StyleBlocks doc={doc} images={images} />
         </div>
         <div className="studio-foot">{footer}</div>
       </div>
-      {style === 'journal' && (
+      {(style === 'journal' || style === 'stage') && (
         <StyleBarName styleId={style} profile={profile} />
       )}
     </div>
