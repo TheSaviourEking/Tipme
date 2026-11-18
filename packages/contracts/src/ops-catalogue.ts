@@ -270,6 +270,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
   },
+  'OpsPlanFeesController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
+  },
   'OpsSwitchesController.list': {
     verb: 'GET',
     permission: 'switches.manage',
@@ -409,6 +415,8 @@ export const SERIOUS_ACTIONS = [
   'announcement.send',
   // Owner, 14 Nov 2026: refund a tip, the tip minus TipMe's fee (TipMe keeps its fee).
   'tip.refund',
+  // Owner, 18 Nov 2026: TipMe's share per plan (Free, Pro), for new quotes only.
+  'plan_fees.change',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -435,6 +443,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'business_pro_price.change': 'Change the Business Pro price',
   'announcement.send': 'Send an announcement by email',
   'tip.refund': 'Refund a tip (TipMe keeps its fee)',
+  'plan_fees.change': 'Change TipMe’s fee per plan',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -461,4 +470,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'business_pro_price.change': 'pro.price',
     'announcement.send': 'announcements.send',
     'tip.refund': 'payments.repair',
+    'plan_fees.change': 'fees.manage',
   };

@@ -62,6 +62,8 @@ const PUBLIC_REVIEWED = [
   'POST /v1/mail/unsubscribe',
   // Paid Pro (ADR-0015): the monthly price, read only and cached publicly; nothing private.
   'GET /v1/pro/price',
+  // TipMe's fee per plan (owner, 18 Nov 2026), for copy: read only.
+  'GET /v1/plan-fees',
   'GET /v1/profiles/{handle}',
   // Campaign pages (Pro): a campaign's headline, description and cover; read-only, no session.
   'GET /v1/profiles/{handle}/campaigns/{slug}',

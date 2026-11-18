@@ -3320,6 +3320,38 @@ export const proPrices = pgTable(
   ],
 );
 
+/**
+ * TipMe's share of each tip on each plan (owner, 18 Nov 2026), append-only, in basis points. The
+ * rates in force are the latest row whose `effective_from` has passed; with no row the coded
+ * defaults apply (DEFAULT_PLAN_FEE_RATES). A quote records the rate it used, so a change applies to
+ * new quotes only. The first row (Free 500, Pro 300) is seeded by its migration with no `set_by`.
+ */
+export const planFeeRates = pgTable(
+  'plan_fee_rates',
+  {
+    id: uuid('id').primaryKey(),
+    freeBps: integer('free_bps').notNull(),
+    proBps: integer('pro_bps').notNull(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('plan_fee_rates_effective_from').on(table.effectiveFrom),
+    check('plan_fee_rates_free_bps', sql`${table.freeBps} BETWEEN 0 AND 10000`),
+    check('plan_fee_rates_pro_bps', sql`${table.proBps} BETWEEN 0 AND 10000`),
+    check(
+      'plan_fee_rates_pro_not_above_free',
+      sql`${table.proBps} <= ${table.freeBps}`,
+    ),
+    check('plan_fee_rates_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
 export const PRO_PERIOD_STATUSES = [
   'SCHEDULED',
   'ACTIVE',

@@ -1,4 +1,5 @@
 import { feePolicyForPlan, planShareBps, type FeePlan } from '@tipme/domain';
+import { planFeeRatesInForce } from './plan-fee-rates.js';
 import { and, eq, ne } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import { feeFreeCredits, profiles } from '../schema.js';
@@ -97,8 +98,8 @@ export function grantFeeFreeTips(
 
 /**
  * One page's pricing for staff, or null when there is no such (non-deleted) page: the deal staff
- * set, the page's plan and its rate (Free 7%, Pro 5%), and the rate new quotes use (the deal only
- * below the plan's rate, planShareBps).
+ * set, the page's plan and its rate (the plan rates in force: Free 5%, Pro 3% to start, owner 18
+ * Nov 2026), and the rate new quotes use (the deal only below the plan's rate, planShareBps).
  */
 export function pagePricing(
   db: Database,
@@ -124,15 +125,17 @@ export function pagePricing(
       );
     if (!row) return null;
     const plan: FeePlan = row.plan === 'pro' ? 'pro' : 'free';
+    const rates = await planFeeRatesInForce(db);
     return {
       customFeeBps: row.customFeeBps,
       feeFreeRemaining: row.remaining ?? 0,
       plan,
-      planFeeBps: Number(feePolicyForPlan(plan).tipmeShareBps),
+      planFeeBps: Number(feePolicyForPlan(plan, rates).tipmeShareBps),
       feeBps: Number(
         planShareBps(
           plan,
           row.customFeeBps === null ? null : BigInt(row.customFeeBps),
+          rates,
         ).bps,
       ),
     };

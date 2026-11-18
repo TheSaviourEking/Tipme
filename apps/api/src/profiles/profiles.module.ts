@@ -16,6 +16,7 @@ import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
 import { PayoutDestinationController } from './payout-destination.controller.js';
 import { ProPriceController } from './pro-price.controller.js';
+import { PlanFeesController } from './plan-fees.controller.js';
 import { StudioController } from '../studio/studio.controller.js';
 import { StudioEnabledGuard } from '../studio/studio-switch.js';
 import { CheckoutModule } from '../checkout/checkout.module.js';
@@ -33,6 +34,7 @@ import { MailModule } from '../mail/mail.module.js';
     PaymentAccountsController,
     PayoutDestinationController,
     ProPriceController,
+    PlanFeesController,
     StudioController,
   ],
   providers: [
