@@ -28,7 +28,7 @@ The owner's answers:
 **Non-goals**
 
 - Billing, or selling a username.
-- Handing a reserved name to a specific person. A reservation only blocks the name. Giving it to someone later is a release followed by their claim, or a future feature.
+- ~~Handing a reserved name to a specific person. A reservation only blocks the name. Giving it to someone later is a release followed by their claim, or a future feature.~~ **Superseded on 18 Nov 2026:** the owner approved handover; see section 14.
 - Changing the built-in list from the admin area. It stays in code.
 - Bulk import of reservations.
 
@@ -401,3 +401,44 @@ These settle the open questions. Where a section above says otherwise, this sect
 - "Needs a second staff member's approval" against the lone-admin rule in `serious-actions.ts:539-590` (answer 1).
 - A Free page can't change its username (`profiles.ts:528`), but the terms ask the person to choose a new one. This design waives the rule for a take-back only.
 - The terms promise an email, but `mailOwner` sends nothing without a verified address (`account-mail.ts:24-56`) (answer 2: email or a seen dashboard banner).
+
+## 14. Handover (18 Nov 2026)
+
+The owner approved this in chat on 18 Nov 2026. Every rule below is the owner's decision unless marked "builder's call". It is a product decision only: it approves nothing in `docs/00-DECISIONS.md` (D-02 to D-07 are unchanged), and it is not legal or regulatory approval.
+
+**Why.** A reservation only blocks a name. Releasing it so a brand can then claim it races anyone else.
+
+**Claim link.**
+
+- On a reserved name, staff choose "Create claim link". The server makes a one-time link for that one name, valid 14 days.
+- Staff copy it and send it themselves; TipMe sends no email.
+- The person opens it, then signs up or signs in. The name moves to their account and the link stops working.
+- The token is stored hashed (sha256) and shown to staff once. One live link per reservation: a new one cancels the old. Staff can cancel a link.
+- The link only lets someone claim that one reserved name. It never takes a name from anyone and touches nothing else.
+- Expired, used or cancelled links show a plain message. Claim attempts are rate-limited.
+- The token never appears in logs, the audit log or analytics. The audit log records the event and the reservation, not the token.
+
+**Direct assignment.**
+
+- On a reserved name, staff choose "Give to an account" and find the account by its current username or email, masked as admin search masks it (public-level page fields only, no email).
+- Staff confirm with a reason. The name moves to that account, and its old username keeps redirecting through the existing handle-change flow (`handle_aliases`, `movedTo`).
+
+**Rules for both.**
+
+- Only `usernames.manage`, with the same fresh-code requirement as the other username routes. Audited with the reason: `username.handover_link_created`, `username.handover_link_cancelled`, `username.claimed_via_link`, `username.assigned`.
+- The name stays reserved until the handover transaction commits. The reservation ends and the handle is set in one transaction, under the same per-handle lock as the reservation code, so nobody can take it in between.
+- Built-in names (`RESERVED_HANDLES`) can never be handed out.
+- No second approver for a handover to an existing account: nobody loses a name. Take-back keeps its second approver, unchanged.
+- Copy is plain language with "they"; it never names the payment provider and never implies regulatory approval.
+
+**How it is built** (builder's calls, for the owner to check):
+
+- Table `handle_handover_links` (migration `0114_username_handover_links`): reservation, name, `token_sha256`, who made it, made, expires, used (by whom), cancelled (by whom, why). A partial unique index keeps one open link per reservation. `handle_reservations.handed_over_to` names the page a released name went to.
+- The link is `/sign-up/claim#claim=<code>`: 24 base32 characters (120 random bits) in the fragment, which no server, log or analytics event sees. The page moves it out of the address bar at once and keeps it in that tab only; it reaches the API only in a request body.
+- `POST /v1/handles/claim-link/preview` (no session) answers `open` with the name, or `used`, `expired`, `cancelled` or `invalid`. `POST /v1/me/username-claim` (session and CSRF) claims; any link that isn't open is one `404 CLAIM_LINK_INVALID`. Both share one allowance per address, 20 an hour (`RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR`).
+- Staff routes: `POST /v1/ops/usernames/{name}/handover-link`, `.../handover-link/cancel`, `POST /v1/ops/usernames/handover-accounts` (the query in the body, audited by its length only, as admin search) and `POST /v1/ops/usernames/{name}/assign`.
+- Lock order, as take-backs and renames: the account's profile row, then the name's advisory lock (`tipme.handle:<name>`, the same key as the reservation code and the 0028/0072 triggers), then the link and the reservation rows. The reservation is released first, then the profile is renamed or created, which the 0072 trigger then allows. A sign-up at the same moment still sees the reservation and is refused; a release, a second claim or an assignment waits for the lock and then finds the reservation gone.
+- An account with a page keeps its old username as a redirect. The handover is not a handle change the person makes: it doesn't count against Pro's changes and works on Free too (the 1 Nov handle rule limits the person's own changes; this is TipMe moving a reserved name, like a take-back). An account with no page gets one, not live, named after the handle, as at sign-up.
+- Refused, changing nothing: a name a page holds (it is never reserved), a name still in a deleted page's 90-day hold (the hold protects that page's old links), a deleted or release-check page, a page with a take-back under way, a deleted account.
+- Releasing a reservation, or giving the name to an account, ends its open link.
+- The staff screen shows the open link's end and maker, never its code. The Overview's staff activity lists `username.assigned`.
