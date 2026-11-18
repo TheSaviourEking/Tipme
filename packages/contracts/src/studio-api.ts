@@ -16,6 +16,10 @@ import {
   studioDocumentSchema,
   type StudioDocument,
 } from './studio-document.js';
+import type {
+  PhotoAccentFailed,
+  PhotoAccentValues,
+} from './studio-photo-accent.js';
 
 /**
  * What the old editor (G1/G2, v1 only) may do: Pro edits; Free gets the teaser; a lapsed page
@@ -54,6 +58,12 @@ export interface MyStudioV1 {
   access: StudioAccess;
   /** The page's plan now. Free saves and publishes free styles (§11). */
   plan: 'free' | 'pro';
+  /**
+   * "From your photo" (§6), for the current profile photo: its values, or the curated accent it
+   * fell back to (the editor says so with `photoAccentNotice`). Null with no photo, or before one
+   * has been computed; the page then uses the style's default accent.
+   */
+  photoAccent: PhotoAccentValues | PhotoAccentFailed | null;
 }
 
 /** The v1 draft body alone (the old editor's). */
