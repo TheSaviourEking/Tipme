@@ -1254,23 +1254,28 @@ test("Free can't choose the photo accent (403)", async () => {
   assert.equal(await storedAccent(profileId), undefined, 'nothing stored');
 });
 
-test('a failed photo accent publishes with its fallback and the editor gets the sentence', async () => {
+test('a grey photo publishes with the Ink fallback and the editor gets the no-clear-colour sentence', async () => {
   await freshSaveAllowance();
   const { cookie, handle, profileId } = await page();
   await uploadAvatar(cookie, GREY());
   const saved = (
     await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
   ).body.data;
-  assert.deepEqual(saved.photoAccent, { failed: true, fallback: 'ink' });
+  assert.deepEqual(saved.photoAccent, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
   const stored = await storedAccent(profileId);
   assert.deepEqual(stored.photo_accent, {
     failed: true,
     fallback: 'ink',
+    noUsableColour: true,
     avatarVersion: stored.avatar_version,
   });
   assert.equal(
     photoAccentNotice(saved.photoAccent),
-    "Your photo's colours didn't pass our contrast check, so your page uses Ink.",
+    "We couldn't find a clear colour in your photo, so your page uses Ink.",
   );
   const done = await json(await publish(cookie, saved.rev));
   assert.equal(done.status, 200, JSON.stringify(done.body));
@@ -1307,7 +1312,11 @@ test('a fallback never outlives its photo: a new photo that cannot be sampled sh
   const saved = (
     await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
   ).body.data;
-  assert.deepEqual(saved.photoAccent, { failed: true, fallback: 'ink' });
+  assert.deepEqual(saved.photoAccent, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
   assert.equal((await publish(cookie, saved.rev)).status, 200);
   assert.deepEqual(
     (await publicPage(handle)).studio.palette,

@@ -183,10 +183,15 @@ test('with no passing candidate it falls back to the nearest curated accent by O
   assert.deepEqual(pickPhotoAccent(['#808080', '#a0a0a0']), {
     failed: true,
     fallback: 'ink',
+    noUsableColour: true,
   });
   // Skin tones only: dropped colours never choose the fallback, so Ink too, whatever the skin.
   for (const skin of [['#c68642', '#e0ac69'], ['#8d5524'], ['#e0ac69']])
-    assert.deepEqual(pickPhotoAccent(skin), { failed: true, fallback: 'ink' });
+    assert.deepEqual(pickPhotoAccent(skin), {
+      failed: true,
+      fallback: 'ink',
+      noUsableColour: true,
+    });
 });
 
 // Monk Skin Tone scale 1–10, common skin palettes, warm-lit and flushed skin as photos show it
@@ -207,7 +212,7 @@ test('every skin tone, light to deep and warm-lit, is dropped; saturated oranges
   for (const skin of SKIN_TONES)
     assert.deepEqual(
       pickPhotoAccent([skin]),
-      { failed: true, fallback: 'ink' },
+      { failed: true, fallback: 'ink', noUsableColour: true },
       skin,
     );
   for (const colour of [
@@ -230,17 +235,42 @@ test('every skin tone, light to deep and warm-lit, is dropped; saturated oranges
 test('the fallback is the same for a light face and a deep face on grey', () => {
   const on = (face) => pickPhotoAccent(['#808080', face, '#5a5a5a']);
   assert.deepEqual(on(MONK[4]), on(MONK[8]));
-  assert.deepEqual(on(MONK[4]), { failed: true, fallback: 'ink' });
+  assert.deepEqual(on(MONK[4]), {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
   // Skin first (a close-up) gives the same.
   assert.deepEqual(pickPhotoAccent([MONK[8], '#808080']), on(MONK[4]));
 });
 
-test('nothing sampled is not a contrast failure', () => {
+test('a photo with no usable colour is not a contrast failure: nothing sampled, greys only, skin only', () => {
+  const sentence =
+    "We couldn't find a clear colour in your photo, so your page uses Ink.";
+  // Greys only (a black-and-white photo) and skin only (a close-up portrait).
+  for (const colours of [
+    ['#808080', '#2b2b2b', '#e6e6e6'],
+    [MONK[4], '#d7bd96', '#c68642'],
+    [MONK[8], '#3a312a', '#604134'],
+  ]) {
+    const p = pickPhotoAccent(colours);
+    assert.deepEqual(
+      p,
+      { failed: true, fallback: 'ink', noUsableColour: true },
+      String(colours),
+    );
+    assert.equal(photoAccentNotice(p), sentence, String(colours));
+  }
+  // The contrast sentence is kept for eligible colours that failed contrast.
+  assert.equal(
+    photoAccentNotice({ failed: true, fallback: 'blue' }),
+    "Your photo's colours didn't pass our contrast check, so your page uses Blue.",
+  );
   for (const nothing of [[], ['red', '#12345']])
     assert.deepEqual(pickPhotoAccent(nothing), {
       failed: true,
       fallback: 'ink',
-      nothingSampled: true,
+      noUsableColour: true,
     });
   assert.equal(
     photoAccentNotice(pickPhotoAccent([])),
@@ -296,11 +326,11 @@ test('a stored photo accent is read only when valid and for the avatar it was ma
   });
   assert.equal(photoAccentOf(failed, { avatarVersion: 10 }), null);
   assert.equal(photoAccentOf(failed, null), null);
-  const empty = { ...failed, fallback: 'ink', nothingSampled: true };
+  const empty = { ...failed, fallback: 'ink', noUsableColour: true };
   assert.deepEqual(photoAccentOf(empty, { avatarVersion: 9 }), {
     failed: true,
     fallback: 'ink',
-    nothingSampled: true,
+    noUsableColour: true,
   });
   // Anything else is nothing: no stored text reaches CSS.
   for (const bad of [
@@ -311,7 +341,7 @@ test('a stored photo accent is read only when valid and for the avatar it was ma
     { failed: true, fallback: 'rose' }, // no photo version
     { failed: true, fallback: 'photo', avatarVersion: 3 },
     { failed: true, fallback: 'teal', avatarVersion: 3 },
-    { failed: true, fallback: 'ink', avatarVersion: 3, nothingSampled: 1 },
+    { failed: true, fallback: 'ink', avatarVersion: 3, noUsableColour: 1 },
     { ...stored, extra: 1 },
   ])
     assert.equal(photoAccentOf(bad, { avatarVersion: 3 }), null);

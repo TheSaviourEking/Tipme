@@ -81,7 +81,11 @@ test('a colourful avatar gives a photo accent; a grey one falls back', async () 
   const grey = await photoAccentFor(
     await avatar({ r: 128, g: 128, b: 128 }, '#5a5a5a', '#d0d0d0'),
   );
-  assert.deepEqual(grey, { failed: true, fallback: 'ink' });
+  assert.deepEqual(grey, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
 });
 
 test('sampling that fails never throws: no accent, and the page id alone is logged', async () => {
@@ -154,7 +158,11 @@ test('a light face and a deep face on grey give the same fallback', async () => 
   const light = await face('#eadaba');
   const deep = await face('#604134');
   assert.deepEqual(light, deep);
-  assert.deepEqual(light, { failed: true, fallback: 'ink' });
+  assert.deepEqual(light, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
 });
 
 test('a photo with no clear colour says so, not that contrast failed', async () => {
@@ -177,6 +185,6 @@ test('a photo with no clear colour says so, not that contrast failed', async () 
   assert.deepEqual(await photoAccentFor(gradient), {
     failed: true,
     fallback: 'ink',
-    nothingSampled: true,
+    noUsableColour: true,
   });
 });

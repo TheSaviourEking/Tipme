@@ -29,13 +29,14 @@ export interface PhotoAccentValues {
 }
 /**
  * No sampled colour passed: the page uses this curated accent, and the editor says so.
- * `nothingSampled`: the photo gave no clear colour at all (a smooth gradient, say), so the editor
- * doesn't blame contrast.
+ * `noUsableColour`: the photo gave no colour to try (nothing sampled, as from a smooth gradient,
+ * or only greys and skin tones), so the editor doesn't blame contrast. Without it, eligible
+ * colours existed and none passed contrast.
  */
 export interface PhotoAccentFailed {
   failed: true;
   fallback: StudioCuratedAccentId;
-  nothingSampled?: true;
+  noUsableColour?: true;
 }
 /**
  * What `page_studios.photo_accent` holds. Both kinds name the photo they came from
@@ -185,7 +186,7 @@ function valuesFor(colour: Hex, mode: Mode): StudioAccentValues | null {
  * or `{ failed: true, fallback }` with the curated accent nearest the most dominant colour that
  * survived the grey and skin filters, or Ink when none did. A dropped colour never chooses it, so
  * a portrait's fallback never depends on the person's skin. Nothing to try at all is
- * `nothingSampled`.
+ * `noUsableColour`, as is a photo whose every colour was dropped as grey or skin.
  */
 export function pickPhotoAccent(
   candidates: readonly Hex[],
@@ -195,7 +196,7 @@ export function pickPhotoAccent(
     .map((c) => c.toLowerCase() as Hex)
     .slice(0, MAX_CANDIDATES);
   if (colours.length === 0)
-    return { failed: true, fallback: 'ink', nothingSampled: true };
+    return { failed: true, fallback: 'ink', noUsableColour: true };
   let survivor: Hex | null = null;
   for (const colour of colours) {
     const { c, h } = hexToOklch(colour);
@@ -205,10 +206,9 @@ export function pickPhotoAccent(
     const dark = light && valuesFor(colour, 'dark');
     if (light && dark) return { light, dark };
   }
-  return {
-    failed: true,
-    fallback: survivor ? nearestCuratedAccent(survivor) : 'ink',
-  };
+  return survivor
+    ? { failed: true, fallback: nearestCuratedAccent(survivor) }
+    : { failed: true, fallback: 'ink', noUsableColour: true };
 }
 
 const hexSchema = z
@@ -237,7 +237,7 @@ export const photoAccentSchema = z.union([
     failed: z.literal(true),
     fallback: z.enum(curatedIds),
     avatarVersion: z.number().int().min(0),
-    nothingSampled: z.literal(true).optional(),
+    noUsableColour: z.literal(true).optional(),
   }),
 ]);
 
@@ -259,7 +259,7 @@ export function photoAccentOf(
     return {
       failed: true,
       fallback: value.fallback,
-      ...(value.nothingSampled ? { nothingSampled: true as const } : {}),
+      ...(value.noUsableColour ? { noUsableColour: true as const } : {}),
     };
   return { light: value.light, dark: value.dark };
 }
@@ -269,7 +269,7 @@ export function photoAccentNotice(
   photo: PhotoAccentValues | PhotoAccentFailed | null,
 ): string | null {
   if (!photo || !('failed' in photo)) return null;
-  if (photo.nothingSampled)
+  if (photo.noUsableColour)
     return `We couldn't find a clear colour in your photo, so your page uses ${STUDIO_ACCENTS[photo.fallback].name}.`;
   return `Your photo's colours didn't pass our contrast check, so your page uses ${STUDIO_ACCENTS[photo.fallback].name}.`;
 }
