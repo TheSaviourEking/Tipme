@@ -696,6 +696,14 @@
   animation-delay: 40ms;
 }
 
+/* Narrow phones: below 360 px a segment's 4 px sides leave "₦10,000" too little room; the label
+   takes the whole segment. */
+@media (max-width: 359px) {
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice > span {
+    padding: 0;
+  }
+}
+
 /* Tablet: one column, 24 px gutters, up to 720. */
 @media (min-width: 768px) {
   .studio[data-style='clear'] {

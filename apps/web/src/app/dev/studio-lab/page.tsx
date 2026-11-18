@@ -28,7 +28,7 @@ import { ProfileCover } from '@/components/profile/cover';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ReportPage } from '@/components/report-page';
 import { StudioPage } from '@/components/studio/studio-page';
-import { StudioStylePage } from '@/components/studio-styles/style-page';
+import { renderStyled } from '@/components/studio-styles/style-page';
 import {
   LAB_IMAGES,
   LAB_LONG_NAMES,
@@ -226,7 +226,7 @@ function decodeDoc(doc: string): unknown {
  */
 function StyleLab({ one }: { one: (k: string) => string | undefined }) {
   const style = pick(one('style') ?? 'clear', STUDIO_STYLE_IDS);
-  if (!style || style === 'classic') notFound();
+  if (!style) notFound();
   const example = one('example');
   const docParam = one('doc');
   let document: StudioDocument | null;
@@ -287,46 +287,57 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     coverKind: 'photo',
     hasAvatar: false,
   });
-  return (
-    <main id="main" tabIndex={-1} className="studio-lab">
-      <StudioStylePage
-        studio={{
-          document,
-          images,
-          palette: studioTokens(style as StudioStyleId, document.accent),
-          checkVersion: DESIGN_CHECK_VERSION,
-        }}
-        profile={profile}
-        coverArt={
-          <ProfileCover
-            cover={resolveCover({
-              handle,
-              coverPath: null,
-              coverDesign: null,
-              coverColour: null,
-            })}
-            priority
-          />
-        }
-        tipBlock={
-          <AppreciationForm
-            surface="profile"
-            paymentMode="test"
-            recipient={firstName}
-            handle={handle}
-            skin={style}
-          />
-        }
-        footer={
-          <footer className="profile-foot">
-            <div className="profile-foot__quiet">
-              <ReportPage handle={handle} />
-              <Link href="/legal/privacy">Privacy</Link>
-              <Link href="/legal/terms">Terms</Link>
-            </div>
-          </footer>
-        }
+  const styled = renderStyled({
+    studio: {
+      document,
+      images,
+      palette: studioTokens(style as StudioStyleId, document.accent),
+      checkVersion: DESIGN_CHECK_VERSION,
+    },
+    profile,
+    coverArt: (
+      <ProfileCover
+        cover={resolveCover({
+          handle,
+          coverPath: null,
+          coverDesign: null,
+          coverColour: null,
+        })}
+        priority
       />
+    ),
+    // Classic keeps TipMe's identity block (the new styles draw their own).
+    identity: <RecipientIdentity profile={profile} firstName={firstName} />,
+    tipBlock: (
+      <AppreciationForm
+        surface="profile"
+        paymentMode="test"
+        recipient={firstName}
+        handle={handle}
+        // Classic has no skin: its tip form is today's.
+        {...(style === 'classic' ? {} : { skin: style })}
+      />
+    ),
+    footer: (
+      <footer className="profile-foot">
+        <div className="profile-foot__quiet">
+          <ReportPage handle={handle} />
+          <Link href="/legal/privacy">Privacy</Link>
+          <Link href="/legal/terms">Terms</Link>
+        </div>
+      </footer>
+    ),
+  });
+  // Classic renders today's page, whose root is its own <main>.
+  return (
+    <>
+      {style === 'classic' ? (
+        styled
+      ) : (
+        <main id="main" tabIndex={-1} className="studio-lab">
+          {styled}
+        </main>
+      )}
       {check.notices.length + check.issues.length > 0 && (
         <aside className="studio-lab-check" aria-label="Design check">
           <ul>
@@ -338,6 +349,6 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
           </ul>
         </aside>
       )}
-    </main>
+    </>
   );
 }

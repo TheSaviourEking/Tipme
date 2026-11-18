@@ -19,8 +19,21 @@
  */
 import type { ReactNode } from 'react';
 import { preload } from 'react-dom';
-import type { PublicProfile, PublicStudio } from '@tipme/contracts';
-import { StyleBlocks, StyleCover, StyleIdentity, StyleLinks } from './parts';
+import {
+  isClassicDefault,
+  type PublicProfile,
+  type PublicStudio,
+} from '@tipme/contracts';
+import { StandardProfile } from '@/components/profile/standard-profile';
+import { ClassicStudio } from './classic';
+import {
+  StyleBarName,
+  StyleBlocks,
+  StyleCover,
+  StyleIdentity,
+  StyleLinks,
+  StyleTop,
+} from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
 import { StyleSheet } from './style-sheets';
 import {
@@ -81,6 +94,7 @@ export function StudioStylePage({
       <style>{css}</style>
       <StyleSheet styleId={style} />
       <div className="studio-page">
+        {style === 'journal' && <StyleTop profile={profile} />}
         <StyleCover doc={doc} cover={profile.cover} coverArt={coverArt} />
         <StyleIdentity
           styleId={style}
@@ -88,6 +102,10 @@ export function StudioStylePage({
           firstName={firstName}
         />
         <section className="studio-tip" aria-label={`Tip ${firstName}`}>
+          {/* Linen's Tip moment is a titled card (§9.8). */}
+          {style === 'linen' && (
+            <h2 className="studio-tip__title">Send a tip</h2>
+          )}
           {tipBlock}
         </section>
         <div className="studio-grid">
@@ -96,6 +114,44 @@ export function StudioStylePage({
         </div>
         <div className="studio-foot">{footer}</div>
       </div>
+      {style === 'journal' && (
+        <StyleBarName styleId={style} profile={profile} />
+      )}
     </div>
+  );
+}
+
+/**
+ * The one entry for a published style (§13): Classic renders today's markup with its choices
+ * (ClassicStudio, §9.1); every other style renders the new frame. `identity` is TipMe's identity
+ * block, which only Classic uses (the new styles draw their own).
+ */
+export function renderStyled(
+  props: Parameters<typeof StudioStylePage>[0] & {
+    identity: ReactNode;
+    lead?: ReactNode;
+  },
+) {
+  const { identity, lead, ...rest } = props;
+  const doc = props.studio.document;
+  // Classic with every default is today's page, byte for byte (§4.3, §9.1): the standard markup
+  // through the same component as a page with no Studio, with no Classic root, tokens or sheet.
+  if (isClassicDefault(doc))
+    return (
+      <StandardProfile
+        firstName={
+          props.profile.displayName.split(/\s+/)[0] ?? props.profile.displayName
+        }
+        lead={lead}
+        cover={props.coverArt}
+        identity={identity}
+        tipBlock={props.tipBlock}
+        footer={props.footer}
+      />
+    );
+  return doc.style === 'classic' ? (
+    <ClassicStudio {...rest} identity={identity} {...(lead ? { lead } : {})} />
+  ) : (
+    <StudioStylePage {...rest} />
   );
 }

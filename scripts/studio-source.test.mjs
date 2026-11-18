@@ -150,10 +150,20 @@ test('no style component renders raw HTML or builds a style from user content', 
       .filter(([, src]) => /^['"]use client['"]/m.test(src))
       .map(([f]) => f.replaceAll('\\', '/'))
       .sort(),
-    ['sheets/clear.tsx', 'style-sheets.tsx', 'video-embed.tsx'],
+    [
+      'sheets/classic.tsx',
+      'sheets/clear.tsx',
+      'sheets/journal.tsx',
+      'sheets/linen.tsx',
+      'style-sheets.tsx',
+      'video-embed.tsx',
+    ],
   );
   // A sheet renders nothing: importing it brings the style's CSS.
   assert.match(readStyle('sheets/clear.tsx'), /return null;/);
+  assert.match(readStyle('sheets/classic.tsx'), /return null;/);
+  assert.match(readStyle('sheets/journal.tsx'), /return null;/);
+  assert.match(readStyle('sheets/linen.tsx'), /return null;/);
   // The old renderer uses the shared video island.
   assert.match(
     read('studio-blocks.tsx'),
@@ -194,9 +204,13 @@ test('every style rule is scoped to a styled Studio page', () => {
     for (const s of selectors)
       assert.match(
         s,
-        own
-          ? new RegExp(`^\\.studio\\[data-style=['"]?${own}['"]?\\]`)
-          : /^(html:has\()?\.studio\[data-style\]/,
+        // Classic is today's page with its choices (§9.1): its root is the profile's <main>,
+        // and its tokens sit on :root while that page is shown.
+        own === 'classic'
+          ? /^(:root:has\()?\.profile-page--studio\[data-style=['"]?classic['"]?\]/
+          : own
+            ? new RegExp(`^\\.studio\\[data-style=['"]?${own}['"]?\\]`)
+            : /^(html:has\()?\.studio\[data-style\]/,
         `${file}: "${s}"`,
       );
   }

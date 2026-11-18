@@ -14,6 +14,7 @@ import {
   proItemsOf,
   studioDocumentSchema,
   studioSlotWidth,
+  STUDIO_HEADING_PX,
 } from '../dist/index.js';
 import { runs, seed } from './support/pbt.mjs';
 import {
@@ -292,6 +293,12 @@ test("long-word measures headings in the style's display face at 320 px", () => 
   );
 });
 
+test("Classic's section title is measured at the size classic.css draws", () => {
+  // 2rem at every width (classic.css .studio-title).
+  assert.equal(STUDIO_HEADING_PX.classic, 32);
+  assert.equal(STUDIO_HEADING_PX.clear, 20);
+});
+
 test("photo rules use the style's slot widths", () => {
   const widest = (style) =>
     Math.max(...[390, 1440].map((v) => studioSlotWidth(style, 'photo', v)));
@@ -309,6 +316,38 @@ test("photo rules use the style's slot widths", () => {
     assert.equal(studioSlotWidth('clear', 'gallery', v), 150, `${v}`);
   assert.equal(studioSlotWidth('clear', 'gallery', 1024), 141);
   assert.equal(studioSlotWidth('clear', 'gallery', 1440), 141);
+  // Classic as classic.css draws it on today's page (§9.1; apps/web test studio-classic holds
+  // the CSS to it). Two columns from 861 px: min(1120, vw − 80) − 408 rail − clamp(32, 5vw, 72)
+  // gap − 40 inset, widest at 1200 (612), 600 at 1440; one column below: min(vw, 576) − 32.
+  // A gallery photo is 2-up with an 8 px gap.
+  const classic = (kind, v) => studioSlotWidth('classic', kind, v);
+  for (const [v, w] of [
+    [1440, 600],
+    [1200, 612],
+    [1024, 445],
+    [861, 290],
+    [860, 544],
+    [768, 544],
+    [576, 544],
+    [390, 358],
+    [320, 288],
+  ]) {
+    for (const kind of [
+      'text',
+      'quote',
+      'photo',
+      'video',
+      'services',
+      'events',
+    ])
+      assert.equal(classic(kind, v), w, `${kind} at ${v}`);
+  }
+  assert.equal(classic('gallery', 1440), 296);
+  assert.equal(classic('gallery', 1200), 302);
+  assert.equal(classic('gallery', 390), 175);
+  // photo-resolution asks for the drawn width at 1440.
+  assert.deepEqual(rules(at('classic', 599)), ['photo-resolution']);
+  assert.deepEqual(rules(at('classic', 600)), []);
   // As in v1: 1x at the widest screen, no density factor and no cap.
   assert.equal(widest('clear'), 440);
   assert.equal(widest('stage'), 720);

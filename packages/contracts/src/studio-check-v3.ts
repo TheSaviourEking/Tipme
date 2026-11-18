@@ -110,9 +110,8 @@ interface Desktop {
   bleed?: true;
 }
 
-const DESKTOP: Record<StudioStyleId, Desktop> = {
-  // Today's page: the main column beside the 340 px rail (1440 − 2×24 − 340 − 32).
-  classic: { text: 1020, media: 1020, list: 1020, tile: 506 },
+// Classic's widths follow the screen (classicSlot, below).
+const DESKTOP: Record<Exclude<StudioStyleId, 'classic'>, Desktop> = {
   // Content 920, a 2-column grid with a 40 px gap; photos 3-up squares in the 440 column, gap 8.
   clear: { text: 440, media: 440, list: 440, tile: 141 },
   // Content 1120: a 420 px column, gap 96, the rest (604); text maxes at 520; photos 3-up, gap 6.
@@ -130,6 +129,37 @@ const DESKTOP: Record<StudioStyleId, Desktop> = {
   // Content 1040: 440 px, gap 80, the right column.
   horizon: { text: 520, media: 520, list: 520, tile: 256 },
 };
+
+/**
+ * Classic draws its blocks on today's page (§9.1, classic.css; apps/web test studio-classic holds
+ * these numbers to the CSS). From 861 px two columns: the sheet min(1120, vw − 80), less the
+ * 408 px tip rail, the clamp(32, 5vw, 72) gap and the 40 px inset the person's column has, so
+ * 612 at 1200 (the widest), 600 at 1440, about 0.95·vw − 528 below 1200. Up to 860 px one
+ * column: min(vw, 576) − 32. Every block fills the column; a gallery photo is 2-up, gap 8.
+ */
+const CLASSIC = {
+  twoColumns: 861,
+  sheet: 1120,
+  sheetGutter: 80,
+  rail: 408,
+  gap: { min: 32, vw: 0.05, max: 72 },
+  inset: 40,
+  phoneMax: 576,
+  phoneGutter: 16,
+  tileGap: 8,
+} as const;
+
+function classicSlot(kind: StudioBlockKind, screen: number): number {
+  const c = CLASSIC;
+  const column =
+    screen >= c.twoColumns
+      ? Math.min(c.sheet, screen - c.sheetGutter) -
+        c.rail -
+        Math.min(Math.max(c.gap.min, c.gap.vw * screen), c.gap.max) -
+        c.inset
+      : Math.min(screen, c.phoneMax) - 2 * c.phoneGutter;
+  return Math.round(kind === 'gallery' ? (column - c.tileGap) / 2 : column);
+}
 
 /** Clear's phone and tablet photo strip: 150×200 tiles (clear.css `.studio-strip li`). */
 const CLEAR_STRIP_TILE = 150;
@@ -149,6 +179,7 @@ export function studioSlotWidth(
   viewport: number,
 ): number {
   const screen = Math.min(Math.max(viewport, 0), 1440);
+  if (style === 'classic') return classicSlot(kind, screen);
   const d = DESKTOP[style];
   if (screen >= 1024) {
     const room = screen - 2 * TABLET_GUTTER;
@@ -198,13 +229,15 @@ const number = (n: number) =>
 
 /**
  * Heading size at 320 px, per style (builder's call within §9; it only feeds the width check).
- * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css): Clear's
- * phone section title is 20/26 (§9.2).
+ * Kept in step with each style's CSS (apps/web/src/components/studio-styles/<style>.css; apps/web
+ * test studio-style-page holds them): Clear's phone section title is 20/26 (§9.2), Journal's
+ * 22/29 (§9.3), Linen's 24/30 (§9.8).
  */
-const HEADING_PX: Record<StudioStyleId, number> = {
-  classic: 24,
+export const STUDIO_HEADING_PX: Record<StudioStyleId, number> = {
+  // classic.css .studio-title: 2rem at every width (apps/web test studio-classic holds it).
+  classic: 32,
   clear: 20,
-  journal: 24,
+  journal: 22,
   stage: 24,
   signboard: 22,
   sprint: 28,
@@ -413,7 +446,11 @@ function headingFace(
     return lacks(font, text) ? INTER() : font;
   };
   if (b.kind === 'text' && b.variant === 'heading')
-    return { font: face(b.text), px: HEADING_PX[doc.style], text: b.text };
+    return {
+      font: face(b.text),
+      px: STUDIO_HEADING_PX[doc.style],
+      text: b.text,
+    };
   return null;
 }
 

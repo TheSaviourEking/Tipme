@@ -1,0 +1,350 @@
+/* Classic's choices (spec 2026-11-17-page-studio-styles §9.1): today's page, its look kept. Loaded
+   only on a Classic page with a choice (sheets/classic.tsx, through style-sheets.tsx); a standard
+   page and a Classic page with every default link none of it. Today's tokens (tokens.css) point at
+   the `--studio-*` values classic-tokens.ts sets on :root, so with today's purple in light mode
+   every one is today's own. The accent replaces the purple only where today's page uses it: the
+   focus ring and links (as tokens), the selected key and the remember box, and the wordmark. Dark
+   is the canvas's derived palette, every shadow and gloss off (each shadow is a token). */
+
+:root:has(.profile-page--studio[data-style='classic'][data-mode]) {
+  color-scheme: var(--studio-scheme);
+  --canvas: var(--studio-bg);
+  --surface-base: var(--studio-base);
+  --surface-raised: var(--studio-card);
+  --surface-recessed: var(--studio-el2);
+  --surface-subtle: var(--studio-subtle);
+  --edge-light: var(--studio-edge);
+  --edge-hairline: var(--studio-hair);
+  --border-material: var(--studio-border);
+  --border-subtle: var(--studio-lineSoft);
+  --text-primary: var(--studio-fg);
+  --text-secondary: var(--studio-fg2);
+  --text-tertiary: var(--studio-fg3);
+  --state-danger: var(--studio-danger);
+  --brand-primary: var(--studio-accText);
+  --brand-ink: var(--studio-ink);
+  --shadow-frame: var(--studio-shFrame);
+  --shadow-instrument: var(--studio-shInst);
+  --shadow-raised-1: var(--studio-shKey);
+  --shadow-raised-signature: var(--studio-shSig);
+  --shadow-recessed: var(--studio-shRec);
+  --shadow-raised-continue: var(--studio-shTip);
+  --shadow-raised-continue-pressed: var(--studio-shTipDown);
+}
+
+/* The TipMe wordmark in the header: its ink and its purple. */
+:root:has(.profile-page--studio[data-style='classic'][data-mode])
+  .brand__mark
+  path[fill='#000000'] {
+  fill: var(--studio-fg);
+}
+
+:root:has(.profile-page--studio[data-style='classic'][data-mode])
+  .brand__mark
+  path[fill='#7A32F9'] {
+  fill: var(--studio-acc);
+}
+
+/* The selected amount key: fill, edge, label and corner dot (currentColor). */
+.profile-page--studio[data-style='classic'][data-mode]
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-accEdge);
+  background-color: var(--studio-acc);
+  background-image: linear-gradient(var(--studio-accGloss), transparent 36%);
+  color: var(--studio-accLabel);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .tip-remember input {
+  border-color: var(--studio-boxLine);
+  box-shadow: var(--studio-shBox);
+}
+
+/* The Pro featured link's ledge, off in dark like every shadow. */
+.profile-page--studio[data-style='classic'][data-mode]
+  .profile-links__featured {
+  box-shadow: var(--studio-shFeat);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .profile-links__featured:active {
+  box-shadow: var(--studio-shFeatDown);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .tip-remember
+  input:checked {
+  border-color: var(--studio-accEdge);
+  background:
+    linear-gradient(var(--studio-accGloss), transparent 40%), var(--studio-acc);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .tip-remember
+  input:checked::before {
+  border-color: var(--studio-accLabel);
+}
+
+/* The Tip key keeps Classic's ink: black in light, the paper colour in dark. */
+.profile-page--studio[data-style='classic'][data-mode] .composer-submit,
+.profile-page--studio[data-style='classic'][data-mode] .composer-submit:hover {
+  border-color: var(--studio-tip);
+  background:
+    linear-gradient(var(--studio-tipGloss), transparent 30%), var(--studio-tip);
+  color: var(--studio-tipFg);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .link-badge:not([data-light]) {
+  color: var(--studio-badgeFg);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .composer-extras
+  summary {
+  border-top-color: var(--studio-rule);
+}
+
+@media (max-width: 860px) and (min-height: 30rem) {
+  .profile-page--studio[data-style='classic'][data-mode] .composer-action {
+    box-shadow: var(--studio-shBar);
+  }
+}
+
+/* Cover type. Gradient: today's cover shape (.profile-cover), two stops of the accent's hue.
+   Plain: no band; the person starts on the canvas. */
+.profile-page--studio[data-style='classic'][data-mode][data-cover='gradient']
+  .classic-cover {
+  background: linear-gradient(
+    135deg,
+    var(--studio-coverFrom),
+    var(--studio-coverTo)
+  );
+}
+
+.profile-page--studio[data-style='classic'][data-mode][data-cover='plain']
+  .profile-identity {
+  margin-top: var(--space-8);
+}
+
+@media (min-width: 861px) {
+  .profile-page--studio[data-style='classic'][data-mode][data-cover='plain']
+    .profile-composer {
+    margin-top: var(--space-8);
+  }
+
+  /* The blocks go under the person; the tip panel keeps the right rail beside both. */
+  .profile-page--studio[data-style='classic'][data-mode] .profile-columns {
+    grid-template-rows: auto 1fr;
+  }
+
+  .profile-page--studio[data-style='classic'][data-mode] .profile-composer {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+  }
+
+  .profile-page--studio[data-style='classic'][data-mode] .classic-blocks {
+    grid-column: 1;
+    padding-left: var(--space-10);
+  }
+}
+
+@media (max-width: 860px) {
+  .profile-page--studio[data-style='classic'][data-mode][data-cover='plain']
+    .profile-identity {
+    margin-top: var(--space-4);
+  }
+}
+
+/* Blocks in Classic's treatment: DM Serif titles, Manrope text, raised panels, photos at the Tip
+   radius (14), money in Inter. */
+.profile-page--studio[data-style='classic'][data-mode] .classic-blocks {
+  min-width: 0;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-blocks {
+  display: grid;
+  gap: var(--space-10);
+  margin-top: var(--space-10);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-section {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-title {
+  margin: 0;
+  font: 400 2rem / 1.05 var(--font-editorial);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-title--fallback {
+  font-family: var(--font-inter), var(--font-interface);
+  font-weight: 700;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-card {
+  margin: 0;
+  padding: 1.375rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 1.625rem;
+  background:
+    linear-gradient(var(--edge-light), transparent 2px), var(--surface-raised);
+  box-shadow: var(--studio-shInst);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-card p {
+  margin: 0;
+  max-width: 34em;
+  color: var(--text-secondary);
+  font-size: 1rem;
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-card p + p {
+  margin-top: var(--space-3);
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .studio-quote
+  blockquote {
+  margin: 0;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-quote p {
+  color: var(--text-primary);
+  font: 400 1.375rem / 1.3 var(--font-editorial);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-photo {
+  margin: 0;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-photo img,
+.profile-page--studio[data-style='classic'][data-mode] .studio-strip img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.875rem;
+}
+
+.profile-page--studio[data-style='classic'][data-mode]
+  .studio-photo
+  figcaption {
+  margin-top: var(--space-2);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-video__still {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  min-height: 5rem;
+  padding: var(--space-4);
+  border: 1px solid var(--border-material);
+  border-radius: 0.875rem;
+  background: var(--surface-recessed);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-video__words,
+.profile-page--studio[data-style='classic'][data-mode] .studio-list__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-video__title,
+.profile-page--studio[data-style='classic'][data-mode] .studio-list__title {
+  font-weight: 700;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-video__note,
+.profile-page--studio[data-style='classic'][data-mode] .studio-list__sub {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-video__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 0.875rem;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-list ul,
+.profile-page--studio[data-style='classic'][data-mode] .studio-events {
+  display: grid;
+  gap: var(--space-4);
+  margin: 0;
+  list-style: none;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-list ul {
+  padding: 0;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-events li {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-price {
+  flex: none;
+  font-family: var(--font-money);
+  font-weight: 700;
+  font-variant-numeric: var(--numeric-variant);
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-fine {
+  margin: var(--space-4) 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-date {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  min-width: 3rem;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.profile-page--studio[data-style='classic'][data-mode] .studio-date__day {
+  color: var(--text-primary);
+  font: 400 1.75rem / 1 var(--font-editorial);
+}

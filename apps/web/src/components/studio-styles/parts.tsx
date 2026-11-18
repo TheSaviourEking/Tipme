@@ -123,6 +123,9 @@ export function StyleIdentity({
   firstName: string;
 }) {
   const fallback = needsInter(style, profile.displayName);
+  // Journal shows this avatar on a desktop only (its phone avatar sits in the top row), so it is
+  // not fetched eagerly there; it is never Journal's largest paint (the name is).
+  const journal = style === 'journal';
   return (
     <header className="studio-identity" aria-labelledby="studio-name">
       <AvatarImage
@@ -131,8 +134,8 @@ export function StyleIdentity({
         name={profile.displayName}
         width={256}
         height={256}
-        sizes="(max-width: 1023px) 104px, 128px"
-        priority
+        sizes={journal ? '72px' : '(max-width: 1023px) 104px, 128px'}
+        priority={!journal}
       />
       <h1
         id="studio-name"
@@ -141,8 +144,13 @@ export function StyleIdentity({
         {profile.displayName}
       </h1>
       <p className="studio-meta">
-        <span>@{profile.handle}</span>
-        {profile.role && <span> · {profile.role}</span>}
+        <span className="studio-meta__handle">@{profile.handle}</span>
+        {profile.role && (
+          <>
+            <span className="studio-meta__sep"> · </span>
+            <span className="studio-meta__role">{profile.role}</span>
+          </>
+        )}
         {profile.plan === 'pro' && <ProBadge explain className="studio-pro" />}
       </p>
       {profile.bio && <p className="studio-bio">{profile.bio}</p>}
@@ -152,6 +160,55 @@ export function StyleIdentity({
         </p>
       )}
     </header>
+  );
+}
+
+/**
+ * Journal's top row (§9.3): the page opens on a category label (the person's role) with the
+ * 40 px avatar on a phone, or the handle on a desktop, over a 1 px rule. Each breakpoint shows
+ * one of the two avatars and one handle (CSS), so only one of each is ever in the tree.
+ */
+export function StyleTop({ profile }: { profile: PublicProfile }) {
+  return (
+    <div className="studio-top">
+      {profile.role && <p className="studio-kicker">{profile.role}</p>}
+      <p className="studio-top__handle">@{profile.handle}</p>
+      <AvatarImage
+        className="studio-avatar studio-avatar--top"
+        src={profile.avatarPath ?? ''}
+        name={profile.displayName}
+        width={80}
+        height={80}
+        sizes="40px"
+      />
+    </div>
+  );
+}
+
+/**
+ * The name and handle on the phone's Tip bar (Journal, §9.3; §9.10: one line, ellipsis). It sits
+ * beside the form's bar and shows only while the bar does (CSS); it repeats the page's heading,
+ * so it stays out of the accessibility tree.
+ */
+export function StyleBarName({
+  styleId,
+  profile,
+}: {
+  styleId: StudioStyleId;
+  profile: PublicProfile;
+}) {
+  return (
+    <div className="studio-barname" aria-hidden="true">
+      <p
+        className={`studio-barname__name${needsInter(styleId, profile.displayName) ? ' studio-barname__name--fallback' : ''}`}
+        data-truncate=""
+      >
+        {profile.displayName}
+      </p>
+      <p className="studio-barname__handle" data-truncate="">
+        @{profile.handle}
+      </p>
+    </div>
   );
 }
 
@@ -172,8 +229,16 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
               <a className="studio-link" href={link.url} {...external}>
                 <LinkBadge platform={link.platform} small />
                 <span className="studio-link__words">
-                  <span className="studio-link__title">{label}</span>
-                  {handle && <span className="studio-link__sub">{handle}</span>}
+                  {/* data-truncate: a style may end these with an ellipsis (the layout probe
+                      accepts it only where marked). */}
+                  <span className="studio-link__title" data-truncate="">
+                    {label}
+                  </span>
+                  {handle && (
+                    <span className="studio-link__sub" data-truncate="">
+                      {handle}
+                    </span>
+                  )}
                 </span>
                 <svg
                   className="studio-link__chevron"
@@ -201,6 +266,10 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
  */
 function sizesFor(style: StudioStyleId, kind: StudioBlock['kind']): string {
   const at = (viewport: number) => studioSlotWidth(style, kind, viewport);
+  // Classic is today's page (classic.css): two columns from 861 px, widest at 1200, then one
+  // column of min(vw, 576) − 32, its photos 2-up with an 8 px gap.
+  if (style === 'classic')
+    return `(min-width: 1024px) ${at(1200)}px, (min-width: 861px) ${at(1023)}px, (min-width: 576px) ${at(576)}px, ${kind === 'gallery' ? 'calc(50vw - 20px)' : 'calc(100vw - 32px)'}`;
   return `(min-width: 1024px) ${at(1440)}px, (min-width: 768px) ${at(1023)}px, ${at(390)}px`;
 }
 

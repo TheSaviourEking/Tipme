@@ -9,7 +9,10 @@ import type { StudioStyleId } from '@tipme/contracts';
  * the same loader, studio-styles.tsx). A style without a sheet yet renders the bare frame.
  */
 const SHEETS: Partial<Record<StudioStyleId, ReturnType<typeof dynamic>>> = {
+  classic: dynamic(() => import('./sheets/classic')),
   clear: dynamic(() => import('./sheets/clear')),
+  journal: dynamic(() => import('./sheets/journal')),
+  linen: dynamic(() => import('./sheets/linen')),
 };
 
 export function StyleSheet({ styleId }: { styleId: StudioStyleId }) {
