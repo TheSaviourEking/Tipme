@@ -270,6 +270,38 @@
   gap: var(--space-3);
 }
 
+/* Username handover (18 Nov 2026): the claim link and "Give to an account", under a reserved name. */
+.ops-handover {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.ops-handover h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ops-handover__link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.ops-handover__link .tm-input {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 30rem) {
+  .ops-handover__link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .ops-reason {
   display: grid;
   gap: var(--space-3);

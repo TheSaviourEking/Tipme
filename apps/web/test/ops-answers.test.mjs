@@ -240,3 +240,19 @@ test('the changelog refusals say nothing changed, and what to do', () => {
     /can’t be shown to users/,
   );
 });
+
+test('the handover refusals and activity have plain words, with no em dash', async () => {
+  const { STAFF_ACTIVITY_WORDS } = await import('../src/lib/ops-answers.ts');
+  const words = (code, status = 409) => refusalWords({ status, code });
+  assert.match(words('USERNAME_IN_HOLD'), /deleted page’s hold/);
+  assert.match(words('HANDOVER_LINK_NOT_FOUND', 404), /no open claim link/);
+  assert.match(words('HANDOVER_ACCOUNT_UNAVAILABLE'), /can’t take a username/);
+  assert.ok(STAFF_ACTIVITY_WORDS['username.assigned']);
+  for (const text of [
+    words('USERNAME_IN_HOLD'),
+    words('HANDOVER_LINK_NOT_FOUND', 404),
+    words('HANDOVER_ACCOUNT_UNAVAILABLE'),
+    STAFF_ACTIVITY_WORDS['username.assigned'],
+  ])
+    assert.equal(/[\u2013\u2014]/.test(text), false, text);
+});
