@@ -1017,6 +1017,8 @@ export const handleReservations = pgTable(
     releasedAt: timestamp('released_at', { withTimezone: true }),
     releasedBy: uuid('released_by').references(() => users.id),
     releaseReason: text('release_reason'),
+    // The page the name was handed over to, when the release was a handover (18 Nov 2026).
+    handedOverTo: uuid('handed_over_to').references(() => profiles.id),
   },
   (table) => [
     uniqueIndex('handle_reservations_active')
@@ -1104,6 +1106,47 @@ export const handleTakeBacks = pgTable(
     check(
       'handle_take_backs_outcome',
       sql`${table.outcome} IS NULL OR ${table.outcome} IN ('user_chose', 'assigned', 'page_deleted', 'old_removed')`,
+    ),
+  ],
+);
+
+/**
+ * One-time claim links for a reserved username (handover, 18 Nov 2026). Only the code's sha256 is
+ * kept; staff see the link once. One open link per reservation: a new one cancels the old. A link
+ * is used once, by the account that claimed the name; cancelled_by is null when TipMe ended it (the
+ * reservation was released or the name given to an account).
+ */
+export const handleHandoverLinks = pgTable(
+  'handle_handover_links',
+  {
+    id: uuid('id').primaryKey(),
+    reservationId: uuid('reservation_id')
+      .notNull()
+      .references(() => handleReservations.id),
+    handleLower: text('handle_lower').notNull(),
+    tokenSha256: text('token_sha256').notNull().unique(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedBy: uuid('used_by').references(() => users.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    cancelReason: text('cancel_reason'),
+  },
+  (table) => [
+    uniqueIndex('handle_handover_links_open')
+      .on(table.reservationId)
+      .where(sql`used_at IS NULL AND cancelled_at IS NULL`),
+    check(
+      'handle_handover_links_outcome',
+      sql`(${table.usedAt} IS NULL OR ${table.cancelledAt} IS NULL) AND (${table.usedAt} IS NULL) = (${table.usedBy} IS NULL) AND (${table.cancelledAt} IS NULL) = (${table.cancelReason} IS NULL)`,
+    ),
+    check(
+      'handle_handover_links_expiry',
+      sql`${table.expiresAt} > ${table.createdAt}`,
     ),
   ],
 );

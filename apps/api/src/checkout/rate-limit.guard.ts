@@ -42,7 +42,8 @@ type RateLimitedRoute =
   | 'business_public'
   | 'business_note'
   | 'business_apply'
-  | 'changelog_ingest';
+  | 'changelog_ingest'
+  | 'username_claims';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
@@ -168,6 +169,11 @@ export class RateLimitGuard implements CanActivate {
       // A supporter's note after paying: one per tip, so a few an hour is plenty.
       business_note: {
         limit: this.config.RATE_LIMIT_BUSINESS_NOTE_PER_HOUR,
+        windowMs: 3_600_000,
+      },
+      // Claim links (handover): previews and claims share one allowance per address.
+      username_claims: {
+        limit: this.config.RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR,
         windowMs: 3_600_000,
       },
       // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.

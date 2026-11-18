@@ -1,0 +1,630 @@
+import { createHash, randomBytes } from 'node:crypto';
+import {
+  CLAIM_LINK_CODE,
+  CLAIM_LINK_PATH,
+  CLAIM_LINK_PREFIX,
+  HANDOVER_LINK_DAYS,
+  type ClaimLinkPreview,
+  type OpsHandoverAccount,
+  type OpsHandoverLink,
+  type UsernameHandedOver,
+} from '@tipme/contracts';
+import { isReservedHandle, reservationKey } from '@tipme/domain';
+import { and, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import type { Database, Tx } from '../client.js';
+import {
+  handleAliases,
+  handleHandoverLinks,
+  handleHolds,
+  handleReservations,
+  handleTakeBacks,
+  profiles,
+  users,
+} from '../schema.js';
+import { recordAudit } from './audit.js';
+import { maskEmail, normaliseEmail } from './email-address.js';
+import { guarded, OperationError, sqlStateOf } from './errors.js';
+import { newId } from './ids.js';
+import { opsPageByHandle } from './profiles.js';
+import { checkedReason, withAuditChange } from './staff.js';
+
+/*
+ * Username handover (owner's approval, 18 Nov 2026; reservation spec, "Handover"). A reserved name
+ * moves to one account, either through a one-time claim link staff copy and send themselves, or by
+ * staff giving it to an account they found. Nobody loses a name: only a reserved name moves, and
+ * the account keeps its old username as a redirect. So there is no second approver.
+ *
+ * The name stays reserved until the handover commits. The reservation ends and the handle is set in
+ * one transaction. Lock order, as for take-backs and renames: the account's profile row, then the
+ * name's per-handle advisory lock (the reservation code and the 0028/0072 triggers take the same
+ * one), then the link and reservation rows. A sign-up meanwhile still sees the reservation and is
+ * refused; a release or a second claim waits for the lock, then finds the reservation gone.
+ *
+ * Only the sha256 of a link's code is stored. The code is never logged, audited or put in a URL a
+ * server sees (it lives in the fragment); the audit names the link and the reservation instead.
+ */
+
+const PERMISSION = 'usernames.manage';
+const DAY_MS = 86_400_000;
+const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const sha256 = (value: string) =>
+  createHash('sha256').update(value).digest('hex');
+/** 24 characters of base32: 120 random bits (256 is a multiple of 32, so each is uniform). */
+const newCode = () =>
+  Array.from(randomBytes(24), (byte) => BASE32[byte & 31]).join('');
+const claimPath = (code: string) =>
+  `${CLAIM_LINK_PATH}${CLAIM_LINK_PREFIX}${code}`;
+
+const isBuiltIn = (raw: string) => isReservedHandle(raw.trim());
+
+/** The same key as username-reservations.ts and the triggers of 0028 and 0072. */
+const lockName = (tx: Tx, key: string) =>
+  tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`tipme.handle:${key}`}::text))`,
+  );
+
+/** A built-in word is refused on the name as typed; anything else must fold to a key. */
+function keyOf(raw: string): string {
+  if (isBuiltIn(raw)) throw new OperationError('USERNAME_BUILT_IN');
+  const key = reservationKey(raw);
+  if (!key) throw new OperationError('USERNAME_NOT_RESERVED');
+  return key;
+}
+
+async function lockedReservation(tx: Tx, key: string) {
+  const [row] = await tx
+    .select()
+    .from(handleReservations)
+    .where(
+      and(
+        eq(handleReservations.handleLower, key),
+        isNull(handleReservations.releasedAt),
+      ),
+    )
+    .for('update');
+  return row ?? null;
+}
+
+/** A deleted page's 90-day hold still protects that page's old links: the name waits. */
+async function holdUntil(
+  db: Database | Tx,
+  key: string,
+  now: Date,
+): Promise<Date | null> {
+  const [hold] = await db
+    .select({ until: handleHolds.until })
+    .from(handleHolds)
+    .where(and(eq(handleHolds.handleLower, key), gt(handleHolds.until, now)));
+  return hold?.until ?? null;
+}
+
+const linkColumns = {
+  id: handleHandoverLinks.id,
+  name: handleHandoverLinks.handleLower,
+  createdAt: handleHandoverLinks.createdAt,
+  expiresAt: handleHandoverLinks.expiresAt,
+  email: users.email,
+};
+
+const toLink = (row: {
+  id: string;
+  name: string;
+  createdAt: Date;
+  expiresAt: Date;
+  email: string | null;
+}): OpsHandoverLink => ({
+  id: row.id,
+  name: row.name,
+  createdBy: row.email ? maskEmail(row.email) : null,
+  createdAt: row.createdAt.toISOString(),
+  expiresAt: row.expiresAt.toISOString(),
+});
+
+const openLinkOf = (reservationId: string) =>
+  and(
+    eq(handleHandoverLinks.reservationId, reservationId),
+    isNull(handleHandoverLinks.usedAt),
+    isNull(handleHandoverLinks.cancelledAt),
+  );
+
+/** The open claim link of a reservation, as staff see it (an expired one is still shown). */
+export async function openHandoverLink(
+  db: Database | Tx,
+  reservationId: string,
+): Promise<OpsHandoverLink | null> {
+  const [row] = await db
+    .select(linkColumns)
+    .from(handleHandoverLinks)
+    .leftJoin(users, eq(users.id, handleHandoverLinks.createdBy))
+    .where(openLinkOf(reservationId));
+  return row ? toLink(row) : null;
+}
+
+/**
+ * Ends the open link of a reservation, if any. `staffId` null means TipMe ended it: the reservation
+ * was released or the name given to an account. The caller holds the name's lock.
+ */
+export async function cancelOpenHandoverLinks(
+  tx: Tx,
+  input: {
+    reservationId: string;
+    staffId: string | null;
+    reason: string;
+    now: Date;
+  },
+): Promise<string | null> {
+  const [cancelled] = await tx
+    .update(handleHandoverLinks)
+    .set({
+      cancelledAt: input.now,
+      cancelledBy: input.staffId,
+      cancelReason: input.reason,
+    })
+    .where(openLinkOf(input.reservationId))
+    .returning({ id: handleHandoverLinks.id });
+  return cancelled?.id ?? null;
+}
+
+/**
+ * Staff make a claim link for a reserved name, valid HANDOVER_LINK_DAYS days. A new link cancels the
+ * open one. The code is returned once, here, and never stored. Audited as
+ * `username.handover_link_created` with the reservation and the link, not the code.
+ */
+export function createHandoverLink(
+  db: Database,
+  input: { staffId: string; name: string; reason: string; now?: Date },
+): Promise<{ link: OpsHandoverLink; path: string }> {
+  const now = input.now ?? new Date();
+  return guarded(async () => {
+    const key = keyOf(input.name);
+    const reason = checkedReason(input.reason);
+    return db.transaction(async (tx) => {
+      await lockName(tx, key);
+      const reservation = await lockedReservation(tx, key);
+      if (!reservation) throw new OperationError('USERNAME_NOT_RESERVED');
+      if (await holdUntil(tx, key, now))
+        throw new OperationError('USERNAME_IN_HOLD');
+      const replaced = await cancelOpenHandoverLinks(tx, {
+        reservationId: reservation.id,
+        staffId: input.staffId,
+        reason: 'Replaced by a new claim link',
+        now,
+      });
+      const code = newCode();
+      const id = newId();
+      const expiresAt = new Date(now.getTime() + HANDOVER_LINK_DAYS * DAY_MS);
+      await tx.insert(handleHandoverLinks).values({
+        id,
+        reservationId: reservation.id,
+        handleLower: key,
+        tokenSha256: sha256(code),
+        createdBy: input.staffId,
+        createdAt: now,
+        expiresAt,
+      });
+      await recordAudit(tx, {
+        staffUserId: input.staffId,
+        action: 'username.handover_link_created',
+        permission: PERMISSION,
+        subjectType: 'username',
+        subjectId: key,
+        reason: withAuditChange(reason, {
+          reservationId: reservation.id,
+          linkId: id,
+          expiresAt: expiresAt.toISOString(),
+          ...(replaced ? { replacedLinkId: replaced } : {}),
+        }),
+        now,
+      });
+      return {
+        link: (await openHandoverLink(tx, reservation.id))!,
+        path: claimPath(code),
+      };
+    });
+  });
+}
+
+/** Staff cancel a reservation's open claim link. The name stays reserved. Audited. */
+export function cancelHandoverLink(
+  db: Database,
+  input: { staffId: string; name: string; reason: string; now?: Date },
+): Promise<OpsHandoverLink> {
+  const now = input.now ?? new Date();
+  return guarded(async () => {
+    const key = keyOf(input.name);
+    const reason = checkedReason(input.reason);
+    return db.transaction(async (tx) => {
+      await lockName(tx, key);
+      const reservation = await lockedReservation(tx, key);
+      if (!reservation) throw new OperationError('USERNAME_NOT_RESERVED');
+      const link = await openHandoverLink(tx, reservation.id);
+      if (!link) throw new OperationError('HANDOVER_LINK_NOT_FOUND');
+      await cancelOpenHandoverLinks(tx, {
+        reservationId: reservation.id,
+        staffId: input.staffId,
+        reason,
+        now,
+      });
+      await recordAudit(tx, {
+        staffUserId: input.staffId,
+        action: 'username.handover_link_cancelled',
+        permission: PERMISSION,
+        subjectType: 'username',
+        subjectId: key,
+        reason: withAuditChange(reason, {
+          reservationId: reservation.id,
+          linkId: link.id,
+        }),
+        now,
+      });
+      return link;
+    });
+  });
+}
+
+/** The link a code belongs to, if any; a code that isn't one is never looked up. */
+async function linkByCode(db: Database | Tx, raw: string) {
+  const code = typeof raw === 'string' ? raw.trim().toUpperCase() : '';
+  if (!CLAIM_LINK_CODE.test(code)) return null;
+  const [row] = await db
+    .select()
+    .from(handleHandoverLinks)
+    .where(eq(handleHandoverLinks.tokenSha256, sha256(code)));
+  return row ?? null;
+}
+
+type LinkRow = typeof handleHandoverLinks.$inferSelect;
+
+/** A link is open while unused, uncancelled, unexpired and its reservation still active. */
+function stateOf(
+  link: LinkRow,
+  reservationActive: boolean,
+  now: Date,
+): ClaimLinkPreview['state'] {
+  if (link.usedAt) return 'used';
+  if (link.cancelledAt || !reservationActive) return 'cancelled';
+  if (link.expiresAt.getTime() <= now.getTime()) return 'expired';
+  return 'open';
+}
+
+async function reservationActive(db: Database | Tx, id: string) {
+  const [row] = await db
+    .select({ id: handleReservations.id })
+    .from(handleReservations)
+    .where(
+      and(eq(handleReservations.id, id), isNull(handleReservations.releasedAt)),
+    );
+  return row !== undefined;
+}
+
+/** What a claim link is, for anyone holding it. Only an open link names its username. */
+export function previewHandoverLink(
+  db: Database,
+  code: string,
+  now: Date = new Date(),
+): Promise<ClaimLinkPreview> {
+  return guarded(async () => {
+    const link = await linkByCode(db, code);
+    if (!link) return { state: 'invalid' };
+    const state = stateOf(
+      link,
+      await reservationActive(db, link.reservationId),
+      now,
+    );
+    return state === 'open'
+      ? {
+          state,
+          name: link.handleLower,
+          expiresAt: link.expiresAt.toISOString(),
+        }
+      : { state };
+  });
+}
+
+/** The account's page row, locked first (the lock order above); null when it has none. */
+async function lockedAccount(tx: Tx, userId: string) {
+  const [account] = await tx
+    .select({ id: users.id, deletedAt: users.deletedAt })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (!account || account.deletedAt)
+    throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+  const [page] = await tx
+    .select()
+    .from(profiles)
+    .where(eq(profiles.userId, userId))
+    .for('update');
+  return page ?? null;
+}
+
+/**
+ * The one handover, inside the caller's transaction, which holds the profile lock then the name's
+ * lock and has checked the reservation is active. Ends the reservation, then gives the name to the
+ * page (the 0072 trigger allows it once nobody reserves it), keeping the old username as a
+ * redirect. Not a handle change the page makes, so no change is counted, on any plan.
+ */
+async function handOver(
+  tx: Tx,
+  input: {
+    key: string;
+    reservation: typeof handleReservations.$inferSelect;
+    page: typeof profiles.$inferSelect | null;
+    userId: string;
+    releasedBy: string;
+    releaseReason: string;
+    now: Date;
+  },
+): Promise<Omit<UsernameHandedOver, 'name'>> {
+  const { key, page, now } = input;
+  if (page) {
+    if (page.pageState === 'deleted' || page.rehearsalRunId)
+      throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+    // A take-back of one of its names is under way: that finishes first (or is cancelled).
+    const [takeBack] = await tx
+      .select({ id: handleTakeBacks.id })
+      .from(handleTakeBacks)
+      .where(
+        and(
+          eq(handleTakeBacks.profileId, page.id),
+          inArray(handleTakeBacks.state, ['approved', 'noticed', 'due']),
+        ),
+      );
+    if (takeBack) throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+  }
+  if (await holdUntil(tx, key, now))
+    throw new OperationError('USERNAME_IN_HOLD');
+  const profileId = page?.id ?? newId();
+  await tx
+    .update(handleReservations)
+    .set({
+      releasedAt: now,
+      releasedBy: input.releasedBy,
+      releaseReason: input.releaseReason,
+    })
+    .where(eq(handleReservations.id, input.reservation.id));
+  if (page) {
+    await tx
+      .insert(handleAliases)
+      .values({ handleLower: page.handleLower, profileId: page.id });
+    await tx
+      .update(profiles)
+      .set({ handle: key, handleLower: key })
+      .where(eq(profiles.id, page.id));
+  } else {
+    // As claimHandle: not live, named after the handle.
+    await tx.insert(profiles).values({
+      id: profileId,
+      userId: input.userId,
+      handle: key,
+      handleLower: key,
+      displayName: key,
+      pageState: 'not_live',
+    });
+  }
+  // After the page exists: the reference must point at a row.
+  await tx
+    .update(handleReservations)
+    .set({ handedOverTo: profileId })
+    .where(eq(handleReservations.id, input.reservation.id));
+  return {
+    handle: key,
+    previous: page?.handleLower ?? null,
+    profileId,
+    created: !page,
+  };
+}
+
+/** A unique violation here is a write that took no lock (an older release): the name is not free. */
+const raced = (
+  error: unknown,
+  code: 'CLAIM_LINK_INVALID' | 'USERNAME_NOT_RESERVED',
+) => {
+  if (sqlStateOf(error) === '23505') throw new OperationError(code);
+  throw error;
+};
+
+/**
+ * The signed-in person claims the name a link is for. Their page takes the name (or, with no page,
+ * one is made); their old username keeps leading to the page. The link is then used. Audited as
+ * `username.claimed_via_link`, by the person, naming the link and the reservation, never the code.
+ * Any link that isn't open is CLAIM_LINK_INVALID; the preview says which.
+ */
+export function claimViaHandoverLink(
+  db: Database,
+  input: { userId: string; code: string; now?: Date },
+): Promise<UsernameHandedOver> {
+  const now = input.now ?? new Date();
+  return guarded(async () => {
+    const found = await linkByCode(db, input.code);
+    if (!found) throw new OperationError('CLAIM_LINK_INVALID');
+    const key = found.handleLower;
+    try {
+      return await db.transaction(async (tx) => {
+        const page = await lockedAccount(tx, input.userId);
+        await lockName(tx, key);
+        const [link] = await tx
+          .select()
+          .from(handleHandoverLinks)
+          .where(eq(handleHandoverLinks.id, found.id))
+          .for('update');
+        const reservation = await lockedReservation(tx, key);
+        if (
+          !link ||
+          !reservation ||
+          reservation.id !== link.reservationId ||
+          stateOf(link, true, now) !== 'open'
+        )
+          throw new OperationError('CLAIM_LINK_INVALID');
+        const result = await handOver(tx, {
+          key,
+          reservation,
+          page,
+          userId: input.userId,
+          // Who let it go: the staff member who made the link.
+          releasedBy: link.createdBy,
+          releaseReason: `Claimed through a claim link (${link.id})`,
+          now,
+        });
+        await tx
+          .update(handleHandoverLinks)
+          .set({ usedAt: now, usedBy: input.userId })
+          .where(eq(handleHandoverLinks.id, link.id));
+        await recordAudit(tx, {
+          staffUserId: input.userId,
+          action: 'username.claimed_via_link',
+          subjectType: 'username',
+          subjectId: key,
+          reason: withAuditChange('Claimed through a claim link', {
+            reservationId: reservation.id,
+            linkId: link.id,
+            linkCreatedBy: link.createdBy,
+            profileId: result.profileId,
+            previous: result.previous,
+          }),
+          now,
+        });
+        return { name: key, ...result };
+      });
+    } catch (error) {
+      return raced(error, 'CLAIM_LINK_INVALID');
+    }
+  });
+}
+
+/**
+ * Staff give a reserved name to an account (`usernames.manage`, a reason), with no second person:
+ * nobody loses a name (owner's call, 18 Nov 2026). The account's page takes the name, and its old
+ * username keeps leading there; an account with no page gets one. An open claim link is cancelled.
+ * Audited as `username.assigned`.
+ */
+export function assignUsername(
+  db: Database,
+  input: {
+    staffId: string;
+    name: string;
+    userId: string;
+    reason: string;
+    now?: Date;
+  },
+): Promise<UsernameHandedOver> {
+  const now = input.now ?? new Date();
+  return guarded(async () => {
+    const key = keyOf(input.name);
+    const reason = checkedReason(input.reason);
+    if (!UUID.test(input.userId))
+      throw new OperationError('HANDOVER_ACCOUNT_UNAVAILABLE');
+    try {
+      return await db.transaction(async (tx) => {
+        const page = await lockedAccount(tx, input.userId);
+        await lockName(tx, key);
+        const reservation = await lockedReservation(tx, key);
+        if (!reservation) throw new OperationError('USERNAME_NOT_RESERVED');
+        const result = await handOver(tx, {
+          key,
+          reservation,
+          page,
+          userId: input.userId,
+          releasedBy: input.staffId,
+          releaseReason: reason,
+          now,
+        });
+        const cancelledLinkId = await cancelOpenHandoverLinks(tx, {
+          reservationId: reservation.id,
+          staffId: null,
+          reason: 'The username was given to an account',
+          now,
+        });
+        await recordAudit(tx, {
+          staffUserId: input.staffId,
+          action: 'username.assigned',
+          permission: PERMISSION,
+          subjectType: 'username',
+          subjectId: key,
+          reason: withAuditChange(reason, {
+            reservationId: reservation.id,
+            userId: input.userId,
+            profileId: result.profileId,
+            previous: result.previous,
+            ...(cancelledLinkId ? { cancelledLinkId } : {}),
+          }),
+          now,
+        });
+        return { name: key, ...result };
+      });
+    } catch (error) {
+      return raced(error, 'USERNAME_NOT_RESERVED');
+    }
+  });
+}
+
+/**
+ * Staff find the account to give a name to: by its current username, or by its whole confirmed
+ * email (never part of one). The answer carries public-level page fields only, as admin search
+ * does: no email, phone or balance. Deleted accounts and pages are not found.
+ */
+export function findHandoverAccounts(
+  db: Database,
+  raw: string,
+): Promise<OpsHandoverAccount[]> {
+  return guarded(async () => {
+    const query = raw.trim();
+    if (query.includes('@') && !query.startsWith('@')) {
+      const email = normaliseEmail(query);
+      if (!email) return [];
+      const [account] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(
+          and(
+            sql`lower(${users.email}) = ${email}`,
+            sql`${users.emailVerifiedAt} IS NOT NULL`,
+            isNull(users.deletedAt),
+          ),
+        );
+      if (!account) return [];
+      const found = await accountOf(db, account.id, 'email');
+      return found ? [found] : [];
+    }
+    const handle = reservationKey(query.replace(/^@/, ''));
+    if (!handle) return [];
+    const [row] = await db
+      .select({ userId: profiles.userId })
+      .from(profiles)
+      .innerJoin(users, eq(users.id, profiles.userId))
+      .where(
+        and(
+          eq(profiles.handleLower, handle),
+          ne(profiles.pageState, 'deleted'),
+          isNull(users.deletedAt),
+        ),
+      );
+    if (!row?.userId) return [];
+    const found = await accountOf(db, row.userId, 'username');
+    return found ? [found] : [];
+  });
+}
+
+async function accountOf(
+  db: Database,
+  userId: string,
+  foundBy: OpsHandoverAccount['foundBy'],
+): Promise<OpsHandoverAccount | null> {
+  const [page] = await db
+    .select({
+      handleLower: profiles.handleLower,
+      pageState: profiles.pageState,
+      rehearsalRunId: profiles.rehearsalRunId,
+    })
+    .from(profiles)
+    .where(eq(profiles.userId, userId));
+  // A deleted page or a release-check page can't take a name: not offered at all.
+  if (page && (page.pageState === 'deleted' || page.rehearsalRunId))
+    return null;
+  return {
+    userId,
+    foundBy,
+    page: page ? await opsPageByHandle(db, page.handleLower) : null,
+  };
+}

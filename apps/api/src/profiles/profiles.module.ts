@@ -5,6 +5,10 @@ import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { MeProfileController } from './me-profile.controller.js';
 import { PublicProfileController } from './public-profile.controller.js';
+import {
+  ClaimLinkPreviewController,
+  UsernameClaimController,
+} from './username-claim.controller.js';
 import { AvatarController } from './avatar.controller.js';
 import { CoverController } from './cover.controller.js';
 import {
@@ -26,6 +30,8 @@ import { MailModule } from '../mail/mail.module.js';
   controllers: [
     MeProfileController,
     PublicProfileController,
+    ClaimLinkPreviewController,
+    UsernameClaimController,
     AvatarController,
     CoverController,
     QrArtController,

@@ -172,6 +172,12 @@ const messages: Record<ApiErrorCode, string> = {
   TAKE_BACK_OPEN: 'This username already has a take-back under way.',
   TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back.',
   TAKE_BACK_CLOSED: 'This take-back has already finished.',
+  USERNAME_IN_HOLD:
+    'A deleted page’s hold on this username hasn’t ended yet, so it can’t be handed over.',
+  HANDOVER_LINK_NOT_FOUND: 'This username has no open claim link.',
+  HANDOVER_ACCOUNT_UNAVAILABLE: 'This account can’t take a username right now.',
+  CLAIM_LINK_INVALID:
+    'This claim link doesn’t work any more. Ask the TipMe team for a new one.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -405,6 +411,14 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  USERNAME_IN_HOLD: { status: 409, code: 'USERNAME_IN_HOLD' },
+  HANDOVER_LINK_NOT_FOUND: { status: 404, code: 'HANDOVER_LINK_NOT_FOUND' },
+  HANDOVER_ACCOUNT_UNAVAILABLE: {
+    status: 409,
+    code: 'HANDOVER_ACCOUNT_UNAVAILABLE',
+  },
+  // Unknown, used, expired or cancelled: one answer; the preview says which, to the code's holder.
+  CLAIM_LINK_INVALID: { status: 404, code: 'CLAIM_LINK_INVALID' },
   // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
   APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
   CHANGELOG_EDITED_ELSEWHERE: {

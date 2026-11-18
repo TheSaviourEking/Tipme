@@ -105,6 +105,10 @@ export type OperationErrorCode =
   | 'TAKE_BACK_OPEN'
   | 'TAKE_BACK_NOT_FOUND'
   | 'TAKE_BACK_CLOSED'
+  | 'USERNAME_IN_HOLD'
+  | 'HANDOVER_LINK_NOT_FOUND'
+  | 'HANDOVER_ACCOUNT_UNAVAILABLE'
+  | 'CLAIM_LINK_INVALID'
   // TipMe for businesses (PR B0). NOT_A_MANAGER and NO_MEMBERSHIP answer as "not found".
   | 'NOT_A_MANAGER'
   | 'NO_MEMBERSHIP'

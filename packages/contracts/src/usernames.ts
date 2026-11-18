@@ -41,7 +41,13 @@ export type OpsUsernameCheck =
   | { name: string; state: 'built_in' }
   /** heldUntil: a deleted page's 90-day hold; a reservation simply outlasts it. */
   | { name: string; state: 'free'; heldUntil: string | null }
-  | { name: string; state: 'reserved'; reservation: OpsReservation }
+  | {
+      name: string;
+      state: 'reserved';
+      reservation: OpsReservation;
+      /** The open claim link, if any (never its code). Optional: older APIs send nothing. */
+      handoverLink?: OpsHandoverLink | null;
+    }
   /** Public-level page fields only: no email, phone or balance. */
   | {
       name: string;
@@ -164,4 +170,94 @@ export interface OpsTakeBackPending {
   name: string;
   profileId: string;
   requestedAt: string;
+}
+
+/*
+ * Handover (owner's approval, 18 Nov 2026; reservation spec, "Handover"). A reserved name moves to
+ * one account: by a one-time claim link staff copy and send themselves, or by staff giving it to an
+ * account they find. The name stays reserved until the handover commits.
+ */
+
+/** A claim link works this many days. */
+export const HANDOVER_LINK_DAYS = 14;
+/**
+ * A claim link is `/sign-up/claim#claim=<code>`. The code lives in the fragment, which no server,
+ * log or analytics event sees, and travels to the API only in a request body.
+ */
+export const CLAIM_LINK_PATH = '/sign-up/claim';
+export const CLAIM_LINK_PREFIX = '#claim=';
+/** 24 characters of base32: 120 random bits. */
+export const CLAIM_LINK_CODE = /^[A-Z2-7]{24}$/;
+
+export const claimLinkCodeSchema = z
+  .object({
+    code: z
+      .string()
+      .transform((code) => code.trim().toUpperCase())
+      .pipe(z.string().regex(CLAIM_LINK_CODE)),
+  })
+  .strict();
+export type ClaimLinkCode = z.infer<typeof claimLinkCodeSchema>;
+
+/** The open claim link of a reservation, as staff see it: never the code. */
+export interface OpsHandoverLink {
+  id: string;
+  /** The reservation key. */
+  name: string;
+  /** Masked staff email. */
+  createdBy: string | null;
+  createdAt: string;
+  expiresAt: string;
+}
+
+/** Shown once, to the staff member who made it; the server keeps only the code's hash. */
+export interface OpsHandoverLinkCreated {
+  link: OpsHandoverLink;
+  /** `/sign-up/claim#claim=<code>`; the web app puts its own origin in front. */
+  path: string;
+}
+
+/** Find the account to give a name to: its current username, or its whole confirmed email. */
+export const opsHandoverAccountsQuerySchema = z
+  .object({ query: z.string().trim().min(2).max(254) })
+  .strict();
+export type OpsHandoverAccountsQuery = z.infer<
+  typeof opsHandoverAccountsQuerySchema
+>;
+
+/** An account found for a handover. Public-level page fields only, as admin search: no email. */
+export interface OpsHandoverAccount {
+  userId: string;
+  foundBy: 'username' | 'email';
+  /** Null for an account with no page yet: the name then becomes its page. */
+  page: OpsPage | null;
+  /** The API fills this from LIVE_CHECKOUT_HANDLES: a renamed page loses live checkout. */
+  liveCheckoutListed?: boolean;
+}
+
+export const opsHandoverAssignSchema = z
+  .object({ userId: z.uuid(), reason: z.string() })
+  .strict();
+export type OpsHandoverAssignRequest = z.infer<typeof opsHandoverAssignSchema>;
+
+/** The name now belongs to the account; `previous` keeps leading to its page. */
+export interface UsernameHandedOver {
+  name: string;
+  handle: string;
+  previous: string | null;
+  profileId: string;
+  /** The account had no page, and now has one named after the name. */
+  created: boolean;
+}
+
+/** What a claim link is, before anyone signs in. Only an open link names the username. */
+export type ClaimLinkPreview =
+  | { state: 'open'; name: string; expiresAt: string }
+  | { state: 'used' | 'expired' | 'cancelled' | 'invalid' };
+
+/** The signed-in person's answer after claiming. */
+export interface UsernameClaimed {
+  handle: string;
+  previous: string | null;
+  created: boolean;
 }

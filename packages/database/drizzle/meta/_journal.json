@@ -799,6 +799,13 @@
       "when": 1794727003408,
       "tag": "0113_mail_messages_type_sent",
       "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1795000290472,
+      "tag": "0114_username_handover_links",
+      "breakpoints": true
     }
   ]
 }
