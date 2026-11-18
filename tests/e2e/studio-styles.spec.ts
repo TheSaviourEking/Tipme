@@ -3,6 +3,7 @@ import { expectAccessible, fitsViewport } from './helpers';
 import {
   contrastProblems,
   geometryProblems,
+  encodeDoc,
   settled,
   studioModules,
 } from './studio-probes';
@@ -359,7 +360,10 @@ test('Journal sets a Hausa name wholly in Inter 700 and the rest of the page in 
   ).toBe(true);
 });
 
-test('Journal on desktop puts the first block in the left column', async ({
+// Ruling U: the board puts the identity, the Tip and the hairline link index ("Elsewhere", a
+// block when it was drawn; §8 fixed it in Journal's left column) on the left, and every block on
+// the right.
+test('Journal on desktop puts the links on the left and every block on the right', async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -381,15 +385,19 @@ test('Journal on desktop puts the first block in the left column', async ({
     box('.studio-section >> nth=1'),
     box('.studio-top'),
   ]);
-  // The left column (420): identity, Tip, links, then the first block.
-  for (const part of [tip, links, first]) {
+  // The left column (420): identity, Tip, then the links.
+  for (const part of [tip, links]) {
     expect(Math.round(part.left)).toBe(Math.round(identity.left));
     expect(Math.round(part.right - part.left)).toBe(420);
   }
-  expect(first.top).toBeGreaterThan(links.bottom);
-  // The other blocks flow in the right column, 96 px across, from the top of the split.
-  expect(Math.round(second.left)).toBe(Math.round(identity.right) + 96);
-  expect(second.top).toBeLessThan(links.top);
+  expect(links.top).toBeGreaterThan(tip.bottom);
+  // Every block in the right column, 96 px across, from the top of the split.
+  for (const section of [first, second]) {
+    expect(Math.round(section.left)).toBe(Math.round(identity.right) + 96);
+    expect(Math.round(section.right)).toBe(Math.round(top.right));
+  }
+  expect(first.top).toBeLessThan(tip.top);
+  expect(second.top).toBeGreaterThan(first.bottom);
   // The top row spans the whole 1120 content width.
   expect(Math.round(top.right - top.left)).toBe(1120);
   // On a desktop the top row carries the handle, and the avatar sits above the name (72 px).
@@ -402,6 +410,171 @@ test('Journal on desktop puts the first block in the left column', async ({
   await expect(page.locator('.studio-top .studio-top__handle')).toBeHidden();
   await expect(page.locator('.studio-identity .studio-avatar')).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 900 });
+  expect(await geometryProblems(page)).toEqual([]);
+});
+
+// Every kind of block, for the slot-width check below.
+const IMG = (n: number) =>
+  `0000${n.toString(16).padStart(4, '0')}-0000-4000-8000-000000000000`;
+const ALL_KINDS = {
+  v: 2,
+  accent: null,
+  mode: 'light',
+  cover: 'yours',
+  blocks: [
+    {
+      id: 'kindtxt1',
+      kind: 'text',
+      variant: 'paragraph',
+      text: 'Studio time.',
+    },
+    { id: 'kindquo1', kind: 'quote', text: 'Sing it again.' },
+    { id: 'kindpho1', kind: 'photo', imageId: IMG(2), alt: 'A stage' },
+    {
+      id: 'kindgal1',
+      kind: 'gallery',
+      images: [3, 4, 5].map((n) => ({ imageId: IMG(n), alt: `Photo ${n}` })),
+    },
+    { id: 'kindvid1', kind: 'video', url: 'https://youtu.be/dQw4w9WgXcQ' },
+    {
+      id: 'kindsvc1',
+      kind: 'services',
+      items: [{ name: 'Skin fade', priceMinor: '800000' }],
+    },
+    {
+      id: 'kindevt1',
+      kind: 'events',
+      items: [{ date: '2099-12-31', title: 'Live set' }],
+    },
+  ],
+};
+/** The box each kind draws at its slot width. */
+const DRAWN = {
+  text: '.studio-text',
+  quote: '.studio-quote',
+  photo: '.studio-photo img',
+  gallery: '.studio-strip li',
+  video: '.studio-video',
+  services: '.studio-list',
+  events: '.studio-list',
+} as const;
+
+test("Journal and Linen draw every block within the design check's slot, Journal's right column exactly", async ({
+  page,
+}) => {
+  const { contracts } = await studioModules();
+  for (const style of ['journal', 'linen'] as const)
+    for (const width of [1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(
+        `/dev/studio-lab?style=${style}&doc=${encodeDoc({ ...ALL_KINDS, style })}`,
+      );
+      await ready(page);
+      for (const [kind, selector] of Object.entries(DRAWN) as [
+        keyof typeof DRAWN,
+        string,
+      ][]) {
+        const drawn = await page
+          .locator(`.studio-block[data-kind="${kind}"] ${selector}`)
+          .first()
+          .evaluate((el) => el.getBoundingClientRect().width);
+        const slot = contracts.studioSlotWidth(style, kind, width) as number;
+        expect(
+          Math.round(drawn),
+          `${style} ${kind} at ${width}`,
+        ).toBeLessThanOrEqual(slot + 1);
+        // At 1440 Journal's right column is the slot itself: equal, not merely within.
+        if (style === 'journal' && width === 1440)
+          expect(
+            Math.abs(Math.round(drawn) - slot),
+            `${style} ${kind} at ${width}: ${drawn} vs ${slot}`,
+          ).toBeLessThanOrEqual(1);
+      }
+    }
+});
+
+// Narrow phones (fix round 1): every amount label fits inside its chip, unselected and selected
+// (650 is wider than 500), in every new style drawn so far. The chip's own box is
+// overflow: visible, so the layout probe can't see this.
+for (const style of ['clear', 'journal', 'linen'] as const)
+  test(`${style} fits every amount label inside its chip at 320 and 360`, async ({
+    page,
+  }) => {
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(`/dev/studio-lab?style=${style}`);
+      await ready(page);
+      const chips = page.locator('.studio-tip .tm-amount-choice');
+      const count = await chips.count();
+      expect(count).toBeGreaterThan(0);
+      const fits = () =>
+        chips.evaluateAll((labels) =>
+          labels.map((label) => {
+            const span = label.querySelector(':scope > span')!;
+            const cs = getComputedStyle(span);
+            const inner =
+              span.clientWidth -
+              parseFloat(cs.paddingLeft) -
+              parseFloat(cs.paddingRight);
+            const range = document.createRange();
+            range.selectNodeContents(span);
+            const text = range.getBoundingClientRect().width;
+            return { label: span.textContent, text, inner };
+          }),
+        );
+      for (let i = 0; i < count; i += 1) {
+        await chips.nth(i).click();
+        // Custom moves focus to its field; the chips stay where they are.
+        await settled(page);
+        const now = await fits();
+        for (const [j, chip] of now.entries())
+          expect(
+            chip.text,
+            `${style} at ${width}: “${chip.label}” ${j === i ? 'selected' : 'unselected'} is ${chip.text.toFixed(1)} px in ${chip.inner.toFixed(1)}`,
+          ).toBeLessThanOrEqual(chip.inner + 0.5);
+      }
+    }
+  });
+
+// Ruling V: the probe excuses a one-line ellipsis only where the markup opts in (data-truncate),
+// and never on a name, an amount or a Tip label, so clipping there can't hide.
+test('the layout probe still catches a truncated name, amount or Tip label', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const [selector, what] of [
+    ['.studio-name', 'name'],
+    ['.studio-tip .tm-amount-choice > span', 'amount'],
+    ['.studio-tip .composer-submit', 'Tip'],
+  ] as const) {
+    await page.goto('/dev/studio-lab?style=journal');
+    await ready(page);
+    expect(await geometryProblems(page), `${what} before`).toEqual([]);
+    await page
+      .locator(selector)
+      .first()
+      .evaluate((el) => {
+        el.setAttribute('data-truncate', '');
+        Object.assign((el as HTMLElement).style, {
+          width: '24px',
+          minWidth: '0',
+          overflow: 'hidden',
+          whiteSpace: 'nowrap',
+          textOverflow: 'ellipsis',
+        });
+      });
+    expect(
+      (await geometryProblems(page)).length,
+      `a clipped ${what} is reported`,
+    ).toBeGreaterThan(0);
+  }
+  // A marked link handle that truncates is a drawn ellipsis, not a fault.
+  await page.goto('/dev/studio-lab?style=linen');
+  await ready(page);
+  await page.setViewportSize({ width: 320, height: 900 });
+  await expect(
+    page.locator('.studio-link__sub[data-truncate]').first(),
+  ).toBeAttached();
   expect(await geometryProblems(page)).toEqual([]);
 });
 

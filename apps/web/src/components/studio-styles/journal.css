@@ -140,9 +140,17 @@
   margin: 0;
 }
 
+/* Narrow phones: below 336 px four chips leave a label less room than "₦10,000" needs, so they
+   stand two by two, still 44 tall. */
+@media (max-width: 335px) {
+  .studio[data-style='journal'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .studio[data-style='journal'] .studio-tip .tm-amount-choice > span {
   min-height: 44px;
-  padding: 0 4px;
+  padding: 0;
   border: 1px solid var(--studio-control);
   border-radius: 6px;
   background: var(--studio-bg);
@@ -344,7 +352,7 @@
   margin-top: 48px;
 }
 
-.studio[data-style='journal'] :is(.studio-blocks, .studio-blocks__rest) {
+.studio[data-style='journal'] .studio-blocks {
   display: contents;
 }
 
@@ -677,8 +685,8 @@
 }
 
 /* Desktop: 1120 wide; the top row spans it, then 420 px and the rest, gap 96. The left column
-   holds the identity, the Tip, the links and the first block; the other blocks flow on the right
-   (text at most 520). The last row is flexible, so the right column's height never spreads the
+   holds the identity, the Tip and the links (the board's "Elsewhere"; Ruling U); every block flows
+   on the right (text at most 520). The last row is flexible, so the right column's height never spreads the
    left column's parts apart. */
 @media (min-width: 1024px) {
   .studio[data-style='journal'] {
@@ -777,13 +785,7 @@
     margin-top: 64px;
   }
 
-  .studio[data-style='journal'] .studio-blocks > .studio-section {
-    grid-row: 6;
-    grid-column: 1;
-    margin-top: 64px;
-  }
-
-  .studio[data-style='journal'] .studio-blocks__rest {
+  .studio[data-style='journal'] .studio-blocks {
     display: flex;
     flex-direction: column;
     grid-row: 2 / 8;
@@ -794,7 +796,7 @@
   }
 
   .studio[data-style='journal']
-    .studio-blocks__rest
+    .studio-blocks
     :is(.studio-text, .studio-quote) {
     max-width: 520px;
   }
@@ -820,14 +822,6 @@
 
   .studio[data-style='journal'] .studio-strip li {
     height: 320px;
-  }
-
-  .studio[data-style='journal']
-    .studio-blocks
-    > .studio-section
-    .studio-strip
-    li {
-    height: 150px;
   }
 
   .studio[data-style='journal'] .studio-foot {

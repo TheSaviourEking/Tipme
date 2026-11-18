@@ -201,10 +201,13 @@ export function StyleBarName({
     <div className="studio-barname" aria-hidden="true">
       <p
         className={`studio-barname__name${needsInter(styleId, profile.displayName) ? ' studio-barname__name--fallback' : ''}`}
+        data-truncate=""
       >
         {profile.displayName}
       </p>
-      <p className="studio-barname__handle">@{profile.handle}</p>
+      <p className="studio-barname__handle" data-truncate="">
+        @{profile.handle}
+      </p>
     </div>
   );
 }
@@ -226,8 +229,16 @@ export function StyleLinks({ links }: { links: readonly SocialLink[] }) {
               <a className="studio-link" href={link.url} {...external}>
                 <LinkBadge platform={link.platform} small />
                 <span className="studio-link__words">
-                  <span className="studio-link__title">{label}</span>
-                  {handle && <span className="studio-link__sub">{handle}</span>}
+                  {/* data-truncate: a style may end these with an ellipsis (the layout probe
+                      accepts it only where marked). */}
+                  <span className="studio-link__title" data-truncate="">
+                    {label}
+                  </span>
+                  {handle && (
+                    <span className="studio-link__sub" data-truncate="">
+                      {handle}
+                    </span>
+                  )}
                 </span>
                 <svg
                   className="studio-link__chevron"
@@ -478,12 +489,9 @@ function Block({
 export function StyleBlocks({
   doc,
   images,
-  split = false,
 }: {
   doc: StudioDocument;
   images: Images;
-  /** Journal: the first section apart, the rest in one column of their own (§9.3 desktop). */
-  split?: boolean;
 }) {
   const sections: { id: string; cells: ReactNode[] }[] = [];
   for (const block of doc.blocks) {
@@ -499,23 +507,13 @@ export function StyleBlocks({
     );
   }
   if (!sections.length) return null;
-  const shown = sections.map((section) => (
-    <div key={section.id} className="studio-section">
-      {section.cells}
-    </div>
-  ));
   return (
     <div className="studio-blocks">
-      {split ? (
-        <>
-          {shown[0]}
-          {shown.length > 1 && (
-            <div className="studio-blocks__rest">{shown.slice(1)}</div>
-          )}
-        </>
-      ) : (
-        shown
-      )}
+      {sections.map((section) => (
+        <div key={section.id} className="studio-section">
+          {section.cells}
+        </div>
+      ))}
     </div>
   );
 }

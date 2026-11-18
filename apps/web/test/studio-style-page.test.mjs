@@ -466,7 +466,8 @@ test("the design check's photo slots are the widths Journal's CSS draws, and siz
     studioSlotWidth('journal', 'gallery', 800),
     Math.round((720 - (n - 1) * gap) / n),
   );
-  // Desktop: content 1120, a 420 px column, gap 96; the other blocks in the rest, text max 520.
+  // Desktop: content 1120, a 420 px column, gap 96; every block in the right column (Ruling U),
+  // text and quotes at most 520, a gallery 3-up. Every kind a block can be is checked.
   const desk = declarations(
     css,
     ".studio[data-style='journal']",
@@ -481,18 +482,34 @@ test("the design check's photo slots are the widths Journal's CSS draws, and siz
   const left = Number(/grid-template-columns: (\d+)px/.exec(split)[1]);
   const colGap = px(split, 'column-gap');
   const rest = content - left - colGap;
-  assert.equal(studioSlotWidth('journal', 'photo', 1440), rest);
-  assert.equal(studioSlotWidth('journal', 'services', 1440), rest);
-  const text = declarations(
+  const blocks = declarations(
     css,
-    ".studio[data-style='journal'] .studio-blocks__rest :is(.studio-text, .studio-quote)",
+    ".studio[data-style='journal'] .studio-blocks",
     'min-width: 1024px',
   );
-  assert.equal(studioSlotWidth('journal', 'text', 1440), px(text, 'max-width'));
-  assert.equal(
-    studioSlotWidth('journal', 'gallery', 1440),
-    Math.round((rest - (n - 1) * gap) / n),
+  assert.match(blocks, /grid-column: 2/, 'the blocks take the right column');
+  const capped = px(
+    declarations(
+      css,
+      ".studio[data-style='journal'] .studio-blocks :is(.studio-text, .studio-quote)",
+      'min-width: 1024px',
+    ),
+    'max-width',
   );
+  const drawn = {
+    text: capped,
+    quote: capped,
+    photo: rest,
+    video: rest,
+    services: rest,
+    events: rest,
+    supporters: rest,
+    gallery: Math.round((rest - (n - 1) * gap) / n),
+  };
+  for (const [kind, width] of Object.entries(drawn))
+    assert.equal(studioSlotWidth('journal', kind, 1440), width, kind);
+  // No section or block is pulled back into the left column.
+  assert.doesNotMatch(css, /blocks__rest|\.studio-blocks > \.studio-section/);
   // The rendered photos ask for exactly those widths.
   const html = page({ document: doc({ style: 'journal' }) });
   const sizes = /<ul class="studio-strip"[\s\S]*?sizes="([^"]+)"/.exec(
@@ -603,7 +620,7 @@ test("Journal's phone bar carries the name and handle beside the Tip, out of the
   const html = page({ document: doc({ style: 'journal' }) });
   assert.match(
     html,
-    /<div class="studio-barname" aria-hidden="true"><p class="studio-barname__name">Kemi Adeyinka<\/p><p class="studio-barname__handle">@studiolab<\/p><\/div>/,
+    /<div class="studio-barname" aria-hidden="true"><p class="studio-barname__name" data-truncate="">Kemi Adeyinka<\/p><p class="studio-barname__handle" data-truncate="">@studiolab<\/p><\/div>/,
   );
   // A Hausa name is set wholly in Inter there too.
   const hausa = page({

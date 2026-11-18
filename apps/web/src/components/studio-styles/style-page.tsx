@@ -110,7 +110,7 @@ export function StudioStylePage({
         </section>
         <div className="studio-grid">
           <StyleLinks links={profile.links ?? []} />
-          <StyleBlocks doc={doc} images={images} split={style === 'journal'} />
+          <StyleBlocks doc={doc} images={images} />
         </div>
         <div className="studio-foot">{footer}</div>
       </div>

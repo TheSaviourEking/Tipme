@@ -167,9 +167,17 @@
   margin: 0;
 }
 
+/* Narrow phones: inside the card, below 378 px four chips leave a label less room than "₦10,000"
+   needs, so they stand two by two, still 48 tall. */
+@media (max-width: 377px) {
+  .studio[data-style='linen'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 .studio[data-style='linen'] .studio-tip .tm-amount-choice > span {
   min-height: 48px;
-  padding: 0 4px;
+  padding: 0;
   border: 1px solid var(--studio-control);
   border-radius: 14px;
   background: var(--studio-card);
