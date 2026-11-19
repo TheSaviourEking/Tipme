@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
 import { API_ORIGIN, WEB_ORIGIN } from './stack';
@@ -296,6 +296,105 @@ test('undo of a saved-away Pro block on Free stays undone and says why', async (
   await expect(
     page.getByText('Adding this back needs Pro. Everything else is kept.'),
   ).toHaveCount(0);
+});
+
+test('an undo refused while you type keeps the typing, and the next Undo doesn’t bring the gallery back', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await saveDraft(page, { style: 'clear', blocks: [HEADING, GALLERY] });
+  await setPlan(who.handle, 'free');
+  await openEditor(page);
+  await openBlocks(page);
+  await blockList(page).getByRole('button', { name: 'Remove Gallery' }).click();
+  await savedWhere(page, (d) => blockIds(d) === HEADING.id);
+  await blockList(page).getByRole('button', { name: /^Text/ }).click();
+  const field = blockList(page).getByRole('textbox', {
+    name: 'Heading',
+    exact: true,
+  });
+
+  // Hold the undo's save (the server's real answer, a 403) until the typing is in.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let asked = () => {};
+  const sent = new Promise<void>((resolve) => (asked = resolve));
+  await page.route(
+    `${API_ORIGIN}/v1/me/studio/draft`,
+    async (route: Route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      const answer = await route.fetch();
+      asked();
+      await held;
+      await route.fulfill({ response: answer });
+    },
+    { times: 1 },
+  );
+  await bar(page).getByRole('button', { name: 'Undo: block removed' }).click();
+  await sent;
+  await field.fill('Typed while saving');
+  release();
+
+  await expect(
+    page.getByText('Adding this back needs Pro. Everything else is kept.'),
+  ).toBeVisible({ timeout: 15_000 });
+  await expect(field).toHaveValue('Typed while saving');
+  await expect(
+    blockList(page).getByRole('button', { name: 'Remove Gallery' }),
+  ).toHaveCount(0);
+  await savedWhere(
+    page,
+    (d) =>
+      blockIds(d) === HEADING.id &&
+      (d.blocks as { text?: string }[])[0]?.text === 'Typed while saving',
+  );
+  await expect(readOnlyBanner(page)).toHaveCount(0);
+
+  // The typing is a step of its own, now without the gallery: undoing it saves, no refusal.
+  await bar(page).getByRole('button', { name: 'Undo: heading edited' }).click();
+  await savedWhere(
+    page,
+    (d) =>
+      blockIds(d) === HEADING.id &&
+      (d.blocks as { text?: string }[])[0]?.text === 'New single',
+  );
+  await expect(
+    page.getByText('Adding this back needs Pro. Everything else is kept.'),
+  ).toHaveCount(0);
+  await expect(undoButton(page)).toHaveAccessibleName('Undo');
+});
+
+test('a failed discard says so and puts focus back on “Discard changes”', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: [QUOTE] });
+  await openEditor(page);
+  await page.route(
+    `${API_ORIGIN}/v1/me/studio/draft`,
+    (route) =>
+      route.request().method() === 'DELETE'
+        ? route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error: { code: 'INTERNAL_ERROR', message: 'x', reference: 'e2e' },
+            }),
+          })
+        : route.continue(),
+    { times: 1 },
+  );
+  await discardButton(page).click();
+  const dialog = discardDialog(page);
+  await dialog.getByRole('button', { name: 'Discard changes' }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Your changes weren’t discarded. Try again in a moment.',
+  );
+  await expect(
+    dialog.getByRole('button', { name: 'Discard changes' }),
+  ).toBeFocused();
+  expect((await savedStudio(page)).draft.style).toBe('clear');
 });
 
 test('a lapsed draft can still be reordered, edited and undone', async ({

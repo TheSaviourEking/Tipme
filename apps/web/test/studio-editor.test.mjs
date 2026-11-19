@@ -440,11 +440,11 @@ test('a failed publish says why, never claims a network failure didn’t publish
     assert.doesNotMatch(publishFailureWords(reason, false), /try again/i);
 });
 
-test('a stale draft says plainly when this tab’s last changes weren’t saved', () => {
+test('a stale draft says plainly that Show the latest drops this tab’s last changes', () => {
   // "Show the latest" drops them, so the words say so before the press (Task 14 minor a).
   assert.equal(
     publishFailureWords('stale', false, true),
-    'This draft changed in another tab. Your last changes in this tab weren’t saved. Show the latest to keep editing.',
+    'This draft changed in another tab. Showing the latest drops your last changes here.',
   );
   assert.equal(
     publishFailureWords('stale', false, false),
@@ -452,7 +452,7 @@ test('a stale draft says plainly when this tab’s last changes weren’t saved'
   );
   assert.equal(
     staleBannerWords(true),
-    'Your design was saved somewhere else after this page opened, so we stopped saving here to keep that version. Your last changes in this tab weren’t saved.',
+    'Your design was saved somewhere else after this page opened, so we stopped saving here to keep that version. Showing the latest drops your last changes here.',
   );
   assert.equal(
     staleBannerWords(false),

@@ -138,7 +138,7 @@ export function publishOutcome(
 }
 
 /** Said before "Show the latest" drops edits this tab couldn't save (another tab saved first). */
-const UNSAVED_HERE = 'Your last changes in this tab weren’t saved.';
+const UNSAVED_HERE = 'Showing the latest drops your last changes here.';
 
 /**
  * The dialog's words for a failed publish. A network failure may have published, so it never
@@ -155,7 +155,7 @@ export function publishFailureWords(
       return 'We couldn’t confirm it was published. Check your connection, then reload to see.';
     case 'stale':
       return unsaved
-        ? `This draft changed in another tab. ${UNSAVED_HERE} Show the latest to keep editing.`
+        ? `This draft changed in another tab. ${UNSAVED_HERE}`
         : 'This draft changed in another tab. Show the latest to keep editing.';
     case 'unavailable':
       return 'Page Studio isn’t available right now.';

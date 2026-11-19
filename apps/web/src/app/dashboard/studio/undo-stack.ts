@@ -7,11 +7,18 @@
  * session: cleared on reload and on discard, at most 50 steps (builder's call on the cap).
  */
 import {
+  STUDIO_PRO_BLOCKS,
   STUDIO_STYLES,
   type StudioBlock,
   type StudioDocument,
+  type StudioStyleId,
 } from '@tipme/contracts';
-import { COVER_LABEL, MODE_LABEL, accentHeading } from './style-tab-model.ts';
+import {
+  COVER_LABEL,
+  MODE_LABEL,
+  accentHeading,
+  withStyle,
+} from './style-tab-model.ts';
 
 /** A field's edits within this long of each other are one step: the save debounce. */
 export const UNDO_PAUSE_MS = 800;
@@ -36,6 +43,15 @@ export interface UndoStack {
   pop(): UndoStep | null;
   peek(): UndoStep | null;
   clear(): void;
+  /**
+   * Rewrites every step's draft (after a refused undo takes the refused items out of them all),
+   * then drops steps that no longer change anything: from the top down, a step whose draft equals
+   * the one above it (`current`, the draft now, for the top).
+   */
+  rewrite(
+    fn: (doc: StudioDocument) => StudioDocument,
+    current: StudioDocument,
+  ): void;
   readonly size: number;
 }
 
@@ -68,6 +84,19 @@ export function createUndoStack(
     },
     clear() {
       steps = [];
+    },
+    rewrite(fn, current) {
+      let above = JSON.stringify(current);
+      const kept: typeof steps = [];
+      for (let i = steps.length - 1; i >= 0; i--) {
+        const step = steps[i]!;
+        const doc = fn(step.doc);
+        const body = JSON.stringify(doc);
+        if (body === above) continue;
+        kept.unshift({ ...step, doc });
+        above = body;
+      }
+      steps = kept;
     },
     get size() {
       return steps.length;
@@ -141,4 +170,58 @@ export function describeChange(
     return { label: `${blockNoun(after)} edited`, field: `${after.id}:${at}` };
   }
   return null;
+}
+
+/** What the server refused when it refused an undo (R4): Pro items the saved draft no longer had. */
+export interface RefusedParts {
+  /** Pro blocks the undo restored that the saved draft didn't hold. */
+  blocks: string[];
+  /** A Pro style the undo switched back to, or null. */
+  style: StudioStyleId | null;
+  /** The undo switched the accent back to "From your photo". */
+  accent: boolean;
+}
+
+/**
+ * The parts of a refused undo (`sent`) the server could not take on Free, given the draft it last
+ * accepted (`saved`). Pro items `saved` already holds aren't refused: a lapsed draft keeps them.
+ * Free blocks are never in it; they save on the next round.
+ */
+export function refusedParts(
+  sent: StudioDocument,
+  saved: StudioDocument,
+): RefusedParts {
+  const held = new Set(saved.blocks.map((b) => b.id));
+  return {
+    blocks: sent.blocks
+      .filter((b) => STUDIO_PRO_BLOCKS.includes(b.kind) && !held.has(b.id))
+      .map((b) => b.id),
+    style:
+      STUDIO_STYLES[sent.style].plan === 'pro' && sent.style !== saved.style
+        ? sent.style
+        : null,
+    accent: sent.accent === 'photo' && saved.accent !== 'photo',
+  };
+}
+
+/**
+ * `doc` with the refused parts taken back out and everything else kept (edits typed while the
+ * refused save was on its way included): the refused blocks go, a refused style goes back to the
+ * saved one (its cover kept when that style offers it), a refused photo accent to the saved accent.
+ */
+export function withoutRefused(
+  doc: StudioDocument,
+  refused: RefusedParts,
+  saved: StudioDocument,
+): StudioDocument {
+  let next = doc;
+  if (refused.blocks.length > 0) {
+    const drop = new Set(refused.blocks);
+    next = { ...next, blocks: next.blocks.filter((b) => !drop.has(b.id)) };
+  }
+  if (refused.style !== null && next.style === refused.style)
+    next = withStyle(next, saved.style);
+  if (refused.accent && next.accent === 'photo')
+    next = { ...next, accent: saved.accent };
+  return next;
 }

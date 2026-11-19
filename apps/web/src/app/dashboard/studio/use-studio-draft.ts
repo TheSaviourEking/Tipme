@@ -21,6 +21,8 @@ import {
   PRO_UNDO_REFUSED,
   createUndoStack,
   describeChange,
+  refusedParts,
+  withoutRefused,
 } from './undo-stack';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
@@ -185,15 +187,22 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
             staleNow.current = true;
             setStale(true);
           } else if (result.code === 'STUDIO_PRO_REQUIRED' && undo) {
-            // An undo that re-adds a Pro item this session saved away (R4): keep the draft as the
-            // server last accepted it, say why, and keep editing.
+            // An undo that re-adds a Pro item this session saved away (R4). Take only those items
+            // back out, of the draft now (edits typed while this save was on its way stay) and of
+            // every step left, so older undo history works without another refusal. Then save
+            // what is left, and keep editing.
             undoing.current = null;
-            const kept = JSON.parse(saved.current) as StudioDocument;
+            const accepted = JSON.parse(saved.current) as StudioDocument;
+            const refused = refusedParts(doc, accepted);
+            const strip = (d: StudioDocument) =>
+              withoutRefused(d, refused, accepted);
+            const kept = strip(latest.current);
             latest.current = kept;
             setDraft(kept);
+            stack.current.rewrite(strip, kept);
+            setUndoLabel(stack.current.peek()?.label ?? null);
             setNotice(PRO_UNDO_REFUSED);
-            setSave('saved');
-            return;
+            continue;
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
             blocked.current = true;
             setProRequired(true);

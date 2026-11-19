@@ -391,7 +391,7 @@ test('when the latest can’t be loaded, the editor says so and keeps the banner
   await expect(page.locator('div.pst-banner')).toHaveCount(0);
 });
 
-test('a stale draft says this tab’s last changes weren’t saved before “Show the latest” drops them', async ({
+test('a stale draft says “Show the latest” drops this tab’s last changes before it does', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo, { live: false });
@@ -408,7 +408,7 @@ test('a stale draft says this tab’s last changes weren’t saved before “Sho
   });
   await expect(banner).toBeVisible({ timeout: 15_000 });
   await expect(banner).toContainText(
-    'Your last changes in this tab weren’t saved.',
+    'Showing the latest drops your last changes here.',
   );
   await page.unroute(`${API_ORIGIN}/v1/me/studio/draft`);
   await banner.getByRole('button', { name: 'Show the latest' }).click();

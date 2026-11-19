@@ -32,7 +32,16 @@ export function ConfirmDialog({
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const confirmButton = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState(false);
+  // A confirm that was busy and left the question open (it failed, and says so): its button was
+  // disabled under the focus, so focus goes back to it once it can be pressed again.
+  const wasBusy = useRef(busy);
+  useEffect(() => {
+    if (wasBusy.current && !busy)
+      confirmButton.current?.focus({ preventScroll: true });
+    wasBusy.current = busy;
+  }, [busy]);
   useEffect(() => {
     const before = document.activeElement;
     const element = dialog.current;
@@ -75,7 +84,12 @@ export function ConfirmDialog({
         <Button ref={cancel} variant="quiet" disabled={locked} onClick={leave}>
           {cancelLabel}
         </Button>
-        <Button disabled={locked} aria-busy={busy} onClick={onConfirm}>
+        <Button
+          ref={confirmButton}
+          disabled={locked}
+          aria-busy={busy}
+          onClick={onConfirm}
+        >
           {confirm}
         </Button>
       </div>

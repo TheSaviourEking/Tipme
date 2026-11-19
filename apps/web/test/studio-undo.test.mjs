@@ -5,7 +5,9 @@ import {
   UNDO_PAUSE_MS,
   createUndoStack,
   describeChange,
+  refusedParts,
   undoButtonName,
+  withoutRefused,
 } from '../src/app/dashboard/studio/undo-stack.ts';
 
 // Page Studio undo (styles spec §12.2; plan Task 15, PR 5b): a step is each change to style,
@@ -196,4 +198,87 @@ test('the undo label says what it undoes', () => {
     PRO_UNDO_REFUSED,
     'Adding this back needs Pro. Everything else is kept.',
   );
+});
+
+const GALLERY = { id: 'undo0009', kind: 'gallery', images: [] };
+
+test('a refused undo takes back out only the Pro items it tried to restore', () => {
+  const [h, q] = base.blocks;
+  const saved = doc({ style: 'clear', blocks: [h, q] });
+  // The undo sent: Stage, the photo accent and a gallery the saved draft no longer has, plus a
+  // quote edit; the quote and the free blocks are not Pro and stay.
+  const sent = doc({
+    style: 'stage',
+    accent: 'photo',
+    blocks: [h, GALLERY, { ...q, text: 'Hi' }],
+  });
+  const refused = refusedParts(sent, saved);
+  assert.deepEqual(refused, {
+    blocks: ['undo0009'],
+    style: 'stage',
+    accent: true,
+  });
+  // Typed while the save was on its way: kept.
+  const typed = doc({
+    style: 'stage',
+    accent: 'photo',
+    blocks: [{ ...h, text: 'Typed' }, GALLERY, { ...q, text: 'Hi' }],
+  });
+  assert.deepEqual(
+    withoutRefused(typed, refused, saved),
+    doc({
+      style: 'clear',
+      blocks: [
+        { ...h, text: 'Typed' },
+        { ...q, text: 'Hi' },
+      ],
+    }),
+  );
+  // A Pro style or block the saved draft already holds is not refused (a lapsed draft keeps it).
+  const lapsed = doc({ style: 'stage', blocks: [h, GALLERY] });
+  assert.deepEqual(
+    refusedParts(doc({ style: 'stage', blocks: [GALLERY, h] }), lapsed),
+    {
+      blocks: [],
+      style: null,
+      accent: false,
+    },
+  );
+  // A free block the undo restored is not taken out: it saves next round.
+  assert.deepEqual(
+    refusedParts(doc({ blocks: [h, q, GALLERY] }), doc({ blocks: [h] })),
+    {
+      blocks: ['undo0009'],
+      style: null,
+      accent: false,
+    },
+  );
+});
+
+test('a refusal rewrites every remaining step, so older history still undoes without a refusal', () => {
+  const [h, q] = base.blocks;
+  const stack = createUndoStack();
+  const a = doc({ blocks: [h, q, GALLERY] });
+  const b = doc({ blocks: [h, GALLERY] }); // quote removed
+  const c = doc({ style: 'clear', blocks: [h, GALLERY] }); // then Clear
+  stack.push(a, 'block removed');
+  stack.push(b, 'style changed to Clear');
+  stack.push(c, 'heading edited', 'undo0001:text');
+  const saved = doc({ style: 'clear', blocks: [{ ...h, text: 'Now' }] });
+  const refused = { blocks: ['undo0009'], style: null, accent: false };
+  stack.rewrite((d) => withoutRefused(d, refused, saved), saved);
+  // No step holds the gallery any more.
+  for (let i = 0; i < 3; i++) {
+    const step = stack.pop();
+    assert.ok(step);
+    assert.ok(!step.doc.blocks.some((x) => x.id === 'undo0009'), step.label);
+  }
+  // A step that no longer changes anything goes.
+  const two = createUndoStack();
+  two.push(doc({ blocks: [h, GALLERY] }), 'block removed');
+  two.rewrite(
+    (d) => withoutRefused(d, refused, doc({ blocks: [h] })),
+    doc({ blocks: [h] }),
+  );
+  assert.equal(two.size, 0);
 });
