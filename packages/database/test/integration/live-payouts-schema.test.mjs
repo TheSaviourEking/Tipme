@@ -349,7 +349,7 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
   t.after(() => old.close());
   // The seed writes today's users columns; this one arrives with a later migration.
   // Likewise the profile columns that handle changes and covers add (0062, 0063), and the
-  // social links list (0074_social_links), the live-update switches (0075_live_popup_prefs), the thank-you line (0076_note_consent_and_thanks), the cover animation (0077_cover_animation), the starting amount (0079_tip_start), and the staff Pro grant (0088_pro_periods).
+  // social links list (0074_social_links), the live-update switches (0075_live_popup_prefs), the thank-you line (0076_note_consent_and_thanks), the cover animation (0077_cover_animation), the starting amount (0079_tip_start), the staff Pro grant (0088_pro_periods), and You collect's collection mode and verification (0119_you_collect).
   await pool.query(
     `ALTER TABLE profiles
        ADD COLUMN handle_changes_used integer NOT NULL DEFAULT 0,
@@ -367,7 +367,10 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        ADD COLUMN cover_animation text,
        ADD COLUMN cover_motion text,
        ADD COLUMN tip_start_minor bigint,
-       ADD COLUMN staff_pro boolean NOT NULL DEFAULT false`,
+       ADD COLUMN staff_pro boolean NOT NULL DEFAULT false,
+       ADD COLUMN collection_mode text,
+       ADD COLUMN collect_verified_at timestamptz,
+       ADD COLUMN collect_legal_name text`,
   );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
@@ -389,7 +392,10 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        DROP COLUMN cover_animation,
        DROP COLUMN cover_motion,
        DROP COLUMN tip_start_minor,
-       DROP COLUMN staff_pro`,
+       DROP COLUMN staff_pro,
+       DROP COLUMN collection_mode,
+       DROP COLUMN collect_verified_at,
+       DROP COLUMN collect_legal_name`,
   );
   const payoutId = randomUUID();
   await pool.query(
