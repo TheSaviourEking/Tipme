@@ -51,7 +51,7 @@ export async function enrolOwner(page: Page, testInfo: TestInfo) {
   const { email } = identity(testInfo);
   const enrolmentCode = await grantOwner(email);
   await signInWithEmail(page, email, '/sign-in?next=/ops');
-  await page.waitForURL(/\/ops$/);
+  await page.waitForURL((url) => url.pathname === '/ops');
   await expect(
     page.getByRole('heading', { name: 'Set up your authenticator' }),
   ).toBeVisible();

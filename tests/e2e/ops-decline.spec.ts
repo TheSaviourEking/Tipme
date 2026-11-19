@@ -11,7 +11,7 @@ test('someone invited can open the decline confirmation, cancel it, and decline'
   const { email } = identity(testInfo);
   await grantOwner(email);
   await signInWithEmail(page, email, '/sign-in?next=/ops');
-  await page.waitForURL(/\/ops$/);
+  await page.waitForURL((url) => url.pathname === '/ops');
   await expect(enrolStep(page)).toBeVisible();
 
   const open = page.getByRole('button', { name: 'Decline admin access' });
@@ -41,7 +41,7 @@ test('the admin sign-in card sits in the middle of the page, under the staff ban
   const { email } = identity(testInfo);
   await grantOwner(email);
   await signInWithEmail(page, email, '/sign-in?next=/ops');
-  await page.waitForURL(/\/ops$/);
+  await page.waitForURL((url) => url.pathname === '/ops');
   await expect(enrolStep(page)).toBeVisible();
   const card = await page.locator('.ops-step').boundingBox();
   const banner = await page.locator('.ops-banner').boundingBox();
