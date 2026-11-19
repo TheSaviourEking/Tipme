@@ -913,3 +913,11 @@
     padding-top: 80px;
   }
 }
+
+/* The header over the cover (frame.css): the hero runs up under the header, so the words stay
+   where they were and the photo fills the header's place too. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='horizon'][data-header] .studio-hero[data-cover='photo'] {
+    min-height: calc(var(--tall) + var(--nav-height));
+  }
+}

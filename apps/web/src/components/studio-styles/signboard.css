@@ -827,3 +827,16 @@
     transition: none;
   }
 }
+
+/* The header over the cover (frame.css): a photo runs up under the header; with no photo the band
+   does, and the header writes in the band's label colour. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='signboard'][data-header='over'] .studio-cover {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+
+  .studio[data-style='signboard'][data-header='band'] .studio-band {
+    border-top: var(--nav-height) solid var(--studio-acc);
+  }
+}

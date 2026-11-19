@@ -1584,10 +1584,14 @@ test("Signboard's photo cover runs edge to edge, 16:9 up to 560 tall", async ({
       .evaluate((el) => {
         const r = el.getBoundingClientRect();
         const img = el.querySelector('img')!.getBoundingClientRect();
+        // The cover runs up under the site header (studio-header-over-cover.spec.ts) by its
+        // top padding; the 16:9 is the part below it.
+        const lift = parseFloat(getComputedStyle(el).paddingTop);
         return {
           left: r.left,
           width: r.width,
-          height: r.height,
+          height: r.height - lift,
+          lift,
           img: [img.width, img.height],
           page: document.documentElement.clientWidth,
         };
@@ -1599,7 +1603,7 @@ test("Signboard's photo cover runs edge to edge, 16:9 up to 560 tall", async ({
     );
     expect(box.img.map(Math.round), `${width}`).toEqual([
       Math.round(box.width),
-      Math.round(box.height),
+      Math.round(box.height + box.lift),
     ]);
   }
 });
