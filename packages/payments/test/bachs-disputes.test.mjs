@@ -285,25 +285,61 @@ test('a dispute event with a bad signature, a stale time, or an unreadable amoun
     signed(provider, event, { at: new Date(NOW.getTime() - 301_000) }),
     { ok: false, reason: 'stale' },
   );
-  for (const data of [
-    { amount: 'lots' },
-    { amount: '-5.00' },
-    { amount: '0.00' },
-    { amount: '10000.001' },
-    { amount: 10000 },
-    { currency: undefined },
-    { currency: 'naira' },
-    { dispute_id: undefined },
-    { dispute_id: 'dsp bad:id' },
-    { status: 'pending_magic' },
-    { response_deadline_at: 'next week' },
+  // Only the signature and the envelope can refuse (400): the partner reads any other 4xx as a
+  // refusal and stops, so a dispute would be lost. A signed dispute TipMe can't read as one is
+  // still not a `dispute`: it falls back to today's reversal, which reaches Pro billing or staff
+  // exactly as before (review fix 1, P5).
+  const raw = Buffer.from('{"id":"evt_x","type":"dispute.created"');
+  const timestamp = String(Math.floor(NOW.getTime() / 1000));
+  const signature = createHmac('sha256', SECRET)
+    .update(Buffer.concat([Buffer.from(`${timestamp}.`), raw]))
+    .digest('hex');
+  assert.deepEqual(
+    provider.verifyWebhook(
+      raw,
+      { 'x-bachs-signature-v2': `t=${timestamp},v1=${signature}` },
+      NOW,
+    ),
+    { ok: false, reason: 'malformed' },
+  );
+  assert.deepEqual(signed(provider, { ...event, id: undefined }), {
+    ok: false,
+    reason: 'malformed',
+  });
+  const reversal = BEFORE.platformCreated;
+  for (const [data, partnerReversalId] of [
+    [{ amount: 'lots' }],
+    [{ amount: '-5.00' }],
+    [{ amount: '0.00' }],
+    [{ amount: '10000.001' }],
+    [{ amount: 10000 }],
+    [{ currency: undefined }],
+    [{ currency: 'naira' }],
+    [{ status: 'pending_magic' }],
+    [{ status: undefined }],
+    [{ response_deadline_at: 'next week' }],
+    [{ dispute_id: undefined }, null],
+    [{ dispute_id: 'dsp bad:id' }, null],
+    // The older shape today's code also reads: a chargeback id, no dispute id.
+    [{ dispute_id: undefined, chargeback_id: 'cb_7' }, 'dispute.cb_7'],
   ]) {
     assert.deepEqual(
       signed(provider, withData('dispute-created-platform', data)),
-      { ok: false, reason: 'malformed' },
+      {
+        ok: true,
+        event: {
+          ...reversal,
+          ...(partnerReversalId === undefined ? {} : { partnerReversalId }),
+        },
+      },
       JSON.stringify(data),
     );
   }
+  // No event time at all (no created_at, no updated_at): today's reversal too.
+  const { created_at: _at, ...untimed } = withData('dispute-created-platform', {
+    updated_at: undefined,
+  });
+  assert.deepEqual(signed(provider, untimed), { ok: true, event: reversal });
 });
 
 test('free-text reasons never leave the adapter', () => {
@@ -419,16 +455,23 @@ test('evidence is submitted once per key; a 5xx is uncertain', async () => {
       UncertainProviderOutcomeError,
     );
   }
-  // A stated refusal (locked, not editable) is definite: nothing was submitted.
-  const { provider: refusing } = fake([
+  // A refusal while the dispute is still editable is definite: nothing was submitted.
+  const { provider: refusing, calls: refusedCalls } = fake([
     jsonResponse(body('dispute-evidence-saved')),
-    jsonResponse({ detail: 'locked', error_code: 'VALIDATION_ERROR' }, 400),
+    jsonResponse({ detail: 'bad', error_code: 'VALIDATION_ERROR' }, 400),
+    jsonResponse({
+      ...body('dispute-get-under-review'),
+      status: 'needs_response',
+      is_response_editable: true,
+    }),
   ]);
   await assert.rejects(refusing.submitDisputeEvidence(input), (error) => {
     assert.ok(error instanceof DisputeEvidenceRefusedError);
     assert.equal(error.providerCode, 'VALIDATION_ERROR');
     return true;
   });
+  assert.equal(refusedCalls[2].method, 'GET');
+  assert.equal(refusedCalls[2].path, `/v1/disputes/${DISPUTE}`);
   // Bad input is refused before anything is sent.
   const { provider: unsent, calls: none } = fake([]);
   for (const bad of [
@@ -439,6 +482,78 @@ test('evidence is submitted once per key; a 5xx is uncertain', async () => {
   ])
     await assert.rejects(unsent.submitDisputeEvidence(bad));
   assert.equal(none.length, 0);
+});
+
+test('a refusal after a lost submit answer is read back: submitted, uncertain, or refused', async () => {
+  const input = {
+    partnerDisputeId: DISPUTE,
+    text: 'The supporter tipped on 19 Nov and was sent a receipt.',
+    fileRefs: [],
+    idempotencyKey: 'tipme-dispute-evidence-0193f7a3',
+  };
+  const saved = () => jsonResponse(body('dispute-evidence-saved'));
+  const notEditable = () =>
+    jsonResponse(
+      { detail: 'Dispute is not editable', error_code: 'VALIDATION_ERROR' },
+      400,
+    );
+  // The first try: evidence saved, the submit answer is a 5xx, so the outcome is unknown.
+  const first = fake([
+    saved(),
+    jsonResponse({ detail: 'x', error_code: 'INTERNAL_SERVER_ERROR' }, 500),
+  ]);
+  await assert.rejects(
+    first.provider.submitDisputeEvidence(input),
+    UncertainProviderOutcomeError,
+  );
+  // The retry: submit says "not editable", and the dispute reads under review: it was submitted.
+  const retry = fake([
+    saved(),
+    notEditable(),
+    jsonResponse(body('dispute-get-under-review')),
+  ]);
+  assert.deepEqual(await retry.provider.submitDisputeEvidence(input), {
+    state: 'submitted',
+  });
+  assert.deepEqual(
+    retry.calls.map((call) => [call.method, call.path]),
+    [
+      ['PATCH', `/v1/disputes/${DISPUTE}/evidence`],
+      ['POST', `/v1/disputes/${DISPUTE}/submit`],
+      ['GET', `/v1/disputes/${DISPUTE}`],
+    ],
+  );
+  assert.equal(Object.hasOwn(retry.calls[2].headers, 'X-Account-Id'), false);
+  // The evidence save itself refused because the dispute is locked: read back the same way.
+  const locked = fake([
+    notEditable(),
+    jsonResponse({
+      ...body('dispute-get-under-review'),
+      status: 'lost',
+      is_response_editable: false,
+    }),
+  ]);
+  assert.deepEqual(await locked.provider.submitDisputeEvidence(input), {
+    state: 'submitted',
+  });
+  // A read-back that can't tell (fails, another dispute, unknown state) is uncertain.
+  for (const readBack of [
+    jsonResponse({ detail: 'x', error_code: 'INTERNAL_SERVER_ERROR' }, 500),
+    new TypeError('reset'),
+    jsonResponse({ ...body('dispute-get-under-review'), dispute_id: 'dsp_x' }),
+    jsonResponse({
+      ...body('dispute-get-under-review'),
+      status: 'mystery',
+      is_response_editable: true,
+    }),
+    jsonResponse({ dispute_id: DISPUTE }),
+  ]) {
+    const unclear = fake([saved(), notEditable(), readBack]);
+    await assert.rejects(
+      unclear.provider.submitDisputeEvidence(input),
+      UncertainProviderOutcomeError,
+    );
+  }
 });
 
 test('a dispute file is uploaded as one multipart file and its id comes back', async () => {
@@ -527,6 +642,27 @@ test("TipMe's disputes are listed across every page, in TipMe's words", async ()
   assert.equal(
     new URL(paged.calls[1].path, 'https://x').searchParams.get('offset'),
     '100',
+  );
+
+  // A dispute created between pages shifts the list (newest first): the total moves, and the
+  // read is uncertain rather than a list with a repeat or a gap.
+  const moved = fake([page(0, 100, 150), page(99, 51, 151)]);
+  await assert.rejects(
+    moved.provider.listDisputes(since),
+    UncertainProviderOutcomeError,
+  );
+  // A repeat with the same total is listed once.
+  const repeated = fake([
+    jsonResponse({
+      total: 2,
+      items: [item, item, { ...item, dispute_id: 'dsp_2' }],
+    }),
+  ]);
+  assert.deepEqual(
+    (await repeated.provider.listDisputes(since)).map(
+      (row) => row.partnerDisputeId,
+    ),
+    [DISPUTE, 'dsp_2'],
   );
 
   // A short page before the total, or an unreadable row, is never a partial answer.

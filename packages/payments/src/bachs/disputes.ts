@@ -65,19 +65,28 @@ function notSent(message: string): never {
   throw new BachsRequestNotSentError(message);
 }
 
-/** A definite 4xx on an evidence write; anything else stays as the client raised it. */
-function refusalOf(error: unknown, reference: string): unknown {
-  if (error instanceof BachsApiError) {
-    if (error.statusCode >= 400 && error.statusCode < 500)
-      return new DisputeEvidenceRefusedError(error.providerCode);
+// Get Dispute: what the read-back after a refused write needs.
+const disputeReadSchema = z.object({
+  dispute_id: z.string().min(1),
+  status: z.string().min(1),
+  is_response_editable: z.boolean(),
+});
+
+/** A 5xx on an evidence write is unknown; the client already raised the rest. */
+function uncertainOf(error: unknown, reference: string): unknown {
+  if (error instanceof BachsApiError)
     return new UncertainProviderOutcomeError(
       reference,
       `the payment provider returned HTTP ${error.statusCode}`,
       { cause: 'http_error', httpStatus: error.statusCode },
     );
-  }
   return error;
 }
+
+const isRefusal = (error: unknown): error is BachsApiError =>
+  error instanceof BachsApiError &&
+  error.statusCode >= 400 &&
+  error.statusCode < 500;
 
 export function createBachsDisputes(
   client: BachsApiClient,
@@ -103,6 +112,35 @@ export function createBachsDisputes(
       if (fileRefs.some((ref) => !PARTNER_ID.test(ref)))
         notSent('Invalid evidence file');
       const path = `/v1/disputes/${encodeURIComponent(partnerDisputeId)}`;
+      const uncertain = (reason: string) =>
+        new UncertainProviderOutcomeError(partnerDisputeId, reason, {
+          cause: 'unexpected_state',
+        });
+      // A 4xx can be the answer to a retry whose first submit went through (the dispute is then
+      // locked), so it is never taken as "not submitted" on its own: the dispute is read back.
+      // Submitted (under review, or no longer editable) is success; still editable is the refusal;
+      // anything unclear stays unknown (review fix 2).
+      const readBack = async (refusal: BachsApiError) => {
+        let dispute: z.infer<typeof disputeReadSchema>;
+        try {
+          dispute = await client.request({
+            method: 'GET',
+            path,
+            schema: disputeReadSchema,
+          });
+        } catch {
+          throw uncertain('the dispute could not be read back after a refusal');
+        }
+        if (dispute.dispute_id !== partnerDisputeId)
+          throw uncertain(
+            'the payment provider answered about another dispute',
+          );
+        if (dispute.status === 'under_review' || !dispute.is_response_editable)
+          return { state: 'submitted' as const };
+        if (dispute.status === 'needs_response')
+          throw new DisputeEvidenceRefusedError(refusal.providerCode);
+        throw uncertain('the dispute is in a state TipMe does not know');
+      };
       try {
         await client.request({
           method: 'PATCH',
@@ -118,7 +156,8 @@ export function createBachsDisputes(
           schema: evidenceSavedSchema,
         });
       } catch (error) {
-        throw refusalOf(error, partnerDisputeId);
+        if (isRefusal(error)) return readBack(error);
+        throw uncertainOf(error, partnerDisputeId);
       }
       let submitted: z.infer<typeof submittedSchema>;
       try {
@@ -131,15 +170,12 @@ export function createBachsDisputes(
           schema: submittedSchema,
         });
       } catch (error) {
-        throw refusalOf(error, partnerDisputeId);
+        if (isRefusal(error)) return readBack(error);
+        throw uncertainOf(error, partnerDisputeId);
       }
       // An answer about another dispute proves nothing about this one.
       if (submitted.dispute_id !== partnerDisputeId)
-        throw new UncertainProviderOutcomeError(
-          partnerDisputeId,
-          'the payment provider answered about another dispute',
-          { cause: 'unexpected_state' },
-        );
+        throw uncertain('the payment provider answered about another dispute');
       return { state: 'submitted' };
     },
 
@@ -167,12 +203,16 @@ export function createBachsDisputes(
       return { fileRef: uploaded.document_id };
     },
 
-    // List Disputes, newest first, 100 a page (the maximum), until `total` is reached.
+    // List Disputes, newest first, 100 a page (the maximum), until `total` is reached. Offsets
+    // shift when a dispute is created between pages, so each id is kept once and a changed total
+    // makes the read uncertain: never a list with a repeat or a gap (review fix 3).
     async listDisputes(since) {
       if (Number.isNaN(since.getTime())) notSent('Invalid time');
-      const rows: Awaited<
+      type Row = Awaited<
         ReturnType<NonNullable<PaymentProvider['listDisputes']>>
-      > = [];
+      >[number];
+      const rows = new Map<string, Row>();
+      let total: number | undefined;
       for (let offset = 0; ; offset += PAGE) {
         const query = new URLSearchParams({
           from_date: since.toISOString(),
@@ -184,6 +224,13 @@ export function createBachsDisputes(
           path: `/v1/disputes?${query}`,
           schema: listSchema,
         });
+        if (total !== undefined && page.total !== total)
+          throw new UncertainProviderOutcomeError(
+            'disputes',
+            'the dispute list changed while it was read',
+            { cause: 'unexpected_state' },
+          );
+        total = page.total;
         for (const item of page.items) {
           const status = disputeStatusOf(item.status);
           const money = disputeAmount(item.amount, item.currency);
@@ -191,7 +238,8 @@ export function createBachsDisputes(
             throw new BachsProtocolError(
               'The payment provider listed a dispute TipMe cannot read',
             );
-          rows.push({
+          if (rows.has(item.dispute_id)) continue;
+          rows.set(item.dispute_id, {
             partnerDisputeId: item.dispute_id,
             status,
             amountMinor: money.amountMinor,
@@ -202,7 +250,7 @@ export function createBachsDisputes(
                 : null,
           });
         }
-        if (rows.length >= page.total) return rows;
+        if (rows.size >= total) return [...rows.values()];
         // A short page before the total: the list moved under us, or was cut. Never partial.
         if (page.items.length < PAGE)
           throw new BachsProtocolError(

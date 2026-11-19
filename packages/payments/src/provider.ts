@@ -111,8 +111,8 @@ export type NormalizedProviderEvent =
   | {
       /**
        * You collect (plan Task 5, R1): a dispute on a charge on TipMe's own account (no top-level
-       * `account`), so TipMe is liable for it. Only `dispute.created` and `dispute.updated` become
-       * this; a connected account's dispute stays a `reversal`, unchanged. Free text never leaves
+       * `account`), so TipMe is liable for it. Only a `dispute.created` or `dispute.updated` TipMe can
+       * read becomes this; an unreadable one, and a connected account's, stay a `reversal`, unchanged. Free text never leaves
        * the adapter: `reason` is the partner's code, or null.
        */
       kind: 'dispute';

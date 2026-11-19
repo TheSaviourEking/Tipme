@@ -197,11 +197,16 @@ function normalizeEvent(
   platformOrganizationId: string | undefined,
 ): NormalizedProviderEvent | undefined {
   // You collect (R1): a dispute on TipMe's own account is modelled; every other stays a reversal.
+  // One TipMe can't read as a dispute is never refused: the partner reads a 4xx as "stop", so the
+  // dispute would be lost. It falls back to today's reversal (P5), flagged or sent to Pro as before.
   if (
     DISPUTE_EVENT_TYPES.has(event.type) &&
     scopeOf(event, platformOrganizationId).platform
   )
-    return normalizeDispute(event);
+    return (
+      normalizeDispute(event) ??
+      normalizeReversal(event, platformOrganizationId)
+    );
   if (REVERSAL_EVENT.test(event.type))
     return normalizeReversal(event, platformOrganizationId);
   if (!SUPPORTED_EVENT_TYPES.has(event.type))
@@ -515,8 +520,8 @@ export function disputeAmount(
 }
 
 /**
- * TipMe's own dispute. Anything TipMe would act on wrongly (no dispute id, an unreadable amount,
- * status or deadline, no event time) is refused, so the partner delivers it again.
+ * TipMe's own dispute, or undefined when TipMe would act on it wrongly (no dispute id, an unreadable
+ * amount, status or deadline, no event time). The caller then falls back to today's reversal.
  */
 function normalizeDispute(
   event: z.infer<typeof eventEnvelopeSchema>,

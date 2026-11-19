@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { createHmac } from 'node:crypto';
+import { BachsWebhookController } from '../../apps/api/dist/webhooks/bachs-webhook.controller.js';
 import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
 import { createBachsProvider } from '../../packages/payments/dist/index.js';
 import {
@@ -392,5 +393,62 @@ test('a platform-scoped dispute on a Pro charge still ends Pro exactly as today'
     assert.deepEqual(strip(now), strip(before), `${type} ${status}`);
     assert.equal(now.events.length, 1);
     assert.equal(now.unmatched, 0);
+  }
+});
+
+// Review fix 1: the partner reads a 4xx as a refusal and stops delivering, so a signed dispute TipMe
+// can't read as one must never be a 400. It is today's reversal, answered 200, and reaches Pro
+// billing exactly as before.
+test('an unreadable platform dispute still reaches Pro as today’s reversal, with a 2xx', async (t) => {
+  for (const [label, change] of [
+    ['unknown status', { status: 'pending_magic' }],
+    ['no dispute id', { dispute_id: undefined }],
+  ]) {
+    const { q, service, purchaseId, reference } = await openPurchase(t);
+    await service.applyBachs(
+      collection(reference, purchaseId),
+      reads('succeeded'),
+    );
+    const body = ownDispute(purchaseId, 'dispute.updated', 'lost');
+    body.data = { ...body.data, ...change };
+    const rawBody = Buffer.from(JSON.stringify(body));
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = createHmac('sha256', BACHS_SECRET)
+      .update(Buffer.concat([Buffer.from(`${timestamp}.`), rawBody]))
+      .digest('hex');
+    const logs = [];
+    const controller = new BachsWebhookController(
+      adapter,
+      { info: (entry) => logs.push(entry), warn: (entry) => logs.push(entry) },
+      service,
+    );
+    // Resolving (not throwing) is the controller's 200.
+    const answer = await controller.receive({
+      rawBody,
+      headers: { 'x-bachs-signature-v2': `t=${timestamp},v1=${signature}` },
+    });
+    assert.deepEqual(answer, { data: { outcome: 'pro_reversed' } }, label);
+    assert.equal(
+      logs.some((entry) => entry.event === 'webhook.rejected'),
+      false,
+      label,
+    );
+    const [stored] = await q(
+      `SELECT payload FROM provider_events WHERE provider_event_id = $1`,
+      [body.id],
+    );
+    assert.equal(stored.payload.kind, 'reversal', label);
+    assert.equal(
+      stored.payload.partnerReversalId,
+      change.dispute_id === undefined && 'dispute_id' in change
+        ? null
+        : 'dispute.dsp_1a2b3c4d5e',
+      label,
+    );
+    assert.equal(
+      (await q(`SELECT plan FROM profiles WHERE id = $1`, [ADA]))[0].plan,
+      'pro',
+      label,
+    );
   }
 });
