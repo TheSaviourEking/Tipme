@@ -833,7 +833,12 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
     ),
   ).toBe(1);
   // A signal never asks the payment partner: every quote this tab read after the load was local.
-  expect(quotes.length).toBeGreaterThan(0);
+  // The quote re-reads on its own timer, which can still be in its 0-10 s spread when the row says
+  // Paid: the list and balance also re-read on `tips.changed`, and once the list shows a withdrawal
+  // in flight its next signal skips the spread, while the quote's timer from the first signal stands.
+  await expect
+    .poll(() => quotes.length, { timeout: WITHDRAWALS_SPREAD_MS + 10_000 })
+    .toBeGreaterThan(0);
   expect(quotes.every((search) => search === '?scope=local')).toBe(true);
   await expectAccessible(watching);
 });
