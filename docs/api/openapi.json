@@ -13520,7 +13520,19 @@
                 "pro_collect_unknown",
                 "pro_refund_failed",
                 "share_transfer_stuck",
-                "tip_refund_failed"
+                "tip_refund_failed",
+                "collect_transfer_stuck",
+                "collect_transfer_review",
+                "collect_in_debt",
+                "collect_invariant_broken",
+                "collect_reserve_low",
+                "collect_auto_payout_on",
+                "collect_recon_mismatch",
+                "collect_same_bank",
+                "dispute_opened",
+                "dispute_deadline",
+                "dispute_fee_unposted",
+                "collect_refund_gap"
               ]
             }
           },
