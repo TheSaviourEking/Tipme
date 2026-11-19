@@ -317,6 +317,12 @@
   html:has(.studio[data-style] form[data-skin]) {
     scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
   }
+
+  /* The site's "TipMe has been updated" notice sits above the bar, as on Classic (globals.css
+     lifts it over `.composer-action` there); a styled page isn't `.profile-page`. */
+  html:has(.studio[data-style] form[data-skin]) .update-notice {
+    bottom: calc(var(--tip-bar, 136px) + 12px);
+  }
 }
 
 @media (min-width: 1024px) {

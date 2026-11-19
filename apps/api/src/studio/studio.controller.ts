@@ -15,7 +15,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
-  studioDraftV1Schema,
+  studioDraftSchema,
   studioFocusSchema,
   studioImageFileName,
   studioPublishSchema,
@@ -72,9 +72,11 @@ import {
   type VideoStatus,
 } from './video-verify.js';
 
-// Page Studio (plan 2026-11-12-page-studio, Task 7). Off: every route here answers 404. A Pro
-// page saves drafts freely and publishes only past the design check, run here with the server's
-// own facts; Free pages read an in-memory preview and can't write; a lapsed page reads only.
+// Page Studio (plan 2026-11-12-page-studio, Task 7; styles plan Task 10). Off: every route here
+// answers 404. Drafts save without a passing check; publishing runs the design check with the
+// server's own facts and the page's real plan, so Free publishes the free styles and a Pro design
+// needs Pro (§11). The draft rules for Free, the plan read under the page lock and the write that
+// requires Pro live in the database operations; a client claim never decides any of it.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fileOf = (imageId: string, version: string, file: string) => {
@@ -137,7 +139,7 @@ export class StudioController {
   @RateLimit('studio_drafts')
   async save(
     @CurrentUser() auth: AuthContext,
-    @Body(new ZodValidationPipe(studioDraftV1Schema)) body: StudioDraftRequest,
+    @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
   ): Promise<ApiDataResponse<MyStudioV1>> {
     const studio = await saveStudioDraft(this.database.db, auth.userId, body);
     // Best effort, in the background: the next save or the publish sees the answer.
@@ -155,9 +157,8 @@ export class StudioController {
     @Body(new ZodValidationPipe(studioPublishSchema))
     body: StudioPublishRequest,
   ): Promise<ApiDataResponse<MyStudioV1>> {
+    // Any plan may publish; the check (with the plan read under the lock) refuses Pro on Free.
     const current = await getMyStudio(this.database.db, auth.userId);
-    if (current.access !== 'edit')
-      throw new CodedHttpException(403, 'STUDIO_PRO_REQUIRED');
     // Awaited here (each site has 3 seconds), so a gone video can't be published.
     await this.checkVideos(studioVideoUrls(current.draft));
     const result = await publishStudio(

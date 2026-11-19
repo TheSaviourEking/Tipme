@@ -239,6 +239,9 @@ export function coverPlay(p: {
   return isProAnimation(p.animation) || p.colour ? 'still' : 'once';
 }
 
+/** The size every uploaded cover is stored at: twice the widest the standard page shows. */
+export const COVER_SIZE = { width: 2240, height: 600 } as const;
+
 /**
  * Smaller copies of an uploaded cover (2240×600), written beside it on upload, for `srcset` on the
  * Studio styles that show the cover full-bleed on phones (Stage, Horizon: spec 2026-11-17 §9.4,

@@ -3,6 +3,8 @@ import {
   RENDITION_WIDTHS,
   SOCIAL_PLATFORMS,
   STUDIO_IMAGE_ASPECT,
+  COVER_SIZE,
+  coverRenditionPath,
   embedUrl,
   linkHandle,
   parseVideoLink,
@@ -63,10 +65,12 @@ export const STYLE_COVER: Partial<
  * `sizes` for a cover photo: full-bleed, and in a tall crop the 16:9 rendition is drawn wider than
  * the screen (object-fit: cover fills the height), so the slot is the wider of the two.
  */
-function coverSizes(style: StudioStyleId): string {
+function coverSizes(
+  style: StudioStyleId,
+  aspect: number = STUDIO_IMAGE_ASPECT.wide,
+): string {
   const tall = STYLE_COVER[style];
   if (!tall) return '100vw';
-  const aspect = STUDIO_IMAGE_ASPECT.wide;
   const phone = Math.ceil(tall.tall * aspect);
   const desk = Math.ceil(tall.desktopTall * aspect);
   return `(min-width: ${desk}px) 100vw, (min-width: 1024px) ${desk}px, (min-width: ${phone}px) 100vw, ${phone}px`;
@@ -78,9 +82,24 @@ function coverPhoto(
   size?: CoverSize,
 ): { src: string; srcSet?: string; sizes?: string } | null {
   if (cover?.kind !== 'photo') return null;
-  // The API's cover is one file, already the size it was cut to.
-  if (API_COVER.test(cover.path)) return { src: `${API_ORIGIN}${cover.path}` };
-  if (LAB_UPLOAD.test(cover.path)) return { src: cover.path };
+  // An uploaded cover (the API's, or the lab's stand-in): one 2240 × 600 file, and its renditions
+  // when the API lists them; without them, the one file, as before.
+  const api = API_COVER.test(cover.path);
+  if (api || LAB_UPLOAD.test(cover.path)) {
+    const at = (path: string) => (api ? `${API_ORIGIN}${path}` : path);
+    const widths = cover.widths ?? [];
+    if (widths.length === 0) return { src: at(cover.path) };
+    const narrow = widths.filter((w) => w <= 1080).at(-1) ?? widths[0]!;
+    return {
+      src: at(coverRenditionPath(cover.path, narrow)),
+      srcSet: [
+        ...widths.map((w) => `${at(coverRenditionPath(cover.path, w))} ${w}w`),
+        `${at(cover.path)} ${COVER_SIZE.width}w`,
+      ].join(', '),
+      // Drawn at the band's own shape: a tall crop shows it far wider than the screen.
+      sizes: coverSizes(style, COVER_SIZE.width / COVER_SIZE.height),
+    };
+  }
   if (!LAB_COVER.test(cover.path)) return null;
   // Renditions of the photo's 16:9 crop, never wider than the photo allows (no upscaling); the
   // smallest is always offered.

@@ -4,8 +4,10 @@ import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
 import { InMemorySpanExporter } from '../../packages/observability/dist/testing.js';
 import {
+  DESIGN_CHECK_VERSION,
   DESIGN_CHECK_VERSION_V1,
-  applyStudioFixV1,
+  resolveStudio,
+  studioTokens,
 } from '../../packages/contracts/dist/index.js';
 import {
   addStudioImage,
@@ -24,8 +26,9 @@ import {
   startStack,
 } from './helpers.mjs';
 
-// Page Studio storage and API (plan Task 7): drafts, the publish gate, photos and their crops,
-// the public page's fallback, a Pro lapse, staff removal, and the switch. Generated images only.
+// Page Studio storage and API (plan Task 7; styles plan Task 10): drafts in both formats, the
+// publish gate, Free and Pro (§11, §14.6), photos and their crops, the public page's fallback and
+// lapse rules (§12.5), staff removal, and the switch. Generated images only.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -171,16 +174,60 @@ const photoBlock = (id, imageId, extra = {}) => ({
   ...extra,
 });
 
-test('a Pro page saves a failing draft, cannot publish it, fixes it and publishes', async () => {
+// The v2 document (styles spec §5.2): a style, an accent, a mode, a cover and blocks in order.
+const v2 = (extra = {}) => ({
+  v: 2,
+  style: 'clear',
+  accent: null,
+  mode: 'light',
+  cover: 'yours',
+  blocks: [
+    { id: 'blk00001', kind: 'text', variant: 'heading', text: 'New single' },
+    { id: 'blk00002', kind: 'quote', text: 'Sang like home.' },
+  ],
+  ...extra,
+});
+const title = (id, text = 'New single') => ({
+  id,
+  kind: 'text',
+  variant: 'heading',
+  text,
+});
+const galleryOf = (id, imageIds, alt = 'On stage') => ({
+  id,
+  kind: 'gallery',
+  images: imageIds.map((imageId) => ({ imageId, alt })),
+});
+/** No events in these documents, so any date resolves them the same as the server's today. */
+const asStored = (d) => resolveStudio(d, '2000-01-01');
+const setPlan = (profileId, plan) =>
+  q(`UPDATE profiles SET staff_pro = $2, plan = $3 WHERE id = $1`, [
+    profileId,
+    plan === 'pro',
+    plan,
+  ]);
+const stored = async (profileId) =>
+  (
+    await q(
+      'SELECT draft, published, published_check_version FROM page_studios WHERE profile_id = $1',
+      [profileId],
+    )
+  )[0];
+
+test('a page saves a failing draft, cannot publish it, changes it and publishes', async () => {
   const { cookie, handle } = await page();
   const start = await studio(cookie);
   assert.equal(start.access, 'edit');
   assert.equal(start.rev, 0);
-  // 700 wide: blurry in a full-width row (shown at up to 1,020), fine at half width (498).
-  const imageId = await uploadPhoto(cookie, 700, 700);
-  const draft = doc([
-    row('row00001', [[heading('blk00001'), photoBlock('blk00002', imageId)]]),
-  ]);
+  // 600 wide: blurry in Journal's photo column (604 at 1440), fine in Clear's (440).
+  const imageId = await uploadPhoto(cookie, 600, 600);
+  const draft = v2({
+    style: 'journal',
+    blocks: [
+      title('blk00001'),
+      { id: 'blk00002', kind: 'photo', imageId, alt: 'A photo' },
+    ],
+  });
   const saved = await json(await save(cookie, 0, draft));
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
   const s = saved.body.data;
@@ -201,7 +248,7 @@ test('a Pro page saves a failing draft, cannot publish it, fixes it and publishe
     null,
     'the draft is kept, nothing published',
   );
-  const fixed = applyStudioFixV1(s.draft, s.check.issues[0], 'smaller-slot');
+  const fixed = { ...draft, style: 'clear' };
   const s2 = (await json(await save(cookie, s.rev, fixed))).body.data;
   assert.deepEqual(s2.check.issues, []);
   const done = await json(await publish(cookie, s2.rev));
@@ -209,7 +256,7 @@ test('a Pro page saves a failing draft, cannot publish it, fixes it and publishe
   assert.deepEqual(done.body.data.published, fixed);
   const visible = await publicPage(handle);
   assert.deepEqual(visible.studio.document, fixed);
-  assert.equal(visible.studio.checkVersion, DESIGN_CHECK_VERSION_V1);
+  assert.equal(visible.studio.checkVersion, DESIGN_CHECK_VERSION);
   const image = visible.studio.images[imageId];
   assert.match(
     image.path,
@@ -266,7 +313,7 @@ test('a published page that fails a newer check falls back to the standard page'
   assert.ok((await publicPage(handle)).studio);
   // As if a rule changed: the stored version now has an empty block.
   await q(
-    `UPDATE page_studios SET published = jsonb_set(published, '{rows,0,cells,0}', '[{"id":"blk00009","kind":"text","variant":"heading","level":2,"text":""}]') WHERE profile_id = $1`,
+    `UPDATE page_studios SET published = jsonb_set(published, '{blocks,0}', '{"id":"blk00009","kind":"text","variant":"heading","text":""}') WHERE profile_id = $1`,
     [profileId],
   );
   const after = await publicPage(handle);
@@ -285,51 +332,331 @@ test('a save with an old rev is refused and keeps the newer draft', async () => 
   assert.equal((await studio(cookie)).draft.rows[0].cells[0][0].text, 'First');
 });
 
-test('a Free page cannot save; its preview is never stored', async () => {
+test('a v1 draft save on Free is refused as today', async () => {
   const { cookie, profileId } = await page({ pro: false });
   const s = await studio(cookie);
+  // The old editor's gate is unchanged until it moves to v2 (ruling R1); the plan is new.
   assert.equal(s.access, 'preview');
+  assert.equal(s.plan, 'free');
   assert.equal(s.rev, 0);
+  assert.equal(s.draft.v, 1);
   const refused = await json(await save(cookie, 0, s.draft));
   assert.equal(refused.status, 403);
   assert.equal(refused.body.error.code, 'STUDIO_PRO_REQUIRED');
-  assert.equal((await publish(cookie, 0)).status, 403);
+  // Nothing stored, so nothing to publish.
+  const nothing = await json(await publish(cookie, 0));
+  assert.equal(nothing.status, 409);
+  assert.equal(nothing.body.error.code, 'STUDIO_DRAFT_STALE');
   assert.deepEqual(
     await q('SELECT 1 FROM page_studios WHERE profile_id = $1', [profileId]),
     [],
   );
 });
 
-test('publish after Pro ended is refused and the draft is kept', async () => {
-  const { cookie, handle, profileId } = await page();
+test('a v1 draft still saves for Pro and publishes as v2', async () => {
+  const { cookie, profileId } = await page();
   const draft = doc([row('row00001', [[heading('blk00001')]])]);
   const s = (await json(await save(cookie, 0, draft))).body.data;
-  assert.equal((await publish(cookie, s.rev)).status, 200);
-  const edited = doc([row('row00001', [[heading('blk00001', 'Edited')]])]);
-  const s2 = (await json(await save(cookie, s.rev, edited))).body.data;
-  await q(
-    `UPDATE profiles SET staff_pro = false, plan = 'free' WHERE id = $1`,
-    [profileId],
-  );
-  const refused = await json(await publish(cookie, s2.rev));
-  assert.equal(refused.status, 403);
-  assert.equal(refused.body.error.code, 'STUDIO_PRO_REQUIRED');
-  const kept = await studio(cookie);
-  assert.equal(kept.access, 'lapsed');
-  assert.deepEqual(kept.draft, edited);
+  assert.deepEqual(s.draft, draft);
+  assert.equal(s.plan, 'pro');
   assert.equal(
-    (await publicPage(handle)).studio,
-    undefined,
-    'the standard page shows while lapsed',
+    s.check.version,
+    DESIGN_CHECK_VERSION_V1,
+    'the v1 check, as the old editor reads it',
   );
-  await q(`UPDATE profiles SET staff_pro = true, plan = 'pro' WHERE id = $1`, [
-    profileId,
-  ]);
+  const done = await json(await publish(cookie, s.rev));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.equal(done.body.data.published.v, 2);
+  // Fraunces headings are Journal (§7.1); the brand colour is the nearest accent.
+  assert.equal(done.body.data.published.style, 'journal');
+  const kept = await stored(profileId);
+  assert.equal(kept.published.v, 2);
+  assert.equal(kept.published_check_version, 3);
+  assert.deepEqual(kept.draft, draft, 'the draft stays v1');
+});
+
+test('Free publishes Clear', async () => {
+  const { cookie, handle, profileId } = await page({ pro: false });
+  const design = v2({ accent: 'blue', mode: 'auto' });
+  const saved = await json(await save(cookie, 0, design));
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(saved.body.data.draft, design);
+  assert.equal(saved.body.data.check.version, 3);
+  assert.deepEqual(saved.body.data.check.issues, []);
+  const done = await json(await publish(cookie, saved.body.data.rev));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.deepEqual(done.body.data.published, design);
+  assert.equal((await stored(profileId)).published_check_version, 3);
+  const visible = (await publicPage(handle)).studio;
+  assert.deepEqual(visible.document, design);
+  assert.deepEqual(visible.palette, studioTokens('clear', 'blue'));
+  assert.equal(visible.checkVersion, 3);
+  assert.deepEqual(visible.images, {});
+});
+
+test("Free can't publish Stage (422 pro-only)", async () => {
+  const { cookie, handle, profileId } = await page();
+  const s = (await json(await save(cookie, 0, v2({ style: 'stage' })))).body
+    .data;
+  await setPlan(profileId, 'free');
+  const refused = await json(await publish(cookie, s.rev));
+  assert.equal(refused.status, 422);
+  assert.equal(refused.body.error.code, 'STUDIO_DESIGN_CHECK_FAILED');
   assert.deepEqual(
-    (await publicPage(handle)).studio.document,
-    draft,
-    'Pro again: the same page is back',
+    refused.body.error.issues.map((i) => i.rule),
+    ['pro-only'],
   );
+  assert.equal((await stored(profileId)).published, null);
+  assert.equal((await publicPage(handle)).studio, undefined);
+  assert.deepEqual((await studio(cookie)).draft, v2({ style: 'stage' }));
+});
+
+test("Free can't add a gallery block or switch to a Pro style (403)", async () => {
+  const { cookie, profileId } = await page({ pro: false });
+  const s = (await json(await save(cookie, 0, v2()))).body.data;
+  for (const next of [
+    v2({ blocks: [...v2().blocks, galleryOf('blk00003', [])] }),
+    v2({ style: 'stage' }),
+    v2({ style: 'tiles' }),
+    v2({ accent: 'photo' }),
+  ]) {
+    const refused = await json(await save(cookie, s.rev, next));
+    assert.equal(refused.status, 403, JSON.stringify(next).slice(0, 80));
+    assert.equal(refused.body.error.code, 'STUDIO_PRO_REQUIRED');
+  }
+  assert.deepEqual((await stored(profileId)).draft, v2());
+  // The free styles and blocks save.
+  const free = v2({ style: 'linen', accent: 'green', mode: 'dark' });
+  assert.equal((await save(cookie, s.rev, free)).status, 200);
+});
+
+test("Free can't upload a photo or change a focus (403)", async () => {
+  const { cookie, profileId } = await page();
+  const imageId = await uploadPhoto(cookie);
+  await setPlan(profileId, 'free');
+  const upload = await fetch(`${stack.api}/v1/me/studio/images`, {
+    method: 'POST',
+    headers: { ...browserHeaders(cookie), 'content-type': 'image/jpeg' },
+    body: await photo(2000, 1400),
+  });
+  assert.equal(upload.status, 403);
+  assert.equal((await upload.json()).error.code, 'STUDIO_PRO_REQUIRED');
+  const focus = await json(
+    await call(cookie, 'PUT', `/v1/me/studio/images/${imageId}/focus`, {
+      focalX: 20,
+      focalY: 20,
+    }),
+  );
+  assert.equal(focus.status, 403);
+  assert.equal(focus.body.error.code, 'STUDIO_PRO_REQUIRED');
+  assert.deepEqual(
+    (
+      await q(
+        'SELECT count(*)::int AS n FROM studio_images WHERE profile_id = $1',
+        [profileId],
+      )
+    )[0].n,
+    1,
+  );
+});
+
+test('a lapsed Free draft that holds a Pro style and Pro blocks can still be reordered, have its text edited, and be discarded', async () => {
+  const { cookie, profileId } = await page();
+  const one = await uploadPhoto(cookie);
+  const two = await uploadPhoto(cookie);
+  const design = v2({
+    style: 'stage',
+    mode: 'dark',
+    blocks: [title('blk00001'), galleryOf('blk00002', [one, two])],
+  });
+  const s = (await json(await save(cookie, 0, design))).body.data;
+  const published = await json(await publish(cookie, s.rev));
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  const lapsedDraft = v2({
+    ...design,
+    blocks: [...design.blocks, title('blk00003', 'Tour dates soon')],
+  });
+  let rev = (
+    await json(await save(cookie, published.body.data.rev, lapsedDraft))
+  ).body.data.rev;
+  await setPlan(profileId, 'free');
+  const ok = async (next, why) => {
+    const r = await json(await save(cookie, rev, next));
+    assert.equal(r.status, 200, `${why}: ${JSON.stringify(r.body)}`);
+    rev = r.body.data.rev;
+    assert.deepEqual(r.body.data.draft, next, why);
+  };
+  // Reorder; edit text, in the gallery too; remove a block; undo the removal.
+  await ok(
+    { ...lapsedDraft, blocks: [...lapsedDraft.blocks].reverse() },
+    'reorder',
+  );
+  const edited = {
+    ...lapsedDraft,
+    blocks: [
+      title('blk00001', 'Edited'),
+      galleryOf('blk00002', [two, one], 'Edited description'),
+      title('blk00003', 'Tour dates in March'),
+    ],
+  };
+  await ok(edited, 'edit text');
+  await ok({ ...edited, blocks: [edited.blocks[0]] }, 'remove');
+  await ok(edited, 'undo the removal: the published version holds the gallery');
+  // Adding anything Pro is refused; everything already saved stays.
+  for (const next of [
+    { ...edited, blocks: [...edited.blocks, galleryOf('blk00004', [one])] },
+    { ...edited, style: 'horizon' },
+  ]) {
+    const refused = await json(await save(cookie, rev, next));
+    assert.equal(refused.status, 403);
+    assert.equal(refused.body.error.code, 'STUDIO_PRO_REQUIRED');
+  }
+  assert.deepEqual((await stored(profileId)).draft, edited);
+  // Discard: back to the published version; both photos are kept (it uses them).
+  const discarded = await json(
+    await call(cookie, 'DELETE', '/v1/me/studio/draft'),
+  );
+  assert.equal(discarded.status, 200, JSON.stringify(discarded.body));
+  assert.deepEqual(discarded.body.data.draft, design);
+  assert.deepEqual(discarded.body.data.published, design);
+  assert.equal(
+    (
+      await q(
+        'SELECT count(*)::int AS n FROM studio_images WHERE profile_id = $1',
+        [profileId],
+      )
+    )[0].n,
+    2,
+  );
+});
+
+test('a lapsed Pro style shows Classic', async () => {
+  const { cookie, handle, profileId } = await page();
+  const imageId = await uploadPhoto(cookie);
+  const design = v2({
+    style: 'signboard',
+    accent: 'coral',
+    mode: 'dark',
+    cover: 'plain',
+    blocks: [
+      title('blk00001'),
+      galleryOf('blk00002', [imageId]),
+      { id: 'blk00003', kind: 'quote', text: 'Sang like home.' },
+    ],
+  });
+  const s = (await json(await save(cookie, 0, design))).body.data;
+  assert.equal((await publish(cookie, s.rev)).status, 200);
+  assert.deepEqual((await publicPage(handle)).studio.document, design);
+  const file = `${stack.api}/v1/studio-images/${profileId}/${imageId}/1/square-480`;
+  assert.equal((await fetch(file)).status, 200);
+  await setPlan(profileId, 'free');
+  const shown = (await publicPage(handle)).studio;
+  // Classic with their accent, mode and cover, and their text and quote blocks in order.
+  assert.deepEqual(shown.document, {
+    v: 2,
+    style: 'classic',
+    accent: 'coral',
+    mode: 'dark',
+    cover: 'plain',
+    blocks: [design.blocks[0], design.blocks[2]],
+  });
+  assert.deepEqual(shown.palette, studioTokens('classic', 'coral'));
+  assert.deepEqual(shown.images, {}, 'hidden photos are not listed');
+  // Nothing is deleted: the design is kept as published.
+  assert.deepEqual((await stored(profileId)).published, design);
+  assert.equal((await fetch(file)).status, 404, 'nor served');
+});
+
+test('a lapsed free style keeps its style and drops the photo accent and Pro blocks', async () => {
+  const { cookie, handle, profileId } = await page();
+  const imageId = await uploadPhoto(cookie);
+  const design = v2({
+    style: 'journal',
+    accent: 'photo',
+    blocks: [title('blk00001'), galleryOf('blk00002', [imageId])],
+  });
+  const s = (await json(await save(cookie, 0, design))).body.data;
+  const done = await json(await publish(cookie, s.rev));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.ok((await publicPage(handle)).studio.images[imageId]);
+  await setPlan(profileId, 'free');
+  const shown = (await publicPage(handle)).studio;
+  assert.deepEqual(shown.document, {
+    ...design,
+    accent: null,
+    blocks: [design.blocks[0]],
+  });
+  assert.deepEqual(shown.palette, studioTokens('journal', null));
+  assert.deepEqual(shown.images, {});
+});
+
+test('resumed Pro shows the design again', async () => {
+  const { cookie, handle, profileId } = await page();
+  const design = v2({ style: 'horizon', accent: 'violet' });
+  const s = (await json(await save(cookie, 0, design))).body.data;
+  assert.equal((await publish(cookie, s.rev)).status, 200);
+  await setPlan(profileId, 'free');
+  assert.equal((await publicPage(handle)).studio.document.style, 'classic');
+  await setPlan(profileId, 'pro');
+  const back = (await publicPage(handle)).studio;
+  assert.deepEqual(back.document, design);
+  assert.deepEqual(back.palette, studioTokens('horizon', 'violet'));
+});
+
+test('a plan change during publish cannot put a Pro style live', async () => {
+  const { cookie, handle, profileId } = await page();
+  const s = (await json(await save(cookie, 0, v2({ style: 'sprint' })))).body
+    .data;
+  // Review Focus 2, with the lock-order pattern (ops-people.test.mjs whileHolding): hold the
+  // page row the way a plan change does, start the publish, and move the page to Free in that
+  // same transaction while the publish waits behind it.
+  const held = await database.pool.connect();
+  let running;
+  try {
+    await held.query('BEGIN');
+    await held.query('SELECT 1 FROM profiles WHERE id = $1 FOR UPDATE', [
+      profileId,
+    ]);
+    const {
+      rows: [{ pid }],
+    } = await held.query('SELECT pg_backend_pid() AS pid');
+    running = publish(cookie, s.rev).then(json);
+    let parked = false;
+    for (let i = 0; i < 200 && !parked; i++) {
+      parked =
+        (
+          await q(
+            `SELECT 1 FROM pg_stat_activity WHERE $1 = ANY(pg_blocking_pids(pid))`,
+            [pid],
+          )
+        ).length > 0;
+      if (!parked) await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    assert.ok(parked, 'the publish waits for the page row');
+    await held.query(
+      `UPDATE profiles SET staff_pro = false, plan = 'free' WHERE id = $1`,
+      [profileId],
+    );
+    await held.query('COMMIT');
+  } catch (error) {
+    await held.query('ROLLBACK');
+    throw error;
+  } finally {
+    held.release();
+  }
+  const refused = await running;
+  assert.equal(refused.status, 422, JSON.stringify(refused.body));
+  assert.equal(refused.body.error.code, 'STUDIO_DESIGN_CHECK_FAILED');
+  assert.deepEqual(
+    refused.body.error.issues.map((i) => i.rule),
+    ['pro-only'],
+  );
+  assert.equal(
+    (await stored(profileId)).published,
+    null,
+    'published unchanged',
+  );
+  assert.equal((await publicPage(handle)).studio, undefined);
 });
 
 test("another page's image id is refused in a draft", async () => {
@@ -404,7 +731,8 @@ test('discard and publish remove unreferenced images only', async () => {
   const discarded = (
     await json(await call(cookie, 'DELETE', '/v1/me/studio/draft'))
   ).body.data;
-  assert.deepEqual(discarded.draft, one);
+  // The draft is the published version again, which is v2 now.
+  assert.deepEqual(discarded.draft, asStored(one));
   assert.deepEqual(await ids(), [kept]);
   assert.ok(!(await ids()).includes(neverUsed));
 });
