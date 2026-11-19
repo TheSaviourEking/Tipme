@@ -14,6 +14,7 @@ const LEAVE_MS = 160;
 export function ConfirmDialog({
   title,
   confirm,
+  cancel: cancelLabel = 'Cancel',
   busy = false,
   onConfirm,
   onCancel,
@@ -21,6 +22,8 @@ export function ConfirmDialog({
 }: {
   title: string;
   confirm: string;
+  /** The safe answer's words ("Keep editing"); focus starts on it. */
+  cancel?: string;
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -70,7 +73,7 @@ export function ConfirmDialog({
       </div>
       <div className="confirm-dialog__actions">
         <Button ref={cancel} variant="quiet" disabled={locked} onClick={leave}>
-          Cancel
+          {cancelLabel}
         </Button>
         <Button disabled={locked} aria-busy={busy} onClick={onConfirm}>
           {confirm}

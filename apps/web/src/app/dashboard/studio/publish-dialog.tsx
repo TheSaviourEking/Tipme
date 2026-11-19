@@ -31,6 +31,7 @@ export function PublishDialog({
   busy,
   failure,
   save,
+  unsaved = false,
   readOnly,
   onPublish,
   onShowLatest,
@@ -46,6 +47,8 @@ export function PublishDialog({
   failure: PublishFailure | null;
   /** The draft's save state: the list says "Your draft is saved." only when it is. */
   save: SaveState;
+  /** This tab has edits the server doesn't have: "Show the latest" would drop them, so it says so. */
+  unsaved?: boolean;
   readOnly: boolean;
   onPublish(): void;
   /** After another tab saved first: what the banner's "Show the latest" does. */
@@ -58,6 +61,7 @@ export function PublishDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
+  const showLatest = useRef<HTMLButtonElement>(null);
   const count = check.issues.length;
   const view = count > 0 ? 'blocked' : 'confirm';
 
@@ -72,6 +76,11 @@ export function PublishDialog({
     if (view === 'confirm') cancel.current?.focus({ preventScroll: true });
     else title.current?.focus({ preventScroll: true });
   }, [view]);
+
+  // Another tab saved first: Publish turns disabled under the focus, so focus goes to what helps.
+  useEffect(() => {
+    if (failure === 'stale') showLatest.current?.focus({ preventScroll: true });
+  }, [failure]);
 
   const apply = (issue: StudioIssue, fixId: string) => {
     onFix(issue, fixId);
@@ -155,7 +164,7 @@ export function PublishDialog({
           <p className="pst-publish__tally">{publishTally(check)}</p>
           {failure && (
             <p className="pst-publish__failed" role="alert">
-              {publishFailureWords(failure, !readOnly)}
+              {publishFailureWords(failure, !readOnly, unsaved)}
             </p>
           )}
         </div>
@@ -168,7 +177,11 @@ export function PublishDialog({
         ) : (
           <>
             {failure === 'stale' && (
-              <Button variant="secondary" onClick={onShowLatest}>
+              <Button
+                ref={showLatest}
+                variant="secondary"
+                onClick={onShowLatest}
+              >
                 Show the latest
               </Button>
             )}

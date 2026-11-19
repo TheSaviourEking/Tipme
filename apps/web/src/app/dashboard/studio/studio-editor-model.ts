@@ -7,6 +7,7 @@ import {
   STUDIO_FIX_LINKS,
   STUDIO_FIX_NEEDS_INPUT,
   STUDIO_WEIGHT,
+  defaultStudioDocument,
   type StudioCheckResult,
   type StudioDocument,
   type StudioFix,
@@ -136,19 +137,26 @@ export function publishOutcome(
   return { failed: 'other' };
 }
 
+/** Said before "Show the latest" drops edits this tab couldn't save (another tab saved first). */
+const UNSAVED_HERE = 'Your last changes in this tab weren’t saved.';
+
 /**
  * The dialog's words for a failed publish. A network failure may have published, so it never
- * says it didn't; "Try again" only while Publish can be pressed.
+ * says it didn't; "Try again" only while Publish can be pressed. `unsaved`: this tab has edits
+ * the stale draft kept it from saving, which "Show the latest" will drop.
  */
 export function publishFailureWords(
   reason: PublishFailure,
   canPublish: boolean,
+  unsaved = false,
 ): string {
   switch (reason) {
     case 'network':
       return 'We couldn’t confirm it was published. Check your connection, then reload to see.';
     case 'stale':
-      return 'This draft changed in another tab. Show the latest to keep editing.';
+      return unsaved
+        ? `This draft changed in another tab. ${UNSAVED_HERE} Show the latest to keep editing.`
+        : 'This draft changed in another tab. Show the latest to keep editing.';
     case 'unavailable':
       return 'Page Studio isn’t available right now.';
     default:
@@ -157,6 +165,31 @@ export function publishFailureWords(
         : 'Your page wasn’t published.';
   }
 }
+
+/**
+ * Whether "Discard changes" has anything to throw away (§12.3): the draft differs from the
+ * published page, or, before any publish, from Classic with no blocks (what a discard leaves).
+ * `published` as `saveWords` takes it.
+ */
+export function hasChangesToDiscard(
+  draft: StudioDocument,
+  published: boolean | 'same',
+): boolean {
+  if (published === 'same') return false;
+  if (published) return true;
+  return JSON.stringify(draft) !== JSON.stringify(defaultStudioDocument());
+}
+
+/** The stale banner's words, saying so when this tab has edits "Show the latest" will drop. */
+export function staleBannerWords(unsaved: boolean): string {
+  const said =
+    'Your design was saved somewhere else after this page opened, so we stopped saving here to keep that version.';
+  return unsaved ? `${said} ${UNSAVED_HERE}` : said;
+}
+
+/** "Show the latest" couldn't read the latest draft; the banner stays. */
+export const RELOAD_FAILED =
+  'We couldn’t load the latest. Check your connection, then try again.';
 
 /** The list's intro: "Your draft is saved." only when it is. */
 export function blockedIntro(count: number, save: SaveState): string {

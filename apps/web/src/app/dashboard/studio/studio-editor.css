@@ -97,6 +97,49 @@
   transform: scale(0.97);
 }
 
+/* Undo and Discard changes (§12.2–12.3; board: quiet buttons beside the status). 44 tall targets,
+   tighter padding so the header still wraps cleanly at 320. aria-disabled keeps them focusable. */
+.pst-bar__undo,
+.pst-bar__discard {
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+/* The sentence after a refused undo (R4). Always in the page so it is announced; out of sight but
+   still read while it is empty. #4D16A8 on #F1E9FF is about 8:1. */
+.pst-notice {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font: 600 13px / 18px var(--font-interface);
+}
+
+.pst-notice:not([data-shown]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* "We couldn't load the latest": under the read-only banner's words. #9B2820 on #F1E9FF is about
+   6.5:1. */
+.pst-banner:has(.pst-banner__failed) {
+  flex-wrap: wrap;
+}
+
+.pst-banner__failed {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--state-danger);
+  font: 700 13px / 18px var(--font-interface);
+}
+
 /* The read-only banner takes focus when Publish is pressed (it says why nothing can be published). */
 .pst-banner:focus {
   outline: none;
