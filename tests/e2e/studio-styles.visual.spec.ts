@@ -10,6 +10,16 @@ const SHOTS = [
   ['journal', 1440],
   ['linen', 390],
   ['linen', 1440],
+  ['stage', 390],
+  ['stage', 1440],
+  ['horizon', 390],
+  ['horizon', 1440],
+  ['signboard', 390],
+  ['signboard', 1440],
+  ['sprint', 390],
+  ['sprint', 1440],
+  ['tiles', 390],
+  ['tiles', 1440],
 ] as const;
 
 for (const [style, width] of SHOTS)
@@ -45,6 +55,25 @@ test('Classic at 390 dark with an accent and blocks', async ({ page }) => {
     [...document.images].every((i) => i.loading === 'lazy' || i.complete),
   );
   await expect(page).toHaveScreenshot('studio-classic-390-dark-green.png', {
+    animations: 'disabled',
+    caret: 'hide',
+    fullPage: true,
+  });
+});
+
+// Stage is dark-first (§9.4, §14.4): its phone in dark too, the glow behind the cover.
+test('Stage at 390 dark', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=stage&mode=dark');
+  await page.locator('.studio[data-style]').waitFor();
+  await page.evaluate(() => document.fonts.ready);
+  await page
+    .locator('form[data-skin][data-bar]')
+    .waitFor({ state: 'attached' });
+  await page.waitForFunction(() =>
+    [...document.images].every((i) => i.loading === 'lazy' || i.complete),
+  );
+  await expect(page).toHaveScreenshot('studio-stage-390-dark.png', {
     animations: 'disabled',
     caret: 'hide',
     fullPage: true,

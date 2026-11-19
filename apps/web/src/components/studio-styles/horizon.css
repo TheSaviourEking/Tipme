@@ -1,0 +1,923 @@
+/* Horizon: "One image, a quiet name" (spec 2026-11-17-page-studio-styles §9.9; canvas "Horizon ·
+   phone", "Horizon · desktop"). Inter 400 and 500 only. Radii 4 (buttons, chips) and 12 (blocks,
+   photos). One full-bleed cover photo with the name, the meta and two buttons at its foot, white,
+   on the scrim; no avatar over a photo. One transition: 330 ms on colour, filter and border. The
+   glass keeps its inner edge lines; the canvas's outer drop shadow is left out (§8: no shadows). */
+
+.studio[data-style='horizon'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --tall: 640px;
+  --ease: cubic-bezier(0.5, 0, 0, 0.75);
+  --move: 330ms var(--ease);
+  letter-spacing: 0;
+}
+
+.studio[data-style='horizon'] :is(.studio-lead, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The hero: the cover and the words share one cell, the words at its foot, centred. */
+.studio[data-style='horizon'] .studio-hero {
+  position: relative;
+  z-index: 0;
+  display: grid;
+}
+
+.studio[data-style='horizon'] .studio-hero > * {
+  grid-area: 1 / 1;
+}
+
+.studio[data-style='horizon'] .studio-hero[data-cover='photo'] {
+  min-height: var(--tall);
+}
+
+.studio[data-style='horizon'] .studio-cover {
+  background: var(--studio-el2);
+}
+
+/* Gradient and plain: the name centred on card, with the avatar and the same two buttons. */
+.studio[data-style='horizon'] .studio-hero:not([data-cover='photo']) {
+  background: var(--studio-card);
+}
+
+.studio[data-style='horizon'] .studio-cover:not([data-cover='photo']) {
+  display: none;
+}
+
+.studio[data-style='horizon'] .studio-hero__words {
+  position: relative;
+  z-index: 0;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  padding: 0 var(--gutter) 28px;
+  text-align: center;
+}
+
+.studio[data-style='horizon']
+  .studio-hero:not([data-cover='photo'])
+  .studio-hero__words {
+  padding-top: 40px;
+  padding-bottom: 32px;
+}
+
+/* Over the photo: white only, on the scrim (§4.2). The scrim is the spec's lower 70% of the
+   cover; a taller block of words (a long name) stretches it, so the top of the words always sits
+   where the scrim is at least 55% black (100 / 200 of its height). */
+.studio[data-style='horizon'] .studio-scrim {
+  color: #fff;
+}
+
+.studio[data-style='horizon'] .studio-scrim::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: max(calc(var(--tall) * 0.7), 200%);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.7) 0%,
+    rgba(0, 0, 0, 0.62) 45%,
+    rgba(0, 0, 0, 0.3) 72%,
+    transparent
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.studio[data-style='horizon'] .studio-avatar {
+  width: 96px;
+  height: 96px;
+  margin-bottom: 16px;
+  font-size: 32px;
+  font-weight: 500;
+}
+
+.studio[data-style='horizon'] .studio-name {
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 40px;
+  letter-spacing: -0.02em;
+}
+
+/* A name that would take a third line steps down about 80% (§9.10). */
+.studio[data-style='horizon'] .studio-name--long {
+  font-size: 28px;
+  line-height: 34px;
+}
+
+.studio[data-style='horizon'] .studio-meta {
+  margin-top: 6px;
+  color: var(--studio-fg2);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.studio[data-style='horizon'] .studio-scrim .studio-meta {
+  color: #fff;
+}
+
+.studio[data-style='horizon'] .studio-scrim .studio-name {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+}
+
+/* The two buttons: "Send a tip" (acc) and "See links" (dark glass over the photo, white text, a
+   white focus ring; outlined in fg on card). They stack full width on a phone. */
+.studio[data-style='horizon'] .studio-hero__actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin-top: 24px;
+}
+
+.studio[data-style='horizon'] :is(.studio-hero__tip, .studio-hero__links) {
+  box-sizing: border-box;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 4px;
+  font: 500 16px/20px var(--studio-ui);
+  text-decoration: none;
+  transition:
+    background-color var(--move),
+    filter var(--move),
+    border-color var(--move);
+}
+
+.studio[data-style='horizon'] .studio-hero__tip {
+  background: var(--studio-acc);
+  color: var(--studio-accLabel);
+}
+
+.studio[data-style='horizon'] .studio-hero__links {
+  border: 1px solid var(--studio-fg);
+  background: transparent;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='horizon'] .studio-hero__links svg {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.studio[data-style='horizon'] .studio-scrim .studio-hero__links {
+  border: 0;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 14%), rgb(255 255 255 / 3%)),
+    rgb(10 10 12 / 32%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 28%),
+    inset 0 0 0 1px rgb(255 255 255 / 16%);
+  color: #fff;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
+}
+
+.studio[data-style='horizon'] .studio-scrim .studio-hero__links:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='horizon'] .studio-scrim .studio-hero__links:hover {
+    background-color: rgb(10 10 12 / 50%);
+  }
+
+  .studio[data-style='horizon']
+    :is(
+      .studio-hero__tip,
+      .studio-tip .composer-submit,
+      .tip-bar__button
+    ):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    filter: brightness(1.08);
+    transform: none;
+  }
+}
+
+.studio[data-style='horizon'] .studio-scrim .studio-hero__links:active {
+  background-color: rgb(10 10 12 / 62%);
+}
+
+/* The Tip area takes focus from "Send a tip": a ring in the accent shows where it landed
+   (WCAG 2.4.7), clear of the chips. */
+.studio[data-style='horizon'] .studio-tip {
+  scroll-margin-top: 24px;
+  border-radius: 4px;
+}
+
+.studio[data-style='horizon'] .studio-tip:focus {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 8px;
+}
+
+/* Below the cover: the bio, then the Tip moment. */
+.studio[data-style='horizon'] .studio-lead {
+  display: grid;
+  gap: 24px;
+  padding-top: 32px;
+}
+
+.studio[data-style='horizon'] .studio-lead__title {
+  display: none;
+}
+
+.studio[data-style='horizon'] .studio-bio {
+  color: var(--studio-fg2);
+  font-size: 15px;
+  line-height: 24px;
+  text-align: center;
+}
+
+.studio[data-style='horizon'] .studio-celebration {
+  justify-self: center;
+  padding: 6px 12px;
+  border-radius: 4px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* The Tip moment: chips 48 tall, r4, a 1 px control edge (§4.2), bg fill; selected: a 2 px inset
+   accText ring. Then "Tip ₦…", 48 tall, r4, acc. */
+.studio[data-style='horizon'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='horizon'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: below 340 px four chips leave a label less room than "₦10,000" needs, so they
+   stand two by two, still 48 tall. */
+@media (max-width: 339px) {
+  .studio[data-style='horizon'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='horizon'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid var(--studio-control);
+  border-radius: 4px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    background-color var(--move),
+    border-color var(--move);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='horizon'] .studio-tip .tm-amount-choice:hover > span {
+    border-color: var(--studio-fg);
+    transform: none;
+  }
+}
+
+.studio[data-style='horizon']
+  .studio-tip
+  .tm-amount-choice
+  input:active
+  + span {
+  background: var(--studio-el2);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Selected: the 1 px edge turns accText and a 1 px inset makes the 2 px ring. */
+.studio[data-style='horizon']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border-color: var(--studio-accText);
+  background: var(--studio-bg);
+  box-shadow: inset 0 0 0 1px var(--studio-accText);
+  color: var(--studio-fg);
+}
+
+.studio[data-style='horizon'] .studio-tip .tm-amount-choice > span {
+  position: relative;
+}
+
+/* And a 6 px accText dot in its corner: Horizon has no heavier weight to step to (400 and 500
+   only), so the choice is marked by shape too, never by colour alone (§4.4). */
+.studio[data-style='horizon']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
+  margin: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--studio-accText);
+  content: '';
+}
+
+.studio[data-style='horizon']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='horizon'] .studio-tip .tm-field label {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='horizon'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 4px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 22px;
+}
+
+.studio[data-style='horizon'] .studio-tip textarea.tm-input {
+  padding: 12px 14px;
+}
+
+.studio[data-style='horizon'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='horizon']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='horizon'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='horizon']
+  .studio-tip
+  .composer-extras[open]
+  summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='horizon'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='horizon'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+  font-weight: 400;
+}
+
+.studio[data-style='horizon']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 500 16px/20px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transform: none;
+  transition: filter var(--move);
+}
+
+.studio[data-style='horizon']
+  :is(
+    .studio-hero__tip,
+    .studio-tip .composer-submit,
+    .tip-bar__button
+  ):active {
+  box-shadow: none;
+  filter: brightness(0.9);
+  transform: none;
+}
+
+.studio[data-style='horizon'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='horizon']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='horizon'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 4px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-weight: 500;
+}
+
+.studio[data-style='horizon'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 12px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: sections 48 apart, a title over each. */
+.studio[data-style='horizon'] .studio-grid {
+  display: grid;
+  gap: 48px;
+  margin-top: 48px;
+}
+
+.studio[data-style='horizon'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='horizon'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.studio[data-style='horizon'] .studio-links {
+  scroll-margin-top: 24px;
+}
+
+.studio[data-style='horizon'] .studio-title {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.01em;
+}
+
+/* Links: flat rows, 56 tall, r12, card; the name, then the handle on the right. */
+.studio[data-style='horizon'] .studio-links__list {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='horizon'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  height: 56px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: background-color var(--move);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='horizon'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='horizon'] .studio-link .link-badge {
+  background: transparent;
+}
+
+.studio[data-style='horizon'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.studio[data-style='horizon'] .studio-link__title {
+  flex: none;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='horizon'] .studio-link__sub {
+  flex: 1;
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='horizon'] .studio-link__chevron {
+  display: none;
+}
+
+/* Blocks. Text: card r12, padding 20 (desktop 24), 15/24. */
+.studio[data-style='horizon'] .studio-card {
+  border-radius: 12px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='horizon'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.studio[data-style='horizon'] .studio-quote {
+  padding: 20px;
+}
+
+.studio[data-style='horizon'] .studio-quote p {
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 26px;
+}
+
+.studio[data-style='horizon'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.studio[data-style='horizon'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.studio[data-style='horizon'] .studio-video {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Photos: 3-up at 3:4, r12, gap 8 (desktop 16). */
+.studio[data-style='horizon'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.studio[data-style='horizon'] .studio-strip li {
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='horizon'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows in one card, 1 px lines between, money tabular on the right. */
+.studio[data-style='horizon'] :is(div.studio-list > ul, ul.studio-list) {
+  display: grid;
+}
+
+.studio[data-style='horizon'] .studio-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px;
+}
+
+.studio[data-style='horizon'] .studio-list li + li {
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='horizon'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 16px 14px;
+}
+
+.studio[data-style='horizon'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.studio[data-style='horizon'] .studio-list__title {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='horizon'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.studio[data-style='horizon'] .studio-price {
+  flex: none;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.studio[data-style='horizon'] .studio-date {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  width: 44px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.studio[data-style='horizon'] .studio-date__day {
+  color: var(--studio-fg);
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: 0;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='horizon'] .studio-foot {
+  margin-top: 48px;
+}
+
+.studio[data-style='horizon'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='horizon'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: bar + blur(20px), a 1 px line, padding 12/20/34; the Tip full width. */
+.studio[data-style='horizon'] .tip-bar {
+  padding: 12px 20px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 1px solid var(--studio-line);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+/* Tablet: one column, 24 px gutters, up to 720; the cover stays full-bleed. */
+@media (min-width: 768px) {
+  .studio[data-style='horizon'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: the cover 836 tall, the buttons side by side, 264 each; then 1040 wide: 440 px (the
+   "Send a tip" title, the bio and the Tip) and the rest (the links), gap 80; every section after
+   splits the same way, its title on the left and its blocks on the right (builder's call). */
+@media (min-width: 1024px) {
+  .studio[data-style='horizon'] {
+    --tall: 836px;
+  }
+
+  .studio[data-style='horizon'] .studio-page {
+    display: grid;
+    grid-template-columns:
+      minmax(var(--gutter), 1fr) minmax(0, 440px) 80px minmax(0, 520px)
+      minmax(var(--gutter), 1fr);
+    align-items: start;
+  }
+
+  .studio[data-style='horizon'] .studio-hero {
+    grid-column: 1 / -1;
+  }
+
+  .studio[data-style='horizon'] .studio-hero__words {
+    padding-bottom: 64px;
+  }
+
+  .studio[data-style='horizon']
+    .studio-hero:not([data-cover='photo'])
+    .studio-hero__words {
+    padding-top: 64px;
+    padding-bottom: 56px;
+  }
+
+  .studio[data-style='horizon'] .studio-name {
+    font-size: 56px;
+    line-height: 64px;
+    letter-spacing: -0.025em;
+  }
+
+  .studio[data-style='horizon'] .studio-name--long {
+    font-size: 46px;
+    line-height: 52px;
+  }
+
+  .studio[data-style='horizon'] .studio-meta {
+    margin-top: 8px;
+    font-size: 17px;
+    line-height: 24px;
+  }
+
+  .studio[data-style='horizon'] .studio-hero__actions {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    margin-top: 32px;
+  }
+
+  .studio[data-style='horizon'] :is(.studio-hero__tip, .studio-hero__links) {
+    width: 264px;
+  }
+
+  .studio[data-style='horizon'] :is(.studio-lead, .studio-grid, .studio-foot) {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='horizon'] .studio-lead {
+    grid-row: 2;
+    grid-column: 2;
+    gap: 16px;
+    padding-top: 80px;
+  }
+
+  .studio[data-style='horizon'] .studio-lead__title {
+    display: block;
+  }
+
+  .studio[data-style='horizon'] .studio-bio {
+    margin-bottom: 8px;
+    font-size: 16px;
+    text-align: start;
+  }
+
+  .studio[data-style='horizon'] .studio-celebration {
+    justify-self: start;
+  }
+
+  .studio[data-style='horizon'] .studio-grid {
+    display: contents;
+  }
+
+  .studio[data-style='horizon'] .studio-links {
+    grid-row: 2;
+    grid-column: 4;
+    padding-top: 80px;
+  }
+
+  .studio[data-style='horizon'] .studio-blocks {
+    display: grid;
+    grid-row: 3;
+    grid-column: 2 / 5;
+    gap: 80px;
+    margin-top: 80px;
+  }
+
+  .studio[data-style='horizon'] .studio-section {
+    display: grid;
+    grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
+    gap: 16px 80px;
+    align-items: start;
+  }
+
+  .studio[data-style='horizon'] .studio-section > .studio-block {
+    grid-column: 2;
+  }
+
+  .studio[data-style='horizon']
+    .studio-section
+    > .studio-block:has(> .studio-block--heading) {
+    grid-column: 1;
+  }
+
+  .studio[data-style='horizon'] :is(.studio-title, .studio-lead__title) {
+    font-size: 20px;
+    font-weight: 500;
+    line-height: 26px;
+    letter-spacing: -0.01em;
+  }
+
+  .studio[data-style='horizon'] :is(.studio-text, .studio-quote) {
+    padding: 24px;
+  }
+
+  .studio[data-style='horizon'] .studio-strip {
+    gap: 16px;
+  }
+
+  .studio[data-style='horizon'] .studio-foot {
+    grid-row: 4;
+    grid-column: 2 / 5;
+    margin-top: 80px;
+  }
+
+  /* No links: the first section takes their place beside the Tip, its title over its blocks
+     (§9.9: the right column holds the first block); the rest follow, split as before. */
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    .studio-blocks {
+    display: contents;
+  }
+
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    :is(.studio-section, .studio-foot) {
+    grid-row: auto;
+    grid-column: 2 / 5;
+    margin-top: 80px;
+  }
+
+  .studio[data-style='horizon']
+    .studio-page:not(:has(.studio-links))
+    .studio-section:first-child {
+    display: flex;
+    flex-direction: column;
+    grid-row: 2;
+    grid-column: 4;
+    margin-top: 0;
+    padding-top: 80px;
+  }
+}
+
+/* The header over the cover (frame.css): the hero runs up under the header, so the words stay
+   where they were and the photo fills the header's place too. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='horizon'][data-header] .studio-hero[data-cover='photo'] {
+    min-height: calc(var(--tall) + var(--nav-height));
+  }
+}

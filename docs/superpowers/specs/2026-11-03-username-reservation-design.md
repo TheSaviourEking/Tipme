@@ -433,7 +433,7 @@ The owner approved this in chat on 18 Nov 2026. Every rule below is the owner's 
 
 **How it is built** (builder's calls, for the owner to check):
 
-- Table `handle_handover_links` (migration `0114_username_handover_links`): reservation, name, `token_sha256`, who made it, made, expires, used (by whom), cancelled (by whom, why). A partial unique index keeps one open link per reservation. `handle_reservations.handed_over_to` names the page a released name went to.
+- Table `handle_handover_links` (migration `0117_username_handover_links`): reservation, name, `token_sha256`, who made it, made, expires, used (by whom), cancelled (by whom, why). A partial unique index keeps one open link per reservation. `handle_reservations.handed_over_to` names the page a released name went to.
 - The link is `/sign-up/claim#claim=<code>`: 24 base32 characters (120 random bits) in the fragment, which no server, log or analytics event sees. The page moves it out of the address bar at once and keeps it in that tab only; it reaches the API only in a request body.
 - `POST /v1/handles/claim-link/preview` (no session) answers `open` with the name, or `used`, `expired`, `cancelled` or `invalid`. `POST /v1/me/username-claim` (session and CSRF) claims; any link that isn't open is one `404 CLAIM_LINK_INVALID`. Both share one allowance per address, 20 an hour (`RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR`).
 - Staff routes: `POST /v1/ops/usernames/{name}/handover-link`, `.../handover-link/cancel`, `POST /v1/ops/usernames/handover-accounts` (the query in the body, audited by its length only, as admin search) and `POST /v1/ops/usernames/{name}/assign`.

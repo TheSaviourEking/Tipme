@@ -38,4 +38,6 @@ test('/health/release reports bachs-live and paymentsLive false', async () => {
   ).info();
   assert.equal(data.paymentProvider, 'bachs-live');
   assert.equal(data.paymentsLive, false);
+  // Page Studio's switch, for the web's preview route (off by default).
+  assert.equal(data.pageStudio, false);
 });

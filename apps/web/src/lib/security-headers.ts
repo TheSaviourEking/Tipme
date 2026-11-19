@@ -8,6 +8,13 @@ import { STUDIO_EMBED_ORIGINS } from '@tipme/contracts';
 export const PUBLIC_PAGE_SOURCE = '/@:handle';
 
 /**
+ * Page Studio's preview document (styles plan Task 12): the editor draws the person's page in a
+ * frame of this one route, so each style's layout follows the preview's width. Only this site may
+ * frame it (`frame-ancestors 'self'`, SAMEORIGIN); every other page still refuses all framing.
+ */
+export const STUDIO_PREVIEW_SOURCE = '/studio-preview';
+
+/**
  * The Content-Security-Policy. Inline scripts/styles are required by statically rendered Next.js
  * pages (nonces would force dynamic rendering; deferred, threat model X1); every other resource
  * class is restricted, and the browser may reach only this site and the configured API origin.
@@ -20,10 +27,13 @@ export function contentSecurityPolicy({
   apiOrigin,
   dev,
   frames,
+  framedBySelf = false,
 }: {
   apiOrigin: string;
   dev: boolean;
   frames: boolean;
+  /** The Studio preview only: this site may frame it. */
+  framedBySelf?: boolean;
 }): string {
   return [
     "default-src 'self'",
@@ -38,23 +48,27 @@ export function contentSecurityPolicy({
     "manifest-src 'self'",
     "worker-src 'self' blob:",
     ...(frames ? [`frame-src ${STUDIO_EMBED_ORIGINS.join(' ')}`] : []),
-    "frame-ancestors 'none'",
+    `frame-ancestors ${framedBySelf ? "'self'" : "'none'"}`,
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
   ].join('; ');
 }
 
-/** Every response's security headers; `frames` as in contentSecurityPolicy. */
+/** Every response's security headers; `frames` and `framedBySelf` as in contentSecurityPolicy. */
 export function securityHeaders(options: {
   apiOrigin: string;
   dev: boolean;
   frames: boolean;
+  framedBySelf?: boolean;
 }): { key: string; value: string }[] {
   return [
     { key: 'X-Content-Type-Options', value: 'nosniff' },
     { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-    { key: 'X-Frame-Options', value: 'DENY' },
+    {
+      key: 'X-Frame-Options',
+      value: options.framedBySelf ? 'SAMEORIGIN' : 'DENY',
+    },
     { key: 'Content-Security-Policy', value: contentSecurityPolicy(options) },
     {
       key: 'Permissions-Policy',

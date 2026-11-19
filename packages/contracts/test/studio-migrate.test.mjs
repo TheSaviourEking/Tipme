@@ -9,12 +9,7 @@ import {
   resolveStudioV1,
   studioDocumentSchema,
 } from '../dist/index.js';
-import {
-  EXAMPLE_CONTEXT,
-  IFY,
-  KEMI,
-  SULE,
-} from './fixtures/studio-examples.mjs';
+import { IFY, KEMI, SULE } from './fixtures/studio-examples.mjs';
 import { TODAY } from './support/studio-arbitrary.mjs';
 
 const json = (path) =>
@@ -235,7 +230,6 @@ test('converted fixtures are pinned', () => {
     ),
   };
   assert.deepEqual(Object.keys(FIXTURE).sort(), Object.keys(sources).sort());
-  assert.ok(EXAMPLE_CONTEXT);
   for (const [name, doc] of Object.entries(sources)) {
     const converted = resolveStudio(doc, TODAY);
     assert.deepEqual(converted, FIXTURE[name], name);

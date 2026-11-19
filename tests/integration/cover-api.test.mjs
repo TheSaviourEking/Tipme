@@ -968,12 +968,12 @@ test('an automatic cover is never animated', async () => {
 
 // Cover renditions (Studio styles spec §9.4/§9.9): an upload also writes the cover at 640, 1080
 // and 1600 wide, beside it, under the same rules. A cover from before has none and says so.
-const renditionRows = async (profileId) =>
+const renditionRows = async (profileId, shape = 'wide') =>
   (
     await database.pool.query(
       `SELECT width, version, bytes IS NOT NULL AS in_db, object_key
-         FROM profile_cover_renditions WHERE profile_id = $1 ORDER BY width`,
-      [profileId],
+         FROM profile_cover_renditions WHERE profile_id = $1 AND shape = $2 ORDER BY width`,
+      [profileId, shape],
     )
   ).rows;
 const renditionPath = (path, width) =>
@@ -1305,8 +1305,8 @@ test('the backfill is a dry run unless told, writes once, and skips what it cann
   assert.ok(stored.written >= 1);
   assert.equal(
     store.objects.size,
-    4,
-    'the renditions sit beside it in the store',
+    5,
+    'the renditions and the tall crop sit beside it in the store',
   );
   // The log names pages by id only: no handle, name or phone.
   assert.equal(lines.join('\n').includes('cover_backfill'), false);
@@ -1532,4 +1532,400 @@ test('a rendition failure still saves the upload, with no renditions, and warns 
     (await publicPage('cover_sizes_fail')).cover.widths,
     [640, 1080, 1600],
   );
+});
+
+// Tall crops (Studio styles Stage and Horizon on phones, follow-up to PR #279): the 4:5 region the
+// phone hero shows (object-position 50% 33%), cut in advance. Stored, served and removed exactly as
+// the wide renditions are.
+const tallPath = (path, width) =>
+  path.replace(/\.webp$/, `-tall-${width}.webp`);
+const fakeTall = (label) => [
+  { shape: 'tall', width: 480, webp: fakeWebp(`${label}-tall-480`) },
+];
+
+test('an upload writes the tall crop, the public page lists it, and it is served like the cover', async () => {
+  const cookie = await livePage('+2348031290081', 'cover_tall');
+  const { profileId } = await userAndPage('cover_tall');
+  const response = await upload(cookie, await photoLike());
+  assert.equal(response.status, 200);
+  const { cover } = (await response.json()).data;
+  assert.deepEqual(cover.widths, [640, 1080, 1600]);
+  assert.deepEqual(cover.tall, [480], '600 high: 720 would be an upscale');
+  assert.deepEqual((await publicPage('cover_tall')).cover, cover);
+  assert.deepEqual((await myPage(cookie)).cover, cover);
+  const version = versionOf(cover.path);
+  assert.deepEqual(
+    (await renditionRows(profileId, 'tall')).map((r) => [
+      r.width,
+      r.version,
+      r.in_db,
+    ]),
+    [[480, version, true]],
+  );
+  const full = await fetch(`${stack.api}${cover.path}`);
+  const fullBytes = (await full.arrayBuffer()).byteLength;
+  const served = await fetch(`${stack.api}${tallPath(cover.path, 480)}`);
+  assert.equal(served.status, 200);
+  for (const header of [
+    'content-type',
+    'cache-control',
+    'content-security-policy',
+    'x-content-type-options',
+  ])
+    assert.equal(served.headers.get(header), full.headers.get(header), header);
+  const bytes = Buffer.from(await served.arrayBuffer());
+  const meta = await sharp(bytes).metadata();
+  assert.deepEqual([meta.format, meta.width, meta.height], ['webp', 480, 600]);
+  assert.equal(meta.exif, undefined);
+  console.log(
+    `served tall crop bytes: ${JSON.stringify({ full: fullBytes, 'tall-480': bytes.length })}`,
+  );
+
+  // Not stored, not a tall width, or not a name at all: not found.
+  for (const name of [
+    'tall-720',
+    'tall-640',
+    'tall-0480',
+    'TALL-480',
+    'tall480',
+    'wide-640',
+    '480',
+  ])
+    assert.equal(
+      (
+        await fetch(
+          `${stack.api}${cover.path.replace('.webp', `-${name}.webp`)}`,
+        )
+      ).status,
+      404,
+      name,
+    );
+  const url = `${stack.api}${tallPath(cover.path, 480)}`;
+  // Same rules: not live, or paused by TipMe, not served.
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'not_live' }),
+  });
+  assert.equal((await fetch(url)).status, 404, 'not live');
+  await fetch(`${stack.api}/v1/me/page/state`, {
+    method: 'PUT',
+    headers: browserHeaders(cookie),
+    body: JSON.stringify({ state: 'live' }),
+  });
+  await database.pool.query(
+    `UPDATE profiles SET status = 'suspended', suspended_reason = 'Under review' WHERE id = $1`,
+    [profileId],
+  );
+  assert.equal((await fetch(url)).status, 404, 'suspended');
+  await database.pool.query(
+    `UPDATE profiles SET status = 'active', suspended_reason = NULL WHERE id = $1`,
+    [profileId],
+  );
+  assert.equal((await fetch(url)).status, 200);
+  // Replaced: the old version's crop stops working, the new one is served.
+  const next = (await (await upload(cookie, await photo())).json()).data.cover;
+  assert.equal((await fetch(url)).status, 404, 'old version');
+  assert.equal(
+    (await fetch(`${stack.api}${tallPath(next.path, 480)}`)).status,
+    200,
+  );
+  assert.deepEqual(
+    (await renditionRows(profileId, 'tall')).map((r) => r.version),
+    [versionOf(next.path)],
+  );
+  // Removed: it goes with the cover.
+  await fetch(`${stack.api}/v1/me/cover`, {
+    method: 'DELETE',
+    headers: browserHeaders(cookie),
+  });
+  assert.deepEqual(await renditionRows(profileId, 'tall'), []);
+  assert.equal(
+    (await fetch(`${stack.api}${tallPath(next.path, 480)}`)).status,
+    404,
+  );
+});
+
+test('with a store, the tall crop sits beside the cover, and replace, remove, staff removal and deletion take it', async () => {
+  await livePage('+2348031290082', 'cover_tall_store');
+  const { profileId, userId } = await userAndPage('cover_tall_store');
+  const store = memoryStore();
+  const both = (label) => [...fakeRenditions(label), ...fakeTall(label)];
+  await setCover(database.db, userId, fakeWebp('one'), store, both('one'));
+  const { object_key: key } = await coverRow(profileId);
+  const base = key.replace(/\.webp$/, '');
+  const [tall] = await renditionRows(profileId, 'tall');
+  assert.equal(tall.in_db, false);
+  assert.match(
+    tall.object_key,
+    new RegExp(`^${base}-tall-480-[0-9a-f]{8}\\.webp$`),
+  );
+  assert.deepEqual(
+    store.objects.get(tall.object_key),
+    fakeWebp('one-tall-480'),
+  );
+  assert.equal(store.objects.size, 5);
+  // Replaced: the old five go, the new five stay.
+  await setCover(database.db, userId, fakeWebp('two'), store, both('two'));
+  assert.equal(store.objects.size, 5);
+  assert.ok(
+    [...store.objects.values()].some((v) => v.equals(fakeWebp('two-tall-480'))),
+  );
+  assert.deepEqual(await orphans(store), []);
+  // Removed.
+  await removeCover(database.db, userId, store);
+  assert.equal(store.objects.size, 0);
+  // Staff removal.
+  await setCover(database.db, userId, fakeWebp('three'), store, both('three'));
+  await staffRemovePageImage(database.db, {
+    profileId,
+    staffUserId: await staffId(),
+    image: 'cover',
+    reason: 'Abusive image reported by a visitor, seen by staff',
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    store,
+  });
+  assert.equal(store.objects.size, 0, 'staff removal');
+  assert.deepEqual(await renditionRows(profileId, 'tall'), []);
+  // Account deletion.
+  await setCover(database.db, userId, fakeWebp('four'), store, both('four'));
+  await deleteAccount(database.db, {
+    userId,
+    sealing: mailSealing(Buffer.alloc(32, 7)),
+    photos: store,
+  });
+  assert.equal(store.objects.size, 0, 'account deletion');
+  assert.deepEqual(await renditionRows(profileId, 'tall'), []);
+});
+
+test('moving photos to the object store moves the tall crop beside its cover', async () => {
+  await livePage('+2348031290083', 'cover_tall_move');
+  const { profileId, userId } = await userAndPage('cover_tall_move');
+  await setCover(database.db, userId, fakeWebp('m'), undefined, [
+    ...fakeRenditions('m'),
+    ...fakeTall('m'),
+  ]);
+  const store = memoryStore();
+  await movePhotosToStore(database.db, store);
+  const { object_key: key } = await coverRow(profileId);
+  const [tall] = await renditionRows(profileId, 'tall');
+  assert.equal(tall.in_db, false);
+  assert.ok(
+    tall.object_key.startsWith(`${key.replace(/\.webp$/, '')}-tall-480-`),
+    tall.object_key,
+  );
+  assert.deepEqual(store.objects.get(tall.object_key), fakeWebp('m-tall-480'));
+  assert.equal((await renditionRows(profileId)).length, 3);
+  assert.deepEqual(await orphans(store), []);
+});
+
+test('the backfill adds the tall crop to a cover that has only wide copies, and leaves those alone', async () => {
+  const cookie = await livePage('+2348031290084', 'cover_tall_fill');
+  const { profileId } = await userAndPage('cover_tall_fill');
+  const { cover } = (await (await upload(cookie, await photoLike())).json())
+    .data;
+  // What a cover uploaded under PR #279 looks like: wide copies, no tall crop.
+  await database.pool.query(
+    `DELETE FROM profile_cover_renditions WHERE profile_id = $1 AND shape = 'tall'`,
+    [profileId],
+  );
+  const wideXmins = async () =>
+    (
+      await database.pool.query(
+        `SELECT width, xmin::text AS xmin FROM profile_cover_renditions
+          WHERE profile_id = $1 AND shape = 'wide' ORDER BY width`,
+        [profileId],
+      )
+    ).rows;
+  const wideBefore = await wideXmins();
+  assert.equal(wideBefore.length, 3);
+  assert.equal((await publicPage('cover_tall_fill')).cover.tall, undefined);
+  assert.deepEqual(
+    (await publicPage('cover_tall_fill')).cover.widths,
+    [640, 1080, 1600],
+  );
+  const listed = (await coversWithoutRenditions(database.db)).find(
+    (c) => c.profileId === profileId,
+  );
+  assert.deepEqual(listed?.missing, ['tall']);
+
+  const lines = [];
+  const log = (line) => lines.push(line);
+  const dry = await backfillCoverRenditions(database.db, { log });
+  assert.equal(dry.written, 0);
+  assert.deepEqual(await renditionRows(profileId, 'tall'), [], 'dry run');
+
+  const real = await backfillCoverRenditions(database.db, { write: true, log });
+  assert.ok(real.written >= 1);
+  assert.deepEqual(
+    (await renditionRows(profileId, 'tall')).map((r) => [r.width, r.version]),
+    [[480, versionOf(cover.path)]],
+  );
+  // The wide rows are the very same rows, never rewritten.
+  assert.deepEqual(await wideXmins(), wideBefore);
+  assert.deepEqual((await publicPage('cover_tall_fill')).cover.tall, [480]);
+  const served = await fetch(`${stack.api}${tallPath(cover.path, 480)}`);
+  assert.equal(served.status, 200);
+  assert.equal(
+    (await sharp(Buffer.from(await served.arrayBuffer())).metadata()).height,
+    600,
+  );
+  // Again: nothing to do for this cover.
+  assert.equal(
+    (await coversWithoutRenditions(database.db)).some(
+      (c) => c.profileId === profileId,
+    ),
+    false,
+  );
+  const again = await backfillCoverRenditions(database.db, {
+    write: true,
+    log,
+  });
+  assert.equal(again.written, 0);
+  assert.deepEqual(await wideXmins(), wideBefore);
+  assert.equal(
+    (await renditionRows(profileId, 'tall')).length,
+    1,
+    'nothing written twice',
+  );
+  assert.equal(lines.join('\n').includes('cover_tall_fill'), false);
+});
+
+test('a tall-crop backfill waits for a removal holding the page, and leaves no object behind', async () => {
+  await livePage('+2348031290085', 'cover_tall_hold');
+  const { profileId, userId } = await userAndPage('cover_tall_hold');
+  const store = memoryStore();
+  await setCover(
+    database.db,
+    userId,
+    fakeWebp('held'),
+    store,
+    fakeRenditions('held'),
+  );
+  const { version } = await coverRow(profileId);
+  const removal = await database.pool.connect();
+  try {
+    await removal.query('BEGIN');
+    await removal.query('SELECT id FROM profiles WHERE id = $1 FOR UPDATE', [
+      profileId,
+    ]);
+    await removal.query(
+      'DELETE FROM profile_cover_renditions WHERE profile_id = $1',
+      [profileId],
+    );
+    const adding = addCoverRenditions(
+      database.db,
+      { profileId, version, renditions: fakeTall('late') },
+      store,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.deepEqual(
+      await renditionRows(profileId, 'tall'),
+      [],
+      'the backfill waits for the page',
+    );
+    await removal.query('DELETE FROM profile_covers WHERE profile_id = $1', [
+      profileId,
+    ]);
+    await removal.query('UPDATE profiles SET cover_path = NULL WHERE id = $1', [
+      profileId,
+    ]);
+    await removal.query('COMMIT');
+    assert.equal(await adding, false);
+  } finally {
+    removal.release();
+  }
+  const left = await orphans(store);
+  assert.ok(
+    left.every((key) => !/-tall-\d+-[0-9a-f]{8}\.webp$/.test(key)),
+    `tall objects left: ${left.join(', ')}`,
+  );
+  assert.deepEqual(await renditionRows(profileId, 'tall'), []);
+});
+
+test('a tall-crop backfill beside a removal, a staff removal, an account deletion or another backfill leaves no orphan', async () => {
+  const paths = {
+    remove: (userId) => removeCover(database.db, userId, paths.store),
+    staff: async (_userId, profileId) =>
+      staffRemovePageImage(database.db, {
+        profileId,
+        staffUserId: await staffId(),
+        image: 'cover',
+        reason: 'Abusive image reported by a visitor, seen by staff',
+        sealing: mailSealing(Buffer.alloc(32, 7)),
+        store: paths.store,
+      }),
+    erase: (userId) =>
+      deleteAccount(database.db, {
+        userId,
+        sealing: mailSealing(Buffer.alloc(32, 7)),
+        photos: paths.store,
+      }),
+    twice: (_userId, profileId, version) =>
+      addCoverRenditions(
+        database.db,
+        { profileId, version, renditions: fakeTall('second') },
+        paths.store,
+      ),
+  };
+  let n = 0;
+  for (const name of ['remove', 'staff', 'erase', 'twice'])
+    for (let round = 0; round < 4; round += 1) {
+      n += 1;
+      const handle = `cover_tall_race_${name}_${round}`;
+      await livePage(`+23480312907${String(n).padStart(2, '0')}`, handle);
+      const { profileId, userId } = await userAndPage(handle);
+      paths.store = memoryStore();
+      await setCover(
+        database.db,
+        userId,
+        fakeWebp(handle),
+        paths.store,
+        fakeRenditions(handle),
+      );
+      const { version } = await coverRow(profileId);
+      const results = await Promise.all([
+        addCoverRenditions(
+          database.db,
+          { profileId, version, renditions: fakeTall(handle) },
+          paths.store,
+        ).catch(() => false),
+        paths[name](userId, profileId, version),
+      ]);
+      assert.deepEqual(await orphans(paths.store), [], `${name} ${round}`);
+      if (name === 'twice') {
+        assert.deepEqual(
+          results.filter(Boolean).length,
+          1,
+          'exactly one backfill wins',
+        );
+        assert.equal((await renditionRows(profileId, 'tall')).length, 1);
+        assert.equal(
+          (await renditionRows(profileId)).length,
+          3,
+          'wide rows kept',
+        );
+      }
+    }
+});
+
+test('the database refuses a tall crop at a wide width, and a wide copy at a tall one', async () => {
+  await livePage('+2348031290086', 'cover_tall_check');
+  const { profileId, userId } = await userAndPage('cover_tall_check');
+  await setCover(database.db, userId, fakeWebp('c'));
+  const { version } = await coverRow(profileId);
+  for (const [shape, width] of [
+    ['tall', 640],
+    ['wide', 480],
+    ['square', 480],
+  ])
+    await assert.rejects(
+      database.pool.query(
+        `INSERT INTO profile_cover_renditions (profile_id, version, shape, width, bytes)
+         VALUES ($1, $2, $3, $4, decode('00', 'hex'))`,
+        [profileId, version, shape, width],
+      ),
+      /violates check constraint/,
+      `${shape} ${width}`,
+    );
 });

@@ -5,8 +5,8 @@ import {
 } from '@tipme/database';
 import { backfillCoverRenditions } from '../profiles/cover-backfill.js';
 
-// Once, after the cover renditions release: gives covers uploaded before it their 640/1080/1600
-// copies (docs/runbooks/photos.md). A dry run unless `--write`. Safe to run again. Uses the R2
+// Once, after each cover renditions release: gives covers uploaded before it their 640/1080/1600
+// copies and their tall crop, whichever they lack (docs/runbooks/photos.md). A dry run unless `--write`. Safe to run again. Uses the R2
 // settings when set (covers kept there get their copies beside them). Prints no secrets.
 //
 //   node apps/api/dist/scripts/backfill-cover-renditions.js            (dry run)
@@ -23,7 +23,7 @@ try {
   console.log(
     write
       ? `Added renditions to ${result.written} of ${result.candidates} cover(s); skipped ${result.skipped}.`
-      : `Dry run: ${result.candidates} cover(s) have no renditions (${result.skipped} need the R2 settings). Run again with --write to add them.`,
+      : `Dry run: ${result.candidates} cover(s) lack renditions or a tall crop (${result.skipped} need the R2 settings). Run again with --write to add them.`,
   );
 } catch (error) {
   console.error(

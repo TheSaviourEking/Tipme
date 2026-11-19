@@ -810,8 +810,22 @@
     {
       "idx": 115,
       "version": "7",
-      "when": 1795023506696,
-      "tag": "0115_username_handover_links",
+      "when": 1795015481658,
+      "tag": "0115_studio_photo_accent",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1795058393539,
+      "tag": "0116_cover_tall_crops",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1795076443958,
+      "tag": "0117_username_handover_links",
       "breakpoints": true
     }
   ]

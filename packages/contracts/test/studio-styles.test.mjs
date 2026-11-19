@@ -285,6 +285,9 @@ test('every style’s neutrals are the spec’s', () => {
   assert.equal(STUDIO_STYLES.stage.neutrals.dark.chip, '#1a1a1f');
   assert.equal(STUDIO_STYLES.stage.neutrals.light.scrimEnd, 'rgba(8,8,10,.86)');
   assert.equal(STUDIO_STYLES.stage.neutrals.dark.scrimEnd, '#0f0f12');
+  // The canvas's desktop Tip card sets its chips on `chipIn` (StageDesktop: --chip: var(--chipIn)).
+  assert.equal(STUDIO_STYLES.stage.neutrals.light.chipIn, '#f2f2f4');
+  assert.equal(STUDIO_STYLES.stage.neutrals.dark.chipIn, '#25252b');
   // §9.5
   assert.deepEqual(
     n('signboard', 'light'),
@@ -581,5 +584,23 @@ test('tokens carry neutrals and accent for both modes; Classic with no accent is
         ])
           assert.ok(t[mode][k], `${style} ${accent} ${mode} ${k}`);
       }
+    }
+});
+
+test("Stage proves its chips on chip and on the desktop card's chipIn, in both modes", () => {
+  for (const mode of MODES)
+    for (const accent of [...CURATED, null]) {
+      const names = studioContrastPairs(
+        'stage',
+        accentValues('stage', accent, mode),
+        mode,
+      ).map((p) => p.name);
+      for (const name of [
+        'chip label (fg) on chip',
+        'selected ring (accText) on chip',
+        'chip label (fg) on chipIn',
+        'selected ring (accText) on chipIn',
+      ])
+        assert.ok(names.includes(name), `${accent} ${mode}: ${name}`);
     }
 });

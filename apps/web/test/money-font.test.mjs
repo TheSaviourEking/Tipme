@@ -8,11 +8,6 @@ import {
   GLYPH_FALLBACK_RANGE,
   withGlyphFallback,
 } from '../src/lib/font-stack.ts';
-import {
-  studioFont,
-  studioFontStack,
-} from '../src/components/studio/studio-theme.ts';
-import { STUDIO_FONTS } from '@tipme/contracts';
 
 // The owner's three fixes of 17 Nov 2026: money in Inter with tabular figures, Inter as the backup
 // for letters the display fonts lack, and a darker hint colour.
@@ -229,16 +224,6 @@ test('the interface and editorial stacks have Inter straight after their own fac
   const tokens = ui('tokens.css');
   assert.match(tokens, /--font-interface:\s*var\(--font-manrope\),/);
   assert.match(tokens, /--font-editorial:\s*var\(--font-dm-serif\),/);
-});
-
-test('every Page Studio stack has Inter straight after its own face', () => {
-  for (const { id, name } of STUDIO_FONTS) {
-    const stack = studioFontStack(studioFont(id));
-    assert.ok(
-      stack.startsWith(`'Studio ${name}', var(--font-glyph-fallback`),
-      `${name}: ${stack}`,
-    );
-  }
 });
 
 /** WCAG relative luminance contrast of two #rrggbb colours. */

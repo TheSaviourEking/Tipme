@@ -317,6 +317,12 @@
   html:has(.studio[data-style] form[data-skin]) {
     scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
   }
+
+  /* The site's "TipMe has been updated" notice sits above the bar, as on Classic (globals.css
+     lifts it over `.composer-action` there); a styled page isn't `.profile-page`. */
+  html:has(.studio[data-style] form[data-skin]) .update-notice {
+    bottom: calc(var(--tip-bar, 136px) + 12px);
+  }
 }
 
 @media (min-width: 1024px) {
@@ -388,5 +394,240 @@ html:has(.studio[data-style])
     border-color: transparent;
     background: var(--surface-signature);
     color: var(--surface-base);
+  }
+}
+
+/* The site header over the cover (owner, 18 Nov 2026: "this header should be transparent or
+   blend into the theme on the hero"). A page that starts with a full-bleed cover marks its root
+   `data-header` (style-page.tsx); each style lifts its cover under the header (its own file). At
+   the top of the page the header is transparent: over a cover its words are white on a soft
+   scrim, 58% black or more wherever they sit, 4.5:1 (§4.2; the unit test reads the stops); over
+   Signboard's band they are the band's label colour. Just before the hero has gone, the header
+   turns to frosted glass in the page's bg, with today's words, in one short step, by a scroll-driven animation on the
+   hero's view timeline: colour and opacity only, no script. Browsers without scroll timelines skip
+   all of it and keep today's solid header; browsers without backdrop-filter get a solid bg. "Claim your username" keeps TipMe purple; the open
+   phone menu is today's solid panel. The ink is a registered colour, so it blends over that step
+   instead of flipping. */
+@property --studio-head-ink {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #fff;
+}
+
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  html:has(.studio[data-style][data-header]) {
+    timeline-scope: --studio-hero;
+  }
+
+  /* The hero's view timeline, measured from the header's foot: the header is solid by the time
+     the cover's foot reaches it. */
+  html:has(.studio[data-style][data-header='over']) .studio-cover,
+  html:has(.studio[data-style][data-header='band']) .studio-band {
+    view-timeline: --studio-hero block;
+    view-timeline-inset: var(--nav-height) 0;
+  }
+
+  /* The header's own tokens follow its ink: links and keys write in it, keys lose their fill. */
+  html:has(.studio[data-style][data-header]) .site-header {
+    --text-primary: currentColor;
+    --surface-raised: transparent;
+    --edge-hairline: color-mix(in srgb, currentColor 55%, transparent);
+    --border-material: color-mix(in srgb, currentColor 55%, transparent);
+    position: sticky;
+    top: 0;
+    margin-bottom: calc(-1 * var(--nav-height));
+    background: transparent;
+    --studio-head-ink: var(--studio-head-over);
+    color: var(--studio-head-ink);
+    animation: studio-head linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  html:has(.studio[data-style][data-header='over']) .site-header {
+    --studio-head-over: #fff;
+  }
+
+  html:has(.studio[data-style][data-header='band']) .site-header {
+    --studio-head-over: var(--studio-accLabel);
+    --studio-head-ring: var(--studio-accLabel);
+  }
+
+  /* The scrim: about 60% black at the top edge, 58% down to 72 px (the words' foot, links wrapped
+     to two lines included), then fading out below the header. It leaves with the hero. */
+  html:has(.studio[data-style][data-header='over']) .site-header::before {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: calc(var(--nav-height) + 76px);
+    background: linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.62) 0px,
+      rgba(8, 8, 10, 0.58) 72px,
+      rgba(8, 8, 10, 0.24) 108px,
+      transparent 152px
+    );
+    content: '';
+    pointer-events: none;
+    animation: studio-head-scrim linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  /* Past the hero the header is frosted glass (the owner, 18 Nov 2026: "keep it fixed but kind
+     of make it glassy when you scroll"): the page's bg at 64% over a blur of what scrolls under
+     it, with a hairline. 64% is the lowest whole percent at which the page's words keep 4.5:1 on
+     it over pure black or pure white, in every style and mode (the unit test). It is the header's
+     own layer, not the header: a backdrop-filter on the header would hold the phone menu (fixed,
+     inside it) in the header's box. */
+  html:has(.studio[data-style][data-header]) .site-header::after {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-bottom: 0.5px solid var(--studio-line);
+    background: color-mix(in srgb, var(--studio-bg) 64%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    content: '';
+    pointer-events: none;
+    opacity: 0;
+    animation: studio-head-glass linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  /* No backdrop-filter, or reduced transparency asked for: today's solid bg. */
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    html:has(.studio[data-style][data-header]) .site-header::after {
+      background: var(--studio-bg);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    html:has(.studio[data-style][data-header]) .site-header::after {
+      background: var(--studio-bg);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* The wordmark in the header's ink over the cover: its purple would vanish on a photo or a
+     purple band. "me" and the heart are purple again once the header is solid. */
+  html:has(.studio[data-style][data-header])
+    .site-header
+    .nav-shell
+    > .brand
+    .brand__mark
+    path {
+    fill: currentColor;
+  }
+
+  html:has(.studio[data-style][data-header])
+    .site-header
+    .nav-shell
+    > .brand
+    .brand__mark
+    path[fill='#7A32F9'] {
+    fill: var(--studio-head-me, currentColor);
+  }
+
+  /* Focus follows the ink, so the ring shows over the cover and on bg. */
+  html:has(.studio[data-style][data-header])
+    .site-header
+    :is(.nav-shell > .brand, .nav-shell > .menu-toggle):focus-visible {
+    outline-color: var(--studio-head-ink);
+  }
+
+  /* "Who it's for" opens on its own card, in the page's words. */
+  html:has(.studio[data-style][data-header]) .site-header .who__menu {
+    --text-primary: var(--studio-fg);
+    --surface-raised: var(--studio-card);
+    --edge-hairline: var(--studio-line);
+    --border-material: var(--studio-line);
+    color: var(--studio-fg);
+  }
+
+  @media (min-width: 801px) {
+    html:has(.studio[data-style][data-header])
+      .site-header
+      :is(.site-nav > a, .who__button):focus-visible {
+      outline-color: var(--studio-head-ink);
+    }
+
+    /* The purple key on Signboard's band, which can be as light as it: a ring in the band's label
+       colour keeps its edge (gone once the header is solid). Today's own shadow stays under it. */
+    html:has(.studio[data-style][data-header='band']) .site-header .nav-claim {
+      box-shadow:
+        0 0 0 2px var(--studio-head-ring),
+        inset 0 1px 0 rgb(255 255 255 / 22%),
+        0 1px 2px rgb(58 17 131 / 28%);
+    }
+  }
+
+  /* The open phone menu is today's page of its own, solid bg and the page's words. */
+  @media (max-width: 800px) {
+    html:has(.studio[data-style][data-header]) .site-nav {
+      --text-primary: var(--studio-fg);
+      --surface-raised: var(--studio-card);
+      --edge-hairline: var(--studio-line);
+      --border-material: var(--studio-line);
+      color: var(--studio-fg);
+    }
+  }
+
+  /* The words keep their over-the-cover ink on the full scrim, with no bg, until the cover's foot
+     is almost at the header's. Then, in one short step: the glass (below), the page's words, the
+     purple "me", the keys raised on card, no ring, no scrim. No mid-way where light words meet
+     half-drawn glass. Custom properties switch half way through the step. */
+  @keyframes studio-head {
+    0%,
+    85% {
+      --studio-head-ink: var(--studio-head-over);
+    }
+
+    88%,
+    100% {
+      --studio-head-ink: var(--studio-fg);
+      --studio-head-me: #7a32f9;
+      --surface-raised: var(--studio-card);
+      --edge-hairline: var(--studio-line);
+      --border-material: var(--studio-line);
+      --studio-head-ring: transparent;
+    }
+  }
+
+  @keyframes studio-head-scrim {
+    0%,
+    85% {
+      opacity: 1;
+    }
+
+    88%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes studio-head-glass {
+    0%,
+    85% {
+      opacity: 0;
+    }
+
+    88%,
+    100% {
+      opacity: 1;
+    }
+  }
+
+  /* Reduced motion: the header switches once the hero has gone, with no fade between. */
+  @media (prefers-reduced-motion: reduce) {
+    html:has(.studio[data-style][data-header]) .site-header,
+    html:has(.studio[data-style][data-header='over']) .site-header::before,
+    html:has(.studio[data-style][data-header]) .site-header::after {
+      animation-timing-function: steps(1, end);
+    }
   }
 }

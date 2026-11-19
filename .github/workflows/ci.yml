@@ -243,7 +243,7 @@ jobs:
       - if: matrix.shard != 'alone' && matrix.shard != 'studio'
         run: pnpm test:e2e --shard=${{ matrix.shard }}/6 --grep-invert @studio-lab
       - if: matrix.shard == 'studio'
-        run: pnpm test:e2e tests/e2e/studio-lab.spec.ts --grep @studio-lab
+        run: pnpm test:e2e tests/e2e/studio-styles-random.spec.ts --grep @studio-lab
       - if: matrix.shard == 'alone'
         run: pnpm test:e2e --alone
       - name: Upload Playwright PNG diagnostics

@@ -27,13 +27,22 @@ const VALUE = /^[#a-zA-Z0-9(),.%\s-]+$/;
 const GRADIENT: Partial<
   Record<
     StudioStyleId,
-    { light: [number, number | 'bg']; dark: [number, number | 'bg'] }
+    {
+      light: [number, number | 'bg'];
+      dark: [number, number | 'bg'];
+      chroma?: number;
+    }
   >
 > = {
   clear: { light: [0.96, 0.9], dark: [0.28, 0.22] },
+  // Tiles (§9.7): "a soft two-tint accent tile at low chroma", Clear's two tints (builder's call).
+  tiles: { light: [0.96, 0.9], dark: [0.28, 0.22] },
   // Linen (§9.8): a warm accent tint at L .94 fading to bg. Dark mode isn't drawn: the tint starts
   // at L .30, just above Linen's dark bg, so the frame never glows (builder's call, as Clear's).
   linen: { light: [0.94, 'bg'], dark: [0.3, 'bg'] },
+  // Stage (§9.4): a deep accent, OKLCH L .30, fading to bg, in both modes. Deep, so the accent's own
+  // chroma (in gamut), not the quiet cap (builder's call).
+  stage: { light: [0.3, 'bg'], dark: [0.3, 'bg'], chroma: Infinity },
 };
 const GRADIENT_CHROMA = 0.035;
 
@@ -42,11 +51,12 @@ function withDerived(
   mode: 'light' | 'dark',
   tokens: StudioTokenMap,
 ): StudioTokenMap {
-  const stops = GRADIENT[style]?.[mode];
+  const gradient = GRADIENT[style];
+  const stops = gradient?.[mode];
   const acc = tokens.acc;
   if (!stops || !acc || !isHex(acc)) return tokens;
   const { c, h } = hexToOklch(acc);
-  const chroma = Math.min(c, GRADIENT_CHROMA);
+  const chroma = Math.min(c, gradient.chroma ?? GRADIENT_CHROMA);
   const [from, to] = stops.map((l) =>
     l === 'bg' ? tokens.bg! : oklchToHex({ l, c: chroma, h }),
   );
@@ -87,7 +97,7 @@ const CHROME_KEYS = ['bg', 'card', 'el2', 'fg', 'fg2', 'line'] as const;
 /**
  * The page's neutrals on <html>, where the site's header and footer (outside `.studio`) can read
  * them (frame.css maps the site's own tokens to these there). Neutrals only: the accent never
- * reaches the chrome. Auto: light, then dark inside `prefers-color-scheme: dark`.
+ * reaches the chrome, save Signboard's label colour for a header over its band. Auto: light, then dark inside `prefers-color-scheme: dark`.
  */
 export function chromeCss(
   style: StudioStyleId,
@@ -96,8 +106,11 @@ export function chromeCss(
 ): string {
   const block = (m: 'light' | 'dark') => {
     const t = modeTokens(style, palette, m);
+    // Signboard's band is the accent; a header over it writes in the band's label colour.
+    const keys =
+      style === 'signboard' ? [...CHROME_KEYS, 'accLabel'] : CHROME_KEYS;
     const own = Object.fromEntries(
-      CHROME_KEYS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]!]),
+      keys.filter((k) => t[k] !== undefined).map((k) => [k, t[k]!]),
     );
     const body = Object.entries(styleTokens(own))
       .map(([key, value]) => `${key}:${value};`)

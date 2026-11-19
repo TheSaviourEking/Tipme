@@ -9,13 +9,25 @@
  * `migrateStudioV1` is the §7.1 table.
  */
 import { z } from 'zod';
-import { hexToOklch, type Hex, type StudioMode } from './studio-colour.js';
+import { type Hex, type StudioMode } from './studio-colour.js';
 import {
+  ID,
+  TIME,
+  UUID,
   cleanStudioParagraph,
+  fit,
+  isDate,
+  isKobo,
+  isLine,
+  isObj,
+  isParagraph,
+  optional,
+  without,
+} from './studio-document-shared.js';
+import {
   parseVideoLink,
   resolveStudioV1,
   STUDIO_MODES,
-  studioDocumentShared as shared,
   type StudioBlockV1,
   type StudioDocumentV1,
   type StudioImageRef,
@@ -23,18 +35,14 @@ import {
 import { STUDIO_LIMITS as L, STUDIO_SUPPORTER_WALL } from './studio-limits.js';
 import {
   STUDIO_ACCENT_IDS,
-  STUDIO_ACCENTS,
   STUDIO_STYLE_IDS,
   STUDIO_STYLES,
   type StudioAccentId,
   type StudioCoverType,
-  type StudioCuratedAccentId,
   type StudioStyleId,
   type StudioTokenMap,
 } from './studio-styles.js';
-
-const { ID, UUID, TIME, fit, isLine, isParagraph, isDate, isKobo } = shared;
-const { isObj, optional, without } = shared;
+import { nearestCuratedAccent } from './studio-photo-accent.js';
 
 // ---------------------------------------------------------------------------------------------
 // Types
@@ -332,33 +340,13 @@ export function studioImageIdsOf(doc: StudioDocument): Set<string> {
 // ---------------------------------------------------------------------------------------------
 // Migration (v1 → v2, §7.1)
 
-type Lab = { l: number; a: number; b: number };
-const lab = (hex: Hex): Lab => {
-  const { l, c, h } = hexToOklch(hex);
-  const rad = (h * Math.PI) / 180;
-  return { l, a: c * Math.cos(rad), b: c * Math.sin(rad) };
-};
-const distance = (x: Lab, y: Lab) =>
-  Math.hypot(x.l - y.l, x.a - y.a, x.b - y.b);
-
 /** The old default brand colour: no accent chosen. */
 const OLD_DEFAULT_BRAND = '#7a32f9';
 
 /** `brand[0]` as an accent (§7.1): the old purple is null, greys are Ink, else the nearest of 8. */
 function accentFromBrand(brand: Hex): StudioAccentId | null {
   if (brand.toLowerCase() === OLD_DEFAULT_BRAND) return null;
-  const own = lab(brand);
-  if (hexToOklch(brand).c < 0.04) return 'ink';
-  let best: StudioCuratedAccentId = 'ink';
-  let bestDistance = Infinity;
-  for (const key of Object.keys(STUDIO_ACCENTS) as StudioCuratedAccentId[]) {
-    const d = distance(own, lab(STUDIO_ACCENTS[key].light.fill));
-    if (d < bestDistance) {
-      best = key;
-      bestDistance = d;
-    }
-  }
-  return best;
+  return nearestCuratedAccent(brand);
 }
 
 function styleFromV1(doc: StudioDocumentV1): StudioStyleId {

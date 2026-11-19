@@ -50,7 +50,7 @@ const messages: Record<ApiErrorCode, string> = {
     'Your page was changed somewhere else. Load the latest version, then save again.',
   STUDIO_DESIGN_CHECK_FAILED:
     'Your page can’t be published yet. Fix what the design check lists first; your draft is saved.',
-  STUDIO_PRO_REQUIRED: 'Page Studio is part of TipMe Pro.',
+  STUDIO_PRO_REQUIRED: 'This part of Page Studio needs TipMe Pro.',
   IMAGE_TOO_SMALL:
     'This photo is too small. Choose one at least 600 pixels on its shortest side, so it looks sharp on every screen.',
   STUDIO_IMAGE_LIMIT:

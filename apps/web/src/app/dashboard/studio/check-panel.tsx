@@ -1,40 +1,40 @@
 'use client';
+import Link from 'next/link';
 import { useRef, useState } from 'react';
-import type {
-  StudioCheckResult,
-  StudioDocumentV1,
-  StudioIssue,
-} from '@tipme/contracts';
+import type { StudioCheckResult, StudioIssue } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
-import { fixesInput, fixesNow, passingWords } from './studio-editor-model';
+import {
+  fixesInput,
+  fixesLinks,
+  fixesNow,
+  passingWords,
+} from './studio-editor-model';
 
 /**
- * The design check (StudioEditor board §1, right panel; the Check tab): what must be fixed before
- * publishing, each with its one-click fixes; what the page corrected by itself ("Fixed for you");
- * and what passes. The same check runs on our servers, and their answer replaces this one after
- * every save.
+ * The design check (the Check tab): what must be fixed before publishing, each with its fixes; the
+ * page's notices; and what passes. Page-level issues (a Pro style or the photo accent on Free,
+ * `at.row` 'style' or 'accent') are listed like any other; "Choose a free style" opens the style
+ * cards, "See Pro" is a link. The same check runs on our servers, and their answer replaces this
+ * one after every save.
  */
 export function CheckPanel({
   id,
   check,
-  draft,
   onFix,
   onInput,
   readOnly,
 }: {
-  /** Unique per copy: the panel shows beside the preview and in the Check tab. */
   id: string;
   check: StudioCheckResult;
-  draft: StudioDocumentV1;
   onFix(issue: StudioIssue, fixId: string): void;
-  /** A fix that needs the person's input: opens the block's form at the field (Blocks tab). */
+  /** A fix that needs the person's input: the style cards, or the block's form at the field. */
   onInput(issue: StudioIssue, fixId: string): void;
   readOnly: boolean;
 }) {
   const summary = useRef<HTMLParagraphElement>(null);
   const [fixed, setFixed] = useState('');
   const count = check.issues.length;
-  const passing = passingWords(check, draft);
+  const passing = passingWords(check);
   const apply = (issue: StudioIssue, fixId: string, label: string) => {
     onFix(issue, fixId);
     setFixed(`Done: ${label.toLowerCase()}.`);
@@ -43,10 +43,10 @@ export function CheckPanel({
   };
   return (
     <section className="pst-check" aria-labelledby={`${id}-title`}>
-      <h2 id={`${id}-title`} className="pst-check__title">
+      <h2 id={`${id}-title`} className="pst-section__title">
         Design check
       </h2>
-      <p className="pst-hint">
+      <p className="pst-note">
         Runs on every change and again before publishing. The same check runs on
         our servers, so a page can’t skip it.
       </p>
@@ -67,8 +67,9 @@ export function CheckPanel({
         <ul className="pst-issues">
           {check.issues.map((issue) => (
             <li
-              key={`${issue.rule}:${issue.at.row}:${issue.at.block ?? ''}:${issue.at.cell ?? ''}`}
+              key={`${issue.rule}:${issue.at.row}:${issue.at.block ?? ''}`}
               className="pst-issue"
+              data-rule={issue.rule}
             >
               <b>{issue.message}</b>
               {issue.detail && <p>{issue.detail}</p>}
@@ -94,6 +95,15 @@ export function CheckPanel({
                       {f.label}
                     </Button>
                   ))}
+                  {fixesLinks(issue).map((f) => (
+                    <Link
+                      key={f.id}
+                      className="tm-button tm-button--quiet"
+                      href="/pro"
+                    >
+                      {f.label}
+                    </Link>
+                  ))}
                 </div>
               )}
             </li>
@@ -102,7 +112,7 @@ export function CheckPanel({
       )}
       {check.notices.length > 0 && (
         <>
-          <h3 className="pst-label">Fixed for you</h3>
+          <h3 className="pst-label">Good to know</h3>
           <ul className="pst-fixed">
             {check.notices.map((n) => (
               <li key={n.message}>{n.message}</li>
