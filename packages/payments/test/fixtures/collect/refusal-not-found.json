@@ -1,0 +1,6 @@
+{
+  "_source": "From https://docs.bachs.io/connect/transfers.md (Errors: 'NOT_FOUND (404), destination is not an account you own') and the standard error envelope. Not recorded live.",
+  "_status": 404,
+  "detail": "Account not found",
+  "error_code": "NOT_FOUND"
+}

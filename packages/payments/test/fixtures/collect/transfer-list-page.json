@@ -1,0 +1,13 @@
+{
+  "_source": "Shape from https://docs.bachs.io/api-reference/transfers/list-transfers.md (TransferListResponse: items plus pagination; limit at most 100) and https://docs.bachs.io/guides/pagination.md (pagination: next_cursor, has_more, limit, offset, returned, total; walk next_cursor until has_more is false). The test builds pages from this template; item shape as transfer-paid.json. Not recorded live: the transfer list was recorded only as { items } (option B read-back).",
+  "items": [],
+  "pagination": {
+    "next_cursor": null,
+    "prev_cursor": null,
+    "has_more": false,
+    "limit": 100,
+    "offset": 0,
+    "returned": 0,
+    "total": 0
+  }
+}

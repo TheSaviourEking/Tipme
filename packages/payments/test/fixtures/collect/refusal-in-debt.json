@@ -1,0 +1,6 @@
+{
+  "_source": "From https://docs.bachs.io/connect/transfers.md (Errors: 'ORGANIZATION_IN_DEBT (400), the transfer's source has a negative balance in some currency') and the standard error envelope. Not recorded live.",
+  "_status": 400,
+  "detail": "The source has a negative balance",
+  "error_code": "ORGANIZATION_IN_DEBT"
+}

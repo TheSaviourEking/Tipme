@@ -1,0 +1,6 @@
+{
+  "_source": "Adapted from the destination bodies in packages/payments/test/bachs-payouts.test.mjs and https://docs.bachs.io/connect/payouts.md ('Check is_usable in the registration response. Bank accounts ... are approved the moment you register them').",
+  "id": "pd_collect_usable",
+  "status": "approved",
+  "is_usable": true
+}

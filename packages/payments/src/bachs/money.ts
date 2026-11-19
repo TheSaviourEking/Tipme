@@ -1,6 +1,14 @@
 const ISO_CURRENCY = /^[A-Z]{3}$/;
 const DECIMAL_AMOUNT = /^(0|[1-9]\d*)(?:\.(\d+))?$/;
 
+/** Whether TipMe can put this currency in minor units (ISO 4217, known to Intl). */
+export function isIsoCurrency(currency: string): boolean {
+  return (
+    ISO_CURRENCY.test(currency) &&
+    Intl.supportedValuesOf('currency').includes(currency)
+  );
+}
+
 function fractionDigits(currency: string): number {
   if (
     !ISO_CURRENCY.test(currency) ||

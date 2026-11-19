@@ -3,6 +3,7 @@ import { mockWebhookSchema, type MockWebhook } from '@tipme/contracts';
 import type { Redis } from 'ioredis';
 import { UncertainProviderOutcomeError } from '../bachs/errors.js';
 import {
+  CollectTransferRefusedError,
   PayoutRejectedError,
   PlatformRefusalError,
   ProRefundRefusedError,
@@ -17,8 +18,18 @@ import type {
 } from '../provider.js';
 import { SIGNATURE_HEADER, verifySignature } from '../signing.js';
 import { NGN_PAYOUT_FEE_MINOR } from '../payout-fee.js';
-import { attemptKey, paymentKey, payoutIdKey, payoutKey } from './keys.js';
-import type { Scenario } from './scenario.js';
+import {
+  accountTransfersKey,
+  attemptKey,
+  collectAnswerKey,
+  collectTransferKey,
+  destinationKey,
+  paymentKey,
+  payoutIdKey,
+  payoutKey,
+  platformBalancesKey,
+} from './keys.js';
+import type { CollectScenario, Scenario } from './scenario.js';
 
 /** Same rounding as CURRENT_FEE_POLICY's estimated processing fee (150 bps, half up). */
 export const mockProviderFee = (amountMinor: bigint): bigint =>
@@ -45,6 +56,40 @@ const PAYOUT_STATUSES: ReadonlySet<string> = new Set([
 
 /** Enough that a pretend balance never limits a withdrawal: the ledger decides. */
 const PRETEND_BALANCE_MINOR = 100_000_000_000n;
+
+/** What each refusing collect scenario answers, as the partner's code (R9). */
+const COLLECT_REFUSALS = {
+  'collect-insufficient': ['insufficient', 'INSUFFICIENT_BALANCE'],
+  'collect-forbidden': ['capability', 'FORBIDDEN'],
+  'collect-in-debt': ['in_debt', 'ORGANIZATION_IN_DEBT'],
+  'collect-not-found': ['not_found', 'NOT_FOUND'],
+} as const;
+
+/** TipMe's own balance and schedule scenarios have one slot each, whatever key they were set for. */
+const PLATFORM_SLOT: Partial<Record<CollectScenario, string>> = {
+  'balance-usd-negative': 'platform:balances',
+  'auto-payout-on': 'platform:schedule',
+};
+
+type PlatformBalanceRow = {
+  currency: string;
+  availableMinor: bigint;
+  pendingMinor: bigint;
+};
+
+const mismatched = (key: string) =>
+  new UncertainProviderOutcomeError(
+    key,
+    'the payment provider answered with different details',
+    { cause: 'unexpected_state' },
+  );
+
+const lostAnswer = (key: string) =>
+  new UncertainProviderOutcomeError(
+    key,
+    'the request may have reached the payment provider but its response was not received',
+    { cause: 'no_response' },
+  );
 
 export interface MockProvider
   extends
@@ -89,6 +134,15 @@ export interface MockProvider
   chooseScenario(reference: string, scenario: Scenario): Promise<boolean>;
   /** Moves the pretend payment to the status its scenario ends in. */
   settle(reference: string): Promise<void>;
+  /**
+   * You collect: how the pretend partner answers next, used once. `collect-*` answers the transfer
+   * with this idempotency key; `destination-*` the next destination added to this account;
+   * `balance-usd-negative` and `auto-payout-on` the next read of TipMe's balances or schedule
+   * (any key).
+   */
+  markCollectAnswer(key: string, scenario: CollectScenario): Promise<void>;
+  /** You collect: TipMe's pretend balances, signed, until set again. */
+  markPlatformBalances(rows: readonly PlatformBalanceRow[]): Promise<void>;
   /** Moves the pretend payout to the status its scenario ends in. */
   settlePayout(reference: string): Promise<void>;
 }
@@ -168,6 +222,40 @@ export function createMockProvider(options: {
       };
     },
 
+    /**
+     * You collect: a pretend tip checkout on TipMe's own account, `platform:mock_collect_<uuid>`,
+     * one per attempt (found by the attempt id, like a tip's). TipMe bears the fee; card unless set.
+     */
+    async initializeCollectCheckout({ attemptId, amountMinor, currency }) {
+      const reference = `platform:mock_collect_${randomUUID()}` as const;
+      const claimed = await redis.set(
+        attemptKey(prefix, attemptId),
+        reference,
+        'NX',
+      );
+      const existing =
+        claimed === 'OK'
+          ? null
+          : await redis.get(attemptKey(prefix, attemptId));
+      const providerReference = (existing ?? reference) as `platform:${string}`;
+      if (claimed === 'OK')
+        await redis.hset(paymentKey(prefix, reference), {
+          attemptId,
+          collect: '1',
+          amountMinor: amountMinor.toString(),
+          currency,
+          feeMinor: mockProviderFee(amountMinor).toString(),
+          scenario: 'succeed',
+          status: 'pending',
+          method: 'NGN_CARD',
+        });
+      return {
+        providerReference,
+        checkoutUrl: `/mock-checkout/${providerReference}`,
+        expiresAt: new Date(Date.now() + 30 * 60_000),
+      };
+    },
+
     async initializePayment({ attemptId, amountMinor, currency, scenario }) {
       // Like a real provider's unique merchant reference: one payment per attempt, however
       // often the start is retried.
@@ -224,7 +312,7 @@ export function createMockProvider(options: {
           ? { method: stored['method'], feePaidBy: 'platform' as const }
           : {}),
         // TipMe's own (Pro) payments name their pretend charge, which a refund names.
-        ...(stored['purchaseId'] || stored['charge']
+        ...(stored['purchaseId'] || stored['charge'] || stored['collect']
           ? { chargeReference: `mock_ch_${providerReference}` }
           : {}),
         // A card saved while paying (the real partner says so by webhook instead).
@@ -363,15 +451,26 @@ export function createMockProvider(options: {
     },
 
     async addPayoutDestination(accountRef, { accountNumber, bankCode }) {
-      return {
-        destinationRef: `mock_dest_${accountRef}_${bankCode}_${accountNumber.slice(-4)}`,
-        usable: true,
-        status: 'usable',
-      };
+      const destinationRef = `mock_dest_${accountRef}_${bankCode}_${accountNumber.slice(-4)}`;
+      // You collect: a destination told to wait for review, or be refused, once.
+      const answer = await redis.getdel(collectAnswerKey(prefix, accountRef));
+      const status =
+        answer === 'destination-pending-review'
+          ? ('pending_review' as const)
+          : answer === 'destination-rejected'
+            ? ('rejected' as const)
+            : ('usable' as const);
+      if (status === 'usable')
+        await redis.del(destinationKey(prefix, destinationRef));
+      else await redis.set(destinationKey(prefix, destinationRef), status);
+      return { destinationRef, usable: status === 'usable', status };
     },
 
-    async payoutDestinationStatus() {
-      return 'usable';
+    async payoutDestinationStatus(_accountRef, destinationRef) {
+      const status = await redis.get(destinationKey(prefix, destinationRef));
+      return status === 'pending_review' || status === 'rejected'
+        ? status
+        : 'usable';
     },
 
     async payoutBalance() {
@@ -440,6 +539,137 @@ export function createMockProvider(options: {
         amountMinor: BigInt(stored['amountMinor'] ?? '0'),
         currency: 'NGN',
       };
+    },
+
+    // You collect: TipMe's balance to a recipient's account, once per key. A refusing scenario moves
+    // nothing; the next send with that key pays. The list keeps every transfer under its account.
+    async sendCollectTransfer({ accountRef, amountMinor, idempotencyKey }) {
+      const stored = await redis.hgetall(
+        collectTransferKey(prefix, idempotencyKey),
+      );
+      // The same key replays the transfer it made, as live does. Checked like the real adapter
+      // checks an answer: one naming other money or another account (a mismatch) stays uncertain.
+      if (stored['transferRef']) {
+        if (
+          stored['amountMinor'] !== amountMinor.toString() ||
+          stored['accountRef'] !== accountRef
+        )
+          throw mismatched(idempotencyKey);
+        return { transferRef: stored['transferRef'], status: 'paid' };
+      }
+      const answer = (await redis.getdel(
+        collectAnswerKey(prefix, idempotencyKey),
+      )) as CollectScenario | null;
+      if (answer && Object.hasOwn(COLLECT_REFUSALS, answer)) {
+        const [reason, code] =
+          COLLECT_REFUSALS[answer as keyof typeof COLLECT_REFUSALS];
+        throw new CollectTransferRefusedError(reason, code);
+      }
+      const transferRef = `mock_collect_tr_${idempotencyKey}`;
+      // A mismatch: the pretend partner moved one kobo more than asked.
+      const moved =
+        answer === 'collect-mismatch' ? amountMinor + 1n : amountMinor;
+      const created = await redis.hsetnx(
+        collectTransferKey(prefix, idempotencyKey),
+        'transferRef',
+        transferRef,
+      );
+      if (created) {
+        await redis.hset(collectTransferKey(prefix, idempotencyKey), {
+          accountRef,
+          amountMinor: moved.toString(),
+          currency: 'NGN',
+        });
+        await redis.rpush(
+          accountTransfersKey(prefix, accountRef),
+          idempotencyKey,
+        );
+      }
+      if (answer === 'collect-no-reply') throw lostAnswer(idempotencyKey);
+      if (answer === 'collect-mismatch') throw mismatched(idempotencyKey);
+      return { transferRef, status: 'paid' };
+    },
+
+    // Newest first, like the partner's list; every transfer carries its key as its group.
+    async listAccountTransfers(accountRef) {
+      const keys = await redis.lrange(
+        accountTransfersKey(prefix, accountRef),
+        0,
+        -1,
+      );
+      const transfers = [];
+      for (const key of keys.reverse()) {
+        const stored = await redis.hgetall(collectTransferKey(prefix, key));
+        if (!stored['transferRef']) continue;
+        transfers.push({
+          transferRef: stored['transferRef'],
+          status: 'paid' as const,
+          amountMinor: BigInt(stored['amountMinor'] ?? '0'),
+          currency: stored['currency'] ?? 'NGN',
+          group: key,
+        });
+      }
+      return transfers;
+    },
+
+    async platformBalances() {
+      const marked = await redis.get(platformBalancesKey(prefix));
+      const rows: PlatformBalanceRow[] = marked
+        ? (
+            JSON.parse(marked) as {
+              currency: string;
+              availableMinor: string;
+              pendingMinor: string;
+            }[]
+          ).map((row) => ({
+            currency: row.currency,
+            availableMinor: BigInt(row.availableMinor),
+            pendingMinor: BigInt(row.pendingMinor),
+          }))
+        : [
+            {
+              currency: 'NGN',
+              availableMinor: PRETEND_BALANCE_MINOR,
+              pendingMinor: 0n,
+            },
+          ];
+      const negative = await redis.getdel(
+        collectAnswerKey(prefix, PLATFORM_SLOT['balance-usd-negative']!),
+      );
+      // A lost dispute's $15 fee drove USD below zero (P5).
+      if (negative)
+        return [
+          ...rows.filter((row) => row.currency !== 'USD'),
+          { currency: 'USD', availableMinor: -1500n, pendingMinor: 0n },
+        ];
+      return rows;
+    },
+
+    async platformPayoutSchedule() {
+      const on = await redis.getdel(
+        collectAnswerKey(prefix, PLATFORM_SLOT['auto-payout-on']!),
+      );
+      return { NGN: on ? 'daily' : 'manual' };
+    },
+
+    async markCollectAnswer(key, scenario) {
+      await redis.set(
+        collectAnswerKey(prefix, PLATFORM_SLOT[scenario] ?? key),
+        scenario,
+      );
+    },
+
+    async markPlatformBalances(rows) {
+      await redis.set(
+        platformBalancesKey(prefix),
+        JSON.stringify(
+          rows.map((row) => ({
+            currency: row.currency,
+            availableMinor: row.availableMinor.toString(),
+            pendingMinor: row.pendingMinor.toString(),
+          })),
+        ),
+      );
     },
 
     async refundPlatformCharge({ chargeReference, reference }) {

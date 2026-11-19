@@ -1,0 +1,20 @@
+{
+  "_source": "Built from https://docs.bachs.io/connect/balances.md and https://docs.bachs.io/api-reference/accounts/get-balances.md (response shape, pending_balance required), with USD driven to -15.00 as the docs allow after a lost dispute ('A lost dispute is the one exception to the floor', /connect/balances; the $15 fee, spec P5). Not recorded live.",
+  "account_id": "acct_stWbI4933A4WVqkc",
+  "balances": [
+    {
+      "currency": "NGN",
+      "available_balance": "482500.00",
+      "pending_balance": "125000.00"
+    },
+    {
+      "currency": "USD",
+      "available_balance": "-15.00",
+      "pending_balance": "0.00"
+    }
+  ],
+  "total_balance_usd": "389.12",
+  "pending_settlements_by_day": [
+    { "date": "2026-11-20", "currency": "NGN", "total": "125000.00" }
+  ]
+}
