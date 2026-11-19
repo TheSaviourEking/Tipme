@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -164,6 +165,18 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
     busy: boolean;
     failure: PublishFailure | null;
   } | null>(null);
+  /**
+   * Where focus goes once the gate has closed. It moves in the commit that removed the dialog,
+   * never before: while the browser's modal is open everything outside it is inert, so `focus()`
+   * there does nothing, and a requestAnimationFrame can run before React commits (a busy tab).
+   */
+  const focusAfterGate = useRef<(() => HTMLElement | null) | null>(null);
+  useLayoutEffect(() => {
+    if (gate !== null || !focusAfterGate.current) return;
+    const target = focusAfterGate.current();
+    focusAfterGate.current = null;
+    target?.focus({ preventScroll: true });
+  }, [gate]);
   /** The read-only banner: where a press on Publish goes while nothing can be published. */
   const bannerRef = useRef<HTMLDivElement>(null);
   /** The banner's "Show the latest", where focus goes when the latest couldn't be loaded. */
@@ -200,7 +213,11 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
       if (fromDialog) closeGate();
       return;
     }
-    if (fromDialog) setGate(null);
+    if (fromDialog) {
+      focusAfterGate.current = () => showLatestRef.current;
+      setGate(null);
+      return;
+    }
     requestAnimationFrame(() =>
       showLatestRef.current?.focus({ preventScroll: true }),
     );
@@ -239,11 +256,8 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
 
   /** Closes the gate; focus goes back to Publish unless a fix is taking it elsewhere. */
   const closeGate = (refocus = true) => {
+    focusAfterGate.current = refocus ? () => publishRef.current : null;
     setGate(null);
-    if (refocus)
-      requestAnimationFrame(() =>
-        publishRef.current?.focus({ preventScroll: true }),
-      );
   };
   const publish = async () => {
     if (gate?.busy || readOnly) return;
@@ -267,14 +281,11 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const input = (issue: StudioIssue, fixId: string) => {
     if (fixId === 'choose-free-style') {
       setTab('style');
-      // After the Style tab renders: its cards' one Tab stop (the chosen card).
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>(
-            `[aria-labelledby="${cardsId}"] [role="radio"][tabindex="0"]`,
-          )
-          ?.focus(),
-      );
+      // Once the dialog is gone and the Style tab rendered: its cards' one Tab stop (the chosen card).
+      focusAfterGate.current = () =>
+        document.querySelector<HTMLElement>(
+          `[aria-labelledby="${cardsId}"] [role="radio"][tabindex="0"]`,
+        );
       return;
     }
     const to = fixTarget(issue, fixId);
