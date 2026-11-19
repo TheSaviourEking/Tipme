@@ -176,12 +176,16 @@ test('an owner reads the rates, their source, the business payout rule and no wa
   });
   assert.equal(response.status, 200);
   const { data } = await response.json();
-  assert.deepEqual(data.current, {
-    freeBps: 500,
-    proBps: 300,
-    source: 'default',
-    effectiveFrom: null,
-  });
+  // The reset seeds the migration's row, so the rates come from the setting.
+  assert.deepEqual(
+    { ...data.current, effectiveFrom: typeof data.current.effectiveFrom },
+    {
+      freeBps: 500,
+      proBps: 300,
+      source: 'setting',
+      effectiveFrom: 'string',
+    },
+  );
   assert.deepEqual(data.limits, { minBps: 150, maxBps: 1000 });
   assert.equal(data.waitingRequestId, null);
   assert.deepEqual(data.business, { payoutFeeAbsorbed: false });
