@@ -2012,11 +2012,14 @@ body:has(main[data-area='recipient']) > .site-footer {
   }
 }
 
-/* Public profile (/@handle): the person, then the tip. The site's own navigation and footer links
-   step aside on this page only. */
-body:has(.profile-page) .site-nav,
-body:has(.profile-page) .menu-toggle,
-body:has(.profile-page) > .site-footer {
+/* Public profile (/@handle) and a business's staff page: the person, then the tip. The site's own
+   navigation and footer links step aside on this page only: the header is the logo alone (a Studio
+   style's page too, frame.css). After moving on within the site the page is kept, hidden, for the
+   way back (React's Activity puts an inline `display: none !important` on it): a hidden page
+   doesn't count, so the next page has today's header and footer. */
+body:has(.profile-page:not([style*='display: none'])) .site-nav,
+body:has(.profile-page:not([style*='display: none'])) .menu-toggle,
+body:has(.profile-page:not([style*='display: none'])) > .site-footer {
   display: none;
 }
 

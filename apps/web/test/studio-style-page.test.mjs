@@ -2102,11 +2102,12 @@ test('the header over a cover is white on a scrim of at least 58% black wherever
     ),
     /fill: currentColor;/,
   );
-  // "Claim your username" keeps TipMe purple: nothing here changes its fill or words; the one
-  // rule on it is the ring that keeps its edge on Signboard's band.
-  assert.doesNotMatch(inside, /tm-button--primary/);
-  for (const m of flat.matchAll(/([^{}]*nav-claim[^{}]*)\{([^}]*)\}/g))
-    assert.match(m[2].trim(), /^box-shadow: [^;]+;$/, m[1]);
+  // On a tip page the header is the logo alone (owner, 19 Nov 2026; globals.css): nothing here
+  // styles the menu, its keys or "Who it's for", which never show over the cover.
+  assert.doesNotMatch(
+    flat,
+    /nav-claim|tm-button|site-nav|menu-toggle|who__|--surface-raised|--edge-hairline|--border-material/,
+  );
 });
 
 test("over Signboard's band the header takes the band's label colour, 4.5:1 on every accent", () => {
@@ -2139,14 +2140,10 @@ test("over Signboard's band the header takes the band's label colour, 4.5:1 on e
   const band = supportsBlock(frameCss()).inside;
   assert.match(
     band,
-    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-over: var\(--studio-accLabel\);\s*--studio-head-ring: var\(--studio-accLabel\);/,
+    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-over: var\(--studio-accLabel\);\s*\}/,
   );
-  // On a wide screen the purple key sits on the band, which can be as light as it (1.0:1 on some
-  // accents): a 2 px ring in the band's label colour keeps its edge while the header is over it.
-  assert.match(
-    band.replace(/\s+/g, ' '),
-    /@media \(min-width: 801px\) \{[^@]*html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \.nav-claim \{ box-shadow: 0 0 0 2px var\(--studio-head-ring\),[^;]+; \}/,
-  );
+  // The header is the logo alone on a tip page: no purple key on the band, so no ring for one.
+  assert.doesNotMatch(band, /--studio-head-ring|nav-claim/);
 });
 
 test('the header holds its ink over the shade, then switches ink, glass and shade together, with no fade between', () => {
@@ -2175,8 +2172,7 @@ test('the header holds its ink over the shade, then switches ink, glass and shad
   assert.deepEqual(scrim[0], [holdAt, 'opacity: 1;']);
   assert.deepEqual(glass[0], [holdAt, 'opacity: 0;']);
   // Then everything changes inside one short step (no mid-way where light words meet a light
-  // half-drawn glass): the glass, the page's words, the purple "me", raised keys, no band ring,
-  // no shade. The header's own bg stays transparent: the glass is its own layer.
+  // half-drawn glass): the glass, the page's words, the purple "me", no shade. The header's own bg stays transparent: the glass is its own layer.
   assert.deepEqual(endAt.at(-1), 100);
   assert.ok(
     endAt[0] - holdAt.at(-1) <= 3,
@@ -2186,8 +2182,6 @@ test('the header holds its ink over the shade, then switches ink, glass and shad
   for (const want of [
     '--studio-head-ink: var(--studio-fg);',
     '--studio-head-me: #7a32f9;',
-    '--surface-raised: var(--studio-card);',
-    '--studio-head-ring: transparent;',
   ])
     assert.ok(end.includes(want), want);
   assert.deepEqual(scrim[1], [endAt, 'opacity: 0;']);
@@ -2197,7 +2191,7 @@ test('the header holds its ink over the shade, then switches ink, glass and shad
     for (const m of decls.matchAll(/([a-z-]+):/g))
       assert.match(
         m[1],
-        /^(opacity|background-color|--studio-head-ink|--studio-head-me|--studio-head-ring|--surface-raised|--edge-hairline|--border-material)$/,
+        /^(opacity|background-color|--studio-head-ink|--studio-head-me)$/,
         m[1],
       );
   const reduced =
