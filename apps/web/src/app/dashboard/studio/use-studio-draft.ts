@@ -19,10 +19,9 @@ import {
 } from './studio-editor-model';
 import {
   PRO_UNDO_REFUSED,
+  afterRefusedUndo,
   createUndoStack,
   describeChange,
-  refusedParts,
-  withoutRefused,
 } from './undo-stack';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
@@ -102,6 +101,8 @@ export interface StudioDraft {
 export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
   const [published, setPublished] = useState(initial.published);
+  /** `published`, for the save loop (what a refused undo may restore from, §11). */
+  const publishedNow = useRef(initial.published);
   const [context, setContext] = useState(initial.context);
   const [plan, setPlan] = useState(initial.plan);
   const [photoAccent, setPhotoAccent] = useState(initial.photoAccent);
@@ -152,6 +153,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     rev.current = studio.rev;
     setShownRev(studio.rev);
     setPublished(studio.published);
+    publishedNow.current = studio.published;
     setContext(studio.context);
     setPlan(studio.plan);
     setPhotoAccent(studio.photoAccent);
@@ -187,19 +189,17 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
             staleNow.current = true;
             setStale(true);
           } else if (result.code === 'STUDIO_PRO_REQUIRED' && undo) {
-            // An undo that re-adds a Pro item this session saved away (R4). Take only those items
-            // back out, of the draft now (edits typed while this save was on its way stay) and of
-            // every step left, so older undo history works without another refusal. Then save
-            // what is left, and keep editing.
+            // An undo that re-adds a Pro item this session saved away (R4). Put back only what
+            // the server wouldn't take, judged as the server judges it (held by the stored draft
+            // or the published version), in the draft now (edits typed while this save was on its
+            // way stay) and in every step left. Then save what is left, and keep editing.
             undoing.current = null;
-            const accepted = JSON.parse(saved.current) as StudioDocument;
-            const refused = refusedParts(doc, accepted);
-            const strip = (d: StudioDocument) =>
-              withoutRefused(d, refused, accepted);
-            const kept = strip(latest.current);
+            const kept = afterRefusedUndo(stack.current, latest.current, {
+              draft: JSON.parse(saved.current) as StudioDocument,
+              published: publishedNow.current,
+            });
             latest.current = kept;
             setDraft(kept);
-            stack.current.rewrite(strip, kept);
             setUndoLabel(stack.current.peek()?.label ?? null);
             setNotice(PRO_UNDO_REFUSED);
             continue;
