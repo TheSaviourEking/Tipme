@@ -167,17 +167,23 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
     failure: PublishFailure | null;
   } | null>(null);
   /**
-   * Where focus goes once the gate has closed. It moves in the commit that removed the dialog,
-   * never before: while the browser's modal is open everything outside it is inert, so `focus()`
-   * there does nothing, and a requestAnimationFrame can run before React commits (a busy tab).
+   * Where focus goes next, moved in the commit that renders it, never before. With the gate open,
+   * that is the commit that removed the dialog: while the browser's modal is open everything
+   * outside it is inert, so `focus()` there does nothing, and a requestAnimationFrame can run
+   * before React commits (a busy tab). Without a dialog (the Check tab), it is the next commit.
    */
   const focusAfterGate = useRef<(() => HTMLElement | null) | null>(null);
+  const [focusRound, setFocusRound] = useState(0);
+  const focusNext = (target: (() => HTMLElement | null) | null) => {
+    focusAfterGate.current = target;
+    if (target) setFocusRound((n) => n + 1);
+  };
   useLayoutEffect(() => {
     if (gate !== null || !focusAfterGate.current) return;
     const target = focusAfterGate.current();
     focusAfterGate.current = null;
     target?.focus({ preventScroll: true });
-  }, [gate]);
+  }, [gate, focusRound]);
   /** The read-only banner: where a press on Publish goes while nothing can be published. */
   const bannerRef = useRef<HTMLDivElement>(null);
   /** The banner's "Show the latest", where focus goes when the latest couldn't be loaded. */
@@ -215,7 +221,7 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
       return;
     }
     if (fromDialog) {
-      focusAfterGate.current = () => showLatestRef.current;
+      focusNext(() => showLatestRef.current);
       setGate(null);
       return;
     }
@@ -257,7 +263,7 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
 
   /** Closes the gate; focus goes back to Publish unless a fix is taking it elsewhere. */
   const closeGate = (refocus = true) => {
-    focusAfterGate.current = refocus ? () => publishRef.current : null;
+    focusNext(refocus ? () => publishRef.current : null);
     setGate(null);
   };
   const publish = async () => {
@@ -282,11 +288,13 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const input = (issue: StudioIssue, fixId: string) => {
     if (fixId === 'choose-free-style') {
       setTab('style');
-      // Once the dialog is gone and the Style tab rendered: its cards' one Tab stop (the chosen card).
-      focusAfterGate.current = () =>
+      // Once the Style tab has rendered (and the dialog, if any, is gone): the cards' one Tab
+      // stop, the chosen card. From the dialog and from the Check tab alike.
+      focusNext(() =>
         document.querySelector<HTMLElement>(
           `[aria-labelledby="${cardsId}"] [role="radio"][tabindex="0"]`,
-        );
+        ),
+      );
       return;
     }
     const to = fixTarget(issue, fixId);
