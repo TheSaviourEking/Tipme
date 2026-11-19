@@ -256,6 +256,24 @@ test('collect schema refuses what the model forbids', async () => {
     status: 'review',
     reviewReason: 'same_bank',
   });
+  // Fix round 1: a review row with no account is released back to waiting (ready needs one).
+  const held = (await newTip()).tipId;
+  await transferRow({ tipId: held, status: 'review', reviewReason: 'dispute' });
+  await refused(
+    q(`UPDATE collect_transfers SET status = 'ready' WHERE tip_id = $1`, [
+      held,
+    ]),
+    /collect_transfers_account/,
+  );
+  await q(
+    `UPDATE collect_transfers SET status = 'waiting', review_reason = NULL WHERE tip_id = $1`,
+    [held],
+  );
+  const [released] = await q(
+    `SELECT status, account_reference FROM collect_transfers WHERE tip_id = $1`,
+    [held],
+  );
+  assert.deepEqual(released, { status: 'waiting', account_reference: null });
 
   // Only a business_payable or a held amount may belong to a business (R3).
   const { businessId } = await seedBusiness(database);
@@ -543,6 +561,27 @@ test('a collect reversal now posts, and a direct over-reversal is still refused'
     ]),
     /ledger_reversal_within_payment/,
   );
+  // A direct payment held nothing, so its reversal can't credit held_for_recipients, for a person
+  // or for a business.
+  const { businessId } = await seedBusiness(database);
+  for (const owner of [{ profileId: ADA.id }, { businessId }])
+    await refused(
+      reversal(directPaid, [
+        {
+          account: 'recipient_payable',
+          profileId: ADA.id,
+          side: 'debit',
+          amountMinor: 1_000n,
+        },
+        {
+          account: 'held_for_recipients',
+          ...owner,
+          side: 'credit',
+          amountMinor: 1_000n,
+        },
+      ]),
+      /ledger_reversal_within_payment/,
+    );
   // And a full chargeback still posts, then nothing more.
   await reversal(
     directPaid,

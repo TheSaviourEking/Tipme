@@ -23,7 +23,7 @@ test('a collect transfer never leaves paid or cancelled, and sent never goes str
     ready: ['sent', 'waiting', 'cancelled', 'review'],
     sent: ['paid', 'unknown', 'ready', 'waiting', 'review'],
     unknown: ['paid', 'ready', 'review'],
-    review: ['ready', 'cancelled', 'paid'],
+    review: ['ready', 'waiting', 'cancelled', 'paid'],
     paid: [],
     cancelled: [],
   });
@@ -52,6 +52,19 @@ test('a collect transfer never leaves paid or cancelled, and sent never goes str
       true,
     );
   }
+});
+
+// Task 3 fix round 1: a share held for review before the recipient had any bank account can't go to
+// `ready` (the database needs an account there), so review releases it back to `waiting`.
+test('a waiting share goes to review and can be released back to waiting', () => {
+  assert.equal(
+    canTransition(COLLECT_TRANSFER_TRANSITIONS, 'waiting', 'review'),
+    true,
+  );
+  assert.equal(
+    canTransition(COLLECT_TRANSFER_TRANSITIONS, 'review', 'waiting'),
+    true,
+  );
 });
 
 test('dispute status is out-of-order safe', () => {
