@@ -30,8 +30,14 @@ import {
   fixesNow,
   issueTab,
   passingWords,
+  blockedIntro,
+  publishFailureWords,
+  publishLabel,
+  publishOutcome,
+  publishTally,
   saveWords,
   studioEntry,
+  withRefusal,
 } from '../src/app/dashboard/studio/studio-editor-model.ts';
 
 // Page Studio editor on v2 (styles plan Task 12, PR 4a): the Style tab's pure parts (§10) and
@@ -306,6 +312,142 @@ test('every rule has words in the passing list', () => {
   assert.equal(words.length, check.passing.length);
   assert.ok(words.every((w) => typeof w === 'string' && w.length > 0));
   assert.ok(words.includes('Long words fit'));
+});
+
+test('the button reads "Publish · 2 to fix" while issues remain and "Publish" when the check passes', () => {
+  assert.equal(publishLabel(2), 'Publish · 2 to fix');
+  assert.equal(publishLabel(1), 'Publish · 1 to fix');
+  assert.equal(publishLabel(0), 'Publish');
+  // The count is the check's: two empty quotes are two issues.
+  const check = checkDesign(
+    doc({
+      blocks: [
+        { id: 'blk00001', kind: 'quote', text: '' },
+        { id: 'blk00002', kind: 'quote', text: '' },
+      ],
+    }),
+    ctx(),
+  );
+  assert.equal(publishLabel(check.issues.length), 'Publish · 2 to fix');
+});
+
+test('the publish dialog reads "Design check: N of N pass" over the rules that can block', () => {
+  const check = checkDesign(doc(), ctx());
+  assert.equal(check.issues.length, 0);
+  assert.match(publishTally(check), /^Design check: (\d+) of \1 pass$/);
+  assert.equal(publishTally(check), 'Design check: 7 of 7 pass');
+  const failing = checkDesign(
+    doc({ blocks: [{ id: 'blk00001', kind: 'quote', text: '' }] }),
+    ctx(),
+  );
+  assert.equal(publishTally(failing), 'Design check: 6 of 7 pass');
+});
+
+test('after a 422 the server’s issues replace the client’s until the next edit', () => {
+  const d = doc();
+  const local = checkDesign(d, ctx());
+  const issue = {
+    rule: 'long-word',
+    severity: 'error',
+    at: { row: '', block: 'blk00001' },
+    message: 'A word is too long for a phone',
+    fixes: [],
+  };
+  const refused = { doc: JSON.stringify(d), issues: [issue] };
+  const shown = withRefusal(d, local, refused);
+  assert.deepEqual(shown.issues, [issue]);
+  assert.ok(!shown.passing.includes('long-word'));
+  // The next edit: the editor's own check again.
+  assert.equal(withRefusal(doc({ mode: 'dark' }), local, refused), local);
+  assert.equal(withRefusal(d, local, null), local);
+});
+
+test('a publish answer becomes an outcome: published, the server’s issues, or why it failed', () => {
+  const issue = {
+    rule: 'long-word',
+    severity: 'error',
+    at: { row: '', block: 'blk00001' },
+    message: 'A word is too long for a phone',
+    fixes: [],
+  };
+  assert.equal(
+    publishOutcome({ ok: true, status: 200, data: {} }),
+    'published',
+  );
+  assert.deepEqual(
+    publishOutcome({
+      ok: false,
+      status: 422,
+      code: 'STUDIO_DESIGN_CHECK_FAILED',
+      issues: [issue],
+    }),
+    { issues: [issue] },
+  );
+  // A 422 without issues is no refusal to list: it failed.
+  for (const issues of [undefined, []])
+    assert.deepEqual(
+      publishOutcome({
+        ok: false,
+        status: 422,
+        code: 'STUDIO_DESIGN_CHECK_FAILED',
+        ...(issues ? { issues } : {}),
+      }),
+      { failed: 'other' },
+    );
+  assert.deepEqual(publishOutcome({ ok: false, status: 0, code: 'NETWORK' }), {
+    failed: 'network',
+  });
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 409, code: 'STUDIO_DRAFT_STALE' }),
+    { failed: 'stale' },
+  );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 404, code: 'NOT_FOUND' }),
+    { failed: 'unavailable' },
+  );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 500, code: 'INTERNAL_ERROR' }),
+    { failed: 'other' },
+  );
+});
+
+test('a failed publish says why, never claims a network failure didn’t publish, and offers a retry only when Publish works', () => {
+  assert.equal(
+    publishFailureWords('network', true),
+    'We couldn’t confirm it was published. Check your connection, then reload to see.',
+  );
+  assert.doesNotMatch(publishFailureWords('network', true), /wasn’t published/);
+  assert.equal(
+    publishFailureWords('stale', false),
+    'This draft changed in another tab. Show the latest to keep editing.',
+  );
+  assert.equal(
+    publishFailureWords('unavailable', true),
+    'Page Studio isn’t available right now.',
+  );
+  assert.equal(
+    publishFailureWords('other', true),
+    'Your page wasn’t published. Try again in a moment.',
+  );
+  assert.equal(
+    publishFailureWords('other', false),
+    'Your page wasn’t published.',
+  );
+  for (const reason of ['network', 'stale', 'unavailable'])
+    assert.doesNotMatch(publishFailureWords(reason, false), /try again/i);
+});
+
+test('the list’s intro says the draft is saved only when it is', () => {
+  assert.equal(
+    blockedIntro(2, 'saved'),
+    '2 things to fix first. Your draft is saved.',
+  );
+  assert.equal(
+    blockedIntro(1, 'saved'),
+    '1 thing to fix first. Your draft is saved.',
+  );
+  for (const state of ['pending', 'saving', 'failed'])
+    assert.equal(blockedIntro(2, state), '2 things to fix first.');
 });
 
 test('the status line says where the draft is ("Saved · not published")', () => {

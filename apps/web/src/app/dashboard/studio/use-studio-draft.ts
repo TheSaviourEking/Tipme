@@ -10,7 +10,13 @@ import {
   type StudioIssue,
 } from '@tipme/contracts';
 import { apiFetch } from '@/lib/session-client';
-import { checkShown, type SaveState } from './studio-editor-model';
+import {
+  checkShown,
+  publishOutcome,
+  withRefusal,
+  type PublishOutcome,
+  type SaveState,
+} from './studio-editor-model';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
 const SAVE_AFTER_MS = 800;
@@ -50,13 +56,20 @@ export interface StudioDraft {
   retry(): void;
   /** Drops this tab's edits for the latest saved draft. */
   reload(): Promise<void>;
+  /**
+   * Saves what is left, then publishes (`POST /v1/me/studio/publish`, §12.1): 'published', the
+   * server's issues when its check refuses (422 STUDIO_DESIGN_CHECK_FAILED; they replace the
+   * editor's until the next edit), or why it failed: the network (it may have gone through),
+   * another tab saved first, Studio switched off (404), or anything else (not saved included).
+   */
+  publish(): Promise<PublishOutcome>;
 }
 
 /**
  * The draft being edited (plan Task 9's `useStudioDraft`, G1 part): the document, the design check
  * on every change, and a debounced save to `PUT /v1/me/studio/draft` naming the revision it was
- * based on. Saving never needs a passing check; only publishing will (G3). Undo, discard and
- * publish come with G3.
+ * based on. Saving never needs a passing check; publishing does (§12.1). Undo and discard come
+ * with G3.
  */
 export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
@@ -76,12 +89,19 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [save, setSave] = useState<SaveState>('saved');
   const [stale, setStale] = useState(false);
   const [proRequired, setProRequired] = useState(false);
+  /** The server's issues for the draft it refused to publish, until the next edit. */
+  const [refused, setRefused] = useState<{
+    doc: string;
+    issues: StudioIssue[];
+  } | null>(null);
   const rev = useRef(initial.rev);
   const [shownRev, setShownRev] = useState(initial.rev);
   const latest = useRef(initial.draft);
   const saved = useRef(JSON.stringify(initial.draft));
-  const inFlight = useRef(false);
+  const sending = useRef<Promise<void> | null>(null);
   const blocked = useRef(false);
+  /** Blocked because another tab saved first (as opposed to a save that needed Pro). */
+  const staleNow = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const adopt = useCallback((studio: MyStudio) => {
@@ -97,11 +117,12 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   }, []);
 
   // One save at a time, each on the revision the last one returned. Edits made while a save was on
-  // its way go in the next round, until the saved draft is the latest.
-  const send = useCallback(async () => {
-    if (inFlight.current || blocked.current) return;
-    inFlight.current = true;
-    try {
+  // its way go in the next round, until the saved draft is the latest. A second caller waits for
+  // the save already on its way (publishing does).
+  const send = useCallback((): Promise<void> => {
+    if (sending.current) return sending.current;
+    if (blocked.current) return Promise.resolve();
+    const round = (async () => {
       for (;;) {
         const doc = latest.current;
         const body = JSON.stringify(doc);
@@ -117,6 +138,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
         if (!result.ok) {
           if (result.code === 'STUDIO_DRAFT_STALE') {
             blocked.current = true;
+            staleNow.current = true;
             setStale(true);
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
             blocked.current = true;
@@ -135,9 +157,11 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
         saved.current = body;
         adopt(result.data);
       }
-    } finally {
-      inFlight.current = false;
-    }
+    })().finally(() => {
+      sending.current = null;
+    });
+    sending.current = round;
+    return round;
   }, [adopt]);
 
   const schedule = useCallback(() => {
@@ -194,6 +218,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     if (!result.ok) return;
     clearTimeout(timer.current);
     blocked.current = false;
+    staleNow.current = false;
     latest.current = result.data.draft;
     saved.current = JSON.stringify(result.data.draft);
     setDraft(result.data.draft);
@@ -221,6 +246,36 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     };
   }, [send]);
 
+  const publish = useCallback(async (): Promise<PublishOutcome> => {
+    clearTimeout(timer.current);
+    const unsaved = () =>
+      blocked.current || saved.current !== JSON.stringify(latest.current);
+    // A save on its way may end before an edit made meanwhile: one more round catches it.
+    await send();
+    if (unsaved()) await send();
+    if (unsaved())
+      return {
+        failed: blocked.current && staleNow.current ? 'stale' : 'other',
+      };
+    const doc = saved.current;
+    const result = await apiFetch<MyStudio>('/v1/me/studio/publish', {
+      method: 'POST',
+      body: { rev: rev.current },
+    });
+    const outcome = publishOutcome(result);
+    if (result.ok) {
+      setRefused(null);
+      adopt(result.data);
+    } else if (outcome !== 'published' && 'issues' in outcome) {
+      setRefused({ doc, issues: outcome.issues });
+    } else if (outcome !== 'published' && outcome.failed === 'stale') {
+      blocked.current = true;
+      staleNow.current = true;
+      setStale(true);
+    }
+    return outcome;
+  }, [adopt, send]);
+
   const local = useMemo(() => checkDesign(draft, context), [draft, context]);
   return {
     draft,
@@ -232,7 +287,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     context,
     plan,
     photoAccent,
-    check: checkShown(draft, local, server),
+    check: withRefusal(draft, checkShown(draft, local, server), refused),
     images,
     upload,
     change,
@@ -240,5 +295,6 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     fix,
     retry: () => void send(),
     reload,
+    publish,
   };
 }
