@@ -32,6 +32,9 @@ export const FEATURE_SWITCHES = [
   // Owner, 18 Nov 2026 ("the admin should be able to set business fees too"): whether TipMe pays a
   // business's payout fee. Off keeps today's rule (the business pays it from the amount).
   'business_payout_fee_absorbed',
+  // You collect (ADR-0016, PROPOSED; owner's design, 19 Nov 2026): TipMe takes a new recipient's tips
+  // on its own account and transfers them on. Registered not built until the owner accepts the ADR.
+  'you_collect',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -205,6 +208,17 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: onOff('BUSINESS_PAYOUT_FEE_ABSORBED'),
+  },
+  you_collect: {
+    label: 'You collect for new recipients',
+    description:
+      'New sign-ups take tips through TipMe and add bank details when they first withdraw. Off, nobody new is put on it; recipients already on it keep it.',
+    money: true,
+    default: false,
+    env: onOff('YOU_COLLECT'),
+    // Plan Task 3 (ruling R12): the schema only. Task 16 removes this once the flow is built and
+    // ADR-0016 is accepted; D-04 and D-06 stay open until then.
+    notBuilt: true,
   },
 };
 

@@ -270,6 +270,20 @@ export const ISSUE_KINDS = [
   'share_transfer_stuck',
   // A staff "Refund tip" our payment partner refused or failed (owner, 14 Nov 2026).
   'tip_refund_failed',
+  // You collect (ADR-0016, proposed): money TipMe holds for recipients on its own partner account,
+  // its transfers on, the reserve that must cover it, and the disputes now modelled.
+  'collect_transfer_stuck',
+  'collect_transfer_review',
+  'collect_in_debt',
+  'collect_invariant_broken',
+  'collect_reserve_low',
+  'collect_auto_payout_on',
+  'collect_recon_mismatch',
+  'collect_same_bank',
+  'dispute_opened',
+  'dispute_deadline',
+  'dispute_fee_unposted',
+  'collect_refund_gap',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

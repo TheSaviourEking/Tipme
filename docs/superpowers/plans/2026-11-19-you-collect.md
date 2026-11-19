@@ -786,3 +786,27 @@ The order is strict. Only Task 3 has a planned migration; any later schema need 
 | §12 rollout, switch                                                    | 3, 16                                                                                                                                   |
 | §13 tests                                                              | each task's Step 1                                                                                                                      |
 | §14 non-goals                                                          | not built: no migration of direct recipients, no automatic unclaimed refunds, no recovery from future tips, no fee, VAT or Terms change |
+
+## Pre-flight rulings (controller, 19 Nov 2026)
+
+The controller's binding rulings from the pre-flight conflict scan of this plan, copied from the build ledger (which is not committed) so they are on record. Where one of these contradicts a task above, the ruling wins.
+
+- Ruling P1 (T1↔T3): KIND map edit belongs to T1 (dd07ec3a did it) — typecheck needs it — cost: none.
+- Ruling P2 (T3 for T9/T10): T3 migration amends trigger tipme_reversal_within_payment (0083) so collect reversals post; tested — else every collect refund/dispute posting is rejected — cost: one trigger change.
+- Ruling P3 (T3 for T7): T3 migration adds share_transfers kind 'collect_sweep' to the kind checks — T7 has no migration — cost: none.
+- Ruling P4 (T3 for T12/T13): T3 adds profiles.collect_verified_at, profiles.collect_legal_name, payout_destinations.account_hash — later tasks need them — cost: unused columns until then.
+- Ruling P5 (T5): unmatched platform-scoped disputes map back to today's reversal shape for applyProEvent (test: a Pro dispute still ends Pro) — else T5 breaks Pro before T9 lands — cost: small adapter.
+- Ruling P6 (T7/R2): routing checks a tipme-tip-refund- reference first; a matched reversal never goes to recordProviderEvent — else collect refunds never reach applyTipRefundEvent.
+- Ruling P7 (T10): the share is HELD at refund ask, cancelled only on refund.paid, restored on refusal — never cancel before the refund succeeds.
+- Ruling P8 (T3/T8): collect_transfers.account_reference nullable, filled when the row moves to ready.
+- Ruling P9 (T11): separate collect_reserve_readings table; today's NGN alert window untouched.
+- Ruling P10 (T11): payout-fee cover is non-voluntary; ownMoneyAllows does nothing when Σheld = 0 (switch-off behaviour unchanged).
+- Ruling P11 (T6↔T11): the sign-up collect write goes through the gated helper so sign-ups pause below zero.
+- Ruling P12 (T13): call holdLocalCurrency on new accounts; usable-without-active-transfers maps to 'checking', not 'verified'; T13 also sends the collect_verified notice (spec gap).
+- Ruling P13 (T3/T8/T9): collect_transfers gets review_reason (dispute|same_bank|provider|…); dispute win / staff retry release only matching reasons.
+- Ruling P14 (T9): for 'back' rows ORGANIZATION_IN_DEBT is the recipient's debt — does not freeze all collect transfers; T9 adds a hook for a dispute opened while the transfer was in flight.
+- Ruling P15: T9 and T10 are built sequentially (T10 needs T9's back rows) — overrides the plan's "may be parallel".
+- Ruling P16 (T6): tip status API adds collectedByTipMe (T14 receipt reads it).
+- Ruling P17 (T8/T11): transfer listing pages through all results (no 100 cap) for read-back and reconciliation.
+- Ruling P18 (T11): spec §7 "platform balance activity vs ledger" daily check added to T11 (spec gap).
+- Ruling P19: R4 (dispute hold by amount on disputes.held_minor, not withdrawal_holds) accepted — withdrawal_holds has no amount — cost: two hold mechanisms.

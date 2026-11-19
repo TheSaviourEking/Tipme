@@ -14,6 +14,8 @@ import {
 } from '@tipme/contracts';
 import {
   ATTEMPT_STATUSES,
+  COLLECT_TRANSFER_STATUSES,
+  DISPUTE_STATUSES,
   PAYOUT_STATUSES,
   SHARE_OPTIONS_BPS,
   TIP_STATUSES,
@@ -106,6 +108,11 @@ export const operationType = pgEnum('operation_type', [
   'pro_sale',
   // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
   'pro_refund',
+  // You collect (ADR-0016, proposed): money TipMe holds for a recipient moved to or from their own
+  // partner account (`provider_clearing` against `held_for_recipients`), and a dispute's fee, which
+  // TipMe pays from its own money. Nothing posts these until the later You collect PRs.
+  'collect_transfer',
+  'dispute_fee',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -685,9 +692,21 @@ export const profiles = pgTable(
     thanksLine: text('thanks_line'),
     thanksStyle: text('thanks_style'),
     thanksSigned: boolean('thanks_signed').notNull().default(false),
+    // You collect (ADR-0016, proposed; ruling R7): who collects this recipient's tips. `direct` is
+    // today's flow (their own partner account), `collect` is TipMe's account. Null is "not decided"
+    // and behaves as `direct`; a quote copies the mode, so a tip keeps the one it was quoted under.
+    collectionMode: text('collection_mode'),
+    // You collect (P4): when the recipient's name and bank account were verified, and the legal name
+    // then, locked from that moment (Tasks 12 and 13).
+    collectVerifiedAt: timestamp('collect_verified_at', { withTimezone: true }),
+    collectLegalName: text('collect_legal_name'),
     createdAt: createdAt(),
   },
   (table) => [
+    check(
+      'profiles_collection_mode',
+      sql`collection_mode IN ('direct', 'collect')`,
+    ),
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
@@ -849,7 +868,9 @@ export const notifications = pgTable(
   (table) => [
     check(
       'notifications_kind',
-      sql`kind IN ('tip', 'weekly_report', 'moment', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
+      // You collect (ADR-0016, proposed): a reminder to add bank details, the details verified, and
+      // a dispute holding part of the balance.
+      sql`kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'dispute_hold', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
     ),
     // One notification per invitation, however often B3's write is retried.
     uniqueIndex('notifications_invitation_once')
@@ -1176,11 +1197,18 @@ export const tipQuotes = pgTable(
     shareAgreementId: uuid('share_agreement_id').references(
       () => shareAgreements.id,
     ),
+    // You collect (ADR-0016, proposed): the recipient's collection mode when this quote was made.
+    // Every later step reads this, never the profile's current mode. Every quote before is `direct`.
+    collectionMode: text('collection_mode').notNull().default('direct'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
   () => [
     currencyCheck('tip_quotes'),
+    check(
+      'tip_quotes_collection_mode',
+      sql`collection_mode IN ('direct', 'collect')`,
+    ),
     check(
       'tip_quotes_recipient',
       sql`(profile_id IS NULL) <> (team_location_id IS NULL)`,
@@ -1475,10 +1503,16 @@ export const payoutDestinations = pgTable(
     bankName: text('bank_name').notNull(),
     accountLast4: char('account_last4', { length: 4 }).notNull(),
     status: text('status').notNull(),
+    // You collect (P4, Task 13): a keyed hash of the bank and full account number, never the number
+    // itself, so a second recipient adding the same account can be sent to review.
+    accountHash: text('account_hash'),
     createdAt: createdAt(),
     replacedAt: timestamp('replaced_at', { withTimezone: true }),
   },
   (table) => [
+    index('payout_destinations_account_hash')
+      .on(table.accountHash)
+      .where(sql`account_hash IS NOT NULL`),
     check(
       'payout_destinations_status',
       sql`status IN ('usable', 'pending_review', 'rejected')`,
@@ -1633,10 +1667,11 @@ export const ledgerAccounts = pgTable(
       'ledger_accounts_one_owner',
       sql`profile_id IS NULL OR business_id IS NULL`,
     ),
-    // Only a business holds a business_payable, and a business holds nothing else.
+    // A business_payable always has a business. A business holds only that and (You collect,
+    // ruling R3) the share TipMe holds for it, `held_for_recipients`.
     check(
       'ledger_accounts_business_payable',
-      sql`(code = 'business_payable') = (business_id IS NOT NULL)`,
+      sql`(code <> 'business_payable' OR business_id IS NOT NULL) AND (business_id IS NULL OR code IN ('business_payable', 'held_for_recipients'))`,
     ),
   ],
 );
@@ -3944,9 +3979,11 @@ export const shareTransfers = pgTable(
   },
   (table) => [
     currencyCheck('share_transfers'),
+    // You collect (R3, P3): `collect_sweep` is a business's share of a collect tip, already in TipMe's
+    // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep')`,
     ),
     check(
       'share_transfers_status',
@@ -3972,9 +4009,10 @@ export const shareTransfers = pgTable(
       'share_transfers_business',
       sql`kind = 'fee_return' OR business_id IS NOT NULL`,
     ),
+    // One sweep per tip, of either kind: a tip is direct or collect, never both.
     uniqueIndex('share_transfers_one_sweep')
       .on(table.tipId)
-      .where(sql`kind = 'sweep'`),
+      .where(sql`kind IN ('sweep', 'collect_sweep')`),
     uniqueIndex('share_transfers_once_per_reversal')
       .on(table.reversalTransactionId)
       .where(sql`kind = 'recover'`),
@@ -4032,5 +4070,292 @@ export const shareHoldbacks = pgTable(
     index('share_holdbacks_open')
       .on(table.businessId, table.createdAt)
       .where(sql`remaining_minor > 0`),
+  ],
+);
+
+// ---- You collect (ADR-0016, PROPOSED; plan Task 3) ----
+// TipMe takes a `collect` recipient's tips on its own partner account, holds each share
+// (`held_for_recipients`) and transfers it on. Nothing writes these tables while the `you_collect`
+// switch is not built; D-04 (custody) and D-06 (verification) stay open.
+
+/**
+ * A partner dispute on a tip TipMe collected (spec §6.2). The partner's ids and codes only: never the
+ * supporter's words. `held_minor` is what is held from the recipient's balance while it is open
+ * (ruling R4: added to `reserved`, not a `withdrawal_holds` row). The fee is posted in the currency the
+ * partner reports; without one, nothing is posted and an issue opens (R6).
+ */
+export const disputes = pgTable(
+  'disputes',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    partnerDisputeId: text('partner_dispute_id').notNull().unique(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    // The partner's reason code only.
+    reason: text('reason'),
+    status: text('status').notNull(),
+    respondBy: timestamp('respond_by', { withTimezone: true }),
+    evidenceState: text('evidence_state').notNull().default('none'),
+    feeMinor: minor('fee_minor'),
+    feeCurrency: char('fee_currency', { length: 3 }),
+    // What the partner set aside from TipMe's available balance while it is open.
+    setAsideMinor: minor('set_aside_minor'),
+    heldMinor: minor('held_minor')
+      .notNull()
+      .default(sql`0`),
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    currencyCheck('disputes'),
+    check('disputes_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    check('disputes_amount', sql`amount_minor > 0`),
+    check(
+      'disputes_status',
+      sql`status IN (${sql.raw(DISPUTE_STATUSES.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check(
+      'disputes_evidence_state',
+      sql`evidence_state IN ('none', 'draft', 'submitted')`,
+    ),
+    check(
+      'disputes_fee',
+      sql`(fee_minor IS NULL OR fee_minor >= 0) AND (fee_currency IS NULL OR fee_currency ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      'disputes_set_aside',
+      sql`set_aside_minor IS NULL OR set_aside_minor >= 0`,
+    ),
+    check('disputes_held', sql`held_minor >= 0 AND held_minor <= amount_minor`),
+    index('disputes_tip').on(table.tipId),
+    index('disputes_status').on(table.status, table.respondBy),
+  ],
+);
+
+export const COLLECT_TRANSFER_KINDS = ['share', 'back'] as const;
+/** Why a collect transfer is in `review` (P13): a release or retry clears only its own reason. */
+export const COLLECT_REVIEW_REASONS = [
+  'dispute',
+  'same_bank',
+  'provider',
+  'refund',
+  'staff',
+] as const;
+
+/**
+ * One money movement between TipMe's partner balance and a collect recipient's own account (spec §5).
+ * `share`: a tip's held share on to the recipient (one per tip, key `tipme-collect-<tipId>`). `back`:
+ * money taken back for a refund or a dispute (key `tipme-collect-back-<refundId|disputeId>`). The key
+ * is also the transfer's `transfer_group`, so a lost answer is read back, never sent blindly. The
+ * account is filled when the row moves to `ready` (P8), from the account verified then.
+ */
+export const collectTransfers = pgTable(
+  'collect_transfers',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    refundId: uuid('refund_id').references(() => tipRefunds.id),
+    disputeId: uuid('dispute_id').references(() => disputes.id),
+    accountReference: text('account_reference'),
+    provider: text('provider').notNull(),
+    environment: providerEnvironment('environment').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    status: text('status').notNull(),
+    reviewReason: text('review_reason'),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    transferReference: text('transfer_reference'),
+    chargeReference: text('charge_reference'),
+    // The new-recipient delay (spec §8): not sent before this.
+    releaseAfter: timestamp('release_after', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    nextTryAt: timestamp('next_try_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    currencyCheck('collect_transfers'),
+    check(
+      'collect_transfers_kind',
+      sql`kind IN (${sql.raw(COLLECT_TRANSFER_KINDS.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check(
+      'collect_transfers_status',
+      sql`status IN (${sql.raw(COLLECT_TRANSFER_STATUSES.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check('collect_transfers_amount', sql`amount_minor > 0`),
+    check('collect_transfers_attempts', sql`attempts >= 0`),
+    check('collect_transfers_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    // A share answers no refund or dispute; a transfer back answers exactly one.
+    check(
+      'collect_transfers_back_source',
+      sql`(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)
+        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))`,
+    ),
+    // The plan's exact keys, so a key can never name another tip, refund or dispute.
+    check(
+      'collect_transfers_key',
+      sql`(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)
+        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)`,
+    ),
+    // A row in review says why (P13).
+    check(
+      'collect_transfers_review_reason',
+      sql`(review_reason IS NULL OR review_reason IN (${sql.raw(COLLECT_REVIEW_REASONS.map((k) => `'${k}'`).join(', '))}))
+        AND (status <> 'review' OR review_reason IS NOT NULL)`,
+    ),
+    // Nothing is claimed or sent without the account it goes to (P8).
+    check(
+      'collect_transfers_account',
+      sql`status IN ('waiting', 'cancelled', 'review') OR account_reference IS NOT NULL`,
+    ),
+    check(
+      'collect_transfers_paid',
+      sql`status <> 'paid' OR paid_at IS NOT NULL`,
+    ),
+    uniqueIndex('collect_transfers_one_share')
+      .on(table.tipId)
+      .where(sql`kind = 'share'`),
+    index('collect_transfers_due').on(table.status, table.nextTryAt),
+    index('collect_transfers_profile').on(table.profileId, table.status),
+  ],
+);
+
+/**
+ * You collect's settings (spec §9), as the plan fee rates: one row per change, never edited, the
+ * latest whose `effective_from` has passed in force, and the coded defaults (`COLLECT_DEFAULTS`) with
+ * none. `paused` is the staff emergency pause of every collect transfer (ruling R11). Bounds are §9's;
+ * the first-withdrawal cap's floor (the minimum withdrawal) is the fee policy's, checked by the
+ * setting's serious action (Task 12).
+ */
+export const collectSettings = pgTable(
+  'collect_settings',
+  {
+    id: uuid('id').primaryKey(),
+    capMinor: minor('cap_minor').notNull(),
+    capDays: integer('cap_days').notNull(),
+    reminderDays: integer('reminder_days').array().notNull(),
+    delayHours: integer('delay_hours').notNull(),
+    delayForDays: integer('delay_for_days').notNull(),
+    firstWithdrawalCapMinor: minor('first_withdrawal_cap_minor').notNull(),
+    newDailyLimitMinor: minor('new_daily_limit_minor').notNull(),
+    newDailyLimitDays: integer('new_daily_limit_days').notNull(),
+    reserveWarningMinor: minor('reserve_warning_minor').notNull(),
+    reserveCriticalMinor: minor('reserve_critical_minor').notNull(),
+    paused: boolean('paused').notNull().default(false),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('collect_settings_effective_from').on(table.effectiveFrom),
+    // ₦10,000 to ₦500,000, for 7 to 90 days.
+    check(
+      'collect_settings_cap_minor',
+      sql`cap_minor BETWEEN 1000000 AND 50000000`,
+    ),
+    check('collect_settings_cap_days', sql`cap_days BETWEEN 7 AND 90`),
+    // One to ten reminders, each a day from 1 to the day before the cap.
+    check(
+      'collect_settings_reminder_days',
+      sql`cardinality(reminder_days) BETWEEN 1 AND 10
+        AND array_position(reminder_days, NULL) IS NULL
+        AND 1 <= ALL (reminder_days) AND cap_days > ALL (reminder_days)`,
+    ),
+    check(
+      'collect_settings_delay',
+      sql`delay_hours BETWEEN 0 AND 72 AND delay_for_days BETWEEN 0 AND 30`,
+    ),
+    check(
+      'collect_settings_first_withdrawal_cap',
+      sql`first_withdrawal_cap_minor > 0`,
+    ),
+    check(
+      'collect_settings_new_daily_limit',
+      sql`new_daily_limit_minor > 0 AND new_daily_limit_days BETWEEN 0 AND 365`,
+    ),
+    check(
+      'collect_settings_reserve',
+      sql`reserve_critical_minor >= 0 AND reserve_critical_minor < reserve_warning_minor`,
+    ),
+    check('collect_settings_reason', sql`char_length(reason) > 0`),
+  ],
+);
+
+/**
+ * One read of TipMe's own partner balance against what it holds for recipients (spec §4, §6.3; P9),
+ * per currency. Kept apart from `payment_reserve_readings`, so today's NGN payout-fee alert and its
+ * re-alert window are untouched. `own_minor` is available less held; the level follows it: `breach`
+ * below zero (held money not covered), `critical` and `warning` below those levels. A read that
+ * failed has no available, own or level ("unknown"), never a guess.
+ */
+export const collectReserveReadings = pgTable(
+  'collect_reserve_readings',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    currency: currency(),
+    availableMinor: minor('available_minor'),
+    heldMinor: minor('held_minor').notNull(),
+    ownMinor: minor('own_minor'),
+    warningMinor: minor('warning_minor').notNull(),
+    criticalMinor: minor('critical_minor').notNull(),
+    level: text('level'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+  },
+  (table) => [
+    currencyCheck('collect_reserve_readings'),
+    check(
+      'collect_reserve_readings_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    check(
+      'collect_reserve_readings_amounts',
+      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor < warning_minor`,
+    ),
+    check(
+      'collect_reserve_readings_own',
+      sql`(available_minor IS NULL AND own_minor IS NULL AND level IS NULL)
+        OR (available_minor IS NOT NULL AND own_minor IS NOT NULL AND own_minor = available_minor - held_minor)`,
+    ),
+    check(
+      'collect_reserve_readings_level',
+      sql`own_minor IS NULL OR (level IS NOT NULL AND level = CASE
+          WHEN own_minor < 0 THEN 'breach'
+          WHEN own_minor < critical_minor THEN 'critical'
+          WHEN own_minor < warning_minor THEN 'warning'
+          ELSE 'ok' END)`,
+    ),
+    index('collect_reserve_readings_latest').on(
+      table.provider,
+      table.currency,
+      table.readAt.desc(),
+    ),
   ],
 );

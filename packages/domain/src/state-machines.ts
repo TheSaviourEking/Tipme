@@ -156,7 +156,9 @@ export const COLLECT_TRANSFER_TRANSITIONS: TransitionTable<CollectTransferStatus
     ready: ['sent', 'waiting', 'cancelled', 'review'],
     sent: ['paid', 'unknown', 'ready', 'waiting', 'review'],
     unknown: ['paid', 'ready', 'review'],
-    review: ['ready', 'cancelled', 'paid'],
+    // Back to `waiting` when the row has no account yet (held for review before the recipient added
+    // bank details): `ready` needs one (collect_transfers_account).
+    review: ['ready', 'waiting', 'cancelled', 'paid'],
     paid: [],
     cancelled: [],
   };
