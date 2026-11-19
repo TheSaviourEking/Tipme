@@ -6,8 +6,11 @@ import {
   STUDIO_ERROR_RULES,
   STUDIO_FIX_LINKS,
   STUDIO_FIX_NEEDS_INPUT,
+  STUDIO_STYLES,
   STUDIO_WEIGHT,
   defaultStudioDocument,
+  studioKeepHeld,
+  studioShown,
   type StudioCheckResult,
   type StudioDocument,
   type StudioFix,
@@ -201,11 +204,20 @@ export function blockedIntro(count: number, save: SaveState): string {
 
 export type SaveState = 'saved' | 'pending' | 'saving' | 'failed';
 
+/** The status line while a Free page previews a Pro style (§12.4): nothing is saved. */
+export const PREVIEWING = 'Previewing a Pro style: not saved';
+
 /**
  * The header's status line (§10: "Saved · not published"). `published`: false before the first
  * publish, true when the draft differs from the published page, 'same' when it doesn't.
+ * `previewing` (§12.4) says so above anything else: no save is sent while it lasts.
  */
-export function saveWords(state: SaveState, published: boolean | 'same') {
+export function saveWords(
+  state: SaveState,
+  published: boolean | 'same',
+  previewing = false,
+) {
+  if (previewing) return PREVIEWING;
   if (state === 'failed') return 'Not saved';
   if (state !== 'saved') return 'Saving…';
   return published === 'same' ? 'Published' : 'Saved · not published';
@@ -220,4 +232,42 @@ export function studioEntry(answer: {
   access?: 'edit';
 }): 'edit' | null {
   return answer.status === 200 && answer.access === 'edit' ? 'edit' : null;
+}
+
+/**
+ * Whether this draft is a Free preview of a Pro style (§12.4): on Free, a Pro style that neither
+ * the stored draft nor the published version holds. The server would refuse to save it (§11), so
+ * the editor keeps it in memory and sends nothing. "Held" is the server's own definition
+ * (contracts `studioKeepHeld`), so a lapsed draft that holds Stage saves its edits as usual.
+ */
+export function previewsPro(
+  doc: StudioDocument,
+  held: { draft: StudioDocument | null; published: StudioDocument | null },
+  plan: 'free' | 'pro',
+): boolean {
+  return studioKeepHeld(doc, held, plan).style !== doc.style;
+}
+
+/**
+ * The editor's banner when Pro has ended (§12.5), or null: on Free, when the published version uses
+ * anything Pro. It names what visitors see (contracts `studioShown`): Classic in place of a Pro
+ * style, or the free style without its Pro extras. Grace counts as Pro, so no banner then.
+ */
+export function lapseBanner(
+  plan: 'free' | 'pro',
+  published: StudioDocument | null,
+): string | null {
+  if (plan === 'pro' || !published) return null;
+  if (
+    studioKeepHeld(published, { draft: null, published: null }, 'free') ===
+    published
+  )
+    return null;
+  // A Pro style at every default shows the standard page, which is Classic.
+  const shown = studioShown(published, 'free')?.style ?? 'classic';
+  const what =
+    shown === published.style
+      ? `${STUDIO_STYLES[shown].name} without Pro extras`
+      : STUDIO_STYLES[shown].name;
+  return `Your Pro has ended. Your page shows ${what} until Pro is back. Your design is kept.`;
 }

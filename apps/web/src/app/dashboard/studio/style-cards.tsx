@@ -11,14 +11,15 @@ import {
 } from '@tipme/contracts';
 import { needsInter } from '@/components/studio-styles/style-fonts';
 import { ICONS, ProPill, RadioGroup } from './segmented';
-import { styleCardLabel, styleChoosable } from './style-tab-model';
+import { styleCardLabel } from './style-tab-model';
 
 /**
  * The style cards (§10.2; canvas "Choosing a style"): one per style in registry order, each a
  * schematic miniature (r14) of the style, set in the person's own name and the style's display
  * face, drawn in the current accent (each style's own while none is picked). Classic carries
- * DEFAULT; Pro styles carry PRO for Free, who can't choose them yet (plan ruling R5). The selected
- * card has a 2 px page + 4 px purple ring, a 22 px check badge and a 750 label.
+ * DEFAULT; Pro styles carry PRO for Free. Every card can be chosen, on any plan (§12.4, overriding
+ * the canvas's aria-disabled Pro cards): on Free a Pro style is a preview the editor doesn't save.
+ * The selected card has a 2 px page + 4 px purple ring, a 22 px check badge and a 750 label.
  */
 export function StyleCards({
   doc,
@@ -26,7 +27,6 @@ export function StyleCards({
   name,
   photoAccent,
   labelledBy,
-  bannerId,
   onChange,
   readOnly,
 }: {
@@ -35,24 +35,17 @@ export function StyleCards({
   name: string;
   photoAccent: PhotoAccentValues | PhotoAccentFailed | null;
   labelledBy: string;
-  /** The Free banner's id, which says why the Pro cards can't be chosen. */
-  bannerId: string;
   onChange(style: StudioStyleId): void;
   readOnly: boolean;
 }) {
   return (
     <RadioGroup
       labelledBy={labelledBy}
-      items={STUDIO_STYLE_IDS.map((id) => {
-        const choosable = styleChoosable(id, plan, doc);
-        return {
-          value: id,
-          key: id,
-          label: styleCardLabel(id),
-          disabled: !choosable,
-          ...(choosable ? {} : { describedBy: bannerId }),
-        };
-      })}
+      items={STUDIO_STYLE_IDS.map((id) => ({
+        value: id,
+        key: id,
+        label: styleCardLabel(id),
+      }))}
       value={doc.style}
       onChange={onChange}
       readOnly={readOnly}
@@ -75,9 +68,6 @@ export function StyleCards({
                   '--m-acc-text': acc.text,
                 }}
               />
-              {item.disabled && (
-                <span className="pst-card__shade" aria-hidden="true" />
-              )}
               {id === 'classic' ? (
                 <span className="pst-card__badge">
                   <span className="pst-pro pst-pro--default">DEFAULT</span>

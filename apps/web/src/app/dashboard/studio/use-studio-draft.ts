@@ -12,6 +12,7 @@ import {
 import { apiFetch } from '@/lib/session-client';
 import {
   checkShown,
+  previewsPro,
   publishOutcome,
   withRefusal,
   type PublishOutcome,
@@ -43,7 +44,17 @@ export interface StudioDraft {
   proRequired: boolean;
   /** This tab has edits the server doesn't have yet (or never will, once the draft is stale). */
   unsaved: boolean;
-  /** Something to undo (§12.2), and what: "style changed to Clear". */
+  /**
+   * A Free preview of a Pro style (§12.4): the draft holds a Pro style that neither the stored
+   * draft nor the published version holds. It is kept in memory only: no save is sent while it
+   * lasts. Choosing a free style ends it and saves again; Undo ends it too.
+   */
+  previewing: boolean;
+  /**
+   * Something to undo (§12.2), and what: "style changed to Clear". A preview isn't a step: while
+   * one lasts, Undo ends it (back to the draft before it, nothing popped), named for the change it
+   * takes back. The free style that ends a preview is one step, from the draft before the preview.
+   */
   canUndo: boolean;
   undoLabel: string | null;
   /**
@@ -105,6 +116,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const publishedNow = useRef(initial.published);
   const [context, setContext] = useState(initial.context);
   const [plan, setPlan] = useState(initial.plan);
+  /** `plan`, for the save loop (whether a Pro style is a preview, §12.4). */
+  const planNow = useRef(initial.plan);
   const [photoAccent, setPhotoAccent] = useState(initial.photoAccent);
   const [images, setImages] = useState(initial.images);
   const imagesNow = useRef(initial.images);
@@ -126,6 +139,17 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const rev = useRef(initial.rev);
   const [shownRev, setShownRev] = useState(initial.rev);
   const latest = useRef(initial.draft);
+  /**
+   * The draft before any preview (§12.4): `latest` except while a Free page previews a Pro style.
+   * Undo steps are taken from it, so a preview never becomes a step of its own.
+   */
+  const base = useRef(initial.draft);
+  const previewingNow = useRef(false);
+  const [previewing, setPreviewing] = useState(false);
+  const markPreviewing = useCallback((on: boolean) => {
+    previewingNow.current = on;
+    setPreviewing(on);
+  }, []);
   const saved = useRef(JSON.stringify(initial.draft));
   /** `saved`, for rendering (whether this tab has unsaved edits). */
   const [savedBody, setSavedBody] = useState(saved.current);
@@ -156,11 +180,26 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     publishedNow.current = studio.published;
     setContext(studio.context);
     setPlan(studio.plan);
+    planNow.current = studio.plan;
     setPhotoAccent(studio.photoAccent);
     imagesNow.current = studio.images;
     setImages(studio.images);
     setServer({ doc: JSON.stringify(studio.draft), check: studio.check });
   }, []);
+
+  /** Whether this draft is a Free preview of a Pro style, judged against what the server holds. */
+  const isPreview = useCallback(
+    (doc: StudioDocument) =>
+      previewsPro(
+        doc,
+        {
+          draft: JSON.parse(saved.current) as StudioDocument,
+          published: publishedNow.current,
+        },
+        planNow.current,
+      ),
+    [],
+  );
 
   // One save at a time, each on the revision the last one returned. Edits made while a save was on
   // its way go in the next round, until the saved draft is the latest. A second caller waits for
@@ -176,6 +215,12 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
         const undo = undoing.current;
         if (body === saved.current) {
           setSave('saved');
+          return;
+        }
+        // A preview is never sent (§12.4): the server would refuse the switch. An undo is, so the
+        // server judges it and a refusal is repaired as R4 says.
+        if (!undo && isPreview(doc)) {
+          setSave('pending');
           return;
         }
         setSave('saving');
@@ -199,6 +244,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
               published: publishedNow.current,
             });
             latest.current = kept;
+            base.current = kept;
             setDraft(kept);
             setUndoLabel(stack.current.peek()?.label ?? null);
             setNotice(PRO_UNDO_REFUSED);
@@ -210,6 +256,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
             // so the screen and the preview say what "kept as it was last saved" says.
             const kept = JSON.parse(saved.current) as StudioDocument;
             latest.current = kept;
+            base.current = kept;
+            markPreviewing(false);
             setDraft(kept);
             setSave('saved');
             return;
@@ -226,7 +274,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     });
     sending.current = round;
     return round;
-  }, [adopt, markSaved]);
+  }, [adopt, isPreview, markPreviewing, markSaved]);
 
   const schedule = useCallback(() => {
     clearTimeout(timer.current);
@@ -237,17 +285,24 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const change = useCallback(
     (next: StudioDocument) => {
       if (blocked.current || discarding.current) return;
-      const step = describeChange(latest.current, next);
-      if (step) {
-        stack.current.push(latest.current, step.label, step.field);
-        setUndoLabel(stack.current.peek()?.label ?? null);
-      }
       setNotice(null);
       latest.current = next;
       setDraft(next);
+      const step = describeChange(base.current, next);
+      if (isPreview(next)) {
+        // Kept in memory: no step and no save. Undo takes back the whole preview.
+        clearTimeout(timer.current);
+        markPreviewing(true);
+        setUndoLabel(step?.label ?? stack.current.peek()?.label ?? null);
+        return;
+      }
+      markPreviewing(false);
+      if (step) stack.current.push(base.current, step.label, step.field);
+      base.current = next;
+      setUndoLabel(stack.current.peek()?.label ?? null);
       schedule();
     },
-    [schedule],
+    [isPreview, markPreviewing, schedule],
   );
 
   const update = useCallback(
@@ -291,6 +346,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
       staleNow.current = false;
       undoing.current = null;
       latest.current = studio.draft;
+      base.current = studio.draft;
+      markPreviewing(false);
       markSaved(JSON.stringify(studio.draft));
       setDraft(studio.draft);
       adopt(studio);
@@ -302,7 +359,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
       setProRequired(false);
       setSave('saved');
     },
-    [adopt, markSaved],
+    [adopt, markPreviewing, markSaved],
   );
 
   const reload = useCallback(async () => {
@@ -314,18 +371,33 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
 
   const undo = useCallback(() => {
     if (blocked.current || discarding.current) return;
+    if (previewingNow.current) {
+      // Ends the preview: back to the draft before it. Nothing is popped; nothing new to save
+      // unless an edit from before the preview is still waiting.
+      markPreviewing(false);
+      setNotice(null);
+      latest.current = base.current;
+      setDraft(base.current);
+      setUndoLabel(stack.current.peek()?.label ?? null);
+      if (JSON.stringify(base.current) === saved.current) {
+        clearTimeout(timer.current);
+        setSave('saved');
+      } else schedule();
+      return;
+    }
     const step = stack.current.pop();
     setUndoLabel(stack.current.peek()?.label ?? null);
     if (!step) return;
     setNotice(null);
     undoing.current = {};
     latest.current = step.doc;
+    base.current = step.doc;
     setDraft(step.doc);
     // Saved at once rather than after the pause, so a refusal (R4) can't take later edits with it.
     clearTimeout(timer.current);
     setSave('saving');
     void send();
-  }, [send]);
+  }, [markPreviewing, schedule, send]);
 
   const discard = useCallback(async () => {
     if (discarding.current) return false;
@@ -410,6 +482,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     stale,
     proRequired,
     unsaved: JSON.stringify(draft) !== savedBody,
+    previewing,
     canUndo: undoLabel !== null,
     undoLabel,
     notice,

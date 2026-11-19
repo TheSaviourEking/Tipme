@@ -89,12 +89,11 @@ export function StyleTab({
           name={name}
           photoAccent={photoAccent}
           labelledBy={cardsId}
-          bannerId={`${id}-pro`}
           readOnly={readOnly}
           onChange={(style) => onChange(withStyle(draft, style, coverChoice))}
         />
         {plan !== 'pro' && (
-          <Link className="pst-banner" href="/pro" id={`${id}-pro`}>
+          <Link className="pst-banner" href="/pro">
             <ProPill large />
             <span className="sr-only"> · </span>
             <span className="pst-banner__words">{proBanner()}</span>
