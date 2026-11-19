@@ -281,7 +281,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/me/sessions/sign-out-others` | yes | – | – |
 | GET | `/v1/me/studio` | n/a (read) | – | – |
 | GET | `/v1/me/studio-images/{imageId}/{version}/{file}` | n/a (read) | – | – |
-| DELETE | `/v1/me/studio/draft` | yes | – | – |
+| DELETE | `/v1/me/studio/draft` | yes | `studio_drafts` | – |
 | PUT | `/v1/me/studio/draft` | yes | `studio_drafts` | – |
 | POST | `/v1/me/studio/images` | yes | `avatars` | – |
 | PUT | `/v1/me/studio/images/{imageId}/focus` | yes | `avatars` | – |
