@@ -1,0 +1,1 @@
+ALTER TABLE "page_studios" ADD COLUMN "photo_accent" jsonb;

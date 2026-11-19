@@ -1,5 +1,5 @@
 {
-  "id": "389b61c6-72cc-450b-a83b-298efce29b06",
+  "id": "2284a771-fe97-4b8a-ba7d-dd96dd4483d7",
   "prevId": "1187b6bb-1216-475a-81d7-f1386d001b84",
   "version": "7",
   "dialect": "postgresql",
@@ -5950,6 +5950,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "photo_accent": {
+          "name": "photo_accent",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -8311,13 +8317,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "shape": {
-          "name": "shape",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'wide'"
-        },
         "width": {
           "name": "width",
           "type": "integer",
@@ -8357,9 +8356,9 @@
         }
       },
       "compositePrimaryKeys": {
-        "profile_cover_renditions_profile_id_shape_width_pk": {
-          "name": "profile_cover_renditions_profile_id_shape_width_pk",
-          "columns": ["profile_id", "shape", "width"]
+        "profile_cover_renditions_profile_id_width_pk": {
+          "name": "profile_cover_renditions_profile_id_width_pk",
+          "columns": ["profile_id", "width"]
         }
       },
       "uniqueConstraints": {},
@@ -8371,7 +8370,7 @@
         },
         "profile_cover_renditions_width": {
           "name": "profile_cover_renditions_width",
-          "value": "(shape = 'wide' AND width IN (640, 1080, 1600)) OR (shape = 'tall' AND width IN (480, 720))"
+          "value": "width IN (640, 1080, 1600)"
         }
       },
       "isRLSEnabled": false

@@ -4,10 +4,10 @@ import { test } from 'node:test';
 import {
   STUDIO_ERROR_RULES,
   STUDIO_FIX_NEEDS_INPUT,
-  checkDesign,
+  checkDesignV1,
   contrastRatio,
   deriveStudioPalette,
-  studioDocumentSchema,
+  studioDocumentV1Schema,
 } from '@tipme/contracts';
 import {
   checkShown,
@@ -97,7 +97,7 @@ test('the palette chips are the engine’s colours, each text pair with its live
 
 test('a yellow that can’t carry text: the board’s sentence, and how it is used', () => {
   const d = doc({ brand: ['#f5c400'] });
-  const check = checkDesign(d, ctx);
+  const check = checkDesignV1(d, ctx);
   const notes = colourNotes(check);
   assert.equal(notes.length, 1);
   assert.equal(
@@ -124,7 +124,7 @@ test('a yellow that can’t carry text: the board’s sentence, and how it is us
   );
   assert.ok(use[0].ratio >= 4.5 && use[1].ratio >= 4.5 && use[2].ratio < 3);
   // A colour that carries text needs no note.
-  assert.deepEqual(colourNotes(checkDesign(doc(), ctx)), []);
+  assert.deepEqual(colourNotes(checkDesignV1(doc(), ctx)), []);
 });
 
 test('font pickers offer each family only for a role it can take', () => {
@@ -150,7 +150,7 @@ test('picking a font replaces its slot, so a page never has a third family', () 
     withFont(doc(), 'body', 'dm-serif-display').fonts,
     doc().fonts,
   );
-  assert.ok(studioDocumentSchema.safeParse(e).success);
+  assert.ok(studioDocumentV1Schema.safeParse(e).success);
 });
 
 test('removing the second colour keeps the document valid: its rows take the main colour', () => {
@@ -158,11 +158,11 @@ test('removing the second colour keeps the document valid: its rows take the mai
     brand: ['#1d4e89', '#ff7a59'],
     rows: [{ ...doc().rows[0], background: 'second' }],
   });
-  assert.ok(studioDocumentSchema.safeParse(two).success);
+  assert.ok(studioDocumentV1Schema.safeParse(two).success);
   const one = withSecondColour(two, null);
   assert.deepEqual(one.brand, ['#1d4e89']);
   assert.equal(one.rows[0].background, 'colour');
-  assert.ok(studioDocumentSchema.safeParse(one).success);
+  assert.ok(studioDocumentV1Schema.safeParse(one).success);
   assert.deepEqual(withSecondColour(doc(), '#ff7a59').brand, [
     '#1d4e89',
     '#ff7a59',
@@ -171,8 +171,8 @@ test('removing the second colour keeps the document valid: its rows take the mai
 
 test('the shown check is the server’s for the document it checked, the editor’s otherwise', () => {
   const d = doc();
-  const server = { ...checkDesign(d, ctx), weightBytes: 1 };
-  const local = checkDesign(d, ctx);
+  const server = { ...checkDesignV1(d, ctx), weightBytes: 1 };
+  const local = checkDesignV1(d, ctx);
   assert.equal(
     checkShown(d, local, { doc: JSON.stringify(d), check: server }),
     server,
@@ -208,7 +208,7 @@ test('one-click fixes apply at once; fixes that need the person’s input open t
 });
 
 test('every rule has words in the passing list', () => {
-  const check = checkDesign(doc(), ctx);
+  const check = checkDesignV1(doc(), ctx);
   const words = passingWords(check, doc());
   assert.equal(words.length, STUDIO_ERROR_RULES.length);
   assert.ok(words.includes('Text is readable (light and dark)'));

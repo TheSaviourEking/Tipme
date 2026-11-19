@@ -1,24 +1,38 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  applyStudioFix,
-  checkDesign,
-  type MyStudio,
+  applyStudioFixV1,
+  checkDesignV1,
+  type MyStudioV1,
+  type StudioCheckContextV1,
   type StudioCheckResult,
   type StudioDocument,
+  type StudioDocumentV1,
   type StudioImage,
   type StudioIssue,
 } from '@tipme/contracts';
 import { apiFetch } from '@/lib/session-client';
 import { checkShown, type SaveState } from './studio-editor-model';
 
+/**
+ * An answer this editor can edit: a v1 draft with the v1 facts. During the two-format period
+ * (styles plan ruling R1) the server may hold a v2 draft (saved by a direct API call); this editor
+ * can't open it and offers to reload instead.
+ */
+export type MyStudioOld = MyStudioV1 & {
+  draft: StudioDocumentV1;
+  context: StudioCheckContextV1;
+};
+export const editableHere = (studio: MyStudioV1): studio is MyStudioOld =>
+  studio.draft.v === 1;
+
 /** Edits settle this long before the draft is saved (plan Task 9). */
 const SAVE_AFTER_MS = 800;
 
 export interface StudioDraft {
-  draft: StudioDocument;
+  draft: StudioDocumentV1;
   rev: number;
-  /** The published version, as the server last said. */
+  /** The published version, as the server last said (always v2 now). */
   published: StudioDocument | null;
   save: SaveState;
   /** Another tab or device saved first (STUDIO_DRAFT_STALE): nothing more is saved here. */
@@ -29,9 +43,9 @@ export interface StudioDraft {
   check: StudioCheckResult;
   /** The page's Studio photos, including ones uploaded in this editor (the preview draws these). */
   images: StudioImage[];
-  change(next: StudioDocument): void;
+  change(next: StudioDocumentV1): void;
   /** A change made from the latest draft (an edit that lands after an upload or a moment's wait). */
-  update(fn: (doc: StudioDocument) => StudioDocument): void;
+  update(fn: (doc: StudioDocumentV1) => StudioDocumentV1): void;
   fix(issue: StudioIssue, fixId: string): void;
   /**
    * Uploads a photo (`POST /v1/me/studio/images`): the id of the new image, or the API's error
@@ -50,7 +64,7 @@ export interface StudioDraft {
  * based on. Saving never needs a passing check; only publishing will (G3). Undo, discard and
  * publish come with G3.
  */
-export function useStudioDraft(initial: MyStudio): StudioDraft {
+export function useStudioDraft(initial: MyStudioOld): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
   const [published, setPublished] = useState(initial.published);
   const [context, setContext] = useState(initial.context);
@@ -74,7 +88,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const blocked = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const adopt = useCallback((studio: MyStudio) => {
+  const adopt = useCallback((studio: MyStudioOld) => {
     rev.current = studio.rev;
     setShownRev(studio.rev);
     setPublished(studio.published);
@@ -98,7 +112,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
           return;
         }
         setSave('saving');
-        const result = await apiFetch<MyStudio>('/v1/me/studio/draft', {
+        const result = await apiFetch<MyStudioV1>('/v1/me/studio/draft', {
           method: 'PUT',
           body: { rev: rev.current, draft: doc },
         });
@@ -114,6 +128,12 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
           return;
         }
         saved.current = body;
+        if (!editableHere(result.data)) {
+          blocked.current = true;
+          setStale(true);
+          setSave('failed');
+          return;
+        }
         adopt(result.data);
       }
     } finally {
@@ -128,7 +148,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   }, [send]);
 
   const change = useCallback(
-    (next: StudioDocument) => {
+    (next: StudioDocumentV1) => {
       if (blocked.current) return;
       latest.current = next;
       setDraft(next);
@@ -138,7 +158,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   );
 
   const update = useCallback(
-    (fn: (doc: StudioDocument) => StudioDocument) => {
+    (fn: (doc: StudioDocumentV1) => StudioDocumentV1) => {
       const next = fn(latest.current);
       if (next !== latest.current) change(next);
     },
@@ -147,13 +167,13 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
 
   const fix = useCallback(
     (issue: StudioIssue, fixId: string) =>
-      change(applyStudioFix(latest.current, issue, fixId)),
+      change(applyStudioFixV1(latest.current, issue, fixId)),
     [change],
   );
 
   // A new photo changes the server's facts (its size, for the check) but not the draft or its rev.
   const upload = useCallback(async (file: Blob) => {
-    const result = await apiFetch<MyStudio>('/v1/me/studio/images', {
+    const result = await apiFetch<MyStudioV1>('/v1/me/studio/images', {
       method: 'POST',
       file,
     });
@@ -166,13 +186,19 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     const imageId = added.imageId;
     imagesNow.current = result.data.images;
     setImages(result.data.images);
-    setContext(result.data.context);
+    if (editableHere(result.data)) setContext(result.data.context);
     return { imageId };
   }, []);
 
   const reload = useCallback(async () => {
-    const result = await apiFetch<MyStudio>('/v1/me/studio');
+    const result = await apiFetch<MyStudioV1>('/v1/me/studio');
     if (!result.ok) return;
+    if (!editableHere(result.data)) {
+      // A v2 draft: this editor can't open it; the page offers to reload.
+      blocked.current = true;
+      setStale(true);
+      return;
+    }
     clearTimeout(timer.current);
     blocked.current = result.data.access !== 'edit';
     latest.current = result.data.draft;
@@ -202,7 +228,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     };
   }, [send]);
 
-  const local = useMemo(() => checkDesign(draft, context), [draft, context]);
+  const local = useMemo(() => checkDesignV1(draft, context), [draft, context]);
   return {
     draft,
     rev: shownRev,

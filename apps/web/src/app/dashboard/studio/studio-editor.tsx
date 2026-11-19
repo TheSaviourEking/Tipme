@@ -8,7 +8,11 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
-import type { MyStudio, StudioIssue } from '@tipme/contracts';
+import {
+  resolveStudio,
+  type MyStudioV1,
+  type StudioIssue,
+} from '@tipme/contracts';
 import { Button, EmptySlip, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
 import { LoadFailed } from '@/components/dashboard/load-failed';
@@ -19,7 +23,11 @@ import { CheckPanel } from './check-panel';
 import { saveWords } from './studio-editor-model';
 import { StudioPreview, type PreviewDevice } from './studio-preview';
 import { StyleTab } from './style-tab';
-import { useStudioDraft } from './use-studio-draft';
+import {
+  editableHere,
+  useStudioDraft,
+  type MyStudioOld,
+} from './use-studio-draft';
 import './studio-editor.css';
 
 const MY_PAGE = '/dashboard/settings#page';
@@ -57,10 +65,10 @@ export function StudioEditorRoute() {
     | { state: 'loading' }
     | { state: 'off' }
     | { state: 'failed' }
-    | { state: 'ready'; studio: MyStudio }
+    | { state: 'ready'; studio: MyStudioV1 }
   >({ state: 'loading' });
   const read = useCallback(async () => {
-    const result = await apiFetch<MyStudio>('/v1/me/studio');
+    const result = await apiFetch<MyStudioV1>('/v1/me/studio');
     if (result.ok) setAnswer({ state: 'ready', studio: result.data });
     else if (result.status === 404) setAnswer({ state: 'off' });
     else setAnswer({ state: 'failed' });
@@ -125,10 +133,39 @@ export function StudioEditorRoute() {
         </Slip>
       </div>
     );
+  // A v2 draft (saved by a direct API call while the editor still edits v1, ruling R1).
+  if (!editableHere(studio))
+    return (
+      <div className="pst-gate">
+        <h1 className="pst-gate__title">Page Studio</h1>
+        <Slip
+          title="Your draft is in the new Page Studio"
+          actions={
+            <>
+              <Button variant="primary" onClick={() => void read()}>
+                Reload
+              </Button>
+              <Link className="tm-button tm-button--quiet" href={MY_PAGE}>
+                Back to My page
+              </Link>
+            </>
+          }
+        >
+          This editor can’t open it yet. Your draft and your page are kept as
+          they are.
+        </Slip>
+      </div>
+    );
   return <StudioEditor initial={studio} />;
 }
 
-function StudioEditor({ initial }: { initial: MyStudio }) {
+/** Today in Lagos, as the server reads a draft's events. */
+const lagosToday = () =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos' }).format(
+    new Date(),
+  );
+
+function StudioEditor({ initial }: { initial: MyStudioOld }) {
   const id = useId();
   const { profile } = useRecipient();
   const studio = useStudioDraft(initial);
@@ -145,7 +182,9 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const published =
     studio.published === null
       ? false
-      : JSON.stringify(studio.published) === JSON.stringify(studio.draft)
+      : // Published as v2 (ruling R1): the same when the draft reads as what was published.
+        JSON.stringify(studio.published) ===
+          JSON.stringify(resolveStudio(studio.draft, lagosToday()))
         ? 'same'
         : true;
   const shownDevice: PreviewDevice = wide ? device : 'phone';

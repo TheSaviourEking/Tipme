@@ -3,25 +3,50 @@ import {
   DESIGN_CHECK_VERSION,
   STUDIO_LIMITS,
   checkDesign,
-  defaultStudioDocument,
-  deriveStudioPalette,
+  checkDesignV1,
+  defaultStudioDocumentV1,
+  photoAccentOf,
+  photoAccentSchema,
+  proItemsOf,
+  resolveCover,
   resolveStudio,
+  resolveStudioV1,
   studioDocumentSchema,
+  studioDocumentV1Schema,
+  studioDraftRefusal,
+  studioImageIdsOf,
+  studioShown,
+  studioTokens,
   visibleLinks,
-  type MyStudio,
+  type MyStudioV1,
   type PagePlan,
+  type PhotoAccent,
   type PublicStudio,
   type SocialLink,
   type StudioBlock,
+  type StudioBlockV1,
   type StudioCheckContext,
+  type StudioCheckContextV1,
   type StudioDocument,
+  type StudioDocumentV1,
   type StudioIssue,
 } from '@tipme/contracts';
-import { and, eq, gt, inArray, ne, notInArray, sql } from 'drizzle-orm';
+import {
+  and,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  notInArray,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import {
   pageStudios,
+  profileAvatars,
   profiles,
   studioImageFiles,
   studioImages,
@@ -34,14 +59,32 @@ import { newId } from './ids.js';
 import type { MailSealing } from './mail-queue.js';
 import { lockLivePage, myPageId, removeObjects } from './page-images.js';
 
-// Page Studio storage (plan 2026-11-12-page-studio, Task 7). A Pro page keeps a draft and a
-// published version; saving never needs a passing design check, publishing always does, with the
-// server's own facts (photo sizes, video status, the page's bio and links). Photos are stored as
-// covers are: re-encoded on the server, each file in Postgres or in R2, objects written before
-// their rows and removed after the change commits. Free pages get an in-memory preview, never
-// stored; a lapsed Pro page keeps everything, read-only, and shows the standard page.
+// Page Studio storage (plan 2026-11-12-page-studio, Task 7; styles plan Task 10). A page keeps a
+// draft and a published version; saving never needs a passing design check, publishing always
+// does, with the server's own facts (photo sizes, video status, the page's bio, links, plan, cover
+// and avatar). Photos are stored as covers are: re-encoded on the server, each file in Postgres or
+// in R2, objects written before their rows and removed after the change commits.
+//
+// Two formats, for now (styles plan ruling R1): a v1 draft (the old editor's) saves on Pro only, as
+// before; a v2 draft saves on any plan under the Free and Pro draft rules (§11, `studioDraftRefusal`).
+// Publishing always stores v2 and runs the v3 check with the page's real plan. The public page shows
+// what `studioShown` makes of the published version for the plan now (§12.5): nothing is deleted
+// when Pro lapses, and it all comes back with Pro. Photo uploads and focus changes are Pro only.
 
 type Db = Database | Tx;
+/** A stored draft as read: v1 stays v1 (the old editor's), v2 stays v2. */
+type AnyStudio = StudioDocumentV1 | StudioDocument;
+
+const isV2 = (doc: AnyStudio): doc is StudioDocument => doc.v === 2;
+
+/** A stored draft or published version, in its own format. Never throws. */
+function readStored(raw: unknown, today: string): AnyStudio {
+  return typeof raw === 'object' &&
+    raw !== null &&
+    (raw as { v?: unknown }).v === 2
+    ? resolveStudio(raw, today)
+    : resolveStudioV1(raw, today);
+}
 
 /** Today in Lagos, YYYY-MM-DD: events before it are hidden. */
 export const lagosToday = (now = new Date()) =>
@@ -55,8 +98,9 @@ export const studioImagePathOf = (
   version: number,
 ) => `/v1/studio-images/${profileId}/${imageId}/${version}`;
 
-/** Every image id a document uses: photos, gallery photos and photo row backgrounds. */
-export function studioImageIds(doc: StudioDocument): Set<string> {
+/** Every image id a document uses: photos, gallery photos and (v1) photo row backgrounds. */
+export function studioImageIds(doc: AnyStudio): Set<string> {
+  if (isV2(doc)) return studioImageIdsOf(doc);
   const ids = new Set<string>();
   for (const row of doc.rows) {
     if (typeof row.background === 'object') ids.add(row.background.photo);
@@ -70,7 +114,13 @@ export function studioImageIds(doc: StudioDocument): Set<string> {
 }
 
 /** Every video link a document uses, for the server's video check. */
-export function studioVideoUrls(doc: StudioDocument): string[] {
+export function studioVideoUrls(doc: AnyStudio): string[] {
+  if (isV2(doc))
+    return [
+      ...new Set(
+        doc.blocks.flatMap((b) => (b.kind === 'video' ? [b.url] : [])),
+      ),
+    ];
   return [
     ...new Set(
       doc.rows.flatMap((row) =>
@@ -81,10 +131,22 @@ export function studioVideoUrls(doc: StudioDocument): string[] {
 }
 
 /** The document without one photo: its blocks go, a gallery left empty goes, a row's photo goes. */
-export function withoutStudioImage(
-  doc: StudioDocument,
+export function withoutStudioImage<D extends AnyStudio>(
+  doc: D,
   imageId: string,
-): StudioDocument {
+): D;
+export function withoutStudioImage(doc: AnyStudio, imageId: string): AnyStudio {
+  if (isV2(doc))
+    return {
+      ...doc,
+      blocks: doc.blocks.flatMap((b): StudioBlock[] => {
+        if (b.kind === 'photo' && b.imageId === imageId) return [];
+        if (b.kind !== 'gallery') return [b];
+        const images = b.images.filter((i) => i.imageId !== imageId);
+        if (images.length === b.images.length) return [b];
+        return images.length ? [{ ...b, images }] : [];
+      }),
+    };
   return {
     ...doc,
     rows: doc.rows.map((row) => ({
@@ -94,7 +156,7 @@ export function withoutStudioImage(
           ? 'page'
           : row.background,
       cells: row.cells.map((cell) =>
-        cell.flatMap((b): StudioBlock[] => {
+        cell.flatMap((b): StudioBlockV1[] => {
           if (b.kind === 'photo' && b.imageId === imageId) return [];
           if (b.kind !== 'gallery') return [b];
           const images = b.images.filter((i) => i.imageId !== imageId);
@@ -112,6 +174,13 @@ interface PageFacts {
   plan: PagePlan;
   bio: string | null;
   links: SocialLink[];
+  /** The display name, for the check's name-fallback notice. */
+  name: string;
+  hasAvatar: boolean;
+  /** The profile photo a stored photo accent must have come from; null without a photo. */
+  avatar: { avatarVersion: number } | null;
+  /** The cover set in Settings, as the v3 check reads it. */
+  coverKind: StudioCheckContext['coverKind'];
 }
 
 async function pageFacts(db: Db, profileId: string): Promise<PageFacts> {
@@ -124,6 +193,12 @@ async function pageFacts(db: Db, profileId: string): Promise<PageFacts> {
       bioPublic: profiles.bioPublic,
       links: profiles.links,
       socialsPublic: profiles.socialsPublic,
+      displayName: profiles.displayName,
+      avatarPath: profiles.avatarPath,
+      avatarVersion: profiles.avatarVersion,
+      coverPath: profiles.coverPath,
+      coverDesign: profiles.coverDesign,
+      coverAnimation: profiles.coverAnimation,
     })
     .from(profiles)
     .where(eq(profiles.id, profileId));
@@ -142,6 +217,8 @@ interface ImageFacts {
   focalX: number;
   focalY: number;
   bytes: Record<string, number>;
+  /** The largest stored file (the master, at the photo's own width): the v3 check scales it. */
+  masterBytes: number;
 }
 
 async function imagesOf(db: Db, profileId: string): Promise<ImageFacts[]> {
@@ -175,6 +252,10 @@ async function imagesOf(db: Db, profileId: string): Promise<ImageFacts[]> {
       files
         .filter((f) => f.imageId === r.id && f.name !== 'master')
         .map((f) => [f.name, f.size]),
+    ),
+    masterBytes: Math.max(
+      0,
+      ...files.filter((f) => f.imageId === r.id).map((f) => f.size),
     ),
   }));
 }
@@ -224,12 +305,13 @@ export function recordStudioVideoChecks(
   });
 }
 
-async function contextFor(
+/** The v1 check's facts (the old editor's): photo sizes, video status, bio and links. */
+async function contextV1For(
   db: Db,
   page: PageFacts,
-  doc: StudioDocument,
+  doc: StudioDocumentV1,
   images?: ImageFacts[],
-): Promise<StudioCheckContext> {
+): Promise<StudioCheckContextV1> {
   const all = images ?? (await imagesOf(db, page.id));
   const videos = await studioVideoChecksFor(db, studioVideoUrls(doc));
   return {
@@ -244,7 +326,35 @@ async function contextFor(
   };
 }
 
-async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
+/** The v3 check's facts: the v1 ones, the name, and the page's plan, cover and avatar now. */
+async function contextFor(
+  db: Db,
+  page: PageFacts,
+  doc: StudioDocument,
+  images?: ImageFacts[],
+): Promise<StudioCheckContext> {
+  const all = images ?? (await imagesOf(db, page.id));
+  const videos = await studioVideoChecksFor(db, studioVideoUrls(doc));
+  return {
+    images: Object.fromEntries(
+      all.map((i) => [
+        i.id,
+        { width: i.width, height: i.height, bytes: i.masterBytes },
+      ]),
+    ),
+    videos,
+    profile: {
+      name: page.name,
+      bio: Boolean(page.bio),
+      links: linkCount(page),
+    },
+    plan: page.plan === 'pro' ? 'pro' : 'free',
+    coverKind: page.coverKind,
+    hasAvatar: page.hasAvatar,
+  };
+}
+
+async function myStudioOf(db: Db, profileId: string): Promise<MyStudioV1> {
   const page = await pageFacts(db, profileId);
   const [row] = await db
     .select()
@@ -252,17 +362,25 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
     .where(eq(pageStudios.profileId, profileId));
   const today = lagosToday();
   const draft = row
-    ? resolveStudio(row.draft, today)
-    : defaultStudioDocument({ bio: page.bio, links: linkCount(page) });
+    ? readStored(row.draft, today)
+    : defaultStudioDocumentV1({ bio: page.bio, links: linkCount(page) });
   const images = await imagesOf(db, profileId);
-  const context = await contextFor(db, page, draft, images);
+  const checked = isV2(draft)
+    ? await (async () => {
+        const context = await contextFor(db, page, draft, images);
+        return { context, check: checkDesign(draft, context) };
+      })()
+    : await (async () => {
+        const context = await contextV1For(db, page, draft, images);
+        return { context, check: checkDesignV1(draft, context) };
+      })();
   return {
     draft,
     published: row?.published ? resolveStudio(row.published, today) : null,
     rev: row?.rev ?? 0,
     publishedAt: row?.publishedAt?.toISOString() ?? null,
-    check: checkDesign(draft, context),
-    context,
+    check: checked.check,
+    context: checked.context,
     images: images.map((i) => ({
       imageId: i.id,
       path: ownerPath(i.id, i.version),
@@ -271,19 +389,30 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
       focalX: i.focalX,
       focalY: i.focalY,
     })),
+    // The old editor's gate, unchanged until it moves to v2 (ruling R1).
     access: page.plan === 'pro' ? 'edit' : row ? 'lapsed' : 'preview',
+    plan: page.plan === 'pro' ? 'pro' : 'free',
+    photoAccent: photoAccentOf(row?.photoAccent ?? null, page.avatar),
   };
 }
 
 /** The owner's Studio: the draft, the published version, the check and the photos. */
-export function getMyStudio(db: Database, userId: string): Promise<MyStudio> {
+export function getMyStudio(db: Database, userId: string): Promise<MyStudioV1> {
   return guarded(async () => myStudioOf(db, await myPageId(db, userId)));
+}
+
+/**
+ * Locks the page and reads its facts under the lock. A plan change takes the same row lock
+ * (recomputePlan), so the plan read here holds until the change commits.
+ */
+async function lockPage(tx: Tx, profileId: string) {
+  await lockLivePage(tx, profileId);
+  return pageFacts(tx, profileId);
 }
 
 /** Locks the page and refuses a page that isn't Pro (now, under the lock). */
 async function lockProPage(tx: Tx, profileId: string) {
-  await lockLivePage(tx, profileId);
-  const page = await pageFacts(tx, profileId);
+  const page = await lockPage(tx, profileId);
   if (page.plan !== 'pro') throw new OperationError('STUDIO_PRO_REQUIRED');
   return page;
 }
@@ -317,22 +446,30 @@ async function dropUnused(
 }
 
 /**
- * Saves the draft (already accepted by `studioDocumentSchema`) if it was based on the latest
- * revision; STUDIO_DRAFT_STALE otherwise, keeping the newer one. Photos must be this page's own.
+ * Saves the draft if it was based on the latest revision; STUDIO_DRAFT_STALE otherwise, keeping
+ * the newer one. Photos must be this page's own. A v1 draft (the old editor's) needs Pro, as
+ * before. A v2 draft saves on any plan, except that on Free it may not add a Pro style, the photo
+ * accent or a Pro block that neither the stored draft nor the published version holds (§11, R4):
+ * STUDIO_PRO_REQUIRED.
  */
 export function saveStudioDraft(
   db: Database,
   userId: string,
-  input: { rev: number; draft: StudioDocument },
-): Promise<MyStudio> {
+  input: { rev: number; draft: AnyStudio },
+): Promise<MyStudioV1> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
+    const next = input.draft;
     // The API's pipe checked it; checked again here, as nothing else may reach the column.
-    if (!studioDocumentSchema.safeParse(input.draft).success)
-      throw new OperationError('STUDIO_DRAFT_INVALID');
+    const valid = isV2(next)
+      ? studioDocumentSchema.safeParse(next).success
+      : studioDocumentV1Schema.safeParse(next).success;
+    if (!valid) throw new OperationError('STUDIO_DRAFT_INVALID');
     await db.transaction(async (tx) => {
-      await lockProPage(tx, profileId);
-      const used = [...studioImageIds(input.draft)];
+      const page = isV2(next)
+        ? await lockPage(tx, profileId)
+        : await lockProPage(tx, profileId);
+      const used = [...studioImageIds(next)];
       if (used.length) {
         const owned = await tx
           .select({ id: studioImages.id })
@@ -347,21 +484,37 @@ export function saveStudioDraft(
           throw new OperationError('STUDIO_DRAFT_INVALID');
       }
       const [row] = await tx
-        .select({ rev: pageStudios.rev })
+        .select({
+          rev: pageStudios.rev,
+          draft: pageStudios.draft,
+          published: pageStudios.published,
+        })
         .from(pageStudios)
         .where(eq(pageStudios.profileId, profileId))
         .for('update');
       if ((row?.rev ?? 0) !== input.rev)
         throw new OperationError('STUDIO_DRAFT_STALE');
+      if (isV2(next)) {
+        const today = lagosToday();
+        const refusal = studioDraftRefusal(
+          next,
+          {
+            draft: row ? resolveStudio(row.draft, today) : null,
+            published: row?.published
+              ? resolveStudio(row.published, today)
+              : null,
+          },
+          page.plan === 'pro' ? 'pro' : 'free',
+        );
+        if (refusal) throw new OperationError(refusal);
+      }
       if (!row)
-        await tx
-          .insert(pageStudios)
-          .values({ profileId, draft: input.draft, rev: 1 });
+        await tx.insert(pageStudios).values({ profileId, draft: next, rev: 1 });
       else
         await tx
           .update(pageStudios)
           .set({
-            draft: input.draft,
+            draft: next,
             rev: sql`${pageStudios.rev} + 1`,
             updatedAt: sql`now()`,
           })
@@ -372,13 +525,16 @@ export function saveStudioDraft(
 }
 
 export type PublishResult =
-  | { published: true; studio: MyStudio; handle: string }
-  | { published: false; studio: MyStudio; issues: StudioIssue[] };
+  | { published: true; studio: MyStudioV1; handle: string }
+  | { published: false; studio: MyStudioV1; issues: StudioIssue[] };
 
 /**
- * Publishes the draft when the design check passes with the server's facts; otherwise nothing
- * changes and the issues come back (there is no "publish anyway", owner ruling 12). Photos used by
- * neither version are deleted.
+ * Publishes the draft, as v2, when the v3 design check passes with the server's facts and the
+ * page's plan read under the page lock; otherwise nothing changes and the issues come back (there
+ * is no "publish anyway", owner ruling 12). A Free page publishing anything Pro gets `pro-only`.
+ * When the version uses anything Pro, the write also requires the plan to be Pro, as setThanks
+ * does, so a plan change can never put a Pro design live. The draft is kept as it was (a v1 draft
+ * stays v1 for the old editor). Photos used by neither version are deleted.
  */
 export function publishStudio(
   db: Database,
@@ -389,7 +545,7 @@ export function publishStudio(
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const outcome = await db.transaction(async (tx) => {
-      const page = await lockProPage(tx, profileId);
+      const page = await lockPage(tx, profileId);
       const [row] = await tx
         .select()
         .from(pageStudios)
@@ -397,19 +553,59 @@ export function publishStudio(
         .for('update');
       if (!row || row.rev !== input.rev)
         throw new OperationError('STUDIO_DRAFT_STALE');
-      const draft = resolveStudio(row.draft, lagosToday());
-      const { issues } = checkDesign(draft, await contextFor(tx, page, draft));
+      const today = lagosToday();
+      const version = resolveStudio(row.draft, today);
+      const context = await contextFor(tx, page, version);
+      const { issues } = checkDesign(version, context);
       if (issues.length) return { issues, keys: [] as string[] };
-      await tx
+      const pro = proItemsOf(version);
+      const needsPro = pro.style || pro.photoAccent || pro.blockIds.length > 0;
+      // Backup, not the gate: the plan above was read under the page's row lock, which a plan
+      // change also takes (recomputePlan), so it can't change before this commits, and the check
+      // has already refused Pro on Free (tested: "a plan change during publish cannot put a Pro
+      // style live"). The write still requires Pro, as setThanks does, in case anything ever
+      // changes the plan without that lock; it can't be reached while the lock holds.
+
+      const written = await tx
         .update(pageStudios)
         .set({
-          published: draft,
+          published: version,
           publishedCheckVersion: DESIGN_CHECK_VERSION,
           publishedAt: sql`now()`,
           updatedAt: sql`now()`,
         })
-        .where(eq(pageStudios.profileId, profileId));
-      const keys = await dropUnused(tx, profileId, studioImageIds(draft));
+        .where(
+          and(
+            eq(pageStudios.profileId, profileId),
+            ...(needsPro
+              ? [
+                  inArray(
+                    pageStudios.profileId,
+                    tx
+                      .select({ id: profiles.id })
+                      .from(profiles)
+                      .where(
+                        and(
+                          eq(profiles.id, profileId),
+                          eq(profiles.plan, 'pro'),
+                        ),
+                      ),
+                  ),
+                ]
+              : []),
+          ),
+        )
+        .returning({ id: pageStudios.profileId });
+      if (written.length === 0)
+        return {
+          issues: checkDesign(version, { ...context, plan: 'free' }).issues,
+          keys: [] as string[],
+        };
+      const keep = new Set([
+        ...studioImageIds(version),
+        ...studioImageIds(readStored(row.draft, today)),
+      ]);
+      const keys = await dropUnused(tx, profileId, keep);
       return { issues: [] as StudioIssue[], keys, handle: page.handle };
     });
     await removeObjects(store, outcome.keys);
@@ -428,11 +624,12 @@ export function discardStudioDraft(
   db: Database,
   userId: string,
   store?: PhotoStore,
-): Promise<MyStudio> {
+): Promise<MyStudioV1> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const keys = await db.transaction(async (tx) => {
-      await lockProPage(tx, profileId);
+      // Any plan: a lapsed Pro draft can be discarded too (§11).
+      await lockLivePage(tx, profileId);
       const [row] = await tx
         .select()
         .from(pageStudios)
@@ -456,7 +653,7 @@ export function discardStudioDraft(
       return dropUnused(
         tx,
         profileId,
-        studioImageIds(resolveStudio(row.published, lagosToday())),
+        studioImageIds(readStored(row.published, lagosToday())),
       );
     });
     await removeObjects(store, keys);
@@ -500,7 +697,7 @@ export function addStudioImage(
   userId: string,
   input: { width: number; height: number; files: StudioImageFiles },
   store?: PhotoStore,
-): Promise<{ studio: MyStudio; imageId: string }> {
+): Promise<{ studio: MyStudioV1; imageId: string }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const imageId = randomUUID();
@@ -593,7 +790,7 @@ export function setStudioFocus(
     files: StudioImageFiles;
   },
   store?: PhotoStore,
-): Promise<{ studio: MyStudio; handle: string; published: boolean }> {
+): Promise<{ studio: MyStudioV1; handle: string; published: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const rows = await putFiles(store, input.imageId, profileId, input.files);
@@ -640,7 +837,7 @@ export function setStudioFocus(
           .where(eq(pageStudios.profileId, profileId));
         published = Boolean(
           row?.published &&
-          studioImageIds(resolveStudio(row.published, lagosToday())).has(
+          studioImageIds(readStored(row.published, lagosToday())).has(
             input.imageId,
           ),
         );
@@ -659,7 +856,8 @@ export function setStudioFocus(
 
 /**
  * A crop to serve publicly: only the current version of a photo the published version of a live,
- * active Pro page uses. Never the master.
+ * active Pro page uses. Never the master. On Free every photo block is hidden (§12.5), so none
+ * is served.
  */
 export function studioImageFile(
   db: Database,
@@ -685,7 +883,7 @@ export function studioImageFile(
       );
     if (!row?.published) return null;
     if (
-      !studioImageIds(resolveStudio(row.published, lagosToday())).has(
+      !studioImageIdsOf(resolveStudio(row.published, lagosToday())).has(
         input.imageId,
       )
     )
@@ -719,31 +917,46 @@ export function myStudioImageFile(
 }
 
 /**
- * The published design for the public page, or undefined: only for a Pro page whose published
- * version passes today's design check with today's facts. A version a newer rule (or a removed
+ * The published design for the public page, or undefined for the standard page: the published
+ * version (v2; a stored v1 is read as v2) as the page's plan shows it now (`studioShown`, §12.5),
+ * when that passes today's design check with today's facts. A version a newer rule (or a removed
  * photo, a gone video) now fails shows the standard page instead; the editor lists the fixes.
+ * Only the photos the shown version uses are listed.
  */
 export async function publicStudioFor(
   db: Db,
   page: PageFacts,
 ): Promise<PublicStudio | undefined> {
-  if (page.plan !== 'pro') return undefined;
   const [row] = await db
-    .select({ published: pageStudios.published })
+    .select({
+      published: pageStudios.published,
+      photoAccent: pageStudios.photoAccent,
+    })
     .from(pageStudios)
     .where(eq(pageStudios.profileId, page.id));
   if (!row?.published) return undefined;
-  const document = resolveStudio(row.published, lagosToday());
+  const document = studioShown(
+    resolveStudio(row.published, lagosToday()),
+    page.plan === 'pro' ? 'pro' : 'free',
+  );
+  if (!document) return undefined;
   const images = await imagesOf(db, page.id);
   const { issues } = checkDesign(
     document,
     await contextFor(db, page, document, images),
   );
   if (issues.length) return undefined;
-  const used = studioImageIds(document);
+  const used = studioImageIdsOf(document);
   return {
     document,
-    palette: deriveStudioPalette(document.brand),
+    // "From your photo" (§6): the stored values for the current photo, or their fallback. With
+    // no photo, or one newer than the stored values, the style's own accent: never a stale one.
+    // On Free `studioShown` has already set the photo accent back to the style's own.
+    palette: studioTokens(
+      document.style,
+      document.accent,
+      photoAccentOf(row.photoAccent, page.avatar),
+    ),
     images: Object.fromEntries(
       images
         .filter((i) => used.has(i.id))
@@ -760,9 +973,30 @@ export async function publicStudioFor(
   };
 }
 
+/** The cover set in Settings, as the check reads it (photo, design, automatic or animated). */
+function coverKindOf(row: {
+  handleLower: string;
+  plan: string;
+  coverPath: string | null;
+  coverDesign: string | null;
+  coverAnimation: string | null;
+}): StudioCheckContext['coverKind'] {
+  const cover = resolveCover({
+    handle: row.handleLower,
+    coverPath: row.coverPath,
+    coverDesign: row.coverDesign,
+    coverColour: null,
+    coverAnimation: row.coverAnimation,
+    plan: row.plan,
+  });
+  if (cover.kind !== 'design') return cover.kind;
+  // A design nobody chose (or one since removed from the catalogue) is the automatic one.
+  return cover.design === row.coverDesign ? 'design' : 'automatic';
+}
+
 /**
  * The page facts the design check reads, from a profiles row: only what the person made public,
- * since that is what the About and Links blocks show.
+ * since that is what the page shows.
  */
 export function studioPageFacts(row: {
   id: string;
@@ -772,6 +1006,12 @@ export function studioPageFacts(row: {
   bioPublic: boolean;
   links: SocialLink[];
   socialsPublic: boolean;
+  displayName: string;
+  avatarPath: string | null;
+  avatarVersion: number;
+  coverPath: string | null;
+  coverDesign: string | null;
+  coverAnimation: string | null;
 }): PageFacts {
   return {
     id: row.id,
@@ -779,7 +1019,122 @@ export function studioPageFacts(row: {
     plan: row.plan as PagePlan,
     bio: row.bioPublic ? row.bio : null,
     links: row.socialsPublic ? row.links : [],
+    name: row.displayName,
+    hasAvatar: row.avatarPath !== null,
+    avatar:
+      row.avatarPath !== null ? { avatarVersion: row.avatarVersion } : null,
+    coverKind: coverKindOf(row),
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// "From your photo" (styles spec §6). The API samples the profile photo and stores what
+// `pickPhotoAccent` made of it; only the server writes the column, and only for the photo it
+// sampled. Reads go through `photoAccentOf`, so a value for an older photo is never shown.
+
+/**
+ * The page's profile photo, to compute its photo accent from: its version and bytes (null when
+ * they can't be read, e.g. an object store without the object). Null when the page has no Studio
+ * row (nothing would use it) or no photo.
+ */
+export function studioPhotoSource(
+  db: Database,
+  userId: string,
+  store?: PhotoStore,
+): Promise<{
+  profileId: string;
+  avatarVersion: number;
+  webp: Buffer | null;
+} | null> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    const [row] = await db
+      .select({
+        version: profileAvatars.version,
+        bytes: profileAvatars.bytes,
+        objectKey: profileAvatars.objectKey,
+      })
+      .from(profileAvatars)
+      .innerJoin(
+        pageStudios,
+        eq(pageStudios.profileId, profileAvatars.profileId),
+      )
+      .where(eq(profileAvatars.profileId, profileId));
+    if (!row) return null;
+    const webp =
+      row.bytes ??
+      (row.objectKey && store ? await store.get(row.objectKey) : null);
+    return { profileId, avatarVersion: row.version, webp: webp ?? null };
+  });
+}
+
+/**
+ * Stores the photo accent computed from photo `avatarVersion`, or clears it (null: that photo
+ * could not be sampled), only while that is still the page's photo (a newer upload or a removal
+ * in the meantime wins). Returns whether it was written.
+ */
+export function setPhotoAccent(
+  db: Database,
+  profileId: string,
+  avatarVersion: number,
+  accent: PhotoAccent | null,
+): Promise<boolean> {
+  return guarded(async () => {
+    // Only the server's own values reach the column, and from there the page's CSS.
+    const value = accent === null ? null : photoAccentSchema.parse(accent);
+    if (value && value.avatarVersion !== avatarVersion)
+      throw new OperationError('STUDIO_DRAFT_INVALID');
+    const written = await db
+      .update(pageStudios)
+      .set({ photoAccent: value })
+      .where(
+        and(
+          eq(pageStudios.profileId, profileId),
+          inArray(
+            pageStudios.profileId,
+            db
+              .select({ id: profiles.id })
+              .from(profiles)
+              .where(
+                and(
+                  eq(profiles.id, profileId),
+                  eq(profiles.avatarVersion, avatarVersion),
+                  isNotNull(profiles.avatarPath),
+                ),
+              ),
+          ),
+        ),
+      )
+      .returning({ id: pageStudios.profileId });
+    return written.length > 0;
+  });
+}
+
+/**
+ * Clears the page's photo accent once its photo is gone; a photo uploaded in the meantime keeps
+ * the accent stored for it.
+ */
+export function clearPhotoAccent(db: Database, userId: string): Promise<void> {
+  return guarded(async () => {
+    const profileId = await myPageId(db, userId);
+    await db
+      .update(pageStudios)
+      .set({ photoAccent: null })
+      .where(
+        and(
+          eq(pageStudios.profileId, profileId),
+          inArray(
+            pageStudios.profileId,
+            db
+              .select({ id: profiles.id })
+              .from(profiles)
+              .where(
+                and(eq(profiles.id, profileId), isNull(profiles.avatarPath)),
+              ),
+          ),
+        ),
+      );
+  });
 }
 
 /** One Studio photo's master as staff see it, whatever the page's state; audited. */
@@ -865,12 +1220,12 @@ export function staffRemoveStudioImage(
           .update(pageStudios)
           .set({
             draft: withoutStudioImage(
-              resolveStudio(row.draft, today),
+              readStored(row.draft, today),
               input.imageId,
             ),
             published: row.published
               ? withoutStudioImage(
-                  resolveStudio(row.published, today),
+                  readStored(row.published, today),
                   input.imageId,
                 )
               : null,

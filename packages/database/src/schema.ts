@@ -2203,8 +2203,8 @@ export const profileCoverRenditions = pgTable(
 
 /**
  * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
- * `published` are StudioDocument JSON, written only after the strict schema accepted them; a
- * read always goes through `resolveStudio`. `rev` counts saves, so two tabs can't overwrite each
+ * `published` are StudioDocumentV1 JSON, written only after the strict schema accepted them; a
+ * read always goes through `resolveStudioV1`. `rev` counts saves, so two tabs can't overwrite each
  * other. Kept when Pro lapses (owner ruling): the standard page shows until Pro returns.
  */
 export const pageStudios = pgTable('page_studios', {
@@ -2219,6 +2219,12 @@ export const pageStudios = pgTable('page_studios', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  /**
+   * "From your photo" (styles spec §5.3, §6): a `PhotoAccent` the server computed from the
+   * profile photo (`avatarVersion` names which), or the curated fallback when no colour passed.
+   * Written only by the server; read through `photoAccentOf`, so a stale or invalid value is none.
+   */
+  photoAccent: jsonb('photo_accent'),
 });
 
 /**

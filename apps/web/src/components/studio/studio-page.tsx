@@ -3,7 +3,7 @@ import { preload } from 'react-dom';
 import {
   studioEagerImages,
   type PublicProfile,
-  type PublicStudio,
+  type PublicStudioV1,
 } from '@tipme/contracts';
 import { needsTextFont, type StudioRenderContext } from './studio-blocks';
 import { StudioRowView } from './studio-row';
@@ -25,7 +25,7 @@ export function StudioPage({
   tipBlock,
   footer,
 }: {
-  studio: PublicStudio;
+  studio: PublicStudioV1;
   profile: PublicProfile;
   identity: ReactNode;
   cover: ReactNode;

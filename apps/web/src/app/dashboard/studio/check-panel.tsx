@@ -2,7 +2,7 @@
 import { useRef, useState } from 'react';
 import type {
   StudioCheckResult,
-  StudioDocument,
+  StudioDocumentV1,
   StudioIssue,
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
@@ -25,7 +25,7 @@ export function CheckPanel({
   /** Unique per copy: the panel shows beside the preview and in the Check tab. */
   id: string;
   check: StudioCheckResult;
-  draft: StudioDocument;
+  draft: StudioDocumentV1;
   onFix(issue: StudioIssue, fixId: string): void;
   /** A fix that needs the person's input: opens the block's form at the field (Blocks tab). */
   onInput(issue: StudioIssue, fixId: string): void;

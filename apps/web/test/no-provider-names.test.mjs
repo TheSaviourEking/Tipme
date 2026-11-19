@@ -10,7 +10,11 @@ import ts from 'typescript';
 // Identifiers (BachsPaymentAccountStatus) and comments are fine; text a user can read is not.
 const webRoot = fileURLToPath(new URL('..', import.meta.url));
 const repoRoot = join(webRoot, '..', '..');
-const roots = [join(webRoot, 'src'), join(repoRoot, 'packages/mail/src')];
+const roots = [
+  join(webRoot, 'src'),
+  join(repoRoot, 'packages/mail/src'),
+  join(repoRoot, 'packages/contracts/src'),
+];
 
 const exempt = [
   'apps/web/src/app/ops/',
@@ -22,6 +26,10 @@ const exempt = [
 // Provider ids the code compares and never shows, matched against a literal's whole text. These
 // are the only provider-id literals in the scanned files today.
 const allowedIds = new Set(['bachs-live', 'bachs-sandbox']);
+// 'bachs' is the name recorded on payment rows; it is stored, never shown, and only here.
+const allowedIdsIn = {
+  'packages/contracts/src/provider-names.ts': new Set(['bachs']),
+};
 // Staff-only text is out of scope on purpose: /ops, ops-client.ts and operator summaries such as
 // packages/database/src/operations/issues.ts may name providers.
 const extraFiles = [
@@ -51,7 +59,7 @@ const kinds = {
 // The text a user could read: string and template literals, JSX text and string JSX attributes.
 // The TypeScript parser drops comments and never reads identifiers as text, so neither can hide
 // or cause a hit, and a '//' or '/*' inside a string cannot swallow code.
-export function visibleProviderNames(code, ext = '.tsx') {
+export function visibleProviderNames(code, ext = '.tsx', also = new Set()) {
   if (!(ext in kinds))
     return code.split('\n').filter((line) => /\bbachs\b/i.test(line));
   const source = ts.createSourceFile(
@@ -63,7 +71,7 @@ export function visibleProviderNames(code, ext = '.tsx') {
   );
   const hits = [];
   const check = (text) => {
-    if (/\bbachs\b/i.test(text) && !allowedIds.has(text))
+    if (/\bbachs\b/i.test(text) && !allowedIds.has(text) && !also?.has(text))
       hits.push(text.trim());
   };
   const visit = (node) => {
@@ -116,6 +124,21 @@ test('the guard allows identifiers, provider ids and comments', () => {
     assert.equal(visibleProviderNames(code).length, 0, code);
 });
 
+test("a stored 'bachs' id is allowed only in its own file", () => {
+  const code = "const p = 'bachs';";
+  assert.equal(visibleProviderNames(code).length, 1);
+  assert.equal(visibleProviderNames('<p>bachs</p>', '.tsx').length, 1);
+  assert.equal(
+    visibleProviderNames(
+      code,
+      '.ts',
+      allowedIdsIn['packages/contracts/src/provider-names.ts'],
+    ).length,
+    0,
+  );
+  assert.equal(allowedIdsIn['apps/web/src/app/page.tsx'], undefined);
+});
+
 test('no user-readable source text names a payment provider', () => {
   const offenders = [];
   for (const file of [...roots.flatMap(sourceFiles), ...extraFiles]) {
@@ -124,6 +147,7 @@ test('no user-readable source text names a payment provider', () => {
     for (const hit of visibleProviderNames(
       readFileSync(file, 'utf8'),
       extname(file),
+      allowedIdsIn[rel],
     ))
       offenders.push(`${rel}: ${hit}`);
   }

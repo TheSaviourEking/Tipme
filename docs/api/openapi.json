@@ -7524,578 +7524,934 @@
                     "maximum": 9007199254740991
                   },
                   "draft": {
-                    "type": "object",
-                    "properties": {
-                      "v": {
-                        "type": "number",
-                        "const": 1
-                      },
-                      "brand": {
-                        "anyOf": [
-                          {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "string"
-                              }
-                            ],
-                            "items": false,
-                            "minItems": 1,
-                            "maxItems": 1
-                          },
-                          {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "string"
-                              }
-                            ],
-                            "items": false,
-                            "minItems": 2,
-                            "maxItems": 2
-                          }
-                        ]
-                      },
-                      "mode": {
-                        "type": "string",
-                        "enum": [
-                          "light",
-                          "dark",
-                          "auto"
-                        ]
-                      },
-                      "fonts": {
+                    "anyOf": [
+                      {
                         "type": "object",
                         "properties": {
-                          "heading": {
-                            "type": "string",
-                            "enum": [
-                              "manrope",
-                              "dm-serif-display",
-                              "inter",
-                              "work-sans",
-                              "space-grotesk",
-                              "bricolage-grotesque",
-                              "outfit",
-                              "nunito",
-                              "fraunces",
-                              "source-serif-4"
+                          "v": {
+                            "type": "number",
+                            "const": 1
+                          },
+                          "brand": {
+                            "anyOf": [
+                              {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "string"
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 1,
+                                "maxItems": 1
+                              },
+                              {
+                                "type": "array",
+                                "prefixItems": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "string"
+                                  }
+                                ],
+                                "items": false,
+                                "minItems": 2,
+                                "maxItems": 2
+                              }
                             ]
                           },
-                          "body": {
+                          "mode": {
                             "type": "string",
                             "enum": [
-                              "manrope",
-                              "dm-serif-display",
-                              "inter",
-                              "work-sans",
-                              "space-grotesk",
-                              "bricolage-grotesque",
-                              "outfit",
-                              "nunito",
-                              "fraunces",
-                              "source-serif-4"
+                              "light",
+                              "dark",
+                              "auto"
                             ]
+                          },
+                          "fonts": {
+                            "type": "object",
+                            "properties": {
+                              "heading": {
+                                "type": "string",
+                                "enum": [
+                                  "manrope",
+                                  "dm-serif-display",
+                                  "inter",
+                                  "work-sans",
+                                  "space-grotesk",
+                                  "bricolage-grotesque",
+                                  "outfit",
+                                  "nunito",
+                                  "fraunces",
+                                  "source-serif-4",
+                                  "unbounded",
+                                  "anton",
+                                  "linen-serif"
+                                ]
+                              },
+                              "body": {
+                                "type": "string",
+                                "enum": [
+                                  "manrope",
+                                  "dm-serif-display",
+                                  "inter",
+                                  "work-sans",
+                                  "space-grotesk",
+                                  "bricolage-grotesque",
+                                  "outfit",
+                                  "nunito",
+                                  "fraunces",
+                                  "source-serif-4",
+                                  "unbounded",
+                                  "anton",
+                                  "linen-serif"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "heading",
+                              "body"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "scale": {
+                            "type": "string",
+                            "enum": [
+                              "standard",
+                              "compact",
+                              "roomy"
+                            ]
+                          },
+                          "corners": {
+                            "type": "string",
+                            "enum": [
+                              "soft",
+                              "square",
+                              "round"
+                            ]
+                          },
+                          "rows": {
+                            "maxItems": 12,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "columns": {
+                                  "type": "string",
+                                  "enum": [
+                                    "1",
+                                    "1-1",
+                                    "2-1",
+                                    "1-2",
+                                    "1-1-1"
+                                  ]
+                                },
+                                "spacing": {
+                                  "type": "string",
+                                  "enum": [
+                                    "m",
+                                    "s",
+                                    "l"
+                                  ]
+                                },
+                                "background": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "page",
+                                        "card",
+                                        "colour",
+                                        "second"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "photo": {
+                                          "type": "string",
+                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "photo"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
+                                },
+                                "cells": {
+                                  "minItems": 1,
+                                  "maxItems": 3,
+                                  "type": "array",
+                                  "items": {
+                                    "maxItems": 3,
+                                    "type": "array",
+                                    "items": {
+                                      "oneOf": [
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "text"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "paragraph",
+                                                "heading",
+                                                "lead"
+                                              ]
+                                            },
+                                            "level": {
+                                              "anyOf": [
+                                                {
+                                                  "type": "number",
+                                                  "const": 2
+                                                },
+                                                {
+                                                  "type": "number",
+                                                  "const": 3
+                                                }
+                                              ]
+                                            },
+                                            "text": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "photo"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "square",
+                                                "wide",
+                                                "tall",
+                                                "circle"
+                                              ]
+                                            },
+                                            "imageId": {
+                                              "type": "string",
+                                              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                            },
+                                            "alt": {
+                                              "type": "string"
+                                            },
+                                            "decorative": {
+                                              "type": "boolean",
+                                              "const": true
+                                            },
+                                            "caption": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "imageId",
+                                            "alt"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "gallery"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "grid",
+                                                "strip",
+                                                "mosaic"
+                                              ]
+                                            },
+                                            "images": {
+                                              "maxItems": 9,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "imageId": {
+                                                    "type": "string",
+                                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                                  },
+                                                  "alt": {
+                                                    "type": "string"
+                                                  },
+                                                  "decorative": {
+                                                    "type": "boolean",
+                                                    "const": true
+                                                  }
+                                                },
+                                                "required": [
+                                                  "imageId",
+                                                  "alt"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "images"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "video"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "const": "still"
+                                            },
+                                            "url": {
+                                              "type": "string",
+                                              "maxLength": 300
+                                            },
+                                            "caption": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "url"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "services"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "list",
+                                                "cards"
+                                              ]
+                                            },
+                                            "items": {
+                                              "maxItems": 12,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "name": {
+                                                    "type": "string"
+                                                  },
+                                                  "detail": {
+                                                    "type": "string"
+                                                  },
+                                                  "priceMinor": {
+                                                    "type": "string"
+                                                  },
+                                                  "from": {
+                                                    "type": "boolean",
+                                                    "const": true
+                                                  }
+                                                },
+                                                "required": [
+                                                  "name",
+                                                  "priceMinor"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "items"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "events"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "list",
+                                                "cards"
+                                              ]
+                                            },
+                                            "items": {
+                                              "maxItems": 6,
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "date": {
+                                                    "type": "string"
+                                                  },
+                                                  "time": {
+                                                    "type": "string",
+                                                    "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                                  },
+                                                  "title": {
+                                                    "type": "string"
+                                                  },
+                                                  "place": {
+                                                    "type": "string"
+                                                  },
+                                                  "note": {
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "date",
+                                                  "title"
+                                                ],
+                                                "additionalProperties": false
+                                              }
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "items"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "links"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "buttons",
+                                                "icons"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "quote"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "enum": [
+                                                "plain",
+                                                "band"
+                                              ]
+                                            },
+                                            "text": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant",
+                                            "text"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "about"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "const": "plain"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant"
+                                          ],
+                                          "additionalProperties": false
+                                        },
+                                        {
+                                          "type": "object",
+                                          "properties": {
+                                            "id": {
+                                              "type": "string",
+                                              "pattern": "^[a-z0-9]{8}$"
+                                            },
+                                            "kind": {
+                                              "type": "string",
+                                              "const": "supporters"
+                                            },
+                                            "variant": {
+                                              "type": "string",
+                                              "const": "names"
+                                            }
+                                          },
+                                          "required": [
+                                            "id",
+                                            "kind",
+                                            "variant"
+                                          ],
+                                          "additionalProperties": false
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "columns",
+                                "spacing",
+                                "background",
+                                "cells"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
-                          "heading",
-                          "body"
+                          "v",
+                          "brand",
+                          "mode",
+                          "fonts",
+                          "scale",
+                          "corners",
+                          "rows"
                         ],
                         "additionalProperties": false
                       },
-                      "scale": {
-                        "type": "string",
-                        "enum": [
-                          "standard",
-                          "compact",
-                          "roomy"
-                        ]
-                      },
-                      "corners": {
-                        "type": "string",
-                        "enum": [
-                          "soft",
-                          "square",
-                          "round"
-                        ]
-                      },
-                      "rows": {
-                        "maxItems": 12,
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9]{8}$"
-                            },
-                            "columns": {
-                              "type": "string",
-                              "enum": [
-                                "1",
-                                "1-1",
-                                "2-1",
-                                "1-2",
-                                "1-1-1"
-                              ]
-                            },
-                            "spacing": {
-                              "type": "string",
-                              "enum": [
-                                "m",
-                                "s",
-                                "l"
-                              ]
-                            },
-                            "background": {
-                              "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "v": {
+                            "type": "number",
+                            "const": 2
+                          },
+                          "style": {
+                            "type": "string",
+                            "enum": [
+                              "classic",
+                              "clear",
+                              "journal",
+                              "stage",
+                              "signboard",
+                              "sprint",
+                              "tiles",
+                              "linen",
+                              "horizon"
+                            ]
+                          },
+                          "accent": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ink",
+                                  "blue",
+                                  "lagoon",
+                                  "green",
+                                  "violet",
+                                  "rose",
+                                  "coral",
+                                  "amber",
+                                  "photo"
+                                ]
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "mode": {
+                            "type": "string",
+                            "enum": [
+                              "light",
+                              "dark",
+                              "auto"
+                            ]
+                          },
+                          "cover": {
+                            "type": "string",
+                            "enum": [
+                              "yours",
+                              "gradient",
+                              "plain"
+                            ]
+                          },
+                          "blocks": {
+                            "maxItems": 40,
+                            "type": "array",
+                            "items": {
+                              "oneOf": [
                                 {
-                                  "type": "string",
-                                  "enum": [
-                                    "page",
-                                    "card",
-                                    "colour",
-                                    "second"
-                                  ]
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "text"
+                                    },
+                                    "variant": {
+                                      "type": "string",
+                                      "enum": [
+                                        "heading",
+                                        "paragraph"
+                                      ]
+                                    },
+                                    "text": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "variant",
+                                    "text"
+                                  ],
+                                  "additionalProperties": false
                                 },
                                 {
                                   "type": "object",
                                   "properties": {
-                                    "photo": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "photo"
+                                    },
+                                    "imageId": {
                                       "type": "string",
                                       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                    },
+                                    "alt": {
+                                      "type": "string"
+                                    },
+                                    "decorative": {
+                                      "type": "boolean",
+                                      "const": true
+                                    },
+                                    "caption": {
+                                      "type": "string"
                                     }
                                   },
                                   "required": [
-                                    "photo"
+                                    "id",
+                                    "kind",
+                                    "imageId",
+                                    "alt"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "gallery"
+                                    },
+                                    "images": {
+                                      "maxItems": 9,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "imageId": {
+                                            "type": "string",
+                                            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                          },
+                                          "alt": {
+                                            "type": "string"
+                                          },
+                                          "decorative": {
+                                            "type": "boolean",
+                                            "const": true
+                                          }
+                                        },
+                                        "required": [
+                                          "imageId",
+                                          "alt"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "images"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "video"
+                                    },
+                                    "url": {
+                                      "type": "string",
+                                      "maxLength": 300
+                                    },
+                                    "caption": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "url"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "services"
+                                    },
+                                    "items": {
+                                      "maxItems": 12,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "detail": {
+                                            "type": "string"
+                                          },
+                                          "priceMinor": {
+                                            "type": "string"
+                                          },
+                                          "from": {
+                                            "type": "boolean",
+                                            "const": true
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "priceMinor"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "items"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "events"
+                                    },
+                                    "items": {
+                                      "maxItems": 6,
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "date": {
+                                            "type": "string"
+                                          },
+                                          "time": {
+                                            "type": "string",
+                                            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                          },
+                                          "title": {
+                                            "type": "string"
+                                          },
+                                          "place": {
+                                            "type": "string"
+                                          },
+                                          "note": {
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "date",
+                                          "title"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "items"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "quote"
+                                    },
+                                    "text": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "text"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "pattern": "^[a-z0-9]{8}$"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "const": "supporters"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "kind"
                                   ],
                                   "additionalProperties": false
                                 }
                               ]
-                            },
-                            "cells": {
-                              "minItems": 1,
-                              "maxItems": 3,
-                              "type": "array",
-                              "items": {
-                                "maxItems": 3,
-                                "type": "array",
-                                "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "text"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "paragraph",
-                                            "heading",
-                                            "lead"
-                                          ]
-                                        },
-                                        "level": {
-                                          "anyOf": [
-                                            {
-                                              "type": "number",
-                                              "const": 2
-                                            },
-                                            {
-                                              "type": "number",
-                                              "const": 3
-                                            }
-                                          ]
-                                        },
-                                        "text": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "text"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "photo"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "square",
-                                            "wide",
-                                            "tall",
-                                            "circle"
-                                          ]
-                                        },
-                                        "imageId": {
-                                          "type": "string",
-                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                                        },
-                                        "alt": {
-                                          "type": "string"
-                                        },
-                                        "decorative": {
-                                          "type": "boolean",
-                                          "const": true
-                                        },
-                                        "caption": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "imageId",
-                                        "alt"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "gallery"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "grid",
-                                            "strip",
-                                            "mosaic"
-                                          ]
-                                        },
-                                        "images": {
-                                          "maxItems": 9,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "imageId": {
-                                                "type": "string",
-                                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                                              },
-                                              "alt": {
-                                                "type": "string"
-                                              },
-                                              "decorative": {
-                                                "type": "boolean",
-                                                "const": true
-                                              }
-                                            },
-                                            "required": [
-                                              "imageId",
-                                              "alt"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "images"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "video"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "still"
-                                        },
-                                        "url": {
-                                          "type": "string",
-                                          "maxLength": 300
-                                        },
-                                        "caption": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "url"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "services"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "list",
-                                            "cards"
-                                          ]
-                                        },
-                                        "items": {
-                                          "maxItems": 12,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "name": {
-                                                "type": "string"
-                                              },
-                                              "detail": {
-                                                "type": "string"
-                                              },
-                                              "priceMinor": {
-                                                "type": "string"
-                                              },
-                                              "from": {
-                                                "type": "boolean",
-                                                "const": true
-                                              }
-                                            },
-                                            "required": [
-                                              "name",
-                                              "priceMinor"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "items"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "events"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "list",
-                                            "cards"
-                                          ]
-                                        },
-                                        "items": {
-                                          "maxItems": 6,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "date": {
-                                                "type": "string"
-                                              },
-                                              "time": {
-                                                "type": "string",
-                                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
-                                              },
-                                              "title": {
-                                                "type": "string"
-                                              },
-                                              "place": {
-                                                "type": "string"
-                                              },
-                                              "note": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "date",
-                                              "title"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "items"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "links"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "buttons",
-                                            "icons"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "quote"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "plain",
-                                            "band"
-                                          ]
-                                        },
-                                        "text": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "text"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "about"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "plain"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "supporters"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "names"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
-                                }
-                              }
                             }
-                          },
-                          "required": [
-                            "id",
-                            "columns",
-                            "spacing",
-                            "background",
-                            "cells"
-                          ],
-                          "additionalProperties": false
-                        }
+                          }
+                        },
+                        "required": [
+                          "v",
+                          "style",
+                          "accent",
+                          "mode",
+                          "cover",
+                          "blocks"
+                        ],
+                        "additionalProperties": false
                       }
-                    },
-                    "required": [
-                      "v",
-                      "brand",
-                      "mode",
-                      "fonts",
-                      "scale",
-                      "corners",
-                      "rows"
-                    ],
-                    "additionalProperties": false
+                    ]
                   }
                 },
                 "required": [

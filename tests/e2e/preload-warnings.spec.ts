@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { signUpRecipient } from './helpers';
 import { enrolOwner } from './ops-helpers';
-import { STUDIO_HANDLES, startStack } from './profile-fixtures';
+import { STYLE_IDS, startStack } from './profile-fixtures';
 
 // Chrome warned "The resource … was preloaded using link preload but not used within a few seconds
 // from the window's load event" (owner, 17 Nov 2026). The resource was studio.css: Next.js
@@ -77,17 +77,28 @@ test.describe('no unused preloads', () => {
   test('Studio pages preload only their own heading font', async ({ page }) => {
     const stack = await startStack('test');
     try {
-      for (const handle of STUDIO_HANDLES) {
-        const url = `${stack.origin}/@${handle}`;
+      // Classic keeps today's fonts and preloads; every other style preloads its name face.
+      for (const style of STYLE_IDS.filter((id) => id !== 'classic')) {
+        const url = `${stack.origin}/@style${style}`;
         const fonts = await expectNoUnusedPreloads(page, url);
-        expect(fonts.filter((f) => f.startsWith('/fonts/studio/'))).toEqual([
-          expect.stringMatching(/^\/fonts\/studio\/[\w-]+\.woff2$/),
-        ]);
-        // The design still gets its stylesheet (studio.css sets the frame's grid).
-        await expect(page.locator('.studio-frame')).toHaveCSS(
-          'display',
-          'grid',
-        );
+        expect(
+          fonts.filter((f) => f.startsWith('/fonts/studio/')),
+          style,
+        ).toEqual([expect.stringMatching(/^\/fonts\/studio\/[\w-]+\.woff2$/)]);
+        // The design still gets its stylesheet (frame.css paints the page in its own colours).
+        const painted = await page.evaluate(() => {
+          const probe = document.createElement('i');
+          probe.style.color = getComputedStyle(
+            document.querySelector('.studio')!,
+          ).getPropertyValue('--studio-bg');
+          document.body.append(probe);
+          const bg = getComputedStyle(probe).color;
+          probe.remove();
+          return (
+            bg === getComputedStyle(document.documentElement).backgroundColor
+          );
+        });
+        expect(painted, style).toBe(true);
       }
     } finally {
       await stack.stop();
