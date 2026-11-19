@@ -181,6 +181,42 @@ test('the contrast probe reads the thumb under Clear’s selected amount, and st
   expect(problems.join('\n')).toMatch(/< 4\.5/);
 });
 
+// With no amount selected Clear's thumb is `opacity: 0`, but Chromium still reports its white
+// background. The probe must measure the first chip on the track, as it is drawn, not on that
+// invisible thumb.
+test('the contrast probe ignores an invisible thumb when no amount is selected @studio-lab', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto('/dev/studio-lab?style=clear&mode=light');
+  await ready(page);
+  // Unselect every amount (the lab's form starts with one chosen).
+  await page.evaluate(() => {
+    for (const input of document.querySelectorAll<HTMLInputElement>(
+      '.studio-tip .tm-amount-choice input',
+    ))
+      input.checked = false;
+  });
+  const state = await page.evaluate(() => {
+    const options = document.querySelector('.studio-tip .amount-options')!;
+    const thumb = getComputedStyle(options, '::before');
+    return { opacity: thumb.opacity, fill: thumb.backgroundColor };
+  });
+  // The premise: an invisible thumb that still reports a solid fill.
+  expect(state.opacity).toBe('0');
+  expect(state.fill).not.toMatch(/rgba\(.*, 0\)/);
+  // A chip's text, set to #767676 (4.54:1 on white): a colour that
+  // reads on white but not on #e8e8ed (the track) must be reported, so the probe measured the track.
+  await page.addStyleTag({
+    content:
+      '.studio-tip .tm-amount-choice input + span{color:#767676 !important}',
+  });
+  const problems = await contrastProblems(page, '.studio');
+  expect(problems.join('\n')).toMatch(
+    /“[^”]*” [\d.]+ < 4\.5 .* on 232,232,237/,
+  );
+});
+
 test('axe is clean on 20 random documents @studio-lab', async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 390, height: 900 });

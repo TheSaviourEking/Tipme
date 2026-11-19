@@ -191,6 +191,12 @@ export async function contrastProblems(
   scope = '.studio',
 ): Promise<string[]> {
   await settled(page);
+  // A thumb sliding (220 ms) or fading would be measured mid-way: wait for every animation.
+  await page.evaluate(() =>
+    Promise.all(
+      document.getAnimations().map((a) => a.finished.catch(() => null)),
+    ),
+  );
   return page.evaluate((scope) => {
     type Rgba = [number, number, number, number];
     const parse = (c: string): Rgba | null => {
@@ -241,27 +247,47 @@ export async function contrastProblems(
         if (at !== el) {
           const pseudo = getComputedStyle(at, '::before');
           const fill = parse(pseudo.backgroundColor);
+          // Only a pseudo-element that is really painted: Chromium reports the background of an
+          // invisible one (Clear's thumb is opacity 0 while no amount is selected) as if it showed.
+          let opacity = Number(pseudo.opacity);
+          for (let up: Element | null = at; up; up = up.parentElement)
+            opacity *= Number(getComputedStyle(up).opacity);
+          const px = (v: string) =>
+            /^-?[\d.]+px$/.test(v) ? parseFloat(v) : null;
+          const [pl, pt, pw, ph] = [
+            px(pseudo.left),
+            px(pseudo.top),
+            px(pseudo.width),
+            px(pseudo.height),
+          ];
           if (
             pseudo.content !== 'none' &&
+            pseudo.display !== 'none' &&
+            pseudo.visibility !== 'hidden' &&
+            opacity >= 0.999 &&
             pseudo.position === 'absolute' &&
             pseudo.backgroundImage === 'none' &&
             fill &&
-            fill[3] >= 0.999
+            fill[3] >= 0.999 &&
+            pl !== null &&
+            pt !== null &&
+            pw !== null &&
+            ph !== null
           ) {
             const host = at.getBoundingClientRect();
             const move = new DOMMatrixReadOnly(
               pseudo.transform === 'none' ? undefined : pseudo.transform,
             );
-            const left = host.left + parseFloat(pseudo.left) + move.m41;
-            const top = host.top + parseFloat(pseudo.top) + move.m42;
+            const left = host.left + pl + move.m41;
+            const top = host.top + pt + move.m42;
             const box = el.getBoundingClientRect();
             const cx = box.left + box.width / 2;
             const cy = box.top + box.height / 2;
             if (
               cx >= left - 1 &&
-              cx <= left + parseFloat(pseudo.width) + 1 &&
+              cx <= left + pw + 1 &&
               cy >= top - 1 &&
-              cy <= top + parseFloat(pseudo.height) + 1
+              cy <= top + ph + 1
             ) {
               layers.push(fill);
               break;

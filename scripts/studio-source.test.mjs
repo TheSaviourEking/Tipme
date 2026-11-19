@@ -110,6 +110,28 @@ test('every style rule is scoped to a styled Studio page', () => {
 // PR 4b (plan Task 13): the v1 renderer, layout model and check are retired. The editor writes v2
 // only and the API refuses v1 writes; stored v1 rows are still read through resolveStudio, which
 // needs only studio-document-v1.ts (schema and resolver).
+// A path ending in a v1 renderer module: '../studio/studio-theme', './studio-row', and the old
+// '../studio/studio-styles' (its stylesheet loader), but not the v2 folder components/studio-styles/.
+const V1_MODULE_IMPORT =
+  /['"][^'"\n]*\/studio(-(theme|row|blocks|sheet|page)|\/studio-styles)['"]/;
+
+test('the v1 module pattern matches v1 imports and not the v2 folder', () => {
+  for (const bad of [
+    "from '../studio/studio-theme'",
+    "from './studio-row'",
+    'from "@/components/studio/studio-page"',
+    "from '../studio/studio-styles'",
+  ])
+    assert.match(bad, V1_MODULE_IMPORT, bad);
+  for (const good of [
+    "from '@/components/studio-styles/style-page'",
+    "from '../studio-styles/video-embed'",
+    "from './studio-styles/parts'",
+    "from '../studio/studio-editor-model'",
+  ])
+    assert.doesNotMatch(good, V1_MODULE_IMPORT, good);
+});
+
 test('nothing imports the v1 renderer, layout model or v1 check', () => {
   const root = new URL('../', import.meta.url);
   const SKIP = new Set([
@@ -153,7 +175,7 @@ test('nothing imports the v1 renderer, layout model or v1 check', () => {
   const banned = [
     /components\/studio\//,
     // A relative import of a v1 renderer module, e.g. '../studio/studio-theme' or './studio-row'.
-    /['"][^'"\n]*\/studio-(theme|row|blocks|sheet|page)['"]/,
+    V1_MODULE_IMPORT,
     /studio-layout/,
     /studio-check-v3/,
     /\bcheckDesignV1\b/,
