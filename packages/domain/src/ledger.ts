@@ -495,24 +495,23 @@ export function buildCollectPaymentPosting(
     platformFeeMinor + quotedProviderFeeMinor + recipientNetMinor
   )
     throw new RangeError('fee breakdown does not add up to the gross amount');
+  if (platformFeeMinor < 0n || quotedProviderFeeMinor < 0n)
+    throw new RangeError('fees cannot be negative');
   if (actualProviderFeeMinor < 0n || actualProviderFeeMinor > grossMinor)
     throw new RangeError('provider fee out of range');
   // payableLines validates the person, the share and its cap.
   const payables = payableLines(input);
+  // The person (and the business) are checked by heldLine, which refuses a missing or empty id.
   const share = businessShare?.amountMinor ?? 0n;
   const own =
     platformFeeMinor + quotedProviderFeeMinor - actualProviderFeeMinor;
   return [
-    line('held_for_recipients', 'debit', recipientNetMinor - share, profileId),
+    heldLine('debit', recipientNetMinor - share, { profileId: profileId! }),
     ...(businessShare
       ? [
-          line(
-            'held_for_recipients',
-            'debit',
-            share,
-            undefined,
-            businessShare.businessId,
-          ),
+          heldLine('debit', share, {
+            businessId: businessShare.businessId,
+          }),
         ]
       : []),
     line(
@@ -578,7 +577,7 @@ export function buildCollectRefundPosting(input: {
 
 /**
  * A refund TipMe pays from its own money (the recipient already withdrew, so nothing is held to take
- * back). The refund and any fee it carries are one loss.
+ * back). The refund is the loss; a fee it carries is the partner's fee, booked as for any refund.
  */
 export function buildAbsorbedRefundPosting(input: {
   amountMinor: bigint;
@@ -589,7 +588,8 @@ export function buildAbsorbedRefundPosting(input: {
   if (fee < 0n) throw new RangeError('refund fee out of range');
   const total = input.amountMinor + fee;
   return [
-    line('refund_loss_expense', 'debit', total),
+    line('refund_loss_expense', 'debit', input.amountMinor),
+    ...(fee > 0n ? [line('provider_fee_expense', 'debit', fee)] : []),
     line('platform_clearing', 'credit', total),
   ];
 }

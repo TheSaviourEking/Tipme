@@ -44,6 +44,8 @@ test('a collect payment balances for Free, Pro, local card and bank transfer', (
         (q) => q,
         (q) => q + 5_000n,
         (q) => (q > 5_000n ? q - 5_000n : 0n),
+        (q) => q + 50n, // the real +/-50 kobo variance
+        (q) => (q > 50n ? q - 50n : 0n),
         () => 0n, // bank transfer
       ];
       for (const actual of actuals) {
@@ -81,11 +83,14 @@ test("an international card makes TipMe's line a credit", () => {
 
 test("golden: the person's net is exactly the quote", () => {
   // ₦10,000 Free: fee 50000 (platform 35000 + processing 15000), net 950000.
-  const q = quoteAt(1_000_000n, 500n);
-  assert.equal(q.platformFeeMinor + q.providerFeeMinor, 50_000n);
-  const lines = buildCollectPaymentPosting(
-    paymentInput(1_000_000n, 500n, (x) => x),
-  );
+  const lines = buildCollectPaymentPosting({
+    grossMinor: 1_000_000n,
+    platformFeeMinor: 35_000n,
+    quotedProviderFeeMinor: 15_000n,
+    actualProviderFeeMinor: 15_000n,
+    recipientNetMinor: 950_000n,
+    profileId: 'p1',
+  });
   assert.deepEqual(lines, [
     {
       account: 'held_for_recipients',
@@ -96,22 +101,22 @@ test("golden: the person's net is exactly the quote", () => {
     {
       account: 'platform_clearing',
       side: 'debit',
-      amountMinor: q.platformFeeMinor,
+      amountMinor: 35_000n,
     },
     {
       account: 'provider_fee_expense',
       side: 'debit',
-      amountMinor: q.providerFeeMinor,
+      amountMinor: 15_000n,
     },
     {
       account: 'platform_fee_revenue',
       side: 'credit',
-      amountMinor: q.platformFeeMinor,
+      amountMinor: 35_000n,
     },
     {
       account: 'provider_fee_recovered',
       side: 'credit',
-      amountMinor: q.providerFeeMinor,
+      amountMinor: 15_000n,
     },
     {
       account: 'recipient_payable',
@@ -233,7 +238,8 @@ test("an absorbed refund and a dispute fee are TipMe's own money", () => {
   });
   assert.ok(isBalanced(refund));
   assert.deepEqual(refund, [
-    { account: 'refund_loss_expense', side: 'debit', amountMinor: 950_300n },
+    { account: 'refund_loss_expense', side: 'debit', amountMinor: 950_000n },
+    { account: 'provider_fee_expense', side: 'debit', amountMinor: 300n },
     { account: 'platform_clearing', side: 'credit', amountMinor: 950_300n },
   ]);
   const fee = buildDisputeFeePosting({ feeMinor: 1_500_000n });
@@ -394,6 +400,149 @@ test('refused: a team on a collect payment, a zero or negative amount, recovery 
         disputedMinor: 100n,
         recovered: [{ amountMinor: 101n, profileId: 'p1' }],
       }),
+    RangeError,
+  );
+});
+
+test('a lost dispute can recover a business-owned part', () => {
+  const lines = buildDisputeLossPosting({
+    disputedMinor: 1_000_000n,
+    recovered: [
+      { amountMinor: 850_000n, profileId: 'p1' },
+      { amountMinor: 100_000n, businessId: 'b1' },
+    ],
+  });
+  assert.ok(isBalanced(lines));
+  assert.deepEqual(lines.slice(0, 4), [
+    {
+      account: 'recipient_payable',
+      side: 'debit',
+      amountMinor: 850_000n,
+      profileId: 'p1',
+    },
+    {
+      account: 'held_for_recipients',
+      side: 'credit',
+      amountMinor: 850_000n,
+      profileId: 'p1',
+    },
+    {
+      account: 'business_payable',
+      side: 'debit',
+      amountMinor: 100_000n,
+      businessId: 'b1',
+    },
+    {
+      account: 'held_for_recipients',
+      side: 'credit',
+      amountMinor: 100_000n,
+      businessId: 'b1',
+    },
+  ]);
+  assert.equal(sum(lines, 'dispute_loss_expense', 'debit'), 50_000n);
+});
+
+test('the held and payable lines land on the right owner', () => {
+  for (let i = 0; i < 200; i++) {
+    const tip = 200_000n + next(10_000_000n);
+    const q = quoteAt(tip, 500n);
+    const net = q.recipientNetMinor;
+    const share = 1n + next(net / 2n);
+    const lines = buildCollectPaymentPosting({
+      grossMinor: tip,
+      platformFeeMinor: q.platformFeeMinor,
+      quotedProviderFeeMinor: q.providerFeeMinor,
+      actualProviderFeeMinor: q.providerFeeMinor,
+      recipientNetMinor: net,
+      profileId: 'p1',
+      businessShare: { businessId: 'b1', amountMinor: share },
+    });
+    const of = (account) =>
+      lines
+        .filter((l) => l.account === account)
+        .map((l) => [l.profileId, l.businessId, l.amountMinor]);
+    assert.deepEqual(of('held_for_recipients'), [
+      ['p1', undefined, net - share],
+      [undefined, 'b1', share],
+    ]);
+    assert.deepEqual(of('recipient_payable'), [['p1', undefined, net - share]]);
+    assert.deepEqual(of('business_payable'), [[undefined, 'b1', share]]);
+  }
+});
+
+test('refused: an owner with no id, negative fees', () => {
+  const base = paymentInput(1_000_000n, 500n, (x) => x);
+  for (const profileId of [undefined, '']) {
+    assert.throws(
+      () => buildCollectPaymentPosting({ ...base, profileId }),
+      RangeError,
+    );
+  }
+  for (const owner of [{}, { profileId: '' }, { businessId: '' }]) {
+    assert.throws(
+      () => buildCollectTransferPosting({ amountMinor: 1n, ...owner }),
+      RangeError,
+    );
+    assert.throws(
+      () => buildCollectReturnPosting({ amountMinor: 1n, ...owner }),
+      RangeError,
+    );
+    assert.throws(
+      () =>
+        buildCollectRefundPosting({ parts: [{ amountMinor: 1n, ...owner }] }),
+      RangeError,
+    );
+    assert.throws(
+      () =>
+        buildDisputeLossPosting({
+          disputedMinor: 5n,
+          recovered: [{ amountMinor: 1n, ...owner }],
+        }),
+      RangeError,
+    );
+  }
+  // Fees that offset each other must still be refused one by one.
+  assert.throws(
+    () =>
+      buildCollectPaymentPosting({
+        ...base,
+        platformFeeMinor: base.platformFeeMinor + 100n,
+        recipientNetMinor: base.recipientNetMinor - 200n,
+        quotedProviderFeeMinor: base.quotedProviderFeeMinor + 100n,
+        actualProviderFeeMinor: -1n,
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () =>
+      buildCollectPaymentPosting({
+        ...base,
+        platformFeeMinor: -100n,
+        recipientNetMinor:
+          base.recipientNetMinor + base.platformFeeMinor + 100n,
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () =>
+      buildCollectPaymentPosting({
+        ...base,
+        quotedProviderFeeMinor: -100n,
+        recipientNetMinor:
+          base.recipientNetMinor + base.quotedProviderFeeMinor + 100n,
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () =>
+      buildCollectRefundPosting({
+        parts: [{ amountMinor: 1n, profileId: 'p1' }],
+        refundFeeMinor: -1n,
+      }),
+    RangeError,
+  );
+  assert.throws(
+    () => buildAbsorbedRefundPosting({ amountMinor: 1n, refundFeeMinor: -1n }),
     RangeError,
   );
 });
