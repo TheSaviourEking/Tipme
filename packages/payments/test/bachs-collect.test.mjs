@@ -5,6 +5,7 @@ import {
   CollectTransferRefusedError,
   PlatformRefusalError,
   UncertainProviderOutcomeError,
+  UnlistedNegativeBalanceError,
   createBachsProvider,
 } from '../dist/index.js';
 
@@ -57,10 +58,11 @@ after(() => {
   globalThis.fetch = realFetch;
 });
 
-function fake(answers) {
+function fake(answers, options = {}) {
   const calls = [];
   const queue = Array.isArray(answers) ? [...answers] : null;
   const provider = createBachsProvider({
+    ...options,
     apiKey: 'sk_sandbox_test',
     environment: 'sandbox',
     webhookSecrets: ['current-secret-0123456789'],
@@ -264,18 +266,40 @@ test("a person's receive-only account requests only payouts and transfers", asyn
   });
   assert.equal(account.accountReference, PERSON);
   assert.deepEqual(account.requirementsDue, ['payout_destination']);
-  assert.equal(account.holdsLocalCurrency, true);
+  // A new account holds only USD until holdLocalCurrency (P12).
+  assert.equal(account.holdsLocalCurrency, false);
 });
 
-test('a person account already named (a replayed create) is not named twice', async () => {
-  const { provider, calls } = fake([answer('individual-account-named', 201)]);
-  await provider.createReceiveOnlyPersonAccount({
-    contactEmail: 'ada@example.com',
-    country: 'NG',
-    legalName: { first: 'Ada', last: 'Okafor' },
-    idempotencyKey: `tipme-person-acct-${TIP}`,
-  });
-  assert.equal(calls.length, 1);
+test('the legal name is always sent after create, even when the requirements omit it', async () => {
+  // A fresh create whose requirements don't list the name (or list it only as eventually_due):
+  // the name still goes, once per key, since a missing entry proves nothing about the person.
+  for (const requirements of [
+    { currently_due: ['payout_destination'], eventually_due: [], past_due: [] },
+    {
+      currently_due: ['payout_destination'],
+      eventually_due: ['persons.name'],
+      past_due: [],
+    },
+  ]) {
+    const created = { ...body('individual-account-created'), requirements };
+    const { provider, calls } = fake([
+      jsonResponse(created, 201),
+      answer('individual-account-named'),
+    ]);
+    await provider.createReceiveOnlyPersonAccount({
+      contactEmail: 'ada@example.com',
+      country: 'NG',
+      legalName: { first: 'Ada', last: 'Okafor' },
+      idempotencyKey: `tipme-person-acct-${TIP}`,
+    });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].path, `/v1/accounts/${PERSON}`);
+    assert.equal(
+      calls[1].headers['Idempotency-Key'],
+      `tipme-person-acct-${TIP}.name`,
+    );
+    assert.deepEqual(calls[1].body.fields.persons[0].first_name, 'Ada');
+  }
 });
 
 test('a person account needs a whole legal name; nothing is sent without one', async () => {
@@ -298,13 +322,12 @@ test('a person account needs a whole legal name; nothing is sent without one', a
 });
 
 test('a person account is made to hold naira with holdLocalCurrency (P12)', async () => {
-  const usdOnly = {
-    ...body('individual-account-named'),
-    balance_currencies: [],
-  };
+  const usdOnly = body('individual-account-named');
+  assert.deepEqual(usdOnly.balance_currencies, ['USD']);
   const { provider, calls } = fake([
     jsonResponse(usdOnly),
-    answer('individual-account-named'),
+    // The update's answer: NGN now held as well.
+    jsonResponse({ ...usdOnly, balance_currencies: ['USD', 'NGN'] }),
   ]);
   const account = await provider.holdLocalCurrency(PERSON);
   assert.equal(calls[1].method, 'POST');
@@ -590,6 +613,74 @@ test('platform balances are signed and list every currency', async () => {
   assert.equal(call.method, 'GET');
   assert.equal(call.path, '/v1/balances');
   assert.equal(Object.hasOwn(call.headers, 'X-Account-Id'), false);
+});
+
+test('a crypto bucket is skipped with a note, and NGN and USD are still returned', async () => {
+  const notes = [];
+  const { provider } = fake(
+    [
+      jsonResponse({
+        ...body('balances-usd-negative'),
+        balances: [
+          ...body('balances-usd-negative').balances,
+          {
+            currency: 'USDT_TRC20',
+            available_balance: '12.345678',
+            pending_balance: '0.000000',
+          },
+        ],
+      }),
+    ],
+    { onNote: (message, fields) => notes.push({ message, fields }) },
+  );
+  assert.deepEqual(await provider.platformBalances(), [
+    { currency: 'NGN', availableMinor: 48250000n, pendingMinor: 12500000n },
+    { currency: 'USD', availableMinor: -1500n, pendingMinor: 0n },
+  ]);
+  assert.equal(notes.length, 1);
+  assert.equal(notes[0].fields.currency, 'USDT_TRC20');
+  // Never the amount: only the currency and that it was skipped.
+  assert.equal(JSON.stringify(notes).includes('12.345678'), false);
+});
+
+test('a negative crypto bucket is flagged: it blocks every transfer', async () => {
+  for (const available of ['-3.500000', '-0.000001']) {
+    const { provider } = fake([
+      jsonResponse({
+        balances: [
+          {
+            currency: 'NGN',
+            available_balance: '100.00',
+            pending_balance: '0.00',
+          },
+          {
+            currency: 'USDT_TRC20',
+            available_balance: available,
+            pending_balance: '0.000000',
+          },
+        ],
+      }),
+    ]);
+    await assert.rejects(
+      provider.platformBalances(),
+      (error) =>
+        error instanceof UnlistedNegativeBalanceError &&
+        error.currency === 'USDT_TRC20',
+    );
+  }
+  // A zero crypto bucket written with a sign is not negative.
+  const zero = fake([
+    jsonResponse({
+      balances: [
+        {
+          currency: 'USDT_TRC20',
+          available_balance: '-0.00',
+          pending_balance: '0',
+        },
+      ],
+    }),
+  ]);
+  assert.deepEqual(await zero.provider.platformBalances(), []);
 });
 
 test('an unreadable platform balance is an error, never a zero', async () => {

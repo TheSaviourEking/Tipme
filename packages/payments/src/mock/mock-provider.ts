@@ -77,6 +77,13 @@ type PlatformBalanceRow = {
   pendingMinor: bigint;
 };
 
+const mismatched = (key: string) =>
+  new UncertainProviderOutcomeError(
+    key,
+    'the payment provider answered with different details',
+    { cause: 'unexpected_state' },
+  );
+
 const lostAnswer = (key: string) =>
   new UncertainProviderOutcomeError(
     key,
@@ -540,9 +547,16 @@ export function createMockProvider(options: {
       const stored = await redis.hgetall(
         collectTransferKey(prefix, idempotencyKey),
       );
-      // The same key replays the transfer it made, whatever is asked now.
-      if (stored['transferRef'])
+      // The same key replays the transfer it made, as live does. Checked like the real adapter
+      // checks an answer: one naming other money or another account (a mismatch) stays uncertain.
+      if (stored['transferRef']) {
+        if (
+          stored['amountMinor'] !== amountMinor.toString() ||
+          stored['accountRef'] !== accountRef
+        )
+          throw mismatched(idempotencyKey);
         return { transferRef: stored['transferRef'], status: 'paid' };
+      }
       const answer = (await redis.getdel(
         collectAnswerKey(prefix, idempotencyKey),
       )) as CollectScenario | null;
@@ -572,12 +586,7 @@ export function createMockProvider(options: {
         );
       }
       if (answer === 'collect-no-reply') throw lostAnswer(idempotencyKey);
-      if (answer === 'collect-mismatch')
-        throw new UncertainProviderOutcomeError(
-          idempotencyKey,
-          'the payment provider answered with different details',
-          { cause: 'unexpected_state' },
-        );
+      if (answer === 'collect-mismatch') throw mismatched(idempotencyKey);
       return { transferRef, status: 'paid' };
     },
 

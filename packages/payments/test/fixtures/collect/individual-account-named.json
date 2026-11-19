@@ -1,10 +1,10 @@
 {
-  "_source": "Built from https://docs.bachs.io/connect/requirements.md ('Submitting': POST /v1/accounts/{account_id} with fields.persons; 'The response is the account, with its recomputed requirements block') applied to individual-account-created.json: persons.name is no longer due. Not recorded live.",
+  "_source": "Built from https://docs.bachs.io/connect/requirements.md ('Submitting': POST /v1/accounts/{account_id} with fields.persons; 'The response is the account, with its recomputed requirements block') applied to individual-account-created.json: persons.name is no longer due. balance_currencies is USD only: a new account holds only USD until holdLocalCurrency adds NGN (/connect/accounts 'Currencies the account holds'; P12). Not recorded live.",
   "id": "acct_Pn4rS0nQw8Lk2Vb7",
   "name": null,
   "country": "NG",
   "entity_type": "individual",
-  "balance_currencies": ["NGN"],
+  "balance_currencies": ["USD"],
   "is_active": false,
   "capabilities": {
     "payouts": {

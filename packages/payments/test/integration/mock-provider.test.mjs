@@ -238,6 +238,13 @@ test('the pretend partner answers each collect scenario once, then pays', async 
     (transfer) => transfer.group === odd,
   );
   assert.notEqual(listedOdd.amountMinor, 950000n);
+  // As live: the same key replays the same (mismatched) transfer, so it stays uncertain.
+  await assert.rejects(
+    mock.sendCollectTransfer(collectInput(odd)),
+    (error) =>
+      error instanceof UncertainProviderOutcomeError &&
+      error.diagnostic?.cause === 'unexpected_state',
+  );
 
   // The list honours transfer_group and the account: another account's transfer is not in it.
   const elsewhere = `tipme-collect-${randomUUID()}`;

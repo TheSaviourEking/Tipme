@@ -407,8 +407,9 @@ export interface PayoutPort {
     }[]
   >;
   /**
-   * TipMe's own balance in every currency the partner lists, signed: a negative balance (a lost
-   * dispute's fee, P5) is reported as it is, never clamped. An unreadable figure throws.
+   * TipMe's own balance in every ISO currency the partner lists, signed: a negative balance (a lost
+   * dispute's fee, P5) is reported as it is, never clamped. An unreadable figure throws. A crypto
+   * bucket is skipped with a note, unless it is negative: then UnlistedNegativeBalanceError.
    */
   platformBalances?(): Promise<
     { currency: string; availableMinor: bigint; pendingMinor: bigint }[]
@@ -505,6 +506,18 @@ export class CollectTransferRefusedError extends Error {
   ) {
     super('The payment provider refused the collect transfer');
     this.name = 'CollectTransferRefusedError';
+  }
+}
+
+/**
+ * TipMe's own balance lists a negative bucket in a currency TipMe can't put in minor units (a crypto
+ * code). It is never skipped like a positive one: any negative balance blocks every transfer
+ * (/connect/balances), so the read fails naming the currency, and staff are told.
+ */
+export class UnlistedNegativeBalanceError extends Error {
+  constructor(readonly currency: string) {
+    super(`TipMe's ${currency} balance at the payment provider is negative`);
+    this.name = 'UnlistedNegativeBalanceError';
   }
 }
 

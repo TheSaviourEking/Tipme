@@ -4,6 +4,7 @@ import {
   CollectTransferRefusedError,
   PayoutRejectedError,
   PlatformRefusalError,
+  UnlistedNegativeBalanceError,
   type CollectTransferRefusal,
   type PayoutFailureReason,
   type PayoutPort,
@@ -17,7 +18,7 @@ import {
   BachsTransportError,
   UncertainProviderOutcomeError,
 } from './errors.js';
-import { decimalToMinor, minorToDecimal } from './money.js';
+import { decimalToMinor, isIsoCurrency, minorToDecimal } from './money.js';
 
 // Bachs charges a flat fee on top of an NGN payout, and nothing states it before the payout exists:
 // its payout quote "carries no fee" (docs /api-reference/payouts/create-payout-quote), and the fee
@@ -495,9 +496,21 @@ function destinationStatus(
   return status === 'rejected' ? 'rejected' : 'pending_review';
 }
 
+/** A process warning by default: the observability setup records it. */
+function warnNote(message: string, fields: Record<string, string>): void {
+  process.emitWarning(message, {
+    code: 'TIPME_PAYMENTS_NOTE',
+    detail: JSON.stringify(fields),
+  });
+}
+
+// A negative decimal that isn't zero: '-0.00' is not a debt.
+const NEGATIVE_AMOUNT = /^-(?=.*[1-9])\d+(?:\.\d+)?$/;
+
 export function createBachsPayouts(
   client: BachsApiClient,
   apiKey: string,
+  onNote: (message: string, fields: Record<string, string>) => void = warnNote,
 ): PayoutPort {
   // GET /v1/balances, with X-Account-Id for an account: https://docs.bachs.io/connect/balances.md
   async function readBalance(currency: 'NGN', accountRef?: string) {
@@ -947,16 +960,34 @@ export function createBachsPayouts(
         path: '/v1/balances',
         schema: signedBalancesSchema,
       });
-      return balances.map((balance) => ({
-        currency: balance.currency,
-        availableMinor: signedMinor(
-          balance.available_balance,
-          balance.currency,
-        ),
-        pendingMinor: balance.pending_balance
-          ? signedMinor(balance.pending_balance, balance.currency)
-          : 0n,
-      }));
+      const rows: {
+        currency: string;
+        availableMinor: bigint;
+        pendingMinor: bigint;
+      }[] = [];
+      for (const balance of balances) {
+        // A crypto bucket (e.g. USDT_TRC20) has no minor unit TipMe knows: skipped, with a note.
+        // A negative one is never skipped: any negative balance blocks every transfer.
+        if (!isIsoCurrency(balance.currency)) {
+          if (NEGATIVE_AMOUNT.test(balance.available_balance.trim()))
+            throw new UnlistedNegativeBalanceError(balance.currency);
+          onNote('Skipped a balance in a currency TipMe does not hold', {
+            currency: balance.currency.slice(0, 32),
+          });
+          continue;
+        }
+        rows.push({
+          currency: balance.currency,
+          availableMinor: signedMinor(
+            balance.available_balance,
+            balance.currency,
+          ),
+          pendingMinor: balance.pending_balance
+            ? signedMinor(balance.pending_balance, balance.currency)
+            : 0n,
+        });
+      }
+      return rows;
     },
 
     // GET /v1/balance_settings as the platform (no X-Account-Id reads TipMe's own):

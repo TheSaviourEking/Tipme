@@ -144,26 +144,6 @@ const personAccountInputSchema = z.object({
     .regex(/^[\w.:-]+$/),
 });
 
-/**
- * Whether the account still owes a person's name (`persons`, `persons.name` or `persons.<id>.name`,
- * https://docs.bachs.io/connect/requirements.md). An account read with no requirements block says
- * nothing, so the name is sent; one that lists none already has it (a replayed create).
- */
-function owesPersonName(account: z.infer<typeof accountSchema>): boolean {
-  const requirements = account.requirements;
-  if (!requirements) return true;
-  const pastDue = Array.isArray(requirements['past_due'])
-    ? (requirements['past_due'] as unknown[])
-    : [];
-  return [...(requirements.currently_due ?? []), ...pastDue].some(
-    (field) =>
-      typeof field === 'string' &&
-      (field === 'persons' ||
-        field === 'persons.name' ||
-        /^persons\.[^.]+\.name$/.test(field)),
-  );
-}
-
 const urlInputSchema = z.string().url();
 
 export type { BachsEnvironment };
@@ -181,6 +161,11 @@ export interface BachsProviderConfig {
   platformOrganizationId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /**
+   * A note about something the adapter skipped (allowlisted fields only, never amounts). Defaults
+   * to a process warning, which the observability setup records.
+   */
+  onNote?: (message: string, fields: Record<string, string>) => void;
 }
 
 export interface BachsRecipientAccount {
@@ -1352,9 +1337,9 @@ export function createBachsProvider(
         },
         schema: accountSchema,
       });
-      // A replayed create of an account already named owes no name: sending it again could add a
-      // second person, since a person without an id is a new one.
-      if (!owesPersonName(created)) return normalizedAccount(created);
+      // Always sent, whatever the requirements list: an absent entry proves nothing about the
+      // person (it may be eventually_due, or not computed yet). Its own key makes a retry replay the
+      // same write rather than add a second person.
       const accountReference = providerIdentifier(
         created.id,
         'account reference',
@@ -1408,7 +1393,7 @@ export function createBachsProvider(
     getRecipientAccount: getAccount,
     holdLocalCurrency,
 
-    ...createBachsPayouts(client, config.apiKey),
+    ...createBachsPayouts(client, config.apiKey, config.onNote),
   };
 }
 
