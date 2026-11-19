@@ -111,6 +111,7 @@ export default defineConfig({
         RATE_LIMIT_INTENTS_PER_MIN: '10000',
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
+        RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
         // Every photo, cover and logo upload and every cover-design save comes from 127.0.0.1, and CI
         // runs a changed spec five times; both limits are covered by

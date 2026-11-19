@@ -294,3 +294,50 @@ export const usernameTakeBackCancelled = defineMailType({
       ctx,
     ),
 });
+
+/**
+ * Staff gave this account a reserved username (handover, 18 Nov 2026). Fixed words only: the staff
+ * reason never reaches the person. `old` is null when the account had no page and now has one.
+ */
+export const usernameAssigned = defineMailType({
+  id: 'username_assigned',
+  category: 'account',
+  sender: 'notifications',
+  preference: null,
+  schema: z.object({ new: handle, old: handle.nullable() }).strict(),
+  sample: { new: 'kemi_studio', old: 'kemi' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'Your TipMe username has changed',
+        preheader: 'TipMe changed the username on your account.',
+        heading: 'Your username has changed',
+        blocks: [
+          {
+            kind: 'text',
+            text: data.old
+              ? `TipMe changed your username to @${data.new}. Your old link @${data.old} still leads to your page.`
+              : `TipMe gave your account the username @${data.new}. Your page isn’t public until you set it up.`,
+          },
+          {
+            kind: 'text',
+            text: data.old
+              ? 'Your tips, balance and plan stay as they are, and it doesn’t use up any of your username changes.'
+              : 'You can set up your page from your dashboard whenever you’re ready.',
+          },
+          {
+            kind: 'button',
+            label: 'Open your dashboard',
+            href: mailLink(ctx, '/dashboard', 'open_dashboard'),
+          },
+          {
+            kind: 'text',
+            text: `Your page: ${pageAt(ctx, data.new)}`,
+          },
+        ],
+        reason:
+          'You get this email when TipMe changes the username on your account. It can’t be turned off.',
+      },
+      ctx,
+    ),
+});

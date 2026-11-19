@@ -13,6 +13,7 @@ import {
   type OpsTakeBack,
   type OpsUsernameCheck,
   type OpsUsernamesList,
+  type UsernameHandedOver,
 } from '@tipme/contracts';
 import Link from 'next/link';
 import {
@@ -25,6 +26,10 @@ import {
   Slip,
 } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
+import {
+  GiveToAccount,
+  HandoverLinkPanel,
+} from '@/components/ops/username-handover';
 import {
   TakeBackForm,
   type TakeBackAnswer,
@@ -73,12 +78,22 @@ function CheckAnswer({
   onRelease,
   onTakeBack,
   onCancelTakeBack,
+  onHandoverChanged,
+  onHandoverRefused,
+  onGiven,
 }: {
   answer: OpsUsernameCheck;
   onReserve: (reason: string) => Promise<string | null>;
   onRelease: (reason: string) => Promise<string | null>;
   onTakeBack: (answer: TakeBackAnswer) => void;
   onCancelTakeBack: (id: string, reason: string) => Promise<string | null>;
+  onHandoverChanged: () => void;
+  onHandoverRefused: (result: {
+    status: number;
+    code: string;
+    message?: string;
+  }) => Promise<string | null>;
+  onGiven: (given: UsernameHandedOver) => void;
 }) {
   const id = useId();
   const heading = <h3 id={id}>@{answer.name}</h3>;
@@ -137,6 +152,20 @@ function CheckAnswer({
               field="Why release this username?"
               submit="Release this username"
               onSubmit={onRelease}
+            />
+          </div>
+          {/* Handover (18 Nov 2026): the name stays reserved until it moves to one account. */}
+          <HandoverLinkPanel
+            name={answer.name}
+            link={answer.handoverLink}
+            onChanged={onHandoverChanged}
+            onRefused={onHandoverRefused}
+          />
+          <div className="ops-actions">
+            <GiveToAccount
+              name={answer.name}
+              onGiven={onGiven}
+              onRefused={onHandoverRefused}
             />
           </div>
         </article>
@@ -396,6 +425,18 @@ export default function UsernamesPage() {
     return null;
   };
 
+  const onGiven = (given: UsernameHandedOver) => {
+    say({
+      tone: 'success',
+      title: 'Given',
+      text: given.previous
+        ? `The page that was @${given.previous} is now @${given.name}. @${given.previous} keeps leading to their page.`
+        : `@${given.name} is now this account’s page. It isn’t live until they set it up.`,
+    });
+    void recheck(given.name);
+    void load(filters);
+  };
+
   const applyFilters = (event: FormEvent) => {
     event.preventDefault();
     void load(filters);
@@ -408,8 +449,9 @@ export default function UsernamesPage() {
         A reserved username can’t be claimed at sign-up or taken by a username
         change. The public sees “reserved”, exactly as for TipMe’s own words.
         Reserving and releasing happen at once, with your reason in the audit
-        log. Taking a username back from a page waits for a second person when
-        one is available.
+        log. A reserved username can be handed to one account, by a claim link
+        you send them or by giving it to their account. Taking a username back
+        from a page waits for a second person when one is available.
       </p>
       <div ref={saidAt} tabIndex={-1}>
         {said && (
@@ -464,6 +506,9 @@ export default function UsernamesPage() {
             onCancelTakeBack={(takeBackId, reason) =>
               onCancelTakeBack(answer.name, takeBackId, reason)
             }
+            onHandoverChanged={() => void recheck(answer.name)}
+            onHandoverRefused={(result) => refused(answer.name, result)}
+            onGiven={onGiven}
           />
         )}
       </Card>

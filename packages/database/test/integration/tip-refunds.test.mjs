@@ -21,7 +21,7 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 /*
  * Staff "Refund tip" (owner, 14 Nov 2026), behind the `tip_refunds` admin switch. Staff ask, a second person approves
@@ -57,7 +57,7 @@ function partner({ refuse, lose } = {}) {
 }
 
 test('staff tip refunds', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);

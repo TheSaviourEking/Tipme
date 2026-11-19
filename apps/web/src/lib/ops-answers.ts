@@ -149,6 +149,7 @@ export const STAFF_ACTIVITY_WORDS: Record<string, string> = {
   'username.take_back_started': 'Started taking a username back from a page',
   'username.take_back_done': 'A username take-back finished',
   'username.released': 'Released a reserved username',
+  'username.assigned': 'Gave a reserved username to an account',
 };
 
 const REFUSALS: Record<string, string> = {
@@ -173,6 +174,16 @@ const REFUSALS: Record<string, string> = {
     'A page has this username, now or as an old one. To take it, ask to take it back.',
   USERNAME_NOT_RESERVED: 'This username isn’t reserved',
   TAKE_BACK_OPEN: 'This username already has a take-back under way',
+  USERNAME_IN_HOLD:
+    'A deleted page’s hold on this username hasn’t ended yet. Nothing changed; try again after it ends.',
+  HANDOVER_LINK_NOT_FOUND:
+    'This username has no open claim link. Nothing changed.',
+  HANDOVER_STAFF_ACCOUNT:
+    'Staff accounts can’t receive a username this way. Nothing changed.',
+  HANDOVER_ACCOUNT_CHANGED:
+    'The account changed while this was happening. Nothing changed; try again.',
+  HANDOVER_ACCOUNT_UNAVAILABLE:
+    'This account can’t take a username right now: it may be deleted, a release-check page, or have a take-back under way. Nothing changed.',
   TAKE_BACK_CLOSED: 'This take-back has already finished',
   TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back',
   CHANGELOG_EDITED_ELSEWHERE:

@@ -1423,6 +1423,57 @@
         "x-tipme-rate-limit": "analytics"
       }
     },
+    "/v1/handles/claim-link/preview": {
+      "post": {
+        "operationId": "ClaimLinkPreview.preview",
+        "tags": [
+          "ClaimLinkPreview"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "username_claims"
+      }
+    },
     "/v1/handles/{handle}/availability": {
       "get": {
         "operationId": "PublicProfile.availability",
@@ -8573,6 +8624,63 @@
         ]
       }
     },
+    "/v1/me/username-claim": {
+      "post": {
+        "operationId": "UsernameClaim.claim",
+        "tags": [
+          "UsernameClaim"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "username_claims",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/visits-today": {
       "get": {
         "operationId": "Dashboard.visits",
@@ -15557,6 +15665,116 @@
         "x-tipme-permission": "payouts.resolve"
       }
     },
+    "/v1/ops/plan-fees": {
+      "get": {
+        "operationId": "OpsPlanFees.state",
+        "tags": [
+          "OpsPlanFees"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      },
+      "post": {
+        "operationId": "OpsPlanFees.change",
+        "tags": [
+          "OpsPlanFees"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "freeBps": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,3}$"
+                  },
+                  "proBps": {
+                    "type": "string",
+                    "pattern": "^[1-9][0-9]{0,3}$"
+                  },
+                  "confirmLargeChange": {
+                    "type": "boolean",
+                    "const": true
+                  }
+                },
+                "required": [
+                  "reason",
+                  "freeBps",
+                  "proBps"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      }
+    },
     "/v1/ops/pro-price": {
       "get": {
         "operationId": "OpsProPrice.state",
@@ -17941,6 +18159,66 @@
         "x-tipme-permission": "usernames.manage"
       }
     },
+    "/v1/ops/usernames/handover-accounts": {
+      "post": {
+        "operationId": "OpsUsernames.handoverAccounts",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 254
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
     "/v1/ops/usernames/take-backs/{id}/cancel": {
       "post": {
         "operationId": "OpsUsernames.cancelTakeBack",
@@ -17950,6 +18228,220 @@
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/assign": {
+      "post": {
+        "operationId": "OpsUsernames.assign",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/handover-link": {
+      "post": {
+        "operationId": "OpsUsernames.createHandoverLink",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/handover-link/cancel": {
+      "post": {
+        "operationId": "OpsUsernames.cancelHandoverLink",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
             "in": "path",
             "required": true,
             "schema": {
@@ -18588,6 +19080,38 @@
             "session": []
           }
         ]
+      }
+    },
+    "/v1/plan-fees": {
+      "get": {
+        "operationId": "PlanFees.rates",
+        "tags": [
+          "PlanFees"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "plan_fees"
       }
     },
     "/v1/pro/price": {
@@ -19640,6 +20164,7 @@
                   "ANNOUNCEMENT_NOT_DRAFT",
                   "ANNOUNCEMENT_NO_RECIPIENTS",
                   "ANNOUNCEMENT_EMAIL_NOT_SET_UP",
+                  "PLAN_FEES_CONFIRM_REQUIRED",
                   "PRO_PRICE_NOT_SET",
                   "PRO_PRICE_CHANGED",
                   "PRO_PURCHASE_OPEN",
@@ -19664,6 +20189,12 @@
                   "TAKE_BACK_OPEN",
                   "TAKE_BACK_NOT_FOUND",
                   "TAKE_BACK_CLOSED",
+                  "USERNAME_IN_HOLD",
+                  "HANDOVER_LINK_NOT_FOUND",
+                  "HANDOVER_ACCOUNT_UNAVAILABLE",
+                  "CLAIM_LINK_INVALID",
+                  "HANDOVER_STAFF_ACCOUNT",
+                  "HANDOVER_ACCOUNT_CHANGED",
                   "ROLE_IN_USE",
                   "ROLE_PROTECTED",
                   "STAFF_PROTECTED",

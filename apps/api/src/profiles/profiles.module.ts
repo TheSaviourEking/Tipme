@@ -5,6 +5,10 @@ import { SessionGuard } from '../auth/session.guard.js';
 import { RateLimitGuard } from '../checkout/rate-limit.guard.js';
 import { MeProfileController } from './me-profile.controller.js';
 import { PublicProfileController } from './public-profile.controller.js';
+import {
+  ClaimLinkPreviewController,
+  UsernameClaimController,
+} from './username-claim.controller.js';
 import { AvatarController } from './avatar.controller.js';
 import { CoverController } from './cover.controller.js';
 import {
@@ -16,6 +20,7 @@ import { ProfileRevalidator } from './revalidate.js';
 import { PaymentAccountsController } from './payment-accounts.controller.js';
 import { PayoutDestinationController } from './payout-destination.controller.js';
 import { ProPriceController } from './pro-price.controller.js';
+import { PlanFeesController } from './plan-fees.controller.js';
 import { StudioController } from '../studio/studio.controller.js';
 import { StudioEnabledGuard } from '../studio/studio-switch.js';
 import { StudioPhotoAccent } from '../studio/photo-accent.js';
@@ -27,6 +32,8 @@ import { MailModule } from '../mail/mail.module.js';
   controllers: [
     MeProfileController,
     PublicProfileController,
+    ClaimLinkPreviewController,
+    UsernameClaimController,
     AvatarController,
     CoverController,
     QrArtController,
@@ -34,6 +41,7 @@ import { MailModule } from '../mail/mail.module.js';
     PaymentAccountsController,
     PayoutDestinationController,
     ProPriceController,
+    PlanFeesController,
     StudioController,
   ],
   providers: [

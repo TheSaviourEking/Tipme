@@ -1,19 +1,13 @@
 import { LegalPlaceholder } from '@/components/legal-placeholder';
-import { FEE_POLICY_V2_FREE, FEE_POLICY_V2_PRO, priceTip } from '@tipme/domain';
-import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import { FREE_WITHDRAWALS_PER_DAY } from '@tipme/domain';
+import { getPlanFees } from '@/lib/plan-fees-api';
+import {
+  TERMS_EXAMPLE_TIP_MINOR,
+  TERMS_REFUND_TIP_MINOR,
+  termsFeeFigures,
+} from '@/lib/terms-fees';
 import { previewMetadata } from '@/lib/metadata';
 import { Money } from '@/components/money';
-
-// The example in the Fees section, worked out by the same pricing the quotes use.
-const EXAMPLE_TIP = BigInt(500000);
-const exampleNet = (policy: typeof FEE_POLICY_V2_FREE) => (
-  <Money minor={priceTip(EXAMPLE_TIP, policy).recipientNetMinor} />
-);
-// The refund example: a refund gives back the tip minus TipMe's fee, which is what the recipient got.
-const REFUND_TIP = BigInt(1000000);
-const refundBack = (policy: typeof FEE_POLICY_V2_FREE) => (
-  <Money minor={priceTip(REFUND_TIP, policy).recipientNetMinor} />
-);
 
 export const metadata = previewMetadata(
   'Terms of use',
@@ -21,7 +15,9 @@ export const metadata = previewMetadata(
   '/legal/terms',
 );
 
-export default function TermsPlaceholder() {
+export default async function TermsPlaceholder() {
+  // The live rates, the ones new quotes use, and the example nets worked from them by the same pricing.
+  const fees = termsFeeFigures(await getPlanFees());
   return (
     <LegalPlaceholder
       title="Terms of use"
@@ -33,7 +29,9 @@ export default function TermsPlaceholder() {
         'Liability and how these terms change',
       ]}
     >
-      {/* The owner's decisions, 3 and 12 Nov 2026: state the fee here (Free 7%, Pro 5%). Amounts follow the fee policies. */}
+      {/* The owner's decisions, 3, 12 and 18 Nov 2026: state the fee here (payment and withdrawal fees
+          included). The rates and the example nets come from the live setting (getPlanFees), so a
+          change in admin shows here; if the API can't be read they are the starting rates, Free 5% and Pro 3%. */}
       <section aria-labelledby="fees">
         <h2 id="fees">Fees</h2>
         <p>
@@ -42,26 +40,29 @@ export default function TermsPlaceholder() {
           <span className="money">₦2,000</span>.
         </p>
         <p>
-          <strong>If you receive tips,</strong> TipMe keeps {FREE_SHARE_PERCENT}
-          % of each tip on the Free plan, or {PRO_SHARE_PERCENT}% on TipMe Pro,
+          <strong>If you receive tips,</strong> TipMe keeps {fees.freePercent}%
+          of each tip on the Free plan, or {fees.proPercent}% on TipMe Pro,
           unless we have agreed a lower fee with you, and you receive the rest.
-          The fee includes the cost of processing the payment. From a{' '}
-          <Money minor={Number(EXAMPLE_TIP)} /> tip, you receive{' '}
-          {exampleNet(FEE_POLICY_V2_FREE)} on Free, or{' '}
-          {exampleNet(FEE_POLICY_V2_PRO)} on Pro. The fee is set by your plan
-          when the supporter sees the amount, so a tip keeps the fee it was
+          The fee includes the cost of processing the payment and of your
+          withdrawals. From a <Money minor={Number(TERMS_EXAMPLE_TIP_MINOR)} />{' '}
+          tip, you receive <Money minor={fees.exampleNet.free} /> on Free, or{' '}
+          <Money minor={fees.exampleNet.pro} /> on Pro. The fee is set by your
+          plan when the supporter sees the amount, so a tip keeps the fee it was
           shown with if your plan changes afterwards.
         </p>
         <p>
-          <strong>Withdrawals:</strong> The smallest withdrawal is{' '}
+          <strong>Withdrawals:</strong> The first {FREE_WITHDRAWALS_PER_DAY}{' '}
+          withdrawals each day (Lagos time) are free: TipMe pays our payment
+          partner’s transfer fee, and you receive the whole amount you withdraw.
+          If you withdraw <span className="money">₦10,000</span>, you receive{' '}
+          <span className="money">₦10,000</span>. After those, in the same day,
+          our payment partner’s transfer fee (<span className="money">₦50</span>{' '}
+          today) comes off the amount, and the withdraw screen tells you before
+          you confirm. The smallest withdrawal is{' '}
           <span className="money">₦2,000</span>, unless you are withdrawing your
-          whole balance. Each withdrawal has our payment partner’s{' '}
-          <span className="money">₦50</span> transfer fee, taken from the
-          amount: if you withdraw <span className="money">₦10,000</span>, you
-          receive <span className="money">₦9,950</span>. A balance of{' '}
-          <span className="money">₦50</span> or less can’t be withdrawn. If our
-          payment partner charges a different fee for a withdrawal, the
-          difference is taken from or added back to your balance.
+          whole balance. Withdrawals from a business’s balance still carry our
+          payment partner’s transfer fee, taken from the amount, unless TipMe
+          tells the business it pays it.
         </p>
       </section>
       {/* The owner's decisions, 14 Nov 2026: TipMe keeps its fee on a refund (the supporter gets back
@@ -72,10 +73,10 @@ export default function TermsPlaceholder() {
         <p>
           <strong>Refunds.</strong> If a tip is refunded, the supporter gets
           back the tip minus TipMe’s fee. TipMe keeps its fee. From a{' '}
-          <Money minor={Number(REFUND_TIP)} /> tip, the supporter gets back{' '}
-          {refundBack(FEE_POLICY_V2_FREE)} on Free, or{' '}
-          {refundBack(FEE_POLICY_V2_PRO)} on Pro, and you give back what you
-          received.
+          <Money minor={Number(TERMS_REFUND_TIP_MINOR)} /> tip, the supporter
+          gets back <Money minor={fees.refundBack.free} /> on Free, or{' '}
+          <Money minor={fees.refundBack.pro} /> on Pro, and you give back what
+          you received.
         </p>
         <p>
           <strong>Chargebacks.</strong> If the supporter’s bank takes a payment

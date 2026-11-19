@@ -88,9 +88,17 @@ export async function signInWithEmail(
     await fork.getByRole('radio', { name: /^Get tipped/ }).check();
     await page.getByRole('button', { name: 'Continue' }).click();
   }
-  await emailField.fill(email);
-  await page.getByRole('button', { name: 'Send code' }).click();
-  await expect(page.getByLabel('6-digit code')).toBeVisible();
+  // A press before the page has hydrated reloads the form and empties it (seen in CI: the sign-in
+  // form shown again with an empty field), so fill and press again until the code step shows.
+  // A second press can send a second code; the newest one below is the one used.
+  await expect(async () => {
+    if (await page.getByLabel('6-digit code').isVisible()) return;
+    await emailField.fill(email);
+    await page.getByRole('button', { name: 'Send code' }).click();
+    await expect(page.getByLabel('6-digit code')).toBeVisible({
+      timeout: 6_000,
+    });
+  }).toPass({ timeout: 30_000 });
   // The worker sends it shortly after; wait for this one, not an earlier sign-in's.
   let code = '';
   await expect(async () => {

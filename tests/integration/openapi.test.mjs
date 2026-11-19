@@ -92,6 +92,11 @@ test('every operation says who may call it, whether it needs CSRF, and its rate 
     op(method, path)['x-tipme-csrf'] ?? false,
     op(method, path)['x-tipme-rate-limit'] ?? null,
   ];
+  assert.deepEqual(access('get', '/v1/plan-fees'), [
+    'public',
+    false,
+    'plan_fees',
+  ]);
   assert.deepEqual(access('post', '/v1/tip-quotes'), [
     'public',
     false,

@@ -104,8 +104,8 @@ export function ValueWithReason({
 }
 
 /**
- * One page's pricing (ADR-0014): TipMe keeps the page's plan rate (Free 7%, Pro 5%, owner 12 Nov
- * 2026) unless staff set a lower share for this page; a deal at or above the plan rate is capped
+ * One page's pricing (ADR-0014): TipMe keeps the page's plan rate (the rates in Fees, Free 5% and Pro
+ * 3% to start, owner 18 Nov 2026) unless staff set a lower share for this page; a deal at or above the plan rate is capped
  * there. Fee-free tips exist only when staff grant them. Nothing here is automatic.
  */
 export function PagePricing({ profileId }: { profileId: string }) {
@@ -153,7 +153,7 @@ export function PagePricing({ profileId }: { profileId: string }) {
         {pricing.customFeeBps === null || capped
           ? ` (${standard}, the plan’s rate)`
           : ' (set by staff for this page)'}
-        , processing included.
+        , payment and withdrawal fees included.
         {capped &&
           ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
         Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>

@@ -60,6 +60,7 @@ import {
   usernameTakeBackDone,
   usernameTakeBackNotice,
   usernameTakeBackReminder,
+  usernameAssigned,
 } from './types/username-take-back.js';
 import { weeklyReport } from './types/weekly-report.js';
 import { monthlyRecap } from './types/monthly-recap.js';
@@ -117,6 +118,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     usernameTakeBackReminder,
     usernameTakeBackDone,
     usernameTakeBackCancelled,
+    usernameAssigned,
     businessInvitation,
     businessOwnerChange,
     shareProposed,

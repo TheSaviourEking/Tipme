@@ -25,6 +25,7 @@ import { OpsChangelogController } from './changelog.controller.js';
 import { OpsProPaymentsController } from './pro-payments.controller.js';
 import { OpsTipRefundsController } from './tip-refunds.controller.js';
 import { OpsProPriceController } from './pro-price.controller.js';
+import { OpsPlanFeesController } from './plan-fees.controller.js';
 import { OpsSwitchesController } from './switches.controller.js';
 import { OpsBusinessProPriceController } from './business-pro-price.controller.js';
 import { OpsAnnouncementsController } from './announcements.controller.js';
@@ -61,6 +62,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsBusinessNotesController,
     OpsChangelogController,
     OpsProPriceController,
+    OpsPlanFeesController,
     OpsBusinessProPriceController,
     OpsAnnouncementsController,
     OpsProPaymentsController,
