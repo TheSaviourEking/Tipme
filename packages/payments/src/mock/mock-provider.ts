@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { UncertainProviderOutcomeError } from '../bachs/errors.js';
 import {
   CollectTransferRefusedError,
+  DisputeEvidenceRefusedError,
   PayoutRejectedError,
   PlatformRefusalError,
   ProRefundRefusedError,
@@ -11,6 +12,7 @@ import {
   TipRefundRefusedError,
 } from '../provider.js';
 import type {
+  DisputeStatus,
   PaymentProvider,
   PayoutPort,
   TransactionStatus,
@@ -24,6 +26,9 @@ import {
   collectAnswerKey,
   collectTransferKey,
   destinationKey,
+  disputeEvidenceKey,
+  disputeKey,
+  disputesKey,
   paymentKey,
   payoutIdKey,
   payoutKey,
@@ -91,6 +96,30 @@ const lostAnswer = (key: string) =>
     { cause: 'no_response' },
   );
 
+const FINAL_DISPUTE: ReadonlySet<string> = new Set(['won', 'lost', 'closed']);
+
+/** A pretend dispute's webhook body, as the mock webhook contract reads it. */
+function disputeWebhook(
+  type: 'dispute.created' | 'dispute.updated',
+  disputeId: string,
+  dispute: Record<string, string>,
+): MockWebhook {
+  return {
+    id: `evt_${randomUUID()}`,
+    type,
+    data: {
+      reference: dispute['chargeReference'] ?? disputeId,
+      disputeId,
+      status: dispute['status'] as DisputeStatus,
+      respondBy: dispute['respondBy']!,
+      amountMinor: dispute['amountMinor']!,
+      currency: dispute['currency']!,
+      feeMinor: dispute['feeMinor']!,
+      feeCurrency: dispute['feeCurrency']!,
+    },
+  };
+}
+
 export interface MockProvider
   extends
     Omit<PaymentProvider<MockWebhook>, keyof PayoutPort>,
@@ -145,6 +174,25 @@ export interface MockProvider
   markPlatformBalances(rows: readonly PlatformBalanceRow[]): Promise<void>;
   /** Moves the pretend payout to the status its scenario ends in. */
   settlePayout(reference: string): Promise<void>;
+  /**
+   * You collect (plan Task 5): the pretend partner opens a dispute on one of TipMe's own charges and
+   * returns its `dispute.created` webhook body, to deliver with runScenario. It reports the flat
+   * fee the real partner charges ($15 unless given), which the real partner's docs never name.
+   * Dev and e2e only: the mock provider is refused in production at startup.
+   */
+  raiseDispute(input: {
+    chargeReference: string;
+    amountMinor: bigint;
+    currency: string;
+    respondBy?: Date;
+    feeMinor?: bigint;
+    feeCurrency?: string;
+  }): Promise<MockWebhook>;
+  /** Moves a pretend dispute on and returns its `dispute.updated` body. A final one can't move. */
+  decideDispute(
+    disputeId: string,
+    status: Exclude<DisputeStatus, 'open'>,
+  ): Promise<MockWebhook>;
 }
 
 /**
@@ -670,6 +718,100 @@ export function createMockProvider(options: {
           })),
         ),
       );
+    },
+
+    async raiseDispute({
+      chargeReference,
+      amountMinor,
+      currency,
+      respondBy = new Date(Date.now() + 10 * 24 * 60 * 60_000),
+      feeMinor = 1500n,
+      feeCurrency = 'USD',
+    }) {
+      const disputeId = `mock_dsp_${randomUUID()}`;
+      const raisedAt = Date.now();
+      const dispute = {
+        chargeReference,
+        amountMinor: amountMinor.toString(),
+        currency,
+        respondBy: respondBy.toISOString(),
+        feeMinor: feeMinor.toString(),
+        feeCurrency,
+        status: 'open',
+      };
+      await redis
+        .multi()
+        .hset(disputeKey(prefix, disputeId), dispute)
+        .zadd(disputesKey(prefix), raisedAt, disputeId)
+        .exec();
+      return disputeWebhook('dispute.created', disputeId, dispute);
+    },
+
+    async decideDispute(disputeId, status) {
+      const dispute = await redis.hgetall(disputeKey(prefix, disputeId));
+      if (!dispute['status']) throw new Error('No such pretend dispute');
+      if (FINAL_DISPUTE.has(dispute['status']))
+        throw new Error('The pretend dispute is already decided');
+      await redis.hset(disputeKey(prefix, disputeId), 'status', status);
+      return disputeWebhook('dispute.updated', disputeId, {
+        ...dispute,
+        status,
+      });
+    },
+
+    // Once per key, as the real partner: a repeat answers the same; a new key after submitting, or
+    // on a decided dispute, is refused.
+    async submitDisputeEvidence({ partnerDisputeId, idempotencyKey }) {
+      const claimed = await redis.set(
+        disputeEvidenceKey(prefix, idempotencyKey),
+        partnerDisputeId,
+        'NX',
+      );
+      if (claimed !== 'OK') {
+        const earlier = await redis.get(
+          disputeEvidenceKey(prefix, idempotencyKey),
+        );
+        if (earlier === partnerDisputeId) return { state: 'submitted' };
+        throw new DisputeEvidenceRefusedError('CONFLICT');
+      }
+      const status = await redis.hget(
+        disputeKey(prefix, partnerDisputeId),
+        'status',
+      );
+      if (status !== 'open') {
+        await redis.del(disputeEvidenceKey(prefix, idempotencyKey));
+        throw new DisputeEvidenceRefusedError('VALIDATION_ERROR');
+      }
+      await redis.hset(
+        disputeKey(prefix, partnerDisputeId),
+        'status',
+        'responded',
+      );
+      return { state: 'submitted' };
+    },
+
+    async uploadDisputeFile() {
+      return { fileRef: `mock_upl_${randomUUID()}` };
+    },
+
+    async listDisputes(since) {
+      const ids = await redis.zrevrangebyscore(
+        disputesKey(prefix),
+        '+inf',
+        since.getTime(),
+      );
+      const rows = [];
+      for (const id of ids) {
+        const dispute = await redis.hgetall(disputeKey(prefix, id));
+        rows.push({
+          partnerDisputeId: id,
+          status: dispute['status'] as DisputeStatus,
+          amountMinor: BigInt(dispute['amountMinor'] ?? '0'),
+          currency: dispute['currency'] ?? 'XXX',
+          chargeReference: dispute['chargeReference'] ?? null,
+        });
+      }
+      return rows;
     },
 
     async refundPlatformCharge({ chargeReference, reference }) {

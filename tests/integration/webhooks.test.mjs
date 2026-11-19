@@ -205,6 +205,51 @@ test('a verified event for an unknown payment is stored for review', async () =>
   assert.equal(await count('unmatched_provider_events'), before + 1);
 });
 
+// You collect (plan Task 5): the pretend partner can raise a dispute. Until Task 9 routes disputes,
+// its webhook is authenticated and stored for review, and touches no payout, tip or balance.
+test('a pretend dispute webhook is stored for review and changes nothing else', async () => {
+  const before = await count('unmatched_provider_events');
+  const untouched = async () => [
+    await count('provider_events'),
+    await count('ledger_transactions'),
+    await count('payouts'),
+  ];
+  const others = await untouched();
+  const opened = await mock.raiseDispute({
+    chargeReference: 'mock_ch_platform:mock_collect_x',
+    amountMinor: 100000n,
+    currency: 'NGN',
+  });
+  const decided = await mock.decideDispute(opened.data.disputeId, 'lost');
+  assert.deepEqual(
+    await runScenario({
+      plan: [
+        { body: opened, signed: true, delayMs: 0 },
+        { body: decided, signed: true, delayMs: 0 },
+        { body: decided, signed: false, delayMs: 0 },
+      ],
+      webhookUrl: hook(),
+      secret: WEBHOOK_SECRET,
+    }),
+    [200, 200, 401],
+  );
+  assert.equal(await count('unmatched_provider_events'), before + 2);
+  assert.deepEqual(
+    (
+      await q(
+        `SELECT event_type, reason FROM unmatched_provider_events
+          WHERE provider_event_id = ANY($1) ORDER BY event_type`,
+        [[opened.id, decided.id]],
+      )
+    ).map((row) => [row.event_type, row.reason]),
+    [
+      ['dispute.created', 'unknown_attempt'],
+      ['dispute.updated', 'unknown_attempt'],
+    ],
+  );
+  assert.deepEqual(await untouched(), others);
+});
+
 test('a duplicate delivery is acknowledged without a second effect', async () => {
   const { attemptId, payment } = await initiatedPayment();
   const plan = planScenario('duplicate', payment);

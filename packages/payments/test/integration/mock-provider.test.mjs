@@ -5,6 +5,7 @@ import { after, test } from 'node:test';
 import { Redis } from 'ioredis';
 import {
   CollectTransferRefusedError,
+  DisputeEvidenceRefusedError,
   UncertainProviderOutcomeError,
   createMockProvider,
   planScenario,
@@ -340,4 +341,101 @@ test('a pretend collect checkout is on TipMe’s own account, one per attempt, r
   assert.equal(read.method, 'NGN_CARD');
   assert.equal(read.feePaidBy, 'platform');
   assert.equal(read.chargeReference, `mock_ch_${first.providerReference}`);
+});
+
+test('the pretend partner raises a dispute on TipMe’s own charge, takes evidence once, and decides it', async (t) => {
+  const mock = provider();
+  const { providerReference } = await mock.initializeCollectCheckout({
+    attemptId: randomUUID(),
+    amountMinor: 1000000n,
+    currency: 'NGN',
+    successUrl: 'https://usetipme.xyz/r',
+    cancelUrl: 'https://usetipme.xyz/c',
+    idempotencyKey: randomUUID(),
+  });
+  const { chargeReference } = await mock.verifyTransaction(providerReference);
+  const since = new Date(Date.now() - 1000);
+  const respondBy = new Date('2026-12-02T00:00:00.000Z');
+  const opened = await mock.raiseDispute({
+    chargeReference,
+    amountMinor: 1000000n,
+    currency: 'NGN',
+    respondBy,
+  });
+  assert.equal(opened.type, 'dispute.created');
+  assert.equal(opened.data.reference, chargeReference);
+  assert.match(opened.data.disputeId, /^mock_dsp_/);
+  assert.equal(opened.data.status, 'open');
+  assert.equal(opened.data.amountMinor, '1000000');
+  assert.equal(opened.data.respondBy, respondBy.toISOString());
+  // The pretend partner reports the flat fee the real one charges ($15), so the booking is testable.
+  assert.equal(opened.data.feeMinor, '1500');
+  assert.equal(opened.data.feeCurrency, 'USD');
+  const disputeId = opened.data.disputeId;
+
+  // Signed like every pretend webhook, and accepted by the mock's own check.
+  const received = [];
+  const server = createServer((request, response) => {
+    let raw = '';
+    request.on('data', (chunk) => (raw += chunk));
+    request.on('end', () => {
+      received.push(mock.verifyWebhook(Buffer.from(raw), request.headers));
+      response.end('ok');
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const { port } = server.address();
+  await runScenario({
+    plan: [{ body: opened, signed: true, delayMs: 0 }],
+    webhookUrl: `http://127.0.0.1:${port}/`,
+    secret,
+  });
+  assert.equal(received[0].ok, true);
+  assert.equal(received[0].event.type, 'dispute.created');
+
+  assert.deepEqual(await mock.listDisputes(since), [
+    {
+      partnerDisputeId: disputeId,
+      status: 'open',
+      amountMinor: 1000000n,
+      currency: 'NGN',
+      chargeReference,
+    },
+  ]);
+  assert.deepEqual(await mock.listDisputes(new Date(Date.now() + 60_000)), []);
+
+  const { fileRef } = await mock.uploadDisputeFile({
+    partnerDisputeId: disputeId,
+    bytes: Buffer.from('%PDF'),
+    contentType: 'application/pdf',
+  });
+  assert.match(fileRef, /^mock_upl_/);
+  const evidence = {
+    partnerDisputeId: disputeId,
+    text: 'Receipt attached.',
+    fileRefs: [fileRef],
+    idempotencyKey: randomUUID(),
+  };
+  assert.deepEqual(await mock.submitDisputeEvidence(evidence), {
+    state: 'submitted',
+  });
+  // The same key again is the same submission; a new key after submitting is refused.
+  assert.deepEqual(await mock.submitDisputeEvidence(evidence), {
+    state: 'submitted',
+  });
+  await assert.rejects(
+    mock.submitDisputeEvidence({ ...evidence, idempotencyKey: randomUUID() }),
+    DisputeEvidenceRefusedError,
+  );
+  assert.equal((await mock.listDisputes(since))[0].status, 'responded');
+
+  const lost = await mock.decideDispute(disputeId, 'lost');
+  assert.equal(lost.type, 'dispute.updated');
+  assert.equal(lost.data.status, 'lost');
+  assert.equal(lost.data.disputeId, disputeId);
+  assert.equal((await mock.listDisputes(since))[0].status, 'lost');
+  // A decided dispute is final.
+  await assert.rejects(mock.decideDispute(disputeId, 'won'));
+  await assert.rejects(mock.decideDispute('mock_dsp_nope', 'won'));
 });
