@@ -84,6 +84,16 @@ export function planScenario(
     case 'payout-failed':
     case 'payout-review':
     case 'payout-timeout':
+    case 'collect-insufficient':
+    case 'collect-forbidden':
+    case 'collect-in-debt':
+    case 'collect-not-found':
+    case 'collect-mismatch':
+    case 'collect-no-reply':
+    case 'destination-pending-review':
+    case 'destination-rejected':
+    case 'balance-usd-negative':
+    case 'auto-payout-on':
       return [];
   }
 }

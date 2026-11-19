@@ -4,6 +4,8 @@ import { createServer } from 'node:http';
 import { after, test } from 'node:test';
 import { Redis } from 'ioredis';
 import {
+  CollectTransferRefusedError,
+  UncertainProviderOutcomeError,
   createMockProvider,
   planScenario,
   runScenario,
@@ -166,4 +168,169 @@ test('the outcome can be chosen once, on the pretend checkout page', async () =>
     'succeeded',
   );
   assert.equal(await mock.chooseScenario('mock_pay_unknown', 'succeed'), false);
+});
+
+// You collect (plan Task 4): the pretend partner's collect checkout, transfers, destinations and
+// TipMe's own balances. Each scenario answers once, keyed like markAmount, then the partner pays.
+const collectInput = (key, accountRef = 'mock_acct_person') => ({
+  accountRef,
+  amountMinor: 950000n,
+  currency: 'NGN',
+  idempotencyKey: key,
+});
+
+test('the pretend partner answers each collect scenario once, then pays', async () => {
+  const mock = provider();
+  const refusals = {
+    'collect-insufficient': ['insufficient', 'INSUFFICIENT_BALANCE'],
+    'collect-forbidden': ['capability', 'FORBIDDEN'],
+    'collect-in-debt': ['in_debt', 'ORGANIZATION_IN_DEBT'],
+    'collect-not-found': ['not_found', 'NOT_FOUND'],
+  };
+  for (const [scenario, [reason, code]] of Object.entries(refusals)) {
+    const key = `tipme-collect-${randomUUID()}`;
+    await mock.markCollectAnswer(key, scenario);
+    await assert.rejects(
+      mock.sendCollectTransfer(collectInput(key)),
+      (error) =>
+        error instanceof CollectTransferRefusedError &&
+        error.reason === reason &&
+        error.providerCode === code,
+      scenario,
+    );
+    // Refused: nothing moved, so the account lists nothing for this key.
+    assert.equal(
+      (await mock.listAccountTransfers('mock_acct_person')).some(
+        (transfer) => transfer.group === key,
+      ),
+      false,
+    );
+    const paid = await mock.sendCollectTransfer(collectInput(key));
+    assert.equal(paid.status, 'paid');
+  }
+
+  // No reply: the transfer exists, its answer is lost; the same key replays it, the list has it.
+  const lost = `tipme-collect-${randomUUID()}`;
+  await mock.markCollectAnswer(lost, 'collect-no-reply');
+  await assert.rejects(
+    mock.sendCollectTransfer(collectInput(lost)),
+    (error) =>
+      error instanceof UncertainProviderOutcomeError &&
+      error.diagnostic?.cause === 'no_response',
+  );
+  const listedLost = (await mock.listAccountTransfers('mock_acct_person')).find(
+    (transfer) => transfer.group === lost,
+  );
+  assert.equal(listedLost.amountMinor, 950000n);
+  const replay = await mock.sendCollectTransfer(collectInput(lost));
+  assert.equal(replay.transferRef, listedLost.transferRef);
+
+  // Mismatch: the partner moved other money; the read-back shows what it moved.
+  const odd = `tipme-collect-${randomUUID()}`;
+  await mock.markCollectAnswer(odd, 'collect-mismatch');
+  await assert.rejects(
+    mock.sendCollectTransfer(collectInput(odd)),
+    (error) =>
+      error instanceof UncertainProviderOutcomeError &&
+      error.diagnostic?.cause === 'unexpected_state',
+  );
+  const listedOdd = (await mock.listAccountTransfers('mock_acct_person')).find(
+    (transfer) => transfer.group === odd,
+  );
+  assert.notEqual(listedOdd.amountMinor, 950000n);
+
+  // The list honours transfer_group and the account: another account's transfer is not in it.
+  const elsewhere = `tipme-collect-${randomUUID()}`;
+  await mock.sendCollectTransfer(collectInput(elsewhere, 'mock_acct_other'));
+  const mine = await mock.listAccountTransfers('mock_acct_person');
+  assert.equal(
+    mine.some((transfer) => transfer.group === elsewhere),
+    false,
+  );
+  assert.equal(
+    new Set(mine.map((transfer) => transfer.group)).size,
+    mine.length,
+  );
+});
+
+test('the pretend partner reviews or rejects a destination once, as told', async () => {
+  const mock = provider();
+  const bank = {
+    accountNumber: '0123456789',
+    accountName: 'ADA OKAFOR',
+    bankCode: '058',
+  };
+  for (const [scenario, status] of [
+    ['destination-pending-review', 'pending_review'],
+    ['destination-rejected', 'rejected'],
+  ]) {
+    const account = `mock_acct_${randomUUID().slice(0, 8)}`;
+    await mock.markCollectAnswer(account, scenario);
+    const added = await mock.addPayoutDestination(account, bank);
+    assert.deepEqual(
+      { status: added.status, usable: added.usable },
+      { status, usable: false },
+    );
+    assert.equal(
+      await mock.payoutDestinationStatus(account, added.destinationRef),
+      status,
+    );
+    // Used once: the next bank account added is usable.
+    const next = await mock.addPayoutDestination(account, {
+      ...bank,
+      accountNumber: '0123451111',
+    });
+    assert.equal(next.status, 'usable');
+  }
+});
+
+test('TipMe’s pretend balances and payout schedule can be set, signed', async () => {
+  const mock = provider();
+  assert.deepEqual(await mock.platformPayoutSchedule(), { NGN: 'manual' });
+  await mock.markCollectAnswer('platform', 'auto-payout-on');
+  assert.deepEqual(await mock.platformPayoutSchedule(), { NGN: 'daily' });
+  assert.deepEqual(await mock.platformPayoutSchedule(), { NGN: 'manual' });
+
+  const [ngn] = await mock.platformBalances();
+  assert.equal(ngn.currency, 'NGN');
+  await mock.markPlatformBalances([
+    { currency: 'NGN', availableMinor: 500000n, pendingMinor: 100n },
+  ]);
+  assert.deepEqual(await mock.platformBalances(), [
+    { currency: 'NGN', availableMinor: 500000n, pendingMinor: 100n },
+  ]);
+  await mock.markCollectAnswer('platform', 'balance-usd-negative');
+  assert.deepEqual(await mock.platformBalances(), [
+    { currency: 'NGN', availableMinor: 500000n, pendingMinor: 100n },
+    { currency: 'USD', availableMinor: -1500n, pendingMinor: 0n },
+  ]);
+  assert.equal((await mock.platformBalances()).length, 1);
+});
+
+test('a pretend collect checkout is on TipMe’s own account, one per attempt, read with its charge', async () => {
+  const mock = provider();
+  const attemptId = randomUUID();
+  const input = {
+    attemptId,
+    amountMinor: 1000000n,
+    currency: 'NGN',
+    successUrl: 'http://localhost:3000/return',
+    cancelUrl: 'http://localhost:3000/cancel',
+    idempotencyKey: `tipme-checkout-${attemptId}`,
+  };
+  const [first, again] = await Promise.all([
+    mock.initializeCollectCheckout(input),
+    mock.initializeCollectCheckout(input),
+  ]);
+  assert.match(first.providerReference, /^platform:mock_collect_/);
+  assert.equal(first.providerReference, again.providerReference);
+  assert.deepEqual(await mock.findPayment(attemptId), {
+    providerReference: first.providerReference,
+  });
+  await mock.markStatus(first.providerReference, 'succeeded');
+  const read = await mock.verifyTransaction(first.providerReference);
+  assert.equal(read.status, 'succeeded');
+  assert.equal(read.method, 'NGN_CARD');
+  assert.equal(read.feePaidBy, 'platform');
+  assert.equal(read.chargeReference, `mock_ch_${first.providerReference}`);
 });
