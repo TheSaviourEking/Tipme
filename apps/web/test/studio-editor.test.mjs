@@ -370,7 +370,10 @@ test('a publish answer becomes an outcome: published, the server’s issues, or 
     message: 'A word is too long for a phone',
     fixes: [],
   };
-  assert.equal(publishOutcome({ ok: true, status: 200, data: {} }), 'published');
+  assert.equal(
+    publishOutcome({ ok: true, status: 200, data: {} }),
+    'published',
+  );
   assert.deepEqual(
     publishOutcome({
       ok: false,
@@ -391,10 +394,9 @@ test('a publish answer becomes an outcome: published, the server’s issues, or 
       }),
       { failed: 'other' },
     );
-  assert.deepEqual(
-    publishOutcome({ ok: false, status: 0, code: 'NETWORK' }),
-    { failed: 'network' },
-  );
+  assert.deepEqual(publishOutcome({ ok: false, status: 0, code: 'NETWORK' }), {
+    failed: 'network',
+  });
   assert.deepEqual(
     publishOutcome({ ok: false, status: 409, code: 'STUDIO_DRAFT_STALE' }),
     { failed: 'stale' },
