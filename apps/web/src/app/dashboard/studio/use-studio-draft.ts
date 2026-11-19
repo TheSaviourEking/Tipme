@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  STUDIO_STYLES,
   applyStudioFix,
   checkDesign,
   type MyStudio,
@@ -209,18 +210,16 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     if (blocked.current) return Promise.resolve();
     const round = (async () => {
       for (;;) {
-        const doc = latest.current;
-        const body = JSON.stringify(doc);
         // Whether this round carries an undo (it read the draft after one).
         const undo = undoing.current;
+        // A preview is never sent (§12.4): the server would refuse the switch. The draft before
+        // it is, so an edit made just before a preview is saved (on the pause, on leaving). An
+        // undo is sent as it is, so the server judges it and a refusal is repaired as R4 says.
+        const doc =
+          !undo && isPreview(latest.current) ? base.current : latest.current;
+        const body = JSON.stringify(doc);
         if (body === saved.current) {
           setSave('saved');
-          return;
-        }
-        // A preview is never sent (§12.4): the server would refuse the switch. An undo is, so the
-        // server judges it and a refusal is repaired as R4 says.
-        if (!undo && isPreview(doc)) {
-          setSave('pending');
           return;
         }
         setSave('saving');
@@ -290,10 +289,11 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
       setDraft(next);
       const step = describeChange(base.current, next);
       if (isPreview(next)) {
-        // Kept in memory: no step and no save. Undo takes back the whole preview.
-        clearTimeout(timer.current);
+        // Kept in memory: no step, and nothing new to save (a save already waiting for the pause
+        // still sends the draft before the preview). Undo takes back the whole preview, edits
+        // made during it included, so its name is the style change.
         markPreviewing(true);
-        setUndoLabel(step?.label ?? stack.current.peek()?.label ?? null);
+        setUndoLabel(`style changed to ${STUDIO_STYLES[next.style].name}`);
         return;
       }
       markPreviewing(false);
@@ -427,8 +427,9 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
 
   // Leaving with an edit not yet saved: save it now (another dashboard page, or closing the tab,
   // when the browser also asks first).
+  // A preview alone has nothing to lose (it is never saved); what counts is the draft before it.
   useEffect(() => {
-    const unsaved = () => saved.current !== JSON.stringify(latest.current);
+    const unsaved = () => saved.current !== JSON.stringify(base.current);
     const warn = (event: BeforeUnloadEvent) => {
       if (!unsaved()) return;
       void send();
