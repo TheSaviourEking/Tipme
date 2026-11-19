@@ -79,6 +79,10 @@ before(async () => {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_AVATARS_PER_HOUR: '1000',
+      // Saves, publishes and discards are limited per address (60 a minute in production), and
+      // every request here comes from 127.0.0.1: this file makes more than 60 in a minute. Its own
+      // allowance, as the e2e stack has (playwright.config.ts).
+      RATE_LIMIT_STUDIO_DRAFTS_PER_MIN: '10000',
       LIVE_UPDATES_ENABLED: 'true',
       RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
       WEB_REVALIDATE_URL: `http://127.0.0.1:${revalidateServer.address().port}/api/revalidate`,
