@@ -292,8 +292,11 @@ test('the withdraw screen writes every amount one way, and the minimum comes fro
   await expect(
     page.getByRole('button', { name: 'Withdraw ₦1,900' }),
   ).toBeEnabled();
-  // No amount on this screen is written as "NGN 1,900.00".
-  await expect(page.locator('main')).not.toContainText(/NGN \d/);
+  // No amount on this screen is written as "NGN 1,900.00". The Withdraw view only: the dashboard bar
+  // around it (in `main` too) carries the bell, whose "You got a tip" toast can show up meanwhile.
+  const view = page.locator('.dashboard-section.withdraw');
+  await expect(view).toContainText('₦1,900');
+  await expect(view).not.toContainText(/NGN \d/);
 });
 
 test('Everything fills the whole balance, and under ₦2,000 it is the only way', async ({
