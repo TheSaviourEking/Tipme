@@ -105,6 +105,7 @@ export * from './operations/supporters.js';
 export * from './operations/business-shifts.js';
 export * from './operations/pro-price.js';
 export * from './operations/plan-fee-rates.js';
+export * from './operations/collect-settings.js';
 export * from './operations/feature-switches.js';
 export * from './operations/pro-periods.js';
 export * from './operations/plan-history.js';

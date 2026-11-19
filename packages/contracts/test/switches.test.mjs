@@ -35,6 +35,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'supporter_recognition',
     'team_tips',
     'tip_refunds',
+    'you_collect',
   ]);
   for (const key of FEATURE_SWITCHES) {
     const entry = FEATURE_SWITCH_CATALOGUE[key];
@@ -58,6 +59,7 @@ test('money switches are exactly the owner’s list (and team tips), and none de
     'refund_fee_return',
     'team_tips',
     'tip_refunds',
+    'you_collect',
   ]);
   for (const key of money)
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
@@ -324,10 +326,14 @@ test('tip_refunds is a money switch, off by default, seeded from TIP_REFUNDS (on
 
 // 16 Nov 2026: a switch with nothing built behind it stays registered (stored rows and old variables
 // stay valid) but is marked, so admin can't offer turning it on and the API refuses it.
-test('team_tips and business_owners are marked not built; every other switch is built', async () => {
+test('team_tips, business_owners and you_collect are marked not built; every other switch is built', async () => {
   const { featureSwitchBuilt } = await import('../dist/index.js');
   const notBuilt = FEATURE_SWITCHES.filter((key) => !featureSwitchBuilt(key));
-  assert.deepEqual(notBuilt.sort(), ['business_owners', 'team_tips']);
+  assert.deepEqual(notBuilt.sort(), [
+    'business_owners',
+    'team_tips',
+    'you_collect',
+  ]);
   for (const key of notBuilt) {
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].notBuilt, true, key);
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
@@ -350,4 +356,27 @@ test('business_payout_fee_absorbed is a money switch, off by default (businesses
   assert.equal(entry.default, false);
   assert.equal(entry.env.name, 'BUSINESS_PAYOUT_FEE_ABSORBED');
   assert.doesNotMatch(entry.description, /bachs/i);
+});
+
+// You collect (ADR-0016, proposed; plan Task 3, ruling R12): registered now so later PRs read it, but
+// nothing is built behind it, so staff can't turn it on until Task 16 removes the mark.
+test('you_collect is a money switch, off, and cannot be turned on yet', async () => {
+  const { featureSwitchBuilt } = await import('../dist/index.js');
+  const entry = FEATURE_SWITCH_CATALOGUE.you_collect;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.notBuilt, true);
+  assert.equal(featureSwitchBuilt('you_collect'), false);
+  assert.equal(entry.label, 'You collect for new recipients');
+  assert.equal(
+    entry.description,
+    'New sign-ups take tips through TipMe and add bank details when they first withdraw. Off, nobody new is put on it; recipients already on it keep it.',
+  );
+  assert.deepEqual(entry.env, { name: 'YOU_COLLECT', on: 'on', off: 'off' });
+  assert.equal(
+    featureSwitchFromEnv('you_collect', { YOU_COLLECT: 'on' }),
+    true,
+  );
+  // Users never see the partner's name, and staff read no wallet or custody words here.
+  assert.doesNotMatch(entry.description, /bachs|wallet|protected|insured/i);
 });

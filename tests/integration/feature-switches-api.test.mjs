@@ -60,7 +60,7 @@ test('the first start wrote every switch, the old variable included, and logged 
   const rows = await q(
     `SELECT key, enabled, source FROM feature_switches ORDER BY key`,
   );
-  assert.equal(rows.length, 18);
+  assert.equal(rows.length, 19);
   assert.deepEqual(
     rows.find((r) => r.key === 'business'),
     {
@@ -103,8 +103,8 @@ test('an owner reads every switch with its state, default and history', async ()
   const response = await opsCall(session, 'GET', '/v1/ops/switches');
   assert.equal(response.status, 200);
   const { switches } = (await response.json()).data;
-  // 12 from #216, business_pro, business_signup, business_owners, campaign_pages (train 2), tip_refunds (#221), and business_payout_fee_absorbed (18 Nov 2026).
-  assert.equal(switches.length, 18);
+  // 12 from #216, business_pro, business_signup, business_owners, campaign_pages (train 2), tip_refunds (#221), business_payout_fee_absorbed (18 Nov 2026), and you_collect (19 Nov 2026, not built).
+  assert.equal(switches.length, 19);
   const studio = switches.find((s) => s.key === 'page_studio');
   assert.equal(studio.on, false);
   assert.equal(studio.envName, 'PAGE_STUDIO_ENABLED');
@@ -208,13 +208,13 @@ test('a switch with nothing built behind it is marked, and turning it on is refu
       .filter((s) => s.notBuilt)
       .map((s) => s.key)
       .sort(),
-    ['business_owners', 'team_tips'],
+    ['business_owners', 'team_tips', 'you_collect'],
   );
   assert.ok(listed.every((s) => typeof s.notBuilt === 'boolean'));
   const before = await q(
     `SELECT count(*)::int AS n FROM approval_requests WHERE action = 'feature_switch.set'`,
   );
-  for (const key of ['team_tips', 'business_owners']) {
+  for (const key of ['team_tips', 'business_owners', 'you_collect']) {
     const refused = await opsCall(session, 'POST', `/v1/ops/switches/${key}`, {
       on: true,
       reason: REASON,

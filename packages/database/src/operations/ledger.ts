@@ -77,7 +77,16 @@ export async function postLedgerTransaction(
   tx: Tx,
   input: {
     operationType:
-      'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale' | 'pro_refund';
+      | 'payment'
+      | 'payout'
+      | 'reward'
+      | 'reversal'
+      | 'pro_sale'
+      | 'pro_refund'
+      // You collect (ADR-0016, proposed): held money moved to or from a recipient's account, and a
+      // dispute's fee from TipMe's own money.
+      | 'collect_transfer'
+      | 'dispute_fee';
     operationKey: string;
     currency: string;
     tipId?: string;
