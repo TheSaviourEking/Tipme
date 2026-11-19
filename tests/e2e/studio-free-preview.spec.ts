@@ -245,6 +245,138 @@ test('a lapsed person sees the banner with "See Pro" and can edit within the Fre
   await expect(status(page)).toHaveText(PREVIEWING);
 });
 
+const HEADING = {
+  id: 'e2efpv01',
+  kind: 'text',
+  variant: 'heading',
+  text: 'New single',
+};
+const QUOTE = { id: 'e2efpv02', kind: 'quote', text: 'Sang like home.' };
+const blockList = (page: Page) =>
+  page.getByRole('list', { name: 'Your blocks' });
+const blockIds = (draft: Record<string, unknown>) =>
+  (draft.blocks as { id: string }[]).map((b) => b.id).join(',');
+const headingText = (draft: Record<string, unknown>) =>
+  (draft.blocks as { text?: string }[])[0]?.text;
+
+/** Whether leaving now would ask first ("Leave site?"): the editor's beforeunload handler. */
+const asksBeforeLeaving = (page: Page) =>
+  page.evaluate(() => {
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+
+test('an edit made just before a preview is saved when leaving inside the app', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: [HEADING] });
+  await openEditor(page);
+  const seen = countRequests(page);
+  await page.getByRole('tab', { name: 'Blocks' }).click();
+  await blockList(page).getByRole('button', { name: /^Text/ }).click();
+  await blockList(page)
+    .getByRole('textbox', { name: 'Heading', exact: true })
+    .fill('Before the preview');
+  // Within the 800 ms save pause: the Style tab, then Stage, in the page itself.
+  await page.evaluate(async () => {
+    const tab = [
+      ...document.querySelectorAll<HTMLElement>('[role="tab"]'),
+    ].find((t) => t.textContent?.trim() === 'Style');
+    tab!.click();
+    await new Promise((r) => setTimeout(r, 60));
+    document
+      .querySelector<HTMLElement>('[role="radio"][aria-label^="Stage,"]')!
+      .click();
+  });
+  await expect(status(page)).toHaveText(PREVIEWING);
+  // Another page of the dashboard: the editor unmounts.
+  await page.getByRole('link', { name: 'Back to My page' }).click();
+  await page.waitForURL(/\/dashboard\/settings/);
+  await expect
+    .poll(
+      async () => {
+        const draft = (await savedStudio(page)).draft;
+        return [draft.style, headingText(draft)];
+      },
+      { timeout: 10_000 },
+    )
+    .toEqual(['clear', 'Before the preview']);
+  expect(seen.saves).toBeGreaterThan(0);
+});
+
+test('a preview alone doesn’t ask before leaving; an unsaved edit underneath it does', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  await card(page, 'Stage').click();
+  await expect(status(page)).toHaveText(PREVIEWING);
+  expect(await asksBeforeLeaving(page)).toBe(false);
+  // Back to Classic, then an edit whose save is held: now there is something to lose.
+  await undoButton(page).click();
+  await expect(status(page)).toHaveText('Saved · not published');
+  await page.route(`${API_ORIGIN}/v1/me/studio/draft`, () => {});
+  await choice(page, 'Appearance', 'Dark').click();
+  expect(await asksBeforeLeaving(page)).toBe(true);
+});
+
+test('edits during a preview go with it: Undo names the style change and takes them back', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  const seen = countRequests(page);
+  await card(page, 'Stage').click();
+  await choice(page, 'Appearance', 'Dark').click();
+  await expect(previewPage(page)).toHaveAttribute('data-mode', 'dark');
+  await expect(undoButton(page)).toHaveAccessibleName(
+    'Undo: style changed to Stage',
+  );
+  await undoButton(page).click();
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Appearance', 'Light')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await pastTheSavePause(page);
+  expect(seen.saves).toBe(0);
+});
+
+test('a lapsed person with a published Pro page can reorder blocks and undo', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await saveDraft(page, { style: 'stage', blocks: [HEADING, QUOTE] });
+  await publishNow(page);
+  await setPlan(who.handle, 'free');
+  await openEditor(page);
+  await expect(lapse(page)).toBeVisible();
+  await page.getByRole('tab', { name: 'Blocks' }).click();
+  await blockList(page).getByRole('button', { name: 'Move Quote up' }).click();
+  await expect
+    .poll(async () => blockIds((await savedStudio(page)).draft), {
+      timeout: 10_000,
+    })
+    .toBe([QUOTE.id, HEADING.id].join(','));
+  await expect(status(page)).toHaveText('Saved · not published');
+  await expect(undoButton(page)).toHaveAccessibleName('Undo: block moved');
+  await undoButton(page).click();
+  await expect
+    .poll(
+      async () => {
+        const draft = (await savedStudio(page)).draft;
+        return [draft.style, blockIds(draft)];
+      },
+      { timeout: 10_000 },
+    )
+    .toEqual(['stage', [HEADING.id, QUOTE.id].join(',')]);
+  await expect(status(page)).toHaveText('Published');
+  await expect(page.locator('div.pst-banner')).toHaveCount(0);
+});
+
 for (const width of [320, 390, 1440])
   test(`previewing a Pro style and the lapse banner fit and are accessible at ${width}`, async ({
     page,
