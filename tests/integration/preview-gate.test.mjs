@@ -205,6 +205,8 @@ test('health, release info and signed webhooks need no cookie', async () => {
     businessPro: false,
     businessSignup: false,
     businessOwners: false,
+    // The page_studio admin switch (off here): the web's /studio-preview 404s while it is off.
+    pageStudio: false,
   });
   // Unsigned, so refused by the webhook itself (400/401), not by the gate.
   const hook = await fetch(`${gated.api}/v1/webhooks/mock`, {
