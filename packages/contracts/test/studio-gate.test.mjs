@@ -9,6 +9,7 @@ import {
   proItemsOf,
   studioDraftRefusal,
   studioDraftSchema,
+  studioKeepHeld,
   studioShown,
 } from '../dist/index.js';
 import { runs, seed } from './support/pbt.mjs';
@@ -394,4 +395,108 @@ test('a draft save takes a v2 document only; a v1 draft is refused (ruling R1, P
       false,
       JSON.stringify(bad).slice(0, 60),
     );
+});
+
+// What a refused Free save may keep (Task 15, R4): the editor and the server judge "held" with the
+// same function, so an undo the server refuses is repaired to exactly what it would accept.
+test('what a Free save may keep: each Pro part goes back to its held version, or goes when nothing holds it', () => {
+  const free = (next, held) => studioKeepHeld(next, held, 'free');
+  // A gallery restored beyond what is held goes back to the held gallery, not away.
+  const saved = doc({
+    blocks: [heading('blk00001'), gallery('blk00002', [IMG1])],
+  });
+  const sent = doc({
+    blocks: [heading('blk00001', 'Typed'), gallery('blk00002', [IMG1, IMG2])],
+  });
+  assert.deepEqual(free(sent, { draft: saved, published: null }), {
+    ...sent,
+    blocks: [heading('blk00001', 'Typed'), gallery('blk00002', [IMG1])],
+  });
+  // A photo whose image changed goes back to the held photo.
+  const photo = (imageId) => ({
+    id: 'blk00003',
+    kind: 'photo',
+    imageId,
+    alt: 'Me',
+  });
+  assert.deepEqual(
+    free(doc({ blocks: [photo(IMG2)] }), {
+      draft: doc({ blocks: [photo(IMG1)] }),
+      published: null,
+    }).blocks,
+    [photo(IMG1)],
+  );
+  // A video link that changed goes back to the held link.
+  const held = { draft: doc({ blocks: [video('blk00004')] }), published: null };
+  assert.deepEqual(
+    free(
+      doc({
+        blocks: [{ ...video('blk00004'), url: 'https://youtu.be/aaaaaaaaaaa' }],
+      }),
+      held,
+    ).blocks,
+    [video('blk00004')],
+  );
+  // Held only by the published version: kept, while a Pro style in the same send goes back to the
+  // stored draft's style (its cover kept where offered) and the photo accent to the draft's accent.
+  const v = video('blk00005');
+  const both = {
+    draft: doc({
+      style: 'clear',
+      accent: 'blue',
+      blocks: [heading('blk00001')],
+    }),
+    published: doc({ style: 'clear', blocks: [v] }),
+  };
+  assert.deepEqual(
+    free(
+      doc({
+        style: 'stage',
+        accent: 'photo',
+        cover: 'gradient',
+        blocks: [heading('blk00001'), v],
+      }),
+      both,
+    ),
+    doc({
+      style: 'clear',
+      accent: 'blue',
+      cover: 'gradient',
+      blocks: [heading('blk00001'), v],
+    }),
+  );
+  // A Pro block nothing holds goes; free blocks always stay.
+  assert.deepEqual(
+    free(doc({ blocks: [quote('blk00006'), gallery('blk00007')] }), {
+      draft: doc(),
+      published: null,
+    }).blocks,
+    [quote('blk00006')],
+  );
+  // Nothing to refuse: the same document back. Pro keeps everything.
+  assert.equal(free(saved, { draft: saved, published: null }), saved);
+  assert.equal(
+    studioKeepHeld(sent, { draft: null, published: null }, 'pro'),
+    sent,
+  );
+});
+
+test('what a Free save may keep is always accepted, and refusal means something had to go', () => {
+  fc.assert(
+    fc.property(
+      studioDocumentArb(),
+      studioDocumentArb(),
+      fc.option(studioDocumentArb(), { nil: null }),
+      (next, draft, published) => {
+        const held = { draft, published };
+        const kept = studioKeepHeld(next, held, 'free');
+        assert.equal(studioDraftRefusal(kept, held, 'free'), null);
+        assert.equal(
+          studioDraftRefusal(next, held, 'free') === null,
+          kept === next,
+        );
+      },
+    ),
+    { seed: seed(), numRuns: runs(300) },
+  );
 });

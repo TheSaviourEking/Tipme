@@ -7551,6 +7551,7 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "studio_drafts",
         "security": [
           {
             "session": []

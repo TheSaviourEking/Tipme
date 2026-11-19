@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
@@ -17,6 +18,7 @@ import {
 } from '@tipme/contracts';
 import { Button, EmptySlip, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { apiFetch } from '@/lib/session-client';
 import { BlocksTab, type BlocksTarget } from './blocks-tab';
@@ -25,15 +27,19 @@ import { CheckPanel } from './check-panel';
 import { RadioGroup } from './segmented';
 import { PublishDialog } from './publish-dialog';
 import {
+  RELOAD_FAILED,
   checkBadge,
+  hasChangesToDiscard,
   publishLabel,
   saveWords,
+  staleBannerWords,
   type PublishFailure,
 } from './studio-editor-model';
 import { StudioPreview, type PreviewDevice } from './studio-preview';
 import { StyleTab } from './style-tab';
 import { accentHeading, styleSummary } from './style-tab-model';
 import { useStudioDraft } from './use-studio-draft';
+import { undoButtonName } from './undo-stack';
 import { editorFontFaces } from './editor-fonts';
 import './studio-editor.css';
 
@@ -111,6 +117,30 @@ export function StudioEditorRoute() {
   return <StudioEditor initial={answer.studio} />;
 }
 
+/**
+ * Where Ctrl/Cmd+Z is the field's own undo, not the editor's (§12.2): text you type into. A
+ * checkbox or a radio is an input but not a text field.
+ */
+function inTextField(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable || target instanceof HTMLTextAreaElement)
+    return true;
+  if (target instanceof HTMLSelectElement) return true;
+  return (
+    target instanceof HTMLInputElement &&
+    ![
+      'checkbox',
+      'radio',
+      'button',
+      'submit',
+      'reset',
+      'range',
+      'color',
+      'file',
+    ].includes(target.type)
+  );
+}
+
 /** Today in Lagos, as the server reads a draft's events. */
 const lagosToday = () =>
   new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Lagos' }).format(
@@ -135,8 +165,34 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
     busy: boolean;
     failure: PublishFailure | null;
   } | null>(null);
+  /**
+   * Where focus goes next, moved in the commit that renders it, never before. With the gate open,
+   * that is the commit that removed the dialog: while the browser's modal is open everything
+   * outside it is inert, so `focus()` there does nothing, and a requestAnimationFrame can run
+   * before React commits (a busy tab). Without a dialog (the Check tab), it is the next commit.
+   */
+  const focusAfterGate = useRef<(() => HTMLElement | null) | null>(null);
+  const [focusRound, setFocusRound] = useState(0);
+  const focusNext = (target: (() => HTMLElement | null) | null) => {
+    focusAfterGate.current = target;
+    if (target) setFocusRound((n) => n + 1);
+  };
+  useLayoutEffect(() => {
+    if (gate !== null || !focusAfterGate.current) return;
+    const target = focusAfterGate.current();
+    focusAfterGate.current = null;
+    target?.focus({ preventScroll: true });
+  }, [gate, focusRound]);
   /** The read-only banner: where a press on Publish goes while nothing can be published. */
   const bannerRef = useRef<HTMLDivElement>(null);
+  /** The banner's "Show the latest", where focus goes when the latest couldn't be loaded. */
+  const showLatestRef = useRef<HTMLButtonElement>(null);
+  const [reloadFailed, setReloadFailed] = useState(false);
+  // Discard (§12.3): the question, a discard on its way, and whether the last one failed.
+  const [discardAsk, setDiscardAsk] = useState<{
+    busy: boolean;
+    failed: boolean;
+  } | null>(null);
   const cardsId = `${id}-cards`;
   const readOnly = studio.stale || studio.proRequired;
   const count = studio.check.issues.length;
@@ -148,14 +204,66 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           JSON.stringify(resolveStudio(draft, lagosToday()))
         ? 'same'
         : true;
+  const canUndo = studio.canUndo && !readOnly;
+  // Not while another tab's newer draft is unseen: a discard would throw that away too.
+  const canDiscard = !studio.stale && hasChangesToDiscard(draft, published);
+
+  /**
+   * "Show the latest", from the banner or the dialog. If the latest can't be read, the banner
+   * stays and says so, and focus goes to its button (the dialog, if open, closes first).
+   */
+  const showLatest = async (fromDialog: boolean) => {
+    const loaded = await studio.reload();
+    setReloadFailed(!loaded);
+    if (loaded) {
+      if (fromDialog) closeGate();
+      return;
+    }
+    if (fromDialog) {
+      focusNext(() => showLatestRef.current);
+      setGate(null);
+      return;
+    }
+    requestAnimationFrame(() =>
+      showLatestRef.current?.focus({ preventScroll: true }),
+    );
+  };
+
+  const discard = async () => {
+    if (discardAsk?.busy) return;
+    setDiscardAsk({ busy: true, failed: false });
+    const done = await studio.discard();
+    if (done) {
+      setDiscardAsk(null);
+      setCoverChoice(studio.published?.cover ?? 'yours');
+    } else setDiscardAsk({ busy: false, failed: true });
+  };
+
+  // Ctrl/Cmd+Z outside a text field is the editor's Undo (§12.2). Not while a dialog is open.
+  const undoKey = useRef(() => {});
+  useEffect(() => {
+    undoKey.current = () => {
+      if (canUndo) studio.undo();
+    };
+  });
+  useEffect(() => {
+    const press = (event: globalThis.KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'z' || event.shiftKey || event.altKey)
+        return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (inTextField(event.target)) return;
+      if (document.querySelector('dialog[open]')) return;
+      event.preventDefault();
+      undoKey.current();
+    };
+    window.addEventListener('keydown', press);
+    return () => window.removeEventListener('keydown', press);
+  }, []);
 
   /** Closes the gate; focus goes back to Publish unless a fix is taking it elsewhere. */
   const closeGate = (refocus = true) => {
+    focusNext(refocus ? () => publishRef.current : null);
     setGate(null);
-    if (refocus)
-      requestAnimationFrame(() =>
-        publishRef.current?.focus({ preventScroll: true }),
-      );
   };
   const publish = async () => {
     if (gate?.busy || readOnly) return;
@@ -179,13 +287,12 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const input = (issue: StudioIssue, fixId: string) => {
     if (fixId === 'choose-free-style') {
       setTab('style');
-      // After the Style tab renders: its cards' one Tab stop (the chosen card).
-      requestAnimationFrame(() =>
-        document
-          .querySelector<HTMLElement>(
-            `[aria-labelledby="${cardsId}"] [role="radio"][tabindex="0"]`,
-          )
-          ?.focus(),
+      // Once the Style tab has rendered (and the dialog, if any, is gone): the cards' one Tab
+      // stop, the chosen card. From the dialog and from the Check tab alike.
+      focusNext(() =>
+        document.querySelector<HTMLElement>(
+          `[aria-labelledby="${cardsId}"] [role="radio"][tabindex="0"]`,
+        ),
       );
       return;
     }
@@ -266,6 +373,29 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           <Link className="tm-button tm-button--quiet" href={MY_PAGE}>
             Back to My page
           </Link>
+          {/* aria-disabled, never disabled: focus stays on it after the last undo. */}
+          <Button
+            variant="quiet"
+            className="pst-bar__undo"
+            aria-label={canUndo ? undoButtonName(studio.undoLabel) : undefined}
+            aria-disabled={!canUndo || undefined}
+            onClick={() => {
+              if (canUndo) studio.undo();
+            }}
+          >
+            Undo
+          </Button>
+          <Button
+            variant="quiet"
+            className="pst-bar__discard"
+            aria-haspopup="dialog"
+            aria-disabled={!canDiscard || undefined}
+            onClick={() => {
+              if (canDiscard) setDiscardAsk({ busy: false, failed: false });
+            }}
+          >
+            Discard changes
+          </Button>
           {/* aria-disabled, never disabled: while issues remain it stays focusable and opens the list. */}
           <button
             ref={publishRef}
@@ -290,9 +420,8 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           busy={gate.busy}
           failure={gate.failure}
           save={studio.save}
-          onShowLatest={() => {
-            void studio.reload().then(() => closeGate());
-          }}
+          unsaved={studio.unsaved}
+          onShowLatest={() => void showLatest(true)}
           readOnly={readOnly}
           onPublish={() => void publish()}
           onFix={studio.fix}
@@ -303,13 +432,41 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           onClose={() => closeGate()}
         />
       )}
+      {discardAsk && (
+        <ConfirmDialog
+          title="Discard your changes?"
+          confirm="Discard changes"
+          cancel="Keep editing"
+          busy={discardAsk.busy}
+          onConfirm={() => void discard()}
+          onCancel={() => setDiscardAsk(null)}
+        >
+          <p>Your page stays as it is now.</p>
+          {discardAsk.failed && (
+            <p className="pst-publish__failed" role="alert">
+              Your changes weren’t discarded. Try again in a moment.
+            </p>
+          )}
+        </ConfirmDialog>
+      )}
+      {/* R4: an undo the server refused on Free. Always rendered, so the sentence is announced. */}
+      <p
+        className="pst-notice"
+        role="status"
+        data-shown={studio.notice ? true : undefined}
+      >
+        {studio.notice}
+      </p>
       {readOnly && (
         <div ref={bannerRef} tabIndex={-1} className="pst-banner">
           {studio.stale ? (
             <Slip tone="neutral" title="This draft changed in another tab">
-              Your design was saved somewhere else after this page opened, so we
-              stopped saving here to keep that version.{' '}
-              <Button variant="secondary" onClick={() => void studio.reload()}>
+              {staleBannerWords(studio.unsaved)}{' '}
+              <Button
+                ref={showLatestRef}
+                variant="secondary"
+                onClick={() => void showLatest(false)}
+              >
                 Show the latest
               </Button>
             </Slip>
@@ -317,10 +474,19 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
             <Slip tone="neutral" title="That change needs Pro">
               Your draft is kept as it was last saved.{' '}
               <Link href="/pro">See Pro</Link>{' '}
-              <Button variant="secondary" onClick={() => void studio.reload()}>
+              <Button
+                ref={showLatestRef}
+                variant="secondary"
+                onClick={() => void showLatest(false)}
+              >
                 Show the latest
               </Button>
             </Slip>
+          )}
+          {reloadFailed && (
+            <p className="pst-banner__failed" role="alert">
+              {RELOAD_FAILED}
+            </p>
           )}
         </div>
       )}

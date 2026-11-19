@@ -190,9 +190,13 @@ export class StudioController {
     return { data: result.studio };
   }
 
-  /** Back to the published version (or nothing); the draft's own photos go with it. */
+  /**
+   * Back to the published version (or nothing); the draft's own photos go with it. Same allowance
+   * as saving: each discard locks the page and may remove photos.
+   */
   @Delete('me/studio/draft')
   @UseGuards(SessionGuard, CsrfGuard)
+  @RateLimit('studio_drafts')
   async discard(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyStudio>> {

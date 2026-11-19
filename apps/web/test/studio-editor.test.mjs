@@ -31,11 +31,14 @@ import {
   issueTab,
   passingWords,
   blockedIntro,
+  hasChangesToDiscard,
   publishFailureWords,
   publishLabel,
   publishOutcome,
   publishTally,
+  RELOAD_FAILED,
   saveWords,
+  staleBannerWords,
   studioEntry,
   withRefusal,
 } from '../src/app/dashboard/studio/studio-editor-model.ts';
@@ -435,6 +438,45 @@ test('a failed publish says why, never claims a network failure didn’t publish
   );
   for (const reason of ['network', 'stale', 'unavailable'])
     assert.doesNotMatch(publishFailureWords(reason, false), /try again/i);
+});
+
+test('a stale draft says plainly that Show the latest drops this tab’s last changes', () => {
+  // "Show the latest" drops them, so the words say so before the press (Task 14 minor a).
+  assert.equal(
+    publishFailureWords('stale', false, true),
+    'This draft changed in another tab. Showing the latest drops your last changes here.',
+  );
+  assert.equal(
+    publishFailureWords('stale', false, false),
+    'This draft changed in another tab. Show the latest to keep editing.',
+  );
+  assert.equal(
+    staleBannerWords(true),
+    'Your design was saved somewhere else after this page opened, so we stopped saving here to keep that version. Showing the latest drops your last changes here.',
+  );
+  assert.equal(
+    staleBannerWords(false),
+    'Your design was saved somewhere else after this page opened, so we stopped saving here to keep that version.',
+  );
+  assert.equal(
+    RELOAD_FAILED,
+    'We couldn’t load the latest. Check your connection, then try again.',
+  );
+});
+
+test('Discard has something to discard unless the draft is the published page, or Classic with no blocks before any publish', () => {
+  const classic = {
+    v: 2,
+    style: 'classic',
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [],
+  };
+  assert.equal(hasChangesToDiscard(classic, false), false);
+  assert.equal(hasChangesToDiscard({ ...classic, mode: 'dark' }, false), true);
+  assert.equal(hasChangesToDiscard(doc(), 'same'), false);
+  assert.equal(hasChangesToDiscard(doc(), true), true);
 });
 
 test('the list’s intro says the draft is saved only when it is', () => {

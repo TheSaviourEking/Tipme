@@ -17,6 +17,12 @@ import {
   type PublishOutcome,
   type SaveState,
 } from './studio-editor-model';
+import {
+  PRO_UNDO_REFUSED,
+  afterRefusedUndo,
+  createUndoStack,
+  describeChange,
+} from './undo-stack';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
 const SAVE_AFTER_MS = 800;
@@ -35,6 +41,16 @@ export interface StudioDraft {
    * reload.
    */
   proRequired: boolean;
+  /** This tab has edits the server doesn't have yet (or never will, once the draft is stale). */
+  unsaved: boolean;
+  /** Something to undo (§12.2), and what: "style changed to Clear". */
+  canUndo: boolean;
+  undoLabel: string | null;
+  /**
+   * A sentence about the last undo, when the server refused it: re-adding a Pro item on Free that
+   * this session saved away (R4). Gone with the next change.
+   */
+  notice: string | null;
   /** The server's facts: the plan, the cover set in Settings, whether there is a profile photo. */
   context: MyStudio['context'];
   plan: MyStudio['plan'];
@@ -54,8 +70,19 @@ export interface StudioDraft {
   upload(file: Blob): Promise<{ imageId: string } | { code: string }>;
   /** Saves now (after a failure). */
   retry(): void;
-  /** Drops this tab's edits for the latest saved draft. */
-  reload(): Promise<void>;
+  /** Drops this tab's edits for the latest saved draft: false when the latest couldn't be read. */
+  reload(): Promise<boolean>;
+  /**
+   * Goes back one step (§12.2) and saves it at once, like any change. On Free, the server refuses a
+   * step that re-adds a Pro item saved away this session (403): the draft stays as last saved, the
+   * step stays undone, `notice` says why, and editing carries on.
+   */
+  undo(): void;
+  /**
+   * Throws the draft away (`DELETE /v1/me/studio/draft`, §12.3): it becomes the published version,
+   * or Classic with no blocks. Undo is cleared. False when the server didn't do it.
+   */
+  discard(): Promise<boolean>;
   /**
    * Saves what is left, then publishes (`POST /v1/me/studio/publish`, §12.1): 'published', the
    * server's issues when its check refuses (422 STUDIO_DESIGN_CHECK_FAILED; they replace the
@@ -68,12 +95,14 @@ export interface StudioDraft {
 /**
  * The draft being edited (plan Task 9's `useStudioDraft`, G1 part): the document, the design check
  * on every change, and a debounced save to `PUT /v1/me/studio/draft` naming the revision it was
- * based on. Saving never needs a passing check; publishing does (§12.1). Undo and discard come
- * with G3.
+ * based on. Saving never needs a passing check; publishing does (§12.1). Undo (§12.2) is an
+ * in-memory stack of earlier drafts; discard (§12.3) goes back to the published version.
  */
 export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [draft, setDraft] = useState(initial.draft);
   const [published, setPublished] = useState(initial.published);
+  /** `published`, for the save loop (what a refused undo may restore from, §11). */
+  const publishedNow = useRef(initial.published);
   const [context, setContext] = useState(initial.context);
   const [plan, setPlan] = useState(initial.plan);
   const [photoAccent, setPhotoAccent] = useState(initial.photoAccent);
@@ -98,6 +127,22 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const [shownRev, setShownRev] = useState(initial.rev);
   const latest = useRef(initial.draft);
   const saved = useRef(JSON.stringify(initial.draft));
+  /** `saved`, for rendering (whether this tab has unsaved edits). */
+  const [savedBody, setSavedBody] = useState(saved.current);
+  const markSaved = useCallback((body: string) => {
+    saved.current = body;
+    setSavedBody(body);
+  }, []);
+  const stack = useRef(createUndoStack());
+  const [undoLabel, setUndoLabel] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  /**
+   * Set by an undo until a save that includes it is answered: a 403 STUDIO_PRO_REQUIRED for that
+   * save is the undo refused (R4), not the read-only kind. A fresh object per undo.
+   */
+  const undoing = useRef<object | null>(null);
+  /** A discard is on its way: edits and saves wait for it. */
+  const discarding = useRef(false);
   const sending = useRef<Promise<void> | null>(null);
   const blocked = useRef(false);
   /** Blocked because another tab saved first (as opposed to a save that needed Pro). */
@@ -108,6 +153,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     rev.current = studio.rev;
     setShownRev(studio.rev);
     setPublished(studio.published);
+    publishedNow.current = studio.published;
     setContext(studio.context);
     setPlan(studio.plan);
     setPhotoAccent(studio.photoAccent);
@@ -126,6 +172,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
       for (;;) {
         const doc = latest.current;
         const body = JSON.stringify(doc);
+        // Whether this round carries an undo (it read the draft after one).
+        const undo = undoing.current;
         if (body === saved.current) {
           setSave('saved');
           return;
@@ -140,6 +188,21 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
             blocked.current = true;
             staleNow.current = true;
             setStale(true);
+          } else if (result.code === 'STUDIO_PRO_REQUIRED' && undo) {
+            // An undo that re-adds a Pro item this session saved away (R4). Put back only what
+            // the server wouldn't take, judged as the server judges it (held by the stored draft
+            // or the published version), in the draft now (edits typed while this save was on its
+            // way stay) and in every step left. Then save what is left, and keep editing.
+            undoing.current = null;
+            const kept = afterRefusedUndo(stack.current, latest.current, {
+              draft: JSON.parse(saved.current) as StudioDocument,
+              published: publishedNow.current,
+            });
+            latest.current = kept;
+            setDraft(kept);
+            setUndoLabel(stack.current.peek()?.label ?? null);
+            setNotice(PRO_UNDO_REFUSED);
+            continue;
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
             blocked.current = true;
             setProRequired(true);
@@ -154,7 +217,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
           setSave('failed');
           return;
         }
-        saved.current = body;
+        markSaved(body);
+        if (undo && undoing.current === undo) undoing.current = null;
         adopt(result.data);
       }
     })().finally(() => {
@@ -162,7 +226,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     });
     sending.current = round;
     return round;
-  }, [adopt]);
+  }, [adopt, markSaved]);
 
   const schedule = useCallback(() => {
     clearTimeout(timer.current);
@@ -172,7 +236,13 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
 
   const change = useCallback(
     (next: StudioDocument) => {
-      if (blocked.current) return;
+      if (blocked.current || discarding.current) return;
+      const step = describeChange(latest.current, next);
+      if (step) {
+        stack.current.push(latest.current, step.label, step.field);
+        setUndoLabel(stack.current.peek()?.label ?? null);
+      }
+      setNotice(null);
       latest.current = next;
       setDraft(next);
       schedule();
@@ -213,20 +283,75 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     return { imageId };
   }, []);
 
+  /** Shows a draft the server just gave (the latest, or the one a discard left): nothing to undo. */
+  const restart = useCallback(
+    (studio: MyStudio) => {
+      clearTimeout(timer.current);
+      blocked.current = false;
+      staleNow.current = false;
+      undoing.current = null;
+      latest.current = studio.draft;
+      markSaved(JSON.stringify(studio.draft));
+      setDraft(studio.draft);
+      adopt(studio);
+      stack.current.clear();
+      setUndoLabel(null);
+      setNotice(null);
+      setRefused(null);
+      setStale(false);
+      setProRequired(false);
+      setSave('saved');
+    },
+    [adopt, markSaved],
+  );
+
   const reload = useCallback(async () => {
     const result = await apiFetch<MyStudio>('/v1/me/studio');
-    if (!result.ok) return;
+    if (!result.ok) return false;
+    restart(result.data);
+    return true;
+  }, [restart]);
+
+  const undo = useCallback(() => {
+    if (blocked.current || discarding.current) return;
+    const step = stack.current.pop();
+    setUndoLabel(stack.current.peek()?.label ?? null);
+    if (!step) return;
+    setNotice(null);
+    undoing.current = {};
+    latest.current = step.doc;
+    setDraft(step.doc);
+    // Saved at once rather than after the pause, so a refusal (R4) can't take later edits with it.
     clearTimeout(timer.current);
-    blocked.current = false;
-    staleNow.current = false;
-    latest.current = result.data.draft;
-    saved.current = JSON.stringify(result.data.draft);
-    setDraft(result.data.draft);
-    adopt(result.data);
-    setStale(false);
-    setProRequired(false);
-    setSave('saved');
-  }, [adopt]);
+    setSave('saving');
+    void send();
+  }, [send]);
+
+  const discard = useCallback(async () => {
+    if (discarding.current) return false;
+    discarding.current = true;
+    clearTimeout(timer.current);
+    try {
+      // A save on its way lands first, so it can't bring the draft back after the discard.
+      if (sending.current) await sending.current;
+      const result = await apiFetch<MyStudio>('/v1/me/studio/draft', {
+        method: 'DELETE',
+      });
+      if (!result.ok) {
+        // Nothing was thrown away: edits not yet saved go on saving.
+        if (
+          !blocked.current &&
+          saved.current !== JSON.stringify(latest.current)
+        )
+          timer.current = setTimeout(() => void send(), SAVE_AFTER_MS);
+        return false;
+      }
+      restart(result.data);
+      return true;
+    } finally {
+      discarding.current = false;
+    }
+  }, [restart, send]);
 
   // Leaving with an edit not yet saved: save it now (another dashboard page, or closing the tab,
   // when the browser also asks first).
@@ -284,6 +409,10 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     save,
     stale,
     proRequired,
+    unsaved: JSON.stringify(draft) !== savedBody,
+    canUndo: undoLabel !== null,
+    undoLabel,
+    notice,
     context,
     plan,
     photoAccent,
@@ -295,6 +424,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     fix,
     retry: () => void send(),
     reload,
+    undo,
+    discard,
     publish,
   };
 }

@@ -337,10 +337,13 @@ test('a draft saved in another tab: the dialog says so, and “Show the latest�
   await expect(dialog.getByRole('alert')).toHaveText(
     'This draft changed in another tab. Show the latest to keep editing.',
   );
-  // Publish can't be pressed now, so nothing offers to try again.
+  // Publish can't be pressed now, so nothing offers to try again, and focus isn't lost with it.
   await expect(
     dialog.getByRole('button', { name: 'Publish', exact: true }),
   ).toBeDisabled();
+  await expect(
+    dialog.getByRole('button', { name: 'Show the latest' }),
+  ).toBeFocused();
   await expect(dialog).not.toContainText(/try again/i);
   await dialog.getByRole('button', { name: 'Show the latest' }).click();
   await expect(dialog).toHaveCount(0);
@@ -352,6 +355,65 @@ test('a draft saved in another tab: the dialog says so, and “Show the latest�
     'aria-disabled',
     'true',
   );
+});
+
+test('when the latest can’t be loaded, the editor says so and keeps the banner', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: FIVE_BLOCKS });
+  await answerPublish(page, (route) =>
+    route.fulfill(refusal(409, 'STUDIO_DRAFT_STALE')),
+  );
+  await openEditor(page);
+  await openGate(page);
+  const dialog = confirm(page);
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await page.route(
+    `${API_ORIGIN}/v1/me/studio`,
+    (route) => route.abort('internetdisconnected'),
+    // A read isn't retried after a network failure, so one is enough.
+    { times: 1 },
+  );
+  await dialog.getByRole('button', { name: 'Show the latest' }).click();
+  const banner = page.locator('div.pst-banner');
+  await expect(banner.getByRole('alert')).toHaveText(
+    'We couldn’t load the latest. Check your connection, then try again.',
+  );
+  await expect(banner).toContainText('This draft changed in another tab');
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    banner.getByRole('button', { name: 'Show the latest' }),
+  ).toBeFocused();
+  // Once it loads, the banner and the words go.
+  await banner.getByRole('button', { name: 'Show the latest' }).click();
+  await expect(page.locator('div.pst-banner')).toHaveCount(0);
+});
+
+test('a stale draft says “Show the latest” drops this tab’s last changes before it does', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: FIVE_BLOCKS });
+  await openEditor(page);
+  await page.route(`${API_ORIGIN}/v1/me/studio/draft`, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill(refusal(409, 'STUDIO_DRAFT_STALE'))
+      : route.continue(),
+  );
+  await card(page, 'Journal').click();
+  const banner = page.locator('div.pst-banner').filter({
+    hasText: 'This draft changed in another tab',
+  });
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  await expect(banner).toContainText(
+    'Showing the latest drops your last changes here.',
+  );
+  await page.unroute(`${API_ORIGIN}/v1/me/studio/draft`);
+  await banner.getByRole('button', { name: 'Show the latest' }).click();
+  await expect(page.locator('div.pst-banner')).toHaveCount(0);
+  await expect(card(page, 'Clear')).toHaveAttribute('aria-checked', 'true');
 });
 
 test('read-only after a refused save, pressing Publish moves focus to the banner', async ({

@@ -188,9 +188,12 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_UNSUBSCRIBE_PER_MIN,
         windowMs: 60_000,
       },
-      // Page Studio saves: the editor saves as the person works (debounced). A fixed allowance
-      // (no setting of its own): generous for a person, and it still stops a script.
-      studio_drafts: { limit: 60, windowMs: 60_000 },
+      // Page Studio saves, publishes and discards: the editor saves as the person works
+      // (debounced). 60 a minute by default: generous for a person, and it still stops a script.
+      studio_drafts: {
+        limit: this.config.RATE_LIMIT_STUDIO_DRAFTS_PER_MIN,
+        windowMs: 60_000,
+      },
       // Photo and cover uploads (PR-013): each one is a full decode and re-encode.
       avatars: {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,

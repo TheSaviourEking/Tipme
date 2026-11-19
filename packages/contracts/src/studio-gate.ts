@@ -9,6 +9,8 @@
  * - `studioDraftRefusal(next, held, plan)`: whether a Free save adds something Pro. A draft may keep
  *   or restore (undo, ruling R4) any Pro item the stored draft or the published version holds;
  *   only an addition is refused.
+ * - `studioKeepHeld(next, held, plan)`: what of `next` such a save may keep. The refusal is defined
+ *   by it, so the editor (repairing a refused undo) and the server can't judge "held" differently.
  */
 import {
   STUDIO_PRO_BLOCKS,
@@ -91,30 +93,70 @@ function covers(held: StudioBlock, next: StudioBlock): boolean {
 }
 
 /**
+ * What of `next` a save on this plan may keep (§11, ruling R4): `next` itself when nothing would be
+ * refused. On Free, each Pro part neither the stored draft nor the published version holds goes
+ * back to what is held: a Pro style to the stored draft's style (or Classic), its cover kept where
+ * that style offers it; the photo accent to the stored draft's accent; a Pro block not covered to
+ * the held block with its id and kind (the stored draft's first), or out when nothing holds one.
+ * Everything else (free blocks, words, order, mode) is kept as it is.
+ */
+export function studioKeepHeld(
+  next: StudioDocument,
+  held: { draft: StudioDocument | null; published: StudioDocument | null },
+  plan: Plan,
+): StudioDocument {
+  if (plan === 'pro') return next;
+  const versions = [held.draft, held.published].filter(
+    (d): d is StudioDocument => d !== null,
+  );
+  let kept = next;
+  if (
+    STUDIO_STYLES[next.style].plan === 'pro' &&
+    !versions.some((d) => d.style === next.style)
+  ) {
+    const style = held.draft?.style ?? 'classic';
+    kept = {
+      ...kept,
+      style,
+      cover: STUDIO_STYLES[style].covers.includes(kept.cover)
+        ? kept.cover
+        : 'yours',
+    };
+  }
+  if (next.accent === 'photo' && !versions.some((d) => d.accent === 'photo'))
+    kept = { ...kept, accent: held.draft?.accent ?? null };
+  let changed = false;
+  const blocks: StudioBlock[] = [];
+  for (const block of next.blocks) {
+    if (
+      !isPro(block) ||
+      versions.some((d) => d.blocks.some((h) => covers(h, block)))
+    ) {
+      blocks.push(block);
+      continue;
+    }
+    changed = true;
+    const back = versions
+      .flatMap((d) => d.blocks)
+      .find((h) => h.id === block.id && h.kind === block.kind);
+    if (back && !blocks.some((b) => b.id === back.id)) blocks.push(back);
+  }
+  return changed ? { ...kept, blocks } : kept;
+}
+
+/**
  * Why a draft save is refused for this plan, or null when it saves (§11, ruling R4). Pro saves
  * anything the schema takes. Free is refused, with 403 `STUDIO_PRO_REQUIRED`, only for a Pro
  * style, the photo accent or a Pro block that neither the stored draft nor the published version
- * holds. So a lapsed Pro draft can still be reordered, have its words edited, lose blocks, and
- * undo back to what it held; it cannot gain anything Pro.
+ * holds (anything `studioKeepHeld` would take back). So a lapsed Pro draft can still be reordered,
+ * have its words edited, lose blocks, and undo back to what it held; it cannot gain anything Pro.
  */
 export function studioDraftRefusal(
   next: StudioDocument,
   held: { draft: StudioDocument | null; published: StudioDocument | null },
   plan: Plan,
 ): 'STUDIO_PRO_REQUIRED' | null {
-  if (plan === 'pro') return null;
-  const versions = [held.draft, held.published].filter(
-    (d): d is StudioDocument => d !== null,
-  );
-  if (
-    STUDIO_STYLES[next.style].plan === 'pro' &&
-    !versions.some((d) => d.style === next.style)
-  )
-    return 'STUDIO_PRO_REQUIRED';
-  if (next.accent === 'photo' && !versions.some((d) => d.accent === 'photo'))
-    return 'STUDIO_PRO_REQUIRED';
-  for (const block of next.blocks.filter(isPro))
-    if (!versions.some((d) => d.blocks.some((h) => covers(h, block))))
-      return 'STUDIO_PRO_REQUIRED';
-  return null;
+  return studioKeepHeld(next, held, plan) === next
+    ? null
+    : 'STUDIO_PRO_REQUIRED';
 }

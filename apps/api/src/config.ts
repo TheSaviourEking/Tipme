@@ -96,6 +96,12 @@ export const apiConfigSchema = z
       .default(20),
     RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
+    // Page Studio saves, publishes and discards per address per minute (generous for a person).
+    RATE_LIMIT_STUDIO_DRAFTS_PER_MIN: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(60),
     RATE_LIMIT_COVER_DESIGNS_PER_HOUR: z.coerce
       .number()
       .int()
