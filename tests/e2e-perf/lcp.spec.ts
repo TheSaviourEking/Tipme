@@ -191,58 +191,91 @@ test('lab LCP sample', async ({ page, browser }) => {
   console.log(`LCP_RESULTS ${JSON.stringify(results)}`);
 });
 
-// Page Studio (plan Task 8): the board's three designs, each a published Studio page on the built
-// web app against the stand-in API (tests/e2e/profile-fixtures.ts). Same throttle, fresh contexts.
+// Page Studio (ruling R6): the published fixture profiles on the built web app against the
+// stand-in API (tests/e2e/profile-fixtures.ts): one page per style (/@style<id>) and the board's
+// three designs converted to v2, each on its real /@username route, at the phone width (390 px).
+// Same throttle, fresh contexts.
+
+/** Three cold samples per URL at 390 × 844, with the budget; returns nothing, asserts each. */
+async function styleSamples(
+  browser: import('@playwright/test').Browser,
+  origin: string,
+  urls: string[],
+  label: string,
+) {
+  const context = await browser.newContext();
+  const state = await context.storageState();
+  await context.close();
+  // Warm only the server: every sample below starts with an empty browser cache.
+  for (const url of urls) await fetch(`${origin}${url}`);
+  const samples: Record<string, number[]> = {};
+  for (let run = 0; run < 3; run += 1)
+    for (const url of urls)
+      (samples[url] ??= []).push(
+        await lcp(browser, state, `${origin}${url}`, {
+          width: 390,
+          height: 844,
+        }),
+      );
+  console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
+  console.log(`${label} ${JSON.stringify(samples)}`);
+  for (const [url, ms] of Object.entries(samples))
+    for (const sample of ms)
+      expect(sample, `${url} LCP ${sample}ms`).toBeLessThan(2000);
+}
+
+test('lab LCP sample: Studio styles', async ({ browser }) => {
+  test.setTimeout(360_000);
+  const { STYLE_HANDLES, startStack } = await import('../e2e/profile-fixtures');
+  const stack = await startStack('test');
+  try {
+    await styleSamples(
+      browser,
+      stack.origin,
+      STYLE_HANDLES.map((handle) => `/@${handle}`),
+      'LCP_STYLES',
+    );
+  } finally {
+    await stack.stop();
+  }
+});
+
 test('lab LCP sample: Studio pages', async ({ browser }) => {
   test.setTimeout(240_000);
   const { STUDIO_HANDLES, startStack } =
     await import('../e2e/profile-fixtures');
   const stack = await startStack('test');
   try {
-    const context = await browser.newContext();
-    const state = await context.storageState();
-    await context.close();
-    const studio: Record<string, number[]> = {};
-    // Warm only the server: every sample below starts with an empty browser cache.
-    for (const handle of STUDIO_HANDLES)
-      await fetch(`${stack.origin}/@${handle}`);
-    for (let run = 0; run < 3; run += 1)
-      for (const handle of STUDIO_HANDLES)
-        (studio[`/@${handle}`] ??= []).push(
-          await lcp(browser, state, `${stack.origin}/@${handle}`),
-        );
-    console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
-    console.log(`LCP_STUDIO ${JSON.stringify(studio)}`);
-    for (const [url, samples] of Object.entries(studio))
-      for (const ms of samples)
-        expect(ms, `${url} LCP ${ms}ms`).toBeLessThan(2000);
+    await styleSamples(
+      browser,
+      stack.origin,
+      STUDIO_HANDLES.map((handle) => `/@${handle}`),
+      'LCP_STUDIO',
+    );
   } finally {
     await stack.stop();
   }
 });
 
-// Page Studio styles (spec 2026-11-17-page-studio-styles §4.3): each style's lab example at the
-// phone width (390 px), on the built web app. Same throttle, fresh contexts. Each style PR adds its
-// id.
-const LAB_STYLES = ['classic', 'clear', 'journal', 'linen'];
-
-test('lab LCP sample: Studio styles', async ({ browser }) => {
+// Stage and Horizon draw the cover photo as their likely LCP. The lab's "uploaded" cover
+// (?yours=upload) is a generated 2240 × 600 WebP like the API's, with the API's 640, 1080 and 1600
+// renditions in srcset (PR #279). Still parked (ruling X), measured 18 Nov 2026 on this branch:
+// Stage 3300–3424 ms with img.studio-cover__photo as the LCP. Its 488 px tall crop draws the 3.73:1
+// band 1822 CSS px wide, so the honest `sizes` selects the full file and no rendition helps; a
+// phone-shaped cover crop would. Horizon 1016–1060 ms, but its LCP is p.studio-bio: Chromium
+// leaves the full-viewport photo out. The 2000 ms budget stays as it is.
+test.fixme('lab LCP sample: Stage and Horizon on a real photo cover', async ({
+  browser,
+}) => {
   test.setTimeout(240_000);
-  const context = await browser.newContext();
-  const state = await context.storageState();
-  await context.close();
-  const urls = LAB_STYLES.map((style) => `/dev/studio-lab?style=${style}`);
-  // Warm only the server: every sample below starts with an empty browser cache.
-  for (const url of urls) await fetch(`${WEB_ORIGIN}${url}`);
-  const samples: Record<string, number[]> = {};
-  for (let run = 0; run < 3; run += 1)
-    for (const url of urls)
-      (samples[url] ??= []).push(
-        await lcp(browser, state, url, { width: 390, height: 844 }),
+  const urls = ['stage', 'horizon'].map(
+    (style) => `/dev/studio-lab?style=${style}&yours=upload`,
+  );
+  await styleSamples(browser, WEB_ORIGIN, urls, 'LCP_PHOTO');
+  // The photo is what the visitor waits for: it must be the element measured.
+  for (const url of urls)
+    for (const element of elements[`${WEB_ORIGIN}${url}`] ?? [])
+      expect(element, `${url} LCP element`).toMatch(
+        /^img\.studio-cover__photo /,
       );
-  console.log(`LCP_ELEMENTS ${JSON.stringify(elements)}`);
-  console.log(`LCP_STYLES ${JSON.stringify(samples)}`);
-  for (const [url, ms] of Object.entries(samples))
-    for (const sample of ms)
-      expect(sample, `${url} LCP ${sample}ms`).toBeLessThan(2000);
 });

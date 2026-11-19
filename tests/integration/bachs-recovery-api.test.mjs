@@ -98,7 +98,7 @@ function controller(db, bachsProvider) {
 /** Repair audit rows name the permission that guards the route, not the older recheck one. */
 async function assertRepairAudited(database) {
   const { rows } = await database.pool.query(
-    // Not the system row a reset seeds with the plan fee rates (migration 0115).
+    // Not the system row a reset seeds with the plan fee rates (migration 0118).
     `SELECT DISTINCT permission FROM audit_events
       WHERE permission IS NOT NULL AND action <> 'plan_fees.changed'`,
   );

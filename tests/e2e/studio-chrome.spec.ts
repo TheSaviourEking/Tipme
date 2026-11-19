@@ -40,7 +40,11 @@ for (const width of [390, 1440])
       page,
     }) => {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`/dev/studio-lab?style=clear&mode=${mode}`);
+      // Clear on its gradient starts on the page's own bg (a photo cover puts the header over
+      // the cover: studio-header-over-cover.spec.ts).
+      await page.goto(
+        `/dev/studio-lab?style=clear&mode=${mode}&cover=gradient`,
+      );
       await page.locator('.studio[data-style]').waitFor();
       const c = await colours(page);
       expect(c.header).toBe(c.bg);

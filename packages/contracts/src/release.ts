@@ -28,6 +28,11 @@ export interface ReleaseInfo {
   businessSignup: boolean;
   /** Co-owners and handover (the `business_owners` switch, on top of `business`; Phase E, not built yet). */
   businessOwners: boolean;
+  /**
+   * Page Studio is switched on (the `page_studio` switch). The web's preview document
+   * (/studio-preview) answers 404 while it is off, like every Studio route.
+   */
+  pageStudio: boolean;
 }
 
 /** GET /health/backups (PR-011): how old the newest backups are, and the WAL archiver's state. */

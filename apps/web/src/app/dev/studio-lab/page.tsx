@@ -6,35 +6,27 @@ import { inflateRawSync } from 'node:zlib';
 import {
   STUDIO_ACCENT_IDS,
   STUDIO_COVER_TYPES,
-  STUDIO_FONTS,
   STUDIO_STYLE_IDS,
   checkDesign,
-  deriveStudioPalette,
   resolveCover,
   resolveStudio,
-  resolveStudioV1,
   studioTokens,
   visibleLinks,
   DESIGN_CHECK_VERSION,
-  DESIGN_CHECK_VERSION_V1,
   type PublicProfile,
   type SocialLink,
   type StudioDocument,
-  type StudioFontId,
   type StudioStyleId,
 } from '@tipme/contracts';
 import { AppreciationForm } from '@/components/appreciation-form';
 import { ProfileCover } from '@/components/profile/cover';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
 import { ReportPage } from '@/components/report-page';
-import { StudioPage } from '@/components/studio/studio-page';
 import { renderStyled } from '@/components/studio-styles/style-page';
 import {
   LAB_IMAGES,
   LAB_LONG_NAMES,
   LAB_STYLE_EXAMPLES,
-  STUDIO_EXAMPLES,
-  fontSpecimen,
   labStyleExample,
 } from './examples';
 import { studioLabOpen } from './lab-gate';
@@ -69,16 +61,16 @@ const today = () =>
   );
 
 /**
- * Page Studio lab (plan Task 6): renders any Studio document with the real renderer around the
- * real tip block, for the render property tests and the curated examples. Test copies only.
- *   ?example=kemi|sule|ify|max|min|empty|hostile, or ?example=fonts&font=<id>
- *   ?doc=<base64url deflate-raw JSON, at most 12 KB>
- *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8, &today=YYYY-MM-DD
- * Page Studio styles (v2, spec 2026-11-17-page-studio-styles), rendered by StudioStylePage:
+ * Page Studio lab: renders a v2 document with the real style renderer around the real tip form
+ * with its style's skin, for the render property tests and the curated examples. Test copies only.
  *   ?style=<id> (LAB_STYLE_EXAMPLES), &mode=light|dark|auto, &accent=<id>, &cover=yours|gradient|plain,
- *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1
- *   ?example=styles-min|styles-max|long-names (&style=<id>, Clear by default), or
- *   ?example=hostile&style=<id> (v2; without &style it is the v1 document)
+ *   &doc=<a v2 (or v1, migrated) document, deflate-raw JSON as base64url, at most 12 KB>,
+ *   &name=<display name>, &links=0..8, &bio=0|1,
+ *   &yours=photo|small|upload|single|design|automatic|animated (the Settings cover: the generated
+ *   photo, the same photo said to be 640 × 360, a generated 2240 × 600 WebP stored like the API's
+ *   with its 640/1080/1600 renditions, the same file without renditions, a design, the automatic
+ *   one, an animation)
+ *   ?example=styles-min|styles-max|long-names|hostile (&style=<id>, Clear by default)
  */
 export default async function StudioLabPage({ searchParams }: Props) {
   // Rendered per request: the lab reads today's Lagos date (to keep today's events), which
@@ -87,115 +79,8 @@ export default async function StudioLabPage({ searchParams }: Props) {
   if (!studioLabOpen()) notFound();
   const q = await searchParams;
   const one = (k: string) => (typeof q[k] === 'string' ? q[k] : undefined);
-  const example = one('example');
-  if (
-    one('style') !== undefined ||
-    (example && ['styles-min', 'styles-max', 'long-names'].includes(example))
-  )
-    return <StyleLab one={one} />;
-  let raw: unknown;
-  if (example === 'fonts') {
-    const font = STUDIO_FONTS.find((f) => f.id === one('font'));
-    if (!font) notFound();
-    raw = fontSpecimen(font.id as StudioFontId);
-  } else if (example) {
-    if (!(example in STUDIO_EXAMPLES)) notFound();
-    raw = STUDIO_EXAMPLES[example as keyof typeof STUDIO_EXAMPLES];
-  } else {
-    const doc = one('doc') ?? '';
-    if (!doc || doc.length > 16_384) notFound();
-    try {
-      raw = JSON.parse(
-        inflateRawSync(Buffer.from(doc, 'base64url'), {
-          maxOutputLength: 1_000_000,
-        }).toString('utf8'),
-      );
-    } catch {
-      notFound();
-    }
-  }
-  // &today=YYYY-MM-DD pins the date events are kept against, so a screenshot never ages.
-  const day = one('today');
-  const document = resolveStudioV1(
-    raw,
-    day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : today(),
-  );
-  const mode = one('mode');
-  if (mode === 'light' || mode === 'dark') document.mode = mode;
-  const bio = one('bio') !== '0';
-  const links = Math.max(0, Math.min(8, Number(one('links') ?? 4) || 0));
-  const handle = 'studiolab';
-  const profile: PublicProfile = {
-    handle,
-    displayName: one('name') ?? 'Kemi Adeyinka',
-    role: 'Singer and songwriter, Lagos',
-    ...(bio
-      ? {
-          bio: 'I write songs about home and the people in it. Every tip goes into studio time.',
-        }
-      : {}),
-    links: LINKS.slice(0, links),
-    plan: 'pro',
-    acceptingTips: true,
-  };
-  // The identity shows name, photo, handle and role; the bio and links are Studio blocks here.
-  const identityProfile: PublicProfile = {
-    handle: profile.handle,
-    displayName: profile.displayName,
-    ...(profile.role ? { role: profile.role } : {}),
-    plan: 'pro',
-  };
-  const firstName = profile.displayName.split(/\s+/)[0] ?? profile.displayName;
-  const images = Object.fromEntries(
-    LAB_IMAGES.map((id) => [
-      id,
-      { path: `/dev/studio-lab/image/${id}`, width: 2400, height: 1600 },
-    ]),
-  );
-  return (
-    <main id="main" tabIndex={-1} className="studio-lab">
-      <StudioPage
-        studio={{
-          document,
-          palette: deriveStudioPalette(document.brand),
-          images,
-          checkVersion: DESIGN_CHECK_VERSION_V1,
-        }}
-        profile={profile}
-        cover={
-          <ProfileCover
-            cover={resolveCover({
-              handle,
-              coverPath: null,
-              coverDesign: null,
-              coverColour: null,
-            })}
-            priority
-          />
-        }
-        identity={
-          <RecipientIdentity profile={identityProfile} firstName={firstName} />
-        }
-        tipBlock={
-          <AppreciationForm
-            surface="profile"
-            paymentMode="test"
-            recipient={firstName}
-            handle={handle}
-          />
-        }
-        footer={
-          <footer className="profile-foot">
-            <div className="profile-foot__quiet">
-              <ReportPage handle={handle} />
-              <Link href="/legal/privacy">Privacy</Link>
-              <Link href="/legal/terms">Terms</Link>
-            </div>
-          </footer>
-        }
-      />
-    </main>
-  );
+  if (one('style') === undefined && !one('example') && !one('doc')) notFound();
+  return <StyleLab one={one} />;
 }
 
 const pick = <T extends string>(
@@ -267,6 +152,45 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     acceptingTips: true,
     cover: { kind: 'photo', path: `/dev/studio-lab/image/${LAB_IMAGES[29]}` },
   };
+  // The Settings cover ("Your cover"): the generated photo by default.
+  const yours =
+    pick(one('yours'), [
+      'photo',
+      'small',
+      'upload',
+      'single',
+      'design',
+      'automatic',
+      'animated',
+    ] as const) ?? 'photo';
+  const settingsCover =
+    yours === 'photo' ||
+    yours === 'small' ||
+    yours === 'upload' ||
+    yours === 'single'
+      ? null
+      : resolveCover({
+          handle,
+          coverPath: null,
+          coverDesign: yours === 'design' ? 'scattered' : null,
+          coverColour: null,
+          coverAnimation: yours === 'animated' ? 'drift' : null,
+          plan,
+        });
+  if (settingsCover) profile.cover = settingsCover;
+  // The API's shape for an uploaded cover with its renditions (or, ?yours=single, without).
+  if (yours === 'upload')
+    profile.cover = {
+      kind: 'photo',
+      path: '/dev/studio-lab/cover/1.webp',
+      widths: [640, 1080, 1600],
+    };
+  if (yours === 'single')
+    profile.cover = { kind: 'photo', path: '/dev/studio-lab/cover/1.webp' };
+  const coverSize =
+    yours === 'small'
+      ? { width: 640, height: 360 }
+      : { width: 2400, height: 1600 };
   const firstName = name.split(/\s+/)[0] ?? name;
   const images = Object.fromEntries(
     LAB_IMAGES.map((id) => [
@@ -284,7 +208,10 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     videos: {},
     profile: { name, bio, links: links.length },
     plan,
-    coverKind: 'photo',
+    coverKind:
+      yours === 'small' || yours === 'upload' || yours === 'single'
+        ? 'photo'
+        : yours,
     hasAvatar: false,
   });
   const styled = renderStyled({
@@ -295,14 +222,18 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
       checkVersion: DESIGN_CHECK_VERSION,
     },
     profile,
+    coverSize,
     coverArt: (
       <ProfileCover
-        cover={resolveCover({
-          handle,
-          coverPath: null,
-          coverDesign: null,
-          coverColour: null,
-        })}
+        cover={
+          settingsCover ??
+          resolveCover({
+            handle,
+            coverPath: null,
+            coverDesign: null,
+            coverColour: null,
+          })
+        }
         priority
       />
     ),

@@ -1,6 +1,7 @@
-// The three pages on the StudioExamples board (Kemi, Sule, Ify), as Studio documents. Each must
-// pass the design check. Task 6 renders the same three in CI. Sample people and content.
-import { IMAGE_POOL, imageFacts } from '../support/studio-arbitrary.mjs';
+// The three pages on the StudioExamples board (Kemi, Sule, Ify), as v1 Studio documents. They are
+// stored v1 rows now: the migration tests pin how each reads as v2 (studio-v1-to-v2.json), and
+// the API and gate tests use them as a v1 draft. Sample people and content.
+import { IMAGE_POOL } from '../support/studio-arbitrary.mjs';
 
 const [STAGE, CUT1, CUT2, CUT3, CUT4, CUT5, CUT6, SHOP] = IMAGE_POOL;
 
@@ -269,13 +270,4 @@ export const IFY = {
       ],
     },
   ],
-};
-
-/** Server facts for the examples: every photo 2400 by 1600, every video live, a bio and 4 links. */
-export const EXAMPLE_CONTEXT = {
-  images: Object.fromEntries(
-    IMAGE_POOL.map((id) => [id, imageFacts({ width: 2400, height: 1600 })]),
-  ),
-  videos: { 'https://www.youtube.com/watch?v=dQw4w9WgXcQ': 'ok' },
-  profile: { bio: true, links: 4 },
 };

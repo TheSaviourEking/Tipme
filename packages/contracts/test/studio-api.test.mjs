@@ -3,12 +3,21 @@ import { test } from 'node:test';
 import {
   STUDIO_IMAGE_SHAPES,
   apiErrorCodes,
-  studioDraftV1Schema,
+  studioDraftSchema,
   studioFocusSchema,
   studioImageFileName,
   studioPublishSchema,
 } from '../dist/index.js';
 import { KEMI } from './fixtures/studio-examples.mjs';
+
+const V2 = {
+  v: 2,
+  style: 'clear',
+  accent: null,
+  mode: 'light',
+  cover: 'yours',
+  blocks: [{ id: 'blk00001', kind: 'quote', text: 'Sang like home.' }],
+};
 
 test('Page Studio has its own error codes', () => {
   for (const code of [
@@ -23,18 +32,20 @@ test('Page Studio has its own error codes', () => {
 
 test('saving a draft takes the revision it was based on and a valid document', () => {
   assert.equal(
-    studioDraftV1Schema.safeParse({ rev: 3, draft: KEMI }).success,
+    studioDraftSchema.safeParse({ rev: 3, draft: V2 }).success,
     true,
   );
   for (const bad of [
-    { draft: KEMI },
-    { rev: -1, draft: KEMI },
-    { rev: 1.5, draft: KEMI },
-    { rev: 0, draft: { ...KEMI, css: 'x' } },
-    { rev: 0, draft: KEMI, extra: true },
+    { draft: V2 },
+    { rev: -1, draft: V2 },
+    { rev: 1.5, draft: V2 },
+    { rev: 0, draft: { ...V2, css: 'x' } },
+    { rev: 0, draft: V2, extra: true },
+    // The old editor's v1 document (ruling R1: refused since PR 4a).
+    { rev: 0, draft: KEMI },
   ])
     assert.equal(
-      studioDraftV1Schema.safeParse(bad).success,
+      studioDraftSchema.safeParse(bad).success,
       false,
       JSON.stringify(bad).slice(0, 60),
     );

@@ -218,7 +218,7 @@ export async function openTestDatabase(): Promise<TestDatabase> {
            VALUES ('00000000-0000-4000-8000-000000250000', 250000, 'NGN', now() - interval '1 second', 'Owner''s decision, 9 Nov 2026: launch Pro price ₦2,500 a month', now() - interval '1 second'),
                   ('00000000-0000-4000-8000-000000500000', 500000, 'NGN', now(), 'Owner''s pricing decision, 12 Nov 2026: Pro is ₦5,000 a month', now())`,
       );
-      // And the plan fee rates 0115 seeds (owner, 18 Nov 2026): Free 500 and Pro 300 bps with the
+      // And the plan fee rates 0118 seeds (owner, 18 Nov 2026): Free 500 and Pro 300 bps with the
       // system audit row, so suites run on the "setting" path production uses. Same id and text.
       await client.query(
         `WITH added AS (

@@ -80,6 +80,30 @@ export function fallback(change: Change): string {
     .join('; ');
 }
 
+/** "2 December 2026", in Lagos time; the value as it is when it isn't a time. */
+const lagosDay = (value: unknown): string => {
+  const time = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(time)
+    ? text(value)
+    : new Intl.DateTimeFormat('en-GB', {
+        dateStyle: 'long',
+        timeZone: 'Africa/Lagos',
+      }).format(time);
+};
+/** A handover's page: what it was called before, or that it is new. */
+const was = (previous: unknown): string =>
+  typeof previous === 'string' && previous
+    ? `which was @${previous}`
+    : 'a new page';
+
+/** The staff change that ended claim links automatically (username handover). */
+const TRIGGER_WORDS: Record<string, string> = {
+  'staff.removed': 'a removal from staff',
+  'staff.role_changed': 'a role move',
+  'staff.role_updated': 'a role edit',
+  'staff.access_changed': 'a change to personal access',
+};
+
 /** Joins the parts that apply, skipping empty ones. */
 const parts = (...items: (string | false | null | undefined)[]): string =>
   items.filter(Boolean).join('; ');
@@ -150,6 +174,34 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
       `Take-back ${short(c.takeBackId)}: ${words(text(c.outcome))}`,
       c.newHandle ? `new name @${text(c.newHandle)}` : null,
       c.noticedVia ? `notice seen by ${words(text(c.noticedVia))}` : null,
+    ),
+  'username.handover_link_created': (c) =>
+    parts(
+      `Claim link ${short(c.linkId)} for reservation ${short(c.reservationId)}, until ${lagosDay(c.expiresAt)}`,
+      c.replacedLinkId ? `replaced link ${short(c.replacedLinkId)}` : null,
+    ),
+  'username.handover_link_cancelled': (c) =>
+    parts(
+      `Claim link ${short(c.linkId)} for reservation ${short(c.reservationId)}`,
+      typeof c.trigger === 'string'
+        ? `ended automatically after ${TRIGGER_WORDS[c.trigger] ?? words(c.trigger)} by ${staff(c.triggeredBy)}`
+        : null,
+    ),
+  'username.claimed_via_link': (c) =>
+    parts(
+      `Claimed through link ${short(c.linkId)} (reservation ${short(c.reservationId)}) by page ${short(c.profileId)}, ${was(c.previous)}`,
+      `link made by ${staff(c.linkCreatedBy)}`,
+    ),
+  'username.account_lookup': (c) =>
+    `Looked up by ${words(text(c.by))}; found ${
+      list(c.found).length === 0
+        ? 'nobody'
+        : `account ${list(c.found).join(', ')}`
+    }`,
+  'username.assigned': (c) =>
+    parts(
+      `Given to page ${short(c.profileId)}, ${was(c.previous)} (reservation ${short(c.reservationId)})`,
+      c.cancelledLinkId ? `cancelled link ${short(c.cancelledLinkId)}` : null,
     ),
   'username.take_back_noticed': (c) =>
     `Take-back ${short(c.takeBackId)}: notice seen by ${words(text(c.via))}`,

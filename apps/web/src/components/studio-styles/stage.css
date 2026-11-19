@@ -1,0 +1,1026 @@
+/* Stage: "House lights down, spotlight up" (spec 2026-11-17-page-studio-styles §9.4; canvas "Stage ·
+   phone", "Stage · desktop"). Inter only: name 800, section titles 750. Radii 12 (cards), 8
+   (photos), pill (Tip and chips). The name sits over a full-bleed cover photo on the scrim, with
+   no avatar; in dark mode a soft accent glow sits behind the cover (the style's one accent
+   exception, §7.2). No shadows. */
+
+.studio[data-style='stage'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --tall: 488px;
+  --ease: cubic-bezier(0.3, 0.7, 0.4, 1);
+  letter-spacing: 0;
+}
+
+.studio[data-style='stage'] :is(.studio-lead, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The hero: the cover and the words share one cell, the words at its foot. */
+.studio[data-style='stage'] .studio-hero {
+  position: relative;
+  z-index: 0;
+  display: grid;
+}
+
+.studio[data-style='stage'] .studio-hero > * {
+  grid-area: 1 / 1;
+}
+
+.studio[data-style='stage'] .studio-hero[data-cover='photo'] {
+  min-height: var(--tall);
+}
+
+/* Dark only (the registry's glow is `none` in light, which makes this background invalid, so it
+   draws nothing): a 260 px accent glow behind the cover's foot, blurred 10 px. Decorative. */
+.studio[data-style='stage'] .studio-hero::before {
+  position: absolute;
+  top: calc(var(--tall) - 108px);
+  right: 0;
+  left: 0;
+  z-index: -1;
+  height: 260px;
+  background: radial-gradient(
+    50% 50% at 50% 30%,
+    color-mix(in srgb, var(--studio-glow) 28%, transparent),
+    transparent
+  );
+  filter: blur(10px);
+  content: '';
+  pointer-events: none;
+}
+
+/* Behind a photo only: a gradient or plain cover has no photo for it to sit behind. */
+.studio[data-style='stage'] .studio-hero:not([data-cover='photo'])::before {
+  display: none;
+}
+
+.studio[data-style='stage'] .studio-cover {
+  background: var(--studio-el2);
+}
+
+/* Gradient: a deep accent (OKLCH L .30) fading to bg; the words follow on bg, in fg. */
+.studio[data-style='stage'] .studio-cover[data-cover='gradient'] {
+  height: 160px;
+  background: linear-gradient(
+    180deg,
+    var(--studio-coverFrom),
+    var(--studio-bg)
+  );
+}
+
+.studio[data-style='stage'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+.studio[data-style='stage'] .studio-hero:not([data-cover='photo']) > * {
+  grid-area: auto;
+}
+
+.studio[data-style='stage'] .studio-hero__words {
+  position: relative;
+  z-index: 0;
+  align-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0 var(--gutter) 24px;
+}
+
+.studio[data-style='stage']
+  .studio-hero[data-cover='gradient']
+  .studio-hero__words {
+  padding-top: 4px;
+}
+
+.studio[data-style='stage']
+  .studio-hero[data-cover='plain']
+  .studio-hero__words {
+  padding-top: 32px;
+}
+
+/* Over the photo: white only, on the scrim (§4.2). The scrim is the spec's lower 75% of the
+   cover; a taller block of words (a long name) stretches it, so the top of the words always sits
+   where the scrim is at least 55% black (100 / 215 of its height). */
+.studio[data-style='stage'] .studio-scrim {
+  color: #fff;
+}
+
+.studio[data-style='stage'] .studio-scrim::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: -1;
+  height: max(calc(var(--tall) * 0.75), 215%);
+  background: linear-gradient(
+    to top,
+    var(--studio-scrimEnd) 0%,
+    rgba(8, 8, 10, 0.8) 12%,
+    rgba(8, 8, 10, 0.66) 38%,
+    rgba(8, 8, 10, 0.3) 68%,
+    transparent
+  );
+  content: '';
+  pointer-events: none;
+}
+
+.studio[data-style='stage'] .studio-avatar {
+  width: 112px;
+  height: 112px;
+  margin-bottom: 20px;
+  font-size: 36px;
+}
+
+.studio[data-style='stage'] .studio-kicker {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='stage'] .studio-name {
+  margin-top: 8px;
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 46px;
+  letter-spacing: -0.04em;
+}
+
+.studio[data-style='stage'] .studio-kicker + .studio-name {
+  margin-top: 8px;
+}
+
+.studio[data-style='stage'] .studio-avatar + .studio-name {
+  margin-top: 0;
+}
+
+/* A name that would take a third line steps down about 80% (§9.10). */
+.studio[data-style='stage'] .studio-name--long {
+  font-size: 38px;
+  line-height: 38px;
+}
+
+.studio[data-style='stage'] .studio-meta {
+  margin-top: 12px;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.studio[data-style='stage'] .studio-scrim :is(.studio-kicker, .studio-meta) {
+  color: #fff;
+}
+
+.studio[data-style='stage'] .studio-scrim .studio-name {
+  text-shadow: 0 1px 2px rgb(0 0 0 / 30%);
+}
+
+/* Below the cover: the bio, then the Tip moment. The lead is positioned so it paints over the
+   glow. */
+.studio[data-style='stage'] .studio-lead {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+}
+
+.studio[data-style='stage'] .studio-bio {
+  margin-bottom: 8px;
+  color: var(--studio-fg2);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.studio[data-style='stage'] .studio-celebration {
+  justify-self: start;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='stage'] .studio-lead__handle {
+  display: none;
+}
+
+/* The Tip moment: four pill chips 48 tall on chip (a 1 px control edge, §4.2); selected: a 1.5 px
+   accText ring. The Tip: a full-width 56 px pill. */
+.studio[data-style='stage'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='stage'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: below 340 px four chips leave a label less room than "₦10,000" needs, so they
+   stand two by two, still 48 tall. */
+@media (max-width: 339px) {
+  .studio[data-style='stage'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='stage'] .studio-tip .tm-amount-choice > span {
+  min-height: 48px;
+  padding: 0;
+  border: 1px solid var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-chip);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    transform 180ms var(--ease),
+    background-color 180ms var(--ease),
+    border-color 180ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='stage'] .studio-tip .tm-amount-choice:hover > span {
+    background: var(--studio-el2);
+    transform: none;
+  }
+}
+
+.studio[data-style='stage'] .studio-tip .tm-amount-choice input:active + span {
+  box-shadow: none;
+  transform: scale(0.95);
+}
+
+/* Selected: the 1 px edge turns accText and a 0.5 px inset completes the 1.5 px ring; the label
+   steps up to 800, so the choice never shows by colour alone (§4.4). */
+.studio[data-style='stage'] .studio-tip .tm-amount-choice input:checked + span {
+  border-color: var(--studio-accText);
+  background: var(--studio-chip);
+  box-shadow: inset 0 0 0 0.5px var(--studio-accText);
+  color: var(--studio-fg);
+  font-weight: 800;
+}
+
+.studio[data-style='stage']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='stage']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='stage'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='stage'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='stage'] .studio-tip textarea.tm-input {
+  padding: 12px 16px;
+}
+
+.studio[data-style='stage'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='stage']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='stage'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='stage'] .studio-tip .composer-extras[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='stage'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='stage'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.studio[data-style='stage']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transform: none;
+  transition:
+    filter 180ms var(--ease),
+    transform 180ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='stage']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    filter: brightness(1.08);
+    transform: none;
+  }
+}
+
+.studio[data-style='stage']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  transform: scale(0.97);
+}
+
+.studio[data-style='stage'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='stage']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='stage'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='stage'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 12px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: sections 40 apart, a title over each. */
+.studio[data-style='stage'] .studio-grid {
+  display: grid;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.studio[data-style='stage'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='stage'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.studio[data-style='stage'] .studio-title {
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+/* Links: elevated rows, 60 tall, r12, card; a 36 px circle glyph on el2. */
+.studio[data-style='stage'] .studio-links__list {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='stage'] .studio-link {
+  box-sizing: border-box;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  height: 60px;
+  padding: 0 16px 0 12px;
+  border-radius: 12px;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: background-color 180ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='stage'] .studio-link:hover {
+    background-color: var(--studio-el2);
+  }
+}
+
+.studio[data-style='stage'] .studio-link .link-badge {
+  width: 36px;
+  height: 36px;
+}
+
+.studio[data-style='stage'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio[data-style='stage'] .studio-link__title {
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 21px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='stage'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='stage'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks. Text: card r12, padding 20, 16/25. */
+.studio[data-style='stage'] .studio-card {
+  border-radius: 12px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='stage'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  font-size: 16px;
+  line-height: 25px;
+}
+
+.studio[data-style='stage'] .studio-quote {
+  padding: 20px;
+}
+
+.studio[data-style='stage'] .studio-quote p {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 27px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='stage'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.studio[data-style='stage'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='stage'] .studio-video {
+  overflow: hidden;
+  border-radius: 12px;
+}
+
+/* Photos: a strip of 156 × 208 tiles, r8, gap 8, that scrolls sideways on a phone. */
+.studio[data-style='stage'] .studio-strip {
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+  scroll-padding-inline: var(--gutter);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.studio[data-style='stage'] .studio-strip li {
+  flex: none;
+  width: 156px;
+  height: 208px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--studio-el2);
+  scroll-snap-align: start;
+}
+
+.studio[data-style='stage'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Events: the board's "Upcoming", each a card row with a 56 px date tile. Services: rows in one
+   card, money tabular on the right. */
+.studio[data-style='stage'] ul.studio-events {
+  display: grid;
+  gap: 8px;
+  background: none;
+}
+
+.studio[data-style='stage'] ul.studio-events li {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 16px 12px 12px;
+  border-radius: 12px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='stage'] div.studio-list > ul {
+  display: grid;
+}
+
+.studio[data-style='stage'] div.studio-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px;
+}
+
+.studio[data-style='stage'] div.studio-list li + li {
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='stage'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 16px 14px;
+}
+
+.studio[data-style='stage'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='stage'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='stage'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='stage'] .studio-price {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.studio[data-style='stage'] .studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--studio-el2);
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='stage'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 24px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='stage'] .studio-foot {
+  margin-top: 40px;
+}
+
+.studio[data-style='stage'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='stage'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: bar + saturate(1.6) blur(24px), a 1 px line; the 36 px avatar, the name
+   15/20 650 and the handle 12/16 beside a 48 px Tip pill with 22 px sides. The pill is at least
+   148 wide (every amount's label fits), and the name keeps clear of it; while a tip starts (the
+   pill's longest label) the name steps aside. */
+.studio[data-style='stage'] .tip-bar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  padding: 10px 12px calc(max(12px, env(safe-area-inset-bottom)) + 34px) 16px;
+  border-top: 1px solid var(--studio-line);
+  -webkit-backdrop-filter: saturate(1.6) blur(24px);
+  backdrop-filter: saturate(1.6) blur(24px);
+}
+
+.studio[data-style='stage'] .tip-bar > p {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='stage'] .tip-bar__button {
+  grid-column: 2;
+  width: auto;
+  min-width: 148px;
+  min-height: 48px;
+  font-size: 16px;
+  line-height: 20px;
+}
+
+.studio[data-style='stage'] .studio-barname {
+  position: fixed;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  left: 16px;
+  z-index: 21;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+  align-content: center;
+  width: calc(100% - 16px - 12px - 148px - 12px);
+  height: 48px;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style='stage']:has(form[data-bar='shown']) .studio-barname {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity 240ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.studio[data-style='stage']:has(
+    :is(input:not([type='radio'], [type='checkbox']), textarea):focus,
+    form[data-submitting]
+  )
+  .studio-barname {
+  visibility: hidden;
+}
+
+.studio[data-style='stage'] .studio-barname__avatar {
+  grid-row: 1 / 3;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.studio[data-style='stage'] .studio-barname p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='stage'] .studio-barname__name {
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='stage'] .studio-barname__handle {
+  color: var(--studio-fg2);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* Tablet: one column, 24 px gutters, up to 720; the cover stays full-bleed. */
+@media (min-width: 768px) {
+  .studio[data-style='stage'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: 1200 wide; the cover 640 tall, the name 104/96 at the left of the content; a 400 px
+   rail (the Tip card: bio, chips, Tip and handle, r12, padding 24), gap 80, and the main column
+   with the links and the blocks. Consecutive list sections (the links, events, services) pair
+   two-up with a 32 px gap. */
+@media (min-width: 1024px) {
+  .studio[data-style='stage'] {
+    --tall: 640px;
+  }
+
+  .studio[data-style='stage'] .studio-page {
+    display: grid;
+    grid-template-columns:
+      minmax(var(--gutter), 1fr) minmax(0, 400px) 80px minmax(0, 720px)
+      minmax(var(--gutter), 1fr);
+    align-items: start;
+  }
+
+  .studio[data-style='stage'] .studio-hero {
+    grid-column: 1 / -1;
+  }
+
+  .studio[data-style='stage'] .studio-hero::before {
+    right: 10%;
+    left: 10%;
+  }
+
+  .studio[data-style='stage'] .studio-hero__words {
+    padding: 0 max(var(--gutter), calc((100% - 1200px) / 2)) 56px;
+  }
+
+  .studio[data-style='stage']
+    .studio-hero:not([data-cover='photo'])
+    .studio-hero__words {
+    padding-bottom: 8px;
+  }
+
+  .studio[data-style='stage'] .studio-cover[data-cover='gradient'] {
+    height: 240px;
+  }
+
+  .studio[data-style='stage']
+    .studio-hero[data-cover='plain']
+    .studio-hero__words {
+    padding-top: 56px;
+  }
+
+  .studio[data-style='stage'] .studio-kicker {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .studio[data-style='stage'] .studio-name {
+    font-size: 104px;
+    line-height: 96px;
+    letter-spacing: -0.045em;
+  }
+
+  .studio[data-style='stage'] .studio-kicker + .studio-name {
+    margin-top: 12px;
+  }
+
+  .studio[data-style='stage'] .studio-name--long {
+    font-size: 84px;
+    line-height: 78px;
+  }
+
+  .studio[data-style='stage'] .studio-meta {
+    margin-top: 16px;
+  }
+
+  /* The handle moves into the Tip card; the Pro badge stays by the name. */
+  .studio[data-style='stage'] .studio-hero .studio-meta__handle {
+    display: none;
+  }
+
+  .studio[data-style='stage'] .studio-hero .studio-meta .studio-pro {
+    margin-inline-start: 0;
+  }
+
+  .studio[data-style='stage'] .studio-hero .studio-meta:not(:has(.studio-pro)) {
+    display: none;
+  }
+
+  .studio[data-style='stage'] :is(.studio-lead, .studio-grid, .studio-foot) {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='stage'] .studio-lead {
+    grid-row: 2;
+    grid-column: 2;
+    gap: 12px;
+    margin-top: 48px;
+    padding: 24px;
+    border-radius: 12px;
+    background: var(--studio-card);
+  }
+
+  .studio[data-style='stage'] .studio-bio {
+    margin-bottom: 4px;
+  }
+
+  .studio[data-style='stage'] .studio-lead .tm-amount-choice > span,
+  .studio[data-style='stage']
+    .studio-lead
+    .tm-amount-choice
+    input:checked
+    + span {
+    background: var(--studio-chipIn);
+  }
+
+  .studio[data-style='stage'] .studio-lead__handle {
+    display: block;
+    margin-top: 4px;
+    color: var(--studio-fg2);
+    font-size: 13px;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .studio[data-style='stage'] .studio-grid {
+    grid-row: 2;
+    grid-column: 4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 48px 32px;
+    margin-top: 48px;
+  }
+
+  .studio[data-style='stage'] .studio-grid > *,
+  .studio[data-style='stage'] .studio-blocks > * {
+    grid-column: 1 / -1;
+  }
+
+  /* List sections (the links; a section of events or services, data-list) side by side when two
+     follow each other (§9.4, builder's call on pairing). */
+  .studio[data-style='stage']
+    :is(
+      .studio-links:has(+ .studio-blocks > [data-list]:first-child),
+      .studio-links + .studio-blocks > [data-list]:first-child,
+      [data-list]:has(+ [data-list]),
+      [data-list] + [data-list]
+    ) {
+    grid-column: auto;
+  }
+
+  .studio[data-style='stage'] :is(.studio-links, .studio-section) {
+    gap: 14px;
+  }
+
+  .studio[data-style='stage'] .studio-title {
+    font-size: 24px;
+    line-height: 30px;
+  }
+
+  .studio[data-style='stage'] .studio-text {
+    padding: 24px;
+  }
+
+  .studio[data-style='stage'] .studio-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+
+  .studio[data-style='stage'] .studio-strip li {
+    width: auto;
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
+
+  .studio[data-style='stage'] .studio-foot {
+    grid-row: 3;
+    grid-column: 2 / 5;
+    margin-top: 72px;
+  }
+
+  .studio[data-style='stage'] .studio-barname {
+    display: none;
+  }
+}
+
+/* Reduced motion (§4.5): no scale; colours and filters may still fade. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='stage']
+    :is(
+      .studio-tip .tm-amount-choice input:active + span,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button:active
+    ) {
+    transform: none;
+  }
+
+  .studio[data-style='stage']
+    :is(
+      .studio-tip .tm-amount-choice > span,
+      .studio-tip .composer-submit,
+      .tip-bar__button
+    ) {
+    transition:
+      background-color 180ms var(--ease),
+      border-color 180ms var(--ease),
+      filter 180ms var(--ease);
+  }
+}
+
+/* The header over the cover (frame.css): the hero runs up under the header, so the words stay
+   where they were and the photo, or the deep gradient, fills the header's place too. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='stage'][data-header] .studio-hero[data-cover='photo'] {
+    min-height: calc(var(--tall) + var(--nav-height));
+  }
+
+  .studio[data-style='stage'][data-header] .studio-hero::before {
+    top: calc(var(--tall) + var(--nav-height) - 108px);
+  }
+
+  .studio[data-style='stage'][data-header]
+    .studio-cover[data-cover='gradient'] {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+}

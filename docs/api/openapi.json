@@ -1423,6 +1423,57 @@
         "x-tipme-rate-limit": "analytics"
       }
     },
+    "/v1/handles/claim-link/preview": {
+      "post": {
+        "operationId": "ClaimLinkPreview.preview",
+        "tags": [
+          "ClaimLinkPreview"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "username_claims"
+      }
+    },
     "/v1/handles/{handle}/availability": {
       "get": {
         "operationId": "PublicProfile.availability",
@@ -7528,34 +7579,40 @@
                     "properties": {
                       "v": {
                         "type": "number",
-                        "const": 1
+                        "const": 2
                       },
-                      "brand": {
+                      "style": {
+                        "type": "string",
+                        "enum": [
+                          "classic",
+                          "clear",
+                          "journal",
+                          "stage",
+                          "signboard",
+                          "sprint",
+                          "tiles",
+                          "linen",
+                          "horizon"
+                        ]
+                      },
+                      "accent": {
                         "anyOf": [
                           {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "string"
-                              }
-                            ],
-                            "items": false,
-                            "minItems": 1,
-                            "maxItems": 1
+                            "type": "string",
+                            "enum": [
+                              "ink",
+                              "blue",
+                              "lagoon",
+                              "green",
+                              "violet",
+                              "rose",
+                              "coral",
+                              "amber",
+                              "photo"
+                            ]
                           },
                           {
-                            "type": "array",
-                            "prefixItems": [
-                              {
-                                "type": "string"
-                              },
-                              {
-                                "type": "string"
-                              }
-                            ],
-                            "items": false,
-                            "minItems": 2,
-                            "maxItems": 2
+                            "type": "null"
                           }
                         ]
                       },
@@ -7567,539 +7624,299 @@
                           "auto"
                         ]
                       },
-                      "fonts": {
-                        "type": "object",
-                        "properties": {
-                          "heading": {
-                            "type": "string",
-                            "enum": [
-                              "manrope",
-                              "dm-serif-display",
-                              "inter",
-                              "work-sans",
-                              "space-grotesk",
-                              "bricolage-grotesque",
-                              "outfit",
-                              "nunito",
-                              "fraunces",
-                              "source-serif-4",
-                              "unbounded",
-                              "anton",
-                              "linen-serif"
-                            ]
-                          },
-                          "body": {
-                            "type": "string",
-                            "enum": [
-                              "manrope",
-                              "dm-serif-display",
-                              "inter",
-                              "work-sans",
-                              "space-grotesk",
-                              "bricolage-grotesque",
-                              "outfit",
-                              "nunito",
-                              "fraunces",
-                              "source-serif-4",
-                              "unbounded",
-                              "anton",
-                              "linen-serif"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "heading",
-                          "body"
-                        ],
-                        "additionalProperties": false
-                      },
-                      "scale": {
+                      "cover": {
                         "type": "string",
                         "enum": [
-                          "standard",
-                          "compact",
-                          "roomy"
+                          "yours",
+                          "gradient",
+                          "plain"
                         ]
                       },
-                      "corners": {
-                        "type": "string",
-                        "enum": [
-                          "soft",
-                          "square",
-                          "round"
-                        ]
-                      },
-                      "rows": {
-                        "maxItems": 12,
+                      "blocks": {
+                        "maxItems": 40,
                         "type": "array",
                         "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string",
-                              "pattern": "^[a-z0-9]{8}$"
-                            },
-                            "columns": {
-                              "type": "string",
-                              "enum": [
-                                "1",
-                                "1-1",
-                                "2-1",
-                                "1-2",
-                                "1-1-1"
-                              ]
-                            },
-                            "spacing": {
-                              "type": "string",
-                              "enum": [
-                                "m",
-                                "s",
-                                "l"
-                              ]
-                            },
-                            "background": {
-                              "anyOf": [
-                                {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "variant": {
                                   "type": "string",
                                   "enum": [
-                                    "page",
-                                    "card",
-                                    "colour",
-                                    "second"
+                                    "heading",
+                                    "paragraph"
                                   ]
                                 },
-                                {
-                                  "type": "object",
-                                  "properties": {
-                                    "photo": {
-                                      "type": "string",
-                                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                                    }
-                                  },
-                                  "required": [
-                                    "photo"
-                                  ],
-                                  "additionalProperties": false
+                                "text": {
+                                  "type": "string"
                                 }
-                              ]
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "variant",
+                                "text"
+                              ],
+                              "additionalProperties": false
                             },
-                            "cells": {
-                              "minItems": 1,
-                              "maxItems": 3,
-                              "type": "array",
-                              "items": {
-                                "maxItems": 3,
-                                "type": "array",
-                                "items": {
-                                  "oneOf": [
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "text"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "paragraph",
-                                            "heading",
-                                            "lead"
-                                          ]
-                                        },
-                                        "level": {
-                                          "anyOf": [
-                                            {
-                                              "type": "number",
-                                              "const": 2
-                                            },
-                                            {
-                                              "type": "number",
-                                              "const": 3
-                                            }
-                                          ]
-                                        },
-                                        "text": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "text"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "photo"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "square",
-                                            "wide",
-                                            "tall",
-                                            "circle"
-                                          ]
-                                        },
-                                        "imageId": {
-                                          "type": "string",
-                                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                                        },
-                                        "alt": {
-                                          "type": "string"
-                                        },
-                                        "decorative": {
-                                          "type": "boolean",
-                                          "const": true
-                                        },
-                                        "caption": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "imageId",
-                                        "alt"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "gallery"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "grid",
-                                            "strip",
-                                            "mosaic"
-                                          ]
-                                        },
-                                        "images": {
-                                          "maxItems": 9,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "imageId": {
-                                                "type": "string",
-                                                "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-                                              },
-                                              "alt": {
-                                                "type": "string"
-                                              },
-                                              "decorative": {
-                                                "type": "boolean",
-                                                "const": true
-                                              }
-                                            },
-                                            "required": [
-                                              "imageId",
-                                              "alt"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "images"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "video"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "still"
-                                        },
-                                        "url": {
-                                          "type": "string",
-                                          "maxLength": 300
-                                        },
-                                        "caption": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "url"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "services"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "list",
-                                            "cards"
-                                          ]
-                                        },
-                                        "items": {
-                                          "maxItems": 12,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "name": {
-                                                "type": "string"
-                                              },
-                                              "detail": {
-                                                "type": "string"
-                                              },
-                                              "priceMinor": {
-                                                "type": "string"
-                                              },
-                                              "from": {
-                                                "type": "boolean",
-                                                "const": true
-                                              }
-                                            },
-                                            "required": [
-                                              "name",
-                                              "priceMinor"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "items"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "events"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "list",
-                                            "cards"
-                                          ]
-                                        },
-                                        "items": {
-                                          "maxItems": 6,
-                                          "type": "array",
-                                          "items": {
-                                            "type": "object",
-                                            "properties": {
-                                              "date": {
-                                                "type": "string"
-                                              },
-                                              "time": {
-                                                "type": "string",
-                                                "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
-                                              },
-                                              "title": {
-                                                "type": "string"
-                                              },
-                                              "place": {
-                                                "type": "string"
-                                              },
-                                              "note": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "date",
-                                              "title"
-                                            ],
-                                            "additionalProperties": false
-                                          }
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "items"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "links"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "buttons",
-                                            "icons"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "quote"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "enum": [
-                                            "plain",
-                                            "band"
-                                          ]
-                                        },
-                                        "text": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant",
-                                        "text"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "about"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "plain"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    },
-                                    {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string",
-                                          "pattern": "^[a-z0-9]{8}$"
-                                        },
-                                        "kind": {
-                                          "type": "string",
-                                          "const": "supporters"
-                                        },
-                                        "variant": {
-                                          "type": "string",
-                                          "const": "names"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "kind",
-                                        "variant"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  ]
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "photo"
+                                },
+                                "imageId": {
+                                  "type": "string",
+                                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                },
+                                "alt": {
+                                  "type": "string"
+                                },
+                                "decorative": {
+                                  "type": "boolean",
+                                  "const": true
+                                },
+                                "caption": {
+                                  "type": "string"
                                 }
-                              }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "imageId",
+                                "alt"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "gallery"
+                                },
+                                "images": {
+                                  "maxItems": 9,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "imageId": {
+                                        "type": "string",
+                                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+                                      },
+                                      "alt": {
+                                        "type": "string"
+                                      },
+                                      "decorative": {
+                                        "type": "boolean",
+                                        "const": true
+                                      }
+                                    },
+                                    "required": [
+                                      "imageId",
+                                      "alt"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "images"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "video"
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "maxLength": 300
+                                },
+                                "caption": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "url"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "services"
+                                },
+                                "items": {
+                                  "maxItems": 12,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string"
+                                      },
+                                      "detail": {
+                                        "type": "string"
+                                      },
+                                      "priceMinor": {
+                                        "type": "string"
+                                      },
+                                      "from": {
+                                        "type": "boolean",
+                                        "const": true
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "priceMinor"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "items"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "events"
+                                },
+                                "items": {
+                                  "maxItems": 6,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "date": {
+                                        "type": "string"
+                                      },
+                                      "time": {
+                                        "type": "string",
+                                        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "place": {
+                                        "type": "string"
+                                      },
+                                      "note": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "date",
+                                      "title"
+                                    ],
+                                    "additionalProperties": false
+                                  }
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "items"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "quote"
+                                },
+                                "text": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind",
+                                "text"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "pattern": "^[a-z0-9]{8}$"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "const": "supporters"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "kind"
+                              ],
+                              "additionalProperties": false
                             }
-                          },
-                          "required": [
-                            "id",
-                            "columns",
-                            "spacing",
-                            "background",
-                            "cells"
-                          ],
-                          "additionalProperties": false
+                          ]
                         }
                       }
                     },
                     "required": [
                       "v",
-                      "brand",
+                      "style",
+                      "accent",
                       "mode",
-                      "fonts",
-                      "scale",
-                      "corners",
-                      "rows"
+                      "cover",
+                      "blocks"
                     ],
                     "additionalProperties": false
                   }
@@ -8800,6 +8617,63 @@
         },
         "x-tipme-access": "recipient",
         "x-tipme-csrf": true,
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/username-claim": {
+      "post": {
+        "operationId": "UsernameClaim.claim",
+        "tags": [
+          "UsernameClaim"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "username_claims",
         "security": [
           {
             "session": []
@@ -18285,6 +18159,66 @@
         "x-tipme-permission": "usernames.manage"
       }
     },
+    "/v1/ops/usernames/handover-accounts": {
+      "post": {
+        "operationId": "OpsUsernames.handoverAccounts",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 254
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
     "/v1/ops/usernames/take-backs/{id}/cancel": {
       "post": {
         "operationId": "OpsUsernames.cancelTakeBack",
@@ -18294,6 +18228,220 @@
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/assign": {
+      "post": {
+        "operationId": "OpsUsernames.assign",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/handover-link": {
+      "post": {
+        "operationId": "OpsUsernames.createHandoverLink",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "usernames.manage"
+      }
+    },
+    "/v1/ops/usernames/{name}/handover-link/cancel": {
+      "post": {
+        "operationId": "OpsUsernames.cancelHandoverLink",
+        "tags": [
+          "OpsUsernames"
+        ],
+        "parameters": [
+          {
+            "name": "name",
             "in": "path",
             "required": true,
             "schema": {
@@ -20041,6 +20189,12 @@
                   "TAKE_BACK_OPEN",
                   "TAKE_BACK_NOT_FOUND",
                   "TAKE_BACK_CLOSED",
+                  "USERNAME_IN_HOLD",
+                  "HANDOVER_LINK_NOT_FOUND",
+                  "HANDOVER_ACCOUNT_UNAVAILABLE",
+                  "CLAIM_LINK_INVALID",
+                  "HANDOVER_STAFF_ACCOUNT",
+                  "HANDOVER_ACCOUNT_CHANGED",
                   "ROLE_IN_USE",
                   "ROLE_PROTECTED",
                   "STAFF_PROTECTED",

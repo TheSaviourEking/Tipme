@@ -82,7 +82,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search`<br>GET `/v1/ops/users` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 | `switches.manage` | GET `/v1/ops/switches`<br>POST `/v1/ops/switches/{key}`<br>POST `/v1/ops/switches/display/{key}` |
-| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
+| `usernames.manage` | GET `/v1/ops/usernames`<br>POST `/v1/ops/usernames`<br>POST `/v1/ops/usernames/{name}/assign`<br>POST `/v1/ops/usernames/{name}/handover-link`<br>POST `/v1/ops/usernames/{name}/handover-link/cancel`<br>POST `/v1/ops/usernames/{name}/release`<br>POST `/v1/ops/usernames/{name}/take-back`<br>GET `/v1/ops/usernames/check/{name}`<br>POST `/v1/ops/usernames/handover-accounts`<br>POST `/v1/ops/usernames/take-backs/{id}/cancel` |
 
 <!-- /generated:permissions -->
 <!-- prettier-ignore-end -->
@@ -124,6 +124,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/diagnostics/trace-probe/{jobId}` | n/a (read) | – | yes |
 | POST | `/v1/events` | – | `analytics` | – |
 | GET | `/v1/handles/{handle}/availability` | n/a (read) | `handles` | – |
+| POST | `/v1/handles/claim-link/preview` | – | `username_claims` | – |
 | GET | `/v1/mail/unsubscribe` | n/a (read) | – | – |
 | POST | `/v1/mail/unsubscribe` | – | `unsubscribe` | – |
 | GET | `/v1/mock-provider/checkout/{reference}` | n/a (read) | – | yes |
@@ -296,6 +297,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/me/tips/{tipId}` | n/a (read) | – | – |
 | POST | `/v1/me/tips/{tipId}/message/hide` | yes | – | – |
 | POST | `/v1/me/tips/{tipId}/message/report` | yes | – | – |
+| POST | `/v1/me/username-claim` | yes | `username_claims` | – |
 | GET | `/v1/me/visits-today` | n/a (read) | – | – |
 | GET | `/v1/me/whats-new` | n/a (read) | – | – |
 | POST | `/v1/me/whats-new/seen` | yes | – | – |
@@ -447,9 +449,13 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/tips/{tipId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/assign` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/handover-link` | `usernames.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/usernames/{name}/handover-link/cancel` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/usernames/{name}/release` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/usernames/{name}/take-back` | `usernames.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames/check/{name}` | `usernames.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/usernames/handover-accounts` | `usernames.manage` | yes | `ops_read` | – |
 | POST | `/v1/ops/usernames/take-backs/{id}/cancel` | `usernames.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/users` | `search.view` | n/a (read) | – | – |
 | POST | `/v1/ops/users/{id}/reveal` | `private.view` | yes | – | – |
@@ -486,7 +492,7 @@ Reviewed one by one; the test lists them and fails when one is added.
 | `POST /v1/profiles/{handle}/report`                                                    | Anyone can report a page                                                             | A reason from a fixed list; always answers the same; rate-limited                                                                                                                                                       |
 | `GET /v1/handles/{handle}/availability`                                                | Choosing a handle before signing up                                                  | Rate-limited                                                                                                                                                                                                            |
 | `GET /v1/avatars/{profileId}/{file}`                                                   | Profile photos on public pages                                                       | Only the current photo of a live, active page                                                                                                                                                                           |
-| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                                      | Only the current cover of a live, active page, and its 640/1080/1600 renditions, same rule                                                                                                                              |
+| `GET /v1/covers/{profileId}/{file}`                                                    | Uploaded covers on public pages                                                      | Only the current cover of a live, active page, its 640/1080/1600 renditions and its 480/720 tall crops, same rule                                                                                                       |
 | `GET /v1/studio-images/{profileId}/{imageId}/{version}/{file}`                         | Page Studio photos on public pages                                                   | Only a crop (never the master) that the published design of a live, active Pro page uses, at its current version; 404 while Page Studio is off                                                                          |
 | `GET /v1/b/{business}/{location}`, `GET /v1/b/{business}/{location}/{handle}`          | A printed business code opens these pages for a supporter without an account (PR B4) | Only verified, not paused businesses and open locations; only people whose page is live and can take a tip; a chosen first name and photo, never a full name, bio, contact or link; 404 while `BUSINESS_ENABLED` is off |
 | `GET /v1/b/{business}`                                                                 | The business page: the places a supporter can pick from                              | Only verified, not paused businesses; open locations' name and address, never a person; 404 while `BUSINESS_ENABLED` is off                                                                                             |

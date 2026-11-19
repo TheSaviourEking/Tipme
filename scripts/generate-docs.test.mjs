@@ -58,6 +58,8 @@ const PUBLIC_REVIEWED = [
   'GET /v1/studio-images/{profileId}/{imageId}/{version}/{file}',
   'POST /v1/events',
   'GET /v1/handles/{handle}/availability',
+  // Username handover (18 Nov 2026): what a claim link is, before signing in. Code in the body.
+  'POST /v1/handles/claim-link/preview',
   'GET /v1/mail/unsubscribe',
   'POST /v1/mail/unsubscribe',
   // Paid Pro (ADR-0015): the monthly price, read only and cached publicly; nothing private.

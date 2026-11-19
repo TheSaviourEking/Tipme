@@ -235,7 +235,7 @@ export interface StudioDocument {
 
 ### 5.3 What else is stored (my call)
 
-- **The photo accent:** a column on `page_studios`, `photo_accent jsonb NULL`, holding `{ source: 'avatar', avatarVersion, light: StudioAccentValues, dark: StudioAccentValues } | { failed: true, fallback: AccentId }`. It is written only by the server (section 6). It needs a drizzle-kit migration. Putting it on `page_studios` rather than `profiles` is the builder's call.
+- **The photo accent:** a column on `page_studios`, `photo_accent jsonb NULL`, holding `{ source: 'avatar', avatarVersion, light: StudioAccentValues, dark: StudioAccentValues } | { failed: true, fallback: AccentId, avatarVersion, noUsableColour?: true }`. Both kinds name the photo they came from, and a value for any other photo reads as none, so a fallback never outlives its photo **(controller ruling AH, Task 11 review)**. It is written only by the server (section 6). It needs a drizzle-kit migration. Putting it on `page_studios` rather than `profiles` is the builder's call.
 - **Nothing else changes in the database.** `draft` and `published` stay jsonb, and `rev`, `published_check_version` and images stay as they are.
 
 ### 5.4 API (my call)
@@ -265,10 +265,10 @@ export interface StudioDocument {
 - **When it is computed:** on the server, when the person picks it and again every time the avatar changes. The published page uses the stored value, and an avatar change revalidates the page through the existing `profile.changed`. **(my call)**
 - **Algorithm** (the brief's §3.0.1, adopted) **(my call)**:
   1. Take up to 5 dominant colours from the 128 px rendition of the avatar.
-  2. Drop near-greys (OKLCH chroma < 0.04) and low-chroma skin oranges.
+  2. Drop near-greys (OKLCH chroma < 0.04) and low-chroma skin oranges (hue 20° to 90° under chroma 0.13, measured to drop every Monk scale tone and warm-lit skin alike) **(controller ruling AI)**.
   3. Clamp each candidate to the curated band: light fill L 0.45 to 0.55, dark fill L 0.75 to 0.82, keeping hue and capping chroma at 0.16.
   4. For each mode, pick the label (`#FFFFFF`, or the dark labels in 7.3) that reaches 4.5:1 on the fill. The text value is the fill, darkened in OKLCH lightness until it reaches **4.5:1 against every style's page and card surfaces in that mode, Classic's included**. Focus ring and selected outline: 3:1 against the same surfaces.
-  5. Take the first candidate that passes everything. If none does, store `{ failed: true, fallback }` with the curated accent nearest in OKLab. The editor then says: "Your photo's colours didn't pass our contrast check, so your page uses {Name}." **(my call, copy)**
+  5. Take the first candidate that passes everything. If none does, store `{ failed: true, fallback }` with the curated accent nearest in OKLab to the most dominant colour that survived step 2, or Ink when none did, so the fallback never depends on skin tone **(controller ruling AI)**. The editor then says: "Your photo's colours didn't pass our contrast check, so your page uses {Name}." **(my call, copy)** When the photo gave no colour to try (nothing sampled, as from a smooth gradient, or only greys and skin tones), the value carries `noUsableColour` and the editor says: "We couldn't find a clear colour in your photo, so your page uses {Name}." **(builder's call, Task 11 review)**
   6. The same avatar always gives the same result: deterministic, with no randomness.
 - **No profile photo:** the swatch is disabled, with the note "Add a profile photo to use this." **(my call)**
 - **Reuse:** `studio-colour.ts` (OKLCH and contrast) and the existing image pipeline. Which pixel-sampling method is used is the builder's call. sharp is already a dependency.

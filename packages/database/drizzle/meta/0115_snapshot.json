@@ -1,5 +1,5 @@
 {
-  "id": "0a29454f-2138-483c-b68a-b33b2e699bad",
+  "id": "2284a771-fe97-4b8a-ba7d-dd96dd4483d7",
   "prevId": "1187b6bb-1216-475a-81d7-f1386d001b84",
   "version": "7",
   "dialect": "postgresql",
@@ -5950,6 +5950,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "photo_accent": {
+          "name": "photo_accent",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -7244,120 +7250,6 @@
         "plan_changes_plan": {
           "name": "plan_changes_plan",
           "value": "\"plan_changes\".\"plan\" IN ('free', 'pro')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.plan_fee_rates": {
-      "name": "plan_fee_rates",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "free_bps": {
-          "name": "free_bps",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "pro_bps": {
-          "name": "pro_bps",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "effective_from": {
-          "name": "effective_from",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "set_by": {
-          "name": "set_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "approved_by": {
-          "name": "approved_by",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "plan_fee_rates_effective_from": {
-          "name": "plan_fee_rates_effective_from",
-          "columns": [
-            {
-              "expression": "effective_from",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "plan_fee_rates_set_by_users_id_fk": {
-          "name": "plan_fee_rates_set_by_users_id_fk",
-          "tableFrom": "plan_fee_rates",
-          "tableTo": "users",
-          "columnsFrom": ["set_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "plan_fee_rates_approved_by_users_id_fk": {
-          "name": "plan_fee_rates_approved_by_users_id_fk",
-          "tableFrom": "plan_fee_rates",
-          "tableTo": "users",
-          "columnsFrom": ["approved_by"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "plan_fee_rates_free_bps": {
-          "name": "plan_fee_rates_free_bps",
-          "value": "\"plan_fee_rates\".\"free_bps\" BETWEEN 150 AND 1000"
-        },
-        "plan_fee_rates_pro_bps": {
-          "name": "plan_fee_rates_pro_bps",
-          "value": "\"plan_fee_rates\".\"pro_bps\" BETWEEN 150 AND 1000"
-        },
-        "plan_fee_rates_pro_not_above_free": {
-          "name": "plan_fee_rates_pro_not_above_free",
-          "value": "\"plan_fee_rates\".\"pro_bps\" <= \"plan_fee_rates\".\"free_bps\""
-        },
-        "plan_fee_rates_reason": {
-          "name": "plan_fee_rates_reason",
-          "value": "char_length(\"plan_fee_rates\".\"reason\") > 0"
         }
       },
       "isRLSEnabled": false
@@ -8990,7 +8882,7 @@
         },
         "profiles_custom_fee_bps": {
           "name": "profiles_custom_fee_bps",
-          "value": "custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 150 AND 1000"
+          "value": "custom_fee_bps IS NULL OR custom_fee_bps BETWEEN 0 AND 10000"
         },
         "profiles_min_tip": {
           "name": "profiles_min_tip",

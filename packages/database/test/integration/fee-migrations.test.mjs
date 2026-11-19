@@ -114,7 +114,7 @@ test('per-page deals no longer below the plan rate are cleared with one audit ro
   // Free pages at 500 bps and up, Pro pages at 300 and up: they can never apply under Free 5% and
   // Pro 3%, so they are cleared; lower deals stay. Each cleared page gets one system audit row.
   const db = await useDatabase(t);
-  const dataStep = (await migration('0115_plan_fee_rates')).filter(
+  const dataStep = (await migration('0118_plan_fee_rates')).filter(
     (statement) => statement.includes('custom_fee_bps'),
   );
   assert.ok(dataStep.length >= 2, 'the migration has a data step');

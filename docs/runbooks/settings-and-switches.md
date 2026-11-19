@@ -217,13 +217,13 @@ Counted on `dev` at 0a490475 (the two variables of open PRs are not on `dev`, so
 
 Not a switch: two rates in basis points, Free and Pro, at `/ops/plan-fees` (table `plan_fee_rates`, append-only
 history, read on every quote, no cache). They started at Free 500 (5%) and Pro 300 (3%), seeded by migration
-`0115_plan_fee_rates` with a system audit row; with no row the coded defaults (`DEFAULT_PLAN_FEE_RATES`, the
+`0118_plan_fee_rates` with a system audit row; with no row the coded defaults (`DEFAULT_PLAN_FEE_RATES`, the
 same numbers) apply. A change is the serious action `plan_fees.change` (permission `fees.manage`, a reason, a
 fresh code and a second person when one exists), audited as `plan_fees.changed` with from, to and approver. It
 applies to new quotes only: a quote already shown keeps the fee it recorded, and paid tips and the ledger are
 never touched. Bounds (owner, 18 Nov 2026): whole basis points 150 to 1000 (1.5% to 10%) on each plan, and Pro never above Free;
 a move of more than 200 bps on either plan needs the explicit confirm (`confirmLargeChange` in the request, a
-ticked box on the screen). Migration `0115` also cleared per-page deals no longer below the new rate (Free 500 and
+ticked box on the screen). Migration `0118` also cleared per-page deals no longer below the new rate (Free 500 and
 up, Pro 300 and up), one `fee.capped` audit row each. A per-page fee staff set
 (`fee.change`, ADR-0014) still wins below the plan's rate. A person's first 2 withdrawals each Lagos day are free
 (`FREE_WITHDRAWALS_PER_DAY`); from the 3rd the partner's fee comes off the amount. Business tips use the staff member's own plan rate:
