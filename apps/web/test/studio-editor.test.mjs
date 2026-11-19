@@ -30,7 +30,10 @@ import {
   fixesNow,
   issueTab,
   passingWords,
+  blockedIntro,
+  publishFailureWords,
   publishLabel,
+  publishOutcome,
   publishTally,
   saveWords,
   studioEntry,
@@ -357,6 +360,92 @@ test('after a 422 the server’s issues replace the client’s until the next ed
   // The next edit: the editor's own check again.
   assert.equal(withRefusal(doc({ mode: 'dark' }), local, refused), local);
   assert.equal(withRefusal(d, local, null), local);
+});
+
+test('a publish answer becomes an outcome: published, the server’s issues, or why it failed', () => {
+  const issue = {
+    rule: 'long-word',
+    severity: 'error',
+    at: { row: '', block: 'blk00001' },
+    message: 'A word is too long for a phone',
+    fixes: [],
+  };
+  assert.equal(publishOutcome({ ok: true, status: 200, data: {} }), 'published');
+  assert.deepEqual(
+    publishOutcome({
+      ok: false,
+      status: 422,
+      code: 'STUDIO_DESIGN_CHECK_FAILED',
+      issues: [issue],
+    }),
+    { issues: [issue] },
+  );
+  // A 422 without issues is no refusal to list: it failed.
+  for (const issues of [undefined, []])
+    assert.deepEqual(
+      publishOutcome({
+        ok: false,
+        status: 422,
+        code: 'STUDIO_DESIGN_CHECK_FAILED',
+        ...(issues ? { issues } : {}),
+      }),
+      { failed: 'other' },
+    );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 0, code: 'NETWORK' }),
+    { failed: 'network' },
+  );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 409, code: 'STUDIO_DRAFT_STALE' }),
+    { failed: 'stale' },
+  );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 404, code: 'NOT_FOUND' }),
+    { failed: 'unavailable' },
+  );
+  assert.deepEqual(
+    publishOutcome({ ok: false, status: 500, code: 'INTERNAL_ERROR' }),
+    { failed: 'other' },
+  );
+});
+
+test('a failed publish says why, never claims a network failure didn’t publish, and offers a retry only when Publish works', () => {
+  assert.equal(
+    publishFailureWords('network', true),
+    'We couldn’t confirm it was published. Check your connection, then reload to see.',
+  );
+  assert.doesNotMatch(publishFailureWords('network', true), /wasn’t published/);
+  assert.equal(
+    publishFailureWords('stale', false),
+    'This draft changed in another tab. Show the latest to keep editing.',
+  );
+  assert.equal(
+    publishFailureWords('unavailable', true),
+    'Page Studio isn’t available right now.',
+  );
+  assert.equal(
+    publishFailureWords('other', true),
+    'Your page wasn’t published. Try again in a moment.',
+  );
+  assert.equal(
+    publishFailureWords('other', false),
+    'Your page wasn’t published.',
+  );
+  for (const reason of ['network', 'stale', 'unavailable'])
+    assert.doesNotMatch(publishFailureWords(reason, false), /try again/i);
+});
+
+test('the list’s intro says the draft is saved only when it is', () => {
+  assert.equal(
+    blockedIntro(2, 'saved'),
+    '2 things to fix first. Your draft is saved.',
+  );
+  assert.equal(
+    blockedIntro(1, 'saved'),
+    '1 thing to fix first. Your draft is saved.',
+  );
+  for (const state of ['pending', 'saving', 'failed'])
+    assert.equal(blockedIntro(2, state), '2 things to fix first.');
 });
 
 test('the status line says where the draft is ("Saved · not published")', () => {

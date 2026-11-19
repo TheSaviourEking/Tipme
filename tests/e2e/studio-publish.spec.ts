@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Route } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
 import { API_ORIGIN, WEB_ORIGIN } from './stack';
@@ -100,6 +100,10 @@ test('with issues, Publish is aria-disabled, stays focusable and opens "Your pag
 
   const dialog = blocked(page);
   await expect(dialog).toBeVisible();
+  // Described by its intro alone, not the whole list.
+  await expect(dialog).toHaveAccessibleDescription(
+    '2 things to fix first. Your draft is saved.',
+  );
   await expect(dialog.getByRole('listitem')).toHaveCount(2);
   await expect(dialog.getByText('A quote is empty')).toHaveCount(2);
   await expect(
@@ -268,11 +272,117 @@ test('there is no publish-anyway control', async ({ page }, testInfo) => {
   await expect(confirm(page)).not.toContainText(/anyway/i);
 });
 
-for (const width of [390, 1440])
+/** Answers the next publish with `fulfil`, the rest as usual. */
+async function answerPublish(
+  page: Page,
+  fulfil: (route: Route) => Promise<void>,
+) {
+  await page.route(`${API_ORIGIN}/v1/me/studio/publish`, fulfil, {
+    times: 1,
+  });
+}
+
+const refusal = (status: number, code: string) => ({
+  status,
+  contentType: 'application/json',
+  body: JSON.stringify({ error: { code, message: code, reference: 'e2e' } }),
+});
+
+test('a publish that can’t be confirmed says so, and never that it wasn’t published', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: FIVE_BLOCKS });
+  await answerPublish(page, (route) => route.abort('internetdisconnected'));
+  await openEditor(page);
+  await openGate(page);
+  const dialog = confirm(page);
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'We couldn’t confirm it was published. Check your connection, then reload to see.',
+  );
+  await expect(dialog).not.toContainText(/wasn’t published/);
+});
+
+test('with Page Studio switched off, Publish says Studio isn’t available right now', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: FIVE_BLOCKS });
+  await answerPublish(page, (route) =>
+    route.fulfill(refusal(404, 'NOT_FOUND')),
+  );
+  await openEditor(page);
+  await openGate(page);
+  const dialog = confirm(page);
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'Page Studio isn’t available right now.',
+  );
+  await expect(dialog).not.toContainText(/try again/i);
+});
+
+test('a draft saved in another tab: the dialog says so, and “Show the latest” brings it back', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await saveDraft(page, { style: 'clear', blocks: FIVE_BLOCKS });
+  await answerPublish(page, (route) =>
+    route.fulfill(refusal(409, 'STUDIO_DRAFT_STALE')),
+  );
+  await openEditor(page);
+  await openGate(page);
+  const dialog = confirm(page);
+  await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toHaveText(
+    'This draft changed in another tab. Show the latest to keep editing.',
+  );
+  // Publish can't be pressed now, so nothing offers to try again.
+  await expect(
+    dialog.getByRole('button', { name: 'Publish', exact: true }),
+  ).toBeDisabled();
+  await expect(dialog).not.toContainText(/try again/i);
+  await dialog.getByRole('button', { name: 'Show the latest' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('This draft changed in another tab')).toHaveCount(
+    0,
+  );
+  await expect(publishButton(page)).toBeFocused();
+  await expect(publishButton(page)).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+});
+
+test('read-only after a refused save, pressing Publish moves focus to the banner', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  await page.route(`${API_ORIGIN}/v1/me/studio/draft`, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill(refusal(403, 'STUDIO_PRO_REQUIRED'))
+      : route.continue(),
+  );
+  await card(page, 'Journal').click();
+  const banner = page.locator('.pst-banner').filter({
+    hasText: 'That change needs Pro',
+  });
+  await expect(banner).toBeVisible({ timeout: 15_000 });
+  await expect(publishButton(page)).toHaveAttribute('aria-disabled', 'true');
+  await openGate(page);
+  await expect(banner).toBeFocused();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+});
+
+for (const width of [320, 390, 1440])
   test(`axe is clean on both publish dialogs at ${width}`, async ({
     page,
   }, testInfo) => {
-    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    await page.setViewportSize({
+      width,
+      height: width === 320 ? 640 : width === 390 ? 844 : 900,
+    });
     await signUpRecipient(page, testInfo, { live: false });
     await saveDraft(page, {
       style: 'clear',

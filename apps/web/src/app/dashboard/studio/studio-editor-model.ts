@@ -112,6 +112,62 @@ export function withRefusal(
   };
 }
 
+/** Why a publish didn't go through (the dialog says which). */
+export type PublishFailure = 'network' | 'stale' | 'unavailable' | 'other';
+export type PublishOutcome =
+  | 'published'
+  | { issues: StudioIssue[] }
+  | { failed: PublishFailure };
+
+/**
+ * The answer to `POST /v1/me/studio/publish`, as the editor acts on it. A 422 lists issues only
+ * when it has some; one without is a failure like any other.
+ */
+export function publishOutcome(
+  result:
+    | { ok: true }
+    | { ok: false; status: number; code: string; issues?: StudioIssue[] },
+): PublishOutcome {
+  if (result.ok) return 'published';
+  if (result.code === 'STUDIO_DESIGN_CHECK_FAILED' && result.issues?.length)
+    return { issues: result.issues };
+  if (result.status === 0 || result.code === 'NETWORK')
+    return { failed: 'network' };
+  if (result.code === 'STUDIO_DRAFT_STALE') return { failed: 'stale' };
+  if (result.status === 404) return { failed: 'unavailable' };
+  return { failed: 'other' };
+}
+
+/**
+ * The dialog's words for a failed publish. A network failure may have published, so it never
+ * says it didn't; "Try again" only while Publish can be pressed.
+ */
+export function publishFailureWords(
+  reason: PublishFailure,
+  canPublish: boolean,
+): string {
+  switch (reason) {
+    case 'network':
+      return 'We couldn’t confirm it was published. Check your connection, then reload to see.';
+    case 'stale':
+      return 'This draft changed in another tab. Show the latest to keep editing.';
+    case 'unavailable':
+      return 'Page Studio isn’t available right now.';
+    default:
+      return canPublish
+        ? 'Your page wasn’t published. Try again in a moment.'
+        : 'Your page wasn’t published.';
+  }
+}
+
+/** The list's intro: "Your draft is saved." only when it is. */
+export function blockedIntro(count: number, save: SaveState): string {
+  const things = count === 1 ? '1 thing' : `${count} things`;
+  return save === 'saved'
+    ? `${things} to fix first. Your draft is saved.`
+    : `${things} to fix first.`;
+}
+
 export type SaveState = 'saved' | 'pending' | 'saving' | 'failed';
 
 /**
