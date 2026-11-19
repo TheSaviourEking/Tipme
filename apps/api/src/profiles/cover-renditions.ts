@@ -1,5 +1,6 @@
 import {
   COVER_RENDITION_WIDTHS,
+  COVER_SIZE,
   type CoverRenditionWidth,
 } from '@tipme/contracts';
 import sharp from 'sharp';
@@ -7,7 +8,7 @@ import { reencodeTo } from './image-upload.js';
 
 // Page covers: 2240×600, twice the widest the standard page shows. The safeguards every upload
 // gets are in image-upload.ts.
-export const toCover = reencodeTo(2240, 600);
+export const toCover = reencodeTo(COVER_SIZE.width, COVER_SIZE.height);
 
 /**
  * Quality for the smaller copies. Lower than the full cover's 80: at these sizes the difference

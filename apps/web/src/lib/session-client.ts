@@ -1,4 +1,5 @@
 'use client';
+import type { StudioIssue } from '@tipme/contracts';
 import { hintFromAnswer, writeSignedInHint } from './signed-in-hint.ts';
 
 /** Calls the API as the signed-in recipient: the session cookie travels, never readable here. */
@@ -19,6 +20,8 @@ export type SessionResult<T> =
       reason?: string;
       /** The API's fixed words for this code. */
       message?: string;
+      /** STUDIO_DESIGN_CHECK_FAILED: the server's design check issues. */
+      issues?: StudioIssue[];
     };
 
 interface ApiFetchInit {
@@ -131,6 +134,7 @@ async function sendWith<T>(
       fields?: string[];
       reason?: string;
       message?: string;
+      issues?: StudioIssue[];
     };
   } | null;
   if (response.ok && body && 'data' in body)
@@ -142,6 +146,9 @@ async function sendWith<T>(
     ...(body?.error?.fields ? { fields: body.error.fields } : {}),
     ...(body?.error?.reason ? { reason: body.error.reason } : {}),
     ...(body?.error?.message ? { message: body.error.message } : {}),
+    ...(Array.isArray(body?.error?.issues)
+      ? { issues: body.error.issues }
+      : {}),
   };
 }
 

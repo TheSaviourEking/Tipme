@@ -2,25 +2,18 @@
 // property tests use it, and so will the Playwright render property test (Task 6).
 //
 // studioDocumentV1Arb({ valid: true }) makes documents the schema accepts: random brand colours, any
-// font pair fontsOk allows, rows, columns and blocks up to the limits, and text from empty to the
+// font pair the v1 roles allow, rows, columns and blocks up to the limits, and text from empty to the
 // limit (biased to the limit, with long unbroken words, emoji, right-to-left and Yoruba text).
 // studioDocumentV1Arb({ valid: false }) makes a valid one, then breaks exactly one rule.
 // studioDocumentArb({ valid }) is the same for the v2 document: a style, an accent (or none), a mode,
 // a cover the style offers and up to 45 blocks of the eight v2 kinds, trimmed to the limits.
-// checkContext() makes the server facts the design check reads: image sizes and rendition
-// bytes, video status and the profile's bio and link count.
 import fc from 'fast-check';
 import {
-  STUDIO_FIX_NEEDS_INPUT,
-  STUDIO_FONTS,
   STUDIO_ACCENT_IDS,
   STUDIO_LIMITS,
   STUDIO_STYLES,
   STUDIO_STYLE_IDS,
-  applyStudioFixV1,
-  checkDesignV1,
   cleanStudioText,
-  fontsOk,
   resolveStudioV1,
 } from '../../dist/index.js';
 
@@ -86,13 +79,23 @@ const id = fc.stringMatching(/^[a-z0-9]{8}$/);
 const hex = fc
   .integer({ min: 0, max: 0xffffff })
   .map((n) => `#${n.toString(16).padStart(6, '0')}`);
-const pairs = STUDIO_FONTS.flatMap((h) =>
-  STUDIO_FONTS.filter((b) => fontsOk(h.id, b.id)).map((b) => ({
-    heading: h.id,
-    body: b.id,
-  })),
+// The v1 editor's fonts and the roles each could take (frozen in studio-document-v1.ts; the v2
+// registry no longer has them), so any heading and body pair the v1 schema allows.
+const V1_BODY_FONTS = ['inter', 'work-sans', 'nunito', 'source-serif-4'];
+const V1_FONTS = [
+  'manrope',
+  'dm-serif-display',
+  'space-grotesk',
+  'bricolage-grotesque',
+  'outfit',
+  'fraunces',
+  ...V1_BODY_FONTS,
+];
+const pairs = V1_FONTS.flatMap((heading) =>
+  V1_BODY_FONTS.map((body) => ({ heading, body })),
 );
-const L = STUDIO_LIMITS;
+// A v1 row and a v1 cell had limits of their own until STUDIO_LIMITS dropped them (PR 4b).
+const L = { ...STUDIO_LIMITS, rows: 12, blocksPerCell: 3 };
 const kobo = fc
   .integer({ min: 1, max: 10_000_000 })
   .map((n) => String(n * 100));
@@ -617,90 +620,4 @@ export function studioDocumentArb({ valid: wanted = true } = {}) {
   return fc
     .tuple(validV2, fc.integer({ min: 0, max: BREAKS_V2.length - 1 }))
     .map(([d, i]) => BREAKS_V2[i](d));
-}
-
-export function checkContext() {
-  const size = fc.record({
-    width: fc.integer({ min: 300, max: 4000 }),
-    height: fc.integer({ min: 300, max: 4000 }),
-    perPixel: fc.double({ min: 0.02, max: 0.5, noNaN: true }),
-  });
-  return fc
-    .record({
-      sizes: fc.array(size, {
-        minLength: IMAGE_POOL.length,
-        maxLength: IMAGE_POOL.length,
-      }),
-      videos: fc.array(fc.constantFrom('ok', 'gone', 'unknown'), {
-        minLength: VIDEO_POOL.length,
-        maxLength: VIDEO_POOL.length,
-      }),
-      bio: fc.boolean(),
-      links: fc.integer({ min: 0, max: 8 }),
-    })
-    .map(({ sizes, videos, bio, links }) => ({
-      images: Object.fromEntries(
-        IMAGE_POOL.map((imageId, i) => [imageId, imageFacts(sizes[i])]),
-      ),
-      videos: Object.fromEntries(VIDEO_POOL.map((url, i) => [url, videos[i]])),
-      profile: { bio, links },
-    }));
-}
-
-/** Facts for one stored image: renditions per shape at 480/960/1440 wide, never upscaled. */
-export function imageFacts({ width, height, perPixel = 0.08 }) {
-  const bytes = {};
-  for (const [shape, aspect] of Object.entries({
-    square: 1,
-    wide: 16 / 9,
-    tall: 4 / 5,
-    strip: 3.73,
-  }))
-    for (const w of [480, 960, 1440]) {
-      const usable = Math.min(width, height * aspect);
-      if (w > usable && w !== 480) continue;
-      bytes[`${shape}-${w}`] = Math.round(w * (w / aspect) * perPixel);
-    }
-  return { width, height, bytes };
-}
-
-/**
- * A random page made to pass the design check the way a person would: apply the first automatic
- * fix, and where only their input could help (a new photo, new words), remove that block or row.
- * Pages that pass straight away are mostly tiny; these keep most of what was generated.
- */
-export function repairToPassing(doc, ctx) {
-  let d = doc;
-  for (let step = 0; step < 120; step += 1) {
-    const { issues } = checkDesignV1(d, ctx);
-    if (issues.length === 0) return d;
-    const fixable = issues.find((i) =>
-      i.fixes.some((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id)),
-    );
-    let next;
-    if (fixable) {
-      const fix = fixable.fixes.find(
-        (f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id),
-      );
-      next = applyStudioFixV1(d, fixable, fix.id);
-    } else {
-      const [issue] = issues;
-      if (issue.at.block) next = applyStudioFixV1(d, issue, 'remove-block');
-      else if (issue.rule === 'photo-resolution')
-        next = applyStudioFixV1(d, issue, 'plain-background');
-      else next = { ...d, rows: d.rows.filter((r) => r.id !== issue.at.row) };
-    }
-    if (JSON.stringify(next) === JSON.stringify(d))
-      next = { ...d, rows: d.rows.slice(0, -1) };
-    d = next;
-  }
-  return null;
-}
-
-/** A passing page and the facts it passes with, made by repairToPassing. */
-export function studioPassingDocument() {
-  return fc
-    .tuple(studioDocumentV1Arb({ valid: true }), checkContext())
-    .map(([doc, ctx]) => ({ doc: repairToPassing(doc, ctx), ctx }))
-    .filter(({ doc }) => doc !== null);
 }

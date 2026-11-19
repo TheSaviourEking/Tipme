@@ -9,20 +9,66 @@
  * document the schema accepts.
  */
 import { z } from 'zod';
+import { isHex, type Hex, type StudioMode } from './studio-colour.js';
 import {
-  isHex,
-  type Hex,
-  type StudioMode,
-  type StudioPalette,
-} from './studio-colour.js';
+  ID,
+  TIME,
+  UUID,
+  cleanStudioParagraph,
+  cleanStudioText,
+  fit,
+  isDate,
+  isKobo,
+  isLine,
+  isObj,
+  isParagraph,
+  optional,
+  without,
+  type Loose,
+} from './studio-document-shared.js';
 import { STUDIO_LIMITS as L, STUDIO_SUPPORTER_WALL } from './studio-limits.js';
-import {
-  STUDIO_DEFAULT_FONTS,
-  STUDIO_FONTS,
-  fontsOk,
-  type StudioFontId,
-  type StudioScaleStep,
-} from './studio-type.js';
+import type { StudioScaleStep } from './studio-type.js';
+
+// The v1 text rules are shared with the v2 document (studio-document-shared.ts, internal); these
+// two stay part of the public API.
+export { cleanStudioParagraph, cleanStudioText };
+
+/**
+ * What the v1 editor limited a row and a cell to. They left `STUDIO_LIMITS` when v1 was retired
+ * (PR 4b), but a stored v1 row is still read against them, so `resolveStudio` migrates it as before.
+ */
+const V1_LIMITS = { rows: 12, blocksPerCell: 3 } as const;
+
+/**
+ * The fonts the v1 editor offered, with the roles each could take. Frozen here: the v2 registry
+ * (`STUDIO_FONTS`) shrank to what the styles use, but a stored v1 document still names these, and
+ * `migrateStudioV1` picks a style from them (Fraunces and Source Serif 4 become Journal, DM Serif
+ * Display with Manrope becomes Classic). Only ids and roles, so no font file is needed to read one.
+ */
+const V1_FONT_ROLES = {
+  manrope: ['heading'],
+  'dm-serif-display': ['heading'],
+  inter: ['heading', 'body'],
+  'work-sans': ['heading', 'body'],
+  'space-grotesk': ['heading'],
+  'bricolage-grotesque': ['heading'],
+  outfit: ['heading'],
+  nunito: ['heading', 'body'],
+  fraunces: ['heading'],
+  'source-serif-4': ['heading', 'body'],
+} as const satisfies Record<string, readonly ('heading' | 'body')[]>;
+
+export type StudioFontIdV1 = keyof typeof V1_FONT_ROLES;
+
+/** What a new v1 document, and one whose font was retired, used. */
+const V1_DEFAULT_FONTS = { heading: 'manrope', body: 'inter' } as const;
+
+const roleOk = (id: StudioFontIdV1, role: 'heading' | 'body') =>
+  (V1_FONT_ROLES[id] as readonly string[]).includes(role);
+
+/** Whether this pair is allowed: each font can take its role (one id for both is one family). */
+const fontsOk = (heading: StudioFontIdV1, body: StudioFontIdV1) =>
+  roleOk(heading, 'heading') && roleOk(body, 'body');
 
 // ---------------------------------------------------------------------------------------------
 // Types
@@ -142,18 +188,10 @@ export interface StudioDocumentV1 {
   v: 1;
   brand: [Hex] | [Hex, Hex];
   mode: StudioMode;
-  fonts: { heading: StudioFontId; body: StudioFontId };
+  fonts: { heading: StudioFontIdV1; body: StudioFontIdV1 };
   scale: StudioScaleStep;
   corners: (typeof STUDIO_CORNERS)[number];
   rows: StudioRowV1[];
-}
-
-/** What the public page receives (Task 7 adds it to PublicProfile behind the page_studio switch). */
-export interface PublicStudioV1 {
-  document: StudioDocumentV1;
-  palette: StudioPalette;
-  images: Record<string, { path: string; width: number; height: number }>;
-  checkVersion: number;
 }
 
 export const columnCount = (columns: StudioColumns): number =>
@@ -161,48 +199,6 @@ export const columnCount = (columns: StudioColumns): number =>
 
 // ---------------------------------------------------------------------------------------------
 // Text
-
-const codePoints = (s: string) => [...s].length;
-
-/**
- * One line of user text as stored: tabs and line breaks become spaces; C0 and C1 controls and the
- * bidi overrides and isolates (U+202A–202E, U+2066–2069) are removed; NFC; trimmed.
- */
-export function cleanStudioText(s: string): string {
-  return s
-    .replace(/[\t\n\r]/g, ' ')
-    .replace(/[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g, '')
-    .normalize('NFC')
-    .trim();
-}
-
-/** A paragraph block: up to 4 paragraphs separated by one blank line, each cleaned to one line. */
-export function cleanStudioParagraph(s: string): string {
-  return s
-    .replace(/\r\n?/g, '\n')
-    .split(/\n\s*\n/)
-    .map(cleanStudioText)
-    .filter((part) => part.length > 0)
-    .slice(0, L.paragraphBreaks + 1)
-    .join('\n\n');
-}
-
-/** Cleaned and cut to `max` code points (cleaning again, since a cut can leave a space). */
-function fit(
-  s: unknown,
-  max: number,
-  clean: (s: string) => string = cleanStudioText,
-): string {
-  let out = clean(typeof s === 'string' ? s : '');
-  for (let i = 0; i < 4 && codePoints(out) > max; i += 1)
-    out = clean([...out].slice(0, max).join(''));
-  return codePoints(out) > max ? [...out].slice(0, max).join('') : out;
-}
-
-const isLine = (s: string, max: number) =>
-  cleanStudioText(s) === s && codePoints(s) <= max;
-const isParagraph = (s: string) =>
-  cleanStudioParagraph(s) === s && codePoints(s) <= L.paragraphText;
 
 // ---------------------------------------------------------------------------------------------
 // Videos
@@ -293,28 +289,6 @@ export function embedUrl(v: { site: StudioVideoSite; id: string }): string {
 // ---------------------------------------------------------------------------------------------
 // Schema (writes)
 
-const ID = /^[a-z0-9]{8}$/;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
-
-function isDate(s: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return false;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const t = new Date(Date.UTC(y, mo - 1, d));
-  return (
-    t.getUTCFullYear() === y &&
-    t.getUTCMonth() === mo - 1 &&
-    t.getUTCDate() === d
-  );
-}
-
-function isKobo(s: string): boolean {
-  if (!/^[1-9]\d{0,12}$/.test(s)) return false;
-  const v = BigInt(s);
-  return v % 100n === 0n && v >= 100n && v <= L.priceMaxMinor;
-}
-
 const id = z.string().regex(ID);
 const uuid = z.string().regex(UUID);
 const hex = z.string().refine(isHex, 'a lower-case #rrggbb colour');
@@ -334,7 +308,7 @@ const imageRef = z.strictObject({
   decorative: yes,
 });
 const fontId = z.enum(
-  STUDIO_FONTS.map((f) => f.id) as [StudioFontId, ...StudioFontId[]],
+  Object.keys(V1_FONT_ROLES) as [StudioFontIdV1, ...StudioFontIdV1[]],
 );
 
 const blockSchema = z.discriminatedUnion('kind', [
@@ -460,7 +434,10 @@ const rowSchema = z.strictObject({
     z.enum(STUDIO_BACKGROUNDS),
     z.strictObject({ photo: uuid }),
   ]),
-  cells: z.array(z.array(blockSchema).max(L.blocksPerCell)).min(1).max(3),
+  cells: z
+    .array(z.array(blockSchema).max(V1_LIMITS.blocksPerCell))
+    .min(1)
+    .max(3),
 });
 
 /** Page-wide totals, in reading order. Shared by the schema and the design check. */
@@ -499,15 +476,15 @@ const documentSchema = z
     fonts: z.strictObject({ heading: fontId, body: fontId }),
     scale: z.enum(STUDIO_SCALES),
     corners: z.enum(STUDIO_CORNERS),
-    rows: z.array(rowSchema).max(L.rows),
+    rows: z.array(rowSchema).max(V1_LIMITS.rows),
   })
   .superRefine((doc, ctx) => {
     const fail = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: 'custom', path, message });
     if (
       !fontsOk(
-        doc.fonts.heading as StudioFontId,
-        doc.fonts.body as StudioFontId,
+        doc.fonts.heading as StudioFontIdV1,
+        doc.fonts.body as StudioFontIdV1,
       )
     )
       fail(['fonts'], 'at most 2 families, each in a role it allows');
@@ -544,16 +521,8 @@ export const studioDocumentV1Schema =
 // ---------------------------------------------------------------------------------------------
 // Resolver (reads)
 
-type Loose = Record<string, unknown>;
-const isObj = (v: unknown): v is Loose =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 const pick = <T extends string>(v: unknown, from: readonly T[]): T =>
   from.includes(v as T) ? (v as T) : (from[0] as T);
-const optional = <T>(v: T | '' | undefined): T | undefined =>
-  v === '' ? undefined : v;
-const without = <T extends object>(o: T): T =>
-  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
-
 function brandOf(v: unknown): [Hex] | [Hex, Hex] {
   const list = Array.isArray(v) ? v : [];
   const colour = (c: unknown) =>
@@ -568,11 +537,14 @@ function brandOf(v: unknown): [Hex] | [Hex, Hex] {
 function fontsOf(v: unknown): StudioDocumentV1['fonts'] {
   const f = isObj(v) ? v : {};
   const can = (id: unknown, role: 'heading' | 'body') =>
-    STUDIO_FONTS.find((font) => font.id === id && font.roles.includes(role))
-      ?.id;
+    typeof id === 'string' && Object.hasOwn(V1_FONT_ROLES, id)
+      ? roleOk(id as StudioFontIdV1, role)
+        ? (id as StudioFontIdV1)
+        : undefined
+      : undefined;
   return {
-    heading: can(f['heading'], 'heading') ?? STUDIO_DEFAULT_FONTS.heading,
-    body: can(f['body'], 'body') ?? STUDIO_DEFAULT_FONTS.body,
+    heading: can(f['heading'], 'heading') ?? V1_DEFAULT_FONTS.heading,
+    body: can(f['body'], 'body') ?? V1_DEFAULT_FONTS.body,
   };
 }
 
@@ -732,7 +704,7 @@ function rowOf(v: Loose, twoColours: boolean, today: string): StudioRowV1 {
     (Array.isArray(rawCells[i]) ? (rawCells[i] as unknown[]) : [])
       .map((b) => blockOf(b, today))
       .filter((b): b is StudioBlockV1 => b !== null)
-      .slice(0, L.blocksPerCell),
+      .slice(0, V1_LIMITS.blocksPerCell),
   );
   return {
     id: typeof v['id'] === 'string' ? v['id'] : '',
@@ -828,7 +800,7 @@ function resolve(raw: unknown, today: string): StudioDocumentV1 {
   const brand = brandOf(o['brand']);
   const rows = (Array.isArray(o['rows']) ? o['rows'] : [])
     .filter(isObj)
-    .slice(0, L.rows)
+    .slice(0, V1_LIMITS.rows)
     .map((row) => rowOf(row, brand.length === 2, today));
   return {
     v: 1,
@@ -845,7 +817,7 @@ const EMPTY: StudioDocumentV1 = {
   v: 1,
   brand: ['#7a32f9'],
   mode: 'light',
-  fonts: { ...STUDIO_DEFAULT_FONTS },
+  fonts: { ...V1_DEFAULT_FONTS },
   scale: 'standard',
   corners: 'soft',
   rows: [],
@@ -893,18 +865,3 @@ export function defaultStudioDocumentV1(profile: {
     );
   return { ...structuredClone(EMPTY), rows };
 }
-
-/** Internal: the v1 text and value rules, shared with the v2 document so the two cannot drift. */
-export const studioDocumentShared = {
-  ID,
-  UUID,
-  TIME,
-  fit,
-  isLine,
-  isParagraph,
-  isDate,
-  isKobo,
-  isObj,
-  optional,
-  without,
-};

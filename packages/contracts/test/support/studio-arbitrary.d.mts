@@ -1,10 +1,6 @@
-// Types for studio-arbitrary.mjs, for TypeScript callers (the Playwright render test).
+// Types for studio-arbitrary.mjs, for TypeScript callers (the Playwright render tests).
 import type fc from 'fast-check';
-import type {
-  StudioCheckContextV1,
-  StudioDocument,
-  StudioDocumentV1,
-} from '../../dist/index.js';
+import type { StudioDocument, StudioDocumentV1 } from '../../dist/index.js';
 
 export { default as fc } from 'fast-check';
 export declare const TODAY: string;
@@ -16,12 +12,3 @@ export declare function studioDocumentV1Arb(options?: {
 export declare function studioDocumentArb(options?: {
   valid?: boolean;
 }): fc.Arbitrary<StudioDocument>;
-export declare function checkContext(): fc.Arbitrary<StudioCheckContextV1>;
-export declare function repairToPassing(
-  doc: StudioDocumentV1,
-  ctx: StudioCheckContextV1,
-): StudioDocumentV1 | null;
-export declare function studioPassingDocument(): fc.Arbitrary<{
-  doc: StudioDocumentV1;
-  ctx: StudioCheckContextV1;
-}>;

@@ -3,7 +3,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import type { PublicProfile } from '../../packages/contracts/src/profiles';
-import type { StudioDocumentV1 } from '../../packages/contracts/src/studio-document-v1';
+import type { StudioDocument } from '../../packages/contracts/src/studio-document';
 import { API_ORIGIN, E2E_REVALIDATE_SECRET } from './stack';
 
 // The e2e API runs one payment mode, and a web instance keeps its mode for a minute. So the page's
@@ -50,13 +50,102 @@ export const page = (
   ...extra,
 });
 
-/** The board's three Studio pages (Kemi, Sule, Ify): /@studiokemi, /@studiosule, /@studioify. */
+/** The board's three Studio pages (Kemi, Sule, Ify), converted to v2: /@studiokemi, … */
 export const STUDIO_HANDLES = [
   'studiokemi',
   'studiosule',
   'studioify',
 ] as const;
 export type StudioHandle = (typeof STUDIO_HANDLES)[number];
+
+/** The nine styles (styles spec §9), in the canvas's order. */
+export const STYLE_IDS = [
+  'classic',
+  'clear',
+  'journal',
+  'stage',
+  'signboard',
+  'sprint',
+  'tiles',
+  'linen',
+  'horizon',
+] as const;
+export type StyleId = (typeof STYLE_IDS)[number];
+/** One published page per style: /@styleclassic, /@styleclear, … (ruling R6). */
+export const STYLE_HANDLES = STYLE_IDS.map((id) => `style${id}` as const);
+
+/** The Settings cover kinds "Your cover" draws (§13, §14.8), for /@cover<style><kind>. */
+export const COVER_KINDS = [
+  'photo',
+  'upload',
+  'design',
+  'automatic',
+  'animated',
+] as const;
+
+/** The lab's generated images (the e2e build serves them), 2400 × 1600 like the examples. */
+const labImage = (n: number) =>
+  `0000${n.toString(16).padStart(4, '0')}-0000-4000-8000-000000000000`;
+const LAB_COVER = `/dev/studio-lab/image/${labImage(29)}`;
+/** An uploaded cover as the API sends it, with its renditions (PR #279); never served here. */
+export const API_COVER_PATH =
+  '/v1/covers/33333333-3333-4333-8333-333333333333/1.webp';
+
+/** Each style's published example: the lab's (examples.ts `styleExample`), as v2. */
+function styleDocument(
+  style: StyleId,
+  extra: Partial<StudioDocument> = {},
+): StudioDocument {
+  const natural: Partial<Record<StyleId, Partial<StudioDocument>>> = {
+    // Classic shows an accent, so it is a design (with every default it is today's page).
+    classic: { accent: 'green' },
+    journal: { cover: 'plain' },
+    stage: { mode: 'dark' },
+    signboard: { cover: 'plain' },
+    tiles: { cover: 'plain' },
+  };
+  return {
+    v: 2,
+    style,
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [
+      {
+        id: 'labhead1',
+        kind: 'text',
+        variant: 'heading',
+        text: 'Studio diary',
+      },
+      {
+        id: 'labtext1',
+        kind: 'text',
+        variant: 'paragraph',
+        text: 'Eight songs, a four-piece band and a small room in Yaba. Tips pay for studio hours and the session players.',
+      },
+      {
+        id: 'labgall1',
+        kind: 'gallery',
+        images: [1, 2, 3].map((n, i) => ({
+          imageId: labImage(n),
+          alt: [
+            'Rehearsal, warm stage light',
+            'Vocal booth under blue light',
+            'Morning session by the window',
+          ][i]!,
+        })),
+      },
+      { id: 'labhead2', kind: 'text', variant: 'heading', text: 'Kind words' },
+      {
+        id: 'labquot1',
+        kind: 'quote',
+        text: 'The best night of live music I’ve had in Lagos this year.',
+      },
+    ],
+    ...natural[style],
+    ...extra,
+  };
+}
 
 /**
  * The Studio documents and the contracts they need, loaded on first use: both are ES modules,
@@ -68,19 +157,21 @@ export async function studioFixtures() {
     import('../../packages/contracts/test/fixtures/studio-examples.mjs'),
     import('../../packages/contracts/test/support/studio-arbitrary.mjs'),
   ]);
-  const docs: Record<StudioHandle, StudioDocumentV1> = {
-    studiokemi: examples.KEMI as StudioDocumentV1,
-    studiosule: examples.SULE as StudioDocumentV1,
-    studioify: examples.IFY as StudioDocumentV1,
+  // The board's v1 documents as the API reads them now (§7.1; pinned in studio-v1-to-v2.json).
+  const today = '2026-11-14';
+  const docs: Record<string, StudioDocument> = {
+    studiokemi: contracts.resolveStudio(examples.KEMI, today),
+    studiosule: contracts.resolveStudio(examples.SULE, today),
+    studioify: contracts.resolveStudio(examples.IFY, today),
   };
   /**
-   * A Pro page with a published design, as the API sends it while the switch is on (plan Task 8).
-   * The photos are the Studio lab's generated images (served by the e2e build only), 2400 by
-   * 1600 like the examples' check context.
+   * A page with a published design, as the API sends it while the switch is on (styles plan Task
+   * 10): v2, as its plan shows it, with the palette the API computes. The photos are the lab's
+   * generated images (served by the e2e build only), 2400 by 1600.
    */
   const studioPage = (
     handle: string,
-    document: StudioDocumentV1,
+    document: StudioDocument,
     extra: Partial<PublicProfile> = {},
   ): PublicProfile =>
     page(handle, {
@@ -94,25 +185,88 @@ export async function studioFixtures() {
         { platform: 'youtube', url: 'https://www.youtube.com/@kemisings' },
         { platform: 'x', url: 'https://x.com/kemisings' },
       ],
+      // "Your cover": the lab's generated photo (Classic draws today's cover, so a design).
+      cover:
+        document.style === 'classic'
+          ? { kind: 'design', design: 'danfo' }
+          : { kind: 'photo', path: LAB_COVER },
       studio: {
         document,
-        palette: contracts.deriveStudioPalette(document.brand),
+        palette: contracts.studioTokens(document.style, document.accent),
         images: Object.fromEntries(
           (arbitrary.IMAGE_POOL as string[]).map((id) => [
             id,
             { path: `/dev/studio-lab/image/${id}`, width: 2400, height: 1600 },
           ]),
         ),
-        checkVersion: contracts.DESIGN_CHECK_VERSION_V1,
+        checkVersion: contracts.DESIGN_CHECK_VERSION,
       },
       ...extra,
     });
+  for (const style of STYLE_IDS) docs[`style${style}`] = styleDocument(style);
+  const settingsCovers = {
+    photo: { kind: 'photo', path: LAB_COVER },
+    upload: {
+      kind: 'photo',
+      path: API_COVER_PATH,
+      widths: [640, 1080, 1600],
+    },
+    design: { kind: 'design', design: 'danfo' },
+    automatic: contracts.resolveCover({
+      handle: 'coverauto',
+      coverPath: null,
+      coverDesign: null,
+      coverColour: null,
+    }),
+    animated: { kind: 'animated', animation: 'drift', play: 'loop' },
+  } as const satisfies Record<
+    (typeof COVER_KINDS)[number],
+    PublicProfile['cover']
+  >;
   const pages = [
-    ...STUDIO_HANDLES.map((handle) => studioPage(handle, docs[handle])),
-    // A design sent for a Free page (a stale answer): the page must stay standard.
-    studioPage('studiofree', docs.studiokemi, { plan: 'free' }),
+    ...Object.entries(docs).map(([handle, doc]) => studioPage(handle, doc)),
+    // The same pages without links: no links area, and no "See links" (§8, §14.8).
+    ...STYLE_IDS.map((style) =>
+      studioPage(`style${style}nolinks`, styleDocument(style), { links: [] }),
+    ),
+    // "Your cover" with each Settings cover kind, in Clear and in Stage (needsPhoto).
+    ...(['clear', 'stage'] as const).flatMap((style) =>
+      COVER_KINDS.map((kind) =>
+        studioPage(`cover${style}${kind}`, styleDocument(style), {
+          cover: settingsCovers[kind],
+        }),
+      ),
+    ),
+    // Today's page with an uploaded cover and its renditions: it must not use them.
+    page('standardupload', { cover: settingsCovers.upload }),
+    // A Free page whose published style is Pro (lapsed): visitors see Classic (§12.5).
+    studioPage('stylelapsed', styleDocument('stage', { accent: 'coral' }), {
+      plan: 'free',
+      cover: { kind: 'design', design: 'danfo' },
+    }),
+    // Classic with every choice at its default: today's page (§9.1), beside its twin with none.
+    studioPage(
+      'classicplain',
+      styleDocument('classic', { accent: null, blocks: [] }),
+      {
+        cover: { kind: 'design', design: 'danfo' },
+      },
+    ),
+    studioPage('classictwin', styleDocument('classic'), {
+      cover: { kind: 'design', design: 'danfo' },
+      studio: undefined,
+    }),
+    // A stale answer: Pro extras only (photo accent and a gallery on Classic) for a Free page.
+    studioPage(
+      'studiofree',
+      styleDocument('classic', {
+        accent: 'photo',
+        blocks: [styleDocument('classic').blocks[2]!],
+      }),
+      { plan: 'free' },
+    ),
   ];
-  return { contracts, docs, context: examples.EXAMPLE_CONTEXT, pages };
+  return { contracts, docs, pages };
 }
 
 export const LONG_NAME =

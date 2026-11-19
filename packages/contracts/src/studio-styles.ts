@@ -15,6 +15,10 @@ import {
   type Hex,
   type StudioMode,
 } from './studio-colour.js';
+import type {
+  PhotoAccentFailed,
+  PhotoAccentValues,
+} from './studio-photo-accent.js';
 import type { StudioFontId } from './studio-type.js';
 
 export const STUDIO_STYLE_IDS = [
@@ -289,6 +293,8 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         line: '#dedee3',
         control: '#8c8b90',
         chip: '#ffffff',
+        // The desktop Tip card's chips (canvas StageDesktop: --chip: var(--chipIn)).
+        chipIn: '#f2f2f4',
         scrimEnd: 'rgba(8,8,10,.86)',
       },
       dark: {
@@ -300,6 +306,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         line: '#2c2c33',
         control: '#65656d',
         chip: '#1a1a1f',
+        chipIn: '#25252b',
         scrimEnd: '#0f0f12',
       },
     },
@@ -478,12 +485,14 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
 export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
   STUDIO_STYLE_IDS.filter((id) => STUDIO_STYLES[id].plan === 'free');
 
-type PhotoAccent = ModePair;
+/** The stored photo accent as read (`photoAccentOf`): its values, or its curated fallback. */
+type PhotoAccent = PhotoAccentValues | PhotoAccentFailed;
 
 /**
  * The accent values a page uses. `null` is the style's default (TipMe purple on Classic).
- * `'photo'` without stored photo values (none computed yet, or the avatar was removed) also
- * falls back to the default, so a page always renders with a tested accent.
+ * `'photo'` takes the photo's values, or the curated accent it fell back to (§6 step 5); without
+ * a photo accent (none computed yet, or the avatar was removed) it is the default too, so a page
+ * always renders with a tested accent.
  */
 export function accentValues(
   style: StudioStyleId,
@@ -491,7 +500,10 @@ export function accentValues(
   mode: 'light' | 'dark',
   photo?: PhotoAccent | null,
 ): StudioAccentValues {
-  if (accent === 'photo' && photo) return photo[mode];
+  if (accent === 'photo' && photo)
+    return 'failed' in photo
+      ? STUDIO_ACCENTS[photo.fallback][mode]
+      : photo[mode];
   const id =
     accent && accent !== 'photo' ? accent : STUDIO_STYLES[style].defaultAccent;
   return id ? STUDIO_ACCENTS[id][mode] : CLASSIC_PURPLE[mode];
@@ -620,8 +632,14 @@ export function studioContrastPairs(
     }
     case 'stage':
       chipBorder(n.control as Hex);
-      add('chip label (fg) on chip', n.fg, n.chip as Hex, 4.5);
-      add('selected ring (accText) on chip', accText, n.chip as Hex, 3);
+      // Phone chips sit on `chip`; the desktop Tip card's on `chipIn`.
+      for (const [name, surface] of [
+        ['chip', n.chip],
+        ['chipIn', n.chipIn],
+      ] as const) {
+        add(`chip label (fg) on ${name}`, n.fg, surface as Hex, 4.5);
+        add(`selected ring (accText) on ${name}`, accText, surface as Hex, 3);
+      }
       break;
     case 'signboard':
       chipBorder(n.ink as Hex);

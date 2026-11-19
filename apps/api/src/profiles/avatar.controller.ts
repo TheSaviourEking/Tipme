@@ -35,6 +35,7 @@ import {
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { StudioPhotoAccent } from '../studio/photo-accent.js';
 
 // Profile photos (PR-013): 512×512. The safeguards every upload gets are in image-upload.ts.
 const toAvatar = reencodeTo(512, 512);
@@ -45,6 +46,8 @@ export class AvatarController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(StudioPhotoAccent)
+    private readonly photoAccent: StudioPhotoAccent,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
@@ -68,6 +71,8 @@ export class AvatarController {
       webp,
       this.photos ?? undefined,
     );
+    // Before the page is refreshed, so it shows the new photo's accent (§6). Never throws.
+    await this.photoAccent.refresh(auth.userId);
     this.revalidator.revalidate(updated.handle);
     void this.publishLive({
       to: { user: auth.userId },
@@ -86,6 +91,8 @@ export class AvatarController {
       auth.userId,
       this.photos ?? undefined,
     );
+    // No photo, no photo accent: the page goes back to its style's own (§6). Never throws.
+    await this.photoAccent.refresh(auth.userId);
     this.revalidator.revalidate(updated.handle);
     void this.publishLive({
       to: { user: auth.userId },

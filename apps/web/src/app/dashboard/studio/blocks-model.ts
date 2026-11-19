@@ -1,101 +1,94 @@
 /**
- * Page Studio editor, PR G2 (plan 2026-11-12-page-studio, Task 9b): the Blocks tab's pure parts.
- * Plain TypeScript with no `@/` imports, so its unit test runs in Node (test/studio-blocks.test.mjs).
- * Every function returns a document the strict schema accepts (or says why it can't), so the
- * editor's debounced save never sends one the API would refuse. The API enforces the same limits.
+ * Page Studio's Blocks tab on v2 (styles spec §10, "The Blocks tab"; plan Task 12, PR 4a): its pure
+ * parts. Plain TypeScript with no `@/` imports, so its unit test runs in Node
+ * (test/studio-blocks.test.mjs). The page is one ordered list of blocks; the style decides how
+ * each looks, so there are no columns, spacing, backgrounds or variants. Every function returns a
+ * document the strict schema accepts (or says why it can't), so the editor's debounced save never
+ * sends one the API would refuse. The API enforces the same limits.
  */
 import {
   STUDIO_LIMITS as L,
+  STUDIO_PRO_BLOCKS,
   cleanStudioParagraph,
   cleanStudioText,
-  columnCount,
-  studioCounts,
-  type StudioBlockV1,
-  type StudioBlockKindV1,
-  type StudioColumns,
-  type StudioDocumentV1,
+  type StudioBlock,
+  type StudioBlockKind,
+  type StudioDocument,
   type StudioIssue,
-  type StudioRowV1,
-  type StudioRowBackground,
-  type StudioSpacing,
 } from '@tipme/contracts';
 
-type Kind = Exclude<StudioBlockKindV1, 'supporters'>;
-type Block<K extends StudioBlockKindV1> = Extract<StudioBlockV1, { kind: K }>;
+type Kind = Exclude<StudioBlockKind, 'supporters'>;
+type Block<K extends StudioBlockKind> = Extract<StudioBlock, { kind: K }>;
 
-/** "Add a block", in the board's order; About comes back here once removed. */
-export const ADD_KINDS: readonly { kind: Kind; label: string; hint: string }[] =
-  [
-    { kind: 'text', label: 'Text', hint: 'heading, intro, paragraph' },
-    { kind: 'photo', label: 'Photo', hint: 'square, wide, tall, circle' },
-    { kind: 'gallery', label: 'Gallery', hint: 'grid, strip, mosaic' },
-    { kind: 'video', label: 'Video', hint: 'loads when tapped' },
-    { kind: 'services', label: 'Services', hint: 'list, cards' },
-    { kind: 'events', label: 'Events', hint: 'list, cards' },
-    { kind: 'links', label: 'Links', hint: 'buttons, icons' },
-    { kind: 'quote', label: 'Quote', hint: 'plain, band' },
-    { kind: 'about', label: 'About', hint: 'your bio' },
-  ];
-
-export const KIND_LABEL: Record<StudioBlockKindV1, string> = {
+export const KIND_LABEL: Record<StudioBlockKind, string> = {
   text: 'Text',
   photo: 'Photo',
   gallery: 'Gallery',
   video: 'Video',
   services: 'Services',
   events: 'Events',
-  links: 'Links',
   quote: 'Quote',
-  about: 'About',
   supporters: 'Supporters',
 };
 
-/** Each variant's words, for the choice at the top of a block's form. */
-export const VARIANT_LABEL: Record<string, string> = {
-  paragraph: 'Paragraph',
-  heading: 'Heading',
-  lead: 'Intro',
-  square: 'Square',
-  wide: 'Wide',
-  tall: 'Tall',
-  circle: 'Circle',
-  grid: 'Grid',
-  strip: 'Strip',
-  mosaic: 'Mosaic',
-  list: 'List',
-  cards: 'Cards',
-  buttons: 'Buttons',
-  icons: 'Icons',
-  plain: 'Plain',
-  band: 'Band',
-};
+/** "Add a block", in order. Links is not a block (profile links are fixed, §8), nor About. */
+const KINDS: readonly { kind: Kind; hint: string }[] = [
+  { kind: 'text', hint: 'a heading or a paragraph' },
+  { kind: 'photo', hint: 'one photo' },
+  { kind: 'gallery', hint: `up to ${L.galleryImages} photos` },
+  { kind: 'video', hint: 'loads when tapped' },
+  { kind: 'services', hint: 'what you offer, with prices' },
+  { kind: 'events', hint: 'dates and places' },
+  { kind: 'quote', hint: 'a line someone said' },
+];
 
-export const COLUMN_LABEL: Record<StudioColumns, string> = {
-  '1': 'One column',
-  '1-1': '1 : 1',
-  '2-1': '2 : 1',
-  '1-2': '1 : 2',
-  '1-1-1': '1 : 1 : 1',
-};
+/** The kinds to add, each marked `pro` (the PRO badge) for a Free page (§10, §11). */
+export function addKinds(
+  plan: 'free' | 'pro',
+): { kind: Kind; label: string; hint: string; pro: boolean }[] {
+  return KINDS.map(({ kind, hint }) => ({
+    kind,
+    label: KIND_LABEL[kind],
+    hint,
+    pro: plan !== 'pro' && STUDIO_PRO_BLOCKS.includes(kind),
+  }));
+}
+
+const FIXED = 'Always TipMe. Can’t be moved or removed.';
+
+/**
+ * TipMe's own parts, shown as locked rows above the blocks (§10): the cover, name and bio, then
+ * the Tip, then the profile links, only when there are some.
+ */
+export function lockedRows(
+  links: number,
+): { key: 'identity' | 'tip' | 'links'; title: string; detail: string }[] {
+  return [
+    { key: 'identity', title: 'Cover, name and bio', detail: FIXED },
+    { key: 'tip', title: 'Tip', detail: FIXED },
+    ...(links > 0
+      ? [
+          {
+            key: 'links' as const,
+            title: 'Your links',
+            detail: `${FIXED} Change them in Settings.`,
+          },
+        ]
+      : []),
+  ];
+}
 
 const codePoints = (s: string) => [...s].length;
 const cut = (s: string, max: number) => [...s].slice(0, max).join('');
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n} ${n === 1 ? one : many}`;
 
-/** Every row and block id on the page. */
-function idsOf(doc: StudioDocumentV1): Set<string> {
-  return new Set(
-    doc.rows.flatMap((r) => [r.id, ...r.cells.flat().map((b) => b.id)]),
-  );
-}
-
 /** A new id the page doesn't use yet (8 lower-case letters or digits, as the schema asks). */
 export function freshId(
-  doc: StudioDocumentV1,
+  doc: StudioDocument,
   also: ReadonlySet<string> = new Set(),
 ): string {
-  const used = idsOf(doc);
+  const used = new Set(doc.blocks.map((b) => b.id));
   const abc = 'abcdefghijklmnopqrstuvwxyz0123456789';
   for (;;) {
     const bytes = crypto.getRandomValues(new Uint8Array(8));
@@ -104,166 +97,52 @@ export function freshId(
   }
 }
 
-const mapRow = (
-  doc: StudioDocumentV1,
-  rowId: string,
-  fn: (row: StudioRowV1) => StudioRowV1,
-): StudioDocumentV1 => ({
-  ...doc,
-  rows: doc.rows.map((r) => (r.id === rowId ? fn(r) : r)),
-});
-
-// ---------------------------------------------------------------------------------------------
-// Rows
-
-/** Why no row can be added, or null. */
-export function rowReason(doc: StudioDocumentV1): string | null {
-  return doc.rows.length >= L.rows
-    ? `Your page has ${L.rows} rows, the most it can have.`
-    : null;
-}
-
-/** A new empty row at the end (one column, page background); unchanged at the limit. */
-export function addRow(doc: StudioDocumentV1): StudioDocumentV1 {
-  if (rowReason(doc)) return doc;
-  return {
-    ...doc,
-    rows: [
-      ...doc.rows,
-      {
-        id: freshId(doc),
-        columns: '1',
-        spacing: 'm',
-        background: 'page',
-        cells: [[]],
-      },
-    ],
-  };
-}
-
-export function removeRow(
-  doc: StudioDocumentV1,
-  rowId: string,
-): StudioDocumentV1 {
-  return { ...doc, rows: doc.rows.filter((r) => r.id !== rowId) };
-}
-
-/** The row at `from` moved to `to`; unchanged when either is off the list or they are equal. */
-export function moveRow(
-  doc: StudioDocumentV1,
-  from: number,
-  to: number,
-): StudioDocumentV1 {
-  const n = doc.rows.length;
-  if (from === to || from < 0 || to < 0 || from >= n || to >= n) return doc;
-  const rows = [...doc.rows];
-  const [moved] = rows.splice(from, 1);
-  rows.splice(to, 0, moved!);
-  return { ...doc, rows };
-}
-
-/** What the live region says after a move (plan Task 9: "Row 3, moved to position 1 of 5"). */
-export const movedWords = (from: number, to: number, total: number) =>
-  `Row ${from + 1}, moved to position ${to + 1} of ${total}`;
-
-/**
- * The row with a new column split. More columns add empty ones; fewer move the blocks of the
- * dropped columns into the ones kept, in reading order. Returns the reason when they don't fit.
- */
-export function withColumns(
-  doc: StudioDocumentV1,
-  rowId: string,
-  columns: StudioColumns,
-): StudioDocumentV1 | string {
-  const row = doc.rows.find((r) => r.id === rowId);
-  if (!row) return doc;
-  const n = columnCount(columns);
-  const blocks = row.cells.flat();
-  if (blocks.length > n * L.blocksPerCell) {
-    const over = blocks.length - n * L.blocksPerCell;
-    return `This row has ${blocks.length} blocks, and ${n === 1 ? 'one column holds' : `${n} columns hold`} ${n * L.blocksPerCell}. Remove ${plural(over, 'block')} or move them to another row first.`;
-  }
-  const cells: StudioBlockV1[][] = Array.from({ length: n }, (_, i) => [
-    ...(row.cells[i] ?? []),
-  ]);
-  for (const block of row.cells.slice(n).flat()) {
-    const room = cells.find((c) => c.length < L.blocksPerCell)!;
-    room.push(block);
-  }
-  return mapRow(doc, rowId, (r) => ({ ...r, columns, cells }));
-}
-
-export const withSpacing = (
-  doc: StudioDocumentV1,
-  rowId: string,
-  spacing: StudioSpacing,
-) => mapRow(doc, rowId, (r) => ({ ...r, spacing }));
-
-export const withBackground = (
-  doc: StudioDocumentV1,
-  rowId: string,
-  background: StudioRowBackground,
-) => mapRow(doc, rowId, (r) => ({ ...r, background }));
-
-/** "2 : 1 · 3 blocks", the row's line in the rows list. */
-export function rowSummary(row: StudioRowV1): string {
-  const n = row.cells.flat().length;
-  return `${COLUMN_LABEL[row.columns]} · ${n === 0 ? 'empty' : plural(n, 'block')}`;
-}
-
-// ---------------------------------------------------------------------------------------------
-// Blocks
-
 /** A new block with nothing in it yet; a photo needs its image and a video its link. */
 export function newBlock(
   kind: Kind,
   id: string,
   given: { imageId?: string; url?: string } = {},
-): StudioBlockV1 {
+): StudioBlock {
   switch (kind) {
     case 'text':
       return { id, kind, variant: 'paragraph', text: '' };
     case 'photo':
-      return {
-        id,
-        kind,
-        variant: 'square',
-        imageId: given.imageId ?? '',
-        alt: '',
-      };
+      return { id, kind, imageId: given.imageId ?? '', alt: '' };
     case 'gallery':
-      return { id, kind, variant: 'grid', images: [] };
+      return { id, kind, images: [] };
     case 'video':
-      return { id, kind, variant: 'still', url: given.url ?? '' };
+      return { id, kind, url: given.url ?? '' };
     case 'services':
-      return { id, kind, variant: 'list', items: [] };
+      return { id, kind, items: [] };
     case 'events':
-      return { id, kind, variant: 'list', items: [] };
-    case 'links':
-      return { id, kind, variant: 'buttons' };
+      return { id, kind, items: [] };
     case 'quote':
-      return { id, kind, variant: 'plain', text: '' };
-    case 'about':
-      return { id, kind, variant: 'plain' };
+      return { id, kind, text: '' };
   }
 }
 
+/** What the page holds against its limits (studio-limits.ts). */
+export function blockCounts(doc: StudioDocument) {
+  const c = { blocks: doc.blocks.length, images: 0, videos: 0, events: 0 };
+  let services = 0;
+  for (const b of doc.blocks) {
+    if (b.kind === 'photo') c.images += 1;
+    if (b.kind === 'gallery') c.images += b.images.length;
+    if (b.kind === 'video') c.videos += 1;
+    if (b.kind === 'events') c.events += b.items.length;
+    if (b.kind === 'services') services += b.items.length;
+  }
+  return { ...c, services };
+}
+
 /**
- * Why each kind can't be added to this column now: `all` when nothing can, otherwise by kind.
- * The same limits the schema and the API enforce (owner ruling 3).
+ * Why each kind can't be added now: `all` when nothing can, otherwise by kind. The same limits the
+ * schema and the API enforce.
  */
 export function addReasons(
-  doc: StudioDocumentV1,
-  rowId: string,
-  cell: number,
-  profile: { bio: boolean; links: number },
+  doc: StudioDocument,
 ): Partial<Record<Kind | 'all', string>> {
-  const row = doc.rows.find((r) => r.id === rowId);
-  const c = studioCounts(doc);
-  if ((row?.cells[cell]?.length ?? 0) >= L.blocksPerCell)
-    return {
-      all: `This column has ${L.blocksPerCell} blocks, the most one column can hold.`,
-    };
+  const c = blockCounts(doc);
   if (c.blocks >= L.blocks)
     return { all: `Your page has ${L.blocks} blocks, the most it can have.` };
   const out: Partial<Record<Kind, string>> = {};
@@ -278,100 +157,69 @@ export function addReasons(
     out.services = `Your page has ${L.services} services, the most it can have.`;
   if (c.events >= L.events)
     out.events = `Your page has ${L.events} events, the most it can have.`;
-  if (c.about > 0) out.about = 'About is already on your page. It shows once.';
-  else if (!profile.bio)
-    out.about = 'Add a bio in My page first. About shows it.';
-  if (c.links > 0)
-    out.links = 'Your links are already on your page. They show once.';
-  else if (profile.links === 0)
-    out.links = 'Add your links in My page first. This block shows them.';
   return out;
 }
 
-export function addBlock(
-  doc: StudioDocumentV1,
-  rowId: string,
-  cell: number,
-  block: StudioBlockV1,
-): StudioDocumentV1 {
-  return mapRow(doc, rowId, (r) => ({
-    ...r,
-    cells: r.cells.map((c, i) => (i === cell ? [...c, block] : c)),
-  }));
-}
+/** The block added at the end of the page. */
+export const addBlock = (
+  doc: StudioDocument,
+  block: StudioBlock,
+): StudioDocument => ({ ...doc, blocks: [...doc.blocks, block] });
 
-/** Where a block is: row index, column and place in the column. */
-export function findBlock(doc: StudioDocumentV1, blockId: string) {
-  for (const [r, row] of doc.rows.entries())
-    for (const [c, cell] of row.cells.entries()) {
-      const k = cell.findIndex((b) => b.id === blockId);
-      if (k >= 0) return { r, c, k, row, block: cell[k]! };
-    }
-  return null;
-}
-
-export function removeBlock(
-  doc: StudioDocumentV1,
+export const removeBlock = (
+  doc: StudioDocument,
   blockId: string,
-): StudioDocumentV1 {
-  return {
-    ...doc,
-    rows: doc.rows.map((r) => ({
-      ...r,
-      cells: r.cells.map((c) => c.filter((b) => b.id !== blockId)),
-    })),
-  };
-}
+): StudioDocument => ({
+  ...doc,
+  blocks: doc.blocks.filter((b) => b.id !== blockId),
+});
 
 export function updateBlock(
-  doc: StudioDocumentV1,
+  doc: StudioDocument,
   blockId: string,
-  fn: (block: StudioBlockV1) => StudioBlockV1,
-): StudioDocumentV1 {
+  fn: (block: StudioBlock) => StudioBlock,
+): StudioDocument {
   return {
     ...doc,
-    rows: doc.rows.map((r) =>
-      r.cells.some((c) => c.some((b) => b.id === blockId))
-        ? {
-            ...r,
-            cells: r.cells.map((c) =>
-              c.map((b) => (b.id === blockId ? fn(b) : b)),
-            ),
-          }
-        : r,
-    ),
+    blocks: doc.blocks.map((b) => (b.id === blockId ? fn(b) : b)),
   };
 }
 
-export type BlockMove = 'up' | 'down' | 'left' | 'right';
-
-/**
- * Up and down within its column; left and right to the end of the next column. Null when it
- * can't go there (an end, or a full column).
- */
+/** One place up or down; null at an end. */
 export function moveBlock(
-  doc: StudioDocumentV1,
+  doc: StudioDocument,
   blockId: string,
-  to: BlockMove,
-): StudioDocumentV1 | null {
-  const at = findBlock(doc, blockId);
-  if (!at) return null;
-  const cells = at.row.cells.map((c) => [...c]);
-  const cell = cells[at.c]!;
-  if (to === 'up' || to === 'down') {
-    const k = at.k + (to === 'up' ? -1 : 1);
-    if (k < 0 || k >= cell.length) return null;
-    [cell[at.k], cell[k]] = [cell[k]!, cell[at.k]!];
-  } else {
-    const target = cells[at.c + (to === 'left' ? -1 : 1)];
-    if (!target || target.length >= L.blocksPerCell) return null;
-    cell.splice(at.k, 1);
-    target.push(at.block);
-  }
-  return mapRow(doc, at.row.id, (r) => ({ ...r, cells }));
+  to: 'up' | 'down',
+): StudioDocument | null {
+  const at = doc.blocks.findIndex((b) => b.id === blockId);
+  if (at < 0) return null;
+  const k = at + (to === 'up' ? -1 : 1);
+  if (k < 0 || k >= doc.blocks.length) return null;
+  return moveBlockTo(doc, at, k);
 }
 
-/** A text block in another style, its words fitted to that style's limit and line rules. */
+/** The block at `from` moved to `to` (a drag); unchanged when either is off the list or equal. */
+export function moveBlockTo(
+  doc: StudioDocument,
+  from: number,
+  to: number,
+): StudioDocument {
+  const n = doc.blocks.length;
+  if (from === to || from < 0 || to < 0 || from >= n || to >= n) return doc;
+  const blocks = [...doc.blocks];
+  const [moved] = blocks.splice(from, 1);
+  blocks.splice(to, 0, moved!);
+  return { ...doc, blocks };
+}
+
+/** What the live region says after a move, in G2's words: "Text, moved to place 2 of 5". */
+export const movedWords = (
+  kind: StudioBlockKind,
+  index: number,
+  total: number,
+) => `${KIND_LABEL[kind]}, moved to place ${index + 1} of ${total}`;
+
+/** A text block as a heading or a paragraph, its words fitted to that kind's limit and line rules. */
 export function textVariant(
   block: Block<'text'>,
   variant: Block<'text'>['variant'],
@@ -383,11 +231,12 @@ export function textVariant(
       variant,
       text: cleanStudioParagraph(cut(block.text, L.paragraphText)),
     };
-  const max = variant === 'heading' ? L.headingText : L.leadText;
-  const text = cleanStudioText(cut(cleanStudioText(block.text), max));
-  return variant === 'heading'
-    ? { id: block.id, kind: 'text', variant, level: block.level ?? 2, text }
-    : { id: block.id, kind: 'text', variant, text };
+  return {
+    id: block.id,
+    kind: 'text',
+    variant,
+    text: cleanStudioText(cut(cleanStudioText(block.text), L.headingText)),
+  };
 }
 
 /** "212 of 600": characters as people see them (code points), as the limits count them. */
@@ -412,8 +261,8 @@ export function nairaToKobo(input: string): string | null {
 export const koboToNaira = (kobo: string) =>
   (BigInt(kobo) / BigInt(100)).toLocaleString('en-NG');
 
-/** The block's line in its column: its first words, or what it holds. */
-export function blockSummary(block: StudioBlockV1): string {
+/** The block's line in the list: its first words, or what it holds. */
+export function blockSummary(block: StudioBlock): string {
   switch (block.kind) {
     case 'text':
     case 'quote':
@@ -437,17 +286,13 @@ export function blockSummary(block: StudioBlockV1): string {
       return block.items.length
         ? plural(block.items.length, 'event')
         : 'No events yet';
-    case 'links':
-      return 'Your links from My page';
-    case 'about':
-      return 'Your bio from My page';
     case 'supporters':
       return 'Supporters';
   }
 }
 
 /** True when removing the block would lose something the person wrote or chose. */
-export function hasContent(block: StudioBlockV1): boolean {
+export function hasContent(block: StudioBlock): boolean {
   switch (block.kind) {
     case 'text':
     case 'quote':
@@ -466,28 +311,25 @@ export function hasContent(block: StudioBlockV1): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Design check fixes that need the person's input (G1 hid them; they open the form here)
+// Design check fixes that need the person's input: they open the block's form at the field
 
-export type FixField = 'photo' | 'background' | 'link' | 'alt' | 'text';
+export type FixField = 'photo' | 'link' | 'alt' | 'text';
 
-/** Where a fix needing input takes the person, or null for a one-click fix. */
+/** Where a fix needing input takes the person, or null (a one-click fix, or a page-level one). */
 export function fixTarget(
-  issue: StudioIssue,
+  issue: Pick<StudioIssue, 'at'>,
   fixId: string,
-): { row: string; block?: string; field: FixField } | null {
-  const { row, block } = issue.at;
+): { block: string; field: FixField } | null {
+  const { block } = issue.at;
   const field: FixField | null =
     fixId === 'replace-photo'
-      ? block
-        ? 'photo'
-        : 'background'
+      ? 'photo'
       : fixId === 'change-link'
         ? 'link'
         : fixId === 'add-description'
           ? 'alt'
-          : fixId === 'edit-text'
+          : fixId === 'shorter-heading' || fixId === 'edit-text'
             ? 'text'
             : null;
-  if (!field || !row) return null;
-  return block ? { row, block, field } : { row, field };
+  return field && block ? { block, field } : null;
 }

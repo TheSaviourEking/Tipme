@@ -480,19 +480,42 @@ export function AppreciationForm({
   }, [onProfile, closed, skin]);
 
   // A styled page's sticky Tip bar (§8): shown once the in-page Tip button scrolls away, hidden
-  // while it is on screen. The server sends no data-bar, and CSS keeps the bar out of sight until
-  // this sets it, so it never paints over the page before the script runs (and without
-  // JavaScript there is none). The attribute is written straight to the form, so scrolling never
-  // re-renders it.
+  // while it is on screen, while any other Tip action the page marks `data-tip-cta` is on screen
+  // (Horizon's "Send a tip" over its cover), and while the page's name is (ruling AA: the bar never
+  // covers the name, e.g. under a tall cover). Both are looked up in this form's own page. The
+  // server sends no data-bar, and CSS
+  // keeps the bar out of sight until this sets it, so it never paints over the page before the
+  // script runs (and without JavaScript there is none). The attribute is written straight to the
+  // form, so scrolling never re-renders it.
   useEffect(() => {
     const host = form.current;
     const tip = host?.querySelector('.composer-action .composer-submit');
     if (!skin || !host || !tip || typeof IntersectionObserver === 'undefined')
       return;
-    const observer = new IntersectionObserver(([entry]) => {
-      host.dataset.bar = entry?.isIntersecting ? 'hidden' : 'shown';
-    });
-    observer.observe(tip);
+    const seen = new Map<Element, boolean>();
+    // Where the site header stays at the top of the screen (over a styled page's cover,
+    // frame.css), a Tip under it is out of sight: its strip is left out of the screen here.
+    const header = document.querySelector<HTMLElement>('.site-header');
+    const under =
+      header && getComputedStyle(header).position === 'sticky'
+        ? header.offsetHeight
+        : 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries)
+          seen.set(entry.target, entry.isIntersecting);
+        host.dataset.bar = [...seen.values()].some(Boolean)
+          ? 'hidden'
+          : 'shown';
+      },
+      { rootMargin: `-${under}px 0px 0px 0px` },
+    );
+    const page = host.closest('.studio') ?? document;
+    for (const target of [
+      tip,
+      ...page.querySelectorAll('[data-tip-cta], .studio-name'),
+    ])
+      observer.observe(target);
     return () => observer.disconnect();
   }, [skin, closed]);
 
