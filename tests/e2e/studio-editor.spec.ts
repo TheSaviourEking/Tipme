@@ -6,8 +6,9 @@ import { API_ORIGIN, WEB_ORIGIN } from './stack';
 // Page Studio editor on v2 (styles plan Task 12, PR 4a; spec §10): the Style tab. Every page edits:
 // Free picks the free styles and Pro all nine, with an accent, an appearance and a cover type, and
 // the preview (the real renderer, in its own frame) follows. Free sees the Pro styles marked and
-// can't choose them yet (plan ruling R5). The `page_studio` switch is on in the e2e stack; "off"
-// is the API's own 404, played here so nothing else in the run changes.
+// can choose them as a preview that isn't saved (§12.4; studio-free-preview.spec.ts). The
+// `page_studio` switch is on in the e2e stack; "off" is the API's own 404, played here so nothing
+// else in the run changes.
 
 const headers = { origin: WEB_ORIGIN, 'x-tipme-csrf': '1' };
 
@@ -168,7 +169,7 @@ test('a Free person picks Journal and Green and it saves @mobile', async ({
   expect(await fitsViewport(page)).toBe(true);
 });
 
-test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.", and can’t choose them yet', async ({
+test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.", and can choose them to preview', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo, { live: false });
@@ -178,12 +179,16 @@ test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, 
     name: 'PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.',
   });
   await expect(banner).toHaveAttribute('href', '/pro');
-  for (const name of ['Stage', 'Signboard', 'Sprint', 'Tiles', 'Horizon'])
-    await expect(card(page, name)).toHaveAttribute('aria-disabled', 'true');
-  await expect(card(page, 'Clear')).not.toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
+  // Every card is a real radio, Pro ones included (§12.4 overrides the canvas's aria-disabled).
+  for (const name of [
+    'Stage',
+    'Signboard',
+    'Sprint',
+    'Tiles',
+    'Horizon',
+    'Clear',
+  ])
+    await expect(card(page, name)).not.toHaveAttribute('aria-disabled', 'true');
   // The label says what the card is: "{Name}, {mood}. {Free|Pro}." (Classic adds the default).
   await expect(card(page, 'Clear')).toHaveAccessibleName(
     'Clear, Quiet, bright, precise. Free.',
@@ -192,11 +197,12 @@ test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, 
     'Classic, Today’s TipMe page, unchanged. Free. The default.',
   );
 
-  // A click on a Pro card chooses nothing; arrow keys reach it (it says why) but don't choose it,
-  // and never leave the group.
-  await card(page, 'Stage').dispatchEvent('click');
+  // A click on a Pro card chooses it (a preview); arrow keys choose each card in turn and never
+  // leave the group.
+  await card(page, 'Stage').click();
+  await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
+  await card(page, 'Classic').click();
   await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
-  await card(page, 'Classic').focus();
   await page.keyboard.press('ArrowRight');
   await expect(card(page, 'Clear')).toBeFocused();
   await expect(card(page, 'Clear')).toHaveAttribute('aria-checked', 'true');
@@ -204,9 +210,10 @@ test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, 
   await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('ArrowRight');
   await expect(card(page, 'Stage')).toBeFocused();
-  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
+  await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('End');
   await expect(card(page, 'Horizon')).toBeFocused();
+  await expect(card(page, 'Horizon')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('ArrowRight');
   await expect(card(page, 'Classic')).toBeFocused();
   await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
@@ -352,9 +359,12 @@ test('a lapsed draft with a Pro style shows the issue on the Check tab; “Choos
   await openEditor(page);
   const tab = page.getByRole('tab', { name: /^Check/ });
   await expect(tab).toContainText('1 to fix');
-  // The draft keeps its style; the other Pro cards stay out of reach.
+  // The draft keeps its style; the other Pro cards can be previewed (§12.4).
   await expect(card(page, 'Tiles')).toHaveAttribute('aria-checked', 'true');
-  await expect(card(page, 'Stage')).toHaveAttribute('aria-disabled', 'true');
+  await expect(card(page, 'Stage')).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
   await tab.click();
   const panel = page.getByRole('tabpanel');
   await expect(panel.getByText('Tiles is a Pro style')).toBeVisible();
@@ -364,7 +374,7 @@ test('a lapsed draft with a Pro style shows the issue on the Check tab; “Choos
   );
   await panel.getByRole('button', { name: 'Choose a free style' }).click();
   await expect(card(page, 'Tiles')).toBeFocused();
-  // Left past the Pro cards (focused, never chosen) to Journal.
+  // Left through the Pro cards (each a preview, never saved) to Journal, which saves.
   for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowLeft');
   await expect(card(page, 'Journal')).toBeFocused();
   await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
