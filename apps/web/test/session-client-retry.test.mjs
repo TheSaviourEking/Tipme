@@ -66,3 +66,26 @@ test('other failures are not retried', async () => {
     false,
   );
 });
+
+test('a refused publish carries the server’s design check issues', async () => {
+  const issues = [
+    {
+      rule: 'long-word',
+      severity: 'error',
+      at: { row: '', block: 'blk00001' },
+      message: 'A word is too long for a phone',
+      fixes: [],
+    },
+  ];
+  answers([
+    422,
+    { error: { code: 'STUDIO_DESIGN_CHECK_FAILED', reference: 'r', issues } },
+  ]);
+  const result = await apiFetch('/v1/me/studio/publish', {
+    method: 'POST',
+    body: { rev: 1 },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'STUDIO_DESIGN_CHECK_FAILED');
+  assert.deepEqual(result.issues, issues);
+});
