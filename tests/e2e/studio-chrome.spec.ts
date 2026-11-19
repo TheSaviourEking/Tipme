@@ -3,8 +3,9 @@ import { expectAccessible } from './helpers';
 
 // The site's header and footer on a styled page (owner, 17 Nov 2026, ruling P): they take the
 // page's own neutrals, so nothing sits on the site's paper as a separate band. The header runs
-// into the page on its `bg`, the footer card is `card`, words are `fg`/`fg2`, and "Claim your
-// username" stays TipMe purple. A page without a style keeps today's header and footer.
+// into the page on its `bg`, the footer card is `card`, words are `fg`/`fg2`; on a tip page the
+// header is the logo alone (owner, 19 Nov 2026). A page without a style keeps today's header and
+// footer.
 
 const colours = (page: Page) =>
   page.evaluate(() => {
@@ -53,23 +54,11 @@ for (const width of [390, 1440])
       expect(c.footerCard).toBe(c.card);
       // The wordmark's "tip" is the page's text colour, so it reads in dark too.
       expect(c.wordmark).toBe(c.fg);
-      if (width === 1440) {
-        await expect(
-          page.locator('.site-nav > a:not(.tm-button)').first(),
-        ).toHaveCSS('color', c.fg);
-        await expect(page.locator('.nav-claim')).toHaveCSS(
-          'background-color',
-          'rgb(122, 50, 249)',
-        );
-      } else {
-        // The phone's menu is a page of the same colour.
-        await page.getByRole('button', { name: 'Open menu' }).click();
-        await expect(page.locator('.site-nav.is-open')).toHaveCSS(
-          'background-color',
-          c.bg,
-        );
-        await page.keyboard.press('Escape');
-      }
+      // On a tip page (the lab stands in for one) the header is the logo alone (owner, 19 Nov
+      // 2026): no menu, keys or phone menu button to colour.
+      const header = page.locator('.site-header');
+      await expect(header.getByRole('link')).toHaveCount(1);
+      await expect(header.getByRole('button')).toHaveCount(0);
       await expectAccessible(page);
     });
 

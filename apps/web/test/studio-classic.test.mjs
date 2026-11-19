@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { unguarded } from './shown-page.mjs';
 import {
   DESIGN_CHECK_VERSION,
   STUDIO_ACCENTS,
@@ -106,9 +107,8 @@ const { renderStyled } = await import(new URL('style-page.mjs', out));
 const { StandardProfile } = await import(new URL('standard-profile.mjs', out));
 
 // Quotes normalised: Prettier writes the sheet's attribute values in single quotes.
-const classicSheet = readFileSync(
-  new URL('classic.css', dir),
-  'utf8',
+const classicSheet = unguarded(
+  readFileSync(new URL('classic.css', dir), 'utf8'),
 ).replaceAll("'", '"');
 
 /** Every rule of a stylesheet: [{ selector, decls: [[prop, value]] }], at-rules flattened. */
@@ -498,9 +498,8 @@ test('Classic’s stylesheet styles only a Classic page and loads only on one', 
   assert.equal(STUDIO_STYLES.classic.displayFont, 'dm-serif-display');
 });
 
-const globalsCss = readFileSync(
-  new URL('../src/app/globals.css', import.meta.url),
-  'utf8',
+const globalsCss = unguarded(
+  readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8'),
 );
 /** One declaration's value in a stylesheet's rule (first match), whitespace collapsed. */
 const declOf = (css, selector, prop) => {

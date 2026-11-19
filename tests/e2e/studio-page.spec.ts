@@ -158,16 +158,19 @@ test.describe('a published Studio page', () => {
       await page.setViewportSize({ width, height: 900 });
       await page.goto(`${stack.origin}/@${handle}`);
       await page.locator('.studio[data-style]').waitFor();
-      // Not the standard page's <main>: its rules hide the site's nav and footer.
+      // Not the standard page's <main>: its rules hide the site's footer.
       await expect(page.locator('main.profile-page')).toHaveCount(0);
       await expect(page.locator('body > .site-footer'), handle).toBeVisible();
-      if (width === 1440)
-        await expect(page.locator('.site-nav'), handle).toBeVisible();
-      else
-        await expect(
-          page.getByRole('button', { name: 'Open menu' }),
-          handle,
-        ).toBeVisible();
+      // The header is the logo alone on every tip page (owner, 19 Nov 2026).
+      await expect(
+        page.locator('.site-header').getByRole('link', { name: 'TipMe home' }),
+        handle,
+      ).toBeVisible();
+      await expect(page.locator('.site-nav'), handle).toBeHidden();
+      await expect(
+        page.getByRole('button', { name: 'Open menu' }),
+        handle,
+      ).toHaveCount(0);
       const c = await page.evaluate(() => {
         const studio = getComputedStyle(document.querySelector('.studio')!);
         const probe = document.createElement('i');

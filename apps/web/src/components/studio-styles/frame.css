@@ -314,13 +314,30 @@
 
   /* Anything scrolled into view (a focused link, the form's problem) stops above the bar
      (WCAG 2.4.11), as on Classic. The fallback holds the bar as drawn, notice included. */
-  html:has(.studio[data-style] form[data-skin]) {
+  html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+      form[data-skin]
+  ) {
     scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
   }
 
   /* The site's "TipMe has been updated" notice sits above the bar, as on Classic (globals.css
      lifts it over `.composer-action` there); a styled page isn't `.profile-page`. */
-  html:has(.studio[data-style] form[data-skin]) .update-notice {
+  html:has(
+      .studio[data-style]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+        form[data-skin]
+    )
+    .update-notice {
     bottom: calc(var(--tip-bar, 136px) + 12px);
   }
 }
@@ -354,17 +371,39 @@
 
 /* The site's own header and footer on a styled page (owner, 17 Nov 2026, ruling P): the page's
    neutrals, written on <html> by the page (style-tokens.ts chromeCss), take the place of the
-   site's paper tokens inside them, so they run into the page with no band or seam. "Claim your
-   username" keeps TipMe purple: it is the site's action, not the page's accent. */
-html:has(.studio[data-style]) {
+   site's paper tokens inside them, so they run into the page with no band or seam. On a tip page
+   the header is the logo alone (owner, 19 Nov 2026; globals.css). */
+html:has(
+  .studio[data-style]:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+) {
   background: var(--studio-bg);
 }
 
-html:has(.studio[data-style][data-mode='dark']) {
+html:has(
+  .studio[data-style][data-mode='dark']:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+) {
   color-scheme: dark;
 }
 
-html:has(.studio[data-style]) :is(.site-header, .site-footer) {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  :is(.site-header, .site-footer) {
   --canvas: var(--studio-bg);
   --surface-raised: var(--studio-card);
   --surface-recessed: var(--studio-el2);
@@ -377,24 +416,61 @@ html:has(.studio[data-style]) :is(.site-header, .site-footer) {
   color: var(--studio-fg);
 }
 
-html:has(.studio[data-style]) .site-header .brand__mark path[fill='#000000'],
-html:has(.studio[data-style]) .site-footer .brand__mark path[fill='#000000'] {
+/* Someone's tip page (/@username, every style; the owner, 19 Nov 2026): the header is the TipMe
+   logo alone, as on the standard page and Classic (globals.css, .profile-page), so nothing competes
+   with the Tip button. The menu, Sign in, Get tipped, the account's links and the phone's menu
+   button step aside, out of sight and out of the keyboard's and screen readers' way; the site's
+   footer stays. The Studio lab stands in for these pages in the tests (test copies only). Every
+   rule here reads only the page on screen (the guard on `.studio`: globals.css, "Only the page on
+   screen"). */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  :is(.site-nav, .menu-toggle) {
+  display: none;
+}
+
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-header
+  .brand__mark
+  path[fill='#000000'],
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-footer
+  .brand__mark
+  path[fill='#000000'] {
   fill: var(--studio-fg);
 }
 
-html:has(.studio[data-style])
-  :is(.site-header, .site-footer)
-  :is(.tm-button--secondary, .tm-surface, .footer-card, .who__item) {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-footer
+  .footer-card {
   box-shadow: none;
-}
-
-/* The phone menu's pinned action is the site's purple there too (Classic draws it in ink). */
-@media (max-width: 800px) {
-  html:has(.studio[data-style]) .site-nav .tm-button--primary {
-    border-color: transparent;
-    background: var(--surface-signature);
-    color: var(--surface-base);
-  }
 }
 
 /* The site header over the cover (owner, 18 Nov 2026: "this header should be transparent or
@@ -405,9 +481,9 @@ html:has(.studio[data-style])
    Signboard's band they are the band's label colour. Just before the hero has gone, the header
    turns to frosted glass in the page's bg, with today's words, in one short step, by a scroll-driven animation on the
    hero's view timeline: colour and opacity only, no script. Browsers without scroll timelines skip
-   all of it and keep today's solid header; browsers without backdrop-filter get a solid bg. "Claim your username" keeps TipMe purple; the open
-   phone menu is today's solid panel. The ink is a registered colour, so it blends over that step
-   instead of flipping. */
+   all of it and keep today's solid header; browsers without backdrop-filter get a solid bg. On a tip
+   page the header is the TipMe logo alone (owner, 19 Nov 2026; globals.css), so the logo is all
+   this styles. The ink is a registered colour, so it blends over that step instead of flipping. */
 @property --studio-head-ink {
   syntax: '<color>';
   inherits: true;
@@ -415,24 +491,51 @@ html:has(.studio[data-style])
 }
 
 @supports (animation-timeline: view()) and (timeline-scope: none) {
-  html:has(.studio[data-style][data-header]) {
+  html:has(
+    .studio[data-style][data-header]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  ) {
     timeline-scope: --studio-hero;
   }
 
   /* The hero's view timeline, measured from the header's foot: the header is solid by the time
      the cover's foot reaches it. */
-  html:has(.studio[data-style][data-header='over']) .studio-cover,
-  html:has(.studio[data-style][data-header='band']) .studio-band {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .studio-cover,
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .studio-band {
     view-timeline: --studio-hero block;
     view-timeline-inset: var(--nav-height) 0;
   }
 
-  /* The header's own tokens follow its ink: links and keys write in it, keys lose their fill. */
-  html:has(.studio[data-style][data-header]) .site-header {
-    --text-primary: currentColor;
-    --surface-raised: transparent;
-    --edge-hairline: color-mix(in srgb, currentColor 55%, transparent);
-    --border-material: color-mix(in srgb, currentColor 55%, transparent);
+  /* The header writes in its ink. */
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
     position: sticky;
     top: 0;
     margin-bottom: calc(-1 * var(--nav-height));
@@ -444,18 +547,41 @@ html:has(.studio[data-style])
     animation-range: exit-crossing 70% exit-crossing 100%;
   }
 
-  html:has(.studio[data-style][data-header='over']) .site-header {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
     --studio-head-over: #fff;
   }
 
-  html:has(.studio[data-style][data-header='band']) .site-header {
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
     --studio-head-over: var(--studio-accLabel);
-    --studio-head-ring: var(--studio-accLabel);
   }
 
   /* The scrim: about 60% black at the top edge, 58% down to 72 px (the words' foot, links wrapped
      to two lines included), then fading out below the header. It leaves with the hero. */
-  html:has(.studio[data-style][data-header='over']) .site-header::before {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header::before {
     position: absolute;
     inset: 0 0 auto;
     z-index: -1;
@@ -480,7 +606,15 @@ html:has(.studio[data-style])
      it over pure black or pure white, in every style and mode (the unit test). It is the header's
      own layer, not the header: a backdrop-filter on the header would hold the phone menu (fixed,
      inside it) in the header's box. */
-  html:has(.studio[data-style][data-header]) .site-header::after {
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header::after {
     position: absolute;
     inset: 0;
     z-index: -1;
@@ -500,13 +634,29 @@ html:has(.studio[data-style])
   @supports not (
     (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
   ) {
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
       background: var(--studio-bg);
     }
   }
 
   @media (prefers-reduced-transparency: reduce) {
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
       background: var(--studio-bg);
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
@@ -515,7 +665,14 @@ html:has(.studio[data-style])
 
   /* The wordmark in the header's ink over the cover: its purple would vanish on a photo or a
      purple band. "me" and the heart are purple again once the header is solid. */
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
     .site-header
     .nav-shell
     > .brand
@@ -524,7 +681,14 @@ html:has(.studio[data-style])
     fill: currentColor;
   }
 
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
     .site-header
     .nav-shell
     > .brand
@@ -534,52 +698,23 @@ html:has(.studio[data-style])
   }
 
   /* Focus follows the ink, so the ring shows over the cover and on bg. */
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
     .site-header
-    :is(.nav-shell > .brand, .nav-shell > .menu-toggle):focus-visible {
+    .nav-shell
+    > .brand:focus-visible {
     outline-color: var(--studio-head-ink);
-  }
-
-  /* "Who it's for" opens on its own card, in the page's words. */
-  html:has(.studio[data-style][data-header]) .site-header .who__menu {
-    --text-primary: var(--studio-fg);
-    --surface-raised: var(--studio-card);
-    --edge-hairline: var(--studio-line);
-    --border-material: var(--studio-line);
-    color: var(--studio-fg);
-  }
-
-  @media (min-width: 801px) {
-    html:has(.studio[data-style][data-header])
-      .site-header
-      :is(.site-nav > a, .who__button):focus-visible {
-      outline-color: var(--studio-head-ink);
-    }
-
-    /* The purple key on Signboard's band, which can be as light as it: a ring in the band's label
-       colour keeps its edge (gone once the header is solid). Today's own shadow stays under it. */
-    html:has(.studio[data-style][data-header='band']) .site-header .nav-claim {
-      box-shadow:
-        0 0 0 2px var(--studio-head-ring),
-        inset 0 1px 0 rgb(255 255 255 / 22%),
-        0 1px 2px rgb(58 17 131 / 28%);
-    }
-  }
-
-  /* The open phone menu is today's page of its own, solid bg and the page's words. */
-  @media (max-width: 800px) {
-    html:has(.studio[data-style][data-header]) .site-nav {
-      --text-primary: var(--studio-fg);
-      --surface-raised: var(--studio-card);
-      --edge-hairline: var(--studio-line);
-      --border-material: var(--studio-line);
-      color: var(--studio-fg);
-    }
   }
 
   /* The words keep their over-the-cover ink on the full scrim, with no bg, until the cover's foot
      is almost at the header's. Then, in one short step: the glass (below), the page's words, the
-     purple "me", the keys raised on card, no ring, no scrim. No mid-way where light words meet
+     purple "me", no scrim. No mid-way where light words meet
      half-drawn glass. Custom properties switch half way through the step. */
   @keyframes studio-head {
     0%,
@@ -591,10 +726,6 @@ html:has(.studio[data-style])
     100% {
       --studio-head-ink: var(--studio-fg);
       --studio-head-me: #7a32f9;
-      --surface-raised: var(--studio-card);
-      --edge-hairline: var(--studio-line);
-      --border-material: var(--studio-line);
-      --studio-head-ring: transparent;
     }
   }
 
@@ -624,9 +755,33 @@ html:has(.studio[data-style])
 
   /* Reduced motion: the header switches once the hero has gone, with no fade between. */
   @media (prefers-reduced-motion: reduce) {
-    html:has(.studio[data-style][data-header]) .site-header,
-    html:has(.studio[data-style][data-header='over']) .site-header::before,
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header,
+    html:has(
+        .studio[data-style][data-header='over']:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::before,
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
       animation-timing-function: steps(1, end);
     }
   }

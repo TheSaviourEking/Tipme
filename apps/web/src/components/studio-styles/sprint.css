@@ -848,27 +848,51 @@
   }
 
   @media (min-width: 1024px) {
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
       .site-header.site-header {
       --studio-head-ink: var(--studio-fg);
-      --text-primary: var(--studio-fg);
-      --surface-raised: var(--studio-card);
-      --edge-hairline: var(--studio-line);
-      --border-material: var(--studio-line);
       position: relative;
       margin-bottom: 0;
       background: var(--canvas);
       animation: none;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
       .site-header.site-header::before,
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
       .site-header.site-header::after {
       display: none;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
       .site-header.site-header
       .nav-shell
       > .brand
@@ -877,14 +901,17 @@
       fill: #7a32f9;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
       .site-header.site-header
-      :is(
-        .nav-shell > .brand,
-        .menu-toggle,
-        .site-nav > a,
-        .who__button
-      ):focus-visible {
+      .nav-shell
+      > .brand:focus-visible {
       outline-color: var(--brand-primary);
     }
   }

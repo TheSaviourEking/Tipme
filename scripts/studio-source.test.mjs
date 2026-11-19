@@ -89,7 +89,11 @@ test('every style rule is scoped to a styled Studio page', () => {
       .filter((s) => !s.startsWith('@'))
       // Keyframe steps are not selectors (`0%, 85%` included).
       .filter((s) => !/^(from|to|[\d.]+%)(\s*,\s*(from|to|[\d.]+%))*$/.test(s))
-      .flatMap(topLevel);
+      .flatMap(topLevel)
+      // As written, whatever the line breaks: Prettier wraps a long `html:has(` onto lines of its own.
+      .map((s) =>
+        s.replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')'),
+      );
     assert.ok(selectors.length > 10, `${file} has its rules`);
     const own = file === 'frame.css' ? '' : file.replace('.css', '');
     for (const s of selectors)

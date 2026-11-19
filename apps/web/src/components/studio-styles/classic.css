@@ -6,7 +6,14 @@
    focus ring and links (as tokens), the selected key and the remember box, and the wordmark. Dark
    is the canvas's derived palette, every shadow and gloss off (each shadow is a token). */
 
-:root:has(.profile-page--studio[data-style='classic'][data-mode]) {
+:root:has(
+  .profile-page--studio[data-style='classic'][data-mode]:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+) {
   color-scheme: var(--studio-scheme);
   --canvas: var(--studio-bg);
   --surface-base: var(--studio-base);
@@ -33,13 +40,27 @@
 }
 
 /* The TipMe wordmark in the header: its ink and its purple. */
-:root:has(.profile-page--studio[data-style='classic'][data-mode])
+:root:has(
+    .profile-page--studio[data-style='classic'][data-mode]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
   .brand__mark
   path[fill='#000000'] {
   fill: var(--studio-fg);
 }
 
-:root:has(.profile-page--studio[data-style='classic'][data-mode])
+:root:has(
+    .profile-page--studio[data-style='classic'][data-mode]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
   .brand__mark
   path[fill='#7A32F9'] {
   fill: var(--studio-acc);
