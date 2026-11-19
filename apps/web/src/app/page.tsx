@@ -45,7 +45,7 @@ export default function Home() {
               (USD, EUR, GBP, NGN, Stablecoins), so people can tip you in a few
               taps. They don’t need an account.
             </p>
-            <HomeClaim label={<GetTippedWords />} />
+            <HomeClaim />
             <p className="home-note">
               {/* Whether tipping is open follows the payment mode, not a fixed promise. */}
               <PaymentModeSlot fallback="Free to start.">

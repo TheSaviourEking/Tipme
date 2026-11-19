@@ -56,7 +56,7 @@ test('staff reserve a name, sign-up refuses it, and staff release it', async ({
   await expect(row).toContainText('Staff');
   await expectAccessible(page);
 
-  // Someone signing up is told it is reserved, as for TipMe's own words.
+  // Someone signing up is told it isn't available, as for TipMe's own words (never why).
   const theirs = await browser.newContext({
     baseURL: testInfo.project.use.baseURL,
   });
@@ -65,7 +65,7 @@ test('staff reserve a name, sign-up refuses it, and staff release it', async ({
   await signInWithEmail(them, email, '/sign-up');
   await them.getByLabel('Username').fill(name);
   await expect(
-    them.getByText('That username is reserved. Try another.'),
+    them.getByText('That username isn’t available. Try another.'),
   ).toBeVisible();
 
   await checkCard(page).getByRole('button', { name: 'Release…' }).click();

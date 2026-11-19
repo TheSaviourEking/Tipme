@@ -76,7 +76,8 @@ test('home’s “Get tipped” runs today’s three steps to the welcome', asyn
   await page.goto('/');
   const main = page.getByRole('main');
   await main.getByLabel('Your username').fill(who.handle);
-  await main.getByRole('button', { name: 'Get tipped' }).click();
+  // The claim form's button reads "Claim username" (owner, 18 Nov 2026).
+  await main.getByRole('button', { name: 'Claim username' }).click();
   await page.waitForURL(/\/sign-up\?handle=/);
   await expect(
     page

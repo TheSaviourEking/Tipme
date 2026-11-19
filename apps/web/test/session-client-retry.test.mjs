@@ -67,6 +67,25 @@ test('other failures are not retried', async () => {
   );
 });
 
+test('a caller’s cancel reaches the request, and ends it as a network failure', async () => {
+  let seen;
+  globalThis.fetch = (url, init) => {
+    seen = init.signal;
+    return new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () =>
+        reject(new DOMException('aborted', 'AbortError')),
+      );
+    });
+  };
+  const cancel = new AbortController();
+  const pending = apiFetch('/v1/handles/kemi/availability', {
+    signal: cancel.signal,
+  });
+  cancel.abort();
+  assert.deepEqual(await pending, { ok: false, status: 0, code: 'NETWORK' });
+  assert.equal(seen.aborted, true);
+});
+
 test('a refused publish carries the server’s design check issues', async () => {
   const issues = [
     {
