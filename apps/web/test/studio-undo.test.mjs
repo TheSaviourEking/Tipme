@@ -7,6 +7,7 @@ import {
   createUndoStack,
   afterRefusedUndo,
   describeChange,
+  proRefusedNotice,
   undoButtonName,
 } from '../src/app/dashboard/studio/undo-stack.ts';
 
@@ -293,4 +294,47 @@ test('a refused undo cleans every step left, and drops steps that no longer chan
   assert.deepEqual(kept, doc({ blocks: [H] }));
   // The newer step now equals the draft: gone. The older one keeps the quote, not the gallery.
   assert.deepEqual(drain(stack), [doc({ blocks: [H, Q] })]);
+});
+
+// A plain save refused when Pro ends mid-session (403, not an undo): the editor repairs the draft
+// with the same `studioKeepHeld` (held = the saved draft and the published version), keeps editing,
+// and says what it took out.
+test('a refused save keeps the typing, takes out only the new Pro block, and says so', () => {
+  const held = { draft: doc({ blocks: [H, Q] }), published: null };
+  const sent = doc({
+    blocks: [H, { ...Q, text: 'Typed while saving' }, video(V1)],
+  });
+  assert.equal(studioDraftRefusal(sent, held, 'free'), 'STUDIO_PRO_REQUIRED');
+  const stack = createUndoStack();
+  stack.push(doc({ blocks: [H, Q, video(V1)] }), 'quote edited');
+  const kept = afterRefusedUndo(stack, sent, held);
+  assert.deepEqual(
+    kept,
+    doc({ blocks: [H, { ...Q, text: 'Typed while saving' }] }),
+  );
+  assert.equal(studioDraftRefusal(kept, held, 'free'), null);
+  assert.equal(
+    proRefusedNotice(sent, kept),
+    'Your Pro has ended, so we took out the video block. Everything else is kept.',
+  );
+});
+
+test('the refused-save sentence names each Pro part it took out', () => {
+  const sent = doc({
+    style: 'stage',
+    accent: 'photo',
+    blocks: [
+      H,
+      video(V1),
+      { ...video(V2), id: 'undo0006' },
+      gallery([IMG1, IMG2]),
+    ],
+  });
+  const kept = doc({ style: 'clear', blocks: [H, gallery([IMG1])] });
+  assert.equal(
+    proRefusedNotice(sent, kept),
+    'Your Pro has ended, so we took out the Stage style, the photo accent, 2 video blocks and the changes to the gallery block. Everything else is kept.',
+  );
+  // Nothing it can name (the server and the editor disagree about what is held): null.
+  assert.equal(proRefusedNotice(sent, sent), null);
 });

@@ -365,6 +365,75 @@ test('an undo refused while you type keeps the typing, and the next Undo doesn�
   await expect(undoButton(page)).toHaveAccessibleName('Undo');
 });
 
+test('Pro ending mid-session: a refused save keeps the quote typed meanwhile, takes the video out, and saving goes on', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await saveDraft(page, { style: 'clear', blocks: [HEADING, QUOTE] });
+  await openEditor(page);
+  await openBlocks(page);
+
+  // Hold the save that carries the new video until Pro has ended and the quote is typed; the
+  // server then judges it on Free and refuses it (403 STUDIO_PRO_REQUIRED).
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  let asked = () => {};
+  const sent = new Promise<void>((resolve) => (asked = resolve));
+  await page.route(
+    `${API_ORIGIN}/v1/me/studio/draft`,
+    async (route: Route) => {
+      if (route.request().method() !== 'PUT') return route.continue();
+      asked();
+      await held;
+      await route.continue();
+    },
+    { times: 1 },
+  );
+  await page.getByRole('button', { name: 'Add a block' }).click();
+  await page
+    .locator('.pst-kinds')
+    .getByRole('button', { name: /^Video/ })
+    .click();
+  await page
+    .locator('.pst-add__panel')
+    .getByLabel('Video link')
+    .fill('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+  await page.getByRole('button', { name: 'Add the video' }).click();
+  await sent;
+  await setPlan(who.handle, 'free');
+  await blockList(page)
+    .getByRole('button', { name: /^Quote/ })
+    .click();
+  const quote = blockList(page).getByRole('textbox', { name: 'Quote' });
+  await quote.fill('Typed while saving');
+  release();
+
+  const notice =
+    'Your Pro has ended, so we took out the video block. Everything else is kept.';
+  await expect(page.locator('.pst-notice')).toHaveText(notice, {
+    timeout: 15_000,
+  });
+  await expect(quote).toHaveValue('Typed while saving');
+  await expect(
+    blockList(page).getByRole('button', { name: 'Remove Video' }),
+  ).toHaveCount(0);
+  await savedWhere(
+    page,
+    (d) =>
+      blockIds(d) === [HEADING.id, QUOTE.id].join(',') &&
+      (d.blocks as { text?: string }[])[1]?.text === 'Typed while saving',
+  );
+  // Still editable within the Free rules: no read-only banner, and the next edit saves.
+  await expect(readOnlyBanner(page)).toHaveCount(0);
+  await quote.fill('Still saving');
+  await savedWhere(
+    page,
+    (d) => (d.blocks as { text?: string }[])[1]?.text === 'Still saving',
+  );
+  await expect(page.getByText(notice)).toHaveCount(0);
+});
+
 test('a failed discard says so and puts focus back on “Discard changes”', async ({
   page,
 }, testInfo) => {
