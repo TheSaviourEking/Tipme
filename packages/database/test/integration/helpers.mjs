@@ -22,14 +22,18 @@ export async function useDatabase(t, options = {}) {
       await database.reset();
       await seedDemoProfiles(database.db);
       // Two rows with the same rates: one dated long ago, so tests that quote at a fixed past `now`
-      // (before the reset's seed) see them, and one dated after the seed, so they win from now on.
+      // (before the reset's seed) see them, and one in force exactly when the seed is, winning on
+      // its later created_at. Not clock_timestamp(): a quote's `now` is a JS Date, whole
+      // milliseconds, so a quote in the same millisecond as that insert read the row as not yet in
+      // force and priced at the seed's 5% (seen in CI, share-transfers' lost-dispute test).
       if (options.planFees)
         await database.pool.query(
           `INSERT INTO plan_fee_rates (id, free_bps, pro_bps, effective_from, reason, created_at)
            VALUES (gen_random_uuid(), $1, $2, '2000-01-01T00:00:00Z',
                    'Test fixture: the 12 Nov 2026 rates (past)', clock_timestamp()),
-                  (gen_random_uuid(), $1, $2, clock_timestamp(),
-                   'Test fixture: the 12 Nov 2026 rates (after the seed)', clock_timestamp())`,
+                  (gen_random_uuid(), $1, $2,
+                   (SELECT max(effective_from) FROM plan_fee_rates),
+                   'Test fixture: the 12 Nov 2026 rates (with the seed)', clock_timestamp())`,
           [options.planFees.freeBps, options.planFees.proBps],
         );
     },
