@@ -12,3 +12,4 @@ export * from './business-plan.js';
 export * from './pro.js';
 export * from './earnings.js';
 export * from './tip-refund.js';
+export * from './collect.js';
