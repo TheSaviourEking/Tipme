@@ -317,7 +317,9 @@
   html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
       form[data-skin]
   ) {
@@ -329,7 +331,9 @@
   html:has(
       .studio[data-style]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
         form[data-skin]
     )
@@ -370,7 +374,12 @@
    site's paper tokens inside them, so they run into the page with no band or seam. On a tip page
    the header is the logo alone (owner, 19 Nov 2026; globals.css). */
 html:has(
-  .studio[data-style]:not([style*='display: none'], [style*='display: none'] *)
+  .studio[data-style]:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
 ) {
   background: var(--studio-bg);
 }
@@ -378,7 +387,9 @@ html:has(
 html:has(
   .studio[data-style][data-mode='dark']:not(
       [style*='display: none'],
-      [style*='display: none'] *
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
     )
 ) {
   color-scheme: dark;
@@ -387,7 +398,9 @@ html:has(
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   :is(.site-header, .site-footer) {
@@ -413,7 +426,9 @@ html:has(
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   :is(.site-nav, .menu-toggle) {
@@ -423,7 +438,9 @@ html:has(
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   .site-header
@@ -432,7 +449,9 @@ html:has(
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   .site-footer
@@ -444,7 +463,9 @@ html:has(
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   .site-footer
@@ -473,7 +494,9 @@ html:has(
   html:has(
     .studio[data-style][data-header]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   ) {
     timeline-scope: --studio-hero;
@@ -484,14 +507,18 @@ html:has(
   html:has(
       .studio[data-style][data-header='over']:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .studio-cover,
   html:has(
       .studio[data-style][data-header='band']:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .studio-band {
@@ -503,7 +530,9 @@ html:has(
   html:has(
       .studio[data-style][data-header]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header {
@@ -521,7 +550,9 @@ html:has(
   html:has(
       .studio[data-style][data-header='over']:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header {
@@ -531,7 +562,9 @@ html:has(
   html:has(
       .studio[data-style][data-header='band']:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header {
@@ -543,7 +576,9 @@ html:has(
   html:has(
       .studio[data-style][data-header='over']:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header::before {
@@ -574,7 +609,9 @@ html:has(
   html:has(
       .studio[data-style][data-header]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header::after {
@@ -600,7 +637,9 @@ html:has(
     html:has(
         .studio[data-style][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header::after {
@@ -612,7 +651,9 @@ html:has(
     html:has(
         .studio[data-style][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header::after {
@@ -627,7 +668,9 @@ html:has(
   html:has(
       .studio[data-style][data-header]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header
@@ -641,7 +684,9 @@ html:has(
   html:has(
       .studio[data-style][data-header]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header
@@ -656,7 +701,9 @@ html:has(
   html:has(
       .studio[data-style][data-header]:not(
           [style*='display: none'],
-          [style*='display: none'] *
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
         )
     )
     .site-header
@@ -711,21 +758,27 @@ html:has(
     html:has(
         .studio[data-style][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header,
     html:has(
         .studio[data-style][data-header='over']:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header::before,
     html:has(
         .studio[data-style][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header::after {

@@ -180,9 +180,10 @@ legend {
 /* Only the page on screen. Next keeps a page someone has moved on from mounted, hidden for the way
    back: React's Activity puts an inline `display: none !important` on its top elements. So a rule
    that reads the page from outside it (`html:has(.marker)`, `body:has(…)`, `:root:has(…)`) adds
-   `:not([style*='display: none'], [style*='display: none'] *)` to its marker, or the page left
-   behind would keep its header, logo, colours and tokens on the next one (globals.css,
-   dashboard.css, the Studio sheets; test/shown-page.test.mjs checks every one). */
+   `:not([style*='display: none'], [style*='display:none'], …)` to its marker: hidden, with or
+   without the space, the element or anything inside it. Otherwise the page left behind would keep
+   its header, logo, colours and tokens on the next one (test/shown-page.test.mjs checks every
+   stylesheet). */
 
 /* Header: quiet, on the same canvas as the page (Concept A); one purple action. */
 .site-header {
@@ -196,7 +197,12 @@ legend {
    dashboard and the staff console keep an ordinary header. In-page jumps stop below it (html
    scroll-padding-top). */
 body:has(
-    .marketing-page:not([style*='display: none'], [style*='display: none'] *)
+    .marketing-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .site-header {
   position: sticky;
@@ -359,7 +365,12 @@ a.who__item:hover {
 
 /* Every dashboard route (and its loading state) renders .dashboard-page: no "Sign in" there. */
 body:has(
-    .dashboard-page:not([style*='display: none'], [style*='display: none'] *)
+    .dashboard-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .site-nav
   .nav-guest {
@@ -552,7 +563,9 @@ body:has(
 body:has(
     main[data-area='recipient']:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   > .site-footer {
@@ -2186,29 +2199,54 @@ body:has(
    navigation and footer links step aside on this page only: the header is the logo alone (a Studio
    style's page too, frame.css). Only the page on screen counts (the guard, above). */
 body:has(
-    .profile-page:not([style*='display: none'], [style*='display: none'] *)
+    .profile-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .site-nav,
 body:has(
-    .profile-page:not([style*='display: none'], [style*='display: none'] *)
+    .profile-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .menu-toggle,
 body:has(
-    .profile-page:not([style*='display: none'], [style*='display: none'] *)
+    .profile-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   > .site-footer {
   display: none;
 }
 
 body:has(
-    .profile-page:not([style*='display: none'], [style*='display: none'] *)
+    .profile-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .nav-shell {
   width: min(70rem, calc(100% - 5rem));
 }
 
 body:has(
-    .profile-page:not([style*='display: none'], [style*='display: none'] *)
+    .profile-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .brand__mark {
   height: 1.875rem;
@@ -2773,7 +2811,12 @@ body:has(
 /* Tablet and phone: one sequence, with the cover edge to edge. */
 @media (max-width: 860px) {
   body:has(
-      .profile-page:not([style*='display: none'], [style*='display: none'] *)
+      .profile-page:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
     )
     .nav-shell {
     width: calc(100% - 2rem);
@@ -2781,7 +2824,12 @@ body:has(
   }
 
   body:has(
-      .profile-page:not([style*='display: none'], [style*='display: none'] *)
+      .profile-page:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
     )
     .brand__mark {
     height: 1.5rem;
@@ -3058,7 +3106,12 @@ body:has(
 @supports selector(:has(*)) {
   @media (max-width: 860px) and (min-height: 30rem) {
     html:has(
-      .profile-page:not([style*='display: none'], [style*='display: none'] *)
+      .profile-page:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
         .composer-action
     ) {
       scroll-padding-bottom: calc(var(--tip-bar, 7rem) + 0.5rem);
@@ -4757,7 +4810,9 @@ body:has(
 html:has(
   .confirm-dialog[open]:not(
       [style*='display: none'],
-      [style*='display: none'] *
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
     )
 ) {
   overflow: hidden;
@@ -4950,7 +5005,12 @@ html:has(
 @media (max-width: 40rem) {
   /* Room under the page for the bar, footer included. */
   body:has(
-    .dashboard-page:not([style*='display: none'], [style*='display: none'] *)
+    .dashboard-page:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
       .dashboard-nav[aria-label='Dashboard']
   ) {
     padding-bottom: var(--dashboard-tab-bar);
@@ -4958,19 +5018,34 @@ html:has(
 
   /* Anything scrolled or focused into view stops above the bar, as the profile does for its Tip bar. */
   html:has(
-    .dashboard-page:not([style*='display: none'], [style*='display: none'] *)
+    .dashboard-page:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
       .dashboard-nav[aria-label='Dashboard']
   ) {
     scroll-padding-bottom: calc(var(--dashboard-tab-bar) + 0.5rem);
   }
 
   html:has(
-      .dashboard-page:not([style*='display: none'], [style*='display: none'] *)
+      .dashboard-page:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
         .dashboard-nav[aria-label='Dashboard']
     )
     .update-notice,
   html:has(
-      .dashboard-page:not([style*='display: none'], [style*='display: none'] *)
+      .dashboard-page:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
         .dashboard-nav[aria-label='Dashboard']
     )
     .toast-region {
@@ -5008,7 +5083,12 @@ html:has(
 
   /* Only the card on paper: no pilot, paused-page or "Needs your attention" notices. */
   body:has(
-      .print-card:not([style*='display: none'], [style*='display: none'] *)
+      .print-card:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
     )
     .dashboard-page
     :is(.owner-attention, .pilot-notice, .tm-slip, .tm-warning):not(
@@ -5050,7 +5130,12 @@ html:has(
 /* Production launch holding page (ComingSoon board): an editorial message over a recessed well
    of pressed keys, Seconds the purple one, and a small paper card of what is coming. */
 body:has(
-  .coming-soon-page:not([style*='display: none'], [style*='display: none'] *)
+  .coming-soon-page:not(
+    [style*='display: none'],
+    [style*='display:none'],
+    [style*='display: none'] *,
+    [style*='display:none'] *
+  )
 ) {
   background:
     linear-gradient(135deg, rgb(122 50 249 / 3.5%), transparent 34%),
@@ -5058,11 +5143,21 @@ body:has(
 }
 
 body:has(
-    .coming-soon-page:not([style*='display: none'], [style*='display: none'] *)
+    .coming-soon-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   > .site-header,
 body:has(
-    .coming-soon-page:not([style*='display: none'], [style*='display: none'] *)
+    .coming-soon-page:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   > .site-footer {
   display: none;
@@ -5366,7 +5461,9 @@ html[data-ops-frame] .site-footer {
 html:has(
   .ops-frame__sheet[open]:not(
       [style*='display: none'],
-      [style*='display: none'] *
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
     )
 ) {
   overflow: hidden;
@@ -6247,7 +6344,12 @@ html:has(
 @supports selector(:has(*)) {
   @media (max-width: 860px) and (min-height: 30rem) {
     html:has(
-        .profile-page:not([style*='display: none'], [style*='display: none'] *)
+        .profile-page:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
           .composer-action
       )
       .update-notice {
@@ -6662,15 +6764,30 @@ p.tip-choice:focus-visible {
 /* The supporter's flow (board section 2): drawn for a phone at 360px, one column at every width.
    As on a person's page, the site's own navigation and footer links step aside. */
 body:has(
-    .business-public:not([style*='display: none'], [style*='display: none'] *)
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .site-nav,
 body:has(
-    .business-public:not([style*='display: none'], [style*='display: none'] *)
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   .menu-toggle,
 body:has(
-    .business-public:not([style*='display: none'], [style*='display: none'] *)
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
   )
   > .site-footer {
   display: none;

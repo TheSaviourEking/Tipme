@@ -851,7 +851,9 @@
     html:has(
         .studio[data-style='sprint'][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header.site-header {
@@ -865,14 +867,18 @@
     html:has(
         .studio[data-style='sprint'][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header.site-header::before,
     html:has(
         .studio[data-style='sprint'][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header.site-header::after {
@@ -882,7 +888,9 @@
     html:has(
         .studio[data-style='sprint'][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header.site-header
@@ -896,7 +904,9 @@
     html:has(
         .studio[data-style='sprint'][data-header]:not(
             [style*='display: none'],
-            [style*='display: none'] *
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
           )
       )
       .site-header.site-header

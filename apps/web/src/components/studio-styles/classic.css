@@ -9,7 +9,9 @@
 :root:has(
   .profile-page--studio[data-style='classic'][data-mode]:not(
       [style*='display: none'],
-      [style*='display: none'] *
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
     )
 ) {
   color-scheme: var(--studio-scheme);
@@ -41,7 +43,9 @@
 :root:has(
     .profile-page--studio[data-style='classic'][data-mode]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   .brand__mark
@@ -52,7 +56,9 @@
 :root:has(
     .profile-page--studio[data-style='classic'][data-mode]:not(
         [style*='display: none'],
-        [style*='display: none'] *
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
       )
   )
   .brand__mark
