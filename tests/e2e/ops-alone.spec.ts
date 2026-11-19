@@ -34,7 +34,7 @@ test('@alone one admin alone does everything at once, sees that they acted alone
 
   await page.goto(`/ops/pages?handle=${handle}`);
   await page.getByRole('button', { name: 'Set this page’s fee…' }).click();
-  await page.getByLabel('New TipMe fee (%)').fill('6');
+  await page.getByLabel('New TipMe fee (%)').fill('4');
   await page
     .locator('form')
     .filter({ has: page.getByLabel('New TipMe fee (%)') })
@@ -300,7 +300,7 @@ test('@alone a request a second owner can decide shows a count of one on their m
   await asker.page
     .getByRole('button', { name: 'Set this page’s fee…' })
     .click();
-  await asker.page.getByLabel('New TipMe fee (%)').fill('6');
+  await asker.page.getByLabel('New TipMe fee (%)').fill('4');
   await asker.page
     .locator('form')
     .filter({ has: asker.page.getByLabel('New TipMe fee (%)') })

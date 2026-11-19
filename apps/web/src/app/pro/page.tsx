@@ -110,7 +110,7 @@ const freeKeeps = ({ freePercent }: PlanFeePercents) => [
   `Receiving tips, with no monthly fee: TipMe keeps ${freePercent}% of each tip, payment and withdrawal fees included`,
   'Your page, username, photo and cover',
   'Your QR code in three looks, ready to print',
-  `${FREE_WITHDRAWALS_PER_DAY} free withdrawals a day to your bank`,
+  `Withdrawals to your bank: the first ${FREE_WITHDRAWALS_PER_DAY} each day are free`,
   'Your full tip history, and a CSV download',
   'Sign-in codes, recovery and security alerts',
   'Up to 3 social links',

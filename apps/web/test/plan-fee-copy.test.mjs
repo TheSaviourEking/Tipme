@@ -78,7 +78,10 @@ test('the copy says payment and withdrawal fees are included, and withdrawals ar
     'The first 2 withdrawals each day are free.',
   );
   assert.match(pro, /FREE_WITHDRAWALS_COPY/);
-  assert.match(pro, /FREE_WITHDRAWALS_PER_DAY\} free withdrawals a day/);
+  assert.match(
+    pro,
+    /Withdrawals to your bank: the first \$\{FREE_WITHDRAWALS_PER_DAY\} each day are free/,
+  );
 });
 
 test('the Terms read the live rates and work the example nets from them', async () => {
