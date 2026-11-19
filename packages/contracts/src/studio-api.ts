@@ -3,15 +3,7 @@
  * named. The routes answer 404 while Page Studio is switched off.
  */
 import { z } from 'zod';
-import type {
-  StudioCheckContextV1,
-  StudioCheckResult,
-} from './studio-check.js';
-import type { StudioCheckContext } from './studio-check-v3.js';
-import {
-  studioDocumentV1Schema,
-  type StudioDocumentV1,
-} from './studio-document-v1.js';
+import type { StudioCheckContext, StudioCheckResult } from './studio-check.js';
 import {
   studioDocumentSchema,
   type StudioDocument,
@@ -22,11 +14,11 @@ import type {
 } from './studio-photo-accent.js';
 
 /**
- * What the old editor (G1/G2, v1 only) may do: Pro edits; Free gets the teaser; a lapsed page
- * reads only. Kept as it is until the editor moves to v2 (plan ruling R1, PR 4a); the server's
- * own rules are the plan and the draft rules (§11), not this.
+ * What the editor may do. Every page edits since the editor moved to v2 (plan ruling R1, PR 4a):
+ * Free saves and publishes the free styles, and the server's own rules (§11) refuse the rest.
+ * `'preview'` and `'lapsed'` are retired (§5.4).
  */
-export type StudioAccess = 'edit' | 'preview' | 'lapsed';
+export type StudioAccess = 'edit';
 
 /** One of the page's Studio photos, as the editor shows it. `path` + `/<shape>-<width>` is a file. */
 export interface StudioImage {
@@ -39,21 +31,20 @@ export interface StudioImage {
 }
 
 /**
- * `GET /v1/me/studio`, and the answer to every Studio write. During the two-format period (plan
- * ruling R1) a v1 draft comes back as v1 with the v1 check and facts, as the old editor reads it;
- * a v2 draft (saved by a direct API call until the editor moves to v2) comes back as v2 with the
- * v3 check and facts, and the old editor offers to reload. What is published is always v2.
+ * `GET /v1/me/studio`, and the answer to every Studio write. The draft is always v2: a draft the
+ * old editor stored as v1 reads through `resolveStudio` (the §7.1 migration), so the editor and
+ * the check see what publishing would store.
  */
-export interface MyStudioV1 {
-  draft: StudioDocumentV1 | StudioDocument;
+export interface MyStudio {
+  draft: StudioDocument;
   published: StudioDocument | null;
   /** Bumped by every save: a save must name the revision it was based on. */
   rev: number;
   publishedAt: string | null;
-  /** The design check of the draft with the server's facts; the editor shows this one. */
+  /** The v3 design check of the draft with the server's facts; the editor shows this one. */
   check: StudioCheckResult;
   /** Those facts, so the editor's own instant check agrees with the server's. */
-  context: StudioCheckContextV1 | StudioCheckContext;
+  context: StudioCheckContext;
   images: StudioImage[];
   access: StudioAccess;
   /** The page's plan now. Free saves and publishes free styles (§11). */
@@ -66,23 +57,18 @@ export interface MyStudioV1 {
   photoAccent: PhotoAccentValues | PhotoAccentFailed | null;
 }
 
-/** The v1 draft body alone (the old editor's). */
-export const studioDraftV1Schema = z.strictObject({
-  rev: z.number().int().min(0),
-  draft: studioDocumentV1Schema,
-});
-
 /**
- * `PUT /v1/me/studio/draft`. Saving never needs a passing check; publishing does. A v1 draft is
- * Pro only, as before; a v2 draft follows the Free and Pro draft rules (§11).
+ * `PUT /v1/me/studio/draft`. Saving never needs a passing check; publishing does. v2 only since
+ * the editor moved to v2 (ruling R1): a v1 document is refused as invalid. The Free and Pro draft
+ * rules (§11) are the server's.
  */
 export const studioDraftSchema = z.strictObject({
   rev: z.number().int().min(0),
-  draft: z.union([studioDocumentV1Schema, studioDocumentSchema]),
+  draft: studioDocumentSchema,
 });
 export type StudioDraftRequest = {
   rev: number;
-  draft: StudioDocumentV1 | StudioDocument;
+  draft: StudioDocument;
 };
 
 /** `POST /v1/me/studio/publish`. There is no "publish anyway" (owner ruling 12). */

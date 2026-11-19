@@ -4,7 +4,9 @@ import { test } from 'node:test';
 import { STUDIO_EMBED_ORIGINS } from '@tipme/contracts';
 import {
   PUBLIC_PAGE_SOURCE,
+  STUDIO_PREVIEW_SOURCE,
   contentSecurityPolicy,
+  securityHeaders,
 } from '../src/lib/security-headers.ts';
 
 // The Content-Security-Policy (threat model X1). Page Studio videos (plan Task 8) open in a frame
@@ -72,4 +74,36 @@ test('next.config applies the framing policy to /@username only, after the site-
   const pub = config.indexOf('source: PUBLIC_PAGE_SOURCE');
   // Next.js: when two entries set one header for a path, the later one wins.
   assert.ok(all > 0 && pub > all, 'the public page entry comes after /:path*');
+});
+
+test('only the Page Studio preview may be framed, and only by this site (styles plan Task 12)', () => {
+  const header = (headers, key) => headers.find((h) => h.key === key)?.value;
+  const site = securityHeaders({ apiOrigin: API, dev: false, frames: false });
+  assert.equal(header(site, 'X-Frame-Options'), 'DENY');
+  assert.deepEqual(
+    directives(header(site, 'Content-Security-Policy')).get('frame-ancestors'),
+    ["'none'"],
+  );
+  const preview = securityHeaders({
+    apiOrigin: API,
+    dev: false,
+    frames: false,
+    framedBySelf: true,
+  });
+  assert.equal(header(preview, 'X-Frame-Options'), 'SAMEORIGIN');
+  const csp = directives(header(preview, 'Content-Security-Policy'));
+  assert.deepEqual(csp.get('frame-ancestors'), ["'self'"]);
+  // Nothing else in the policy moves.
+  const base = directives(header(site, 'Content-Security-Policy'));
+  csp.delete('frame-ancestors');
+  base.delete('frame-ancestors');
+  assert.deepEqual(csp, base);
+  assert.equal(STUDIO_PREVIEW_SOURCE, '/studio-preview');
+  const config = readFileSync(
+    new URL('../next.config.ts', import.meta.url),
+    'utf8',
+  );
+  const all = config.indexOf("source: '/:path*'");
+  const own = config.indexOf('source: STUDIO_PREVIEW_SOURCE');
+  assert.ok(all > 0 && own > all, 'the preview entry comes after /:path*');
 });

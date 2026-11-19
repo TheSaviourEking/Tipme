@@ -9,7 +9,6 @@ import {
   woff2CharacterMap,
   woff2NameStrings,
 } from '../apps/web/src/lib/font-cmap.ts';
-import { LEGACY_BODY_WORD_FALLBACK } from '../packages/contracts/test/support/studio-legacy-body-fonts.mjs';
 import { OUT_DIR, SOURCES, licenceName, outputName } from './studio-fonts.mjs';
 
 const PUBLIC = new URL('../apps/web/public', import.meta.url);
@@ -21,7 +20,7 @@ test('every library font draws every required character (body) or is marked word
     for (const file of f.files) {
       const map = woff2CharacterMap(bytesOf(file.path));
       const missing = STUDIO_REQUIRED_CODEPOINTS.filter((c) => !map.has(c));
-      if (f.roles.includes('body') && !LEGACY_BODY_WORD_FALLBACK.includes(f.id))
+      if (f.roles.includes('body'))
         assert.deepEqual(missing, [], `${f.id} misses ${missing.map(hexOf)}`);
       else if (missing.length)
         assert.ok(
@@ -62,6 +61,28 @@ test('every style page stays within 2 families, 4 files and 200 KB', () => {
     for (const file of files)
       assert.ok(file.bytes <= 102_400, `${file.path}: ${file.bytes} bytes`);
   }
+});
+
+test('only the faces the styles use ship (the v1 editor’s fonts were retired in PR 4b)', () => {
+  assert.deepEqual(STUDIO_FONTS.map((f) => f.id).sort(), [
+    'anton',
+    'dm-serif-display',
+    'inter',
+    'linen-serif',
+    'source-serif-4',
+    'unbounded',
+  ]);
+  const licences = readdirSync(OUT_DIR)
+    .filter((n) => n.startsWith('OFL-'))
+    .sort();
+  assert.deepEqual(licences, [
+    'OFL-Anton.txt',
+    'OFL-DMSerifDisplay.txt',
+    'OFL-GentiumBookPlus.txt',
+    'OFL-Inter.txt',
+    'OFL-SourceSerif4.txt',
+    'OFL-Unbounded.txt',
+  ]);
 });
 
 test('every font has a licence file beside it', () => {

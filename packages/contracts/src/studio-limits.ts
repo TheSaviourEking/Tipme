@@ -4,8 +4,6 @@
  * points, so "ẹ" is one character however it is typed.
  */
 export const STUDIO_LIMITS = {
-  rows: 12,
-  blocksPerCell: 3,
   blocks: 40,
   galleryImages: 9,
   /** Photo blocks, gallery photos and photo row backgrounds on one page. */

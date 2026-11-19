@@ -2,532 +2,753 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fc from 'fast-check';
 import {
-  BLOCK_MIN_WIDTH,
-  DESIGN_CHECK_VERSION_V1,
-  STUDIO_BREAKPOINTS,
-  STUDIO_FIX_NEEDS_INPUT,
-  STUDIO_FONTS,
-  applyStudioFixV1,
-  blocksIn,
-  cellWidths,
-  checkDesignV1,
-  defaultStudioDocumentV1,
-  sameIssue,
-  studioColourName,
-  studioDocumentV1Schema,
-  studioEagerImages,
-  studioIssueKeys,
-  studioLargeText,
+  DESIGN_CHECK_VERSION,
+  STUDIO_ACCENTS,
+  STUDIO_PRO_BLOCKS,
+  STUDIO_STYLES,
+  STUDIO_STYLE_IDS,
+  applyStudioFix,
+  checkDesign,
+  defaultStudioDocument,
+  proItemsOf,
+  studioDocumentSchema,
+  studioSlotWidth,
+  STUDIO_HEADING_PX,
 } from '../dist/index.js';
-import {
-  EXAMPLE_CONTEXT,
-  IFY,
-  KEMI,
-  SULE,
-} from './fixtures/studio-examples.mjs';
-import { regressions, runs, seed } from './support/pbt.mjs';
+import { runs, seed } from './support/pbt.mjs';
 import {
   IMAGE_POOL,
-  checkContext,
-  imageFacts,
-  studioDocumentV1Arb,
+  VIDEO_POOL,
+  studioDocumentArb,
 } from './support/studio-arbitrary.mjs';
 
-const CTX = EXAMPLE_CONTEXT;
+const BREAKPOINTS = [320, 390, 768, 1024, 1440];
 const [IMG] = IMAGE_POOL;
-const base = { ...KEMI, rows: [] };
-const page = (...rows) => ({ ...base, rows });
-const row = (id, cells, extra = {}) => ({
-  id,
-  columns: ['1', '1-1', '1-1-1'][cells.length - 1],
-  spacing: 'm',
-  background: 'page',
-  cells,
-  ...extra,
-});
-const h2 = (id, text = 'Hello') => ({
-  id,
-  kind: 'text',
-  variant: 'heading',
-  level: 2,
-  text,
-});
-const photo = (id, extra = {}) => ({
+const CTX = {
+  images: { [IMG]: { width: 2400, height: 1800, bytes: 300_000 } },
+  videos: {},
+  profile: { name: 'Kemi Adeyemi', bio: true, links: 2 },
+  plan: 'pro',
+  coverKind: 'photo',
+  hasAvatar: true,
+};
+const free = { ...CTX, plan: 'free' };
+const doc = (extra = {}) => ({ ...defaultStudioDocument(), ...extra });
+const photo = (id = 'photo001', extra = {}) => ({
   id,
   kind: 'photo',
-  variant: 'square',
   imageId: IMG,
   alt: 'A photo',
   ...extra,
 });
-const withImage = (facts) => ({
-  ...CTX,
-  images: { ...CTX.images, [IMG]: facts },
+const heading = (text, id = 'head0001') => ({
+  id,
+  kind: 'text',
+  variant: 'heading',
+  text,
 });
-const rulesOf = (d, ctx = CTX) =>
-  checkDesignV1(d, ctx).issues.map((i) => i.rule);
-const fixIds = (issue) => issue.fixes.map((f) => f.id);
-const automatic = (issue) =>
-  issue.fixes.filter((f) => !STUDIO_FIX_NEEDS_INPUT.includes(f.id));
+const rules = (result) => result.issues.map((i) => i.rule);
+const noticeRules = (result) => result.notices.map((n) => n.rule);
 
-test('the curated examples pass, with their notices', () => {
-  for (const [name, doc] of Object.entries({ KEMI, SULE, IFY })) {
-    assert.equal(studioDocumentV1Schema.safeParse(doc).success, true, name);
-    const result = checkDesignV1(doc, CTX);
+test('the check is version 3', () => {
+  assert.equal(DESIGN_CHECK_VERSION, 3);
+  assert.equal(checkDesign(doc(), CTX).version, 3);
+});
+
+test('pro-only fires on Free for a Pro style, the photo accent or a Pro block, and never on Pro', () => {
+  const proStyle = doc({ style: 'stage' });
+  const photoAccent = doc({ style: 'clear', accent: 'photo' });
+  const proBlock = doc({ style: 'clear', blocks: [photo()] });
+  for (const d of [proStyle, photoAccent, proBlock]) {
     assert.deepEqual(
-      result.issues,
-      [],
-      `${name}: ${JSON.stringify(result.issues)}`,
+      rules(checkDesign(d, free)),
+      ['pro-only'],
+      JSON.stringify(d),
     );
-    assert.equal(result.version, DESIGN_CHECK_VERSION_V1);
-    assert.ok(
-      result.weightBytes > 0 && result.weightBytes < 1_500_000,
-      `${name} ${result.weightBytes}`,
-    );
+    assert.deepEqual(rules(checkDesign(d, CTX)), [], 'Pro never fires');
   }
-  const sule = checkDesignV1(SULE, CTX).notices.map((n) => n.message);
-  assert.ok(
-    sule.includes(
-      'Your yellow is too light for text on a light page. We’ll use it for highlights and for buttons with dark text, and a deeper shade of it for links and headings. Your page will still look yellow.',
-    ),
-    sule.join('\n'),
+  assert.equal(
+    checkDesign(proBlock, free).issues[0].at.block,
+    'photo001',
+    'the issue points at the block',
   );
-  assert.ok(sule.some((m) => /shade behind the words on the photo/.test(m)));
-  assert.ok(
-    checkDesignV1(IFY, CTX).notices.some(
-      (n) =>
-        n.rule === 'contrast' &&
-        /pink is too light for small text/.test(n.message),
-    ),
+  for (const kind of STUDIO_PRO_BLOCKS)
+    assert.ok(
+      ['photo', 'gallery', 'video', 'services', 'events'].includes(kind),
+    );
+  // Text and quote are Free.
+  const freeBlocks = doc({
+    style: 'clear',
+    blocks: [heading('Hello'), { id: 'quote001', kind: 'quote', text: 'Hi' }],
+  });
+  assert.deepEqual(rules(checkDesign(freeBlocks, free)), []);
+  // Two Pro things are two issues, and a Pro block each.
+  const many = doc({
+    style: 'stage',
+    accent: 'photo',
+    blocks: [photo('photo001'), photo('photo002')],
+  });
+  assert.equal(
+    rules(checkDesign(many, free)).filter((r) => r === 'pro-only').length,
+    4,
   );
 });
 
-test('each rule fires on its minimal bad example', () => {
-  // phone-fit: service cards need 220 px; a third of the row is about 185 px on a 1024 px screen.
-  const cards = {
-    id: 'blk00002',
-    kind: 'services',
-    variant: 'cards',
-    items: [{ name: 'Cut', priceMinor: '500000' }],
-  };
-  assert.deepEqual(
-    rulesOf(page(row('row00001', [[h2('blk00001')], [cards], []]))),
-    ['phone-fit'],
+test('pro-only fixes: "Use Blue" sets the style default, "Remove the block" removes it, "Choose a free style" needs input, "See Pro" is a link', () => {
+  const find = (result, id) =>
+    result.issues.flatMap((i) => i.fixes).find((f) => f.id === id);
+
+  const accentDoc = doc({ style: 'clear', accent: 'photo' });
+  const accent = checkDesign(accentDoc, free);
+  const useDefault = find(accent, 'use-default-accent');
+  assert.equal(
+    useDefault.label,
+    `Use ${STUDIO_ACCENTS[STUDIO_STYLES.clear.defaultAccent].name}`,
   );
-  // long-word
+  assert.equal(useDefault.label, 'Use Blue');
+  const fixedAccent = applyStudioFix(
+    accentDoc,
+    accent.issues[0],
+    'use-default-accent',
+  );
+  assert.equal(fixedAccent.accent, null, 'null is the style default');
+  assert.deepEqual(rules(checkDesign(fixedAccent, free)), []);
+  assert.equal(accentDoc.accent, 'photo', 'the input is not changed');
+  assert.ok(find(accent, 'see-pro'));
+  assert.equal(find(accent, 'see-pro').label, 'See Pro');
+
+  const blockDoc = doc({ style: 'clear', blocks: [heading('Hi'), photo()] });
+  const block = checkDesign(blockDoc, free);
+  assert.equal(find(block, 'remove-block').label, 'Remove the block');
+  const removed = applyStudioFix(blockDoc, block.issues[0], 'remove-block');
   assert.deepEqual(
-    rulesOf(page(row('row00001', [[h2('blk00001', 'W'.repeat(40))]]))),
+    removed.blocks.map((b) => b.id),
+    ['head0001'],
+  );
+  assert.deepEqual(rules(checkDesign(removed, free)), []);
+
+  const styleDoc = doc({ style: 'stage' });
+  const style = checkDesign(styleDoc, free);
+  assert.equal(find(style, 'choose-free-style').label, 'Choose a free style');
+  assert.deepEqual(
+    applyStudioFix(styleDoc, style.issues[0], 'choose-free-style'),
+    styleDoc,
+    'it needs the person to choose, so nothing changes',
+  );
+  assert.deepEqual(
+    applyStudioFix(styleDoc, style.issues[0], 'see-pro'),
+    styleDoc,
+    'a link changes nothing',
+  );
+  assert.equal(find(style, 'use-default-accent'), undefined);
+  // Classic's default accent is today's purple.
+  const classic = checkDesign(doc({ style: 'classic', accent: 'photo' }), free);
+  assert.equal(
+    classic.issues[0].fixes.find((f) => f.id === 'use-default-accent').label,
+    'Use TipMe purple',
+  );
+});
+
+test('cover-photo is a notice for Stage and Horizon on Your cover without a photo', () => {
+  const stage = checkDesign(doc({ style: 'stage' }), {
+    ...CTX,
+    coverKind: 'design',
+  });
+  assert.deepEqual(
+    stage.notices.filter((n) => n.rule === 'cover-photo'),
+    [
+      {
+        rule: 'cover-photo',
+        message: 'Stage looks best with a cover photo. Add one in Settings.',
+      },
+    ],
+  );
+  assert.deepEqual(stage.issues, [], 'a notice, never an error');
+  const horizon = checkDesign(doc({ style: 'horizon' }), {
+    ...CTX,
+    coverKind: 'none',
+  });
+  assert.equal(
+    horizon.notices.find((n) => n.rule === 'cover-photo').message,
+    'Horizon looks best with a cover photo. Add one in Settings.',
+  );
+  const quiet = (d, ctx) =>
+    assert.ok(!noticeRules(checkDesign(d, ctx)).includes('cover-photo'));
+  quiet(doc({ style: 'clear' }), { ...CTX, coverKind: 'none' });
+  quiet(doc({ style: 'stage' }), { ...CTX, coverKind: 'photo' });
+  quiet(doc({ style: 'stage', cover: 'gradient' }), {
+    ...CTX,
+    coverKind: 'none',
+  });
+  quiet(doc({ style: 'stage', cover: 'plain' }), { ...CTX, coverKind: 'none' });
+});
+
+test('name-fallback names the face', () => {
+  const name = 'Ɗanlami Ƙwairanga Ɓello';
+  const journal = checkDesign(doc({ style: 'journal' }), {
+    ...CTX,
+    profile: { ...CTX.profile, name },
+  });
+  assert.deepEqual(
+    journal.notices.filter((n) => n.rule === 'name-fallback'),
+    [
+      {
+        rule: 'name-fallback',
+        message:
+          "Your name has a letter Source Serif 4 can't draw, so it's set in Inter.",
+      },
+    ],
+  );
+  const clear = checkDesign(doc({ style: 'clear' }), {
+    ...CTX,
+    profile: { ...CTX.profile, name },
+  });
+  assert.ok(!noticeRules(clear).includes('name-fallback'), 'Clear is Inter');
+  assert.ok(
+    !noticeRules(checkDesign(doc({ style: 'journal' }), CTX)).includes(
+      'name-fallback',
+    ),
+    'a name the face can draw',
+  );
+});
+
+test('missing-links is a notice with no fix', () => {
+  const none = checkDesign(doc(), {
+    ...CTX,
+    profile: { ...CTX.profile, links: 0 },
+  });
+  assert.deepEqual(none.notices, [
+    {
+      rule: 'missing-links',
+      message: 'Add links in Settings to show them on your page.',
+    },
+  ]);
+  assert.deepEqual(none.issues, []);
+  assert.deepEqual(checkDesign(doc(), CTX).notices, []);
+});
+
+test("long-word measures headings in the style's display face at 320 px", () => {
+  const word = (n) => 'W'.repeat(n);
+  const signboard = doc({ style: 'signboard', blocks: [heading(word(40))] });
+  const result = checkDesign(signboard, CTX);
+  assert.deepEqual(rules(result), ['long-word']);
+  assert.equal(result.issues[0].at.block, 'head0001');
+  assert.deepEqual(
+    result.issues[0].fixes.map((f) => [f.id, f.label]),
+    [['shorter-heading', 'Use a shorter heading']],
+  );
+  // Needs input: nothing changes.
+  assert.deepEqual(
+    applyStudioFix(signboard, result.issues[0], 'shorter-heading'),
+    signboard,
+  );
+  // Only headings are checked: a long word in a paragraph or a quote passes.
+  const link = 'See https://example.com/a-very-long-link-to-something';
+  const paragraph = {
+    id: 'para0001',
+    kind: 'text',
+    variant: 'paragraph',
+    text: link,
+  };
+  const quote = { id: 'quote001', kind: 'quote', text: link };
+  for (const style of ['clear', 'signboard'])
+    for (const block of [paragraph, quote])
+      assert.deepEqual(
+        rules(checkDesign(doc({ style, blocks: [block] }), CTX)),
+        [],
+        `${style} ${block.kind}`,
+      );
+  assert.deepEqual(
+    rules(checkDesign(doc({ style: 'clear', blocks: [heading(link)] }), CTX)),
     ['long-word'],
   );
-  // heading-order
+  // Unbounded is far wider than Inter: a word that fits Clear doesn't fit Signboard.
+  const middle = 'Wwwwwwwwwwwwww';
   assert.deepEqual(
-    rulesOf(
-      page(
-        row('row00001', [[{ ...h2('blk00001'), level: 3 }, h2('blk00002')]]),
+    rules(checkDesign(doc({ style: 'clear', blocks: [heading(middle)] }), CTX)),
+    [],
+  );
+  assert.deepEqual(
+    rules(
+      checkDesign(doc({ style: 'signboard', blocks: [heading(middle)] }), CTX),
+    ),
+    ['long-word'],
+  );
+  assert.deepEqual(
+    rules(
+      checkDesign(
+        doc({ style: 'clear', blocks: [heading('Hello there')] }),
+        CTX,
       ),
     ),
-    ['heading-order'],
+    [],
   );
-  // crowded: three photos in a third of a row
-  const narrow = {
-    ...row('row00001', [
-      [h2('blk00001')],
-      [photo('blk00002'), photo('blk00003'), photo('blk00004')],
-    ]),
-    columns: '2-1',
-  };
-  assert.deepEqual(rulesOf(page(narrow)), ['crowded']);
-  // crowded: two colour rows touching with small spacing
+  // A name-like word the display face can't draw is set in Inter, so it is measured in Inter.
+  const hausa = 'Ɗanlamiƙwairangaɓello'.slice(0, 14);
   assert.deepEqual(
-    rulesOf(
-      page(
-        row('row00001', [[h2('blk00001')]], {
-          background: 'colour',
-          spacing: 's',
-        }),
-        row('row00002', [[h2('blk00002')]], { background: 'colour' }),
+    rules(
+      checkDesign(doc({ style: 'journal', blocks: [heading(hausa)] }), CTX),
+    ),
+    [],
+  );
+});
+
+test("Classic's section title is measured at the size classic.css draws", () => {
+  // 2rem at every width (classic.css .studio-title).
+  assert.equal(STUDIO_HEADING_PX.classic, 32);
+  assert.equal(STUDIO_HEADING_PX.clear, 20);
+  // Stage's phone section title is 22/28 (§9.4), Horizon's 18/24 (§9.9): apps/web test
+  // studio-style-page holds both to stage.css and horizon.css.
+  assert.equal(STUDIO_HEADING_PX.stage, 22);
+  assert.equal(STUDIO_HEADING_PX.horizon, 18);
+});
+
+// PR 2e (§9.5, §9.6, §9.7): Signboard, Sprint and Tiles, as their CSS draws them (apps/web test
+// studio-style-page holds each number to signboard.css, sprint.css and tiles.css).
+test("Signboard's, Sprint's and Tiles' section titles are measured at the size their CSS draws", () => {
+  // Signboard 15/22 Unbounded caps, Sprint 20/26 Inter, Tiles 15/20 Inter (the text tile title).
+  assert.equal(STUDIO_HEADING_PX.signboard, 15);
+  assert.equal(STUDIO_HEADING_PX.sprint, 20);
+  assert.equal(STUDIO_HEADING_PX.tiles, 15);
+});
+
+test('Sprint measures headings in Inter: Anton sets the name only (§9.6)', () => {
+  // Inter at 20 px, like Clear: 18 letters fit 280, 19 don't (Anton at 20 would pass 19, and at
+  // the old 28 px fail 18).
+  const sprint = (n) =>
+    rules(
+      checkDesign(
+        doc({ style: 'sprint', blocks: [heading('W'.repeat(n))] }),
+        CTX,
+      ),
+    );
+  assert.deepEqual(sprint(18), []);
+  assert.deepEqual(sprint(19), ['long-word']);
+});
+
+test("Signboard's titles are capitals: a heading word is measured at Unbounded's widest letter", () => {
+  // 14 letters at 15 px: the mean of Unbounded's advances fits 280, its capitals don't.
+  const word = 'Wwwwwwwwwwwwww';
+  assert.deepEqual(
+    rules(
+      checkDesign(doc({ style: 'signboard', blocks: [heading(word)] }), CTX),
+    ),
+    ['long-word'],
+  );
+  assert.deepEqual(
+    rules(
+      checkDesign(
+        doc({ style: 'signboard', blocks: [heading('Wwwwww')] }),
+        CTX,
       ),
     ),
-    ['crowded'],
+    [],
   );
-  // photo-resolution, photo-alt
+});
+
+test("Signboard's, Sprint's and Tiles' photo slots are the widths their CSS draws", () => {
+  // Signboard (§9.5): photos 3-up, gap 8, in the column; on a desktop 440 | 80 | 600, every block
+  // but the first in the 600 column.
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 390),
+    Math.round((350 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 800),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 1440),
+    Math.round((600 - 16) / 3),
+  );
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('signboard', kind, 1440), 600, kind);
+  // Sprint (§9.6): photos run edge to edge at every width (a gallery's odd first photo takes the
+  // whole row); everything else sits in the column, on a desktop the 680 cell of 680 | 120 | 480.
+  for (const v of [320, 390, 800, 1024, 1440]) {
+    assert.equal(studioSlotWidth('sprint', 'photo', v), v, `photo ${v}`);
+    assert.equal(studioSlotWidth('sprint', 'gallery', v), v, `gallery ${v}`);
+  }
+  assert.equal(studioSlotWidth('sprint', 'text', 390), 350);
+  for (const kind of ['text', 'quote', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('sprint', kind, 1440), 680, kind);
+  // Tiles (§9.7): a 2-column grid, gap 12, below 1024; on a desktop a 340 rail, gap 72 (the
+  // canvas), and a 788 px 4-column grid, gap 16. Photos, text and lists take the grid's width.
+  // A gallery photo is one tile, but the last of a row closes it (fix round 1): on a phone an odd
+  // last photo is 2 wide, on a desktop the last of 4n + 1 spans all four. The widest is the slot.
+  assert.equal(studioSlotWidth('tiles', 'gallery', 390), 350);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 800), 720);
+  assert.equal(studioSlotWidth('tiles', 'photo', 390), 350);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), 788);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('tiles', kind, 1440), 788, kind);
+});
+
+test("Stage's and Horizon's photo slots are the widths their CSS draws", () => {
+  // Stage (§9.4): a strip of 156 px tiles on a phone and tablet; on a desktop the 720 main column
+  // with photos 3-up, gap 8 (the canvas's StageDesktop "Backstage" grid).
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('stage', 'gallery', v), 156, `${v}`);
+  assert.equal(
+    studioSlotWidth('stage', 'gallery', 1440),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(studioSlotWidth('stage', 'photo', 1440), 720);
+  // Horizon (§9.9): 3-up at 3:4, gap 8 on a phone and tablet; on a desktop the 520 column, gap 16.
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 390),
+    Math.round((350 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 320),
+    Math.round((280 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 800),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 1440),
+    Math.round((520 - 32) / 3),
+  );
+  assert.equal(studioSlotWidth('horizon', 'photo', 1440), 520);
+});
+
+test("photo rules use the style's slot widths", () => {
+  const widest = (style) =>
+    Math.max(...[390, 1440].map((v) => studioSlotWidth(style, 'photo', v)));
+  const at = (style, width) =>
+    checkDesign(doc({ style, blocks: [photo()] }), {
+      ...CTX,
+      images: { [IMG]: { width, height: width, bytes: 200_000 } },
+    });
+  // Clear: a 440 px column on desktop, 350 px on a phone.
+  assert.equal(studioSlotWidth('clear', 'photo', 1440), (920 - 40) / 2);
+  assert.equal(studioSlotWidth('clear', 'photo', 390), 390 - 40);
+  // Clear's photos as its CSS draws them (§9.2): a 150 px strip up to 1023 px, then a 3-up
+  // square grid in the 440 column, gap 8 (apps/web test studio-style-page holds the CSS to it).
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('clear', 'gallery', v), 150, `${v}`);
+  assert.equal(studioSlotWidth('clear', 'gallery', 1024), 141);
+  assert.equal(studioSlotWidth('clear', 'gallery', 1440), 141);
+  // Classic as classic.css draws it on today's page (§9.1; apps/web test studio-classic holds
+  // the CSS to it). Two columns from 861 px: min(1120, vw − 80) − 408 rail − clamp(32, 5vw, 72)
+  // gap − 40 inset, widest at 1200 (612), 600 at 1440; one column below: min(vw, 576) − 32.
+  // A gallery photo is 2-up with an 8 px gap.
+  const classic = (kind, v) => studioSlotWidth('classic', kind, v);
+  for (const [v, w] of [
+    [1440, 600],
+    [1200, 612],
+    [1024, 445],
+    [861, 290],
+    [860, 544],
+    [768, 544],
+    [576, 544],
+    [390, 358],
+    [320, 288],
+  ]) {
+    for (const kind of [
+      'text',
+      'quote',
+      'photo',
+      'video',
+      'services',
+      'events',
+    ])
+      assert.equal(classic(kind, v), w, `${kind} at ${v}`);
+  }
+  assert.equal(classic('gallery', 1440), 296);
+  assert.equal(classic('gallery', 1200), 302);
+  assert.equal(classic('gallery', 390), 175);
+  // photo-resolution asks for the drawn width at 1440.
+  assert.deepEqual(rules(at('classic', 599)), ['photo-resolution']);
+  assert.deepEqual(rules(at('classic', 600)), []);
+  // As in v1: 1x at the widest screen, no density factor and no cap.
+  assert.equal(widest('clear'), 440);
+  assert.equal(widest('stage'), 720);
+  assert.deepEqual(rules(at('clear', 439)), ['photo-resolution']);
+  assert.deepEqual(rules(at('clear', 440)), []);
+  // Passes now, failed under the 2x rule (880).
+  assert.deepEqual(rules(at('clear', 640)), []);
+  // Another style, another slot: Stage's main column is wider, so it needs more.
+  assert.deepEqual(rules(at('stage', 640)), ['photo-resolution']);
+  assert.deepEqual(rules(at('stage', 719)), ['photo-resolution']);
+  assert.deepEqual(rules(at('stage', 720)), []);
+  // Sprint's full-bleed photos need the full 1440.
+  assert.deepEqual(rules(at('sprint', 1439)), ['photo-resolution']);
+  assert.deepEqual(rules(at('sprint', 1440)), []);
+  // A photo we have no facts for is as blurry as one with no pixels.
   assert.deepEqual(
-    rulesOf(
-      page(row('row00001', [[h2('blk00001'), photo('blk00002')]])),
-      withImage(imageFacts({ width: 500, height: 500 })),
-    ),
+    rules(checkDesign(doc({ blocks: [photo()] }), { ...CTX, images: {} })),
     ['photo-resolution'],
   );
+  // The fix needs a new photo.
+  const blurry = at('clear', 400);
   assert.deepEqual(
-    rulesOf(
-      page(row('row00001', [[h2('blk00001'), photo('blk00002', { alt: '' })]])),
-    ),
-    ['photo-alt'],
+    blurry.issues[0].fixes.map((f) => f.id),
+    ['replace-photo'],
+  );
+  // The slot is never a column the person chose: it only depends on style, kind and screen.
+  for (const style of STUDIO_STYLE_IDS)
+    for (const v of BREAKPOINTS)
+      for (const kind of ['text', 'photo', 'gallery', 'video'])
+        assert.ok(
+          studioSlotWidth(style, kind, v) > 0 &&
+            studioSlotWidth(style, kind, v) <= Math.max(v, 1440),
+          `${style} ${kind} ${v}`,
+        );
+});
+
+test('photo-alt, empty-block, broken-video and page-weight keep their fixes', () => {
+  const noAlt = doc({ blocks: [photo('photo001', { alt: '' })] });
+  const alt = checkDesign(noAlt, CTX);
+  assert.deepEqual(rules(alt), ['photo-alt']);
+  assert.deepEqual(
+    alt.issues[0].fixes.map((f) => f.id),
+    ['mark-decorative', 'add-description'],
+  );
+  const marked = applyStudioFix(noAlt, alt.issues[0], 'mark-decorative');
+  assert.equal(marked.blocks[0].decorative, true);
+  assert.deepEqual(rules(checkDesign(marked, CTX)), []);
+
+  const emptyGallery = doc({
+    blocks: [{ id: 'gal00001', kind: 'gallery', images: [] }],
+  });
+  const empty = checkDesign(emptyGallery, CTX);
+  assert.deepEqual(rules(empty), ['empty-block']);
+  assert.deepEqual(
+    empty.issues[0].fixes.map((f) => f.label),
+    ['Remove the block'],
+  );
+  const emptyText = checkDesign(doc({ blocks: [heading('')] }), CTX);
+  assert.deepEqual(rules(emptyText), ['empty-block']);
+
+  const [url] = VIDEO_POOL;
+  const gone = doc({ blocks: [{ id: 'vid00001', kind: 'video', url }] });
+  const broken = checkDesign(gone, { ...CTX, videos: { [url]: 'gone' } });
+  assert.deepEqual(rules(broken), ['broken-video']);
+  assert.deepEqual(
+    broken.issues[0].fixes.map((f) => f.id),
+    ['remove-video', 'change-link'],
   );
   assert.deepEqual(
-    rulesOf(
-      page(
-        row('row00001', [
-          [h2('blk00001'), photo('blk00002', { alt: '', decorative: true })],
-        ]),
-      ),
-    ),
+    rules(checkDesign(gone, { ...CTX, videos: { [url]: 'unknown' } })),
     [],
   );
-  // page-weight: a heavy photo at the top
-  const heavy = withImage(
-    imageFacts({ width: 2400, height: 2400, perPixel: 2 }),
-  );
   assert.deepEqual(
-    rulesOf(page(row('row00001', [[photo('blk00001')]])), heavy),
-    ['page-weight'],
+    applyStudioFix(gone, broken.issues[0], 'remove-video').blocks,
+    [],
   );
-  // empty-block
-  assert.deepEqual(
-    rulesOf(
-      page(
-        row('row00001', [
-          [
-            h2('blk00001'),
-            { id: 'blk00002', kind: 'gallery', variant: 'grid', images: [] },
-          ],
-        ]),
-      ),
+
+  // Page weight: many big photos near the top of a phone page.
+  const heavy = doc({
+    blocks: IMAGE_POOL.slice(0, 6).map((imageId, i) =>
+      photo(`heavy00${i}`, { imageId }),
     ),
-    ['empty-block'],
-  );
-  assert.deepEqual(
-    rulesOf(
-      page(
-        row('row00001', [
-          [{ id: 'blk00001', kind: 'about', variant: 'plain' }],
-        ]),
-      ),
-      { ...CTX, profile: { bio: false, links: 0 } },
+  });
+  const ctx = {
+    ...CTX,
+    images: Object.fromEntries(
+      IMAGE_POOL.slice(0, 6).map((id) => [
+        id,
+        { width: 1500, height: 1500, bytes: 3_000_000 },
+      ]),
     ),
-    ['empty-block'],
-  );
-  // broken-video
-  const video = {
-    id: 'blk00002',
-    kind: 'video',
-    variant: 'still',
-    url: 'https://youtu.be/dQw4w9WgXcQ',
   };
-  const d = page(row('row00001', [[h2('blk00001'), video]]));
-  assert.deepEqual(
-    rulesOf(d, { ...CTX, videos: { 'https://youtu.be/dQw4w9WgXcQ': 'gone' } }),
-    ['broken-video'],
-  );
-  assert.deepEqual(
-    rulesOf(d, {
-      ...CTX,
-      videos: { 'https://youtu.be/dQw4w9WgXcQ': 'unknown' },
-    }),
-    [],
-    'unknown never fails',
-  );
-});
-
-test('rules that the schema or engine already guarantee stay silent, and say what they fixed', () => {
-  const r = checkDesignV1(
-    page(row('row00001', [[h2('blk00001', 'Ṣọlá')]])),
-    CTX,
-  );
-  assert.deepEqual(r.issues, []);
-  // Kemi's heading font is Fraunces, which has no Ṅ; Ṣọlá it draws. Manrope has no Ṣ.
-  const manrope = checkDesignV1(
-    {
-      ...page(row('row00001', [[h2('blk00001', 'Ṣọlá')]])),
-      fonts: { heading: 'manrope', body: 'inter' },
-    },
-    CTX,
-  );
+  const weight = checkDesign(heavy, ctx);
+  assert.ok(rules(weight).includes('page-weight'));
+  assert.ok(weight.weightBytes > 1_500_000);
   assert.ok(
-    manrope.notices.some(
-      (n) => n.rule === 'fonts' && /Set in your text font/.test(n.message),
-    ),
+    !rules(checkDesign(doc(), CTX)).includes('page-weight'),
+    'a light page',
   );
-  for (const rule of ['contrast', 'fonts'])
-    assert.ok(r.passing.includes(rule), rule);
 });
 
-test('a photo 640 wide in a 2-1 wide cell fails; the same photo in a 1-1 cell passes', () => {
-  const ctx = withImage(imageFacts({ width: 640, height: 640 }));
-  const two = {
-    ...row('row00001', [[h2('blk00001'), photo('blk00002')], [h2('blk00003')]]),
-    columns: '2-1',
+test('the removed rules never fire', () => {
+  const removed = [
+    'contrast',
+    'contrast-on-photo',
+    'fonts',
+    'phone-fit',
+    'crowded',
+    'heading-order',
+  ];
+  const check = (d, plan, ctx) => {
+    const result = checkDesign(d, { ...ctx, plan });
+    for (const r of [
+      ...rules(result),
+      ...noticeRules(result),
+      ...result.passing,
+    ])
+      assert.ok(!removed.includes(r), r);
   };
-  const [issue] = checkDesignV1(page(two), ctx).issues;
-  assert.equal(issue?.rule, 'photo-resolution');
-  assert.deepEqual(fixIds(issue), ['smaller-slot', 'replace-photo']);
-  assert.equal(issue.fixes[0].label, 'Make the photo smaller');
-  assert.match(issue.detail, /640 pixels wide, shown at up to 672/);
-  const fixed = applyStudioFixV1(page(two), issue, 'smaller-slot');
-  assert.equal(fixed.rows[0].columns, '1-1');
-  assert.deepEqual(checkDesignV1(fixed, ctx).issues, []);
-  assert.deepEqual(
-    checkDesignV1(page({ ...two, columns: '1-1' }), ctx).issues,
-    [],
-  );
-});
-
-test('the weight estimate counts only photos in the first 1.5 screens and only the fonts used', () => {
-  const filler = (i) =>
-    row(`row0000${i}`, [
-      [
-        {
-          id: `blk0000${i}`,
-          kind: 'text',
-          variant: 'paragraph',
-          text: 'Words. '.repeat(80).trim(),
-        },
-      ],
-    ]);
-  const top = page(row('row00001', [[photo('blk00001')]]));
-  const low = page(
-    filler(2),
-    filler(3),
-    filler(4),
-    row('row00001', [[photo('blk00001')]]),
-  );
-  const noPhoto = page(filler(2), filler(3), filler(4));
-  const w = (d) => checkDesignV1(d, CTX).weightBytes;
-  assert.ok(w(top) > w(page()), 'a photo at the top counts');
-  assert.equal(w(low), w(noPhoto), 'a photo lower down loads lazily');
-  const font = (id) => STUDIO_FONTS.find((f) => f.id === id).files[0].bytes;
-  const one = { ...page(), fonts: { heading: 'nunito', body: 'nunito' } };
-  const two = { ...page(), fonts: { heading: 'fraunces', body: 'nunito' } };
-  assert.equal(w(two) - w(one), font('fraunces'));
-});
-
-test('large text: DM Serif Display h3 is not large; bold h3 at 18.66px or more is', () => {
-  const dm = { ...base, fonts: { heading: 'dm-serif-display', body: 'inter' } };
-  assert.equal(studioLargeText(dm, 'h3'), false);
-  assert.equal(studioLargeText(dm, 'display'), true);
-  assert.equal(
-    studioLargeText(
-      { ...base, scale: 'compact', fonts: { heading: 'inter', body: 'inter' } },
-      'h3',
-    ),
-    true,
-  );
-  assert.equal(
-    studioLargeText(
-      { ...base, fonts: { heading: 'fraunces', body: 'inter' } },
-      'h3',
-    ),
-    false,
-  ); // 600 weight, 20px
-});
-
-test('colour names for the one-sentence notes', () => {
-  assert.equal(studioColourName('#f5c400'), 'yellow');
-  assert.equal(studioColourName('#1d4e89'), 'blue');
-  assert.equal(studioColourName('#e0457b'), 'pink');
-  assert.equal(studioColourName('#777777'), 'grey');
-  assert.equal(studioColourName('#7a32f9'), 'purple');
-  assert.equal(studioColourName('#2e7d32'), 'green');
-  assert.equal(studioColourName('#d32f2f'), 'red');
-  assert.equal(studioColourName('#ff0000'), 'red');
-  // The coral accent the Studio suggests is named coral, never red.
-  assert.equal(studioColourName('#ff7a59'), 'coral');
-  assert.equal(studioColourName('#f08080'), 'coral');
-  const coralNotes = checkDesignV1({ ...KEMI, mode: 'light' }, CTX)
-    .notices.filter((n) => n.rule === 'contrast')
-    .map((n) => n.message);
-  assert.ok(
-    coralNotes.some((m) => /Your coral /.test(m)),
-    coralNotes.join('\n'),
-  );
-  assert.ok(!coralNotes.some((m) => /\bred\b/.test(m)), coralNotes.join('\n'));
-  assert.equal(studioColourName('#6d4c41'), 'brown');
-});
-
-test('studioIssueKeys lists the same issues as checkDesignV1', () => {
   fc.assert(
     fc.property(
-      studioDocumentV1Arb({ valid: true }),
-      checkContext(),
-      (doc, ctx) => {
-        assert.deepEqual(
-          studioIssueKeys(doc, ctx),
-          checkDesignV1(doc, ctx).issues.map(({ rule, at }) => ({ rule, at })),
-        );
-      },
+      studioDocumentArb({ valid: true }),
+      fc.constantFrom('free', 'pro'),
+      contextArb(),
+      (d, plan, ctx) => check(d, plan, ctx),
     ),
     { numRuns: runs(500), seed: seed() },
   );
 });
 
-test('checkDesignV1 is pure and deterministic', () => {
-  fc.assert(
-    fc.property(
-      studioDocumentV1Arb({ valid: true }),
-      checkContext(),
-      (doc, ctx) => {
-        const before = structuredClone(doc);
-        const a = checkDesignV1(doc, ctx);
-        assert.deepEqual(doc, before);
-        assert.deepEqual(
-          checkDesignV1(structuredClone(doc), structuredClone(ctx)),
-          a,
-        );
-      },
-    ),
-    { numRuns: runs(500), seed: seed() },
-  );
-});
-
-test('every offered fix removes its issue and adds no new error', () => {
-  const property = (doc, ctx) => {
-    const before = checkDesignV1(doc, ctx);
-    for (const issue of before.issues)
-      for (const f of automatic(issue)) {
-        const next = applyStudioFixV1(doc, issue, f.id);
-        assert.equal(
-          studioDocumentV1Schema.safeParse(next).success,
-          true,
-          `${issue.rule}/${f.id}`,
-        );
-        const after = studioIssueKeys(next, ctx);
-        assert.ok(
-          !after.some((i) => sameIssue(i, issue)),
-          `${issue.rule}/${f.id} left its issue`,
-        );
-        assert.ok(
-          after.every((i) => before.issues.some((b) => sameIssue(b, i))),
-          `${issue.rule}/${f.id} added an issue`,
-        );
-      }
-  };
-  for (const [doc, ctx] of regressions('fixes')) property(doc, ctx);
-  fc.assert(
-    fc.property(studioDocumentV1Arb({ valid: true }), checkContext(), property),
-    { numRuns: runs(2000), seed: seed() },
-  );
-});
-
-test('repeatedly applying the first automatic fix reaches a passing page or only input-needing issues', () => {
-  fc.assert(
-    fc.property(
-      studioDocumentV1Arb({ valid: true }),
-      checkContext(),
-      (doc, ctx) => {
-        let d = doc;
-        let result = checkDesignV1(d, ctx);
-        const start = result.issues.length;
-        for (let step = 0; step <= start; step += 1) {
-          const issue = result.issues.find((i) => automatic(i).length > 0);
-          if (!issue) break;
-          d = applyStudioFixV1(d, issue, automatic(issue)[0].id);
-          const next = checkDesignV1(d, ctx);
-          assert.ok(
-            next.issues.length < result.issues.length,
-            'each fix leaves fewer issues',
-          );
-          result = next;
-        }
-        assert.ok(result.issues.every((i) => automatic(i).length === 0));
-      },
-    ),
-    { numRuns: runs(2000), seed: seed() },
-  );
-});
-
-test('a passing document fits every breakpoint in the layout model', () => {
-  fc.assert(
-    fc.property(
-      studioDocumentV1Arb({ valid: true }),
-      checkContext(),
-      (doc, ctx) => {
-        if (checkDesignV1(doc, ctx).issues.length) return;
-        for (const w of STUDIO_BREAKPOINTS)
-          for (const [cell, width] of Object.entries(cellWidths(doc, w)))
-            for (const b of blocksIn(doc, cell))
-              assert.ok(
-                BLOCK_MIN_WIDTH[`${b.kind}:${b.variant}`] <= width,
-                `${b.kind}:${b.variant} in ${width}px at ${w}`,
-              );
-      },
-    ),
-    { numRuns: runs(2000), seed: seed() },
-  );
-});
-
-test('every block fits a single column on the narrowest phone, even on a coloured row', () => {
-  const narrowest = Math.min(
-    ...Object.values(
-      cellWidths(page(row('row00001', [[]], { background: 'colour' })), 320),
-    ),
-  );
-  for (const [kind, min] of Object.entries(BLOCK_MIN_WIDTH))
-    assert.ok(min <= narrowest, `${kind} ${min} > ${narrowest}`);
-});
-
-test('defaultStudioDocumentV1 passes the design check', () => {
-  for (const profile of [
-    { bio: 'Singer, Lagos', links: 3 },
-    { bio: null, links: 0 },
-    { bio: '', links: 2 },
-  ]) {
-    const ctx = {
-      images: {},
-      videos: {},
-      profile: { bio: Boolean(profile.bio), links: profile.links },
-    };
-    assert.deepEqual(
-      checkDesignV1(defaultStudioDocumentV1(profile), ctx).issues,
-      [],
-      JSON.stringify(profile),
-    );
+test('the default document passes on Free and Pro', () => {
+  for (const plan of ['free', 'pro']) {
+    const result = checkDesign(defaultStudioDocument(), { ...CTX, plan });
+    assert.deepEqual(result.issues, []);
+    assert.deepEqual(result.notices, []);
+    assert.equal(result.passing.length, 7);
   }
 });
 
-test('the photos that load first are the ones the weight estimate counts', () => {
-  const filler = (i) =>
-    row(`row0000${i}`, [
-      [
-        {
-          id: `blk0000${i}`,
-          kind: 'text',
-          variant: 'paragraph',
-          text: 'Words. '.repeat(80).trim(),
-        },
-      ],
-    ]);
-  const top = page(
-    row('row00001', [[photo('blk00001')]], { background: { photo: IMG } }),
+test('proItemsOf lists what needs Pro', () => {
+  assert.deepEqual(proItemsOf(defaultStudioDocument()), {
+    style: false,
+    photoAccent: false,
+    blockIds: [],
+  });
+  assert.deepEqual(
+    proItemsOf(
+      doc({
+        style: 'tiles',
+        accent: 'photo',
+        blocks: [heading('Hi'), photo('photo001'), photo('photo002')],
+      }),
+    ),
+    { style: true, photoAccent: true, blockIds: ['photo001', 'photo002'] },
   );
-  const low = page(
-    filler(2),
-    filler(3),
-    filler(4),
-    row('row00001', [[photo('blk00001')]]),
-  );
-  assert.deepEqual([...studioEagerImages(top, CTX)].sort(), [
-    'bg:row00001',
-    'blk00001',
+});
+
+function contextArb() {
+  const facts = fc.record({
+    width: fc.integer({ min: 100, max: 4000 }),
+    height: fc.integer({ min: 100, max: 4000 }),
+    bytes: fc.integer({ min: 10_000, max: 3_000_000 }),
+  });
+  return fc
+    .record({
+      images: fc.array(facts, {
+        minLength: IMAGE_POOL.length,
+        maxLength: IMAGE_POOL.length,
+      }),
+      videos: fc.array(fc.constantFrom('ok', 'gone', 'unknown'), {
+        minLength: VIDEO_POOL.length,
+        maxLength: VIDEO_POOL.length,
+      }),
+      name: fc.constantFrom(
+        'Kemi Adeyemi',
+        'Ɗanlami Ƙwairanga Ɓello',
+        'Ọlápéjú Adébáyọ̀',
+        'A',
+      ),
+      bio: fc.boolean(),
+      links: fc.integer({ min: 0, max: 8 }),
+      coverKind: fc.constantFrom(
+        'photo',
+        'design',
+        'automatic',
+        'animated',
+        'none',
+      ),
+      hasAvatar: fc.boolean(),
+    })
+    .map((c) => ({
+      images: Object.fromEntries(IMAGE_POOL.map((id, i) => [id, c.images[i]])),
+      videos: Object.fromEntries(VIDEO_POOL.map((u, i) => [u, c.videos[i]])),
+      profile: { name: c.name, bio: c.bio, links: c.links },
+      plan: 'free',
+      coverKind: c.coverKind,
+      hasAvatar: c.hasAvatar,
+    }));
+}
+
+const key = (i) =>
+  `${i.rule}|${i.at.row}|${i.at.block ?? ''}|${i.at.cell ?? ''}`;
+const PAGE = ['page-weight'];
+const sameKey = (a, b) =>
+  a.rule === b.rule && (PAGE.includes(a.rule) || key(a) === key(b));
+
+test('every offered pure fix removes its issue and adds no new error', () => {
+  const pure = new Set([
+    'use-default-accent',
+    'remove-block',
+    'remove-video',
+    'mark-decorative',
+    'move-lower',
   ]);
-  assert.deepEqual([...studioEagerImages(low, CTX)], []);
-  const gallery = page(
-    row('row00001', [
-      [
-        {
-          id: 'blk00001',
-          kind: 'gallery',
-          variant: 'grid',
-          images: IMAGE_POOL.slice(0, 9).map((imageId) => ({
-            imageId,
-            alt: 'a',
-          })),
-        },
-      ],
-    ]),
+  let offered = 0;
+  fc.assert(
+    fc.property(
+      studioDocumentArb({ valid: true }),
+      fc.constantFrom('free', 'pro'),
+      contextArb(),
+      (d, plan, base) => {
+        const ctx = { ...base, plan };
+        const before = checkDesign(d, ctx);
+        for (const issue of before.issues)
+          for (const fix of issue.fixes) {
+            if (!pure.has(fix.id)) continue;
+            offered += 1;
+            const next = applyStudioFix(d, issue, fix.id);
+            assert.notDeepEqual(next, d, `${fix.id} changed nothing`);
+            assert.equal(studioDocumentSchema.safeParse(next).success, true);
+            const after = checkDesign(next, ctx);
+            assert.ok(
+              !after.issues.some((a) => sameKey(a, issue)),
+              `${fix.id} left its issue`,
+            );
+            for (const a of after.issues)
+              assert.ok(
+                before.issues.some((b) => sameKey(a, b)),
+                `${fix.id} added ${key(a)}`,
+              );
+          }
+      },
+    ),
+    { numRuns: runs(500), seed: seed() },
   );
-  const eager = [...studioEagerImages(gallery, CTX)];
-  assert.ok(
-    eager.includes('blk00001:0') && !eager.includes('blk00001:8'),
-    eager.join(),
+  assert.ok(offered > 0, 'the property saw fixes');
+});
+
+test('checkDesign is pure and deterministic', () => {
+  fc.assert(
+    fc.property(
+      studioDocumentArb({ valid: true }),
+      fc.constantFrom('free', 'pro'),
+      contextArb(),
+      (d, plan, base) => {
+        const ctx = { ...base, plan };
+        const frozenDoc = JSON.stringify(d);
+        const frozenCtx = JSON.stringify(ctx);
+        const first = checkDesign(d, ctx);
+        assert.deepEqual(
+          checkDesign(JSON.parse(JSON.stringify(d)), ctx),
+          first,
+        );
+        assert.equal(
+          JSON.stringify(d),
+          frozenDoc,
+          'the document is not changed',
+        );
+        assert.equal(
+          JSON.stringify(ctx),
+          frozenCtx,
+          'the facts are not changed',
+        );
+        for (const issue of first.issues)
+          for (const fix of issue.fixes)
+            assert.deepEqual(
+              applyStudioFix(d, issue, fix.id),
+              applyStudioFix(d, issue, fix.id),
+            );
+        assert.equal(
+          JSON.stringify(d),
+          frozenDoc,
+          'fixes do not change their input',
+        );
+      },
+    ),
+    { numRuns: runs(500), seed: seed() },
   );
 });

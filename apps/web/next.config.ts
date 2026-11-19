@@ -4,6 +4,7 @@ import { withSentryConfig } from '@sentry/nextjs/config';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
 import {
   PUBLIC_PAGE_SOURCE,
+  STUDIO_PREVIEW_SOURCE,
   securityHeaders,
 } from './src/lib/security-headers';
 
@@ -55,6 +56,13 @@ const publicPageHeaders = securityHeaders({
   dev,
   frames: true,
 });
+// Page Studio's preview: only this site may frame it (the editor's live preview).
+const studioPreviewHeaders = securityHeaders({
+  apiOrigin: apiUrl.origin,
+  dev,
+  frames: false,
+  framedBySelf: true,
+});
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
@@ -77,6 +85,7 @@ const nextConfig: NextConfig = {
     return [
       { source: '/:path*', headers: siteHeaders },
       { source: PUBLIC_PAGE_SOURCE, headers: publicPageHeaders },
+      { source: STUDIO_PREVIEW_SOURCE, headers: studioPreviewHeaders },
     ];
   },
   // How it works is a section of Home now (the owner, 3 Nov 2026); old links land on it.

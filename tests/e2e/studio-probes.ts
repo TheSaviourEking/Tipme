@@ -14,27 +14,32 @@ export async function studioModules() {
   return { contracts, arbitrary, pbt };
 }
 
-/** Sizes of the viewport, the frame and every row, read in the page (what `settled` and a failure's snapshot use). */
+/**
+ * Sizes of the viewport, the styled page's root and every block, read in the page (what `settled`
+ * and a failure's snapshot use). The root is `.studio`, or Classic's `.profile-page--studio`.
+ */
 export const readLayout = () => {
   const root = document.documentElement;
-  const rows = [...document.querySelectorAll('.studio-row')].map((row) => {
-    const box = row.getBoundingClientRect();
-    return {
-      columns: row.getAttribute('data-columns'),
-      bg: row.getAttribute('data-bg'),
-      client: row.clientWidth,
-      scroll: row.scrollWidth,
-      left: Math.round(box.left),
-      right: Math.round(box.right),
-    };
-  });
+  const page = document.querySelector('.studio, .profile-page--studio');
+  const blocks = [...document.querySelectorAll('.studio-block')].map(
+    (block) => {
+      const box = block.getBoundingClientRect();
+      return {
+        kind: block.getAttribute('data-kind'),
+        client: block.clientWidth,
+        scroll: block.scrollWidth,
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+      };
+    },
+  );
   return {
     innerWidth: window.innerWidth,
     clientWidth: root.clientWidth,
     scrollWidth: root.scrollWidth,
     visualViewport: window.visualViewport?.width ?? null,
-    frameClient: document.querySelector('.studio-frame')?.clientWidth ?? null,
-    rows,
+    pageClient: page?.clientWidth ?? null,
+    blocks,
   };
 };
 
@@ -52,7 +57,7 @@ const frames = (page: Page) =>
  * seed -732091363, 16 Nov 2026) saw a row 272px wide holding content 288px wide, which no single
  * layout produces, and the failure screenshot showed the previous width. So wait for `innerWidth`
  * to equal the width Playwright set (the document agreeing, less a scrollbar), then for two
- * readings in a row of the same frame and row sizes. Throws, with the last reading, if that does
+ * readings in a row of the same page and block sizes. Throws, with the last reading, if that does
  * not happen within `timeout`.
  */
 export async function settled(page: Page, timeout = 10_000) {
@@ -71,8 +76,8 @@ export async function settled(page: Page, timeout = 10_000) {
           Math.abs(read.visualViewport - want) <= 24));
     const signature = JSON.stringify([
       read.innerWidth,
-      read.frameClient,
-      read.rows,
+      read.pageClient,
+      read.blocks,
     ]);
     if (applied && signature === previous) return;
     previous = signature;
@@ -83,13 +88,15 @@ export async function settled(page: Page, timeout = 10_000) {
   }
 }
 
-/** A failure's attachment: the viewport, the frame, and every row with the ones that overflow marked. */
+/** A failure's attachment: the viewport, the page, and every block with the ones that overflow marked. */
 export async function layoutSnapshot(page: Page) {
   const read = await page.evaluate(readLayout);
   return {
     requestedViewport: page.viewportSize(),
     ...read,
-    overflowingRows: read.rows.filter((row) => row.scroll > row.client),
+    overflowingBlocks: read.blocks.filter(
+      (block) => block.scroll > block.client,
+    ),
   };
 }
 
@@ -103,8 +110,8 @@ export const NEVER_TRUNCATED =
 
 /**
  * Layout faults on a Studio page, as labels (empty when there are none): the page scrolls
- * sideways; an element that clips (overflow not visible) holds more than it shows; two blocks
- * overlap; or the tip rail overlaps the rows. TipMe's cover is tested on its own and skipped.
+ * sideways, or an element that clips (overflow not visible) holds more than it shows. TipMe's
+ * cover is tested on its own and skipped.
  */
 export async function geometryProblems(
   page: Page,
@@ -168,27 +175,6 @@ export async function geometryProblems(
             `${label(el)} clips its content (${el.scrollHeight} > ${el.clientHeight})`,
           );
       }
-      const boxes = [...studio.querySelectorAll('.studio-cell > *')].map(
-        (el) => ({
-          el,
-          r: el.getBoundingClientRect(),
-        }),
-      );
-      const meet = (a: DOMRect, b: DOMRect) =>
-        Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-        Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
-      for (let i = 0; i < boxes.length; i += 1)
-        for (let j = i + 1; j < boxes.length; j += 1)
-          if (meet(boxes[i]!.r, boxes[j]!.r))
-            out.push(`${label(boxes[i]!.el)} overlaps ${label(boxes[j]!.el)}`);
-      const rail = studio
-        .querySelector('.studio-rail')
-        ?.getBoundingClientRect();
-      for (const part of ['.studio-rows', '.studio-identity']) {
-        const r = studio.querySelector(part)?.getBoundingClientRect();
-        if (rail && r && r.height > 1 && meet(rail, r))
-          out.push(`the tip rail overlaps ${part}`);
-      }
       return out;
     },
     [scope, NEVER_TRUNCATED] as const,
@@ -205,6 +191,16 @@ export async function contrastProblems(
   scope = '.studio',
 ): Promise<string[]> {
   await settled(page);
+  // A thumb sliding (220 ms) or fading would be measured mid-way: wait for every animation
+  // that ends. An endless one (a pulse, a nudge) never finishes, so waiting on it would hang.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => null)),
+    ),
+  );
   return page.evaluate((scope) => {
     type Rgba = [number, number, number, number];
     const parse = (c: string): Rgba | null => {
@@ -246,6 +242,61 @@ export async function contrastProblems(
         if (at === scrim) {
           base = [97, 97, 97, 1];
           break;
+        }
+        // A solid `::before` that an ancestor positions under the element is the surface the text
+        // is read on (Clear's selected amount sits on the segmented control's `::before` thumb,
+        // while its own span and the track are other colours). `getBoundingClientRect` can't
+        // measure a pseudo-element, so its box comes from the resolved left, top, size and
+        // translate of an absolutely positioned one.
+        if (at !== el) {
+          const pseudo = getComputedStyle(at, '::before');
+          const fill = parse(pseudo.backgroundColor);
+          // Only a pseudo-element that is really painted: Chromium reports the background of an
+          // invisible one (Clear's thumb is opacity 0 while no amount is selected) as if it showed.
+          let opacity = Number(pseudo.opacity);
+          for (let up: Element | null = at; up; up = up.parentElement)
+            opacity *= Number(getComputedStyle(up).opacity);
+          const px = (v: string) =>
+            /^-?[\d.]+px$/.test(v) ? parseFloat(v) : null;
+          const [pl, pt, pw, ph] = [
+            px(pseudo.left),
+            px(pseudo.top),
+            px(pseudo.width),
+            px(pseudo.height),
+          ];
+          if (
+            pseudo.content !== 'none' &&
+            pseudo.display !== 'none' &&
+            pseudo.visibility !== 'hidden' &&
+            opacity >= 0.999 &&
+            pseudo.position === 'absolute' &&
+            pseudo.backgroundImage === 'none' &&
+            fill &&
+            fill[3] >= 0.999 &&
+            pl !== null &&
+            pt !== null &&
+            pw !== null &&
+            ph !== null
+          ) {
+            const host = at.getBoundingClientRect();
+            const move = new DOMMatrixReadOnly(
+              pseudo.transform === 'none' ? undefined : pseudo.transform,
+            );
+            const left = host.left + pl + move.m41;
+            const top = host.top + pt + move.m42;
+            const box = el.getBoundingClientRect();
+            const cx = box.left + box.width / 2;
+            const cy = box.top + box.height / 2;
+            if (
+              cx >= left - 1 &&
+              cx <= left + pw + 1 &&
+              cy >= top - 1 &&
+              cy <= top + ph + 1
+            ) {
+              layers.push(fill);
+              break;
+            }
+          }
         }
         const cs = getComputedStyle(at);
         if (cs.backgroundImage !== 'none') return null; // an image: not measurable here

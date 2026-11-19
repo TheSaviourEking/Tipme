@@ -3,8 +3,7 @@ import {
   DESIGN_CHECK_VERSION,
   STUDIO_LIMITS,
   checkDesign,
-  checkDesignV1,
-  defaultStudioDocumentV1,
+  defaultStudioDocument,
   photoAccentOf,
   photoAccentSchema,
   proItemsOf,
@@ -12,13 +11,12 @@ import {
   resolveStudio,
   resolveStudioV1,
   studioDocumentSchema,
-  studioDocumentV1Schema,
   studioDraftRefusal,
   studioImageIdsOf,
   studioShown,
   studioTokens,
   visibleLinks,
-  type MyStudioV1,
+  type MyStudio,
   type PagePlan,
   type PhotoAccent,
   type PublicStudio,
@@ -26,7 +24,6 @@ import {
   type StudioBlock,
   type StudioBlockV1,
   type StudioCheckContext,
-  type StudioCheckContextV1,
   type StudioDocument,
   type StudioDocumentV1,
   type StudioIssue,
@@ -65,14 +62,19 @@ import { lockLivePage, myPageId, removeObjects } from './page-images.js';
 // and avatar). Photos are stored as covers are: re-encoded on the server, each file in Postgres or
 // in R2, objects written before their rows and removed after the change commits.
 //
-// Two formats, for now (styles plan ruling R1): a v1 draft (the old editor's) saves on Pro only, as
-// before; a v2 draft saves on any plan under the Free and Pro draft rules (§11, `studioDraftRefusal`).
-// Publishing always stores v2 and runs the v3 check with the page's real plan. The public page shows
+// v2 only since the editor moved to v2 (styles plan ruling R1, PR 4a): a draft saves on any plan
+// under the Free and Pro draft rules (§11, `studioDraftRefusal`), and a v1 document is refused as
+// STUDIO_DRAFT_INVALID. A draft the old editor stored as v1 reads as v2 (`resolveStudio`, the §7.1
+// migration), so the editor sees what publishing stores. Publishing always stores v2 and runs the
+// v3 check with the page's real plan. The public page shows
 // what `studioShown` makes of the published version for the plan now (§12.5): nothing is deleted
 // when Pro lapses, and it all comes back with Pro. Photo uploads and focus changes are Pro only.
 
 type Db = Database | Tx;
-/** A stored draft as read: v1 stays v1 (the old editor's), v2 stays v2. */
+/**
+ * A stored row as read, in its own format: rows the old editor saved can still hold v1, so the
+ * photo and video bookkeeping reads both. The editor only ever sees v2 (myStudioOf).
+ */
 type AnyStudio = StudioDocumentV1 | StudioDocument;
 
 const isV2 = (doc: AnyStudio): doc is StudioDocument => doc.v === 2;
@@ -305,27 +307,6 @@ export function recordStudioVideoChecks(
   });
 }
 
-/** The v1 check's facts (the old editor's): photo sizes, video status, bio and links. */
-async function contextV1For(
-  db: Db,
-  page: PageFacts,
-  doc: StudioDocumentV1,
-  images?: ImageFacts[],
-): Promise<StudioCheckContextV1> {
-  const all = images ?? (await imagesOf(db, page.id));
-  const videos = await studioVideoChecksFor(db, studioVideoUrls(doc));
-  return {
-    images: Object.fromEntries(
-      all.map((i) => [
-        i.id,
-        { width: i.width, height: i.height, bytes: i.bytes },
-      ]),
-    ),
-    videos,
-    profile: { bio: Boolean(page.bio), links: linkCount(page) },
-  };
-}
-
 /** The v3 check's facts: the v1 ones, the name, and the page's plan, cover and avatar now. */
 async function contextFor(
   db: Db,
@@ -354,33 +335,24 @@ async function contextFor(
   };
 }
 
-async function myStudioOf(db: Db, profileId: string): Promise<MyStudioV1> {
+async function myStudioOf(db: Db, profileId: string): Promise<MyStudio> {
   const page = await pageFacts(db, profileId);
   const [row] = await db
     .select()
     .from(pageStudios)
     .where(eq(pageStudios.profileId, profileId));
   const today = lagosToday();
-  const draft = row
-    ? readStored(row.draft, today)
-    : defaultStudioDocumentV1({ bio: page.bio, links: linkCount(page) });
+  // Always v2: a draft the old editor stored as v1 reads through the §7.1 migration.
+  const draft = row ? resolveStudio(row.draft, today) : defaultStudioDocument();
   const images = await imagesOf(db, profileId);
-  const checked = isV2(draft)
-    ? await (async () => {
-        const context = await contextFor(db, page, draft, images);
-        return { context, check: checkDesign(draft, context) };
-      })()
-    : await (async () => {
-        const context = await contextV1For(db, page, draft, images);
-        return { context, check: checkDesignV1(draft, context) };
-      })();
+  const context = await contextFor(db, page, draft, images);
   return {
     draft,
     published: row?.published ? resolveStudio(row.published, today) : null,
     rev: row?.rev ?? 0,
     publishedAt: row?.publishedAt?.toISOString() ?? null,
-    check: checked.check,
-    context: checked.context,
+    check: checkDesign(draft, context),
+    context,
     images: images.map((i) => ({
       imageId: i.id,
       path: ownerPath(i.id, i.version),
@@ -389,15 +361,15 @@ async function myStudioOf(db: Db, profileId: string): Promise<MyStudioV1> {
       focalX: i.focalX,
       focalY: i.focalY,
     })),
-    // The old editor's gate, unchanged until it moves to v2 (ruling R1).
-    access: page.plan === 'pro' ? 'edit' : row ? 'lapsed' : 'preview',
+    // Every page edits (§5.4): Free saves and publishes free styles; the server refuses the rest.
+    access: 'edit',
     plan: page.plan === 'pro' ? 'pro' : 'free',
     photoAccent: photoAccentOf(row?.photoAccent ?? null, page.avatar),
   };
 }
 
 /** The owner's Studio: the draft, the published version, the check and the photos. */
-export function getMyStudio(db: Database, userId: string): Promise<MyStudioV1> {
+export function getMyStudio(db: Database, userId: string): Promise<MyStudio> {
   return guarded(async () => myStudioOf(db, await myPageId(db, userId)));
 }
 
@@ -447,28 +419,24 @@ async function dropUnused(
 
 /**
  * Saves the draft if it was based on the latest revision; STUDIO_DRAFT_STALE otherwise, keeping
- * the newer one. Photos must be this page's own. A v1 draft (the old editor's) needs Pro, as
- * before. A v2 draft saves on any plan, except that on Free it may not add a Pro style, the photo
- * accent or a Pro block that neither the stored draft nor the published version holds (§11, R4):
- * STUDIO_PRO_REQUIRED.
+ * the newer one. Photos must be this page's own. Only a v2 draft saves (ruling R1): anything else,
+ * the old editor's v1 included, is STUDIO_DRAFT_INVALID. It saves on any plan, except that on Free
+ * it may not add a Pro style, the photo accent or a Pro block that neither the stored draft nor
+ * the published version holds (§11, R4): STUDIO_PRO_REQUIRED.
  */
 export function saveStudioDraft(
   db: Database,
   userId: string,
-  input: { rev: number; draft: AnyStudio },
-): Promise<MyStudioV1> {
+  input: { rev: number; draft: StudioDocument },
+): Promise<MyStudio> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const next = input.draft;
     // The API's pipe checked it; checked again here, as nothing else may reach the column.
-    const valid = isV2(next)
-      ? studioDocumentSchema.safeParse(next).success
-      : studioDocumentV1Schema.safeParse(next).success;
-    if (!valid) throw new OperationError('STUDIO_DRAFT_INVALID');
+    if (!studioDocumentSchema.safeParse(next).success)
+      throw new OperationError('STUDIO_DRAFT_INVALID');
     await db.transaction(async (tx) => {
-      const page = isV2(next)
-        ? await lockPage(tx, profileId)
-        : await lockProPage(tx, profileId);
+      const page = await lockPage(tx, profileId);
       const used = [...studioImageIds(next)];
       if (used.length) {
         const owned = await tx
@@ -494,20 +462,18 @@ export function saveStudioDraft(
         .for('update');
       if ((row?.rev ?? 0) !== input.rev)
         throw new OperationError('STUDIO_DRAFT_STALE');
-      if (isV2(next)) {
-        const today = lagosToday();
-        const refusal = studioDraftRefusal(
-          next,
-          {
-            draft: row ? resolveStudio(row.draft, today) : null,
-            published: row?.published
-              ? resolveStudio(row.published, today)
-              : null,
-          },
-          page.plan === 'pro' ? 'pro' : 'free',
-        );
-        if (refusal) throw new OperationError(refusal);
-      }
+      const today = lagosToday();
+      const refusal = studioDraftRefusal(
+        next,
+        {
+          draft: row ? resolveStudio(row.draft, today) : null,
+          published: row?.published
+            ? resolveStudio(row.published, today)
+            : null,
+        },
+        page.plan === 'pro' ? 'pro' : 'free',
+      );
+      if (refusal) throw new OperationError(refusal);
       if (!row)
         await tx.insert(pageStudios).values({ profileId, draft: next, rev: 1 });
       else
@@ -525,16 +491,16 @@ export function saveStudioDraft(
 }
 
 export type PublishResult =
-  | { published: true; studio: MyStudioV1; handle: string }
-  | { published: false; studio: MyStudioV1; issues: StudioIssue[] };
+  | { published: true; studio: MyStudio; handle: string }
+  | { published: false; studio: MyStudio; issues: StudioIssue[] };
 
 /**
  * Publishes the draft, as v2, when the v3 design check passes with the server's facts and the
  * page's plan read under the page lock; otherwise nothing changes and the issues come back (there
  * is no "publish anyway", owner ruling 12). A Free page publishing anything Pro gets `pro-only`.
  * When the version uses anything Pro, the write also requires the plan to be Pro, as setThanks
- * does, so a plan change can never put a Pro design live. The draft is kept as it was (a v1 draft
- * stays v1 for the old editor). Photos used by neither version are deleted.
+ * does, so a plan change can never put a Pro design live. The draft is kept as it was. Photos used by
+ * neither version are deleted.
  */
 export function publishStudio(
   db: Database,
@@ -624,7 +590,7 @@ export function discardStudioDraft(
   db: Database,
   userId: string,
   store?: PhotoStore,
-): Promise<MyStudioV1> {
+): Promise<MyStudio> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const keys = await db.transaction(async (tx) => {
@@ -697,7 +663,7 @@ export function addStudioImage(
   userId: string,
   input: { width: number; height: number; files: StudioImageFiles },
   store?: PhotoStore,
-): Promise<{ studio: MyStudioV1; imageId: string }> {
+): Promise<{ studio: MyStudio; imageId: string }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const imageId = randomUUID();
@@ -790,7 +756,7 @@ export function setStudioFocus(
     files: StudioImageFiles;
   },
   store?: PhotoStore,
-): Promise<{ studio: MyStudioV1; handle: string; published: boolean }> {
+): Promise<{ studio: MyStudio; handle: string; published: boolean }> {
   return guarded(async () => {
     const profileId = await myPageId(db, userId);
     const rows = await putFiles(store, input.imageId, profileId, input.files);

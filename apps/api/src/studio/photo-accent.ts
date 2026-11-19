@@ -142,9 +142,8 @@ export async function photoAccentFor(
   }
 }
 
-/** The sampler `StudioPhotoAccent` uses; a test may provide its own (PHOTO_ACCENT_SAMPLER). */
+/** The sampler `StudioPhotoAccent` uses; a test replaces it on the instance. */
 export type PhotoAccentSampler = (webp: Buffer) => Promise<Hex[]>;
-export const PHOTO_ACCENT_SAMPLER = Symbol('PHOTO_ACCENT_SAMPLER');
 
 /**
  * Keeps the stored photo accent in step with the profile photo. Only while Page Studio is on (the
@@ -161,11 +160,10 @@ export class StudioPhotoAccent {
     @Optional()
     @Inject(LOGGER)
     private readonly logger: Pick<Logger, 'warn'> | null = null,
-    /** Replaceable in tests (integration replaces it on the instance to make sampling fail). */
-    @Optional()
-    @Inject(PHOTO_ACCENT_SAMPLER)
-    public sample: PhotoAccentSampler = sampleAvatarColours,
   ) {}
+
+  /** Replaceable in tests (integration replaces it on the instance to make sampling fail). */
+  sample: PhotoAccentSampler = sampleAvatarColours;
 
   /** After the photo changed or a save picked "From your photo": recompute, or clear. */
   async refresh(userId: string): Promise<void> {
