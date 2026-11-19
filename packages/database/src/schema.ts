@@ -1017,6 +1017,8 @@ export const handleReservations = pgTable(
     releasedAt: timestamp('released_at', { withTimezone: true }),
     releasedBy: uuid('released_by').references(() => users.id),
     releaseReason: text('release_reason'),
+    // The page the name was handed over to, when the release was a handover (18 Nov 2026).
+    handedOverTo: uuid('handed_over_to').references(() => profiles.id),
   },
   (table) => [
     uniqueIndex('handle_reservations_active')
@@ -1104,6 +1106,47 @@ export const handleTakeBacks = pgTable(
     check(
       'handle_take_backs_outcome',
       sql`${table.outcome} IS NULL OR ${table.outcome} IN ('user_chose', 'assigned', 'page_deleted', 'old_removed')`,
+    ),
+  ],
+);
+
+/**
+ * One-time claim links for a reserved username (handover, 18 Nov 2026). Only the code's sha256 is
+ * kept; staff see the link once. One open link per reservation: a new one cancels the old. A link
+ * is used once, by the account that claimed the name; cancelled_by is null when TipMe ended it (the
+ * reservation was released or the name given to an account).
+ */
+export const handleHandoverLinks = pgTable(
+  'handle_handover_links',
+  {
+    id: uuid('id').primaryKey(),
+    reservationId: uuid('reservation_id')
+      .notNull()
+      .references(() => handleReservations.id),
+    handleLower: text('handle_lower').notNull(),
+    tokenSha256: text('token_sha256').notNull().unique(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedBy: uuid('used_by').references(() => users.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    cancelReason: text('cancel_reason'),
+  },
+  (table) => [
+    uniqueIndex('handle_handover_links_open')
+      .on(table.reservationId)
+      .where(sql`used_at IS NULL AND cancelled_at IS NULL`),
+    check(
+      'handle_handover_links_outcome',
+      sql`(${table.usedAt} IS NULL OR ${table.cancelledAt} IS NULL) AND (${table.usedAt} IS NULL) = (${table.usedBy} IS NULL) AND (${table.cancelledAt} IS NULL) = (${table.cancelReason} IS NULL)`,
+    ),
+    check(
+      'handle_handover_links_expiry',
+      sql`${table.expiresAt} > ${table.createdAt}`,
     ),
   ],
 );
@@ -2169,6 +2212,11 @@ export const profileCovers = pgTable(
  * full-bleed. Shaped like `studio_image_files`: in Postgres or in R2, exactly one of the two, and
  * always where the cover itself is. `version` is the cover's: a row for another version is never
  * served. A cover uploaded before these existed has none, so the read model reports none.
+ *
+ * `shape` is `wide` for those copies, or `tall` for the 4:5 crop the phone hero of Stage and
+ * Horizon shows (`COVER_TALL_WIDTHS`, 480 and 720). The two width lists never overlap, and the
+ * check holds each shape to its own: an API from before `shape` reads and writes by width alone
+ * (its rows default to `wide`), so during a blue/green overlap it never mistakes a crop for a copy.
  */
 export const profileCoverRenditions = pgTable(
   'profile_cover_renditions',
@@ -2177,18 +2225,22 @@ export const profileCoverRenditions = pgTable(
       .notNull()
       .references(() => profileCovers.profileId, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
+    shape: text('shape').notNull().default('wide'),
     width: integer('width').notNull(),
     bytes: bytea('bytes'),
     objectKey: text('object_key'),
     createdAt: createdAt(),
   },
   (table) => [
-    primaryKey({ columns: [table.profileId, table.width] }),
+    primaryKey({ columns: [table.profileId, table.shape, table.width] }),
     check(
       'profile_cover_renditions_one_place',
       sql`(bytes IS NULL) <> (object_key IS NULL)`,
     ),
-    check('profile_cover_renditions_width', sql`width IN (640, 1080, 1600)`),
+    check(
+      'profile_cover_renditions_width',
+      sql`(shape = 'wide' AND width IN (640, 1080, 1600)) OR (shape = 'tall' AND width IN (480, 720))`,
+    ),
   ],
 );
 
@@ -3323,6 +3375,41 @@ export const proPrices = pgTable(
     check('pro_prices_amount_positive', sql`${table.amountMinor} > 0`),
     check('pro_prices_currency_ngn', sql`${table.currency} = 'NGN'`),
     check('pro_prices_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
+/**
+ * TipMe's share of each tip on each plan (owner, 18 Nov 2026), append-only, in basis points. The
+ * rates in force are the latest row whose `effective_from` has passed; with no row the coded
+ * defaults apply (DEFAULT_PLAN_FEE_RATES). A quote records the rate it used, so a change applies to
+ * new quotes only. The first row (Free 500, Pro 300) is seeded by its migration with no `set_by`.
+ */
+export const planFeeRates = pgTable(
+  'plan_fee_rates',
+  {
+    id: uuid('id').primaryKey(),
+    freeBps: integer('free_bps').notNull(),
+    proBps: integer('pro_bps').notNull(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('plan_fee_rates_effective_from').on(table.effectiveFrom),
+    check(
+      'plan_fee_rates_free_bps',
+      sql`${table.freeBps} BETWEEN 150 AND 1000`,
+    ),
+    check('plan_fee_rates_pro_bps', sql`${table.proBps} BETWEEN 150 AND 1000`),
+    check(
+      'plan_fee_rates_pro_not_above_free',
+      sql`${table.proBps} <= ${table.freeBps}`,
+    ),
+    check('plan_fee_rates_reason', sql`char_length(${table.reason}) > 0`),
   ],
 );
 

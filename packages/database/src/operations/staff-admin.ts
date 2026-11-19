@@ -60,6 +60,7 @@ import {
   type StaffAccess,
   withAuditChange,
 } from './staff.js';
+import { endLinksOfStaffWithoutAccess } from './username-handovers.js';
 import { closePendingRequestsOf } from './serious-actions.js';
 
 const MANAGE = 'staff.manage';
@@ -399,6 +400,12 @@ export function updateRole(
             : {}),
         }),
       });
+      // Claim links whose maker no longer manages usernames end, audited (security review).
+      await endLinksOfStaffWithoutAccess(tx, {
+        actorId: actor.id,
+        trigger: 'staff.role_updated',
+        now: new Date(),
+      });
       await alertStaffChange(tx, 'role_updated', actor.id, {
         targetId: input.roleId,
         roleName: name ?? role.name,
@@ -567,6 +574,12 @@ export function setPersonalAccess(
             .sort(),
         }),
       });
+      // Claim links whose maker no longer manages usernames end, audited (security review).
+      await endLinksOfStaffWithoutAccess(tx, {
+        actorId: actor.id,
+        trigger: 'staff.access_changed',
+        now: new Date(),
+      });
       await alertStaffChange(tx, 'access_changed', actor.id, {
         targetId: target.id,
         roleName: target.access.roleId,
@@ -638,6 +651,12 @@ export function changeRole(
       if (moved.length === 0) throw new OperationError('STAFF_CHANGED');
       const cleared =
         input.roleId === 'owner' ? await clearOverrides(tx, userId) : {};
+      // Claim links whose maker no longer manages usernames end, audited (security review).
+      await endLinksOfStaffWithoutAccess(tx, {
+        actorId: actor.id,
+        trigger: 'staff.role_changed',
+        now: new Date(),
+      });
       await recordAudit(tx, {
         staffUserId: actor.id,
         action: 'staff.role_changed',
@@ -1118,6 +1137,12 @@ export function removeStaff(
       if (removed.length === 0) throw new OperationError('STAFF_CHANGED');
       await dropOpsAccess(tx, userId, now);
       const cleared = await clearOverrides(tx, userId);
+      // Claim links whose maker no longer manages usernames end, audited (security review).
+      await endLinksOfStaffWithoutAccess(tx, {
+        actorId: actor.id,
+        trigger: 'staff.removed',
+        now,
+      });
       if (input.sealing)
         await mailOwner(tx, input.sealing, {
           userId,

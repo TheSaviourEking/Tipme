@@ -308,7 +308,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
               </>
             ) : (
               <>
-                No transfer fee comes off it this time: the business receives{' '}
+                No transfer fee comes off it: the business receives{' '}
                 <Money minor={summary.receiveMinor} />.
               </>
             )}

@@ -5,12 +5,11 @@ import {
   HomeClaim,
   HomeDemo,
   MINIMUM_TIP_TEXT,
-  FREE_SHARE_PERCENT,
-  PRO_SHARE_PERCENT,
   TippedSteps,
   TippingSteps,
 } from '@/components/marketing';
 import { PaymentModeSlot } from '@/components/payment-mode-slot';
+import { PlanFeePercent } from '@/components/plan-fee-percent';
 import {
   GetTippedWords,
   ReleaseFlagsSlot,
@@ -45,7 +44,7 @@ export default function Home() {
               (USD, EUR, GBP, NGN, Stablecoins), so people can tip you in a few
               taps. They don’t need an account.
             </p>
-            <HomeClaim label={<GetTippedWords />} />
+            <HomeClaim />
             <p className="home-note">
               {/* Whether tipping is open follows the payment mode, not a fixed promise. */}
               <PaymentModeSlot fallback="Free to start.">
@@ -89,9 +88,10 @@ export default function Home() {
           <div>
             <h2 id="band-title">Appreciation goes a long way.</h2>
             <p>
-              TipMe keeps {FREE_SHARE_PERCENT}% of each tip on Free, or{' '}
-              {PRO_SHARE_PERCENT}% on Pro, and that covers processing. You
-              receive the rest, and see every tip and note. The smallest tip is{' '}
+              TipMe keeps <PlanFeePercent plan="free" />% of each tip on Free,
+              or <PlanFeePercent plan="pro" />% on Pro, and that covers payment
+              and withdrawal fees. You receive the rest, and see every tip and
+              note. The smallest tip is{' '}
               <span className="money">{MINIMUM_TIP_TEXT}</span>.
             </p>
           </div>

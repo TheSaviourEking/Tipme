@@ -63,7 +63,7 @@ test('a recipient reads their week and shares it without supporters’ names', a
   await expect(page.getByRole('heading', { level: 1 })).toContainText(
     'Your week',
   );
-  await expect(page.getByText('₦1,860').first()).toBeVisible();
+  await expect(page.getByText('₦1,900').first()).toBeVisible();
   await expect(page.getByText('Most frequent supporter: Zed Q.')).toBeVisible();
   await expect(page.getByText('Only you can see this')).toBeVisible();
   await expectAccessible(page);
@@ -84,7 +84,7 @@ test('each tip reads like a message, with what you received and what was given',
   await tipAsVisitor(browser, handle, { name: 'Bola' });
   await page.goto('/dashboard/tips');
   const row = page.getByRole('link', { name: /Tip from Bola/ });
-  await expect(row).toContainText('₦1,860');
+  await expect(row).toContainText('₦1,900');
   await expect(row).toContainText('from ₦2,000');
   // Search, filters and the CSV export stay, out of the way.
   await expect(page.getByLabel('Search')).toBeVisible();
@@ -95,7 +95,7 @@ test('each tip reads like a message, with what you received and what was given',
   await expectAccessible(page);
 });
 
-test('the tip detail is a receipt: tipped, TipMe’s 7% on Free, received', async ({
+test('the tip detail is a receipt: tipped, TipMe’s 5% on Free, received', async ({
   page,
   browser,
 }, testInfo) => {
@@ -111,18 +111,18 @@ test('the tip detail is a receipt: tipped, TipMe’s 7% on Free, received', asyn
   await page.goto('/dashboard/tips');
   await page.getByRole('link', { name: /Tip from Bola/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    '₦1,860 from Bola',
+    '₦1,900 from Bola',
   );
   const receipt = page.locator('.receipt');
   await expect(receipt.getByText('Bola tipped')).toBeVisible();
   await expect(receipt).toContainText('₦2,000');
   await expect(
-    receipt.getByText('TipMe fee (7%, includes processing)'),
+    receipt.getByText('TipMe fee (5%, includes processing)'),
   ).toBeVisible();
-  await expect(receipt).toContainText('−₦140');
+  await expect(receipt).toContainText('−₦100');
   // The tip keeps the policy it was priced under (owner, 12 Nov 2026); the receipt says the share
   // in words above and never prints the policy's internal id (UI audit, 15 Nov 2026).
-  await expect(receipt).not.toContainText(/v2-free-7pct|fees from policy/i);
+  await expect(receipt).not.toContainText(/v3-free|bps|fees from policy/i);
   await expect(receipt.getByText('You received')).toBeVisible();
   await expect(receipt.getByText('In your balance')).toBeVisible();
   await expect(receipt.getByText(/…[0-9a-f-]{6}/)).toBeVisible();
@@ -145,8 +145,8 @@ test('the tip detail is a receipt: tipped, TipMe’s 7% on Free, received', asyn
   ).toBeVisible();
 });
 
-// The owner's pricing, 12 Nov 2026: a Pro page's tips are priced at 5%, and the receipt says so.
-test('on Pro the receipt shows TipMe’s 5%, recorded on the tip', async ({
+// The owner's rates, 18 Nov 2026: a Pro page's tips are priced at 3%, and the receipt says so.
+test('on Pro the receipt shows TipMe’s 3%, recorded on the tip', async ({
   page,
   browser,
 }, testInfo) => {
@@ -157,14 +157,14 @@ test('on Pro the receipt shows TipMe’s 5%, recorded on the tip', async ({
   await page.goto('/dashboard/tips');
   await page.getByRole('link', { name: /Tip from Bola/ }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(
-    '₦1,900 from Bola',
+    '₦1,940 from Bola',
   );
   const receipt = page.locator('.receipt');
   await expect(
-    receipt.getByText('TipMe fee (5%, includes processing)'),
+    receipt.getByText('TipMe fee (3%, includes processing)'),
   ).toBeVisible();
-  await expect(receipt).toContainText('−₦100');
-  await expect(receipt).not.toContainText(/v2-pro-5pct|policy/i);
+  await expect(receipt).toContainText('−₦60');
+  await expect(receipt).not.toContainText(/v3-pro|bps|policy/i);
 });
 
 test('the week’s notes are a stack you press through', async ({

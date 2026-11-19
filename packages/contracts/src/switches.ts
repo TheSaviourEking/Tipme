@@ -29,6 +29,9 @@ export const FEATURE_SWITCHES = [
   'campaign_pages',
   // Staff "Refund tip", PR #221 (feat/tip-refund): moves money, so a money switch.
   'tip_refunds',
+  // Owner, 18 Nov 2026 ("the admin should be able to set business fees too"): whether TipMe pays a
+  // business's payout fee. Off keeps today's rule (the business pays it from the amount).
+  'business_payout_fee_absorbed',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -194,6 +197,14 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: onOff('TIP_REFUNDS'),
+  },
+  business_payout_fee_absorbed: {
+    label: 'TipMe pays business payout fees',
+    description:
+      'TipMe pays our payment partner’s transfer fee on a business’s withdrawals from the payment reserve, so the business receives the whole amount. Off, the business pays it from the amount, as today. A withdrawal keeps the rule it was asked under.',
+    money: true,
+    default: false,
+    env: onOff('BUSINESS_PAYOUT_FEE_ABSORBED'),
   },
 };
 

@@ -5,6 +5,7 @@ import {
   balanceOf,
   businessBalanceOf,
   businessWithdrawalQuote,
+  setFeatureSwitch,
   createPaymentIntent,
   createQuote,
   DEMO_PROFILES,
@@ -883,6 +884,62 @@ test('a business balance and its withdrawals', async (t) => {
         changed.map((m) => [m.to, m.data.businessName, m.data.last4]),
         [['owner@example.com', 'The Yellow Chilli', '2222']],
       );
+    },
+  );
+  await t.test(
+    'business withdrawals keep today’s rule unless staff switch on TipMe paying their fee (owner, 18 Nov 2026)',
+    async () => {
+      const switchTo = (on) =>
+        db.transaction((tx) =>
+          setFeatureSwitch(tx, {
+            key: 'business_payout_fee_absorbed',
+            on,
+            staffUserId: OWNER,
+            approvedBy: null,
+            reason: 'Switched for the business payout fee test',
+            now: new Date(),
+          }),
+        );
+      const sentAndFee = (payoutId) =>
+        q(
+          `SELECT amount_minor::text AS sent, user_fee_minor::text AS fee, fee_payer
+             FROM payouts WHERE id = $1`,
+          [payoutId],
+        );
+      await database.fresh();
+      const shared = await atBusiness();
+      await paidTip(shared);
+      // Off by default: the business pays the ₦50 from the amount, as since 12 Nov 2026.
+      const before = await businessWithdrawalQuote(db, {
+        businessId: shared.businessId,
+        userId: OWNER,
+        provider: provider(),
+      });
+      assert.equal(before.feePaidBy, 'user');
+      const paysItself = await withdraw(shared.businessId, 500000n);
+      assert.deepEqual(await sentAndFee(paysItself.payoutId), [
+        { sent: '495000', fee: '5000', fee_payer: 'user' },
+      ]);
+      // On: TipMe pays it, the whole amount is sent; the payout asked for before keeps its terms.
+      await switchTo(true);
+      const after = await businessWithdrawalQuote(db, {
+        businessId: shared.businessId,
+        userId: OWNER,
+        provider: provider(),
+      });
+      assert.equal(after.feePaidBy, 'tipme');
+      const absorbed = await withdraw(shared.businessId, 500000n);
+      assert.deepEqual(await sentAndFee(absorbed.payoutId), [
+        { sent: '500000', fee: '0', fee_payer: 'tipme' },
+      ]);
+      assert.deepEqual(await sentAndFee(paysItself.payoutId), [
+        { sent: '495000', fee: '5000', fee_payer: 'user' },
+      ]);
+      // Off again: back to the business paying.
+      await switchTo(false);
+      const again = await withdraw(shared.businessId, 500000n);
+      assert.equal((await sentAndFee(again.payoutId))[0].fee_payer, 'user');
+      await assertBalanced();
     },
   );
 });

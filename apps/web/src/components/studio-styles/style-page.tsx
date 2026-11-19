@@ -24,6 +24,7 @@ import {
   isClassicDefault,
   type PublicProfile,
   type PublicStudio,
+  type StudioStyleId,
 } from '@tipme/contracts';
 import { StandardProfile } from '@/components/profile/standard-profile';
 import { ClassicStudio } from './classic';
@@ -36,6 +37,8 @@ import {
   StyleIdentity,
   StyleLinks,
   StyleTop,
+  coverKind,
+  type CoverKind,
   type CoverSize,
 } from './parts';
 import { styleFontFaces, styleFontPreload } from './style-fonts';
@@ -48,6 +51,30 @@ import {
 } from './style-tokens';
 
 export type { TipSkin } from '@/components/appreciation-form';
+
+/**
+ * The site header over the cover (owner, 18 Nov 2026): where a page starts with a full-bleed
+ * cover, the frame lays the header over it, transparent, its words white on a soft scrim, until
+ * the hero has scrolled past (frame.css). Signboard's plain band is the cover: the header takes the
+ * band's own label colour there. Every other page starts on bg, where today's header already runs
+ * into the page. Stage draws its deep gradient for any cover but a photo (dark at the top); Horizon's
+ * other covers are the name on card, and Clear's gradient a pale tint beside bg.
+ */
+const HEADER_OVER: Partial<Record<StudioStyleId, readonly CoverKind[]>> = {
+  stage: ['photo', 'art', 'gradient'],
+  horizon: ['photo'],
+  sprint: ['photo', 'art'],
+  signboard: ['photo', 'art'],
+  clear: ['photo', 'art'],
+};
+
+export function studioHeader(
+  style: StudioStyleId,
+  kind: CoverKind,
+): 'over' | 'band' | undefined {
+  if (HEADER_OVER[style]?.includes(kind)) return 'over';
+  return style === 'signboard' ? 'band' : undefined;
+}
 
 /**
  * A page in one of the eight new styles (§8 skeleton, §13): cover, identity, the Tip moment,
@@ -119,11 +146,13 @@ export function StudioStylePage({
     <StyleIdentity styleId={style} profile={profile} firstName={firstName} />
   );
   const links = <StyleLinks links={profile.links ?? []} />;
+  const header = studioHeader(style, coverKind(doc, profile.cover));
   return (
     <div
       className="studio"
       data-style={style}
       data-mode={doc.mode}
+      {...(header ? { 'data-header': header } : {})}
       style={styleTokens(own)}
     >
       <style>{css}</style>

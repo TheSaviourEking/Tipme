@@ -813,6 +813,27 @@
       "when": 1795015481658,
       "tag": "0115_studio_photo_accent",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1795058393539,
+      "tag": "0116_cover_tall_crops",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1795076443958,
+      "tag": "0117_username_handover_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1795078926326,
+      "tag": "0118_plan_fee_rates",
+      "breakpoints": true
     }
   ]
 }

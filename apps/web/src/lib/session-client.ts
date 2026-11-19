@@ -32,6 +32,8 @@ interface ApiFetchInit {
   headers?: Record<string, string>;
   /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
   timeoutMs?: number;
+  /** Cancels the call (a newer keystroke replaces a check); it then ends as a network failure. */
+  signal?: AbortSignal;
 }
 
 const READ_RETRY_MS = 400;
@@ -71,15 +73,22 @@ async function sendOnce<T>(
   path: string,
   init: ApiFetchInit,
 ): Promise<SessionResult<T>> {
-  const abort = init.timeoutMs ? new AbortController() : undefined;
-  const timer = abort
-    ? setTimeout(() => abort.abort(), init.timeoutMs)
-    : undefined;
+  const abort =
+    init.timeoutMs || init.signal ? new AbortController() : undefined;
+  const timer =
+    abort && init.timeoutMs
+      ? setTimeout(() => abort.abort(), init.timeoutMs)
+      : undefined;
+  // The caller's own cancel ends the call the same way as the time limit.
+  const forward = () => abort?.abort();
+  if (init.signal?.aborted) forward();
+  init.signal?.addEventListener('abort', forward, { once: true });
   try {
     return await sendWith<T>(path, init, abort);
   } finally {
     // An answered call no longer needs its time limit (and must not keep a timer alive).
     clearTimeout(timer);
+    init.signal?.removeEventListener('abort', forward);
   }
 }
 

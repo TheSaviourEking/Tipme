@@ -67,6 +67,13 @@ const LINKS: {
     needs: ['pro.price'],
   },
   {
+    // TipMe's fee per plan (owner, 18 Nov 2026): Free and Pro, for new tips only.
+    href: '/ops/plan-fees',
+    label: 'Fees',
+    group: 'Work',
+    needs: ['fees.manage'],
+  },
+  {
     href: '/ops/businesses',
     label: 'Businesses',
     group: 'Work',

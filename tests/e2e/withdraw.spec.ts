@@ -66,10 +66,10 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
 
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.reload();
-  await expect(meter(page)).toContainText('Ready to withdraw ₦1,860');
-  // Owner, 12 Nov 2026: the user pays the transfer fee, from the amount.
+  await expect(meter(page)).toContainText('Ready to withdraw ₦1,900');
+  // Owner, 18 Nov 2026: a person's withdrawals are free; TipMe pays the transfer fee.
   await expect(meter(page)).toContainText(
-    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+    'Withdrawals are free: you receive the whole amount.',
   );
   const chip = meter(page).locator('.withdraw__chip');
   await expect(chip).toContainText(/to .+ ••\d{4}/);
@@ -207,8 +207,8 @@ test('an idempotency conflict never says to simply try again', async ({
       : route.continue(),
   );
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1860');
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1900');
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   const slip = page.locator('.tm-slip--unsure');
   await expect(slip).toHaveAttribute('role', 'alert');
   await expect(slip.locator('.tm-slip__title')).toHaveText(
@@ -236,12 +236,12 @@ for (const [code, message] of [
     const { handle } = await signUpRecipient(page, testInfo);
     await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
     await page.goto('/dashboard/withdraw');
-    await expect(meter(page)).toContainText('Ready to withdraw ₦1,860');
+    await expect(meter(page)).toContainText('Ready to withdraw ₦1,900');
     // What a fresh quote says by the time the request is refused.
     await fakeQuote(page, {
       state: 'ready',
       withdrawableMinor: '100000',
-      ledgerMinor: '186000',
+      ledgerMinor: '190000',
       providerMinor: '100000',
       feeMinor: '5000',
       feePaidBy: 'user',
@@ -260,8 +260,8 @@ for (const [code, message] of [
         request.url().endsWith('/v1/me/withdrawal-quote') &&
         request.method() === 'GET',
     );
-    await page.getByLabel('Amount (NGN)').fill('1860');
-    await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+    await page.getByLabel('Amount (NGN)').fill('1900');
+    await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
     await reloaded;
     // Still the field's own line, beside the amount.
     await expect(page.locator('.tm-field-error')).toHaveText(message);
@@ -269,7 +269,7 @@ for (const [code, message] of [
     await expect(meter(page).locator('.withdraw__chip')).toContainText(
       'GTBank ••1234',
     );
-    await expect(page.getByText('Ready to withdraw ₦1,860')).toHaveCount(0);
+    await expect(page.getByText('Ready to withdraw ₦1,900')).toHaveCount(0);
   });
 }
 
@@ -283,16 +283,16 @@ test('the withdraw screen writes every amount one way, and the minimum comes fro
   await expect(
     meter(page).getByRole('heading', { name: 'Available' }),
   ).toBeVisible();
-  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,860');
+  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,900');
   // The minimum in the hint is the policy's, written in the same format.
   await expect(
     page.getByText(/The smallest withdrawal is ₦2,000, or your whole balance/),
   ).toBeVisible();
-  await page.getByLabel('Amount (NGN)').fill('1860');
+  await page.getByLabel('Amount (NGN)').fill('1900');
   await expect(
-    page.getByRole('button', { name: 'Withdraw ₦1,860' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,900' }),
   ).toBeEnabled();
-  // No amount on this screen is written as "NGN 1,860.00".
+  // No amount on this screen is written as "NGN 1,900.00".
   await expect(page.locator('main')).not.toContainText(/NGN \d/);
 });
 
@@ -305,15 +305,15 @@ test('Everything fills the whole balance, and under ₦2,000 it is the only way'
   await page.goto('/dashboard/withdraw');
   const everything = page.getByRole('button', { name: 'Everything' });
   await expect(everything).toBeVisible();
-  // ₦1,860 is under the ₦2,000 minimum: no other amount key is offered.
+  // ₦1,900 is under the ₦2,000 minimum: no other amount key is offered.
   await expect(
     page.getByRole('group', { name: 'Quick amounts' }).getByRole('button'),
   ).toHaveCount(1);
   await everything.click();
   await expect(everything).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByLabel('Amount (NGN)')).toHaveValue('₦1,860');
+  await expect(page.getByLabel('Amount (NGN)')).toHaveValue('₦1,900');
   await expect(
-    page.getByRole('button', { name: 'Withdraw ₦1,860' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,900' }),
   ).toBeEnabled();
   // Typing something else lets go of Everything.
   await page.getByLabel('Amount (NGN)').fill('1000');
@@ -338,9 +338,9 @@ test('the summary says where it goes, what arrives and what is left', async ({
   );
   await expect(summary.getByText('Going to')).toHaveCount(0);
   await expect(summary.getByText('You’ll receive')).toBeVisible();
-  // The ₦50 transfer fee comes off the amount (owner, 12 Nov 2026): Everything sends the rest.
-  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
-  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,810');
+  // Withdrawals are free for a person (owner, 18 Nov 2026): Everything sends all of it.
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,900');
   await expect(summary.getByText('Balance afterwards')).toBeVisible();
   await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
   await expectAccessible(page);
@@ -446,8 +446,8 @@ test('an older withdrawal stays listed after many tips', async ({
   await saveBank(handle, 'GTBank', '6789');
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1860');
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1900');
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   // More tips than the mixed activity feed holds.
   for (let batch = 0; batch < 3; batch += 1)
@@ -456,7 +456,7 @@ test('an older withdrawal stays listed after many tips', async ({
     );
   await page.goto('/dashboard/withdraw');
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(/Requested|On its way|Paid/);
   await expect(row).toContainText('to GTBank ••6789');
@@ -470,13 +470,13 @@ test('a past withdrawal keeps its bank after the bank changes', async ({
   await saveBank(handle, 'GTBank', '6789');
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1860');
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1900');
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await saveBank(handle, 'Kuda', '9876');
   await page.reload();
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
   await expect(row).toContainText('to GTBank ••6789');
   await expect(row).not.toContainText('9876');
   await expect(row).not.toContainText('Kuda');
@@ -700,7 +700,7 @@ test('figures are shown only for an amount that can be sent', async ({
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.goto('/dashboard/withdraw');
-  // ₦1,860 is all there is: ₦1,500 is under the minimum and is not the whole balance.
+  // ₦1,900 is all there is: ₦1,500 is under the minimum and is not the whole balance.
   await page.getByLabel('Amount (NGN)').fill('1500');
   await expect(page.getByTestId('you-receive')).toHaveText('—');
   await expect(page.getByTestId('balance-afterwards')).toHaveText('—');
@@ -714,9 +714,9 @@ test('figures are shown only for an amount that can be sent', async ({
   await page.getByLabel('Amount (NGN)').fill('5000');
   await expect(page.getByTestId('you-receive')).toHaveText('—');
   await page.getByRole('button', { name: 'Everything' }).click();
-  await expect(page.getByTestId('you-receive')).toHaveText('₦1,810');
+  await expect(page.getByTestId('you-receive')).toHaveText('₦1,900');
   await expect(
-    page.getByRole('button', { name: 'Withdraw ₦1,860' }),
+    page.getByRole('button', { name: 'Withdraw ₦1,900' }),
   ).toBeEnabled();
 });
 
@@ -786,7 +786,7 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await expect(async () => {
     await page.goto('/dashboard/withdraw');
-    await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,860', {
+    await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,900', {
       timeout: 1000,
     });
   }).toPass({ timeout: 15_000 });
@@ -804,12 +804,12 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
       quotes.push(new URL(request.url()).search);
   });
 
-  await page.getByLabel('Amount (NGN)').fill('1860');
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1900');
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
 
   const history = watching.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,810' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
   // Requested, then paid: the pretend partner pays within seconds. This tab knows of no withdrawal
   // on its way (its list was empty), so by design it re-reads a `withdrawals.changed` only after a
   // random 0-10 s spread (live-refetch.ts), plus the debounce and the read itself.
@@ -894,8 +894,8 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.goto('/dashboard/withdraw');
-  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,860');
-  await page.getByLabel('Amount (NGN)').fill('1860');
+  await expect(page.getByTestId('withdraw-available')).toHaveText('₦1,900');
+  await page.getByLabel('Amount (NGN)').fill('1900');
   // The figure changes only from the dashboard's own answer, re-read after the request. A read a
   // late tip signal started can land beside the request with the old balance (burn-in, 14 Nov
   // 2026), so this waits for the answer that says ₦0, not for the first answer.
@@ -913,13 +913,13 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
       )
       .catch(() => undefined);
   });
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   const done = page.locator('.tm-slip--done');
   await expect(done).toHaveAttribute('role', 'status');
   await expect(done.locator('.tm-slip__title')).toHaveText(
     'Withdrawal requested',
   );
-  await expect(done).toContainText('₦1,810 is on its way to your test bank.');
+  await expect(done).toContainText('₦1,900 is on its way to your test bank.');
   await expect(
     done.getByRole('link', { name: 'Back to your dashboard' }),
   ).toHaveAttribute('href', '/dashboard');
@@ -1010,8 +1010,37 @@ test('a visit reads the quote once, and a refusal over the amount reads it once 
   expect(reads).toBe(2);
 });
 
-// Owner, 12 Nov 2026: users pay the ₦50 transfer fee, taken from the amount.
-test('withdraw ₦10,000: the screen shows the ₦50 fee and that ₦9,950 arrives', async ({
+// Owner, 18 Nov 2026: a person's withdrawals are free. The API reports no fee and TipMe pays it.
+test('withdraw ₦10,000: the fee reads Free and ₦10,000 arrives', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '1000000');
+  await fakeQuote(
+    page,
+    readyQuote({
+      withdrawableMinor: '1000000',
+      ledgerMinor: '1000000',
+      providerMinor: '1000000',
+      feeMinor: '0',
+      feePaidBy: 'tipme',
+    }),
+  );
+  await page.goto('/dashboard/withdraw');
+  await expect(
+    page.getByText('Withdrawals are free: you receive the whole amount.'),
+  ).toBeVisible();
+  await page.getByLabel('Amount (NGN)').fill('10000');
+  const summary = page.getByRole('region', { name: 'Summary' });
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦10,000');
+  await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
+  await expect(page.getByText(/₦50|transfer fee:/i)).toHaveCount(0);
+  await expectAccessible(page);
+});
+
+// Owner, 12 Nov 2026: under the user-pays rule (a business's today) the ₦50 comes off the amount.
+test('under the user-pays rule, withdraw ₦10,000: the screen shows the ₦50 fee and that ₦9,950 arrives', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);

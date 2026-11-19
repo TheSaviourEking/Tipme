@@ -328,7 +328,10 @@ export class DashboardController {
               withdrawableMinor: quote.withdrawableMinor.toString(),
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
-              feeMinor: quote.feeMinor.toString(),
+              // What the person pays: nothing when TipMe pays the partner's fee, as it does for
+              // every new withdrawal from a person's page (owner, 18 Nov 2026).
+              feeMinor:
+                quote.feePaidBy === 'tipme' ? '0' : quote.feeMinor.toString(),
               feePaidBy: quote.feePaidBy,
             }
           : { ...quote, inReview },

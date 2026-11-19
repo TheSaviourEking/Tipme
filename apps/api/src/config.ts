@@ -87,6 +87,13 @@ export const apiConfigSchema = z
     // Anonymous analytics events per client per minute (PR-009).
     RATE_LIMIT_ANALYTICS_PER_MIN: z.coerce.number().int().min(1).default(120),
     RATE_LIMIT_REPORTS_PER_HOUR: z.coerce.number().int().min(1).default(10),
+    // Username claim links (handover, 18 Nov 2026): previews and claims together, per address. A
+    // person opens their link a few times; a script guessing codes stops here.
+    RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .default(20),
     RATE_LIMIT_UNSUBSCRIBE_PER_MIN: z.coerce.number().int().min(1).default(600),
     RATE_LIMIT_AVATARS_PER_HOUR: z.coerce.number().int().min(1).default(20),
     // Page Studio saves, publishes and discards per address per minute (generous for a person).

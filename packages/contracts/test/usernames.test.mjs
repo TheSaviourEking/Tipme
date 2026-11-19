@@ -38,3 +38,59 @@ test('the two take-back issue kinds exist', () => {
   assert.ok(ISSUE_KINDS.includes('username_take_back_unnoticed'));
   assert.ok(ISSUE_KINDS.includes('username_take_back_overdue'));
 });
+
+test('handover: a claim link lasts 14 days, and its code travels only in a body', async () => {
+  const {
+    HANDOVER_LINK_DAYS,
+    CLAIM_LINK_PREFIX,
+    claimLinkCodeSchema,
+    opsHandoverAssignSchema,
+    opsHandoverAccountsQuerySchema,
+  } = await import('../dist/index.js');
+  assert.equal(HANDOVER_LINK_DAYS, 14);
+  assert.equal(CLAIM_LINK_PREFIX, '#claim=');
+  const code = 'ABCDEFGHIJKLMNOPQRSTUVWX';
+  assert.deepEqual(claimLinkCodeSchema.parse({ code }), { code });
+  // Lower case is read as the same code; anything else is refused before the database.
+  assert.deepEqual(claimLinkCodeSchema.parse({ code: code.toLowerCase() }), {
+    code,
+  });
+  for (const bad of [
+    '',
+    'ABC',
+    `${code}A`,
+    'ABCDEFGHIJKLMNOPQRSTUVW1',
+    code.replace('A', '-'),
+  ])
+    assert.equal(
+      claimLinkCodeSchema.safeParse({ code: bad }).success,
+      false,
+      bad,
+    );
+  assert.equal(
+    claimLinkCodeSchema.safeParse({ code, extra: 1 }).success,
+    false,
+  );
+  const userId = '00000000-0000-4000-8000-000000000001';
+  assert.equal(
+    opsHandoverAssignSchema.safeParse({ userId, reason: 'The brand asked us' })
+      .success,
+    true,
+  );
+  assert.equal(
+    opsHandoverAssignSchema.safeParse({
+      userId: 'x',
+      reason: 'The brand asked us',
+    }).success,
+    false,
+  );
+  assert.equal(
+    opsHandoverAccountsQuerySchema.safeParse({ query: 'a' }).success,
+    false,
+  );
+  assert.equal(
+    opsHandoverAccountsQuerySchema.safeParse({ query: 'kemi@example.com' })
+      .success,
+    true,
+  );
+});

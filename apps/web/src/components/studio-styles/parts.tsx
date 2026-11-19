@@ -49,31 +49,48 @@ const LAB_UPLOAD = /^\/dev\/studio-lab\/cover\/\d+\.webp$/;
 /** A cover photo's own pixel size, where it is known (the lab's generated covers). */
 export type CoverSize = { width: number; height: number };
 
+/** The site header's height (globals.css `--nav-height`): a full-bleed cover runs up under it. */
+const NAV_HEIGHT = 76;
+
 /**
  * The styles that set the identity over a full-bleed cover photo (§9.4, §9.9), and how tall that
- * photo is on a phone and from 1024 px (stage.css, horizon.css `--tall`; a unit test holds the two
- * equal). They need a photo (`needsPhoto`): any other cover draws their gradient treatment.
+ * photo is drawn on a phone and from 1024 px: stage.css, horizon.css `--tall` plus the header strip
+ * it runs up under (frame.css; a unit test holds them equal). They need a photo (`needsPhoto`): any
+ * other cover draws their gradient treatment.
  */
 export const STYLE_COVER: Partial<
   Record<StudioStyleId, { tall: number; desktopTall: number }>
 > = {
-  stage: { tall: 488, desktopTall: 640 },
-  horizon: { tall: 640, desktopTall: 836 },
+  stage: { tall: 488 + NAV_HEIGHT, desktopTall: 640 + NAV_HEIGHT },
+  horizon: { tall: 640 + NAV_HEIGHT, desktopTall: 836 + NAV_HEIGHT },
 };
 
 /**
- * `sizes` for a cover photo: full-bleed, and in a tall crop the 16:9 rendition is drawn wider than
- * the screen (object-fit: cover fills the height), so the slot is the wider of the two.
+ * `sizes` for a cover photo: full-bleed, and where the box is taller than the photo's shape
+ * (object-fit: cover fills the height) it is drawn wider than the screen, so the slot is the wider
+ * of the two. Stage and Horizon crop tall; Clear, Sprint (phone) and Signboard are as tall as their
+ * CSS height plus the header strip (clear.css, sprint.css, signboard.css; a unit test reads them).
  */
 function coverSizes(
   style: StudioStyleId,
   aspect: number = STUDIO_IMAGE_ASPECT.wide,
 ): string {
+  const w = (h: number) => Math.ceil(h * aspect);
   const tall = STYLE_COVER[style];
-  if (!tall) return '100vw';
-  const phone = Math.ceil(tall.tall * aspect);
-  const desk = Math.ceil(tall.desktopTall * aspect);
-  return `(min-width: ${desk}px) 100vw, (min-width: 1024px) ${desk}px, (min-width: ${phone}px) 100vw, ${phone}px`;
+  if (tall) {
+    const phone = w(tall.tall);
+    const desk = w(tall.desktopTall);
+    return `(min-width: ${desk}px) 100vw, (min-width: 1024px) ${desk}px, (min-width: ${phone}px) 100vw, ${phone}px`;
+  }
+  if (style === 'clear')
+    return `(min-width: 1024px) max(100vw, ${w(380 + NAV_HEIGHT)}px), max(100vw, ${w(220 + NAV_HEIGHT)}px)`;
+  // A desktop's photo is the left half, beside the name (as before).
+  if (style === 'sprint')
+    return `(min-width: 1024px) 100vw, max(100vw, ${w(440 + NAV_HEIGHT)}px)`;
+  // 16:9 of the screen up to 560 tall, then the strip.
+  if (style === 'signboard')
+    return `max(100vw, calc(min(${Number((56.25 * aspect).toFixed(2))}vw, ${w(560)}px) + ${w(NAV_HEIGHT)}px))`;
+  return '100vw';
 }
 
 function coverPhoto(
@@ -168,6 +185,17 @@ export function StyleCover({
       <div className="studio-cover__fade" />
     </div>
   );
+}
+
+/** What the cover slot draws: the person's photo, today's cover art, or the style's own. */
+export type CoverKind = 'photo' | 'art' | 'gradient' | 'plain';
+
+export function coverKind(
+  doc: StudioDocument,
+  cover: PublicProfile['cover'],
+): CoverKind {
+  if (doc.cover !== 'yours') return doc.cover;
+  return coverPhoto(cover, doc.style) ? 'photo' : 'art';
 }
 
 /** The treatment a needsPhoto style draws: its photo, or its gradient for any other cover (§13). */
