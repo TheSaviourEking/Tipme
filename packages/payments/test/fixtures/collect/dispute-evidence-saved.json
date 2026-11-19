@@ -1,0 +1,7 @@
+{
+  "_source": "Built from the docs, not recorded: the 200 example of PATCH /v1/disputes/{dispute_id}/evidence (DisputeEvidenceUpdateResponse) in https://docs.bachs.io/api-reference/disputes/update-dispute-evidence.md.",
+  "dispute_id": "dsp_1a2b3c4d5e",
+  "status": "needs_response",
+  "is_response_editable": true,
+  "evidence_updated_at": "2026-11-20T11:30:00.000Z"
+}

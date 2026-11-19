@@ -1,6 +1,8 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import type {
+  DisputeEvent,
+  DisputeStatus,
   NormalizedProviderEvent,
   WebhookVerification,
 } from '../provider.js';
@@ -27,6 +29,8 @@ const SUPPORTED_EVENT_TYPES = new Set([
 const eventEnvelopeSchema = z.object({
   id: z.string().min(1).max(200),
   type: z.string().min(1).max(200),
+  // When the event occurred (the partner's event pages); only dispute events read it.
+  created_at: z.string().max(64).optional(),
   organization_id: z.string().nullable().optional(),
   account: z.string().nullable().optional(),
   data: z.record(z.string(), z.unknown()),
@@ -192,6 +196,12 @@ function normalizeEvent(
   event: z.infer<typeof eventEnvelopeSchema>,
   platformOrganizationId: string | undefined,
 ): NormalizedProviderEvent | undefined {
+  // You collect (R1): a dispute on TipMe's own account is modelled; every other stays a reversal.
+  if (
+    DISPUTE_EVENT_TYPES.has(event.type) &&
+    scopeOf(event, platformOrganizationId).platform
+  )
+    return normalizeDispute(event);
   if (REVERSAL_EVENT.test(event.type))
     return normalizeReversal(event, platformOrganizationId);
   if (!SUPPORTED_EVENT_TYPES.has(event.type))
@@ -450,6 +460,127 @@ function normalizeReversal(
     refundFeeMinor: paid
       ? (amountOf(event.data['refund_fee_amount'], currency) ?? null)
       : null,
+  };
+}
+
+/*
+ * You collect (plan Task 5, R1). The partner's dispute events, https://docs.bachs.io/connect/disputes
+ * and /guides/webhooks/events/dispute-created and dispute-updated: `data.dispute_id`, `charge_id`,
+ * `amount` (decimal string) and `currency`, `status`, `reason`, `response_deadline_at`. No fee field
+ * is documented. `checkout_id` and `reference` are not documented either; they are read only so the
+ * Pro reversal built from this event (disputeAsReversal) is exactly what it was before.
+ */
+const DISPUTE_EVENT_TYPES: ReadonlySet<string> = new Set([
+  'dispute.created',
+  'dispute.updated',
+]);
+/** The docs' statuses (`prevented` appears on events only: stopped early, no money moved). */
+const DISPUTE_STATUSES: Readonly<Record<string, DisputeStatus>> = {
+  needs_response: 'open',
+  under_review: 'responded',
+  won: 'won',
+  lost: 'lost',
+  closed: 'closed',
+  prevented: 'closed',
+};
+/** The partner's reason is a network code; anything else could be free text and is dropped. */
+const DISPUTE_REASON = /^[a-z_]{1,40}$/;
+
+/** A partner status in TipMe's words; undefined when it is not one the docs list. */
+export function disputeStatusOf(value: unknown): DisputeStatus | undefined {
+  return typeof value === 'string' && Object.hasOwn(DISPUTE_STATUSES, value)
+    ? DISPUTE_STATUSES[value]
+    : undefined;
+}
+
+/** A partner timestamp, or undefined when it is not a readable ISO 8601 time. */
+function isoTime(value: unknown): Date | undefined {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value))
+    return undefined;
+  const at = new Date(value);
+  return Number.isNaN(at.getTime()) ? undefined : at;
+}
+
+/** A disputed amount: a positive decimal string at its ISO currency's precision. */
+export function disputeAmount(
+  amount: unknown,
+  currency: unknown,
+): { amountMinor: bigint; currency: string } | undefined {
+  if (typeof currency !== 'string' || !/^[A-Z]{3}$/.test(currency))
+    return undefined;
+  const amountMinor = safeMinor(amount, currency);
+  return amountMinor !== undefined && amountMinor > 0n
+    ? { amountMinor, currency }
+    : undefined;
+}
+
+/**
+ * TipMe's own dispute. Anything TipMe would act on wrongly (no dispute id, an unreadable amount,
+ * status or deadline, no event time) is refused, so the partner delivers it again.
+ */
+function normalizeDispute(
+  event: z.infer<typeof eventEnvelopeSchema>,
+): DisputeEvent | undefined {
+  const { data } = event;
+  const partnerDisputeId = partnerId(data['dispute_id']);
+  const status = disputeStatusOf(data['status']);
+  const money = disputeAmount(data['amount'], data['currency']);
+  const deadline = data['response_deadline_at'];
+  const respondBy =
+    deadline === null || deadline === undefined ? null : isoTime(deadline);
+  const occurredAt = isoTime(event.created_at) ?? isoTime(data['updated_at']);
+  if (
+    !partnerDisputeId ||
+    !status ||
+    !money ||
+    respondBy === undefined ||
+    !occurredAt
+  )
+    return undefined;
+  const reason = data['reason'];
+  const checkoutId = nullableString(data['checkout_id']);
+  return {
+    kind: 'dispute',
+    eventId: event.id,
+    eventType: event.type as DisputeEvent['eventType'],
+    scope: 'platform',
+    partnerDisputeId,
+    chargeReference: partnerId(data['charge_id']),
+    providerReference: checkoutId ? `platform:${checkoutId}` : null,
+    operationReference: nullableString(data['reference']),
+    status,
+    amountMinor: money.amountMinor,
+    currency: money.currency,
+    reason:
+      typeof reason === 'string' && DISPUTE_REASON.test(reason) ? reason : null,
+    respondBy,
+    feeMinor: null,
+    feeCurrency: null,
+    occurredAt,
+  };
+}
+
+/**
+ * P5: until Task 9 routes disputes, TipMe's own dispute goes to Pro billing as the reversal the
+ * adapter made of it before Task 5, field for field (ids only: no amount, reason or deadline).
+ */
+export function disputeAsReversal(
+  event: DisputeEvent,
+): Extract<NormalizedProviderEvent, { kind: 'reversal' }> {
+  return {
+    kind: 'reversal',
+    eventId: event.eventId,
+    eventType: event.eventType,
+    scope: 'platform',
+    accountReference: null,
+    providerReference: event.providerReference,
+    chargeReference: event.chargeReference,
+    operationReference: event.operationReference,
+    partnerReversalId: `dispute.${event.partnerDisputeId}`,
+    disputeWon: event.status === 'won',
+    refundState: null,
+    refundedMinor: null,
+    refundFeeMinor: null,
   };
 }
 
