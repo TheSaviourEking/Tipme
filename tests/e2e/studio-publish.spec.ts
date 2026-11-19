@@ -65,6 +65,16 @@ const card = (page: Page, name: string) =>
     .getByRole('radiogroup', { name: 'Style', exact: true })
     .getByRole('radio', { name: new RegExp(`^${name},`) });
 
+/**
+ * Opens the gate from Publish by keyboard. Playwright counts aria-disabled as disabled and won't
+ * click it; a person can, and that is the point (§12.1), so focus it and press Enter.
+ */
+async function openGate(page: Page) {
+  await publishButton(page).focus();
+  await expect(publishButton(page)).toBeFocused();
+  await page.keyboard.press('Enter');
+}
+
 async function openEditor(page: Page) {
   await page.goto('/dashboard/studio');
   await expect(
@@ -82,7 +92,8 @@ test('with issues, Publish is aria-disabled, stays focusable and opens "Your pag
   const button = publishButton(page);
   await expect(button).toHaveText('Publish · 2 to fix');
   await expect(button).toHaveAttribute('aria-disabled', 'true');
-  await expect(button).not.toBeDisabled();
+  // Not the native attribute: that would take it out of the Tab order.
+  await expect(button).not.toHaveAttribute('disabled');
   await button.focus();
   await expect(button).toBeFocused();
   await page.keyboard.press('Enter');
@@ -105,6 +116,11 @@ test('with issues, Publish is aria-disabled, stays focusable and opens "Your pag
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(button).toBeFocused();
+  // A pointer opens it too (force: Playwright won't click an aria-disabled button by itself).
+  await button.click({ force: true });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(button).toBeFocused();
   // Nothing was published.
   expect((await savedStudio(page)).published).toBeNull();
 });
@@ -118,7 +134,7 @@ test('a Free person with Stage sees the pro-only issue with "Choose a free style
   await setPlan(who.handle, 'free');
   await openEditor(page);
   await expect(publishButton(page)).toHaveText('Publish · 1 to fix');
-  await publishButton(page).click();
+  await openGate(page);
 
   const dialog = blocked(page);
   await expect(dialog.getByText('Stage is a Pro style')).toBeVisible();
@@ -169,7 +185,7 @@ test('after a 422 the dialog shows the server’s issues, not the client’s', a
     'aria-disabled',
     'true',
   );
-  await publishButton(page).click();
+  await openGate(page);
   await confirm(page)
     .getByRole('button', { name: 'Publish', exact: true })
     .click();
@@ -185,7 +201,7 @@ test('after a 422 the dialog shows the server’s issues, not the client’s', a
   await page.keyboard.press('Escape');
   await expect(publishButton(page)).toBeFocused();
   // Until the next edit, the server's issues stand.
-  await publishButton(page).click();
+  await openGate(page);
   await expect(
     blocked(page).getByText('Our servers found a word too long for a phone'),
   ).toBeVisible();
@@ -206,7 +222,7 @@ test('when the check passes, "Publish your page?" shows "Clear · Blue · Auto �
   await expect(bar(page).getByRole('status')).toHaveText(
     'Saved · not published',
   );
-  await publishButton(page).click();
+  await openGate(page);
 
   const dialog = confirm(page);
   await expect(dialog).toBeVisible();
@@ -238,7 +254,7 @@ test('there is no publish-anyway control', async ({ page }, testInfo) => {
   const anyway = page.getByRole('button', { name: /anyway/i });
   const anywayLink = page.getByRole('link', { name: /anyway/i });
   await expect(anyway).toHaveCount(0);
-  await publishButton(page).click();
+  await openGate(page);
   const dialog = blocked(page);
   await expect(dialog).toBeVisible();
   await expect(anyway).toHaveCount(0);
@@ -263,7 +279,7 @@ for (const width of [390, 1440])
       blocks: [...FIVE_BLOCKS.slice(0, 2), EMPTY_QUOTES[0]],
     });
     await openEditor(page);
-    await publishButton(page).click();
+    await openGate(page);
     await expect(blocked(page)).toBeVisible();
     await expectAccessible(page);
     expect(await fitsViewport(page)).toBe(true);
