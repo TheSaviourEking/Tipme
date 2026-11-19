@@ -4,10 +4,14 @@ import { useEffect, useId, useRef } from 'react';
 import type { StudioCheckResult, StudioIssue } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import {
+  blockedIntro,
   fixesInput,
   fixesLinks,
   fixesNow,
+  publishFailureWords,
   publishTally,
+  type PublishFailure,
+  type SaveState,
 } from './studio-editor-model';
 
 /**
@@ -25,9 +29,11 @@ export function PublishDialog({
   check,
   summary,
   busy,
-  failed,
+  failure,
+  save,
   readOnly,
   onPublish,
+  onShowLatest,
   onFix,
   onInput,
   onClose,
@@ -36,10 +42,14 @@ export function PublishDialog({
   /** "Clear · Blue · Auto · Your cover · 5 blocks". */
   summary: string;
   busy: boolean;
-  /** The last try didn't publish (not saved, the network): said in the dialog. */
-  failed: boolean;
+  /** Why the last try didn't go through, said in the dialog. */
+  failure: PublishFailure | null;
+  /** The draft's save state: the list says "Your draft is saved." only when it is. */
+  save: SaveState;
   readOnly: boolean;
   onPublish(): void;
+  /** After another tab saved first: what the banner's "Show the latest" does. */
+  onShowLatest(): void;
   onFix(issue: StudioIssue, fixId: string): void;
   onInput(issue: StudioIssue, fixId: string): void;
   onClose(): void;
@@ -74,7 +84,7 @@ export function PublishDialog({
       ref={dialog}
       className="confirm-dialog pst-publish"
       aria-labelledby={`${id}-title`}
-      aria-describedby={`${id}-body`}
+      aria-describedby={`${id}-intro`}
       data-view={view}
       onCancel={(event) => {
         // Escape: closing is ours, so React's state and the dialog can't disagree.
@@ -89,10 +99,7 @@ export function PublishDialog({
       </h2>
       {view === 'blocked' ? (
         <div id={`${id}-body`} className="confirm-dialog__body">
-          <p>
-            {count === 1 ? '1 thing' : `${count} things`} to fix first. Your
-            draft is saved.
-          </p>
+          <p id={`${id}-intro`}>{blockedIntro(count, save)}</p>
           <ul className="pst-issues" aria-label="To fix">
             {check.issues.map((issue) => (
               <li
@@ -141,12 +148,14 @@ export function PublishDialog({
         </div>
       ) : (
         <div id={`${id}-body`} className="confirm-dialog__body">
-          <p>Everyone who opens your page will see this design.</p>
+          <p id={`${id}-intro`}>
+            Everyone who opens your page will see this design.
+          </p>
           <p className="pst-publish__summary">{summary}</p>
           <p className="pst-publish__tally">{publishTally(check)}</p>
-          {failed && (
+          {failure && (
             <p className="pst-publish__failed" role="alert">
-              Your page wasn’t published. Check your connection and try again.
+              {publishFailureWords(failure, !readOnly)}
             </p>
           )}
         </div>
@@ -158,6 +167,11 @@ export function PublishDialog({
           </Button>
         ) : (
           <>
+            {failure === 'stale' && (
+              <Button variant="secondary" onClick={onShowLatest}>
+                Show the latest
+              </Button>
+            )}
             <Button
               ref={cancel}
               variant="quiet"

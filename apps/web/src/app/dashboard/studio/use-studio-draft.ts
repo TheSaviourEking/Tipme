@@ -10,7 +10,13 @@ import {
   type StudioIssue,
 } from '@tipme/contracts';
 import { apiFetch } from '@/lib/session-client';
-import { checkShown, withRefusal, type SaveState } from './studio-editor-model';
+import {
+  checkShown,
+  publishOutcome,
+  withRefusal,
+  type PublishOutcome,
+  type SaveState,
+} from './studio-editor-model';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
 const SAVE_AFTER_MS = 800;
@@ -53,9 +59,10 @@ export interface StudioDraft {
   /**
    * Saves what is left, then publishes (`POST /v1/me/studio/publish`, §12.1): 'published', the
    * server's issues when its check refuses (422 STUDIO_DESIGN_CHECK_FAILED; they replace the
-   * editor's until the next edit), or 'failed' (not saved, another tab saved first, the network).
+   * editor's until the next edit), or why it failed: the network (it may have gone through),
+   * another tab saved first, Studio switched off (404), or anything else (not saved included).
    */
-  publish(): Promise<'published' | 'failed' | { issues: StudioIssue[] }>;
+  publish(): Promise<PublishOutcome>;
 }
 
 /**
@@ -93,6 +100,8 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
   const saved = useRef(JSON.stringify(initial.draft));
   const sending = useRef<Promise<void> | null>(null);
   const blocked = useRef(false);
+  /** Blocked because another tab saved first (as opposed to a save that needed Pro). */
+  const staleNow = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const adopt = useCallback((studio: MyStudio) => {
@@ -129,6 +138,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
         if (!result.ok) {
           if (result.code === 'STUDIO_DRAFT_STALE') {
             blocked.current = true;
+            staleNow.current = true;
             setStale(true);
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
             blocked.current = true;
@@ -208,6 +218,7 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     if (!result.ok) return;
     clearTimeout(timer.current);
     blocked.current = false;
+    staleNow.current = false;
     latest.current = result.data.draft;
     saved.current = JSON.stringify(result.data.draft);
     setDraft(result.data.draft);
@@ -235,35 +246,34 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
     };
   }, [send]);
 
-  const publish = useCallback(async (): Promise<
-    'published' | 'failed' | { issues: StudioIssue[] }
-  > => {
+  const publish = useCallback(async (): Promise<PublishOutcome> => {
     clearTimeout(timer.current);
     const unsaved = () =>
       blocked.current || saved.current !== JSON.stringify(latest.current);
     // A save on its way may end before an edit made meanwhile: one more round catches it.
     await send();
     if (unsaved()) await send();
-    if (unsaved()) return 'failed';
+    if (unsaved())
+      return {
+        failed: blocked.current && staleNow.current ? 'stale' : 'other',
+      };
     const doc = saved.current;
     const result = await apiFetch<MyStudio>('/v1/me/studio/publish', {
       method: 'POST',
       body: { rev: rev.current },
     });
+    const outcome = publishOutcome(result);
     if (result.ok) {
       setRefused(null);
       adopt(result.data);
-      return 'published';
-    }
-    if (result.code === 'STUDIO_DESIGN_CHECK_FAILED' && result.issues) {
-      setRefused({ doc, issues: result.issues });
-      return { issues: result.issues };
-    }
-    if (result.code === 'STUDIO_DRAFT_STALE') {
+    } else if (outcome !== 'published' && 'issues' in outcome) {
+      setRefused({ doc, issues: outcome.issues });
+    } else if (outcome !== 'published' && outcome.failed === 'stale') {
       blocked.current = true;
+      staleNow.current = true;
       setStale(true);
     }
-    return 'failed';
+    return outcome;
   }, [adopt, send]);
 
   const local = useMemo(() => checkDesign(draft, context), [draft, context]);

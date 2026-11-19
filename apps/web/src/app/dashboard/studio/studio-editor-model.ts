@@ -115,9 +115,7 @@ export function withRefusal(
 /** Why a publish didn't go through (the dialog says which). */
 export type PublishFailure = 'network' | 'stale' | 'unavailable' | 'other';
 export type PublishOutcome =
-  | 'published'
-  | { issues: StudioIssue[] }
-  | { failed: PublishFailure };
+  'published' | { issues: StudioIssue[] } | { failed: PublishFailure };
 
 /**
  * The answer to `POST /v1/me/studio/publish`, as the editor acts on it. A 422 lists issues only

@@ -24,7 +24,12 @@ import { fixTarget } from './blocks-model';
 import { CheckPanel } from './check-panel';
 import { RadioGroup } from './segmented';
 import { PublishDialog } from './publish-dialog';
-import { checkBadge, publishLabel, saveWords } from './studio-editor-model';
+import {
+  checkBadge,
+  publishLabel,
+  saveWords,
+  type PublishFailure,
+} from './studio-editor-model';
 import { StudioPreview, type PreviewDevice } from './studio-preview';
 import { StyleTab } from './style-tab';
 import { accentHeading, styleSummary } from './style-tab-model';
@@ -126,9 +131,12 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   const refs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   // The publish gate (§12.1): the dialog, a publish on its way, and the last try's failure.
   const publishRef = useRef<HTMLButtonElement>(null);
-  const [gate, setGate] = useState<{ busy: boolean; failed: boolean } | null>(
-    null,
-  );
+  const [gate, setGate] = useState<{
+    busy: boolean;
+    failure: PublishFailure | null;
+  } | null>(null);
+  /** The read-only banner: where a press on Publish goes while nothing can be published. */
+  const bannerRef = useRef<HTMLDivElement>(null);
   const cardsId = `${id}-cards`;
   const readOnly = studio.stale || studio.proRequired;
   const count = studio.check.issues.length;
@@ -151,12 +159,16 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   };
   const publish = async () => {
     if (gate?.busy || readOnly) return;
-    setGate({ busy: true, failed: false });
+    setGate({ busy: true, failure: null });
     const outcome = await studio.publish();
     // Published: the status line says so. Refused: the server's issues are now the check, and
     // the same dialog lists them. Failed: said in the dialog, which stays.
     if (outcome === 'published') closeGate();
-    else setGate({ busy: false, failed: outcome === 'failed' });
+    else
+      setGate({
+        busy: false,
+        failure: 'failed' in outcome ? outcome.failed : null,
+      });
   };
 
   const open = (key: Tab) => {
@@ -262,7 +274,9 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
             aria-disabled={count > 0 || readOnly || undefined}
             aria-haspopup="dialog"
             onClick={() => {
-              if (!readOnly) setGate({ busy: false, failed: false });
+              // Read-only (another tab saved, or a save needed Pro): the banner says why.
+              if (readOnly) bannerRef.current?.focus();
+              else setGate({ busy: false, failure: null });
             }}
           >
             {publishLabel(count)}
@@ -274,7 +288,11 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           check={studio.check}
           summary={styleSummary(draft, draft.blocks.length)}
           busy={gate.busy}
-          failed={gate.failed}
+          failure={gate.failure}
+          save={studio.save}
+          onShowLatest={() => {
+            void studio.reload().then(() => closeGate());
+          }}
           readOnly={readOnly}
           onPublish={() => void publish()}
           onFix={studio.fix}
@@ -285,23 +303,26 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
           onClose={() => closeGate()}
         />
       )}
-      {studio.stale && (
-        <Slip tone="neutral" title="This draft changed in another tab">
-          Your design was saved somewhere else after this page opened, so we
-          stopped saving here to keep that version.{' '}
-          <Button variant="secondary" onClick={() => void studio.reload()}>
-            Show the latest
-          </Button>
-        </Slip>
-      )}
-      {studio.proRequired && (
-        <Slip tone="neutral" title="That change needs Pro">
-          Your draft is kept as it was last saved.{' '}
-          <Link href="/pro">See Pro</Link>{' '}
-          <Button variant="secondary" onClick={() => void studio.reload()}>
-            Show the latest
-          </Button>
-        </Slip>
+      {readOnly && (
+        <div ref={bannerRef} tabIndex={-1} className="pst-banner">
+          {studio.stale ? (
+            <Slip tone="neutral" title="This draft changed in another tab">
+              Your design was saved somewhere else after this page opened, so we
+              stopped saving here to keep that version.{' '}
+              <Button variant="secondary" onClick={() => void studio.reload()}>
+                Show the latest
+              </Button>
+            </Slip>
+          ) : (
+            <Slip tone="neutral" title="That change needs Pro">
+              Your draft is kept as it was last saved.{' '}
+              <Link href="/pro">See Pro</Link>{' '}
+              <Button variant="secondary" onClick={() => void studio.reload()}>
+                Show the latest
+              </Button>
+            </Slip>
+          )}
+        </div>
       )}
       <div className="pst-body">
         {wide && (

@@ -97,6 +97,16 @@
   transform: scale(0.97);
 }
 
+/* The read-only banner takes focus when Publish is pressed (it says why nothing can be published). */
+.pst-banner:focus {
+  outline: none;
+}
+
+.pst-banner:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 3px;
+}
+
 /* The publish dialog: the shared modal (dashboard.css .confirm-dialog), a little wider for the
    list, which scrolls inside it on a short phone. */
 .pst-publish {
