@@ -2,254 +2,339 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import {
-  STUDIO_ERROR_RULES,
-  STUDIO_FIX_NEEDS_INPUT,
-  checkDesignV1,
-  contrastRatio,
-  deriveStudioPalette,
-  studioDocumentV1Schema,
+  STUDIO_STYLE_IDS,
+  checkDesign,
+  studioDocumentSchema,
 } from '@tipme/contracts';
 import {
+  accentChoices,
+  accentHeading,
+  accentNote,
+  coverChoices,
+  proBanner,
+  selectedAccent,
+  styleCardLabel,
+  styleChoosable,
+  styleHeading,
+  styleSummary,
+  withAccent,
+  withCover,
+  withMode,
+  withStyle,
+} from '../src/app/dashboard/studio/style-tab-model.ts';
+import {
+  checkBadge,
   checkShown,
-  colourNotes,
-  colourUse,
-  fontChoices,
   fixesInput,
+  fixesLinks,
   fixesNow,
-  formatRatio,
-  normaliseHex,
-  paletteChips,
+  issueTab,
   passingWords,
   saveWords,
   studioEntry,
-  withFont,
-  withSecondColour,
 } from '../src/app/dashboard/studio/studio-editor-model.ts';
 
-// Page Studio editor, PR G1 (plan 2026-11-12-page-studio, Task 9a): the editor's pure parts.
+// Page Studio editor on v2 (styles plan Task 12, PR 4a): the Style tab's pure parts (§10) and
+// the editor's (status line, the Check tab's badge, the check's fixes).
 
 const doc = (extra = {}) => ({
-  v: 1,
-  brand: ['#1d4e89'],
+  v: 2,
+  style: 'clear',
+  accent: null,
   mode: 'light',
-  fonts: { heading: 'fraunces', body: 'inter' },
-  scale: 'standard',
-  corners: 'soft',
-  rows: [
-    {
-      id: 'row00001',
-      columns: '1',
-      spacing: 'm',
-      background: 'page',
-      cells: [
-        [{ id: 'blk00001', kind: 'text', variant: 'lead', text: 'Hello' }],
-      ],
-    },
+  cover: 'yours',
+  blocks: [
+    { id: 'blk00001', kind: 'text', variant: 'heading', text: 'New single' },
+    { id: 'blk00002', kind: 'quote', text: 'Sang like home.' },
   ],
   ...extra,
 });
-const ctx = { images: {}, videos: {}, profile: { bio: false, links: 0 } };
+const ctx = (extra = {}) => ({
+  images: {},
+  videos: {},
+  profile: { name: 'Kemi Adeyinka', bio: true, links: 3 },
+  plan: 'pro',
+  coverKind: 'photo',
+  hasAvatar: true,
+  ...extra,
+});
+const valid = (d) => studioDocumentSchema.safeParse(d).success;
 
-test('a typed colour becomes #rrggbb, or nothing when it is not a colour', () => {
-  assert.equal(normaliseHex('#F5C400'), '#f5c400');
-  assert.equal(normaliseHex('  f5c400 '), '#f5c400');
-  assert.equal(normaliseHex('#abc'), '#aabbcc');
-  assert.equal(normaliseHex('abc'), '#aabbcc');
-  for (const bad of ['', '#', '#12345', '#gggggg', 'red', '#1234567', 'f5c40'])
-    assert.equal(normaliseHex(bad), null, bad);
+test('switching style keeps an explicit accent, the mode and the blocks', () => {
+  const start = doc({ accent: 'rose', mode: 'dark', cover: 'plain' });
+  const next = withStyle(start, 'journal');
+  assert.equal(next.style, 'journal');
+  assert.equal(next.accent, 'rose');
+  assert.equal(next.mode, 'dark');
+  assert.equal(next.cover, 'plain', 'Journal offers Plain, so it stays');
+  assert.deepEqual(next.blocks, start.blocks);
+  assert.ok(valid(next));
+  // An accent left at the style's own stays the style's own: each style opens differently.
+  assert.equal(withStyle(doc(), 'stage').accent, null);
 });
 
-test('ratios read as the board writes them', () => {
-  assert.equal(formatRatio(15.04), '15.0 : 1');
-  assert.equal(formatRatio(4.5), '4.5 : 1');
-  assert.equal(formatRatio(21), '21.0 : 1');
-});
-
-test('the palette chips are the engine’s colours, each text pair with its live ratio', () => {
-  const palette = deriveStudioPalette(['#0f2238', '#ff7a59']);
-  for (const mode of ['light', 'dark']) {
-    const chips = paletteChips(palette, mode);
-    assert.deepEqual(
-      chips.map((c) => c.label),
-      [
-        'Page',
-        'Card',
-        'Text',
-        'Quiet text',
-        'Accent',
-        'Lines',
-        'Links',
-        'Focus ring',
-      ],
-    );
-    const t = palette[mode];
-    const text = chips.find((c) => c.label === 'Text');
-    assert.equal(text.hex, t.text);
-    assert.equal(text.ratio, contrastRatio(t.text, t.page));
-    assert.ok(text.ratio >= 4.5);
-    assert.equal(chips.find((c) => c.label === 'Lines').ratio, null);
-    assert.equal(chips.find((c) => c.label === 'Page').ratio, null);
-    for (const chip of chips)
-      if (chip.ratio !== null)
-        assert.ok(chip.ratio >= chip.min, `${mode} ${chip.label}`);
+test('switching to a style without the current cover type selects Your cover', () => {
+  for (const style of ['signboard', 'sprint']) {
+    const next = withStyle(doc({ cover: 'gradient' }), style);
+    assert.equal(next.cover, 'yours', style);
+    assert.ok(valid(next), style);
   }
-});
-
-test('a yellow that can’t carry text: the board’s sentence, and how it is used', () => {
-  const d = doc({ brand: ['#f5c400'] });
-  const check = checkDesignV1(d, ctx);
-  const notes = colourNotes(check);
-  assert.equal(notes.length, 1);
+  // And a cover the new style offers is kept.
   assert.equal(
-    notes[0].lead,
-    'Your yellow is too light for text on a light page.',
+    withStyle(doc({ cover: 'gradient' }), 'linen').cover,
+    'gradient',
   );
-  assert.equal(
-    notes[0].rest,
-    'We’ll use it for highlights and for buttons with dark text, and a deeper shade of it for links and headings. Your page will still look yellow.',
-  );
-  const use = colourUse(
-    deriveStudioPalette(['#f5c400']),
-    'light',
-    0,
-    '#f5c400',
-  );
+  assert.equal(withStyle(doc({ cover: 'plain' }), 'sprint').cover, 'plain');
+});
+
+test('browsing styles keeps the last cover choice: Clear+Gradient → Sprint → Journal restores Gradient', () => {
+  // The person chose Gradient on Clear; arrows then pass Sprint (no gradient) on the way to Journal.
+  const wanted = 'gradient';
+  const clear = doc({ cover: 'gradient' });
+  const sprint = withStyle(clear, 'sprint', wanted);
+  assert.equal(sprint.cover, 'yours', 'Sprint has no gradient: Your cover');
+  assert.ok(valid(sprint));
+  const journal = withStyle(sprint, 'journal', wanted);
+  assert.equal(journal.cover, 'gradient', 'Journal offers it again: restored');
+  assert.ok(valid(journal));
+  // Without a remembered choice, the document's own cover is used as before.
+  assert.equal(withStyle(sprint, 'journal').cover, 'yours');
+});
+
+test('choosing TipMe purple stores no accent', () => {
+  const classic = doc({ style: 'classic', accent: 'green' });
+  const purple = accentChoices('classic', 'pro')[0];
+  assert.equal(purple.name, 'TipMe purple');
+  assert.equal(purple.value, null);
+  const next = withAccent(classic, purple.value);
+  assert.equal(next.accent, null);
+  assert.equal(selectedAccent(next), null);
+  assert.equal(accentHeading(next), 'TipMe purple');
+  // Classic back at every default is exactly a page that never opened the Studio (§9.1).
   assert.deepEqual(
-    use.map((u) => [u.label, u.used]),
-    [
-      ['Buttons', true],
-      ['Links', true],
-      ['As text', false],
-    ],
+    withAccent(
+      { ...classic, blocks: [], mode: 'light', cover: 'yours' },
+      purple.value,
+    ),
+    {
+      v: 2,
+      style: 'classic',
+      accent: null,
+      mode: 'light',
+      cover: 'yours',
+      blocks: [],
+    },
   );
-  assert.ok(use[0].ratio >= 4.5 && use[1].ratio >= 4.5 && use[2].ratio < 3);
-  // A colour that carries text needs no note.
-  assert.deepEqual(colourNotes(checkDesignV1(doc(), ctx)), []);
 });
 
-test('font pickers offer each family only for a role it can take', () => {
-  const headings = fontChoices('heading');
-  const texts = fontChoices('body');
-  assert.ok(headings.some((f) => f.id === 'dm-serif-display'));
-  assert.ok(!texts.some((f) => f.id === 'dm-serif-display'));
-  assert.ok(texts.every((f) => f.roles.includes('body')));
-  assert.ok(headings.every((f) => f.roles.includes('heading')));
-});
-
-test('picking a font replaces its slot, so a page never has a third family', () => {
-  const d = withFont(doc(), 'heading', 'space-grotesk');
-  assert.deepEqual(d.fonts, { heading: 'space-grotesk', body: 'inter' });
-  const e = withFont(d, 'body', 'source-serif-4');
-  assert.deepEqual(e.fonts, {
-    heading: 'space-grotesk',
-    body: 'source-serif-4',
-  });
-  assert.equal(new Set(Object.values(e.fonts)).size <= 2, true);
-  // A family can't take a role it doesn't have: nothing changes.
-  assert.deepEqual(
-    withFont(doc(), 'body', 'dm-serif-display').fonts,
-    doc().fonts,
-  );
-  assert.ok(studioDocumentV1Schema.safeParse(e).success);
-});
-
-test('removing the second colour keeps the document valid: its rows take the main colour', () => {
-  const two = doc({
-    brand: ['#1d4e89', '#ff7a59'],
-    rows: [{ ...doc().rows[0], background: 'second' }],
-  });
-  assert.ok(studioDocumentV1Schema.safeParse(two).success);
-  const one = withSecondColour(two, null);
-  assert.deepEqual(one.brand, ['#1d4e89']);
-  assert.equal(one.rows[0].background, 'colour');
-  assert.ok(studioDocumentV1Schema.safeParse(one).success);
-  assert.deepEqual(withSecondColour(doc(), '#ff7a59').brand, [
-    '#1d4e89',
-    '#ff7a59',
+test('the accent swatches: TipMe purple first on Classic only, the eight, then From your photo', () => {
+  const names = (style) => accentChoices(style, 'pro').map((a) => a.name);
+  const eight = [
+    'Ink',
+    'Blue',
+    'Lagoon',
+    'Green',
+    'Violet',
+    'Rose',
+    'Coral',
+    'Amber',
+  ];
+  assert.deepEqual(names('classic'), [
+    'TipMe purple',
+    ...eight,
+    'From your photo',
   ]);
+  assert.deepEqual(names('clear'), [...eight, 'From your photo']);
+  // A style's own accent shows selected while nothing is picked (Clear's is Blue).
+  assert.equal(selectedAccent(doc()), 'blue');
+  assert.equal(accentHeading(doc()), 'Blue');
+  assert.equal(accentHeading(doc({ accent: 'photo' })), 'From your photo');
+  assert.equal(withAccent(doc(), 'amber').accent, 'amber');
+});
+
+test('card labels: "Clear, Quiet, bright, precise. Free." and Classic adds "The default."', () => {
+  assert.equal(styleCardLabel('clear'), 'Clear, Quiet, bright, precise. Free.');
+  assert.equal(
+    styleCardLabel('stage'),
+    'Stage, House lights down, spotlight up. Pro.',
+  );
+  assert.equal(
+    styleCardLabel('classic'),
+    'Classic, Today’s TipMe page, unchanged. Free. The default.',
+  );
+  for (const id of STUDIO_STYLE_IDS)
+    assert.match(styleCardLabel(id), /^[A-Z][a-z]+, .+\. (Free|Pro)\./, id);
+});
+
+test('the heading reads "4 of 9 free" on Free and "9 styles" on Pro', () => {
+  assert.equal(styleHeading('free'), '4 of 9 free');
+  assert.equal(styleHeading('pro'), '9 styles');
+  assert.equal(
+    proBanner(),
+    'Stage, Signboard, Sprint, Tiles and Horizon come with Pro.',
+  );
+});
+
+test('Free can’t choose a Pro style yet (R5); a style the draft already holds stays selectable', () => {
+  assert.equal(styleChoosable('stage', 'free', doc()), false);
+  assert.equal(styleChoosable('journal', 'free', doc()), true);
+  assert.equal(styleChoosable('stage', 'pro', doc()), true);
+  // A lapsed draft that holds Stage keeps it chosen (§11: a held Pro item saves).
+  assert.equal(styleChoosable('stage', 'free', doc({ style: 'stage' })), true);
+});
+
+test('Free sees the photo swatch disabled with "“From your photo” comes with Pro."', () => {
+  const photo = (plan, hasAvatar = true) =>
+    accentChoices('clear', plan, hasAvatar).at(-1);
+  assert.equal(photo('free').name, 'From your photo');
+  assert.equal(photo('free').disabled, true);
+  assert.equal(
+    accentNote(doc(), { plan: 'free', hasAvatar: true, photoAccent: null }),
+    '“From your photo” comes with Pro.',
+  );
+  // Pro with no profile photo: disabled, with the reason (§6).
+  assert.equal(photo('pro', false).disabled, true);
+  assert.equal(
+    accentNote(doc(), { plan: 'pro', hasAvatar: false, photoAccent: null }),
+    'Add a profile photo to use this.',
+  );
+  // Pro with a photo: chosen, it says where the colour comes from, and why a fallback is used.
+  assert.equal(photo('pro').disabled, false);
+  assert.equal(
+    accentNote(doc({ accent: 'photo' }), {
+      plan: 'pro',
+      hasAvatar: true,
+      photoAccent: null,
+    }),
+    'Picked from your profile photo and checked for contrast in light and dark.',
+  );
+  assert.equal(
+    accentNote(doc({ accent: 'photo' }), {
+      plan: 'pro',
+      hasAvatar: true,
+      photoAccent: { failed: true, fallback: 'green' },
+    }),
+    'Picked from your profile photo and checked for contrast in light and dark. Your photo’s colours didn’t pass our contrast check, so your page uses Green.'.replace(
+      /’/g,
+      "'",
+    ),
+  );
+  assert.equal(
+    accentNote(doc(), { plan: 'pro', hasAvatar: true, photoAccent: null }),
+    null,
+    'nothing to say for a curated accent',
+  );
+});
+
+test('the Cover control shows Your cover and Plain only for Signboard and Sprint', () => {
+  const labels = (style) => coverChoices(style).map((c) => c.label);
+  assert.deepEqual(labels('signboard'), ['Your cover', 'Plain']);
+  assert.deepEqual(labels('sprint'), ['Your cover', 'Plain']);
+  for (const style of ['classic', 'clear', 'stage', 'horizon'])
+    assert.deepEqual(labels(style), ['Your cover', 'Gradient', 'Plain']);
+  assert.equal(withCover(doc(), 'plain').cover, 'plain');
+  assert.equal(withMode(doc(), 'auto').mode, 'auto');
+});
+
+test('the summary reads "Clear · Blue · Auto · Your cover · 5 blocks"', () => {
+  assert.equal(
+    styleSummary(doc({ mode: 'auto' }), 5),
+    'Clear · Blue · Auto · Your cover · 5 blocks',
+  );
+  assert.equal(
+    styleSummary(doc({ style: 'classic', cover: 'plain' }), 1),
+    'Classic · TipMe purple · Light · Plain · 1 block',
+  );
+  assert.equal(
+    styleSummary(doc({ accent: 'photo', mode: 'dark' }), 0),
+    'Clear · From your photo · Dark · Your cover · 0 blocks',
+  );
 });
 
 test('the shown check is the server’s for the document it checked, the editor’s otherwise', () => {
   const d = doc();
-  const server = { ...checkDesignV1(d, ctx), weightBytes: 1 };
-  const local = checkDesignV1(d, ctx);
+  const local = checkDesign(d, ctx());
+  const server = { ...local, weightBytes: 1 };
   assert.equal(
     checkShown(d, local, { doc: JSON.stringify(d), check: server }),
     server,
   );
-  const edited = doc({ corners: 'round' });
   assert.equal(
-    checkShown(edited, local, { doc: JSON.stringify(d), check: server }),
+    checkShown(doc({ mode: 'dark' }), local, {
+      doc: JSON.stringify(d),
+      check: server,
+    }),
     local,
   );
   assert.equal(checkShown(d, local, null), local);
 });
 
-test('one-click fixes apply at once; fixes that need the person’s input open the Blocks tab (G2)', () => {
-  const issue = {
-    rule: 'photo-resolution',
-    severity: 'error',
-    at: { row: 'r', block: 'b' },
-    message: 'A photo will look blurry',
-    fixes: [
-      { id: 'smaller-slot', label: 'Make the photo smaller' },
-      { id: 'replace-photo', label: 'Replace photo' },
-    ],
-  };
+test('the Check tab’s badge reads "Pass" or "N to fix"', () => {
+  assert.equal(checkBadge(0), 'Pass');
+  assert.equal(checkBadge(1), '1 to fix');
+  assert.equal(checkBadge(3), '3 to fix');
+});
+
+test('a Pro style on Free is a page-level issue the Style tab answers; its fixes are placed', () => {
+  const check = checkDesign(
+    doc({ style: 'stage', accent: 'photo' }),
+    ctx({ plan: 'free' }),
+  );
+  const style = check.issues.find((i) => i.at.row === 'style');
+  const accent = check.issues.find((i) => i.at.row === 'accent');
+  assert.ok(style && accent);
+  assert.equal(issueTab(style), 'style');
+  assert.equal(issueTab(accent), 'style');
   assert.deepEqual(
-    fixesNow(issue).map((f) => f.id),
-    ['smaller-slot'],
+    fixesInput(style).map((f) => f.id),
+    ['choose-free-style'],
   );
   assert.deepEqual(
-    fixesInput(issue).map((f) => f.id),
-    ['replace-photo'],
+    fixesLinks(style).map((f) => f.id),
+    ['see-pro'],
   );
-  assert.ok(STUDIO_FIX_NEEDS_INPUT.includes('replace-photo'));
+  assert.deepEqual(
+    fixesNow(accent).map((f) => f.id),
+    ['use-default-accent'],
+  );
+  assert.equal(issueTab({ at: { row: '', block: 'blk00001' } }), 'blocks');
 });
 
 test('every rule has words in the passing list', () => {
-  const check = checkDesignV1(doc(), ctx);
-  const words = passingWords(check, doc());
-  assert.equal(words.length, STUDIO_ERROR_RULES.length);
-  assert.ok(words.includes('Text is readable (light and dark)'));
-  assert.ok(words.includes('Fits phones from 320 px'));
-  assert.ok(words.includes('Fonts: 2 families'));
-  assert.ok(words.some((w) => /^Page weight: \d+ KB of 1\.5 MB$/.test(w)));
+  const check = checkDesign(doc(), ctx());
+  const words = passingWords(check);
+  assert.equal(words.length, check.passing.length);
+  assert.ok(words.every((w) => typeof w === 'string' && w.length > 0));
+  assert.ok(words.includes('Long words fit'));
 });
 
-test('the save line says where the draft is', () => {
-  assert.equal(saveWords('saved', false), 'Not published yet · Draft saved');
-  assert.equal(
-    saveWords('saving', true),
-    'Changes not published yet · Saving…',
-  );
-  assert.equal(
-    saveWords('failed', true),
-    'Changes not published yet · Not saved',
-  );
-  assert.equal(saveWords('saved', 'same'), 'Your page shows this design');
+test('the status line says where the draft is ("Saved · not published")', () => {
+  assert.equal(saveWords('saved', false), 'Saved · not published');
+  assert.equal(saveWords('saved', true), 'Saved · not published');
+  assert.equal(saveWords('saved', 'same'), 'Published');
+  assert.equal(saveWords('pending', false), 'Saving…');
+  assert.equal(saveWords('saving', 'same'), 'Saving…');
+  assert.equal(saveWords('failed', true), 'Not saved');
 });
 
-test('the dashboard entry: hidden while the switch is off; Pro opens the editor; Free sees Pro', () => {
+test('the dashboard entry: hidden while the switch is off; every page opens the editor', () => {
   assert.equal(studioEntry({ status: 404 }), null);
   assert.equal(studioEntry({ status: 500 }), null);
   assert.equal(studioEntry({ status: 200, access: 'edit' }), 'edit');
-  assert.equal(studioEntry({ status: 200, access: 'preview' }), 'pro');
-  assert.equal(studioEntry({ status: 200, access: 'lapsed' }), 'lapsed');
 });
 
 test('the editor never writes markup from text, and names no payment provider', () => {
   const dir = new URL('../src/app/dashboard/studio/', import.meta.url);
-  for (const file of readdirSync(dir)) {
+  for (const file of readdirSync(dir).filter((f) => /\.(tsx?|css)$/.test(f))) {
     const source = readFileSync(new URL(file, dir), 'utf8');
     assert.doesNotMatch(source, /dangerouslySetInnerHTML/, file);
-    assert.doesNotMatch(source, /paystack|flutterwave|monnify/i, file);
+    assert.doesNotMatch(source, /paystack|flutterwave|monnify|bachs/i, file);
     assert.doesNotMatch(source, /@handle\b/, file);
   }
 });
 
 test('the renderer the preview uses has no server-only imports', () => {
-  const dir = new URL('../src/components/studio/', import.meta.url);
+  const dir = new URL('../src/components/studio-styles/', import.meta.url);
   for (const file of readdirSync(dir).filter(
     (f) => f.endsWith('.tsx') || f.endsWith('.ts'),
   )) {

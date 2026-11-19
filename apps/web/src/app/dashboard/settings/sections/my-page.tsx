@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Dispatch, FormEvent, SetStateAction } from 'react';
-import type { HandleStatus, MyProfile, MyStudioV1 } from '@tipme/contracts';
+import type { HandleStatus, MyProfile, MyStudio } from '@tipme/contracts';
 import { CURRENT_FEE_POLICY } from '@tipme/domain';
 import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
@@ -90,16 +90,16 @@ export function PageState() {
 }
 
 /**
- * Page Studio's way in (plan Task 9). Shown only while the `page_studio` switch is on: the Studio
- * API answers 404 while it is off, and then nothing shows here. Pro opens the editor; Free sees
- * what it is and that it comes with Pro; after Pro ends, that the design is kept.
+ * Page Studio's way in (plan Task 9; styles plan Task 12). Shown only while the `page_studio`
+ * switch is on: the Studio API answers 404 while it is off, and then nothing shows here. Every
+ * page opens the editor (§5.4): Free saves and publishes the free styles.
  */
 export function StudioEntry() {
   const { profile } = useRecipient();
   const [entry, setEntry] = useState<ReturnType<typeof studioEntry>>(null);
   useEffect(() => {
     let current = true;
-    void apiFetch<MyStudioV1>('/v1/me/studio').then((result) => {
+    void apiFetch<MyStudio>('/v1/me/studio').then((result) => {
       if (current)
         setEntry(
           studioEntry(
@@ -117,23 +117,14 @@ export function StudioEntry() {
   if (!entry) return null;
   return (
     <Card id="page-studio" className="settings-section">
-      <h3>Page Studio{entry === 'edit' ? '' : ' (Pro)'}</h3>
+      <h3>Page Studio</h3>
       <p className="tm-hint">
-        {entry === 'edit'
-          ? 'Design your page: your colours, fonts and text size. TipMe checks every change, so your page stays readable on every phone.'
-          : entry === 'lapsed'
-            ? 'Your Page Studio design, draft and photos are kept. Your page shows the standard design until Pro is back.'
-            : 'Design your own page: any colour, fonts from our library, and your own rows of words and photos. Page Studio comes with Pro.'}
+        Choose a style for your page and the order of your blocks. TipMe checks
+        every change, so your page stays readable on every phone.
       </p>
-      {entry === 'edit' ? (
-        <Link className="tm-button tm-button--primary" href="/dashboard/studio">
-          Design your page
-        </Link>
-      ) : (
-        <Link className="tm-button tm-button--secondary" href="/pro">
-          See Pro
-        </Link>
-      )}
+      <Link className="tm-button tm-button--primary" href="/dashboard/studio">
+        Design your page
+      </Link>
     </Card>
   );
 }

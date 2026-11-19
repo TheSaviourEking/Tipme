@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import {
   useEffect,
   useId,
@@ -9,15 +10,10 @@ import {
   type KeyboardEvent,
 } from 'react';
 import {
-  STUDIO_COLUMNS,
-  STUDIO_SPACINGS,
-  studioCounts,
   STUDIO_LIMITS as L,
-  type StudioBlockV1,
-  type StudioColumns,
-  type StudioDocumentV1,
+  type StudioBlock,
+  type StudioDocument,
   type StudioImage,
-  type StudioRowV1,
 } from '@tipme/contracts';
 import { Button } from '@tipme/ui';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -31,42 +27,33 @@ import { shrinkPhoto } from '@/lib/shrink-photo';
 import {
   BlockForm,
   PHOTO_LIMITS,
-  Thumb,
   VideoLinkField,
   type SavePhoto,
 } from './block-forms';
 import {
-  ADD_KINDS,
-  COLUMN_LABEL,
   KIND_LABEL,
   addBlock,
+  addKinds,
   addReasons,
-  addRow,
+  blockCounts,
   blockSummary,
-  findBlock,
   freshId,
   hasContent,
+  lockedRows,
   moveBlock,
-  moveRow,
+  moveBlockTo,
   movedWords,
   newBlock,
   removeBlock,
-  removeRow,
-  rowReason,
-  rowSummary,
   updateBlock,
-  withBackground,
-  withColumns,
-  withSpacing,
-  type BlockMove,
   type FixField,
 } from './blocks-model';
-import { Choice } from './style-tab';
+import { ICONS, ProPill } from './segmented';
 
 /** Studio photos are kept whole, up to 2400 px (the API's master), so shrinking starts there. */
 const STUDIO_SHRINK_MAX = 2400;
 
-/** The API's photo refusals in plain words (Task 10 moves IMAGE_TOO_SMALL into photo-errors). */
+/** The API's photo refusals in plain words. */
 const STUDIO_PHOTO_ERRORS: Record<string, string> = {
   IMAGE_TOO_SMALL:
     'This photo is too small. Choose one at least 600 pixels on its shortest side, so it looks sharp on every screen.',
@@ -76,63 +63,47 @@ const STUDIO_PHOTO_ERRORS: Record<string, string> = {
 
 /** Where the design check sent the person (a fix that needs their input), once per press. */
 export interface BlocksTarget {
-  row: string;
-  block?: string;
+  block: string;
   field: FixField;
   /** Bumped on every press, so the same fix twice still moves focus. */
   n: number;
 }
 
-type Confirm =
-  | { kind: 'row'; row: StudioRowV1; index: number }
-  | { kind: 'block'; block: StudioBlockV1 };
-
-const BACKGROUND_LABEL = {
-  page: 'Page',
-  card: 'Card',
-  colour: 'Colour',
-  second: 'Second colour',
-  photo: 'Photo',
-} as const;
-
 /**
- * The Blocks tab (plan Task 9b; StudioEditor board, "Blocks tab: rows and blocks"). A page is
- * rows; each row picks its columns, spacing and background from fixed choices, then holds blocks.
- * Rows move with Up and Down, by drag, or with the arrow keys on the focused row; blocks with Up
- * and Down (and Left and Right between columns), or the arrow keys on the focused block. TipMe's
- * own parts show as locked lines that can't be moved, styled or removed. Every limit is checked
- * here, with the reason, and again by the API.
+ * The Blocks tab on v2 (styles spec §10, "The Blocks tab"): one ordered list. TipMe's own parts
+ * are locked rows at the top ("Cover, name and bio", "Tip", and "Your links" when there are
+ * links), which can't be moved or removed. Blocks move by drag, with Up and Down, or with the
+ * arrow keys on the focused block, and the live region says where each went in G2's words. The
+ * style decides how every block looks: no columns, spacing, backgrounds or variants. "Add a block"
+ * has no Links (profile links are fixed) and marks Pro kinds PRO for Free, who can't add them.
  */
 export function BlocksTab({
   draft,
+  plan,
   update,
   readOnly,
   images,
   upload,
-  profile,
+  links,
   target,
-  onOpenRow,
 }: {
-  draft: StudioDocumentV1;
-  update(fn: (doc: StudioDocumentV1) => StudioDocumentV1): void;
+  draft: StudioDocument;
+  plan: 'free' | 'pro';
+  update(fn: (doc: StudioDocument) => StudioDocument): void;
   readOnly: boolean;
   images: StudioImage[];
   upload(file: Blob): Promise<{ imageId: string } | { code: string }>;
-  profile: { bio: boolean; links: number };
+  /** The number of saved profile links (the "Your links" row shows only with some). */
+  links: number;
   target: BlocksTarget | null;
-  /** The open row, for the preview's outline. */
-  onOpenRow(rowId: string | null): void;
 }) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
-  const [openRow, setOpenRow] = useState<string | null>(
-    draft.rows[0]?.id ?? null,
-  );
   const [openBlock, setOpenBlock] = useState<string | null>(null);
   const [said, setSaid] = useState('');
-  const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [confirm, setConfirm] = useState<StudioBlock | null>(null);
   const [dragging, setDragging] = useState<number | null>(null);
-  /** A control to focus after the next render (rows and blocks re-render in a new order). */
+  /** A control to focus after the next render (blocks re-render in a new order). */
   const focusNext = useRef<string | null>(null);
 
   useLayoutEffect(() => {
@@ -142,22 +113,16 @@ export function BlocksTab({
     el?.focus();
   });
 
-  useEffect(() => onOpenRow(openRow), [openRow, onOpenRow]);
-
-  // A design check fix that needs input: open its row and block, then focus the field.
+  // A design check fix that needs input: open its block, then focus the field.
   const [handled, setHandled] = useState(0);
   if (target && target.n !== handled) {
     setHandled(target.n);
-    setOpenRow(target.row);
-    if (target.block) setOpenBlock(target.block);
+    setOpenBlock(target.block);
   }
   useEffect(() => {
     if (!target) return;
-    const scope = target.block
-      ? `[data-block="${target.block}"]`
-      : `[data-row="${target.row}"]`;
     const el = root.current?.querySelector<HTMLElement>(
-      `${scope} [data-field="${target.field}"]`,
+      `[data-block="${target.block}"] [data-field="${target.field}"]`,
     );
     const focusable = el?.matches('input, textarea, button, select')
       ? el
@@ -185,28 +150,35 @@ export function BlocksTab({
     return { ok: true };
   };
 
-  const counts = studioCounts(draft);
   const photoReason =
-    counts.images >= L.pageImages
+    blockCounts(draft).images >= L.pageImages
       ? `Your page has ${L.pageImages} photos, the most it can have.`
       : null;
-  const total = draft.rows.length;
-  const tooMany = rowReason(draft);
+  const total = draft.blocks.length;
 
-  const shiftRow = (from: number, to: number) => {
-    if (to < 0 || to >= total || from === to) return;
-    const rowId = draft.rows[from]!.id;
-    update((doc) => moveRow(doc, from, to));
-    setSaid(movedWords(from, to, total));
-    focusNext.current = `[data-row="${rowId}"] [data-row-handle]`;
+  /** Moves the block at `from` to `to`, says where it went, and keeps focus on its handle. */
+  const shift = (from: number, to: number) => {
+    const block = draft.blocks[from];
+    if (!block || to < 0 || to >= total || from === to || readOnly) return;
+    update((doc) => moveBlockTo(doc, from, to));
+    setSaid(movedWords(block.kind, to, total));
+    focusNext.current = `[data-block="${block.id}"] [data-block-handle]`;
   };
 
-  const rowKeys = (event: KeyboardEvent, index: number) => {
+  const step = (block: StudioBlock, index: number, to: 'up' | 'down') => {
+    if (!moveBlock(draft, block.id, to)) {
+      setSaid(`Already ${to === 'up' ? 'first' : 'last'}.`);
+      return;
+    }
+    shift(index, index + (to === 'up' ? -1 : 1));
+  };
+
+  const keys = (event: KeyboardEvent, block: StudioBlock, index: number) => {
     const to =
       event.key === 'ArrowUp'
-        ? index - 1
+        ? 'up'
         : event.key === 'ArrowDown'
-          ? index + 1
+          ? 'down'
           : event.key === 'Home'
             ? 0
             : event.key === 'End'
@@ -214,529 +186,181 @@ export function BlocksTab({
               : null;
     if (to === null) return;
     event.preventDefault();
-    if (readOnly) return;
-    shiftRow(index, to);
-  };
-
-  const shiftBlock = (block: StudioBlockV1, to: BlockMove, focus: string) => {
-    const next = moveBlock(draft, block.id, to);
-    if (!next) {
-      setSaid(
-        to === 'left' || to === 'right'
-          ? `Can’t move it ${to}: there is no column there, or it’s full.`
-          : `Already ${to === 'up' ? 'first' : 'last'} in its column.`,
-      );
-      return;
-    }
-    update((doc) => moveBlock(doc, block.id, to) ?? doc);
-    const at = findBlock(next, block.id)!;
-    const cols = at.row.cells.length;
-    setSaid(
-      `${KIND_LABEL[block.kind]}, moved to place ${at.k + 1} of ${at.row.cells[at.c]!.length}${cols > 1 ? ` in column ${at.c + 1}` : ''}`,
-    );
-    focusNext.current = `[data-block="${block.id}"] ${focus}`;
-  };
-
-  const blockKeys = (event: KeyboardEvent, block: StudioBlockV1) => {
-    const to = (
-      {
-        ArrowUp: 'up',
-        ArrowDown: 'down',
-        ArrowLeft: 'left',
-        ArrowRight: 'right',
-      } as const
-    )[event.key as 'ArrowUp'];
-    if (!to) return;
-    event.preventDefault();
-    if (!readOnly) shiftBlock(block, to, '[data-block-handle]');
+    if (typeof to === 'number') shift(index, to);
+    else step(block, index, to);
   };
 
   const onDrop = (event: DragEvent, to: number) => {
     event.preventDefault();
-    if (dragging !== null) shiftRow(dragging, to);
+    if (dragging !== null) shift(dragging, to);
     setDragging(null);
   };
 
-  const removeConfirmed = () => {
-    if (!confirm) return;
-    if (confirm.kind === 'row') {
-      update((doc) => removeRow(doc, confirm.row.id));
-      setSaid(`Row ${confirm.index + 1} removed`);
-      focusNext.current = '[data-add-row]';
-    } else {
-      update((doc) => removeBlock(doc, confirm.block.id));
-      setSaid(`${KIND_LABEL[confirm.block.kind]} removed`);
-    }
-    setConfirm(null);
+  const remove = (block: StudioBlock) => {
+    update((doc) => removeBlock(doc, block.id));
+    setSaid(`${KIND_LABEL[block.kind]} removed`);
+    focusNext.current = '[data-add-block]';
   };
 
   return (
     <div ref={root} className="pst-blocks">
-      <h2 className="pst-label">Rows and blocks</h2>
-      <p className="pst-hint">
-        A page is rows. Each row picks its columns, then holds blocks. Spacing
-        and backgrounds come from fixed choices.
+      <div className="pst-section__head">
+        <h2>Blocks</h2>
+        <span>
+          {total} of {L.blocks}
+        </span>
+      </div>
+      <p className="pst-note">
+        Your page shows them in this order. Your style decides how each one
+        looks.
       </p>
       <p className="sr-only" role="status" aria-live="polite">
         {said}
       </p>
       <p id={`${id}-move-hint`} className="sr-only">
-        Up and Down arrow keys move it.
+        Up and Down arrow keys move it. Home and End move it first or last.
       </p>
-      <Locked
-        title="Name, photo, @username and badge"
-        detail="Always TipMe. Can’t be moved, styled or removed."
-      />
-      <Locked
-        title="Tip block and fee line"
-        detail="Always TipMe. Can’t be moved, styled or removed. It sits beside your rows on wide screens and straight after your name on phones."
-      />
+      <ul className="pst-locked-rows" aria-label="Always on your page">
+        {lockedRows(links).map((row) => (
+          <li key={row.key} className="pst-block pst-block--locked">
+            <span className="pst-block__lock">{ICONS.lock}</span>
+            <span className="pst-block__words">
+              <b>{row.title}</b>
+              <span>
+                {row.detail.replace(' Change them in Settings.', '')}
+                {row.key === 'links' && (
+                  <>
+                    {' '}
+                    <Link href="/dashboard/settings#page">
+                      Change them in Settings.
+                    </Link>
+                  </>
+                )}
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
       {total === 0 ? (
-        <p className="pst-hint">No rows yet. Add one, then add blocks to it.</p>
+        <p className="pst-note">No blocks yet. Add one below.</p>
       ) : (
-        <ol className="pst-rows" aria-label="Your rows">
-          {draft.rows.map((row, index) => (
+        <ol className="pst-block-list" aria-label="Your blocks">
+          {draft.blocks.map((block, index) => (
             <li
-              key={row.id}
-              data-row={row.id}
-              className="pst-row"
-              data-open={openRow === row.id || undefined}
+              key={block.id}
+              data-block={block.id}
+              className="pst-block"
+              data-open={openBlock === block.id || undefined}
               data-dragging={dragging === index || undefined}
               onDragOver={(e) => {
                 if (dragging !== null) e.preventDefault();
               }}
               onDrop={(e) => onDrop(e, index)}
             >
-              <div className="pst-row__head">
+              <div className="pst-block__head">
                 <span
-                  className="pst-row__grip"
+                  className="pst-block__grip"
                   draggable={!readOnly}
                   aria-hidden="true"
                   title="Drag to move"
-                  data-row-grip
+                  data-block-grip
                   onDragStart={(e) => {
                     e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/plain', row.id);
+                    e.dataTransfer.setData('text/plain', block.id);
                     setDragging(index);
                   }}
                   onDragEnd={() => setDragging(null)}
                 >
-                  ⋮⋮
+                  {ICONS.grip}
                 </span>
                 <button
                   type="button"
-                  className="pst-row__toggle"
-                  aria-expanded={openRow === row.id}
+                  className="pst-block__toggle"
+                  aria-expanded={openBlock === block.id}
                   aria-describedby={`${id}-move-hint`}
-                  data-row-handle
-                  onClick={() => setOpenRow(openRow === row.id ? null : row.id)}
-                  onKeyDown={(e) => rowKeys(e, index)}
+                  data-block-handle
+                  onClick={() =>
+                    setOpenBlock(openBlock === block.id ? null : block.id)
+                  }
+                  onKeyDown={(e) => keys(e, block, index)}
                 >
-                  <b>Row {index + 1}</b> <span>{rowSummary(row)}</span>
+                  <b>{KIND_LABEL[block.kind]}</b>{' '}
+                  <span>{blockSummary(block)}</span>
                 </button>
                 <div className="pst-actions">
                   <Button
                     variant="quiet"
-                    aria-label={`Move row ${index + 1} up`}
+                    aria-label={`Move ${KIND_LABEL[block.kind]} up`}
                     disabled={readOnly || index === 0}
-                    onClick={() => shiftRow(index, index - 1)}
+                    onClick={() => step(block, index, 'up')}
                   >
                     Up
                   </Button>
                   <Button
                     variant="quiet"
-                    aria-label={`Move row ${index + 1} down`}
+                    aria-label={`Move ${KIND_LABEL[block.kind]} down`}
                     disabled={readOnly || index === total - 1}
-                    onClick={() => shiftRow(index, index + 1)}
+                    onClick={() => step(block, index, 'down')}
                   >
                     Down
                   </Button>
+                  <Button
+                    variant="quiet"
+                    aria-label={`Remove ${KIND_LABEL[block.kind]}`}
+                    disabled={readOnly}
+                    onClick={() =>
+                      hasContent(block) ? setConfirm(block) : remove(block)
+                    }
+                  >
+                    Remove
+                  </Button>
                 </div>
               </div>
-              {openRow === row.id && (
-                <fieldset className="pst-row__body" disabled={readOnly}>
-                  <legend className="sr-only">Row {index + 1}</legend>
-                  <RowToolbar
-                    row={row}
-                    index={index}
-                    draft={draft}
-                    update={update}
+              {openBlock === block.id && (
+                <fieldset className="pst-block__form" disabled={readOnly}>
+                  <legend className="sr-only">
+                    {KIND_LABEL[block.kind]} block
+                  </legend>
+                  <BlockForm
+                    block={block}
                     images={images}
                     savePhoto={savePhoto}
                     photoReason={photoReason}
+                    onChange={(next) =>
+                      update((doc) => updateBlock(doc, block.id, () => next))
+                    }
                   />
-                  {row.cells.map((cell, c) => (
-                    <section
-                      key={c}
-                      className="pst-cell"
-                      aria-label={
-                        row.cells.length > 1
-                          ? `Row ${index + 1}, column ${c + 1}`
-                          : `Row ${index + 1} blocks`
-                      }
-                    >
-                      {row.cells.length > 1 && (
-                        <h3 className="pst-label">Column {c + 1}</h3>
-                      )}
-                      {cell.length > 0 && (
-                        <ul className="pst-block-list">
-                          {cell.map((block, k) => (
-                            <li
-                              key={block.id}
-                              data-block={block.id}
-                              className="pst-block"
-                            >
-                              <div className="pst-block__head">
-                                <button
-                                  type="button"
-                                  className="pst-block__toggle"
-                                  aria-expanded={openBlock === block.id}
-                                  aria-describedby={`${id}-block-hint`}
-                                  data-block-handle
-                                  onClick={() =>
-                                    setOpenBlock(
-                                      openBlock === block.id ? null : block.id,
-                                    )
-                                  }
-                                  onKeyDown={(e) => blockKeys(e, block)}
-                                >
-                                  <b>{KIND_LABEL[block.kind]}</b>{' '}
-                                  <span>{blockSummary(block)}</span>
-                                </button>
-                                <div className="pst-actions">
-                                  <Button
-                                    variant="quiet"
-                                    aria-label={`Move ${KIND_LABEL[block.kind]} up`}
-                                    disabled={k === 0}
-                                    onClick={() =>
-                                      shiftBlock(
-                                        block,
-                                        'up',
-                                        '[data-block-handle]',
-                                      )
-                                    }
-                                  >
-                                    Up
-                                  </Button>
-                                  <Button
-                                    variant="quiet"
-                                    aria-label={`Move ${KIND_LABEL[block.kind]} down`}
-                                    disabled={k === cell.length - 1}
-                                    onClick={() =>
-                                      shiftBlock(
-                                        block,
-                                        'down',
-                                        '[data-block-handle]',
-                                      )
-                                    }
-                                  >
-                                    Down
-                                  </Button>
-                                  {row.cells.length > 1 && (
-                                    <>
-                                      <Button
-                                        variant="quiet"
-                                        aria-label={`Move ${KIND_LABEL[block.kind]} to the column on the left`}
-                                        disabled={
-                                          c === 0 ||
-                                          row.cells[c - 1]!.length >=
-                                            L.blocksPerCell
-                                        }
-                                        onClick={() =>
-                                          shiftBlock(
-                                            block,
-                                            'left',
-                                            '[data-block-handle]',
-                                          )
-                                        }
-                                      >
-                                        Left
-                                      </Button>
-                                      <Button
-                                        variant="quiet"
-                                        aria-label={`Move ${KIND_LABEL[block.kind]} to the column on the right`}
-                                        disabled={
-                                          c === row.cells.length - 1 ||
-                                          row.cells[c + 1]!.length >=
-                                            L.blocksPerCell
-                                        }
-                                        onClick={() =>
-                                          shiftBlock(
-                                            block,
-                                            'right',
-                                            '[data-block-handle]',
-                                          )
-                                        }
-                                      >
-                                        Right
-                                      </Button>
-                                    </>
-                                  )}
-                                  <Button
-                                    variant="quiet"
-                                    aria-label={`Remove ${KIND_LABEL[block.kind]}`}
-                                    onClick={() => {
-                                      if (hasContent(block))
-                                        setConfirm({ kind: 'block', block });
-                                      else {
-                                        update((doc) =>
-                                          removeBlock(doc, block.id),
-                                        );
-                                        setSaid(
-                                          `${KIND_LABEL[block.kind]} removed`,
-                                        );
-                                      }
-                                    }}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              </div>
-                              {openBlock === block.id && (
-                                <div className="pst-block__form">
-                                  <BlockForm
-                                    block={block}
-                                    images={images}
-                                    savePhoto={savePhoto}
-                                    photoReason={photoReason}
-                                    profile={profile}
-                                    onChange={(next) =>
-                                      update((doc) =>
-                                        updateBlock(doc, block.id, () => next),
-                                      )
-                                    }
-                                  />
-                                </div>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <AddBlock
-                        draft={draft}
-                        row={row}
-                        cell={c}
-                        profile={profile}
-                        savePhoto={savePhoto}
-                        onAdd={(block) => {
-                          update((doc) => addBlock(doc, row.id, c, block));
-                          setOpenBlock(block.id);
-                          setSaid(`${KIND_LABEL[block.kind]} added`);
-                          focusNext.current = `[data-block="${block.id}"] [data-block-handle]`;
-                        }}
-                      />
-                    </section>
-                  ))}
-                  <div className="pst-actions">
-                    <Button
-                      variant="quiet"
-                      onClick={() => {
-                        if (row.cells.flat().length > 0)
-                          setConfirm({ kind: 'row', row, index });
-                        else {
-                          update((doc) => removeRow(doc, row.id));
-                          setSaid(`Row ${index + 1} removed`);
-                          focusNext.current = '[data-add-row]';
-                        }
-                      }}
-                    >
-                      Remove row {index + 1}
-                    </Button>
-                  </div>
                 </fieldset>
               )}
             </li>
           ))}
         </ol>
       )}
-      <p id={`${id}-block-hint`} className="sr-only">
-        Arrow keys move it: up and down in its column, left and right between
-        columns.
-      </p>
-      <div className="pst-actions">
-        <Button
-          variant="secondary"
-          data-add-row
-          aria-disabled={readOnly || tooMany !== null || undefined}
-          aria-describedby={tooMany ? `${id}-rows-full` : undefined}
-          onClick={() => {
-            if (readOnly || tooMany) return;
-            const before = new Set(draft.rows.map((r) => r.id));
-            const next = addRow(draft);
-            const added = next.rows.find((r) => !before.has(r.id));
-            update(() => next);
-            if (added) {
-              setOpenRow(added.id);
-              setSaid(`Row ${next.rows.length} added`);
-              focusNext.current = `[data-row="${added.id}"] [data-row-handle]`;
-            }
-          }}
-        >
-          Add a row
-        </Button>
-      </div>
-      {tooMany && (
-        <p id={`${id}-rows-full`} className="pst-hint">
-          {tooMany}
-        </p>
-      )}
-      <Locked
-        title="Footer: Report this page, Privacy, Terms"
-        detail="Always TipMe. Can’t be moved, styled or removed."
+      <AddBlock
+        draft={draft}
+        plan={plan}
+        readOnly={readOnly}
+        savePhoto={savePhoto}
+        onAdd={(block) => {
+          update((doc) => addBlock(doc, block));
+          setOpenBlock(block.id);
+          setSaid(`${KIND_LABEL[block.kind]} added`);
+          focusNext.current = `[data-block="${block.id}"] [data-block-handle]`;
+        }}
       />
-      <p className="pst-hint">
-        No dragging to a pixel position, no resizing by hand, nothing on top of
-        anything else. Every row becomes one column on phones, left column
-        first.
-      </p>
       {confirm && (
         <ConfirmDialog
-          title={
-            confirm.kind === 'row'
-              ? `Remove row ${confirm.index + 1}?`
-              : `Remove this ${KIND_LABEL[confirm.block.kind].toLowerCase()} block?`
-          }
+          title={`Remove this ${KIND_LABEL[confirm.kind].toLowerCase()} block?`}
           confirm="Remove"
-          onConfirm={removeConfirmed}
+          onConfirm={() => {
+            remove(confirm);
+            setConfirm(null);
+          }}
           onCancel={() => setConfirm(null)}
         >
-          {confirm.kind === 'row'
-            ? `Its ${confirm.row.cells.flat().length === 1 ? 'block goes' : `${confirm.row.cells.flat().length} blocks go`} too. Your published page doesn’t change until you publish.`
-            : 'What you wrote or chose in it goes too. Your published page doesn’t change until you publish.'}
+          What you wrote or chose in it goes too. Your published page doesn’t
+          change until you publish.
         </ConfirmDialog>
-      )}
-    </div>
-  );
-}
-
-function Locked({ title, detail }: { title: string; detail: string }) {
-  return (
-    <div className="pst-row pst-row--locked">
-      <b>{title}</b>
-      <p className="pst-hint">{detail}</p>
-    </div>
-  );
-}
-
-function RowToolbar({
-  row,
-  index,
-  draft,
-  update,
-  images,
-  savePhoto,
-  photoReason,
-}: {
-  row: StudioRowV1;
-  index: number;
-  draft: StudioDocumentV1;
-  update(fn: (doc: StudioDocumentV1) => StudioDocumentV1): void;
-  images: StudioImage[];
-  savePhoto: SavePhoto;
-  photoReason: string | null;
-}) {
-  const [refused, setRefused] = useState('');
-  const isPhoto = typeof row.background === 'object';
-  const [choosingPhoto, setChoosingPhoto] = useState(false);
-  const bg = isPhoto
-    ? 'photo'
-    : (row.background as keyof typeof BACKGROUND_LABEL);
-  const backgrounds = (
-    [
-      'page',
-      'card',
-      'colour',
-      ...(draft.brand.length === 2 ? ['second'] : []),
-      'photo',
-    ] as const
-  ).map((value) => ({
-    value: value as keyof typeof BACKGROUND_LABEL,
-    label: BACKGROUND_LABEL[value as keyof typeof BACKGROUND_LABEL],
-  }));
-  return (
-    <div className="pst-toolbar">
-      <Choice
-        label={`Row ${index + 1} · columns`}
-        options={STUDIO_COLUMNS.map((c) => ({
-          value: c,
-          label: COLUMN_LABEL[c],
-        }))}
-        value={row.columns}
-        onChange={(columns: StudioColumns) => {
-          const next = withColumns(draft, row.id, columns);
-          if (typeof next === 'string') setRefused(next);
-          else {
-            setRefused('');
-            update((doc) => {
-              const again = withColumns(doc, row.id, columns);
-              return typeof again === 'string' ? doc : again;
-            });
-          }
-        }}
-      />
-      {refused && (
-        <p className="pst-error" role="alert">
-          {refused}
-        </p>
-      )}
-      <Choice
-        label="Spacing"
-        options={STUDIO_SPACINGS.map((s) => ({
-          value: s,
-          label: s.toUpperCase(),
-        })).sort((a, b) => 'SML'.indexOf(a.label) - 'SML'.indexOf(b.label))}
-        value={row.spacing}
-        onChange={(spacing) =>
-          update((doc) => withSpacing(doc, row.id, spacing))
-        }
-      />
-      <Choice
-        label="Background"
-        options={backgrounds}
-        value={choosingPhoto ? 'photo' : bg}
-        onChange={(value) => {
-          if (value === 'photo') {
-            setChoosingPhoto(true);
-            return;
-          }
-          setChoosingPhoto(false);
-          update((doc) =>
-            withBackground(
-              doc,
-              row.id,
-              value as 'page' | 'card' | 'colour' | 'second',
-            ),
-          );
-        }}
-      />
-      {(isPhoto || choosingPhoto) && (
-        <div className="pst-picker" data-field="background">
-          {!isPhoto && photoReason ? (
-            <p className="pst-hint">{photoReason}</p>
-          ) : (
-            <ImagePicker
-              kind="photo"
-              frame={false}
-              hasImage={isPhoto}
-              tile={
-                typeof row.background === 'object' ? (
-                  <Thumb imageId={row.background.photo} images={images} />
-                ) : (
-                  <span className="pst-thumb" />
-                )
-              }
-              limits={`${PHOTO_LIMITS} Words on it get a shade behind them, so they stay readable.`}
-              onSave={(picture) =>
-                savePhoto(picture, (imageId) => {
-                  setChoosingPhoto(false);
-                  update((doc) =>
-                    withBackground(doc, row.id, { photo: imageId }),
-                  );
-                })
-              }
-            />
-          )}
-        </div>
       )}
     </div>
   );
@@ -744,30 +368,30 @@ function RowToolbar({
 
 function AddBlock({
   draft,
-  row,
-  cell,
-  profile,
+  plan,
+  readOnly,
   savePhoto,
   onAdd,
 }: {
-  draft: StudioDocumentV1;
-  row: StudioRowV1;
-  cell: number;
-  profile: { bio: boolean; links: number };
+  draft: StudioDocument;
+  plan: 'free' | 'pro';
+  readOnly: boolean;
   savePhoto: SavePhoto;
-  onAdd(block: StudioBlockV1): void;
+  onAdd(block: StudioBlock): void;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState<'photo' | 'video' | null>(null);
-  const reasons = addReasons(draft, row.id, cell, profile);
+  const [pending, setPending] = useState<
+    'photo' | 'video' | { pro: string } | null
+  >(null);
+  const reasons = addReasons(draft);
   const close = () => {
     setOpen(false);
     setPending(null);
   };
   if (reasons.all)
     return (
-      <p className="pst-hint" data-add-full>
+      <p className="pst-note" data-add-full>
         {reasons.all}
       </p>
     );
@@ -775,8 +399,10 @@ function AddBlock({
     <div className="pst-add">
       <Button
         variant="secondary"
+        data-add-block
         aria-expanded={open}
         aria-controls={`${id}-kinds`}
+        disabled={readOnly}
         onClick={() => (open ? close() : setOpen(true))}
       >
         Add a block
@@ -816,9 +442,27 @@ function AddBlock({
                 Back to the list
               </Button>
             </>
+          ) : pending ? (
+            // A Pro kind on Free: what it needs, and the way to Pro. Nothing is added.
+            <div
+              className="pst-pro-sheet"
+              role="group"
+              aria-labelledby={`${id}-pro`}
+            >
+              <ProPill />
+              <p id={`${id}-pro`}>{pending.pro} blocks come with Pro.</p>
+              <div className="pst-actions">
+                <Link className="tm-button tm-button--primary" href="/pro">
+                  See Pro
+                </Link>
+                <Button variant="quiet" onClick={() => setPending(null)}>
+                  Back to the list
+                </Button>
+              </div>
+            </div>
           ) : (
             <ul className="pst-kinds" aria-label="Kinds of block">
-              {ADD_KINDS.map(({ kind, label, hint }) => {
+              {addKinds(plan).map(({ kind, label, hint, pro }) => {
                 const reason = reasons[kind];
                 return (
                   <li key={kind}>
@@ -829,6 +473,10 @@ function AddBlock({
                       aria-describedby={`${id}-${kind}`}
                       onClick={() => {
                         if (reason) return;
+                        if (pro) {
+                          setPending({ pro: label });
+                          return;
+                        }
                         if (kind === 'photo' || kind === 'video') {
                           setPending(kind);
                           return;
@@ -838,6 +486,7 @@ function AddBlock({
                       }}
                     >
                       <b>{label}</b>
+                      {pro && <ProPill />}
                     </button>
                     <small id={`${id}-${kind}`}>{reason ?? hint}</small>
                   </li>
