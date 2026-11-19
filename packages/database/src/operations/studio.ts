@@ -499,8 +499,10 @@ export type PublishResult =
  * page's plan read under the page lock; otherwise nothing changes and the issues come back (there
  * is no "publish anyway", owner ruling 12). A Free page publishing anything Pro gets `pro-only`.
  * When the version uses anything Pro, the write also requires the plan to be Pro, as setThanks
- * does, so a plan change can never put a Pro design live. The draft is kept as it was. Photos used by
- * neither version are deleted.
+ * does, so a plan change can never put a Pro design live. The draft is kept as it was. On Pro, photos
+ * used by neither version are deleted. Not on Free (§12.5: nothing is deleted while Pro is off): a
+ * lapsed page that takes its gallery out to publish a free style keeps the photos for when Pro
+ * returns, and the next publish made on Pro clears what is still unused.
  */
 export function publishStudio(
   db: Database,
@@ -571,7 +573,9 @@ export function publishStudio(
         ...studioImageIds(version),
         ...studioImageIds(readStored(row.draft, today)),
       ]);
-      const keys = await dropUnused(tx, profileId, keep);
+      // The plan as read under the page lock, as for the check above.
+      const keys =
+        page.plan === 'pro' ? await dropUnused(tx, profileId, keep) : [];
       return { issues: [] as StudioIssue[], keys, handle: page.handle };
     });
     await removeObjects(store, outcome.keys);
@@ -583,8 +587,11 @@ export function publishStudio(
 }
 
 /**
- * Throws the draft away: back to the published version, or to nothing when there isn't one. The
- * photos only the draft used go with it.
+ * Throws the draft away: back to the published version, or to Classic with no blocks when there
+ * isn't one (§12.3). The row is kept and its rev moves on, never back to 0: deleting it would let
+ * the next save start again at rev 1, and a tab still holding the old rev 1 could then save over
+ * that newer work without being told it is stale. On Pro, the photos neither the published version
+ * nor the new draft uses go with it; on Free nothing is deleted (§12.5), as for publishing.
  */
 export function discardStudioDraft(
   db: Database,
@@ -595,32 +602,32 @@ export function discardStudioDraft(
     const profileId = await myPageId(db, userId);
     const keys = await db.transaction(async (tx) => {
       // Any plan: a lapsed Pro draft can be discarded too (§11).
-      await lockLivePage(tx, profileId);
+      const page = await lockPage(tx, profileId);
       const [row] = await tx
         .select()
         .from(pageStudios)
         .where(eq(pageStudios.profileId, profileId))
         .for('update');
-      if (!row) return dropUnused(tx, profileId, new Set());
-      if (!row.published) {
+      // No row: nothing was ever saved, so no tab holds a rev to protect.
+      const draft = row
+        ? (row.published ?? defaultStudioDocument())
+        : defaultStudioDocument();
+      if (row)
         await tx
-          .delete(pageStudios)
+          .update(pageStudios)
+          .set({
+            draft,
+            rev: sql`${pageStudios.rev} + 1`,
+            updatedAt: sql`now()`,
+          })
           .where(eq(pageStudios.profileId, profileId));
-        return dropUnused(tx, profileId, new Set());
-      }
-      await tx
-        .update(pageStudios)
-        .set({
-          draft: row.published,
-          rev: sql`${pageStudios.rev} + 1`,
-          updatedAt: sql`now()`,
-        })
-        .where(eq(pageStudios.profileId, profileId));
-      return dropUnused(
-        tx,
-        profileId,
-        studioImageIds(readStored(row.published, lagosToday())),
-      );
+      return page.plan === 'pro'
+        ? dropUnused(
+            tx,
+            profileId,
+            studioImageIds(readStored(draft, lagosToday())),
+          )
+        : [];
     });
     await removeObjects(store, keys);
     return myStudioOf(db, profileId);

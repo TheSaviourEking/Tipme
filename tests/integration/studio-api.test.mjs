@@ -358,6 +358,45 @@ test('a save with an old rev is refused and keeps the newer draft', async () => 
   assert.equal((await studio(cookie)).draft.blocks[0].text, 'First');
 });
 
+test('discard keeps the row: a tab still on the old rev is refused as stale after a discard (no ABA)', async () => {
+  const { cookie, profileId } = await page();
+  // Tab A saves at rev 1; tab B loads it.
+  const first = (
+    await json(await save(cookie, 0, withBlocks([title('blk00001', 'Old')])))
+  ).body.data;
+  assert.equal(first.rev, 1);
+  const tabB = await studio(cookie);
+  assert.equal(tabB.rev, 1);
+  // Tab A discards a page that was never published: Classic with no blocks, a newer rev.
+  const discarded = await json(
+    await call(cookie, 'DELETE', '/v1/me/studio/draft'),
+  );
+  assert.equal(discarded.status, 200, JSON.stringify(discarded.body));
+  assert.deepEqual(discarded.body.data.draft, {
+    v: 2,
+    style: 'classic',
+    accent: null,
+    mode: 'light',
+    cover: 'yours',
+    blocks: [],
+  });
+  assert.equal(discarded.body.data.published, null);
+  // Tab A saves newer work on the rev the discard gave it.
+  const newer = withBlocks([title('blk00001', 'Newer')]);
+  const saved = await json(await save(cookie, discarded.body.data.rev, newer));
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  // Tab B, still on rev 1, is refused and the newer work stays.
+  const stale = await json(
+    await save(cookie, tabB.rev, withBlocks([title('blk00001', 'Stale')])),
+  );
+  assert.equal(stale.status, 409, JSON.stringify(stale.body));
+  assert.equal(stale.body.error.code, 'STUDIO_DRAFT_STALE');
+  assert.equal((await studio(cookie)).draft.blocks[0].text, 'Newer');
+  // How: the row is kept and the rev moves on, never back to 0.
+  assert.ok(discarded.body.data.rev > 1, 'the rev moves on');
+  assert.ok(await stored(profileId), 'the row is kept');
+});
+
 test('a v1 draft is refused now that the editor speaks v2', async () => {
   for (const pro of [true, false]) {
     const { cookie, profileId } = await page({ pro });
@@ -578,6 +617,61 @@ test('a lapsed Free draft that holds a Pro style and Pro blocks can still be reo
     )[0].n,
     2,
   );
+});
+
+test('a lapsed page that removes its gallery to publish a free style keeps its photos until a publish on Pro', async () => {
+  const { cookie, profileId } = await page();
+  const one = await uploadPhoto(cookie);
+  const two = await uploadPhoto(cookie);
+  const design = v2({
+    style: 'stage',
+    blocks: [title('blk00001'), galleryOf('blk00002', [one, two])],
+  });
+  const s = (await json(await save(cookie, 0, design))).body.data;
+  assert.equal((await publish(cookie, s.rev)).status, 200);
+  const photos = async () =>
+    (
+      await q(
+        'SELECT id FROM studio_images WHERE profile_id = $1 ORDER BY id',
+        [profileId],
+      )
+    ).map((r) => r.id);
+  const files = async () =>
+    (
+      await q(
+        `SELECT count(*)::int AS n FROM studio_image_files f JOIN studio_images i ON i.id = f.image_id
+          WHERE i.profile_id = $1`,
+        [profileId],
+      )
+    )[0].n;
+  const fileCount = await files();
+  assert.ok(fileCount > 0);
+  // Pro lapses. To publish a free style, they take the gallery out (§12.5: nothing is deleted).
+  await setPlan(profileId, 'free');
+  const free = withBlocks([title('blk00001')]);
+  const s2 = (await json(await save(cookie, (await studio(cookie)).rev, free)))
+    .body.data;
+  const published = await json(await publish(cookie, s2.rev));
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+  assert.deepEqual((await stored(profileId)).published, free);
+  assert.deepEqual(await photos(), [one, two].sort(), 'both photos are kept');
+  assert.equal(await files(), fileCount, 'and every file of them');
+  // A discard on Free deletes nothing either.
+  const discarded = await json(
+    await call(cookie, 'DELETE', '/v1/me/studio/draft'),
+  );
+  assert.equal(discarded.status, 200, JSON.stringify(discarded.body));
+  assert.deepEqual(await photos(), [one, two].sort());
+  // They are still the owner's, so the gallery can come back when Pro does.
+  assert.deepEqual(
+    discarded.body.data.images.map((i) => i.imageId).sort(),
+    [one, two].sort(),
+  );
+  // Pro renews: the next publish cleans up as before.
+  await setPlan(profileId, 'pro');
+  const s3 = await studio(cookie);
+  assert.equal((await publish(cookie, s3.rev)).status, 200);
+  assert.deepEqual(await photos(), [], 'unused photos go on a Pro publish');
 });
 
 test('a lapsed Pro style shows Classic', async () => {
