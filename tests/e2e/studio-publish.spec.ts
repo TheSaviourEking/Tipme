@@ -373,10 +373,11 @@ test('when the latest can’t be loaded, the editor says so and keeps the banner
   await page.route(
     `${API_ORIGIN}/v1/me/studio`,
     (route) => route.abort('internetdisconnected'),
-    { times: 2 },
+    // A read isn't retried after a network failure, so one is enough.
+    { times: 1 },
   );
   await dialog.getByRole('button', { name: 'Show the latest' }).click();
-  const banner = page.locator('.pst-banner');
+  const banner = page.locator('div.pst-banner');
   await expect(banner.getByRole('alert')).toHaveText(
     'We couldn’t load the latest. Check your connection, then try again.',
   );
@@ -387,7 +388,7 @@ test('when the latest can’t be loaded, the editor says so and keeps the banner
   ).toBeFocused();
   // Once it loads, the banner and the words go.
   await banner.getByRole('button', { name: 'Show the latest' }).click();
-  await expect(page.locator('.pst-banner')).toHaveCount(0);
+  await expect(page.locator('div.pst-banner')).toHaveCount(0);
 });
 
 test('a stale draft says this tab’s last changes weren’t saved before “Show the latest” drops them', async ({
@@ -402,7 +403,7 @@ test('a stale draft says this tab’s last changes weren’t saved before “Sho
       : route.continue(),
   );
   await card(page, 'Journal').click();
-  const banner = page.locator('.pst-banner').filter({
+  const banner = page.locator('div.pst-banner').filter({
     hasText: 'This draft changed in another tab',
   });
   await expect(banner).toBeVisible({ timeout: 15_000 });
@@ -411,7 +412,7 @@ test('a stale draft says this tab’s last changes weren’t saved before “Sho
   );
   await page.unroute(`${API_ORIGIN}/v1/me/studio/draft`);
   await banner.getByRole('button', { name: 'Show the latest' }).click();
-  await expect(page.locator('.pst-banner')).toHaveCount(0);
+  await expect(page.locator('div.pst-banner')).toHaveCount(0);
   await expect(card(page, 'Clear')).toHaveAttribute('aria-checked', 'true');
 });
 

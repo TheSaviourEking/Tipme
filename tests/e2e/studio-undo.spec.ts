@@ -74,7 +74,7 @@ const card = (page: Page, name: string) =>
     .getByRole('radio', { name: new RegExp(`^${name},`) });
 const blockList = (page: Page) =>
   page.getByRole('list', { name: 'Your blocks' });
-const readOnlyBanner = (page: Page) => page.locator('.pst-banner');
+const readOnlyBanner = (page: Page) => page.locator('div.pst-banner');
 
 async function openEditor(page: Page) {
   await page.goto('/dashboard/studio');

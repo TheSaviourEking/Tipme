@@ -117,6 +117,9 @@ export default defineConfig({
         // tests/integration/avatars-limit.test.mjs.
         RATE_LIMIT_AVATARS_PER_HOUR: '10000',
         RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '10000',
+        // Every Studio save, publish and discard comes from 127.0.0.1 too (a burn-in passes 60 a
+        // minute); the limit is covered by tests/integration/studio-discard-limit.test.mjs.
+        RATE_LIMIT_STUDIO_DRAFTS_PER_MIN: '10000',
         LIVE_UPDATES_ENABLED: 'true',
         // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
         BUSINESS_ENABLED: 'true',

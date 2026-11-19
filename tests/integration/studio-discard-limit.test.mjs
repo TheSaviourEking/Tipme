@@ -12,9 +12,9 @@ import {
 } from './helpers.mjs';
 
 // Discarding a Studio draft (styles plan Task 15, PR 5b; spec §12.3) counts against the same
-// allowance as saving and publishing it (`studio_drafts`, 60 a minute): each discard locks the page
-// and may remove photos, so a script can't hammer it. Its own stack (its own rate-limit prefix), so
-// using up the allowance can't touch another file's saves.
+// allowance as saving and publishing it (`studio_drafts`, 60 a minute by default; 3 here): each
+// discard locks the page and may remove photos, so a script can't hammer it. Its own stack (its own
+// rate-limit prefix), so using up the allowance can't touch another file's saves.
 startTelemetry({
   serviceName: 'tipme-integration',
   sampleRatio: 1,
@@ -28,7 +28,11 @@ before(async () => {
   await database.reset();
   stack = await startStack({
     databaseUrl: database.url,
-    apiEnv: { WEB_ORIGIN: WEB, RATE_LIMIT_AUTH_PER_HOUR: '1000' },
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+      RATE_LIMIT_STUDIO_DRAFTS_PER_MIN: '3',
+    },
   });
   await setSwitch(database.pool, 'page_studio', true);
 });
@@ -51,12 +55,11 @@ test('discarding the draft shares the Studio save allowance', async () => {
     });
   // A minute's window can turn over mid-test: start near the beginning of one.
   const into = Date.now() % 60_000;
-  if (into > 40_000)
+  if (into > 55_000)
     await new Promise((resolve) => setTimeout(resolve, 60_500 - into));
   const statuses = [];
-  for (let i = 0; i < 61; i++) statuses.push((await discard()).status);
-  assert.deepEqual(statuses.slice(0, 60), Array(60).fill(200));
-  assert.equal(statuses[60], 429);
+  for (let i = 0; i < 4; i++) statuses.push((await discard()).status);
+  assert.deepEqual(statuses, [200, 200, 200, 429]);
   // Saving is the same allowance: it is used up too.
   const save = await fetch(`${stack.api}/v1/me/studio/draft`, {
     method: 'PUT',
