@@ -4147,7 +4147,9 @@
   margin-top: var(--space-2);
 }
 
-body:has(.coming-soon-page) {
+body:has(
+  .coming-soon-page:not([style*='display: none'], [style*='display: none'] *)
+) {
   background:
     linear-gradient(135deg, rgb(122 50 249 / 3.5%), transparent 34%),
     var(--canvas);
@@ -7617,9 +7619,18 @@ p.tip-choice {
   gap: var(--space-3);
 }
 
-body:has(.business-public) .site-nav,
-body:has(.business-public) .menu-toggle,
-body:has(.business-public) > .site-footer {
+body:has(
+    .business-public:not([style*='display: none'], [style*='display: none'] *)
+  )
+  .site-nav,
+body:has(
+    .business-public:not([style*='display: none'], [style*='display: none'] *)
+  )
+  .menu-toggle,
+body:has(
+    .business-public:not([style*='display: none'], [style*='display: none'] *)
+  )
+  > .site-footer {
   display: none;
 }
 

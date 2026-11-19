@@ -848,7 +848,12 @@
   }
 
   @media (min-width: 1024px) {
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
       .site-header.site-header {
       --studio-head-ink: var(--studio-fg);
       position: relative;
@@ -857,14 +862,29 @@
       animation: none;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
       .site-header.site-header::before,
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
       .site-header.site-header::after {
       display: none;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
       .site-header.site-header
       .nav-shell
       > .brand
@@ -873,7 +893,12 @@
       fill: #7a32f9;
     }
 
-    html:has(.studio[data-style='sprint'][data-header])
+    html:has(
+        .studio[data-style='sprint'][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
       .site-header.site-header
       .nav-shell
       > .brand:focus-visible {

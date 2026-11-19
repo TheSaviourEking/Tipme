@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import ts from 'typescript';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { unguarded } from './shown-page.mjs';
 import {
   DESIGN_CHECK_VERSION,
   STUDIO_FONTS,
@@ -409,7 +410,8 @@ test("text on the site's chrome keeps 4.5:1 in every style, light and dark", () 
 });
 
 // Journal and Linen (PR 2c, spec §9.3, §9.8).
-const sheet = (style) => readFileSync(new URL(`${style}.css`, src), 'utf8');
+const sheet = (style) =>
+  unguarded(readFileSync(new URL(`${style}.css`, src), 'utf8'));
 /** The declarations of the first rule whose selector ends with `selector` (outside media). */
 const declarations = (css, selector, media = null) => {
   const body = media
@@ -949,7 +951,7 @@ test('the cover photo is cropped by the style: high priority, sized for its tall
     assert.match(small, / src="[^"]*wide-480"/);
   }
   // The crop keeps the upper third (no focal point is stored for a Settings cover).
-  const frame = readFileSync(new URL('frame.css', src), 'utf8');
+  const frame = unguarded(readFileSync(new URL('frame.css', src), 'utf8'));
   assert.match(
     declarations(frame, '.studio[data-style] .studio-cover__photo'),
     /object-position: 50% 33%;/,
@@ -1987,7 +1989,8 @@ function supportsBlock(css) {
   }
   throw new Error('unclosed @supports');
 }
-const frameCss = () => readFileSync(new URL('frame.css', src), 'utf8');
+const frameCss = () =>
+  unguarded(readFileSync(new URL('frame.css', src), 'utf8'));
 
 test('every header-over-cover rule waits for scroll-driven animation support, in Studio CSS only', () => {
   const files = ['frame', ...STUDIO_STYLE_IDS.filter((s) => s !== 'classic')];

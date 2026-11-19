@@ -314,13 +314,26 @@
 
   /* Anything scrolled into view (a focused link, the form's problem) stops above the bar
      (WCAG 2.4.11), as on Classic. The fallback holds the bar as drawn, notice included. */
-  html:has(.studio[data-style] form[data-skin]) {
+  html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+      form[data-skin]
+  ) {
     scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
   }
 
   /* The site's "TipMe has been updated" notice sits above the bar, as on Classic (globals.css
      lifts it over `.composer-action` there); a styled page isn't `.profile-page`. */
-  html:has(.studio[data-style] form[data-skin]) .update-notice {
+  html:has(
+      .studio[data-style]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+        form[data-skin]
+    )
+    .update-notice {
     bottom: calc(var(--tip-bar, 136px) + 12px);
   }
 }
@@ -356,15 +369,28 @@
    neutrals, written on <html> by the page (style-tokens.ts chromeCss), take the place of the
    site's paper tokens inside them, so they run into the page with no band or seam. On a tip page
    the header is the logo alone (owner, 19 Nov 2026; globals.css). */
-html:has(.studio[data-style]) {
+html:has(
+  .studio[data-style]:not([style*='display: none'], [style*='display: none'] *)
+) {
   background: var(--studio-bg);
 }
 
-html:has(.studio[data-style][data-mode='dark']) {
+html:has(
+  .studio[data-style][data-mode='dark']:not(
+      [style*='display: none'],
+      [style*='display: none'] *
+    )
+) {
   color-scheme: dark;
 }
 
-html:has(.studio[data-style]) :is(.site-header, .site-footer) {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  )
+  :is(.site-header, .site-footer) {
   --canvas: var(--studio-bg);
   --surface-raised: var(--studio-card);
   --surface-recessed: var(--studio-el2);
@@ -381,22 +407,48 @@ html:has(.studio[data-style]) :is(.site-header, .site-footer) {
    logo alone, as on the standard page and Classic (globals.css, .profile-page), so nothing competes
    with the Tip button. The menu, Sign in, Get tipped, the account's links and the phone's menu
    button step aside, out of sight and out of the keyboard's and screen readers' way; the site's
-   footer stays. The Studio lab stands in for these pages in the tests (test copies only). A page
-   kept hidden for the way back (React's Activity: an inline `display: none !important`) doesn't
-   count, so the page someone moves on to has today's header. */
-html:has(.studio[data-style]:is(main:not([style*='display: none']) > *))
+   footer stays. The Studio lab stands in for these pages in the tests (test copies only). Every
+   rule here reads only the page on screen (the guard on `.studio`: globals.css, "Only the page on
+   screen"). */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  )
   :is(.site-nav, .menu-toggle) {
   display: none;
 }
 
-html:has(.studio[data-style]) .site-header .brand__mark path[fill='#000000'],
-html:has(.studio[data-style]) .site-footer .brand__mark path[fill='#000000'] {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  )
+  .site-header
+  .brand__mark
+  path[fill='#000000'],
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  )
+  .site-footer
+  .brand__mark
+  path[fill='#000000'] {
   fill: var(--studio-fg);
 }
 
-html:has(.studio[data-style])
-  :is(.site-header, .site-footer)
-  :is(.tm-button--secondary, .tm-surface, .footer-card) {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  )
+  .site-footer
+  .footer-card {
   box-shadow: none;
 }
 
@@ -418,20 +470,43 @@ html:has(.studio[data-style])
 }
 
 @supports (animation-timeline: view()) and (timeline-scope: none) {
-  html:has(.studio[data-style][data-header]) {
+  html:has(
+    .studio[data-style][data-header]:not(
+        [style*='display: none'],
+        [style*='display: none'] *
+      )
+  ) {
     timeline-scope: --studio-hero;
   }
 
   /* The hero's view timeline, measured from the header's foot: the header is solid by the time
      the cover's foot reaches it. */
-  html:has(.studio[data-style][data-header='over']) .studio-cover,
-  html:has(.studio[data-style][data-header='band']) .studio-band {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .studio-cover,
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .studio-band {
     view-timeline: --studio-hero block;
     view-timeline-inset: var(--nav-height) 0;
   }
 
   /* The header writes in its ink. */
-  html:has(.studio[data-style][data-header]) .site-header {
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .site-header {
     position: sticky;
     top: 0;
     margin-bottom: calc(-1 * var(--nav-height));
@@ -443,17 +518,35 @@ html:has(.studio[data-style])
     animation-range: exit-crossing 70% exit-crossing 100%;
   }
 
-  html:has(.studio[data-style][data-header='over']) .site-header {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .site-header {
     --studio-head-over: #fff;
   }
 
-  html:has(.studio[data-style][data-header='band']) .site-header {
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .site-header {
     --studio-head-over: var(--studio-accLabel);
   }
 
   /* The scrim: about 60% black at the top edge, 58% down to 72 px (the words' foot, links wrapped
      to two lines included), then fading out below the header. It leaves with the hero. */
-  html:has(.studio[data-style][data-header='over']) .site-header::before {
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .site-header::before {
     position: absolute;
     inset: 0 0 auto;
     z-index: -1;
@@ -478,7 +571,13 @@ html:has(.studio[data-style])
      it over pure black or pure white, in every style and mode (the unit test). It is the header's
      own layer, not the header: a backdrop-filter on the header would hold the phone menu (fixed,
      inside it) in the header's box. */
-  html:has(.studio[data-style][data-header]) .site-header::after {
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
+    .site-header::after {
     position: absolute;
     inset: 0;
     z-index: -1;
@@ -498,13 +597,25 @@ html:has(.studio[data-style])
   @supports not (
     (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
   ) {
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
+      .site-header::after {
       background: var(--studio-bg);
     }
   }
 
   @media (prefers-reduced-transparency: reduce) {
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
+      .site-header::after {
       background: var(--studio-bg);
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
@@ -513,7 +624,12 @@ html:has(.studio[data-style])
 
   /* The wordmark in the header's ink over the cover: its purple would vanish on a photo or a
      purple band. "me" and the heart are purple again once the header is solid. */
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
     .site-header
     .nav-shell
     > .brand
@@ -522,7 +638,12 @@ html:has(.studio[data-style])
     fill: currentColor;
   }
 
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
     .site-header
     .nav-shell
     > .brand
@@ -532,7 +653,12 @@ html:has(.studio[data-style])
   }
 
   /* Focus follows the ink, so the ring shows over the cover and on bg. */
-  html:has(.studio[data-style][data-header])
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display: none'] *
+        )
+    )
     .site-header
     .nav-shell
     > .brand:focus-visible {
@@ -582,9 +708,27 @@ html:has(.studio[data-style])
 
   /* Reduced motion: the header switches once the hero has gone, with no fade between. */
   @media (prefers-reduced-motion: reduce) {
-    html:has(.studio[data-style][data-header]) .site-header,
-    html:has(.studio[data-style][data-header='over']) .site-header::before,
-    html:has(.studio[data-style][data-header]) .site-header::after {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
+      .site-header,
+    html:has(
+        .studio[data-style][data-header='over']:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
+      .site-header::before,
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display: none'] *
+          )
+      )
+      .site-header::after {
       animation-timing-function: steps(1, end);
     }
   }
