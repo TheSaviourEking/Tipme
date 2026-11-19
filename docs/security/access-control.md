@@ -128,7 +128,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/mail/unsubscribe` | – | `unsubscribe` | – |
 | GET | `/v1/mock-provider/checkout/{reference}` | n/a (read) | – | yes |
 | POST | `/v1/mock-provider/checkout/{reference}` | – | – | yes |
-| GET | `/v1/plan-fees` | n/a (read) | – | – |
+| GET | `/v1/plan-fees` | n/a (read) | `plan_fees` | – |
 | GET | `/v1/pro/price` | n/a (read) | – | – |
 | GET | `/v1/profiles/{handle}` | n/a (read) | – | – |
 | GET | `/v1/profiles/{handle}/campaigns/{slug}` | n/a (read) | – | – |

@@ -15847,11 +15847,15 @@
                   },
                   "freeBps": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]{0,4})$"
+                    "pattern": "^[1-9][0-9]{0,3}$"
                   },
                   "proBps": {
                     "type": "string",
-                    "pattern": "^(0|[1-9][0-9]{0,4})$"
+                    "pattern": "^[1-9][0-9]{0,3}$"
+                  },
+                  "confirmLargeChange": {
+                    "type": "boolean",
+                    "const": true
                   }
                 },
                 "required": [
@@ -18958,7 +18962,8 @@
             }
           }
         },
-        "x-tipme-access": "public"
+        "x-tipme-access": "public",
+        "x-tipme-rate-limit": "plan_fees"
       }
     },
     "/v1/pro/price": {
@@ -20011,6 +20016,7 @@
                   "ANNOUNCEMENT_NOT_DRAFT",
                   "ANNOUNCEMENT_NO_RECIPIENTS",
                   "ANNOUNCEMENT_EMAIL_NOT_SET_UP",
+                  "PLAN_FEES_CONFIRM_REQUIRED",
                   "PRO_PRICE_NOT_SET",
                   "PRO_PRICE_CHANGED",
                   "PRO_PURCHASE_OPEN",
