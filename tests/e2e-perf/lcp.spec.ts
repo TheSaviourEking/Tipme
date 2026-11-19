@@ -259,11 +259,21 @@ test('lab LCP sample: Studio pages', async ({ browser }) => {
 
 // Stage and Horizon draw the cover photo as their likely LCP. The lab's "uploaded" cover
 // (?yours=upload) is a generated 2240 × 600 WebP like the API's, with the API's 640, 1080 and 1600
-// renditions in srcset (PR #279). Still parked (ruling X), measured 18 Nov 2026 on this branch:
-// Stage 3300–3424 ms with img.studio-cover__photo as the LCP. Its 488 px tall crop draws the 3.73:1
-// band 1822 CSS px wide, so the honest `sizes` selects the full file and no rendition helps; a
-// phone-shaped cover crop would. Horizon 1016–1060 ms, but its LCP is p.studio-bio: Chromium
-// leaves the full-viewport photo out. The 2000 ms budget stays as it is.
+// renditions in srcset (PR #279). Parked (ruling X): measured 18 Nov 2026, Stage 3300–3424 ms on a
+// phone (about 3.3 s) with img.studio-cover__photo as the LCP, against §4.3's 2000 ms. Its 488 px
+// tall crop draws the 3.73:1 band 1822 CSS px wide, so the honest `sizes` selects the full file and
+// no band rendition helps. Horizon 1016–1060 ms, but its LCP is p.studio-bio: Chromium leaves the
+// full-viewport photo out. The 2000 ms budget stays as it is.
+//
+// Follow-up that unparks this (and the `page_studio` switch-on prerequisite in
+// docs/runbooks/settings-and-switches.md): #283 (on dev) stores 4:5 tall crops of each uploaded
+// cover, listed on the public cover data as `tall` (contracts `ResolvedCover.tall`,
+// `COVER_TALL_WIDTHS` 480 and 720, served at `coverTallPath`: `<n>-tall-<width>.webp`). The web
+// doesn't read them yet. Stage and Horizon must draw the photo cover through `<picture>`: a
+// `<source>` with a media/aspect query (`(max-aspect-ratio: 4/5)`) whose srcset is the tall crops,
+// used only where the cover box is 4:5 or taller (box aspect ≤ 4:5), and today's band `<img>` with
+// its renditions everywhere else. Then turn this back into `test`, and re-run `pnpm perf:lab` for
+// /@tobi and every /@style* fixture on merged dev.
 test.fixme('lab LCP sample: Stage and Horizon on a real photo cover', async ({
   browser,
 }) => {
