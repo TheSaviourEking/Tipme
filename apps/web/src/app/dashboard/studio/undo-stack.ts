@@ -189,3 +189,41 @@ export function afterRefusedUndo(
   stack.rewrite(keep, kept);
   return kept;
 }
+
+/** "a", "a and b", "a, b and c". */
+const listed = (parts: string[]) =>
+  parts.length < 2
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}`;
+
+/**
+ * What the editor says after a plain save is refused because Pro has ended (403
+ * STUDIO_PRO_REQUIRED, not an undo) and `afterRefusedUndo` repaired the draft: each Pro part it took
+ * out of what was sent (`sent`) to make what it saves next (`kept`). Null when it took out nothing,
+ * which happens only if the editor and the server disagree about what is held.
+ */
+export function proRefusedNotice(
+  sent: StudioDocument,
+  kept: StudioDocument,
+): string | null {
+  const parts: string[] = [];
+  if (sent.style !== kept.style)
+    parts.push(`the ${STUDIO_STYLES[sent.style].name} style`);
+  if (sent.accent === 'photo' && kept.accent !== 'photo')
+    parts.push('the photo accent');
+  const after = new Map(kept.blocks.map((b) => [b.id, b]));
+  const removed = new Map<string, number>();
+  const changed: string[] = [];
+  for (const block of sent.blocks) {
+    const now = after.get(block.id);
+    const noun = blockNoun(block);
+    if (!now) removed.set(noun, (removed.get(noun) ?? 0) + 1);
+    else if (JSON.stringify(now) !== JSON.stringify(block))
+      changed.push(`the changes to the ${noun} block`);
+  }
+  for (const [noun, count] of removed)
+    parts.push(count === 1 ? `the ${noun} block` : `${count} ${noun} blocks`);
+  parts.push(...changed);
+  if (parts.length === 0) return null;
+  return `Your Pro has ended, so we took out ${listed(parts)}. Everything else is kept.`;
+}

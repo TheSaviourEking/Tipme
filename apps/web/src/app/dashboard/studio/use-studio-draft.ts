@@ -24,6 +24,7 @@ import {
   afterRefusedUndo,
   createUndoStack,
   describeChange,
+  proRefusedNotice,
 } from './undo-stack';
 
 /** Edits settle this long before the draft is saved (plan Task 9). */
@@ -38,9 +39,11 @@ export interface StudioDraft {
   /** Another tab or device saved first (STUDIO_DRAFT_STALE): nothing more is saved here. */
   stale: boolean;
   /**
-   * A save needed Pro (STUDIO_PRO_REQUIRED: the plan changed, or a change the server refuses on
-   * Free). The screen goes back to the draft as last saved, and nothing more is saved until a
-   * reload.
+   * A save needed Pro and the editor couldn't repair it: the server refused it (403
+   * STUDIO_PRO_REQUIRED) and taking out what isn't held (the saved draft, the published version)
+   * left nothing to take out, so the two disagree. The screen goes back to the draft as last saved,
+   * and nothing more is saved until a reload. The usual refusal, Pro ending mid-session, is
+   * repaired instead and editing carries on (`notice` says what was taken out).
    */
   proRequired: boolean;
   /** This tab has edits the server doesn't have yet (or never will, once the draft is stale). */
@@ -59,8 +62,9 @@ export interface StudioDraft {
   canUndo: boolean;
   undoLabel: string | null;
   /**
-   * A sentence about the last undo, when the server refused it: re-adding a Pro item on Free that
-   * this session saved away (R4). Gone with the next change.
+   * A sentence about the last refused save: an undo re-adding a Pro item on Free that this session
+   * saved away (R4), or a save refused because Pro ended mid-session, naming what was taken out.
+   * Gone with the next change.
    */
   notice: string | null;
   /** The server's facts: the plan, the cover set in Settings, whether there is a profile photo. */
@@ -249,6 +253,30 @@ export function useStudioDraft(initial: MyStudio): StudioDraft {
             setNotice(PRO_UNDO_REFUSED);
             continue;
           } else if (result.code === 'STUDIO_PRO_REQUIRED') {
+            // Pro ended while this tab was editing (the plan read under the server's lock is Free).
+            // The same repair as a refused undo: take out only the Pro parts neither the saved
+            // draft nor the published version holds, in the draft now (edits typed while this save
+            // was on its way stay) and in every step left, say what went, and save what is left.
+            // The editor stays editable within the Free rules, as the lapse banner says (§12.5).
+            const sentDoc = latest.current;
+            const repaired = afterRefusedUndo(stack.current, sentDoc, {
+              draft: JSON.parse(saved.current) as StudioDocument,
+              published: publishedNow.current,
+            });
+            const said = proRefusedNotice(sentDoc, repaired);
+            if (said) {
+              planNow.current = 'free';
+              setPlan('free');
+              setContext((c) => ({ ...c, plan: 'free' }));
+              latest.current = repaired;
+              base.current = repaired;
+              markPreviewing(false);
+              setDraft(repaired);
+              setUndoLabel(stack.current.peek()?.label ?? null);
+              setNotice(said);
+              continue;
+            }
+            // Nothing to take out: the server holds something this tab doesn't know. Read-only.
             blocked.current = true;
             setProRequired(true);
             // The refused change never reached the server: show the draft as it was last saved,
