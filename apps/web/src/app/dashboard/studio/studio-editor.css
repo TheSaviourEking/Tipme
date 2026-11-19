@@ -127,6 +127,59 @@
   white-space: nowrap;
 }
 
+/* The lapse banner (§12.5): the notice's colours (#4D16A8 on #F1E9FF, about 8:1), "See Pro"
+   underlined in the same ink so it isn't told by colour alone. */
+.pst-lapse {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+  font: 600 13px / 18px var(--font-interface);
+  text-wrap: pretty;
+}
+
+.pst-lapse a {
+  color: inherit;
+  font-weight: 750;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+.pst-lapse a:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* The preview and, on Free with a Pro style, its PRO tag above it (§12.4). The tag is a live
+   region: in the page while empty, out of sight. */
+.pst-preview {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  min-width: 0;
+}
+
+.pst-preview:has(.pst-frame[data-frame='desktop']) {
+  justify-items: stretch;
+}
+
+.pst-preview-pro {
+  justify-self: center;
+  margin: 0;
+}
+
+.pst-preview-pro:not([data-shown]) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* "We couldn't load the latest": under the read-only banner's words. #9B2820 on #F1E9FF is about
    6.5:1. */
 .pst-banner:has(.pst-banner__failed) {
@@ -565,16 +618,6 @@
     0 0 0 2px var(--canvas),
     0 0 0 4px var(--brand-primary),
     0 10px 24px -10px rgb(77 22 168 / 45%);
-}
-
-.pst-card__shade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    rgb(20 18 16 / 0%) 45%,
-    rgb(20 18 16 / 55%)
-  );
 }
 
 .pst-card__badge {

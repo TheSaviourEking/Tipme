@@ -175,23 +175,6 @@ export function proBanner(): string {
   return `${listed(pro.map((id) => STUDIO_STYLES[id].name))} come with Pro.`;
 }
 
-/**
- * Whether a card can be chosen: every style on Pro; on Free the free styles, and the style the
- * draft already holds (a lapsed draft keeps it, §11). The owner's Free preview of Pro styles
- * (§12.4) comes with PR 5c; until then Free sees Pro cards aria-disabled (plan ruling R5).
- */
-export function styleChoosable(
-  style: StudioStyleId,
-  plan: Plan,
-  doc: StudioDocument,
-): boolean {
-  return (
-    plan === 'pro' ||
-    STUDIO_STYLES[style].plan === 'free' ||
-    doc.style === style
-  );
-}
-
 export const COVER_LABEL: Record<StudioCoverType, string> = {
   yours: 'Your cover',
   gradient: 'Gradient',

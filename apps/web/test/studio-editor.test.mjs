@@ -14,7 +14,6 @@ import {
   proBanner,
   selectedAccent,
   styleCardLabel,
-  styleChoosable,
   styleHeading,
   styleSummary,
   withAccent,
@@ -32,6 +31,9 @@ import {
   passingWords,
   blockedIntro,
   hasChangesToDiscard,
+  lapseBanner,
+  previewsPro,
+  PREVIEWING,
   publishFailureWords,
   publishLabel,
   publishOutcome,
@@ -184,12 +186,26 @@ test('the heading reads "4 of 9 free" on Free and "9 styles" on Pro', () => {
   );
 });
 
-test('Free can’t choose a Pro style yet (R5); a style the draft already holds stays selectable', () => {
-  assert.equal(styleChoosable('stage', 'free', doc()), false);
-  assert.equal(styleChoosable('journal', 'free', doc()), true);
-  assert.equal(styleChoosable('stage', 'pro', doc()), true);
-  // A lapsed draft that holds Stage keeps it chosen (§11: a held Pro item saves).
-  assert.equal(styleChoosable('stage', 'free', doc({ style: 'stage' })), true);
+test('on Free, a Pro style neither the stored draft nor the published version holds is a preview (§12.4)', () => {
+  const held = (draft, published = null) => ({ draft, published });
+  // Free on Clear picks Stage: a preview, never saved (the server would refuse the switch).
+  assert.equal(previewsPro(doc({ style: 'stage' }), held(doc()), 'free'), true);
+  // A free style is never a preview; Pro saves anything.
+  assert.equal(
+    previewsPro(doc({ style: 'journal' }), held(doc()), 'free'),
+    false,
+  );
+  assert.equal(previewsPro(doc({ style: 'stage' }), held(doc()), 'pro'), false);
+  // A lapsed draft that holds Stage, or a published Stage, saves it (§11: a held Pro item saves).
+  const stage = doc({ style: 'stage' });
+  assert.equal(previewsPro(stage, held(stage), 'free'), false);
+  assert.equal(previewsPro(stage, held(doc(), stage), 'free'), false);
+  // Edits to a held Stage aren't a preview either; another Pro style is.
+  assert.equal(
+    previewsPro(doc({ style: 'stage', mode: 'dark' }), held(stage), 'free'),
+    false,
+  );
+  assert.equal(previewsPro(doc({ style: 'tiles' }), held(stage), 'free'), true);
 });
 
 test('Free sees the photo swatch disabled with "“From your photo” comes with Pro."', () => {
@@ -499,6 +515,45 @@ test('the status line says where the draft is ("Saved · not published")', () =>
   assert.equal(saveWords('pending', false), 'Saving…');
   assert.equal(saveWords('saving', 'same'), 'Saving…');
   assert.equal(saveWords('failed', true), 'Not saved');
+});
+
+test('while previewing a Pro style the status line reads "Previewing a Pro style: not saved"', () => {
+  assert.equal(PREVIEWING, 'Previewing a Pro style: not saved');
+  for (const state of ['saved', 'pending', 'saving', 'failed'])
+    for (const published of [false, true, 'same'])
+      assert.equal(saveWords(state, published, true), PREVIEWING);
+  assert.equal(saveWords('saved', 'same', false), 'Published');
+});
+
+test('the lapse banner names what visitors see', () => {
+  const stage = doc({ style: 'stage', accent: 'coral' });
+  assert.equal(
+    lapseBanner('free', stage),
+    'Your Pro has ended. Your page shows Classic until Pro is back. Your design is kept.',
+  );
+  // A free style with Pro extras: the photo accent, a Pro block.
+  const gallery = { id: 'blk00009', kind: 'gallery', images: [] };
+  for (const extras of [
+    { accent: 'photo' },
+    { blocks: [...doc().blocks, gallery] },
+  ])
+    assert.equal(
+      lapseBanner('free', doc({ style: 'journal', ...extras })),
+      'Your Pro has ended. Your page shows Journal without Pro extras until Pro is back. Your design is kept.',
+    );
+  // No banner on Pro (grace counts as Pro), before any publish, or when nothing published is Pro.
+  assert.equal(lapseBanner('pro', stage), null);
+  assert.equal(lapseBanner('free', null), null);
+  assert.equal(lapseBanner('free', doc({ style: 'journal' })), null);
+  assert.equal(
+    lapseBanner('free', doc({ style: 'classic', blocks: [] })),
+    null,
+  );
+  // A Pro style left at every default still shows Classic (the standard page) to visitors.
+  assert.equal(
+    lapseBanner('free', doc({ style: 'horizon', blocks: [] })),
+    'Your Pro has ended. Your page shows Classic until Pro is back. Your design is kept.',
+  );
 });
 
 test('the dashboard entry: hidden while the switch is off; every page opens the editor', () => {

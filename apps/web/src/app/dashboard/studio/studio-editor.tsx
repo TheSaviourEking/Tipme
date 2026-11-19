@@ -24,12 +24,13 @@ import { apiFetch } from '@/lib/session-client';
 import { BlocksTab, type BlocksTarget } from './blocks-tab';
 import { fixTarget } from './blocks-model';
 import { CheckPanel } from './check-panel';
-import { RadioGroup } from './segmented';
+import { ProPill, RadioGroup } from './segmented';
 import { PublishDialog } from './publish-dialog';
 import {
   RELOAD_FAILED,
   checkBadge,
   hasChangesToDiscard,
+  lapseBanner,
   publishLabel,
   saveWords,
   staleBannerWords,
@@ -323,14 +324,33 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
   };
 
   const style = STUDIO_STYLES[draft.style];
+  // On Free, a Pro style (a preview, or one a lapsed draft holds) carries a PRO tag above the
+  // preview (§12.4): visitors don't see it. A polite live region, always in the page, so the tag
+  // is announced when it appears.
+  const proStyle = plan !== 'pro' && style.plan === 'pro';
+  const lapse = lapseBanner(plan, studio.published);
   const preview = (frame: 'small' | 'phone' | 'desktop') => (
-    <StudioPreview
-      draft={draft}
-      images={studio.images}
-      profile={profile}
-      photoAccent={photoAccent}
-      frame={frame}
-    />
+    <div className="pst-preview">
+      <p
+        className="pst-preview-pro"
+        role="status"
+        data-shown={proStyle || undefined}
+      >
+        {proStyle && (
+          <>
+            <ProPill />
+            <span className="sr-only"> {style.name} comes with Pro.</span>
+          </>
+        )}
+      </p>
+      <StudioPreview
+        draft={draft}
+        images={studio.images}
+        profile={profile}
+        photoAccent={photoAccent}
+        frame={frame}
+      />
+    </div>
   );
   const accentName = accentHeading(draft);
   const accentHex = accentValues(
@@ -347,7 +367,7 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
         <div className="pst-bar__name">
           <h1 className="pst-bar__title">Page Studio</h1>
           <p className="pst-bar__status" role="status">
-            {saveWords(studio.save, published)}
+            {saveWords(studio.save, published, studio.previewing)}
           </p>
         </div>
         <div className="pst-bar__actions">
@@ -457,6 +477,12 @@ function StudioEditor({ initial }: { initial: MyStudio }) {
       >
         {studio.notice}
       </p>
+      {/* §12.5: Pro has ended and the published page uses Pro. The draft stays editable on Free. */}
+      {lapse && (
+        <p className="pst-lapse">
+          {lapse} <Link href="/pro">See Pro</Link>
+        </p>
+      )}
       {readOnly && (
         <div ref={bannerRef} tabIndex={-1} className="pst-banner">
           {studio.stale ? (
