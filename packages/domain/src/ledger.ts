@@ -16,7 +16,13 @@ export type AccountCode =
   // Paid Pro (ADR-0015; ADR-0006 addendum, needs finance sign-off): what recipients paid TipMe for
   // Pro, and TipMe's OWN partner balance, kept apart from provider_clearing (tips).
   | 'subscription_revenue'
-  | 'platform_clearing';
+  | 'platform_clearing'
+  // You collect (ADR-0016): what TipMe holds on its own partner account for recipients until it is
+  // transferred on. Owned by a person (`profileId`) or, for a business share, a business.
+  | 'held_for_recipients'
+  | 'dispute_fee_expense'
+  | 'dispute_loss_expense'
+  | 'refund_loss_expense';
 
 export interface LedgerLine {
   account: AccountCode;
@@ -419,4 +425,213 @@ export function buildProRefundPosting(input: {
     line('provider_fee_expense', 'debit', refundFeeMinor),
     line('platform_clearing', 'credit', refundedMinor + refundFeeMinor),
   ].filter((entry) => entry.amountMinor > 0n);
+}
+
+// ---------------------------------------------------------------------------------------------
+// You collect (ADR-0016; codes illustrative pending finance sign-off, ADR-0006). TipMe collects each
+// tip on its own partner account (`platform_clearing`) and holds every recipient's share
+// (`held_for_recipients`) until it is transferred on. The recipient's payable is unchanged.
+// ---------------------------------------------------------------------------------------------
+
+/** Who a held amount belongs to: a person, or (a share, ruling R3) a business. */
+export type Owner = { profileId: string } | { businessId: string };
+
+function ownerOf(owner: Owner): { profileId?: string; businessId?: string } {
+  const { profileId, businessId } = owner as {
+    profileId?: string;
+    businessId?: string;
+  };
+  if (Boolean(profileId) === Boolean(businessId))
+    throw new RangeError(
+      'a held amount belongs to exactly one person or business',
+    );
+  return profileId ? { profileId } : { businessId: businessId! };
+}
+
+const heldLine = (
+  side: LedgerLine['side'],
+  amountMinor: bigint,
+  owner: Owner,
+) => {
+  const { profileId, businessId } = ownerOf(owner);
+  return line('held_for_recipients', side, amountMinor, profileId, businessId);
+};
+
+const payableOf = (amountMinor: bigint, owner: Owner): LedgerLine => {
+  const { profileId, businessId } = ownerOf(owner);
+  return businessId
+    ? line('business_payable', 'debit', amountMinor, undefined, businessId)
+    : line('recipient_payable', 'debit', amountMinor, profileId);
+};
+
+function requirePositive(amountMinor: bigint, what: string): void {
+  if (amountMinor <= 0n) throw new RangeError(`${what} must be positive`);
+}
+
+/**
+ * A tip collected on TipMe's own account. The partner pays the gross to TipMe less its actual fee;
+ * what TipMe owes goes into `held_for_recipients` (the person: net less any share; the business:
+ * the share), and the payables are credited exactly as `buildPaymentPosting` does. TipMe's own line
+ * on `platform_clearing` is `platformFee + quotedFee - actualFee`: a debit normally, a credit when
+ * the actual fee is above the quote (an international card). A team tip is refused: team splits are
+ * not collected this way.
+ */
+export function buildCollectPaymentPosting(
+  input: PaymentPostingInput,
+): LedgerLine[] {
+  if (input.teamSplits)
+    throw new RangeError('a collect tip carries no team split');
+  const {
+    grossMinor,
+    platformFeeMinor,
+    quotedProviderFeeMinor,
+    actualProviderFeeMinor,
+    recipientNetMinor,
+    profileId,
+    businessShare,
+  } = input;
+  if (
+    grossMinor !==
+    platformFeeMinor + quotedProviderFeeMinor + recipientNetMinor
+  )
+    throw new RangeError('fee breakdown does not add up to the gross amount');
+  if (actualProviderFeeMinor < 0n || actualProviderFeeMinor > grossMinor)
+    throw new RangeError('provider fee out of range');
+  // payableLines validates the person, the share and its cap.
+  const payables = payableLines(input);
+  const share = businessShare?.amountMinor ?? 0n;
+  const own =
+    platformFeeMinor + quotedProviderFeeMinor - actualProviderFeeMinor;
+  return [
+    line('held_for_recipients', 'debit', recipientNetMinor - share, profileId),
+    ...(businessShare
+      ? [
+          line(
+            'held_for_recipients',
+            'debit',
+            share,
+            undefined,
+            businessShare.businessId,
+          ),
+        ]
+      : []),
+    line(
+      'platform_clearing',
+      own < 0n ? 'credit' : 'debit',
+      own < 0n ? -own : own,
+    ),
+    line('provider_fee_expense', 'debit', actualProviderFeeMinor),
+    line('platform_fee_revenue', 'credit', platformFeeMinor),
+    line('provider_fee_recovered', 'credit', quotedProviderFeeMinor),
+    ...payables,
+  ].filter((entry) => entry.amountMinor > 0n);
+}
+
+/** TipMe transfers a held amount to its owner's account: no payable moves. */
+export function buildCollectTransferPosting(
+  input: { amountMinor: bigint } & Owner,
+): LedgerLine[] {
+  requirePositive(input.amountMinor, 'a transfer');
+  return [
+    line('provider_clearing', 'debit', input.amountMinor),
+    heldLine('credit', input.amountMinor, input),
+  ];
+}
+
+/** A transferred amount comes back to TipMe's account: the mirror of the transfer. */
+export function buildCollectReturnPosting(
+  input: { amountMinor: bigint } & Owner,
+): LedgerLine[] {
+  requirePositive(input.amountMinor, 'a return');
+  return [
+    heldLine('debit', input.amountMinor, input),
+    line('provider_clearing', 'credit', input.amountMinor),
+  ];
+}
+
+/**
+ * A refund of money still held: each part takes back the owner's payable and the held money, never
+ * TipMe's fee. A fee the refund itself carries is TipMe's expense, out of its own balance.
+ */
+export function buildCollectRefundPosting(input: {
+  parts: readonly ({ amountMinor: bigint } & Owner)[];
+  refundFeeMinor?: bigint;
+}): LedgerLine[] {
+  const fee = input.refundFeeMinor ?? 0n;
+  if (input.parts.length === 0) throw new RangeError('a refund has a part');
+  if (fee < 0n) throw new RangeError('refund fee out of range');
+  const lines: LedgerLine[] = [];
+  for (const part of input.parts) {
+    requirePositive(part.amountMinor, 'a refund part');
+    lines.push(
+      payableOf(part.amountMinor, part),
+      heldLine('credit', part.amountMinor, part),
+    );
+  }
+  if (fee > 0n)
+    lines.push(
+      line('provider_fee_expense', 'debit', fee),
+      line('platform_clearing', 'credit', fee),
+    );
+  return lines;
+}
+
+/**
+ * A refund TipMe pays from its own money (the recipient already withdrew, so nothing is held to take
+ * back). The refund and any fee it carries are one loss.
+ */
+export function buildAbsorbedRefundPosting(input: {
+  amountMinor: bigint;
+  refundFeeMinor?: bigint;
+}): LedgerLine[] {
+  const fee = input.refundFeeMinor ?? 0n;
+  requirePositive(input.amountMinor, 'a refund');
+  if (fee < 0n) throw new RangeError('refund fee out of range');
+  const total = input.amountMinor + fee;
+  return [
+    line('refund_loss_expense', 'debit', total),
+    line('platform_clearing', 'credit', total),
+  ];
+}
+
+/** The partner's fee for a dispute, TipMe's own cost. */
+export function buildDisputeFeePosting(input: {
+  feeMinor: bigint;
+}): LedgerLine[] {
+  requirePositive(input.feeMinor, 'a dispute fee');
+  return [
+    line('dispute_fee_expense', 'debit', input.feeMinor),
+    line('platform_clearing', 'credit', input.feeMinor),
+  ];
+}
+
+/**
+ * A lost dispute: the partner takes the disputed amount from TipMe's account. What was still held
+ * is taken back from the owners (payable and held, as a refund does); TipMe absorbs the rest.
+ * TipMe's fee revenue is not reversed (ruling R6).
+ */
+export function buildDisputeLossPosting(input: {
+  disputedMinor: bigint;
+  recovered: readonly ({ amountMinor: bigint } & Owner)[];
+}): LedgerLine[] {
+  requirePositive(input.disputedMinor, 'a disputed amount');
+  let recovered = 0n;
+  const lines: LedgerLine[] = [];
+  for (const part of input.recovered) {
+    requirePositive(part.amountMinor, 'a recovered part');
+    recovered += part.amountMinor;
+    lines.push(
+      payableOf(part.amountMinor, part),
+      heldLine('credit', part.amountMinor, part),
+    );
+  }
+  if (recovered > input.disputedMinor)
+    throw new RangeError('recovered more than the disputed amount');
+  const loss = input.disputedMinor - recovered;
+  if (loss > 0n)
+    lines.push(
+      line('dispute_loss_expense', 'debit', loss),
+      line('platform_clearing', 'credit', loss),
+    );
+  return lines;
 }
