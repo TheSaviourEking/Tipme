@@ -192,12 +192,17 @@ export async function contrastProblems(
 ): Promise<string[]> {
   await settled(page);
   // A thumb sliding (220 ms) or fading would be measured mid-way: wait for every animation
-  // that ends. An endless one (a pulse, a nudge) never finishes, so waiting on it would hang.
+  // that ends. An endless one (a pulse, a nudge) never finishes, so waiting on it would hang;
+  // nor does one driven by scrolling (the header over the cover), which ends only on a scroll.
   await page.evaluate(() =>
     Promise.all(
       document
         .getAnimations()
-        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .filter(
+          (a) =>
+            a.timeline instanceof DocumentTimeline &&
+            a.effect?.getComputedTiming().iterations !== Infinity,
+        )
         .map((a) => a.finished.catch(() => null)),
     ),
   );
