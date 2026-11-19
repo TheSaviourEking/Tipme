@@ -1,0 +1,7 @@
+{
+  "_source": "Adapted from the recorded platform checkout in packages/payments/test/bachs-platform-checkout.test.mjs (sandbox evidence of 9 Nov 2026: 201, status open, a checkout URL, about 30 minutes to pay); ids renamed for a collect checkout.",
+  "checkout_id": "cs_collect_7f2a",
+  "checkout_url": "https://checkout.bachs.io/session/cs_collect_7f2a",
+  "status": "open",
+  "expires_at": "2026-11-19T21:45:00Z"
+}

@@ -1,0 +1,36 @@
+{
+  "_source": "Built from https://docs.bachs.io/connect/requirements.md ('Submitting': POST /v1/accounts/{account_id} with fields.persons; 'The response is the account, with its recomputed requirements block') applied to individual-account-created.json: persons.name is no longer due. Not recorded live.",
+  "id": "acct_Pn4rS0nQw8Lk2Vb7",
+  "name": null,
+  "country": "NG",
+  "entity_type": "individual",
+  "balance_currencies": ["NGN"],
+  "is_active": false,
+  "capabilities": {
+    "payouts": {
+      "status": "active",
+      "requested": true,
+      "status_details": null,
+      "international": false
+    },
+    "transfers": {
+      "status": "active",
+      "requested": true,
+      "status_details": null
+    },
+    "conversions": {
+      "status": "active",
+      "requested": false,
+      "status_details": null
+    }
+  },
+  "responsibilities": { "fees": { "collector": "platform" } },
+  "requirements": {
+    "currently_due": ["payout_destination"],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "errors": []
+  },
+  "configuration": { "recipient": {} }
+}

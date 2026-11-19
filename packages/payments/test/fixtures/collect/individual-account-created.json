@@ -1,0 +1,36 @@
+{
+  "_source": "Built from https://docs.bachs.io/api-reference/accounts/create-an-account.md (OrganizationResponse example) and https://docs.bachs.io/connect/requirements.md ('A person ... payouts, transfers: their name, and for payouts a payout account in their own name'), with the receive-only shape of the recorded S1 company account in packages/payments/test/bachs-business-shares.test.mjs (sandbox 11 Nov 2026: payouts, transfers and conversions active at once, requirements persons.name and payout_destination). entity_type individual; not recorded live.",
+  "id": "acct_Pn4rS0nQw8Lk2Vb7",
+  "name": null,
+  "country": "NG",
+  "entity_type": "individual",
+  "balance_currencies": ["NGN"],
+  "is_active": false,
+  "capabilities": {
+    "payouts": {
+      "status": "active",
+      "requested": true,
+      "status_details": null,
+      "international": false
+    },
+    "transfers": {
+      "status": "active",
+      "requested": true,
+      "status_details": null
+    },
+    "conversions": {
+      "status": "active",
+      "requested": false,
+      "status_details": null
+    }
+  },
+  "responsibilities": { "fees": { "collector": "platform" } },
+  "requirements": {
+    "currently_due": ["persons.name", "payout_destination"],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "errors": []
+  },
+  "configuration": { "recipient": {} }
+}

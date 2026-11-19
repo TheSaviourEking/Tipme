@@ -1,0 +1,9 @@
+{
+  "_source": "Adapted from PAID in packages/payments/test/bachs-platform-checkout.test.mjs (TipMe's own payment read back, sandbox evidence of 9 Nov 2026); a ₦10,000 card tip with a 2% fee of ₦200.",
+  "payment_id": "pay_collect_7f2a",
+  "status": "succeeded",
+  "amount": "10000.00",
+  "currency": "NGN",
+  "fees": { "amount": "200.00", "currency": "NGN" },
+  "payment_method_type": "NGN_CARD"
+}

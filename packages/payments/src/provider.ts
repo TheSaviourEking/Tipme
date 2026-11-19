@@ -1,3 +1,5 @@
+import type { BachsRecipientAccount } from './bachs/provider.js';
+
 export type TransactionStatus =
   'succeeded' | 'failed' | 'pending' | 'not_found';
 
@@ -161,6 +163,25 @@ export interface PaymentProvider<
     saveCard?: { customerReference: string };
   }): Promise<{
     providerReference: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }>;
+  /**
+   * You collect: a tip's checkout on TipMe's own account (the same request as
+   * initializePlatformCheckout, with the attempt as reference, naira methods only, no platform fee
+   * and no saved card). Read back with verifyTransaction like any `platform:` checkout. Raises
+   * PlatformCheckoutUnavailableError when TipMe's account is refused, UncertainProviderOutcomeError
+   * when the outcome is unknown.
+   */
+  initializeCollectCheckout?(input: {
+    attemptId: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+  }): Promise<{
+    providerReference: `platform:${string}`;
     checkoutUrl: string;
     expiresAt: Date;
   }>;
@@ -349,6 +370,51 @@ export interface PayoutPort {
     amountMinor: bigint;
     currency: string;
   } | null>;
+  /**
+   * You collect: a receive-only account for one person (entity `individual`, the recipient persona
+   * with `payouts` and `transfers` only, no dashboard refunds). Their legal name is the person's
+   * name the requirements ask for (R8). It holds only USD until holdLocalCurrency is called (P12).
+   */
+  createReceiveOnlyPersonAccount?(input: {
+    contactEmail: string;
+    country: 'NG';
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
+  /**
+   * You collect (R9): a recipient's share from TipMe's balance to their account, `transfer_group` =
+   * the key. It can't be reversed. CollectTransferRefusedError is definite (no money moved);
+   * UncertainProviderOutcomeError is not, including an answer naming another account or amount.
+   */
+  sendCollectTransfer?(input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+  }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
+  /**
+   * Every transfer the account was a party to, newest first, across every page (P17): the read-back
+   * and reconciliation match on `group`. Raises UncertainProviderOutcomeError when any page fails or
+   * the pages disagree, never a partial list.
+   */
+  listAccountTransfers?(accountRef: string): Promise<
+    {
+      transferRef: string;
+      status: 'paid' | 'pending';
+      amountMinor: bigint;
+      currency: string;
+      group: string | null;
+    }[]
+  >;
+  /**
+   * TipMe's own balance in every currency the partner lists, signed: a negative balance (a lost
+   * dispute's fee, P5) is reported as it is, never clamped. An unreadable figure throws.
+   */
+  platformBalances?(): Promise<
+    { currency: string; availableMinor: bigint; pendingMinor: bigint }[]
+  >;
+  /** TipMe's own payout schedule: currency → interval (`manual` means nothing pays out by itself). */
+  platformPayoutSchedule?(): Promise<Record<string, string>>;
   /** Repeated requests with the same key must resolve to the same provider payout. */
   initiatePayout(input: {
     payoutId: string;
@@ -419,6 +485,26 @@ export class PlatformRefusalError extends Error {
   ) {
     super('The payment provider refused the platform');
     this.name = 'PlatformRefusalError';
+  }
+}
+
+/** Why the partner definitely refused a You collect transfer (R9). */
+export type CollectTransferRefusal =
+  'insufficient' | 'capability' | 'in_debt' | 'not_found' | 'other';
+
+/**
+ * You collect (R9): the partner definitely refused to move a recipient's share from TipMe's balance
+ * to their account, so no money moved for this request. `insufficient` is TipMe's available balance
+ * (retry later), `capability` the account's `transfers` capability not active, `in_debt` a negative
+ * balance on TipMe's side, `not_found` an account TipMe doesn't own. Option B keeps its own refusals.
+ */
+export class CollectTransferRefusedError extends Error {
+  constructor(
+    readonly reason: CollectTransferRefusal,
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the collect transfer');
+    this.name = 'CollectTransferRefusedError';
   }
 }
 

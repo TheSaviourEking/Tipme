@@ -1,0 +1,6 @@
+{
+  "_source": "Live-only shape, from https://docs.bachs.io/connect/payouts.md ('A destination that waits for review sits pending_review') and https://docs.bachs.io/connect/requirements.md ('Some words match ... the destination is saved, and our team checks it'). The sandbox does not run the bank-name check, so this was never recorded.",
+  "id": "pd_collect_review",
+  "status": "pending_review",
+  "is_usable": false
+}

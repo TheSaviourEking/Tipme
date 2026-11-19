@@ -1,8 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import {
+  CollectTransferRefusedError,
   PayoutRejectedError,
   PlatformRefusalError,
+  type CollectTransferRefusal,
   type PayoutFailureReason,
   type PayoutPort,
 } from '../provider.js';
@@ -77,6 +79,19 @@ const transferSchema = z.object({
 const balancesSchema = z.object({
   balances: z.array(
     z.object({ currency: z.string(), available_balance: z.string() }),
+  ),
+});
+
+// The same read with every bucket kept. `pending_balance` is required by the reference
+// (https://docs.bachs.io/api-reference/accounts/get-balances.md), but the option B evidence has
+// bodies without it, so an absent one reads as nothing pending rather than failing the read.
+const signedBalancesSchema = z.object({
+  balances: z.array(
+    z.object({
+      currency: z.string().min(1).max(32),
+      available_balance: z.string(),
+      pending_balance: z.string().nullable().optional(),
+    }),
   ),
 });
 
@@ -158,6 +173,20 @@ const TRANSFER_REFUSALS: Readonly<
   VALIDATION_ERROR: 'other',
 };
 
+// You collect (R9): TipMe's balance to a recipient's person account. Unlike option B, each refusal is
+// told apart, because each sends the share somewhere else: INSUFFICIENT_BALANCE waits for TipMe's
+// available balance, FORBIDDEN for the account's `transfers` capability, ORGANIZATION_IN_DEBT stops
+// every collect transfer, NOT_FOUND goes to review. https://docs.bachs.io/connect/transfers.md
+const COLLECT_TRANSFER_REFUSALS: Readonly<
+  Record<string, CollectTransferRefusal>
+> = {
+  INSUFFICIENT_BALANCE: 'insufficient',
+  FORBIDDEN: 'capability',
+  ORGANIZATION_IN_DEBT: 'in_debt',
+  NOT_FOUND: 'not_found',
+  VALIDATION_ERROR: 'other',
+};
+
 // Paying for Pro from the balance (plan Task 8): the debited side is the person's own account, so
 // these are about their money, not TipMe's reserve. https://docs.bachs.io/connect/transfers.md
 const COLLECT_REFUSALS: Readonly<Record<string, PayoutFailureReason>> = {
@@ -181,6 +210,30 @@ const transferListSchema = z.union([
   z.object({ data: z.array(listedTransferSchema) }),
 ]);
 const TRANSFER_LIST_LIMIT = 100;
+
+// A page of GET /v1/transfers with its pagination block: `{ items, pagination }`, walked by
+// `next_cursor` until `has_more` is false (https://docs.bachs.io/guides/pagination.md,
+// https://docs.bachs.io/api-reference/transfers/list-transfers.md).
+const transferPaginationSchema = z
+  .object({
+    next_cursor: z.string().min(1).max(512).nullable().optional(),
+    has_more: z.boolean(),
+    total: z.number().int().nonnegative().optional(),
+  })
+  .nullable()
+  .optional();
+const pagedTransferListSchema = z.union([
+  z.object({
+    items: z.array(listedTransferSchema),
+    pagination: transferPaginationSchema,
+  }),
+  z.object({
+    data: z.array(listedTransferSchema),
+    pagination: transferPaginationSchema,
+  }),
+]);
+// 20,000 transfers for one account is far past any recipient's: past it, something is looping.
+const TRANSFER_LIST_MAX_PAGES = 200;
 
 const sentTransferSchema = z.object({
   id: identifierSchema,
@@ -302,6 +355,54 @@ async function moneyWrite<T>(
         ...(code ? { providerCode: code } : {}),
       },
     );
+  }
+}
+
+/**
+ * A You collect transfer (R9): its own refusals are definite and told apart. FORBIDDEN is read here
+ * as the account's `transfers` capability, before moneyWrite would read it as TipMe's key; every
+ * other answer (UNAUTHORIZED, an unlisted code, no answer) is handled by moneyWrite as for option B.
+ */
+function collectTransferWrite<T>(
+  operation: string,
+  write: () => Promise<T>,
+): Promise<T> {
+  return moneyWrite(operation, {}, async () => {
+    try {
+      return await write();
+    } catch (error) {
+      const code =
+        error instanceof BachsApiError ? error.providerCode : undefined;
+      if (
+        error instanceof BachsApiError &&
+        error.statusCode < 500 &&
+        code !== undefined &&
+        Object.hasOwn(COLLECT_TRANSFER_REFUSALS, code)
+      )
+        throw new CollectTransferRefusedError(
+          COLLECT_TRANSFER_REFUSALS[code] ?? 'other',
+          code,
+        );
+      throw error;
+    }
+  });
+}
+
+/** A signed decimal in minor units: the partner writes a negative balance as `-15.00`. */
+function signedMinor(value: string, currency: string): bigint {
+  const negative = value.startsWith('-');
+  try {
+    const magnitude = decimalToMinor(
+      negative ? value.slice(1) : value,
+      currency,
+    );
+    return negative ? -magnitude : magnitude;
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof RangeError)
+      throw new BachsProtocolError(
+        'The payment provider returned an invalid balance',
+      );
+    throw error;
   }
 }
 
@@ -711,6 +812,166 @@ export function createBachsPayouts(
         amountMinor,
         currency: ours.currency,
       };
+    },
+
+    // You collect (R9): POST /v1/transfers as the platform, TipMe's balance to the recipient's person
+    // account. https://docs.bachs.io/connect/transfers.md
+    async sendCollectTransfer(input) {
+      const account = checkedIdentifier(input.accountRef, 'account reference');
+      const idempotencyKey = checkedKey(input.idempotencyKey);
+      const amount = checkedAmount(input.amountMinor, input.currency);
+      const transfer = await collectTransferWrite(idempotencyKey, () =>
+        client.request({
+          method: 'POST',
+          path: '/v1/transfers',
+          idempotencyKey,
+          operationReference: idempotencyKey,
+          body: {
+            destination: account,
+            amount,
+            currency: input.currency,
+            description: 'TipMe tip',
+            // Listing can't filter by it, but every transfer returns it: the read-back finds ours.
+            transfer_group: idempotencyKey,
+          },
+          schema: sentTransferSchema,
+        }),
+      );
+      if (
+        transfer.destination !== account ||
+        !sameMoney(transfer.amount, transfer.currency, input.amountMinor)
+      )
+        throw unexpected(idempotencyKey);
+      return {
+        transferRef: transfer.id,
+        status: transfer.status.toLowerCase() === 'paid' ? 'paid' : 'pending',
+      };
+    },
+
+    // GET /v1/transfers?connected_account_id=, newest first, every page by `next_cursor` (P17). The
+    // first request is findPlatformCollection's exactly. Offsets move when a transfer lands while
+    // paging, so one can appear twice (kept once) but never be skipped; anything else unclear about
+    // the pages makes the whole list uncertain, because a missing transfer could mean a second send.
+    async listAccountTransfers(accountRef) {
+      const account = checkedIdentifier(accountRef, 'account reference');
+      const operation = `transfers.${account}`;
+      const base = `/v1/transfers?connected_account_id=${encodeURIComponent(account)}&limit=${TRANSFER_LIST_LIMIT}`;
+      const inconsistent = (reason: string) =>
+        new UncertainProviderOutcomeError(operation, reason, {
+          cause: 'unexpected_shape',
+        });
+      const seen = new Map<string, z.infer<typeof listedTransferSchema>>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      let firstTotal: number | undefined;
+      for (let pageNumber = 0; ; pageNumber += 1) {
+        if (pageNumber >= TRANSFER_LIST_MAX_PAGES)
+          throw inconsistent('too many pages of transfers to be sure');
+        let listed: z.infer<typeof pagedTransferListSchema>;
+        try {
+          listed = await client.request({
+            method: 'GET',
+            path: cursor
+              ? `${base}&cursor=${encodeURIComponent(cursor)}`
+              : base,
+            schema: pagedTransferListSchema,
+          });
+        } catch (error) {
+          throw new UncertainProviderOutcomeError(
+            operation,
+            'the transfers could not be read',
+            error instanceof BachsApiError
+              ? { cause: 'http_error', httpStatus: error.statusCode }
+              : { cause: 'unreadable_response' },
+          );
+        }
+        const items = 'items' in listed ? listed.items : listed.data;
+        if (items.length > TRANSFER_LIST_LIMIT)
+          throw inconsistent('a page longer than asked for');
+        for (const item of items) {
+          const earlier = seen.get(item.id);
+          if (
+            earlier &&
+            (earlier.amount !== item.amount ||
+              earlier.currency !== item.currency ||
+              (earlier.transfer_group ?? null) !==
+                (item.transfer_group ?? null))
+          )
+            throw inconsistent('one transfer listed with different details');
+          // The newest read wins: a transfer can go from pending to paid between pages.
+          seen.set(item.id, item);
+        }
+        const pagination = listed.pagination;
+        if (!pagination) {
+          // No way to ask for more: only a short page is known to be the whole list.
+          if (items.length >= TRANSFER_LIST_LIMIT)
+            throw inconsistent('too many transfers to be sure');
+          break;
+        }
+        if (pageNumber === 0) firstTotal = pagination.total;
+        if (!pagination.has_more) break;
+        const next = pagination.next_cursor;
+        if (!next || cursors.has(next) || items.length === 0)
+          throw inconsistent('the pages of transfers do not follow on');
+        cursors.add(next);
+        cursor = next;
+      }
+      // Fewer than the first page promised: some were skipped, so absence proves nothing.
+      if (firstTotal !== undefined && seen.size < firstTotal)
+        throw inconsistent('fewer transfers than the list said');
+      return [...seen.values()].map((item) => {
+        let amountMinor: bigint;
+        try {
+          amountMinor = decimalToMinor(item.amount, item.currency);
+        } catch {
+          throw unexpected(operation);
+        }
+        return {
+          transferRef: item.id,
+          status:
+            item.status.toLowerCase() === 'paid'
+              ? ('paid' as const)
+              : ('pending' as const),
+          amountMinor,
+          currency: item.currency,
+          group: item.transfer_group ?? null,
+        };
+      });
+    },
+
+    // GET /v1/balances as the platform, every currency, signed: a lost dispute can drive one negative
+    // and that blocks every transfer (https://docs.bachs.io/connect/balances.md). Never clamped.
+    async platformBalances() {
+      const { balances } = await client.request({
+        method: 'GET',
+        path: '/v1/balances',
+        schema: signedBalancesSchema,
+      });
+      return balances.map((balance) => ({
+        currency: balance.currency,
+        availableMinor: signedMinor(
+          balance.available_balance,
+          balance.currency,
+        ),
+        pendingMinor: balance.pending_balance
+          ? signedMinor(balance.pending_balance, balance.currency)
+          : 0n,
+      }));
+    },
+
+    // GET /v1/balance_settings as the platform (no X-Account-Id reads TipMe's own):
+    // https://docs.bachs.io/api-reference/payouts/get-payout-schedule.md
+    async platformPayoutSchedule() {
+      const settings = await client.request({
+        method: 'GET',
+        path: '/v1/balance_settings',
+        schema: balanceSettingsSchema,
+      });
+      return Object.fromEntries(
+        Object.entries(settings.schedule_by_currency).map(
+          ([currency, schedule]) => [currency, schedule.interval],
+        ),
+      );
     },
 
     // POST /v1/balance_settings with X-Account-Id. A schedule is set per currency:
