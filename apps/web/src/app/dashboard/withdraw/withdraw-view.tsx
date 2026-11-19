@@ -36,6 +36,7 @@ import {
   belowMinimum,
   TOO_SMALL,
   withdrawableNow,
+  withdrawDayNote,
   withdrawFee,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
@@ -352,14 +353,14 @@ export default function WithdrawPage({
     chosen !== null &&
     chosen <= withdrawable &&
     !belowWithdrawalMinimum(chosen, withdrawable);
-  // Users pay the transfer fee from the amount (owner, 12 Nov 2026): what arrives is the amount
-  // less the fee, and the whole amount leaves the balance. Only an amount that sends something
-  // gets figures.
+  // A person's withdrawals are free (owner, 18 Nov 2026): what arrives is the amount. Under the
+  // user-pays rule it is the amount less the fee. Only an amount that sends something gets figures.
   const figures =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
+  const dayNote = withdrawDayNote(quote);
   // Ready with money to send: the lamp line and the bank chip say what the notice used to.
   const readyWithMoney = state.kind === 'ready' && withdrawable > BigInt(0);
   const notice = state.notice;
@@ -519,7 +520,7 @@ export default function WithdrawPage({
                       <dd data-testid="transfer-fee">
                         {figures ? (
                           figures.feePaidBy === 'tipme' ? (
-                            'Paid by TipMe'
+                            'Free'
                           ) : (
                             <Money minor={figures.feeMinor} />
                           )
@@ -541,6 +542,11 @@ export default function WithdrawPage({
                       </dd>
                     </dl>
                   </section>
+                )}
+                {dayNote && (
+                  <p className="tm-hint" data-testid="withdrawal-day-note">
+                    {dayNote}
+                  </p>
                 )}
                 <Button
                   type="submit"

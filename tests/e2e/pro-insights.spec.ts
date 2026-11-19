@@ -46,8 +46,8 @@ test('earnings: Pro sees the chart, period tiles and notes; Free sees the basics
   const totals = main.getByRole('region', { name: 'Your totals' });
   await expect(totals.getByText('This week')).toBeVisible();
   await expect(totals.getByText('This year')).toBeVisible();
-  // A Pro page: TipMe keeps 5% (owner, 12 Nov 2026), so ₦1,900 of the ₦2,000 tip.
-  await expect(totals.getByText('₦1,900').first()).toBeVisible();
+  // A Pro page: TipMe keeps 3% (owner, 18 Nov 2026), so ₦1,940 of the ₦2,000 tip.
+  await expect(totals.getByText('₦1,940').first()).toBeVisible();
   await expect(
     main.getByRole('heading', { name: 'Week by week' }),
   ).toBeVisible();

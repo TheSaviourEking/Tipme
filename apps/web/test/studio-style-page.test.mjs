@@ -9,8 +9,12 @@ import {
   STUDIO_FONTS,
   STUDIO_HEADING_PX,
   STUDIO_STYLE_IDS,
+  STUDIO_ACCENT_IDS,
   STUDIO_TILES_RING_MIX,
+  blend,
   contrastRatio,
+  oklchToHex,
+  pickPhotoAccent,
   resolveStudio,
   studioSlotWidth,
   studioTokens,
@@ -672,6 +676,12 @@ const over = (style, { cover = 'yours', mode, profile = {}, coverSize } = {}) =>
     }),
   );
 const { STYLE_COVER } = await import(new URL('parts.mjs', out));
+/** The site header's height (globals.css), which a cover runs up under on a styled page. */
+const NAV_HEIGHT = Number(
+  /--nav-height: (\d+)px;/.exec(
+    readFileSync(new URL('../src/app/globals.css', import.meta.url), 'utf8'),
+  )[1],
+);
 
 /** A CSS linear-gradient's stops as [alpha, position 0..1], from the bottom (`to top`). */
 function scrimStops(decls, scrimEnd) {
@@ -761,9 +771,11 @@ test("text over a Stage or Horizon photo sits on the spec's scrim: at least 55% 
       `.studio[data-style='${style}'] .studio-scrim`,
     );
     assert.match(words, /color: #fff;/, `${style}: white words`);
-    // The cover's own height is the one StyleCover sizes its photo for (phone, desktop).
+    // The cover's own height, plus the header it runs up under (frame.css), is the one
+    // StyleCover sizes its photo for (phone, desktop).
     assert.equal(
-      px(declarations(css, `.studio[data-style='${style}']`), '--tall'),
+      px(declarations(css, `.studio[data-style='${style}']`), '--tall') +
+        NAV_HEIGHT,
       STYLE_COVER[style].tall,
     );
     assert.equal(
@@ -774,12 +786,12 @@ test("text over a Stage or Horizon photo sits on the spec's scrim: at least 55% 
           'min-width: 1024px',
         ),
         '--tall',
-      ),
+      ) + NAV_HEIGHT,
       STYLE_COVER[style].desktopTall,
     );
   }
-  assert.deepEqual(STYLE_COVER.stage, { tall: 488, desktopTall: 640 });
-  assert.deepEqual(STYLE_COVER.horizon, { tall: 640, desktopTall: 836 });
+  assert.deepEqual(STYLE_COVER.stage, { tall: 564, desktopTall: 716 });
+  assert.deepEqual(STYLE_COVER.horizon, { tall: 716, desktopTall: 912 });
 });
 
 test('Stage and Horizon put the words over the photo, white, on the scrim, with no avatar', () => {
@@ -1915,4 +1927,383 @@ test('Signboard, Sprint and Tiles move as drawn, and under reduced motion only f
     assert.ok(reduced, `${style}: a reduced-motion block`);
     assert.match(reduced[1], /transform: none;/, style);
   }
+});
+
+// The site header over the cover (owner, 18 Nov 2026: "this header should be transparent or blend
+// into the theme on the hero"). A page that starts with a full-bleed cover marks its root
+// `data-header`; the frame then lays the header over the cover, transparent, its words white on a
+// soft dark scrim (or, over Signboard's band, the band's own label colour), and gives it back the
+// page's bg once the hero has scrolled past, with a scroll-driven animation inside @supports.
+const headerOf = (html) =>
+  /<div class="studio"[^>]*?data-header="([a-z]+)"/.exec(html)?.[1];
+
+test('the header sits over the cover only where the page starts with a full-bleed cover', () => {
+  const art = { cover: null };
+  const want = [
+    ['stage', 'yours', {}, 'over'],
+    ['stage', 'yours', art, 'over'], // no photo: Stage's deep gradient, dark at the top
+    ['stage', 'gradient', {}, 'over'],
+    ['stage', 'plain', {}, undefined],
+    ['horizon', 'yours', {}, 'over'],
+    ['horizon', 'gradient', {}, undefined], // the name on card, no cover
+    ['horizon', 'plain', {}, undefined],
+    ['sprint', 'yours', {}, 'over'],
+    ['sprint', 'yours', art, 'over'],
+    ['sprint', 'plain', {}, undefined],
+    ['signboard', 'yours', {}, 'over'],
+    ['signboard', 'yours', art, 'over'],
+    ['signboard', 'plain', {}, 'band'], // the band is the cover
+    ['clear', 'yours', {}, 'over'],
+    ['clear', 'yours', art, 'over'],
+    ['clear', 'gradient', {}, undefined], // a pale tint beside bg: the bg header already blends
+    ['clear', 'plain', {}, undefined],
+    // Their pages start on bg: Journal's top rule, Linen's framed cover, Tiles' identity.
+    ['journal', 'yours', {}, undefined],
+    ['linen', 'yours', {}, undefined],
+    ['tiles', 'yours', {}, undefined],
+  ];
+  for (const [style, cover, profile, mode] of want)
+    assert.equal(
+      headerOf(over(style, { cover, profile })),
+      mode,
+      `${style} ${cover}${profile.cover === null ? ' (cover art)' : ''}`,
+    );
+});
+
+/** The Studio CSS inside the header's @supports block, and everything outside it. */
+const SUPPORTS =
+  '@supports (animation-timeline: view()) and (timeline-scope: none)';
+function supportsBlock(css) {
+  const at = css.indexOf(SUPPORTS);
+  if (at < 0) return { inside: '', outside: css };
+  let depth = 0;
+  for (let i = css.indexOf('{', at); i < css.length; i += 1) {
+    if (css[i] === '{') depth += 1;
+    else if (css[i] === '}' && (depth -= 1) === 0)
+      return {
+        inside: css.slice(at, i + 1),
+        outside: css.slice(0, at) + css.slice(i + 1),
+      };
+  }
+  throw new Error('unclosed @supports');
+}
+const frameCss = () => readFileSync(new URL('frame.css', src), 'utf8');
+
+test('every header-over-cover rule waits for scroll-driven animation support, in Studio CSS only', () => {
+  const files = ['frame', ...STUDIO_STYLE_IDS.filter((s) => s !== 'classic')];
+  for (const name of files) {
+    const css = name === 'frame' ? frameCss() : sheet(name);
+    const { outside } = supportsBlock(css);
+    // Outside the block a browser without scroll timelines keeps today's solid header.
+    assert.doesNotMatch(
+      outside.replace(/\/\*[\s\S]*?\*\//g, ''),
+      /data-header|studio-hero-timeline/,
+      `${name}: header-over-cover rule outside @supports`,
+    );
+  }
+  assert.match(
+    supportsBlock(frameCss()).inside,
+    /animation-timeline: --studio-hero;/,
+  );
+  const globals = readFileSync(
+    new URL('../src/app/globals.css', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(globals, /data-header|studio-hero/);
+  // Every selector in the block is scoped to a styled page.
+  const inside = supportsBlock(frameCss()).inside.replace(
+    /\/\*[\s\S]*?\*\//g,
+    '',
+  );
+  for (const m of inside.matchAll(/(?:^|[;{}])\s*([^;{}@]+?)\s*\{/g)) {
+    const sel = m[1].trim();
+    // Keyframe stops (`0%, 85%`) are not selectors.
+    if (/^(from|to|\d+%)(\s*,\s*(from|to|\d+%))*$/.test(sel)) continue;
+    for (const one of sel.split(/,(?![^(]*\))/))
+      assert.match(
+        one.trim(),
+        /^html:has\(\.studio\[data-style\]\[data-header/,
+        `scoped: ${one.trim()}`,
+      );
+  }
+});
+
+/** A to-bottom gradient's stops as [alpha, px], from the header's top edge. */
+function headerScrim(decls) {
+  const g = /linear-gradient\(\s*to bottom,([\s\S]*?)\);/.exec(decls);
+  assert.ok(g, `a to-bottom gradient in ${decls}`);
+  return g[1]
+    .split(/,(?![^(]*\))/)
+    .map((p) => p.trim())
+    .map((part) => {
+      const at = /(\d+)px$/.exec(part);
+      assert.ok(at, `a px stop: ${part}`);
+      if (/^transparent/.test(part)) return [0, Number(at[1])];
+      const rgba = /rgba\(\s*8,\s*8,\s*10,\s*([\d.]+)\)/.exec(part);
+      assert.ok(rgba, part);
+      return [Number(rgba[1]), Number(at[1])];
+    });
+}
+
+// The header's words and keys end 60 px down (16 px + a 44 px key in the 76 px bar); where the
+// site's links wrap to two lines (801 to about 1000 px) they reach 64. e2e measures it. The scrim
+// is proved to 72 px.
+const HEADER_TEXT_BOTTOM = 72;
+
+test('the header over a cover is white on a scrim of at least 58% black wherever its words sit: 4.5:1', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  const flat = inside.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const rule = (sel) => {
+    const esc = sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = new RegExp(`(?:^|[{}]) ?${esc} \\{([^}]*)\\}`).exec(flat);
+    assert.ok(m, sel);
+    return m[1];
+  };
+  const over = "html:has(.studio[data-style][data-header='over'])";
+  const scrim = rule(`${over} .site-header::before`);
+  const stops = headerScrim(scrim);
+  // It starts at the header's top edge, spans the screen, and fades to nothing below the header.
+  assert.equal(stops[0][1], 0);
+  assert.equal(stops.at(-1)[0], 0);
+  assert.match(scrim, /inset: 0 0 auto;/);
+  const height = /height: calc\(var\(--nav-height\) \+ (\d+)px\);/.exec(scrim);
+  assert.ok(height, 'the scrim runs past the header');
+  assert.ok(
+    stops.at(-1)[1] <= 76 + Number(height[1]),
+    'the fade ends inside the scrim',
+  );
+  assert.ok(
+    stops[0][0] >= 0.45 && stops[0][0] <= 0.65,
+    'about half black at the top',
+  );
+  const alphaAtPx = (y) => {
+    for (let i = 1; i < stops.length; i += 1) {
+      const [a0, p0] = stops[i - 1];
+      const [a1, p1] = stops[i];
+      if (y <= p1) return a0 + ((a1 - a0) * (y - p0)) / (p1 - p0 || 1);
+    }
+    return 0;
+  };
+  for (let y = 0; y <= HEADER_TEXT_BOTTOM; y += 1) {
+    const a = alphaAtPx(y);
+    assert.ok(a >= 0.58, `${a.toFixed(3)} black at ${y} px`);
+    // White words over the scrim over a white photo, the worst cover there is.
+    const under = blend('#08080a', a, '#ffffff');
+    assert.ok(
+      contrastRatio('#ffffff', under) >= 4.5,
+      `${y} px: ${contrastRatio('#ffffff', under)}`,
+    );
+  }
+  // The words are white; the wordmark is drawn in them (its purple would vanish on a photo).
+  assert.match(rule(`${over} .site-header`), /--studio-head-over: #fff;/);
+  assert.match(
+    rule(
+      'html:has(.studio[data-style][data-header]) .site-header .nav-shell > .brand .brand__mark path',
+    ),
+    /fill: currentColor;/,
+  );
+  // "Claim your username" keeps TipMe purple: nothing here changes its fill or words; the one
+  // rule on it is the ring that keeps its edge on Signboard's band.
+  assert.doesNotMatch(inside, /tm-button--primary/);
+  for (const m of flat.matchAll(/([^{}]*nav-claim[^{}]*)\{([^}]*)\}/g))
+    assert.match(m[2].trim(), /^box-shadow: [^;]+;$/, m[1]);
+});
+
+test("over Signboard's band the header takes the band's label colour, 4.5:1 on every accent", () => {
+  const accents = [null, ...STUDIO_ACCENT_IDS.filter((a) => a !== 'photo')];
+  const palettes = accents.map((a) => [
+    String(a),
+    studioTokens('signboard', a),
+  ]);
+  // "From your photo": accents picked round the hue circle, as the photo picker makes them.
+  for (let h = 0; h < 360; h += 15) {
+    const photo = pickPhotoAccent([oklchToHex({ l: 0.55, c: 0.14, h })]);
+    if (!('failed' in photo))
+      palettes.push([`photo ${h}`, studioTokens('signboard', 'photo', photo)]);
+  }
+  assert.ok(palettes.length > 12);
+  for (const [name, p] of palettes)
+    for (const mode of ['light', 'dark']) {
+      const t = p[mode];
+      const ratio = contrastRatio(t.accLabel, t.acc);
+      assert.ok(ratio >= 4.5, `${name} ${mode}: ${ratio.toFixed(2)}`);
+    }
+  // The page writes the label colour where the header can read it (Signboard only).
+  const blocks = chromeBlocks(over('signboard', { cover: 'plain' }));
+  assert.equal(
+    blocks[0].tokens.accLabel,
+    studioTokens('signboard', null).light.accLabel,
+  );
+  for (const { tokens } of chromeBlocks(page()))
+    assert.ok(!('accLabel' in tokens));
+  const band = supportsBlock(frameCss()).inside;
+  assert.match(
+    band,
+    /html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \{\s*--studio-head-over: var\(--studio-accLabel\);\s*--studio-head-ring: var\(--studio-accLabel\);/,
+  );
+  // On a wide screen the purple key sits on the band, which can be as light as it (1.0:1 on some
+  // accents): a 2 px ring in the band's label colour keeps its edge while the header is over it.
+  assert.match(
+    band.replace(/\s+/g, ' '),
+    /@media \(min-width: 801px\) \{[^@]*html:has\(\.studio\[data-style\]\[data-header='band'\]\) \.site-header \.nav-claim \{ box-shadow: 0 0 0 2px var\(--studio-head-ring\),[^;]+; \}/,
+  );
+});
+
+test('the header holds its ink over the shade, then switches ink, glass and shade together, with no fade between', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  /** A keyframes block's stops as [[percent…], declarations]. */
+  const stops = (name) => {
+    const block = new RegExp(
+      `@keyframes ${name} \\{([\\s\\S]*?)\\n {2}\\}`,
+    ).exec(inside);
+    assert.ok(block, name);
+    return [...block[1].matchAll(/([\d%,\s]+)\{([^}]*)\}/g)].map((m) => [
+      m[1].split(',').map((p) => Number.parseFloat(p)),
+      m[2].replace(/\s+/g, ' ').trim(),
+    ]);
+  };
+  const head = stops('studio-head');
+  const scrim = stops('studio-head-scrim');
+  const glass = stops('studio-head-glass');
+  assert.equal(head.length, 2);
+  assert.equal(scrim.length, 2);
+  assert.equal(glass.length, 2);
+  const [[holdAt, hold], [endAt, end]] = head;
+  // Held from the top: the words in their over-the-cover ink on the full shade, no glass.
+  assert.deepEqual(holdAt[0], 0);
+  assert.match(hold, /--studio-head-ink: var\(--studio-head-over\);/);
+  assert.deepEqual(scrim[0], [holdAt, 'opacity: 1;']);
+  assert.deepEqual(glass[0], [holdAt, 'opacity: 0;']);
+  // Then everything changes inside one short step (no mid-way where light words meet a light
+  // half-drawn glass): the glass, the page's words, the purple "me", raised keys, no band ring,
+  // no shade. The header's own bg stays transparent: the glass is its own layer.
+  assert.deepEqual(endAt.at(-1), 100);
+  assert.ok(
+    endAt[0] - holdAt.at(-1) <= 3,
+    `a ${endAt[0] - holdAt.at(-1)}% step`,
+  );
+  assert.doesNotMatch(end, /background-color/);
+  for (const want of [
+    '--studio-head-ink: var(--studio-fg);',
+    '--studio-head-me: #7a32f9;',
+    '--surface-raised: var(--studio-card);',
+    '--studio-head-ring: transparent;',
+  ])
+    assert.ok(end.includes(want), want);
+  assert.deepEqual(scrim[1], [endAt, 'opacity: 0;']);
+  assert.deepEqual(glass[1], [endAt, 'opacity: 1;']);
+  // Colours and opacity only.
+  for (const [, decls] of [...head, ...scrim, ...glass])
+    for (const m of decls.matchAll(/([a-z-]+):/g))
+      assert.match(
+        m[1],
+        /^(opacity|background-color|--studio-head-ink|--studio-head-me|--studio-head-ring|--surface-raised|--edge-hairline|--border-material)$/,
+        m[1],
+      );
+  const reduced =
+    /@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n {2}\}/.exec(
+      inside,
+    );
+  assert.ok(reduced, 'a reduced-motion block');
+  assert.match(reduced[1], /animation-timing-function: steps\(1, end\);/);
+  assert.match(
+    frameCss(),
+    /@property --studio-head-ink \{\s*syntax: '<color>';/,
+  );
+});
+
+// The owner (18 Nov 2026): "keep it fixed but kind of make it glassy when you scroll". Past the hero
+// the header is frosted glass: the page's bg, translucent, over a blur of what scrolls under it,
+// with a hairline. Its own layer (::after), so the phone menu (fixed, inside the header) is never
+// held inside a backdrop-filter's box.
+test('past the hero the header is frosted glass, at the lowest bg opacity that keeps its words 4.5:1 over anything', () => {
+  const inside = supportsBlock(frameCss()).inside;
+  const flat = inside.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ');
+  const glassRule =
+    /html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{([^}]*)\}/.exec(
+      flat,
+    );
+  assert.ok(glassRule, 'the glass layer');
+  const g = glassRule[1];
+  const alpha =
+    /background: color-mix\(in srgb, var\(--studio-bg\) (\d+)%, transparent\);/.exec(
+      g,
+    );
+  assert.ok(alpha, 'a translucent bg');
+  assert.match(g, /-webkit-backdrop-filter: blur\(\d+px\) saturate\([\d.]+\);/);
+  assert.match(g, / backdrop-filter: blur\(\d+px\) saturate\([\d.]+\);/);
+  assert.match(g, /border-bottom: 0\.5px solid var\(--studio-line\);/);
+  assert.match(g, /z-index: -1;/);
+  assert.match(g, /inset: 0;/);
+  // The words on the glass, blur ignored, over the worst there is beneath: pure black and pure
+  // white (a composite's luminance only grows with what is under it, so these bound every
+  // colour). Every style, both modes; and one percent less fails somewhere, so it is the lowest.
+  const passes = (pct) =>
+    STUDIO_STYLE_IDS.filter((s) => s !== 'classic').every((style) =>
+      ['light', 'dark'].every((mode) => {
+        const t = studioTokens(style, null)[mode];
+        return ['#000000', '#ffffff'].every(
+          (under) => contrastRatio(t.fg, blend(t.bg, pct / 100, under)) >= 4.5,
+        );
+      }),
+    );
+  const pct = Number(alpha[1]);
+  assert.ok(passes(pct), `${pct}% keeps 4.5:1`);
+  assert.ok(
+    !passes(pct - 1),
+    `${pct - 1}% would also pass: ${pct}% is not the lowest`,
+  );
+  // Without backdrop-filter, or with reduced transparency asked for, the glass is today's solid bg.
+  assert.match(
+    flat,
+    /@supports not \( ?\(backdrop-filter: blur\(1px\)\) or \(-webkit-backdrop-filter: blur\(1px\)\) ?\) \{ html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{ background: var\(--studio-bg\); \} \}/,
+  );
+  assert.match(
+    flat,
+    /@media \(prefers-reduced-transparency: reduce\) \{ html:has\(\.studio\[data-style\]\[data-header\]\) \.site-header::after \{ background: var\(--studio-bg\); -webkit-backdrop-filter: none; backdrop-filter: none; \} \}/,
+  );
+  // The header itself never takes a backdrop-filter (it would hold the fixed phone menu inside it).
+  assert.doesNotMatch(flat, /\.site-header \{[^}]*backdrop-filter/);
+});
+
+test('a full-bleed cover photo is offered for the box it is drawn in, header strip included', () => {
+  const img = (html) =>
+    /<img class="studio-cover__photo"[^>]*sizes="([^"]+)"/.exec(html)?.[1];
+  const w = (h) => Math.ceil((h * 16) / 9);
+  const clear = sheet('clear');
+  const phone = px(
+    declarations(clear, ".studio[data-style='clear'] .studio-cover"),
+    'height',
+  );
+  const desk = px(
+    declarations(
+      clear,
+      ".studio[data-style='clear'] .studio-cover",
+      'min-width: 1024px',
+    ),
+    'height',
+  );
+  assert.equal(
+    img(over('clear')),
+    `(min-width: 1024px) max(100vw, ${w(desk + NAV_HEIGHT)}px), max(100vw, ${w(phone + NAV_HEIGHT)}px)`,
+  );
+  const sprint = px(
+    declarations(sheet('sprint'), ".studio[data-style='sprint'] .studio-cover"),
+    'height',
+  );
+  assert.equal(
+    img(over('sprint')),
+    `(min-width: 1024px) 100vw, max(100vw, ${w(sprint + NAV_HEIGHT)}px)`,
+  );
+  const cap = /height: min\(56\.25vw, (\d+)px\);/.exec(
+    declarations(
+      sheet('signboard'),
+      ".studio[data-style='signboard'] .studio-cover[data-cover='photo']",
+    ),
+  );
+  assert.ok(cap);
+  assert.equal(
+    img(over('signboard')),
+    `max(100vw, calc(min(100vw, ${w(Number(cap[1]))}px) + ${w(NAV_HEIGHT)}px))`,
+  );
 });

@@ -61,7 +61,7 @@ test("the tipping steps' chosen amount reads as chosen on the grey well", async 
 test('home states the fee and the minimum plainly', async ({ page }) => {
   await page.goto('/');
   await expect(
-    page.getByText('TipMe keeps 7% of each tip on Free, or 5% on Pro', {
+    page.getByText('TipMe keeps 5% of each tip on Free, or 3% on Pro', {
       exact: false,
     }),
   ).toBeVisible();
@@ -99,8 +99,8 @@ test('the handle typed on Home is waiting, lowercased, at the handle step of sig
   await page.goto('/');
   const form = page.getByRole('form', { name: 'Claim your link' });
   await form.getByLabel('Your username').fill(typed);
-  // Business sign-up is on in the e2e stack: the claim button reads "Get tipped".
-  await form.getByRole('button', { name: 'Get tipped' }).click();
+  // The claim form's button reads "Claim username" (owner, 18 Nov 2026); the nav keeps "Get tipped".
+  await form.getByRole('button', { name: 'Claim username' }).click();
   await expect(page).toHaveURL(/\/sign-up\?handle=/);
   // Through the email and the code (the handle must survive both) to the handle step.
   await signInWithEmail(page, who.email, page.url());

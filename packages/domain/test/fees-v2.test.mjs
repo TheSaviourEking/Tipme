@@ -1,29 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  CURRENT_FEE_POLICY,
   FEE_POLICY_V1,
   FEE_POLICY_V2_FREE,
   FEE_POLICY_V2_PRO,
   PROCESSING_INCLUDED_FEE_VERSIONS,
-  feePolicyForPlan,
-  planShareBps,
   priceTip,
 } from '../dist/index.js';
 
 // The owner's pricing, 12 Nov 2026: TipMe Free keeps 7% of each tip, TipMe Pro (₦5,000 a month)
 // keeps 5%, processing included in both, for quotes created from the release that carries it.
 // The recipient's plan at quote time picks the rate. Tips priced before keep their recorded 10%.
+// Since 18 Nov 2026 new quotes use V3 (fees-v3.test.mjs); V2 stays for tips already priced under it.
 
 test('Free is 7% and Pro is 5%, processing still paid from TipMe’s share', () => {
   assert.equal(FEE_POLICY_V2_FREE.tipmeShareBps, 700n);
   assert.equal(FEE_POLICY_V2_PRO.tipmeShareBps, 500n);
   assert.equal(FEE_POLICY_V2_FREE.providerFeeBps, 150n);
   assert.equal(FEE_POLICY_V2_PRO.providerFeeBps, 150n);
-  assert.equal(feePolicyForPlan('free'), FEE_POLICY_V2_FREE);
-  assert.equal(feePolicyForPlan('pro'), FEE_POLICY_V2_PRO);
-  // The standard (and the minimums every page shares) is the Free policy.
-  assert.equal(CURRENT_FEE_POLICY, FEE_POLICY_V2_FREE);
   for (const policy of [FEE_POLICY_V2_FREE, FEE_POLICY_V2_PRO]) {
     assert.equal(policy.minTipMinor, 200_000n);
     assert.equal(policy.minTipMinor, 200_000n);
@@ -63,29 +57,13 @@ test('V1 is kept unchanged for history: 10%', () => {
   assert.equal(FEE_POLICY_V1.tipmeShareBps, 1000n);
 });
 
-test('V1 and both V2 plans count as "processing included"', () => {
-  assert.deepEqual(
-    [...PROCESSING_INCLUDED_FEE_VERSIONS].sort(),
-    [
-      FEE_POLICY_V1.version,
-      FEE_POLICY_V2_FREE.version,
-      FEE_POLICY_V2_PRO.version,
-    ].sort(),
-  );
-});
-
-test('a staff-set share is capped at the plan’s rate; below it stays (owner, 12 Nov 2026)', () => {
-  // No deal: the plan's rate.
-  assert.deepEqual(planShareBps('free', null), { bps: 700n, custom: null });
-  assert.deepEqual(planShareBps('pro', null), { bps: 500n, custom: null });
-  // Above the plan's rate: the plan's rate, and the quote records no deal.
-  assert.deepEqual(planShareBps('free', 1000n), { bps: 700n, custom: null });
-  assert.deepEqual(planShareBps('pro', 600n), { bps: 500n, custom: null });
-  assert.deepEqual(planShareBps('free', 700n), { bps: 700n, custom: null });
-  // Below: the deal stands.
-  assert.deepEqual(planShareBps('free', 600n), { bps: 600n, custom: 600n });
-  assert.deepEqual(planShareBps('pro', 300n), { bps: 300n, custom: 300n });
-  assert.deepEqual(planShareBps('pro', 0n), { bps: 0n, custom: 0n });
+test('V1 and both V2 plans still count as "processing included"', () => {
+  for (const version of [
+    FEE_POLICY_V1.version,
+    FEE_POLICY_V2_FREE.version,
+    FEE_POLICY_V2_PRO.version,
+  ])
+    assert.ok(PROCESSING_INCLUDED_FEE_VERSIONS.includes(version), version);
 });
 
 test('cash rewards stay half of the fees each tip really paid: old 10%, Free 7% and Pro 5% mixed', async () => {

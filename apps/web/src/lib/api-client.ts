@@ -1,5 +1,6 @@
 import type {
   ProfileReportReason,
+  PublicPlanFees,
   PublicProPrice,
   TipIntentCreated,
   TipQuote,
@@ -139,6 +140,9 @@ export const mockCheckoutPay = (
 
 /** Paid Pro: the price staff set, and whether buying is open on this copy. 404: no price yet. */
 export const proPrice = () => call<PublicProPrice>('/v1/pro/price', {});
+
+/** TipMe's fee per plan as staff set it (owner, 18 Nov 2026), for copy only. */
+export const planFees = () => call<PublicPlanFees>('/v1/plan-fees', {});
 
 /** Reporting a page (PR-013): a reason from the list only. The API answers the same either way. */
 export const reportPage = (handle: string, reason: ProfileReportReason) =>

@@ -97,7 +97,7 @@ const CHROME_KEYS = ['bg', 'card', 'el2', 'fg', 'fg2', 'line'] as const;
 /**
  * The page's neutrals on <html>, where the site's header and footer (outside `.studio`) can read
  * them (frame.css maps the site's own tokens to these there). Neutrals only: the accent never
- * reaches the chrome. Auto: light, then dark inside `prefers-color-scheme: dark`.
+ * reaches the chrome, save Signboard's label colour for a header over its band. Auto: light, then dark inside `prefers-color-scheme: dark`.
  */
 export function chromeCss(
   style: StudioStyleId,
@@ -106,8 +106,11 @@ export function chromeCss(
 ): string {
   const block = (m: 'light' | 'dark') => {
     const t = modeTokens(style, palette, m);
+    // Signboard's band is the accent; a header over it writes in the band's label colour.
+    const keys =
+      style === 'signboard' ? [...CHROME_KEYS, 'accLabel'] : CHROME_KEYS;
     const own = Object.fromEntries(
-      CHROME_KEYS.filter((k) => t[k] !== undefined).map((k) => [k, t[k]!]),
+      keys.filter((k) => t[k] !== undefined).map((k) => [k, t[k]!]),
     );
     const body = Object.entries(styleTokens(own))
       .map(([key, value]) => `${key}:${value};`)

@@ -16,7 +16,7 @@ import {
   withdrawalQuote,
   withdrawalsAvailable,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 const { createMockProvider } = await import('../../../payments/dist/index.js');
 const { Redis } = createRequire(
@@ -25,7 +25,7 @@ const { Redis } = createRequire(
 const [ADA, TOBI] = DEMO_PROFILES;
 
 test('withdrawals', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   t.after(() => redis.quit());
   const { db } = database;
@@ -296,7 +296,7 @@ test('withdrawals', async (t) => {
 });
 
 test('money collected by a provider without payouts can never be withdrawn through another', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   await database.fresh();
   // The dashboard asks the same question before the owner types an amount.
@@ -366,7 +366,7 @@ test('money collected by a provider without payouts can never be withdrawn throu
 });
 
 test('withdrawals through the provider', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);
@@ -505,8 +505,10 @@ test('withdrawals through the provider', async (t) => {
         ledgerMinor: 372000n,
         providerMinor: 240000n,
         feeMinor: 5000n,
-        // Users pay it, from the amount (owner, 12 Nov 2026).
-        feePaidBy: 'user',
+        // TipMe pays it for a person's page (owner, 18 Nov 2026): withdrawals are free.
+        feePaidBy: 'tipme',
+        ordinalToday: 1,
+        freePerDay: 2,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
       const more = await quoteOf(withBalance(1800000n));

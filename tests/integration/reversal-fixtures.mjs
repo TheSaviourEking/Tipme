@@ -9,7 +9,8 @@ import {
 } from '../../packages/database/test/integration/business-fixtures.mjs';
 
 export const GROSS = 400000n;
-export const NET = 372000n;
+// A ₦4,000 tip on Free keeps TipMe’s 5% (owner, 18 Nov 2026): ₦3,800 to the person.
+export const NET = 380000n;
 
 /**
  * A paid ₦4,000 tip to `handle` (Tobi by default), at a business taking `bps` of their net when

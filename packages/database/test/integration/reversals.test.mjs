@@ -22,7 +22,7 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 // Business release 2, PR R2-A: the business's share is its own ledger line, and a refund or
 // chargeback that staff confirm takes back every line of the tip (Q7), even below zero (Q8).
@@ -38,7 +38,7 @@ const GROSS = 400000n;
 const NET = 372000n;
 
 test('reversals and the business share', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   t.after(() => redis.quit());
   const { db } = database;

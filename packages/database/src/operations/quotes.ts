@@ -15,6 +15,7 @@ import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { opsPageByHandle, tipAmountsOf } from './profiles.js';
 import { personOf } from './owner.js';
+import { planFeeRatesInForce } from './plan-fee-rates.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -79,14 +80,17 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     );
   if (!profile) throw new OperationError('PROFILE_NOT_FOUND');
   const minTipMinor = BigInt(tipAmountsOf(profile).minMinor);
-  // The recipient's plan now picks the rate (owner, 12 Nov 2026: Free 7%, Pro 5%), and the quote
-  // records it in its version, so a later plan change never alters this price. A share staff set
-  // for this account (ADR-0014) applies only below the plan's rate.
+  // The recipient's plan picks the rate (owner, 12 Nov 2026), at the rates in force now: the admin
+  // setting, Free 5% and Pro 3% to start (owner, 18 Nov 2026), or those coded defaults when none is
+  // stored. The quote records the rate in its version and amounts, so a later plan or rate change
+  // never alters this price. A share staff set for this account (ADR-0014) applies only below it.
   const plan = profile.plan === 'pro' ? 'pro' : 'free';
-  const policy = feePolicyForPlan(plan);
+  const rates = await planFeeRatesInForce(db, input.now ?? new Date());
+  const policy = feePolicyForPlan(plan, rates);
   const { bps: shareBps, custom } = planShareBps(
     plan,
     profile.customFeeBps === null ? null : BigInt(profile.customFeeBps),
+    rates,
   );
   const baseVersion =
     custom === null ? policy.version : `${policy.version}-custom-${custom}`;

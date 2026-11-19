@@ -61,6 +61,8 @@ const STAFF_ACTIVITY_ACTIONS = [
   'username.take_back_started',
   'username.take_back_done',
   'username.released',
+  'username.assigned',
+  'username.handover_link_created',
 ];
 
 /** Newest first. The written reason stays in the audit log, which takes its own permission. */

@@ -18,7 +18,8 @@ const REASON =
   'The supporter paid twice by mistake and asked us to refund one.';
 const [, TOBI] = ops.DEMO_PROFILES;
 const GROSS = 1_000_000n;
-const NET = 930_000n;
+// Free keeps 5% (owner, 18 Nov 2026): ₦9,500 of a ₦10,000 tip.
+const NET = 950_000n;
 
 let database;
 const people = new Map();
@@ -146,9 +147,9 @@ test('a tip refund waits for a second person and says what goes back; approving 
   );
   assert.match(
     request.summary,
-    /Refund NGN 9,300\.00 of a NGN 10,000\.00 tip to @tobi/,
+    /Refund NGN 9,500\.00 of a NGN 10,000\.00 tip to @tobi/,
   );
-  assert.match(request.summary, /TipMe keeps its NGN 700\.00 fee/);
+  assert.match(request.summary, /TipMe keeps its NGN 500\.00 fee/);
   // The one who asked can't decide it.
   await assert.rejects(approve(outcome.requestId, requester), {
     code: 'APPROVAL_OWN_REQUEST',

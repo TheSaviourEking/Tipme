@@ -493,10 +493,23 @@ export function AppreciationForm({
     if (!skin || !host || !tip || typeof IntersectionObserver === 'undefined')
       return;
     const seen = new Map<Element, boolean>();
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) seen.set(entry.target, entry.isIntersecting);
-      host.dataset.bar = [...seen.values()].some(Boolean) ? 'hidden' : 'shown';
-    });
+    // Where the site header stays at the top of the screen (over a styled page's cover,
+    // frame.css), a Tip under it is out of sight: its strip is left out of the screen here.
+    const header = document.querySelector<HTMLElement>('.site-header');
+    const under =
+      header && getComputedStyle(header).position === 'sticky'
+        ? header.offsetHeight
+        : 0;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries)
+          seen.set(entry.target, entry.isIntersecting);
+        host.dataset.bar = [...seen.values()].some(Boolean)
+          ? 'hidden'
+          : 'shown';
+      },
+      { rootMargin: `-${under}px 0px 0px 0px` },
+    );
     const page = host.closest('.studio') ?? document;
     for (const target of [
       tip,

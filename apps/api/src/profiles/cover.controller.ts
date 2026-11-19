@@ -57,8 +57,8 @@ import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
-// Page covers: 2240×600, twice the widest the page shows, and smaller copies of it for the Studio
-// styles' srcset (cover-renditions.ts). The safeguards every upload gets are in image-upload.ts,
+// Page covers: 2240×600, twice the widest the page shows, and smaller copies and a tall crop of it
+// for the Studio styles' srcset (cover-renditions.ts). The safeguards every upload gets are in image-upload.ts,
 // and uploads share the photo upload's rate limit and re-encoding slots.
 
 @Controller('v1')
@@ -177,8 +177,9 @@ export class CoverController {
   }
 
   /**
-   * Public, but only for live pages: the cover (`<n>.webp`) or one of its renditions
-   * (`<n>-640.webp`), under the same rules and headers. Any other width is not found.
+   * Public, but only for live pages: the cover (`<n>.webp`), one of its renditions
+   * (`<n>-640.webp`) or its tall crop (`<n>-tall-480.webp`), under the same rules and headers. Any
+   * other width is not found.
    */
   @Get('covers/:profileId/:file')
   @Header('X-Content-Type-Options', 'nosniff')

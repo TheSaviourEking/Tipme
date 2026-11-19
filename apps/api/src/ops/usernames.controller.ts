@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Header,
   HttpCode,
   Inject,
   Param,
@@ -11,11 +12,18 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
+  opsHandoverAccountsQuerySchema,
+  opsHandoverAssignSchema,
   opsReasonSchema,
   opsTakeBackRequestSchema,
   opsUsernameReserveSchema,
   opsUsernamesQuerySchema,
   type ApiDataResponse,
+  type OpsHandoverAccount,
+  type OpsHandoverAccountsQuery,
+  type OpsHandoverAssignRequest,
+  type OpsHandoverLink,
+  type OpsHandoverLinkCreated,
   type OpsReasonRequest,
   type OpsReservation,
   type OpsSeriousPending,
@@ -25,9 +33,16 @@ import {
   type OpsUsernameReserveRequest,
   type OpsUsernamesList,
   type OpsUsernamesQuery,
+  type UsernameHandedOver,
 } from '@tipme/contracts';
 import {
+  assignUsername,
+  cancelHandoverLink,
   cancelTakeBack,
+  createHandoverLink,
+  findHandoverAccounts,
+  recordAudit,
+  withAuditChange,
   checkUsername,
   listUsernames,
   releaseUsername,
@@ -41,6 +56,7 @@ import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -55,6 +71,10 @@ import { OpsPermission } from './permission.decorator.js';
  * and audited. Reads count against `ops_read`, asks against `ops_request` (ruling, 5 Nov 2026). Sign-up and handle changes then refuse a reserved name (profiles.ts).
  * Taking a name back from a page is the serious action `username.take_back`: it waits for a
  * second person when one exists. Cancelling one is instant.
+ *
+ * Handover (owner's approval, 18 Nov 2026): a reserved name goes to one account, by a one-time
+ * claim link (shown once; staff send it themselves) or by giving it to an account staff find. No
+ * second person: nobody loses a name. The same permission and fresh code; every step audited.
  */
 @Controller('v1/ops/usernames')
 export class OpsUsernamesController {
@@ -65,6 +85,7 @@ export class OpsUsernamesController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {}
 
   @Get()
@@ -202,5 +223,121 @@ export class OpsUsernamesController {
         sealing: this.sealing,
       }),
     };
+  }
+
+  /** Shown once: the answer carries the link's path with its code; the server keeps its hash. */
+  @Post(':name/handover-link')
+  @HttpCode(201)
+  @Header('Cache-Control', 'private, no-store')
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('usernames.manage')
+  async createHandoverLink(
+    @CurrentOps() ops: OpsContext,
+    @Param('name') name: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<OpsHandoverLinkCreated>> {
+    return {
+      data: await createHandoverLink(this.database.db, {
+        staffId: ops.userId,
+        name,
+        reason: body.reason,
+      }),
+    };
+  }
+
+  @Post(':name/handover-link/cancel')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('usernames.manage')
+  async cancelHandoverLink(
+    @CurrentOps() ops: OpsContext,
+    @Param('name') name: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<OpsHandoverLink>> {
+    return {
+      data: await cancelHandoverLink(this.database.db, {
+        staffId: ops.userId,
+        name,
+        reason: body.reason,
+      }),
+    };
+  }
+
+  /**
+   * Finds the account to give a name to, by its current username or whole confirmed email. The
+   * query travels in the body, never the URL, and is audited by its length only, as admin search:
+   * what staff typed could be an email address. The answer has no email.
+   */
+  @Post('handover-accounts')
+  @HttpCode(200)
+  @Header('Cache-Control', 'private, no-store')
+  @RateLimit('ops_read')
+  @FreshCode()
+  @OpsPermission('usernames.manage')
+  async handoverAccounts(
+    @CurrentOps() ops: OpsContext,
+    @Body(new ZodValidationPipe(opsHandoverAccountsQuerySchema))
+    body: OpsHandoverAccountsQuery,
+  ): Promise<ApiDataResponse<OpsHandoverAccount[]>> {
+    // Looking an account up by email is a staff search, so it also takes search.view (review).
+    const byEmail = body.query.includes('@') && !body.query.startsWith('@');
+    if (byEmail && !ops.permissions.has('search.view'))
+      throw new CodedHttpException(403, 'FORBIDDEN');
+    const listed = this.config.LIVE_CHECKOUT_HANDLES;
+    const accounts = await findHandoverAccounts(this.database.db, body.query);
+    // Who was found, never what was typed (it could be an email address).
+    await recordAudit(this.database.db, {
+      staffUserId: ops.userId,
+      action: 'username.account_lookup',
+      permission: 'usernames.manage',
+      subjectType: 'search',
+      subjectId: `${body.query.length} characters`,
+      reason: withAuditChange('Looked up an account for a handover', {
+        by: byEmail ? 'email' : 'username',
+        found: accounts.map((account) => account.userId),
+      }),
+    });
+    return {
+      data: accounts.map((account) => ({
+        ...account,
+        // Named on its own in the list: a page that changes its username loses live checkout.
+        liveCheckoutListed:
+          account.page !== null &&
+          Array.isArray(listed) &&
+          listed.includes(account.page.handle.toLowerCase()),
+      })),
+    };
+  }
+
+  /** Gives a reserved name to an account, with a reason; its old username keeps redirecting. */
+  @Post(':name/assign')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('usernames.manage')
+  async assign(
+    @CurrentOps() ops: OpsContext,
+    @Param('name') name: string,
+    @Body(new ZodValidationPipe(opsHandoverAssignSchema))
+    body: OpsHandoverAssignRequest,
+  ): Promise<ApiDataResponse<UsernameHandedOver>> {
+    const given = await assignUsername(this.database.db, {
+      staffId: ops.userId,
+      name,
+      userId: body.userId,
+      reason: body.reason,
+      sealing: this.sealing,
+    });
+    // After the commit: the old page address now redirects, and the name is a page.
+    if (given.previous) this.revalidator.revalidateGone(given.previous);
+    this.revalidator.revalidate(given.handle);
+    // Their open dashboards re-read their profile (never awaited, never thrown).
+    void this.publishLive({
+      to: { user: body.userId },
+      type: 'profile.changed',
+    });
+    return { data: given };
   }
 }

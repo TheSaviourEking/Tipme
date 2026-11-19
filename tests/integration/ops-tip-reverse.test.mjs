@@ -89,7 +89,7 @@ const business = async (businessId) =>
 test('staff reverse a shared tip: both parts come back, audited, alone with the alert', async () => {
   const before = await reportedReversal(database, { bps: 1000 });
   const personBefore = await person(before.profileId);
-  assert.equal(await business(before.businessId), 37200n);
+  assert.equal(await business(before.businessId), 38000n);
   const response = await reverse(before.issueId, full);
   assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual((await response.json()).data, {
@@ -98,7 +98,7 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
     belowZero: false,
     actedAlone: true,
   });
-  assert.equal(await person(before.profileId), personBefore - (NET - 37200n));
+  assert.equal(await person(before.profileId), personBefore - (NET - 38000n));
   assert.equal(await business(before.businessId), 0n);
   assert.equal(await before.reversals(), 1);
   // Owner, 14 Nov 2026: TipMe keeps its fee on a refund. This one was the whole ₦4,000, made at the
@@ -120,7 +120,7 @@ test('staff reverse a shared tip: both parts come back, audited, alone with the 
   assert.equal(over.length, 1);
   assert.match(
     over[0].summary,
-    /₦280 more than this tip's recipients received/,
+    /₦200 more than this tip's recipients received/,
   );
   const audits = await q(
     `SELECT action, reason FROM audit_events WHERE action = 'serious_action.ran_alone'

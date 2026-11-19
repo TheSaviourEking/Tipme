@@ -109,13 +109,22 @@ export async function moveRowsToStore(
   return moved;
 }
 
+/** A cover rendition's shape: a same-shape smaller copy, or the 4:5 tall crop. */
+export type CoverRenditionShape = 'wide' | 'tall';
+
 /**
  * Where a cover's rendition is kept in the object store: beside the cover, under the same page
- * (`covers/<page>/<random>-640-<salt>.webp`). The salt makes every write a new key, so removing
- * the objects of a write that lost a race can never remove another write's.
+ * (`covers/<page>/<random>-640-<salt>.webp`, or `<random>-tall-480-<salt>.webp` for a tall crop).
+ * The salt makes every write a new key, so removing the objects of a write that lost a race can
+ * never remove another write's.
  */
-export const renditionKeyOf = (coverKey: string, width: number, salt: string) =>
-  `${coverKey.replace(/\.webp$/, '')}-${width}-${salt}.webp`;
+export const renditionKeyOf = (
+  coverKey: string,
+  width: number,
+  salt: string,
+  shape: CoverRenditionShape = 'wide',
+) =>
+  `${coverKey.replace(/\.webp$/, '')}-${shape === 'tall' ? 'tall-' : ''}${width}-${salt}.webp`;
 export const newRenditionSalt = () => randomUUID().slice(0, 8);
 
 /**
@@ -134,13 +143,19 @@ export async function deleteCoverRenditions(
   return rows.flatMap((r) => (r.objectKey ? [r.objectKey] : []));
 }
 
-/** The widths stored for the page's current cover, narrowest first; none for an older cover. */
+/**
+ * The renditions stored for the page's current cover, narrowest first, by shape, as `resolveCover`
+ * takes them; none for an older cover.
+ */
 export async function coverWidthsOf(
   db: Database | Tx,
   profileId: string,
-): Promise<number[]> {
+): Promise<{ coverWidths: number[]; coverTall: number[] }> {
   const rows = await db
-    .select({ width: profileCoverRenditions.width })
+    .select({
+      shape: profileCoverRenditions.shape,
+      width: profileCoverRenditions.width,
+    })
     .from(profileCoverRenditions)
     .innerJoin(
       profileCovers,
@@ -151,7 +166,10 @@ export async function coverWidthsOf(
     )
     .where(eq(profileCoverRenditions.profileId, profileId))
     .orderBy(asc(profileCoverRenditions.width));
-  return rows.map((r) => r.width);
+  return {
+    coverWidths: rows.filter((r) => r.shape === 'wide').map((r) => r.width),
+    coverTall: rows.filter((r) => r.shape === 'tall').map((r) => r.width),
+  };
 }
 
 /**
@@ -166,12 +184,13 @@ export async function moveRenditionsToStore(
   const waiting = await db
     .select({
       profileId: profileCoverRenditions.profileId,
+      shape: profileCoverRenditions.shape,
       width: profileCoverRenditions.width,
     })
     .from(profileCoverRenditions)
     .where(isNotNull(profileCoverRenditions.bytes));
   let moved = 0;
-  for (const { profileId, width } of waiting) {
+  for (const { profileId, shape, width } of waiting) {
     const [row] = await db
       .select({
         version: profileCoverRenditions.version,
@@ -189,13 +208,19 @@ export async function moveRenditionsToStore(
       .where(
         and(
           eq(profileCoverRenditions.profileId, profileId),
+          eq(profileCoverRenditions.shape, shape),
           eq(profileCoverRenditions.width, width),
           isNotNull(profileCoverRenditions.bytes),
           isNotNull(profileCovers.objectKey),
         ),
       );
     if (!row?.coverKey) continue;
-    const objectKey = renditionKeyOf(row.coverKey, width, newRenditionSalt());
+    const objectKey = renditionKeyOf(
+      row.coverKey,
+      width,
+      newRenditionSalt(),
+      shape as CoverRenditionShape,
+    );
     await store.put(objectKey, row.bytes!);
     const updated = await db
       .update(profileCoverRenditions)
@@ -203,6 +228,7 @@ export async function moveRenditionsToStore(
       .where(
         and(
           eq(profileCoverRenditions.profileId, profileId),
+          eq(profileCoverRenditions.shape, shape),
           eq(profileCoverRenditions.width, width),
           eq(profileCoverRenditions.version, row.version),
           isNotNull(profileCoverRenditions.bytes),

@@ -21,6 +21,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'analytics',
     'business',
     'business_owners',
+    'business_payout_fee_absorbed',
     'business_pro',
     'business_shares',
     'business_signup',
@@ -48,6 +49,7 @@ test('money switches are exactly the owner’s list (and team tips), and none de
     (key) => FEATURE_SWITCH_CATALOGUE[key].money,
   ).sort();
   assert.deepEqual(money, [
+    'business_payout_fee_absorbed',
     'business_shares',
     'pro_auto_renew',
     'pro_billing',
@@ -338,4 +340,14 @@ test('team_tips and business_owners are marked not built; every other switch is 
   }
   assert.ok(isFeatureSwitch('team_tips'));
   assert.ok(isFeatureSwitch('business_owners'));
+});
+
+// Owner, 18 Nov 2026 ("the admin should be able to set business fees too"): whether TipMe pays a
+// business's payout fee is a money switch, off by default so businesses keep today's rule.
+test('business_payout_fee_absorbed is a money switch, off by default (businesses pay their fee today)', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.business_payout_fee_absorbed;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'BUSINESS_PAYOUT_FEE_ABSORBED');
+  assert.doesNotMatch(entry.description, /bachs/i);
 });

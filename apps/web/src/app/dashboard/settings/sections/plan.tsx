@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { MyProfile, MyPro, ProPurchase } from '@tipme/contracts';
 import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import { usePlanFees } from '@/lib/use-plan-fees';
 import { dateOf } from '@/lib/lagos-time';
 import {
   ASK_FOR_PRO,
@@ -195,6 +195,7 @@ function FollowedSlip({
 
 /** What Pro includes, the current plan, and paying for a month when buying is open. */
 export function ProPlan() {
+  const { freePercent, proPercent } = usePlanFees();
   const { profile, setProfile } = useRecipient();
   const [pro, setPro] = useState<MyPro | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -317,11 +318,11 @@ export function ProPlan() {
               ? 'Your page is on TipMe Pro, turned on by the TipMe team.'
               : 'Your page is on TipMe Pro.'}
       </p>
-      {/* The owner's pricing, 12 Nov 2026: the plan sets TipMe's share of each new tip. */}
+      {/* The plan sets TipMe's share of each new tip, at the rates staff set (owner, 18 Nov 2026). */}
       <p className="settings-plan__status">
         {onPro
-          ? `TipMe keeps ${PRO_SHARE_PERCENT}% of each tip while you’re on Pro, instead of ${FREE_SHARE_PERCENT}% on Free.`
-          : `TipMe keeps ${FREE_SHARE_PERCENT}% of each tip on Free. On Pro it keeps ${PRO_SHARE_PERCENT}%.`}
+          ? `TipMe keeps ${proPercent}% of each tip while you’re on Pro, instead of ${freePercent}% on Free. Payment and withdrawal fees are included.`
+          : `TipMe keeps ${freePercent}% of each tip on Free, payment and withdrawal fees included. On Pro it keeps ${proPercent}%.`}
       </p>
       {pro?.next && (
         <p className="settings-plan__status">

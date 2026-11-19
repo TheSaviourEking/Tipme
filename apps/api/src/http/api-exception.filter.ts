@@ -141,6 +141,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Nobody in this audience can get announcements right now. Nothing was sent.',
   ANNOUNCEMENT_EMAIL_NOT_SET_UP:
     'Announcement email isn’t set up on this server, so nothing can be sent.',
+  PLAN_FEES_CONFIRM_REQUIRED:
+    'That moves a rate by more than 2 percentage points. Confirm the big change to go ahead.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -172,6 +174,15 @@ const messages: Record<ApiErrorCode, string> = {
   TAKE_BACK_OPEN: 'This username already has a take-back under way.',
   TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back.',
   TAKE_BACK_CLOSED: 'This take-back has already finished.',
+  USERNAME_IN_HOLD:
+    'A deleted page’s hold on this username hasn’t ended yet, so it can’t be handed over.',
+  HANDOVER_LINK_NOT_FOUND: 'This username has no open claim link.',
+  HANDOVER_ACCOUNT_UNAVAILABLE: 'This account can’t take a username right now.',
+  CLAIM_LINK_INVALID:
+    'This claim link doesn’t work any more. Ask the TipMe team for a new one.',
+  HANDOVER_STAFF_ACCOUNT: 'Staff accounts can’t receive a username this way.',
+  HANDOVER_ACCOUNT_CHANGED:
+    'The account changed while this was happening. Nothing changed; try again.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -405,6 +416,16 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  USERNAME_IN_HOLD: { status: 409, code: 'USERNAME_IN_HOLD' },
+  HANDOVER_LINK_NOT_FOUND: { status: 404, code: 'HANDOVER_LINK_NOT_FOUND' },
+  HANDOVER_ACCOUNT_UNAVAILABLE: {
+    status: 409,
+    code: 'HANDOVER_ACCOUNT_UNAVAILABLE',
+  },
+  // Unknown, used, expired or cancelled: one answer; the preview says which, to the code's holder.
+  CLAIM_LINK_INVALID: { status: 404, code: 'CLAIM_LINK_INVALID' },
+  HANDOVER_STAFF_ACCOUNT: { status: 409, code: 'HANDOVER_STAFF_ACCOUNT' },
+  HANDOVER_ACCOUNT_CHANGED: { status: 409, code: 'HANDOVER_ACCOUNT_CHANGED' },
   // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
   APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
   CHANGELOG_EDITED_ELSEWHERE: {
@@ -440,6 +461,10 @@ const operationErrors: Partial<
   CAMPAIGN_HEADLINE_NAME: { status: 422, code: 'CAMPAIGN_HEADLINE_NAME' },
   SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
+  PLAN_FEES_CONFIRM_REQUIRED: {
+    status: 400,
+    code: 'PLAN_FEES_CONFIRM_REQUIRED',
+  },
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
   PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },
