@@ -1,10 +1,10 @@
 /**
- * Page Studio type scale and font library (plan 2026-11-12-page-studio, Task 2).
+ * Page Studio font library (plan 2026-11-12-page-studio, Task 2).
  *
  * Fonts are self-hosted WOFF2 files in `apps/web/public/fonts/studio/`, cut from google/fonts at a
  * pinned commit by `scripts/studio-fonts.mjs` (which also measured the metrics below). A page uses
  * at most two families, one for headings and one for text, so it loads at most 2 files and well
- * under 200 KB of fonts. Every size is a `clamp()` between a 320px and a 1440px screen.
+ * under 200 KB of fonts.
  */
 
 export type StudioFontId =
@@ -364,73 +364,5 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
   },
 ];
 
+/** The v1 document's type size step (`StudioDocumentV1['scale']`); the v1 type scale itself is gone. */
 export type StudioScaleStep = 'compact' | 'standard' | 'roomy';
-export type StudioTextRole = 'display' | 'h2' | 'h3' | 'body' | 'small';
-
-export interface StudioTypeSize {
-  /** px at a 320px screen and at 1440px; `css` is the clamp() between them. */
-  min: number;
-  max: number;
-  css: string;
-  lineHeight: number;
-  measure: string;
-}
-
-const RATIO: Record<StudioScaleStep, number> = {
-  compact: 1.2,
-  standard: 1.25,
-  roomy: 1.333,
-};
-
-const NARROW = 320;
-const WIDE = 1440;
-const round = (n: number, places: number) => Number(n.toFixed(places));
-
-function fluid(min: number, max: number): string {
-  const slope = (max - min) / (WIDE - NARROW);
-  // Rounded down, so the fluid size never passes `min` at 320px (display stays ≤ 40px).
-  const rem = Math.floor(((min - slope * NARROW) / 16) * 1e4) / 1e4;
-  return `clamp(${min}px, ${rem}rem + ${round(slope * 100, 4)}vw, ${max}px)`;
-}
-
-/**
- * Body is 16–18px; each step up multiplies both ends by the ratio (h3 once, h2 twice, display four
- * times); small divides by it. Display never passes 40px on a 320px screen, small never drops
- * below 13px. Body text keeps a 68-character line; headings 24.
- */
-export function studioTypeScale(
-  step: StudioScaleStep,
-): Record<StudioTextRole, StudioTypeSize> {
-  const r = RATIO[step];
-  const size = (
-    power: number,
-    lineHeight: number,
-    measure: string,
-    floor = 0,
-    cap = Infinity,
-  ) => {
-    const min = round(Math.min(cap, Math.max(floor, 16 * r ** power)), 2);
-    const max = round(Math.max(min, 18 * r ** power), 2);
-    return { min, max, css: fluid(min, max), lineHeight, measure };
-  };
-  return {
-    display: size(4, 1.1, '24ch', 0, 40),
-    h2: size(2, 1.2, '24ch'),
-    h3: size(1, 1.3, '24ch'),
-    body: {
-      min: 16,
-      max: 18,
-      css: 'clamp(16px, 0.95rem + 0.25vw, 18px)',
-      lineHeight: 1.6,
-      measure: '68ch',
-    },
-    small: size(-1, 1.5, '68ch', 13),
-  };
-}
-
-/** Row spacing steps, px at 320 and 1440. */
-export const STUDIO_SPACING = {
-  s: { min: 16, max: 24 },
-  m: { min: 24, max: 48 },
-  l: { min: 40, max: 80 },
-} as const;

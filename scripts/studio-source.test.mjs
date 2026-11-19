@@ -136,17 +136,29 @@ test('nothing imports the v1 renderer, layout model or v1 check', () => {
   const packages = readdirSync(new URL('packages/', root)).map(
     (p) => `packages/${p}/src/`,
   );
+  // Package sources, and now also their tests, the browser tests and the support files. The v1
+  // fixtures (studio-examples.mjs) and the frozen v1 font table are stored-row data, not imports
+  // of the deleted modules, and name none of the banned words.
   const scanned = [
     ...walk('apps/'),
+    ...walk('tests/'),
     ...packages.filter((p) => existsSync(new URL(p, root))).flatMap(walk),
+    ...readdirSync(new URL('packages/', root)).flatMap((p) =>
+      existsSync(new URL(`packages/${p}/test/`, root))
+        ? walk(`packages/${p}/test/`)
+        : [],
+    ),
   ];
   assert.ok(scanned.length > 500, `scanned ${scanned.length} files`);
   const banned = [
     /components\/studio\//,
+    // A relative import of a v1 renderer module, e.g. '../studio/studio-theme' or './studio-row'.
+    /['"][^'"\n]*\/studio-(theme|row|blocks|sheet|page)['"]/,
     /studio-layout/,
     /studio-check-v3/,
     /\bcheckDesignV1\b/,
     /\bapplyStudioFixV1\b/,
+    /\bSTUDIO_GRID\b/,
   ];
   const hits = scanned.flatMap((file) => {
     const text = readFileSync(new URL(file, root), 'utf8');

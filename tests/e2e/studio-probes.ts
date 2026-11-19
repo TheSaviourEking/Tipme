@@ -233,6 +233,41 @@ export async function contrastProblems(
           base = [97, 97, 97, 1];
           break;
         }
+        // A solid `::before` that an ancestor positions under the element is the surface the text
+        // is read on (Clear's selected amount sits on the segmented control's `::before` thumb,
+        // while its own span and the track are other colours). `getBoundingClientRect` can't
+        // measure a pseudo-element, so its box comes from the resolved left, top, size and
+        // translate of an absolutely positioned one.
+        if (at !== el) {
+          const pseudo = getComputedStyle(at, '::before');
+          const fill = parse(pseudo.backgroundColor);
+          if (
+            pseudo.content !== 'none' &&
+            pseudo.position === 'absolute' &&
+            pseudo.backgroundImage === 'none' &&
+            fill &&
+            fill[3] >= 0.999
+          ) {
+            const host = at.getBoundingClientRect();
+            const move = new DOMMatrixReadOnly(
+              pseudo.transform === 'none' ? undefined : pseudo.transform,
+            );
+            const left = host.left + parseFloat(pseudo.left) + move.m41;
+            const top = host.top + parseFloat(pseudo.top) + move.m42;
+            const box = el.getBoundingClientRect();
+            const cx = box.left + box.width / 2;
+            const cy = box.top + box.height / 2;
+            if (
+              cx >= left - 1 &&
+              cx <= left + parseFloat(pseudo.width) + 1 &&
+              cy >= top - 1 &&
+              cy <= top + parseFloat(pseudo.height) + 1
+            ) {
+              layers.push(fill);
+              break;
+            }
+          }
+        }
         const cs = getComputedStyle(at);
         if (cs.backgroundImage !== 'none') return null; // an image: not measurable here
         const bg = parse(cs.backgroundColor);

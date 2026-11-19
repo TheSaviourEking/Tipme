@@ -69,18 +69,13 @@ test('random v2 documents render cleanly at 320–1440px, light and dark @studio
         await page.goto(lab(doc, mode, ctx.links, ctx.bio));
         await ready(page);
         const root = rootOf(doc);
-        const accented = (doc as { accent?: unknown }).accent !== null;
         for (const width of WIDTHS) {
           await page.setViewportSize({ width, height: 900 });
           expect(
             await geometryProblems(page, root),
             `${mode} at ${width}px`,
           ).toEqual([]);
-          // Contrast is checked on the style's own accent only. With a curated accent the selected
-          // amount's text can miss 4.5:1 on its chip (Clear with coral 4.40, Classic with green
-          // 4.41, found by this property in PR 4b). That is a token fix for its own PR, reported
-          // with 4b, not part of retiring v1; geometry still runs on every document.
-          if ((width === 320 || width === 1440) && !accented)
+          if (width === 320 || width === 1440)
             expect(
               await contrastProblems(page, root),
               `${mode} at ${width}px`,
@@ -140,6 +135,50 @@ test('settled waits for the requested width and says so when it never comes @stu
   await expect(settled(page, 1500)).rejects.toThrow(
     /did not settle at 333px within 1500ms; last reading: .*"innerWidth":390/,
   );
+});
+
+// Clear draws its selected amount on the segmented control's `::before` thumb, while the chip's own
+// span is transparent and the track behind it is #e8e8ed-ish. A probe that only walks parent
+// elements measured the track (coral 4.40:1 and green 4.41:1, false misses found in PR 4b); on the
+// thumb they are 5.37:1 and 5.39:1. The probe now reads the thumb, and still fails a real miss.
+test('the contrast probe reads the thumb under Clear’s selected amount, and still fails a real miss @studio-lab', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  for (const accent of ['coral', 'green']) {
+    await page.goto(`/dev/studio-lab?style=clear&accent=${accent}&mode=light`);
+    await ready(page);
+    // What the old probe measured: the track behind the thumb is the first opaque background up
+    // the tree from the checked chip, and the text misses 4.5:1 on it.
+    const onTrack = await page.evaluate(() => {
+      const chip = document.querySelector(
+        '.studio-tip .tm-amount-choice input:checked + span',
+      )!;
+      const track = getComputedStyle(chip.closest('.amount-options')!);
+      const lum = (c: string) =>
+        c
+          .match(/[\d.]+/g)!
+          .slice(0, 3)
+          .map((v) => Number(v) / 255)
+          .map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+          .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i]!, 0);
+      const [a, b] = [
+        lum(getComputedStyle(chip).color),
+        lum(track.backgroundColor),
+      ].sort((x, y) => y - x);
+      return (a! + 0.05) / (b! + 0.05);
+    });
+    expect(onTrack, `${accent} on the track`).toBeLessThan(4.5);
+    expect(await contrastProblems(page, '.studio'), accent).toEqual([]);
+  }
+  // A thumb that really is too close to the text still fails: the probe is not blind to it.
+  await page.addStyleTag({
+    content:
+      '.studio[data-style="clear"] .studio-tip .amount-options::before{background:#c9c9c9 !important}',
+  });
+  const problems = await contrastProblems(page, '.studio');
+  expect(problems.length).toBeGreaterThan(0);
+  expect(problems.join('\n')).toMatch(/< 4\.5/);
 });
 
 test('axe is clean on 20 random documents @studio-lab', async ({ page }) => {
