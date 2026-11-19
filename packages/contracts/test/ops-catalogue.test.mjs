@@ -59,8 +59,10 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-one', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 21);
+test('the serious actions are the agreed twenty-two', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 22);
+  // Owner, 18 Nov 2026: TipMe's fee per plan is a money change, with a second person.
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['plan_fees.change'], 'fees.manage');
   // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['tip.refund'], 'payments.repair');
   // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.

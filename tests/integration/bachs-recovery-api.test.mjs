@@ -98,7 +98,9 @@ function controller(db, bachsProvider) {
 /** Repair audit rows name the permission that guards the route, not the older recheck one. */
 async function assertRepairAudited(database) {
   const { rows } = await database.pool.query(
-    `SELECT DISTINCT permission FROM audit_events WHERE permission IS NOT NULL`,
+    // Not the system row a reset seeds with the plan fee rates (migration 0118).
+    `SELECT DISTINCT permission FROM audit_events
+      WHERE permission IS NOT NULL AND action <> 'plan_fees.changed'`,
   );
   assert.deepEqual(
     rows.map((r) => r.permission),
@@ -114,7 +116,7 @@ test('checkout recovery verifies matching provider evidence before attaching and
     async verifyTransaction(reference, expectation) {
       assert.equal(reference, 'acct_ada123:chk_test123');
       // A ₦1,000 tip: Bachs confirms success only against TipMe's ₦100 share.
-      assert.deepEqual(expectation, { platformFeeMinor: 14000n });
+      assert.deepEqual(expectation, { platformFeeMinor: 10000n });
       return {
         status: 'succeeded',
         amountMinor: BigInt(quote.payer_total_minor),

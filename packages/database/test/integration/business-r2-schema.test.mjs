@@ -15,7 +15,7 @@ import {
   seedMember,
   seedTableCard,
 } from './business-fixtures.mjs';
-import { ADA, TOBI, useDatabase } from './helpers.mjs';
+import { ADA, AT_12_NOV_PLAN_FEES, TOBI, useDatabase } from './helpers.mjs';
 
 // Business release 2, PR R2-0 Task 27: what the database itself refuses, so no later lane can
 // write a share, a team split, a table assignment or a reversal wrongly.
@@ -33,7 +33,7 @@ test('the share options agree in contracts and domain', () => {
 });
 
 test('business release 2 schema', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const q = (text, values) =>
     database.pool.query(text, values).then((result) => result.rows);
   const tipAt = async (businessMemberId) =>

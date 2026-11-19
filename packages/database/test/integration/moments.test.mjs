@@ -14,14 +14,14 @@ import {
   recordProviderEvent,
   shareMoment,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 const [, TOBI] = DEMO_PROFILES;
 const BUDGET = 25_000_000n;
 const lagos = (iso) => new Date(`${iso}+01:00`);
 
 test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);
@@ -102,7 +102,7 @@ test('moments (celebrations) and staff-granted fee-free tips', async (t) => {
         next.breakdown.platformFeeMinor + next.breakdown.providerFeeMinor,
         14000n,
       );
-      assert.equal(next.feePolicyVersion, 'v2-free-7pct');
+      assert.equal(next.feePolicyVersion, 'v3-free-700bps');
     },
   );
 
@@ -256,7 +256,7 @@ test('public moment words never reveal a reward', async () => {
 });
 
 test('review fixes: rewards', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);

@@ -827,6 +827,13 @@
       "when": 1795076443958,
       "tag": "0117_username_handover_links",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1795078926326,
+      "tag": "0118_plan_fee_rates",
+      "breakpoints": true
     }
   ]
 }

@@ -26,12 +26,13 @@ export const FEE_POLICY_V1: FeePolicy = {
 };
 
 /**
- * The owner's pricing, 12 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): the recipient's plan at
+ * The owner's pricing, 12 Nov 2026 until 18 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): the recipient's plan at
  * quote time picks TipMe's share, processing still included. TipMe Free keeps 7% of each tip with no
  * subscription; TipMe Pro (₦5,000 a month) keeps 5%. For quotes created from the release that
  * carries it: a quote already shown (15-minute life) is charged as shown, and tips before keep
  * their recorded 10%. The version names the plan's rate, so a recorded tip says what it paid.
- * Minimums are unchanged.
+ * Minimums are unchanged. Kept for history since 18 Nov 2026 (V3, feePolicyForPlan): tips priced
+ * under it keep their recorded amounts.
  */
 export const FEE_POLICY_V2_FREE: FeePolicy = {
   version: 'v2-free-7pct',
@@ -50,16 +51,75 @@ export const FEE_POLICY_V2_PRO: FeePolicy = {
 /** The plan a page is on (`profiles.plan`, derived from staff grants and paid Pro months). */
 export type FeePlan = 'free' | 'pro';
 
-/** The policy a new quote uses, by the recipient's plan at quote time. */
-export function feePolicyForPlan(plan: FeePlan): FeePolicy {
-  return plan === 'pro' ? FEE_POLICY_V2_PRO : FEE_POLICY_V2_FREE;
+/** TipMe's share on each plan, in basis points: the admin setting (`plan_fee_rates`). */
+export interface PlanFeeRates {
+  readonly freeBps: bigint;
+  readonly proBps: bigint;
 }
 
 /**
- * The standard policy (Free's), for the minimums every page shares and for copy that states the
- * standard rate. A quote never uses it blindly: it uses feePolicyForPlan.
+ * The owner's pricing, 18 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): TipMe Free keeps 5% of each
+ * tip and TipMe Pro 3%, processing and withdrawal fees included (TipMe pays both from its share).
+ * Staff can change the two rates at /ops/plan-fees (two people, audited); these are the coded
+ * defaults, used only when no rate row exists or the stored one is invalid. A database error is not
+ * covered: the quote fails rather than price from defaults.
  */
-export const CURRENT_FEE_POLICY: FeePolicy = FEE_POLICY_V2_FREE;
+export const DEFAULT_PLAN_FEE_RATES: PlanFeeRates = {
+  freeBps: 500n,
+  proBps: 300n,
+};
+
+/** The prefix of every V3 version, by plan: `v3-free-500bps`, `v3-pro-300bps`. */
+const V3_VERSION_PREFIX: Record<FeePlan, string> = {
+  free: 'v3-free',
+  pro: 'v3-pro',
+};
+
+/** The owner's bounds, 18 Nov 2026: each plan's rate is from 1.5% to 10% (150 to 1000 bps). */
+export const PLAN_FEE_MIN_BPS = 150n;
+export const PLAN_FEE_MAX_BPS = 1000n;
+
+/**
+ * Why a pair of plan rates is not allowed, or null when it is: each a whole number of basis points
+ * from 150 to 1000 (1.5% to 10%), and Pro never above Free (the owner, 18 Nov 2026).
+ */
+export function planFeeRatesProblem(rates: {
+  freeBps: bigint;
+  proBps: bigint;
+}): 'freeBps' | 'proBps' | 'proAboveFree' | null {
+  const inRange = (bps: bigint) =>
+    bps >= PLAN_FEE_MIN_BPS && bps <= PLAN_FEE_MAX_BPS;
+  if (!inRange(rates.freeBps)) return 'freeBps';
+  if (!inRange(rates.proBps)) return 'proBps';
+  if (rates.proBps > rates.freeBps) return 'proAboveFree';
+  return null;
+}
+
+/**
+ * The policy a new quote uses, by the recipient's plan at quote time and the plan rates in force
+ * (the setting, or the coded defaults). The version names the plan and the rate, so a recorded tip
+ * says what it paid whatever the setting says later.
+ */
+export function feePolicyForPlan(
+  plan: FeePlan,
+  rates: PlanFeeRates = DEFAULT_PLAN_FEE_RATES,
+): FeePolicy {
+  if (planFeeRatesProblem(rates) !== null)
+    throw new RangeError('plan fee rates out of bounds');
+  const bps = plan === 'pro' ? rates.proBps : rates.freeBps;
+  return {
+    version: `${V3_VERSION_PREFIX[plan]}-${bps}bps`,
+    tipmeShareBps: bps,
+    providerFeeBps: 150n,
+    minTipMinor: 200_000n,
+  };
+}
+
+/**
+ * The standard policy (Free's, at the coded default), for the minimums every page shares. A quote
+ * never uses it blindly: it uses feePolicyForPlan with the rates in force.
+ */
+export const CURRENT_FEE_POLICY: FeePolicy = feePolicyForPlan('free');
 
 /**
  * The share a quote uses: the plan's rate, or a staff-set share (ADR-0014) when it is below that
@@ -69,8 +129,9 @@ export const CURRENT_FEE_POLICY: FeePolicy = FEE_POLICY_V2_FREE;
 export function planShareBps(
   plan: FeePlan,
   customBps: bigint | null,
+  rates: PlanFeeRates = DEFAULT_PLAN_FEE_RATES,
 ): { bps: bigint; custom: bigint | null } {
-  const planBps = feePolicyForPlan(plan).tipmeShareBps;
+  const planBps = feePolicyForPlan(plan, rates).tipmeShareBps;
   if (customBps === null || customBps >= planBps)
     return { bps: planBps, custom: null };
   return { bps: customBps, custom: customBps };
@@ -78,13 +139,16 @@ export function planShareBps(
 
 /**
  * Every policy under which processing is paid from TipMe's share (one fee line, "includes
- * processing"). A tip whose recorded version is one of these, alone or with the quote writer's
- * suffixes ("-custom-600", "-fee-free"), is labelled that way; older ones are not.
+ * processing"). A tip whose recorded version is one of these, alone or with a suffix
+ * ("-custom-600", "-fee-free", and for V3 the rate, "v3-free-500bps"), is labelled that way; older
+ * ones are not. V3's entries are the plan prefixes, since its rate is a setting.
  */
 export const PROCESSING_INCLUDED_FEE_VERSIONS: readonly string[] = [
   FEE_POLICY_V1.version,
   FEE_POLICY_V2_FREE.version,
   FEE_POLICY_V2_PRO.version,
+  V3_VERSION_PREFIX.free,
+  V3_VERSION_PREFIX.pro,
 ];
 
 export interface FeeBreakdown {
@@ -233,5 +297,24 @@ export function belowWithdrawalMinimum(
   return (
     chosenMinor < withdrawalMinimumMinor(policy) &&
     chosenMinor !== withdrawableMinor
+  );
+}
+
+/**
+ * Withdrawals from a person's page that are free each Lagos calendar day (owner, 18 Nov 2026): TipMe
+ * pays our payment partner's fee on the first this many. From the next one the user pays it from the
+ * amount. Businesses are not counted. The one place this number is written.
+ */
+export const FREE_WITHDRAWALS_PER_DAY = 2;
+
+/** Lagos is UTC+1 all year (no daylight saving). */
+const LAGOS_OFFSET_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+
+/** The instant the Lagos calendar day containing `now` began. */
+export function lagosDayStart(now: Date): Date {
+  const local = now.getTime() + LAGOS_OFFSET_MS;
+  return new Date(
+    local - (((local % DAY_MS) + DAY_MS) % DAY_MS) - LAGOS_OFFSET_MS,
   );
 }

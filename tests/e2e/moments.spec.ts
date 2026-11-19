@@ -45,13 +45,13 @@ test('the 10th tip is celebrated without changing the fee, and a shared moment i
   const quoteResponse = visitor.request.post(`${API_ORIGIN}/v1/tip-quotes`, {
     data: { handle, amountMinor: '200000', currency: 'NGN' },
   });
-  // Milestones grant nothing by themselves: the quote still uses the plan's normal rate (ADR-0014; Free 7% since 12 Nov 2026).
+  // Milestones grant nothing by themselves: the quote still uses the plan's normal rate (ADR-0014; Free 5% since 18 Nov 2026).
   const quote = await (await quoteResponse).json();
   expect(quote.data.payerTotalMinor).toBe('200000');
   expect(
     BigInt(quote.data.platformFeeMinor) + BigInt(quote.data.providerFeeMinor),
-  ).toBe(14000n);
-  expect(quote.data.recipientNetMinor).toBe('186000');
+  ).toBe(10000n);
+  expect(quote.data.recipientNetMinor).toBe('190000');
 
   const moment = page.locator('.moment-list li', { hasText: '10 tips!' });
   await moment.getByRole('button', { name: 'Share on my page' }).click();

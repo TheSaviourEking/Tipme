@@ -46,6 +46,16 @@ const CASES = [
     'Pro price: ₦2,500 → ₦5,000 a month; approved by staff …00c3d4',
   ],
   [
+    'plan_fees.changed',
+    'plan_fee_rates',
+    {
+      from: { freeBps: '700', proBps: '500' },
+      to: { freeBps: '500', proBps: '300' },
+      approvedBy: B,
+    },
+    'TipMe’s fee per plan: Free 7%, Pro 5% → Free 5%, Pro 3%; approved by staff …00c3d4',
+  ],
+  [
     'business_pro.price_changed',
     'p',
     { from: null, to: '700000', approvedBy: null },

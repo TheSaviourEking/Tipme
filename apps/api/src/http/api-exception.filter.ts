@@ -141,6 +141,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Nobody in this audience can get announcements right now. Nothing was sent.',
   ANNOUNCEMENT_EMAIL_NOT_SET_UP:
     'Announcement email isn’t set up on this server, so nothing can be sent.',
+  PLAN_FEES_CONFIRM_REQUIRED:
+    'That moves a rate by more than 2 percentage points. Confirm the big change to go ahead.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -459,6 +461,10 @@ const operationErrors: Partial<
   CAMPAIGN_HEADLINE_NAME: { status: 422, code: 'CAMPAIGN_HEADLINE_NAME' },
   SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
+  PLAN_FEES_CONFIRM_REQUIRED: {
+    status: 400,
+    code: 'PLAN_FEES_CONFIRM_REQUIRED',
+  },
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
   PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },

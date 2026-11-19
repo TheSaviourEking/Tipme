@@ -8,6 +8,8 @@ import {
   userPaidWithdrawal,
   canTransition,
   formatMinor,
+  FREE_WITHDRAWALS_PER_DAY,
+  lagosDayStart,
   PAYOUT_TRANSITIONS,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
@@ -21,6 +23,9 @@ import {
   and,
   asc,
   eq,
+  gte,
+  lt,
+  ne,
   inArray,
   isNotNull,
   isNull,
@@ -50,6 +55,7 @@ import {
 } from '../schema.js';
 import { balanceIn, businessBalanceIn } from './balance.js';
 import { freeFeeCredit } from './fee-credits.js';
+import { readFeatureSwitch } from './feature-switches.js';
 import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
@@ -1073,10 +1079,19 @@ export type WithdrawalQuoteResult =
       providerMinor: bigint;
       feeMinor: bigint;
       /**
-       * Who pays `feeMinor` on a withdrawal asked for now (owner, 12 Nov 2026): 'user' takes it from
-       * the amount chosen; 'tipme' only while an unused top-up TipMe already sent can pay it.
+       * Who pays `feeMinor` on a withdrawal asked for now: 'tipme' for a person's page (owner, 18 Nov
+       * 2026: withdrawals are free, covered by the plan fee), and for a business while the
+       * absorbed-fee switch is on or an unused top-up can pay it; otherwise 'user' (a business, since
+       * 12 Nov 2026), which takes it from the amount chosen.
        */
       feePaidBy: 'user' | 'tipme';
+      /**
+       * A person's page: which withdrawal of the Lagos day this one would be (1 for the first, not
+       * counting failed ones), and how many a day are free. 1 and 0 for a business, which has no daily
+       * allowance.
+       */
+      ordinalToday: number;
+      freePerDay: number;
       destination: { bankName: string; last4: string };
     }
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
@@ -1569,6 +1584,8 @@ type QuoteInput = {
   onReadFailure?: ProviderReadFailureLog;
   /** Only for showing the quote; a request takes none and always asks the provider. */
   cache?: PartnerQuoteCache;
+  /** The moment "today" is counted at (the Lagos calendar day); tests only. */
+  now?: Date;
 };
 
 /** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
@@ -1625,9 +1642,15 @@ async function quoteFor(
   if (read.state === 'unavailable') return { state: 'provider_unavailable' };
   if (read.state === 'setup_needed') return read;
   const providerMinor = notNegative(read.availableMinor - queuedMinor);
+  const now = input.now ?? new Date();
   const feePaidBy = await guarded(() =>
-    feePayerFor(db, route, input.provider.name, read.feeMinor),
+    feePayerFor(db, owner, route, input.provider.name, read.feeMinor, now),
   );
+  const ordinalToday =
+    'businessId' in owner
+      ? 1
+      : (await guarded(() => personsWithdrawalsToday(db, owner.profileId, now)))
+          .counted + 1;
   return {
     state: 'ready',
     withdrawableMinor: notNegative(lower(ledgerMinor, providerMinor)),
@@ -1635,6 +1658,8 @@ async function quoteFor(
     providerMinor,
     feeMinor: read.feeMinor,
     feePaidBy,
+    ordinalToday,
+    freePerDay: 'businessId' in owner ? 0 : FREE_WITHDRAWALS_PER_DAY,
     destination: route.destination
       ? { bankName: route.destination.bankName, last4: route.destination.last4 }
       : { bankName: 'Pretend bank', last4: '0000' },
@@ -1642,15 +1667,63 @@ async function quoteFor(
 }
 
 /**
- * Who pays the partner's fee on a withdrawal asked for now (owner, 12 Nov 2026): the user, from the
- * amount, unless an unused top-up TipMe already sent to this account can pay it (fee-credits.ts).
+ * A person's withdrawals on the Lagos calendar day of `now`: those asked for and not failed (`counted`),
+ * and how many of them TipMe pays the fee on (`free`, by the stored `fee_payer`). Read under the
+ * profile row lock a request already holds, so two at once can't both take the last free slot.
+ */
+async function personsWithdrawalsToday(
+  db: Database | Tx,
+  profileId: string,
+  now: Date,
+): Promise<{ counted: number; free: number }> {
+  const [row] = await db
+    .select({
+      counted: sql<number>`count(*)::int`,
+      free: sql<number>`(count(*) FILTER (WHERE ${payouts.feePayer} = 'tipme'))::int`,
+    })
+    .from(payouts)
+    .where(
+      and(
+        eq(payouts.profileId, profileId),
+        ne(payouts.status, 'FAILED'),
+        gte(payouts.createdAt, lagosDayStart(now)),
+        lt(
+          payouts.createdAt,
+          new Date(lagosDayStart(now).getTime() + 86_400_000),
+        ),
+      ),
+    );
+  return { counted: row?.counted ?? 0, free: row?.free ?? 0 };
+}
+
+/**
+ * Who pays the partner's fee on a withdrawal asked for now. A person's own page: TipMe for the first
+ * FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day (owner, 18 Nov 2026: withdrawals are free twice
+ * a day), counted by the stored `fee_payer` of those not failed; from the next one the user pays from
+ * the amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the
+ * fee up from the platform payment reserve before the payout (coverFee, or an unused top-up), and
+ * books the partner's real fee as its own cost when the payout is paid. A
+ * business is unchanged until the owner says otherwise: it pays from the amount (owner, 12 Nov 2026),
+ * unless an unused top-up TipMe already sent to its account can pay it (fee-credits.ts). A payout
+ * keeps the rule it was asked under (`fee_payer`), so one asked for before this release finishes as
+ * it was asked.
  */
 async function feePayerFor(
   db: Database | Tx,
+  owner: MoneyOwner,
   route: { accountReference: string | null },
   providerName: string,
   feeMinor: bigint,
+  now: Date,
 ): Promise<'user' | 'tipme'> {
+  if (!('businessId' in owner)) {
+    const today = await personsWithdrawalsToday(db, owner.profileId, now);
+    return today.free < FREE_WITHDRAWALS_PER_DAY ? 'tipme' : 'user';
+  }
+  // Staff may switch TipMe paying a business's fee on (`business_payout_fee_absorbed`, a money
+  // switch: two people, audited). Read uncached, so a quote and the request agree with the switch.
+  if (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
+    return 'tipme';
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
     accountRef: route.accountReference,
@@ -1671,6 +1744,8 @@ type RequestInput = {
   provider: PayoutReader;
   traceId?: string | null;
   onReadFailure?: ProviderReadFailureLog;
+  /** The moment "today" is counted at (the Lagos calendar day); tests only. */
+  now?: Date;
 };
 
 type RequestResult = { payoutId: string; status: string; replayed: boolean };
@@ -1823,13 +1898,17 @@ async function requestFor(
       // cannot withdraw, or an account they cannot close.
       if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
-      // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and
-      // nothing can be sent when the amount is not more than the fee.
+      // A person's page: TipMe pays the fee on the first two withdrawals of the Lagos day and the whole
+      // amount is sent; from the 3rd the fee comes off the amount chosen (owner, 18 Nov 2026), decided
+      // here under the profile lock. A business: the fee comes off the amount chosen (owner, 12 Nov
+      // 2026). Either way nothing can be sent when the amount is not more than the fee.
       const feePayer = await feePayerFor(
         tx,
+        owner,
         route,
         providerName,
         read.feeMinor,
+        input.now ?? new Date(),
       );
       const userPaid =
         feePayer === 'user'

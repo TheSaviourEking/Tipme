@@ -65,6 +65,14 @@ import {
   setProPrice,
 } from './pro-price.js';
 import {
+  checkedPlanFeeRates,
+  requirePlanFeeConfirm,
+  percentOf,
+  PLAN_FEES_CHANGE_ACTION,
+  planFeeRatesInForce,
+  setPlanFeeRates,
+} from './plan-fee-rates.js';
+import {
   qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
@@ -581,6 +589,51 @@ const proPriceChange = acting<{ amountMinor: string }>({
       id: set.id,
       amountMinor: String(set.amountMinor),
     })),
+});
+
+/*
+ * TipMe's share per plan (owner, 18 Nov 2026): the Free and Pro rates, for new quotes only. A money
+ * change, so a second person decides. Pinned on the rates in force, so a change made while this
+ * waited makes it stale. Nobody is its subject: it applies to every new quote.
+ */
+const planFeesChange = acting<{
+  freeBps: string;
+  proBps: string;
+  confirmLargeChange?: boolean;
+}>({
+  name: PLAN_FEES_CHANGE_ACTION,
+  permission: 'fees.manage',
+  target: () => 'plan_fees',
+  current: async (tx) => {
+    const rates = await planFeeRatesInForce(tx);
+    return {
+      id: rates.row?.id ?? null,
+      freeBps: String(rates.freeBps),
+      proBps: String(rates.proBps),
+    };
+  },
+  describe: async (tx, payload) => {
+    const to = checkedPlanFeeRates(payload);
+    const from = await planFeeRatesInForce(tx);
+    // Asked at request time too, so a big move without the confirm never opens a request.
+    requirePlanFeeConfirm(from, to, payload.confirmLargeChange);
+    return `Change TipMe’s fee from Free ${percentOf(from.freeBps)} and Pro ${percentOf(from.proBps)} to Free ${percentOf(to.freeBps)} and Pro ${percentOf(to.proBps)}, for new tips only`;
+  },
+  act: (tx, payload, context) => {
+    const to = checkedPlanFeeRates(payload);
+    return setPlanFeeRates(tx, {
+      ...to,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+      confirmedLargeChange: payload.confirmLargeChange === true,
+    }).then((set) => ({
+      id: set.id,
+      freeBps: String(set.freeBps),
+      proBps: String(set.proBps),
+    }));
+  },
 });
 
 /*
@@ -1251,6 +1304,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(businessProPriceChange);
   registerSeriousAction(announcementSendAction);
   registerSeriousAction(tipRefund);
+  registerSeriousAction(planFeesChange);
 }
 
 /* Routes whose seriousness depends on what is being done */

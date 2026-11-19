@@ -1,7 +1,7 @@
 import { withdrawalMinimumMinor } from '@tipme/domain';
 import { ActionLink, Container } from '@tipme/ui';
 import { WhereYouMeetPeople } from '@/components/marketing/where-you-meet-people';
-import { FREE_SHARE_PERCENT } from '@/components/marketing';
+import { PlanFeePercent } from '@/components/plan-fee-percent';
 import { formatNaira } from '@/lib/demo-amount';
 import { marketingMetadata } from '@/lib/metadata';
 
@@ -64,8 +64,9 @@ export default function ForCreators() {
           <div>
             <h2 id="creators-band-title">Your name, your page.</h2>
             <p>
-              Free to start. TipMe keeps {FREE_SHARE_PERCENT}% of each tip,
-              processing included, and you withdraw to your bank from{' '}
+              Free to start. TipMe keeps <PlanFeePercent plan="free" />% of each
+              tip, payment and withdrawal fees included, and you withdraw to
+              your bank for free from{' '}
               <span className="money">{MIN_WITHDRAWAL}</span>, or take your
               whole balance if it is less.
             </p>

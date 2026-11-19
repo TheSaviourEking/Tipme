@@ -259,3 +259,14 @@ test('Prices, Announcements and Switches all show for someone with every permiss
     'Announcements',
   ]);
 });
+
+// Owner, 18 Nov 2026: TipMe's fee per plan is an admin setting, beside the prices, for fees.manage.
+test('Fees sits in Work after Prices, only with fees.manage', () => {
+  assert.ok(!hrefs(['pro.price']).includes('/ops/plan-fees'));
+  assert.deepEqual(
+    opsMenuGroups(['pro.price', 'fees.manage'])
+      .find((group) => group.label === 'Work')
+      ?.links.map((link) => link.label),
+    ['Pages', 'Prices', 'Fees'],
+  );
+});

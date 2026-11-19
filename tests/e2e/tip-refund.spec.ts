@@ -26,12 +26,12 @@ test('staff see exactly what goes back and who gives it, and ask with a reason',
   const row = tips.getByRole('listitem').filter({ hasText: tipId });
   await row.getByRole('button', { name: 'Refund tip…' }).click();
   const panel = row.getByTestId('tip-refund');
-  // A Free ₦10,000 tip: the supporter gets ₦9,300 back, TipMe keeps its ₦700 (admin writes NGN).
+  // A Free ₦10,000 tip: the supporter gets ₦9,500 back, TipMe keeps its ₦500 (admin writes NGN).
   await expect(panel).toContainText(
-    'The supporter gets back NGN 9,300.00: the NGN 10,000.00 tip minus TipMe’s NGN 700.00 fee, which TipMe keeps.',
+    'The supporter gets back NGN 9,500.00: the NGN 10,000.00 tip minus TipMe’s NGN 500.00 fee, which TipMe keeps.',
   );
   await expect(panel).toContainText(
-    `@${who.handle} gives back NGN 9,300.00: what they received.`,
+    `@${who.handle} gives back NGN 9,500.00: what they received.`,
   );
   await expect(panel).not.toContainText(/bachs/i);
   await expectAccessible(page);
@@ -72,11 +72,11 @@ test('the supporter’s receipt says what was refunded, and that TipMe’s fee i
     const response = await route.fetch();
     const json = await response.json();
     if (json.data?.state === 'paid')
-      json.data.refund = { refundedMinor: '930000' };
+      json.data.refund = { refundedMinor: '950000' };
     await route.fulfill({ response, json });
   });
   await page.goto(`/tip/${tipId}#t=${statusToken}`);
   const receipt = page.getByRole('region', { name: 'Your receipt' });
-  await expect(receipt).toContainText('Refunded ₦9,300 (TipMe’s fee is kept)');
+  await expect(receipt).toContainText('Refunded ₦9,500 (TipMe’s fee is kept)');
   await expectAccessible(page);
 });

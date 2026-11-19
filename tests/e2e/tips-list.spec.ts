@@ -14,8 +14,8 @@ test('the tips header says what was received and from how many tips', async ({
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await tipAsVisitor(browser, handle, { name: 'Bo' });
   await page.goto('/dashboard/tips');
-  // Two ₦2,000 tips, each ₦1,860 to the recipient (Free 7%): the API's total, formatted and nothing more.
-  await expect(page.getByText('₦3,720 from 2 tips so far')).toBeVisible();
+  // Two ₦2,000 tips, each ₦1,900 to the recipient (Free 5%): the API's total, formatted and nothing more.
+  await expect(page.getByText('₦3,800 from 2 tips so far')).toBeVisible();
 });
 
 test('a tip still being confirmed is not in the totals', async ({
@@ -65,7 +65,7 @@ test('a tip still being confirmed is not in the totals', async ({
   });
   await page.reload();
   await expect(page.getByText('Slow Sam')).toBeVisible();
-  await expect(page.getByText('₦1,860 from 1 tip so far')).toBeVisible();
+  await expect(page.getByText('₦1,900 from 1 tip so far')).toBeVisible();
 });
 
 test('With a note lists only tips with a note', async ({
@@ -98,7 +98,7 @@ test('the totals keep showing when a refresh fails', async ({
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard/tips');
-  const subtitle = page.getByText('₦1,860 from 1 tip so far');
+  const subtitle = page.getByText('₦1,900 from 1 tip so far');
   await expect(subtitle).toBeVisible();
   await page.route('**/v1/me/tip-totals', (route) =>
     route.fulfill({
@@ -132,7 +132,7 @@ test('tips: each amount is set in the money face (Inter), and a desktop shows th
   await tipAsVisitor(browser, handle, { name: 'Bo' });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/dashboard/tips');
-  await expect(page.getByText('₦3,720 from 2 tips so far')).toBeVisible();
+  await expect(page.getByText('₦3,800 from 2 tips so far')).toBeVisible();
   // The owner, 17 Nov 2026: money is set in Inter, which draws ₦ (DM Serif Display does not).
   expect(
     await editorial(page.locator('.tip-row__money strong .money').first()),
@@ -184,7 +184,7 @@ test('a tip being confirmed carries its state as a stamp in the list', async ({
               supporterLabel: 'Slow Sam',
               hasMessage: false,
               grossMinor: '200000',
-              netMinor: '186000',
+              netMinor: '190000',
               state: 'confirming',
             },
           ],

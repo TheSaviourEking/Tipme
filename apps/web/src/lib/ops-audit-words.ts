@@ -121,6 +121,21 @@ const approved = (c: Change) =>
     ? `approved by ${staff(c.approvedBy)}`
     : null;
 
+/** A plan fee pair as staff read it: "Free 5%, Pro 3%". */
+const planFees = (value: unknown): string => {
+  if (typeof value !== 'object' || value === null) return '—';
+  const { freeBps, proBps } = value as Record<string, unknown>;
+  const pct = (bps: unknown) => {
+    const n = Number(bps);
+    if (!Number.isInteger(n) || n < 0) return '?';
+    const frac = String(n % 100)
+      .padStart(2, '0')
+      .replace(/0+$/, '');
+    return `${Math.floor(n / 100)}${frac ? `.${frac}` : ''}%`;
+  };
+  return `Free ${pct(freeBps)}, Pro ${pct(proBps)}`;
+};
+
 /** Each known action's record, as a sentence. */
 const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
   'feature_switch.set': (c, s) =>
@@ -129,6 +144,11 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
     `Setting ${s}: ${text(c.from)} → ${text(c.to)}`,
   'pro.price_changed': (c) =>
     parts(`Pro price: ${naira(c.from)} → ${naira(c.to)} a month`, approved(c)),
+  'plan_fees.changed': (c) =>
+    parts(
+      `TipMe’s fee per plan: ${planFees(c.from)} → ${planFees(c.to)}`,
+      approved(c),
+    ),
   'business_pro.price_changed': (c) =>
     parts(
       `Business Pro price: ${naira(c.from)} → ${naira(c.to)} a month`,
