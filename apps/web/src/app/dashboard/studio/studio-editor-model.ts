@@ -83,6 +83,35 @@ export function passingWords(check: StudioCheckResult): string[] {
     .map((rule) => PASSING[rule](check));
 }
 
+/** The header's Publish button (§12.1): "Publish · N to fix" while issues remain. */
+export const publishLabel = (issueCount: number) =>
+  issueCount === 0 ? 'Publish' : `Publish · ${issueCount} to fix`;
+
+/** "Design check: N of N pass" (§12.1): the rules that can block publishing, and how many pass. */
+export function publishTally(check: StudioCheckResult): string {
+  const rules = STUDIO_ERROR_RULES as readonly StudioRuleId[];
+  const passing = check.passing.filter((rule) => rules.includes(rule)).length;
+  return `Design check: ${passing} of ${rules.length} pass`;
+}
+
+/**
+ * The check after a refused publish (422 STUDIO_DESIGN_CHECK_FAILED): the server's issues replace
+ * the editor's while the draft is the one it refused; the next edit brings the editor's own back.
+ */
+export function withRefusal(
+  doc: StudioDocument,
+  shown: StudioCheckResult,
+  refused: { doc: string; issues: StudioIssue[] } | null,
+): StudioCheckResult {
+  if (!refused || refused.doc !== JSON.stringify(doc)) return shown;
+  const failing = new Set(refused.issues.map((i) => i.rule));
+  return {
+    ...shown,
+    issues: refused.issues,
+    passing: shown.passing.filter((rule) => !failing.has(rule)),
+  };
+}
+
 export type SaveState = 'saved' | 'pending' | 'saving' | 'failed';
 
 /**

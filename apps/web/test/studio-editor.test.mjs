@@ -30,8 +30,11 @@ import {
   fixesNow,
   issueTab,
   passingWords,
+  publishLabel,
+  publishTally,
   saveWords,
   studioEntry,
+  withRefusal,
 } from '../src/app/dashboard/studio/studio-editor-model.ts';
 
 // Page Studio editor on v2 (styles plan Task 12, PR 4a): the Style tab's pure parts (§10) and
@@ -306,6 +309,54 @@ test('every rule has words in the passing list', () => {
   assert.equal(words.length, check.passing.length);
   assert.ok(words.every((w) => typeof w === 'string' && w.length > 0));
   assert.ok(words.includes('Long words fit'));
+});
+
+test('the button reads "Publish · 2 to fix" while issues remain and "Publish" when the check passes', () => {
+  assert.equal(publishLabel(2), 'Publish · 2 to fix');
+  assert.equal(publishLabel(1), 'Publish · 1 to fix');
+  assert.equal(publishLabel(0), 'Publish');
+  // The count is the check's: two empty quotes are two issues.
+  const check = checkDesign(
+    doc({
+      blocks: [
+        { id: 'blk00001', kind: 'quote', text: '' },
+        { id: 'blk00002', kind: 'quote', text: '' },
+      ],
+    }),
+    ctx(),
+  );
+  assert.equal(publishLabel(check.issues.length), 'Publish · 2 to fix');
+});
+
+test('the publish dialog reads "Design check: N of N pass" over the rules that can block', () => {
+  const check = checkDesign(doc(), ctx());
+  assert.equal(check.issues.length, 0);
+  assert.match(publishTally(check), /^Design check: (\d+) of \1 pass$/);
+  assert.equal(publishTally(check), 'Design check: 7 of 7 pass');
+  const failing = checkDesign(
+    doc({ blocks: [{ id: 'blk00001', kind: 'quote', text: '' }] }),
+    ctx(),
+  );
+  assert.equal(publishTally(failing), 'Design check: 6 of 7 pass');
+});
+
+test('after a 422 the server’s issues replace the client’s until the next edit', () => {
+  const d = doc();
+  const local = checkDesign(d, ctx());
+  const issue = {
+    rule: 'long-word',
+    severity: 'error',
+    at: { row: '', block: 'blk00001' },
+    message: 'A word is too long for a phone',
+    fixes: [],
+  };
+  const refused = { doc: JSON.stringify(d), issues: [issue] };
+  const shown = withRefusal(d, local, refused);
+  assert.deepEqual(shown.issues, [issue]);
+  assert.ok(!shown.passing.includes('long-word'));
+  // The next edit: the editor's own check again.
+  assert.equal(withRefusal(doc({ mode: 'dark' }), local, refused), local);
+  assert.equal(withRefusal(d, local, null), local);
 });
 
 test('the status line says where the draft is ("Saved · not published")', () => {
