@@ -153,8 +153,13 @@ test('no style component renders raw HTML or builds a style from user content', 
     [
       'sheets/classic.tsx',
       'sheets/clear.tsx',
+      'sheets/horizon.tsx',
       'sheets/journal.tsx',
       'sheets/linen.tsx',
+      'sheets/signboard.tsx',
+      'sheets/sprint.tsx',
+      'sheets/stage.tsx',
+      'sheets/tiles.tsx',
       'style-sheets.tsx',
       'video-embed.tsx',
     ],
@@ -164,6 +169,10 @@ test('no style component renders raw HTML or builds a style from user content', 
   assert.match(readStyle('sheets/classic.tsx'), /return null;/);
   assert.match(readStyle('sheets/journal.tsx'), /return null;/);
   assert.match(readStyle('sheets/linen.tsx'), /return null;/);
+  assert.match(readStyle('sheets/stage.tsx'), /return null;/);
+  assert.match(readStyle('sheets/horizon.tsx'), /return null;/);
+  for (const style of ['signboard', 'sprint', 'tiles'])
+    assert.match(readStyle(`sheets/${style}.tsx`), /return null;/, style);
   // The old renderer uses the shared video island.
   assert.match(
     read('studio-blocks.tsx'),

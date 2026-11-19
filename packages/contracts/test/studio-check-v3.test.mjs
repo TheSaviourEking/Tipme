@@ -297,6 +297,121 @@ test("Classic's section title is measured at the size classic.css draws", () => 
   // 2rem at every width (classic.css .studio-title).
   assert.equal(STUDIO_HEADING_PX.classic, 32);
   assert.equal(STUDIO_HEADING_PX.clear, 20);
+  // Stage's phone section title is 22/28 (§9.4), Horizon's 18/24 (§9.9): apps/web test
+  // studio-style-page holds both to stage.css and horizon.css.
+  assert.equal(STUDIO_HEADING_PX.stage, 22);
+  assert.equal(STUDIO_HEADING_PX.horizon, 18);
+});
+
+// PR 2e (§9.5, §9.6, §9.7): Signboard, Sprint and Tiles, as their CSS draws them (apps/web test
+// studio-style-page holds each number to signboard.css, sprint.css and tiles.css).
+test("Signboard's, Sprint's and Tiles' section titles are measured at the size their CSS draws", () => {
+  // Signboard 15/22 Unbounded caps, Sprint 20/26 Inter, Tiles 15/20 Inter (the text tile title).
+  assert.equal(STUDIO_HEADING_PX.signboard, 15);
+  assert.equal(STUDIO_HEADING_PX.sprint, 20);
+  assert.equal(STUDIO_HEADING_PX.tiles, 15);
+});
+
+test('Sprint measures headings in Inter: Anton sets the name only (§9.6)', () => {
+  // Inter at 20 px, like Clear: 18 letters fit 280, 19 don't (Anton at 20 would pass 19, and at
+  // the old 28 px fail 18).
+  const sprint = (n) =>
+    rules(
+      checkDesign(
+        doc({ style: 'sprint', blocks: [heading('W'.repeat(n))] }),
+        CTX,
+      ),
+    );
+  assert.deepEqual(sprint(18), []);
+  assert.deepEqual(sprint(19), ['long-word']);
+});
+
+test("Signboard's titles are capitals: a heading word is measured at Unbounded's widest letter", () => {
+  // 14 letters at 15 px: the mean of Unbounded's advances fits 280, its capitals don't.
+  const word = 'Wwwwwwwwwwwwww';
+  assert.deepEqual(
+    rules(
+      checkDesign(doc({ style: 'signboard', blocks: [heading(word)] }), CTX),
+    ),
+    ['long-word'],
+  );
+  assert.deepEqual(
+    rules(
+      checkDesign(
+        doc({ style: 'signboard', blocks: [heading('Wwwwww')] }),
+        CTX,
+      ),
+    ),
+    [],
+  );
+});
+
+test("Signboard's, Sprint's and Tiles' photo slots are the widths their CSS draws", () => {
+  // Signboard (§9.5): photos 3-up, gap 8, in the column; on a desktop 440 | 80 | 600, every block
+  // but the first in the 600 column.
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 390),
+    Math.round((350 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 800),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('signboard', 'gallery', 1440),
+    Math.round((600 - 16) / 3),
+  );
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('signboard', kind, 1440), 600, kind);
+  // Sprint (§9.6): photos run edge to edge at every width (a gallery's odd first photo takes the
+  // whole row); everything else sits in the column, on a desktop the 680 cell of 680 | 120 | 480.
+  for (const v of [320, 390, 800, 1024, 1440]) {
+    assert.equal(studioSlotWidth('sprint', 'photo', v), v, `photo ${v}`);
+    assert.equal(studioSlotWidth('sprint', 'gallery', v), v, `gallery ${v}`);
+  }
+  assert.equal(studioSlotWidth('sprint', 'text', 390), 350);
+  for (const kind of ['text', 'quote', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('sprint', kind, 1440), 680, kind);
+  // Tiles (§9.7): a 2-column grid, gap 12, below 1024; on a desktop a 340 rail, gap 72 (the
+  // canvas), and a 788 px 4-column grid, gap 16. Photos, text and lists take the grid's width.
+  // A gallery photo is one tile, but the last of a row closes it (fix round 1): on a phone an odd
+  // last photo is 2 wide, on a desktop the last of 4n + 1 spans all four. The widest is the slot.
+  assert.equal(studioSlotWidth('tiles', 'gallery', 390), 350);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 800), 720);
+  assert.equal(studioSlotWidth('tiles', 'photo', 390), 350);
+  assert.equal(studioSlotWidth('tiles', 'gallery', 1440), 788);
+  for (const kind of ['text', 'quote', 'photo', 'video', 'services', 'events'])
+    assert.equal(studioSlotWidth('tiles', kind, 1440), 788, kind);
+});
+
+test("Stage's and Horizon's photo slots are the widths their CSS draws", () => {
+  // Stage (§9.4): a strip of 156 px tiles on a phone and tablet; on a desktop the 720 main column
+  // with photos 3-up, gap 8 (the canvas's StageDesktop "Backstage" grid).
+  for (const v of [320, 390, 768, 1023])
+    assert.equal(studioSlotWidth('stage', 'gallery', v), 156, `${v}`);
+  assert.equal(
+    studioSlotWidth('stage', 'gallery', 1440),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(studioSlotWidth('stage', 'photo', 1440), 720);
+  // Horizon (§9.9): 3-up at 3:4, gap 8 on a phone and tablet; on a desktop the 520 column, gap 16.
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 390),
+    Math.round((350 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 320),
+    Math.round((280 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 800),
+    Math.round((720 - 16) / 3),
+  );
+  assert.equal(
+    studioSlotWidth('horizon', 'gallery', 1440),
+    Math.round((520 - 32) / 3),
+  );
+  assert.equal(studioSlotWidth('horizon', 'photo', 1440), 520);
 });
 
 test("photo rules use the style's slot widths", () => {

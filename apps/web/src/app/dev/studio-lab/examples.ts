@@ -658,9 +658,10 @@ export type StudioExampleName = keyof typeof STUDIO_EXAMPLES | 'fonts';
 // Page Studio styles (spec 2026-11-17-page-studio-styles, PR 2a): v2 documents.
 
 /**
- * One example per style drawn so far: its default accent (`null`), its natural mode, its default
- * cover ("Your cover" is the lab profile's generated cover photo; Journal's is plain), a text, a quote and three photos, with the profile's
- * links on. Headings start each section, as on the canvas. Each style PR adds its own.
+ * One example per style: its default accent (`null`), its natural mode, its default cover ("Your
+ * cover" is the lab profile's generated cover photo; Journal's, Signboard's and Tiles' are plain),
+ * a text, a quote and three photos, with the profile's links on. Headings start each section, as
+ * on the canvas.
  */
 const styleExample = (
   style: StudioStyleId,
@@ -709,6 +710,13 @@ export const LAB_STYLE_EXAMPLES: Partial<
   // Journal's default cover is plain (§9.3): the page opens on its top row, as the board draws it.
   journal: styleExample('journal', 'light', 'plain'),
   linen: styleExample('linen', 'light'),
+  // Stage is dark-first (§9.4); Horizon light (§9.9). Both open on "Your cover", the photo.
+  stage: styleExample('stage', 'dark'),
+  horizon: styleExample('horizon', 'light'),
+  // Signboard opens on its band (plain, §9.5), Sprint on "Your cover" (§9.6), Tiles plain (§9.7).
+  signboard: styleExample('signboard', 'light', 'plain'),
+  sprint: styleExample('sprint', 'light'),
+  tiles: styleExample('tiles', 'light', 'plain'),
 };
 
 /** §9.10's long names, for `?example=long-names` (the first, unless `&name=` picks another). */

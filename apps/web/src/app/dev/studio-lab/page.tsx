@@ -76,7 +76,10 @@ const today = () =>
  *   &mode=light|dark (overrides the document's), &bio=0|1, &links=0..8, &today=YYYY-MM-DD
  * Page Studio styles (v2, spec 2026-11-17-page-studio-styles), rendered by StudioStylePage:
  *   ?style=<id> (LAB_STYLE_EXAMPLES), &mode=light|dark|auto, &accent=<id>, &cover=yours|gradient|plain,
- *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1
+ *   &doc=<a v2 document, encoded as above>, &name=<display name>, &links=0..8, &bio=0|1,
+ *   &yours=photo|small|upload|design|automatic|animated (the Settings cover: the generated photo,
+ *   the same photo said to be 640 × 360, a generated 2240 × 600 WebP stored like the API's, a
+ *   design, the automatic one, an animation)
  *   ?example=styles-min|styles-max|long-names (&style=<id>, Clear by default), or
  *   ?example=hostile&style=<id> (v2; without &style it is the v1 document)
  */
@@ -267,6 +270,34 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     acceptingTips: true,
     cover: { kind: 'photo', path: `/dev/studio-lab/image/${LAB_IMAGES[29]}` },
   };
+  // The Settings cover ("Your cover"): the generated photo by default.
+  const yours =
+    pick(one('yours'), [
+      'photo',
+      'small',
+      'upload',
+      'design',
+      'automatic',
+      'animated',
+    ] as const) ?? 'photo';
+  const settingsCover =
+    yours === 'photo' || yours === 'small' || yours === 'upload'
+      ? null
+      : resolveCover({
+          handle,
+          coverPath: null,
+          coverDesign: yours === 'design' ? 'scattered' : null,
+          coverColour: null,
+          coverAnimation: yours === 'animated' ? 'drift' : null,
+          plan,
+        });
+  if (settingsCover) profile.cover = settingsCover;
+  if (yours === 'upload')
+    profile.cover = { kind: 'photo', path: '/dev/studio-lab/cover/1.webp' };
+  const coverSize =
+    yours === 'small'
+      ? { width: 640, height: 360 }
+      : { width: 2400, height: 1600 };
   const firstName = name.split(/\s+/)[0] ?? name;
   const images = Object.fromEntries(
     LAB_IMAGES.map((id) => [
@@ -284,7 +315,7 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
     videos: {},
     profile: { name, bio, links: links.length },
     plan,
-    coverKind: 'photo',
+    coverKind: yours === 'small' || yours === 'upload' ? 'photo' : yours,
     hasAvatar: false,
   });
   const styled = renderStyled({
@@ -295,14 +326,18 @@ function StyleLab({ one }: { one: (k: string) => string | undefined }) {
       checkVersion: DESIGN_CHECK_VERSION,
     },
     profile,
+    coverSize,
     coverArt: (
       <ProfileCover
-        cover={resolveCover({
-          handle,
-          coverPath: null,
-          coverDesign: null,
-          coverColour: null,
-        })}
+        cover={
+          settingsCover ??
+          resolveCover({
+            handle,
+            coverPath: null,
+            coverDesign: null,
+            coverColour: null,
+          })
+        }
         priority
       />
     ),

@@ -289,6 +289,8 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         line: '#dedee3',
         control: '#8c8b90',
         chip: '#ffffff',
+        // The desktop Tip card's chips (canvas StageDesktop: --chip: var(--chipIn)).
+        chipIn: '#f2f2f4',
         scrimEnd: 'rgba(8,8,10,.86)',
       },
       dark: {
@@ -300,6 +302,7 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
         line: '#2c2c33',
         control: '#65656d',
         chip: '#1a1a1f',
+        chipIn: '#25252b',
         scrimEnd: '#0f0f12',
       },
     },
@@ -620,8 +623,14 @@ export function studioContrastPairs(
     }
     case 'stage':
       chipBorder(n.control as Hex);
-      add('chip label (fg) on chip', n.fg, n.chip as Hex, 4.5);
-      add('selected ring (accText) on chip', accText, n.chip as Hex, 3);
+      // Phone chips sit on `chip`; the desktop Tip card's on `chipIn`.
+      for (const [name, surface] of [
+        ['chip', n.chip],
+        ['chipIn', n.chipIn],
+      ] as const) {
+        add(`chip label (fg) on ${name}`, n.fg, surface as Hex, 4.5);
+        add(`selected ring (accText) on ${name}`, accText, surface as Hex, 3);
+      }
       break;
     case 'signboard':
       chipBorder(n.ink as Hex);
