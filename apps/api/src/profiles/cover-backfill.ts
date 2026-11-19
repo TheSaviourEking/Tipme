@@ -8,12 +8,13 @@ import {
 import { withSlot } from './image-upload.js';
 import { coverRenditionsOf } from './cover-renditions.js';
 
-// Renditions for covers uploaded before they existed (scripts/backfill-cover-renditions.ts). Until
-// it runs, those covers simply report none and pages use the full file: nothing breaks.
+// Renditions for covers uploaded before they existed (scripts/backfill-cover-renditions.ts): the
+// wide copies, the tall crop, or both, whichever a cover lacks. Until it runs, those covers simply
+// report none and pages use the full file: nothing breaks.
 
 export interface BackfillResult {
   write: boolean;
-  /** Covers with no renditions when the run started. */
+  /** Covers missing the wide copies or the tall crop when the run started. */
   candidates: number;
   written: number;
   /** In the object store with no store given, unreadable, or replaced meanwhile. */
@@ -21,8 +22,8 @@ export interface BackfillResult {
 }
 
 /**
- * Dry run unless `write`: then each cover without renditions gets them, where it is kept. Safe to
- * run again: a cover that has renditions is never touched. Lines name pages by id only.
+ * Dry run unless `write`: then each cover gets the shapes of rendition it lacks, where it is kept.
+ * Safe to run again: a shape a cover has is never touched. Lines name pages by id only.
  */
 export async function backfillCoverRenditions(
   db: Database,
@@ -43,13 +44,14 @@ export async function backfillCoverRenditions(
   };
   for (const cover of covers) {
     const label = `page ${cover.profileId} cover v${cover.version}`;
+    const lacks = cover.missing.join(' and ');
     if (cover.inStore && !options.store) {
       log(`${label}: skipped, in the object store (set the R2 settings)`);
       result.skipped += 1;
       continue;
     }
     if (!write) {
-      log(`${label}: would add renditions`);
+      log(`${label}: would add ${lacks}`);
       continue;
     }
     const bytes = await storedCover(db, cover, options.store);
@@ -60,7 +62,9 @@ export async function backfillCoverRenditions(
     }
     let renditions;
     try {
-      renditions = await withSlot(() => coverRenditionsOf(bytes));
+      renditions = (await withSlot(() => coverRenditionsOf(bytes))).filter(
+        (r) => cover.missing.includes(r.shape),
+      );
     } catch {
       log(`${label}: skipped, its file is not a readable WebP`);
       result.skipped += 1;
@@ -81,7 +85,7 @@ export async function backfillCoverRenditions(
     if (added) {
       result.written += 1;
       log(
-        `${label}: added ${renditions.map((r) => `${r.width} (${r.webp.length} B)`).join(', ')}`,
+        `${label}: added ${renditions.map((r) => `${r.shape === 'tall' ? 'tall ' : ''}${r.width} (${r.webp.length} B)`).join(', ')}`,
       );
     } else {
       result.skipped += 1;

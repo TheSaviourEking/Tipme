@@ -16,6 +16,8 @@ import {
   resolveCover,
   COVER_RENDITION_WIDTHS,
   coverRenditionPath,
+  COVER_TALL_WIDTHS,
+  coverTallPath,
 } from '../dist/index.js';
 
 const HEARTS = ['scattered', 'large', 'dark', 'outline', 'ripple', 'rising'];
@@ -530,4 +532,34 @@ test('cover renditions: fixed widths, a path beside the original, listed only wh
   );
   // Widths mean nothing without a photo.
   assert.equal(resolveCover(page({ coverWidths: [640] })).kind, 'design');
+});
+
+// Tall crops (Studio styles Stage and Horizon on phones): the 4:5 crop the phone hero already shows
+// (object-position 50% 33%), cut in advance. Widths disjoint from the wide ones, so a row's width
+// alone never makes an older API serve a tall crop as a wide copy.
+test('cover tall crops: fixed widths, their own path, listed only when stored', () => {
+  assert.deepEqual([...COVER_TALL_WIDTHS], [480, 720]);
+  for (const w of COVER_TALL_WIDTHS)
+    assert.equal(COVER_RENDITION_WIDTHS.includes(w), false, `${w}`);
+  const path = '/v1/covers/0d7f6d2c-6a51-4c0a-9d3e-6b9f3c2a1e00/3.webp';
+  assert.equal(
+    coverTallPath(path, 480),
+    '/v1/covers/0d7f6d2c-6a51-4c0a-9d3e-6b9f3c2a1e00/3-tall-480.webp',
+  );
+  assert.deepEqual(
+    resolveCover(page({ coverPath: path, coverWidths: [640], coverTall: [] })),
+    { kind: 'photo', path, widths: [640] },
+  );
+  assert.deepEqual(
+    resolveCover(
+      page({ coverPath: path, coverWidths: [640], coverTall: [720, 480] }),
+    ),
+    { kind: 'photo', path, widths: [640], tall: [480, 720] },
+  );
+  // Tall alone (no wide copies) is still reported; unknown widths never are.
+  assert.deepEqual(
+    resolveCover(page({ coverPath: path, coverTall: [480, 640, 999] })),
+    { kind: 'photo', path, tall: [480] },
+  );
+  assert.equal(resolveCover(page({ coverTall: [480] })).kind, 'design');
 });

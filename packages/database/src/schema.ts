@@ -2169,6 +2169,11 @@ export const profileCovers = pgTable(
  * full-bleed. Shaped like `studio_image_files`: in Postgres or in R2, exactly one of the two, and
  * always where the cover itself is. `version` is the cover's: a row for another version is never
  * served. A cover uploaded before these existed has none, so the read model reports none.
+ *
+ * `shape` is `wide` for those copies, or `tall` for the 4:5 crop the phone hero of Stage and
+ * Horizon shows (`COVER_TALL_WIDTHS`, 480 and 720). The two width lists never overlap, and the
+ * check holds each shape to its own: an API from before `shape` reads and writes by width alone
+ * (its rows default to `wide`), so during a blue/green overlap it never mistakes a crop for a copy.
  */
 export const profileCoverRenditions = pgTable(
   'profile_cover_renditions',
@@ -2177,18 +2182,22 @@ export const profileCoverRenditions = pgTable(
       .notNull()
       .references(() => profileCovers.profileId, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
+    shape: text('shape').notNull().default('wide'),
     width: integer('width').notNull(),
     bytes: bytea('bytes'),
     objectKey: text('object_key'),
     createdAt: createdAt(),
   },
   (table) => [
-    primaryKey({ columns: [table.profileId, table.width] }),
+    primaryKey({ columns: [table.profileId, table.shape, table.width] }),
     check(
       'profile_cover_renditions_one_place',
       sql`(bytes IS NULL) <> (object_key IS NULL)`,
     ),
-    check('profile_cover_renditions_width', sql`width IN (640, 1080, 1600)`),
+    check(
+      'profile_cover_renditions_width',
+      sql`(shape = 'wide' AND width IN (640, 1080, 1600)) OR (shape = 'tall' AND width IN (480, 720))`,
+    ),
   ],
 );
 

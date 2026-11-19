@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import {
   COVER_RENDITION_WIDTHS,
+  COVER_TALL_WIDTHS,
   coverChoiceNeedsPro,
   type CoverDesignChoice,
   type MyProfile,
 } from '@tipme/contracts';
-import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
 import type { PhotoStore } from '../photo-store.js';
 import { profileCoverRenditions, profileCovers, profiles } from '../schema.js';
@@ -17,7 +18,10 @@ import {
   newRenditionSalt,
   removeObjects,
   renditionKeyOf,
+  type CoverRenditionShape,
 } from './page-images.js';
+
+export type { CoverRenditionShape } from './page-images.js';
 import { getMyProfile } from './profiles.js';
 
 // Page covers. Stored and served exactly as page photos are (see avatars.ts): the bytes are
@@ -27,14 +31,30 @@ import { getMyProfile } from './profiles.js';
 export const coverPathOf = (profileId: string, version: number) =>
   `/v1/covers/${profileId}/${version}.webp`;
 
-/** A smaller copy of a cover, already re-encoded on the server (apps/api cover-renditions.ts). */
+/**
+ * A smaller copy of a cover, or its tall crop, already re-encoded on the server (apps/api
+ * cover-renditions.ts). No `shape` means a wide copy.
+ */
 export interface CoverRenditionBytes {
+  shape?: CoverRenditionShape;
   width: number;
   webp: Buffer;
 }
 
-const isRenditionWidth = (width: number) =>
-  (COVER_RENDITION_WIDTHS as readonly number[]).includes(width);
+const SHAPES: readonly CoverRenditionShape[] = ['wide', 'tall'];
+const WIDTHS: Record<CoverRenditionShape, readonly number[]> = {
+  wide: COVER_RENDITION_WIDTHS,
+  tall: COVER_TALL_WIDTHS,
+};
+const isRendition = (shape: string, width: number) =>
+  (SHAPES as readonly string[]).includes(shape) &&
+  WIDTHS[shape as CoverRenditionShape].includes(width);
+const shapeOf = (r: CoverRenditionBytes): CoverRenditionShape =>
+  r.shape ?? 'wide';
+const checkRenditions = (renditions: CoverRenditionBytes[]) => {
+  if (renditions.some((r) => !isRendition(shapeOf(r), r.width)))
+    throw new Error('not a cover rendition width');
+};
 
 /**
  * Replaces the page's cover with already re-encoded WebP bytes; a new version, a new URL. Its
@@ -48,15 +68,17 @@ export function setCover(
   renditions: CoverRenditionBytes[] = [],
 ): Promise<MyProfile> {
   return guarded(async () => {
-    if (renditions.some((r) => !isRenditionWidth(r.width)))
-      throw new Error('not a cover rendition width');
+    checkRenditions(renditions);
     const profileId = await myPageId(db, userId);
     // Uploaded first: if this fails, nothing in the database changed.
     const objectKey = store ? `covers/${profileId}/${randomUUID()}.webp` : null;
     const salt = newRenditionSalt();
     const sized = renditions.map((r) => ({
       ...r,
-      objectKey: objectKey ? renditionKeyOf(objectKey, r.width, salt) : null,
+      shape: shapeOf(r),
+      objectKey: objectKey
+        ? renditionKeyOf(objectKey, r.width, salt, shapeOf(r))
+        : null,
     }));
     const written: string[] = [];
     let previous: string[] = [];
@@ -103,6 +125,7 @@ export function setCover(
             sized.map((r) => ({
               profileId,
               version,
+              shape: r.shape,
               width: r.width,
               ...(r.objectKey
                 ? { bytes: null, objectKey: r.objectKey }
@@ -272,16 +295,23 @@ export function myCover(
 }
 
 /**
- * A cover's rendition to serve, under exactly the cover's rules (`coverFor`): the current version
- * only, only while the page is live and not paused. Null for a width that was never stored.
+ * A cover's rendition or tall crop to serve, under exactly the cover's rules (`coverFor`): the
+ * current version only, only while the page is live and not paused. Null for a width that was
+ * never stored. No `shape` means a wide copy.
  */
 export function coverRenditionFor(
   db: Database,
-  input: { profileId: string; version: number; width: number },
+  input: {
+    profileId: string;
+    version: number;
+    shape?: CoverRenditionShape;
+    width: number;
+  },
   store?: PhotoStore,
 ): Promise<Buffer | null> {
   return guarded(async () => {
-    if (!isRenditionWidth(input.width)) return null;
+    const shape = input.shape ?? 'wide';
+    if (!isRendition(shape, input.width)) return null;
     const [row] = await db
       .select({
         bytes: profileCoverRenditions.bytes,
@@ -300,6 +330,7 @@ export function coverRenditionFor(
         and(
           eq(profileCoverRenditions.profileId, input.profileId),
           eq(profileCoverRenditions.version, input.version),
+          eq(profileCoverRenditions.shape, shape),
           eq(profileCoverRenditions.width, input.width),
           eq(profiles.pageState, 'live'),
           eq(profiles.status, 'active'),
@@ -314,33 +345,44 @@ export function coverRenditionFor(
 // The backfill (apps/api/src/scripts/backfill-cover-renditions.ts): covers uploaded before
 // renditions existed get them, once, whatever the page's state (a paused page may come back).
 
-/** Covers with no renditions for their current version, oldest first: the backfill's work list. */
-export function coversWithoutRenditions(
-  db: Database,
-): Promise<{ profileId: string; version: number; inStore: boolean }[]> {
+/**
+ * Covers missing a shape of rendition (the wide copies, the tall crop, or both) for their current
+ * version, oldest first, with the shapes they lack: the backfill's work list.
+ */
+export function coversWithoutRenditions(db: Database): Promise<
+  {
+    profileId: string;
+    version: number;
+    inStore: boolean;
+    missing: CoverRenditionShape[];
+  }[]
+> {
   return guarded(async () => {
+    // Rows for another version don't count (an older API replaced the cover during a blue/green
+    // overlap, not knowing about renditions): that cover still needs its own.
+    // Names written out: drizzle leaves columns unqualified in a select list, and there the inner
+    // and outer `profile_id` would be the same column.
+    const has = (shape: CoverRenditionShape) =>
+      sql<boolean>`EXISTS (SELECT 1 FROM profile_cover_renditions r
+        WHERE r.profile_id = profile_covers.profile_id
+          AND r.version = profile_covers.version
+          AND r.shape = ${shape})`;
     const rows = await db
       .select({
         profileId: profileCovers.profileId,
         version: profileCovers.version,
         objectKey: profileCovers.objectKey,
+        wide: has('wide'),
+        tall: has('tall'),
       })
       .from(profileCovers)
-      // Rows for another version don't count (an older API replaced the cover during a
-      // blue/green overlap, not knowing about renditions): that cover still needs its own.
-      .leftJoin(
-        profileCoverRenditions,
-        and(
-          eq(profileCoverRenditions.profileId, profileCovers.profileId),
-          eq(profileCoverRenditions.version, profileCovers.version),
-        ),
-      )
-      .where(isNull(profileCoverRenditions.profileId))
+      .where(sql`NOT (${has('wide')} AND ${has('tall')})`)
       .orderBy(profileCovers.createdAt);
     return rows.map((r) => ({
       profileId: r.profileId,
       version: r.version,
       inStore: r.objectKey !== null,
+      missing: SHAPES.filter((shape) => !r[shape]),
     }));
   });
 }
@@ -371,10 +413,12 @@ export function storedCover(
 }
 
 /**
- * Adds renditions to a cover that has none for its version, where the cover is kept (the store
- * when it is there), and drops any rows left from another version (their objects are removed after
- * the commit). Writes nothing, and returns false, when the cover was replaced or removed meanwhile
- * or already has renditions: so running twice, or beside an upload, is safe.
+ * Adds renditions to a cover, where the cover is kept (the store when it is there), for each shape
+ * (wide copies, tall crop) it has none of at its version, and drops any rows left from another
+ * version (their objects are removed after the commit). A shape the cover already has is never
+ * touched, and the given renditions of that shape are dropped. Writes nothing, and returns false,
+ * when the cover was replaced or removed meanwhile or already has every shape given: so running
+ * twice, or beside an upload, is safe.
  *
  * Locks the page first, as `setCover` and every removal path do (removeCover, the staff removal,
  * account deletion): they delete the renditions and then the cover under that lock, and a write
@@ -393,8 +437,7 @@ export function addCoverRenditions(
   beforePut: (objectKey: string) => void = () => {},
 ): Promise<boolean> {
   return guarded(async () => {
-    if (input.renditions.some((r) => !isRenditionWidth(r.width)))
-      throw new Error('not a cover rendition width');
+    checkRenditions(input.renditions);
     if (!input.renditions.length) return false;
     const [cover] = await db
       .select({ objectKey: profileCovers.objectKey })
@@ -411,10 +454,13 @@ export function addCoverRenditions(
     const salt = newRenditionSalt();
     const sized = input.renditions.map((r) => ({
       ...r,
+      shape: shapeOf(r),
       objectKey: cover.objectKey
-        ? renditionKeyOf(cover.objectKey, r.width, salt)
+        ? renditionKeyOf(cover.objectKey, r.width, salt, shapeOf(r))
         : null,
     }));
+    /** The objects written for renditions that were then inserted: every other one is removed. */
+    const kept = new Set<string>();
     const written: string[] = [];
     try {
       for (const r of sized)
@@ -455,26 +501,36 @@ export function addCoverRenditions(
         stale.push(
           ...others.flatMap((r) => (r.objectKey ? [r.objectKey] : [])),
         );
-        const [existing] = await tx
-          .select({ width: profileCoverRenditions.width })
-          .from(profileCoverRenditions)
-          .where(eq(profileCoverRenditions.profileId, input.profileId))
-          .limit(1);
-        if (existing) return false;
+        // Only rows of this version are left, so a shape present here is the cover's own.
+        const present = new Set(
+          (
+            await tx
+              .select({ shape: profileCoverRenditions.shape })
+              .from(profileCoverRenditions)
+              .where(eq(profileCoverRenditions.profileId, input.profileId))
+          ).map((r) => r.shape),
+        );
+        const adding = sized.filter((r) => !present.has(r.shape));
+        if (!adding.length) return false;
         await tx.insert(profileCoverRenditions).values(
-          sized.map((r) => ({
+          adding.map((r) => ({
             profileId: input.profileId,
             version: input.version,
+            shape: r.shape,
             width: r.width,
             ...(r.objectKey
               ? { bytes: null, objectKey: r.objectKey }
               : { bytes: r.webp, objectKey: null }),
           })),
         );
+        for (const r of adding) if (r.objectKey) kept.add(r.objectKey);
         return true;
       });
       await removeObjects(store, stale);
-      if (!added) await removeObjects(store, written);
+      await removeObjects(
+        store,
+        written.filter((key) => !kept.has(key)),
+      );
       return added;
     } catch (error) {
       await removeObjects(store, written);

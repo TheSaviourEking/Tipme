@@ -35,7 +35,9 @@ Each uploaded cover is also kept at 640, 1080 and 1600 wide (WebP, quality 75, s
 
 Measured on a generated test photo (`apps/api/test/photo-like.mjs`): full cover 118 KB, 1600 wide 25 KB, 1080 wide 15 KB, 640 wide 8 KB.
 
-**Covers uploaded before this release have no sizes.** They keep working: the public profile simply lists no `widths` for them, and pages use the full file. To give them sizes, the owner runs the backfill once per copy (staging, then production), in the API image, which has the image library. It is a dry run unless `--write` is given, and safe to run again:
+**Tall crops.** Each cover also gets the 4:5 region the phone hero of Stage and Horizon shows (`object-fit: cover`, `object-position: 50% 33%`): the full band height, centred across, so a 2240×600 cover gives a 480×600 crop cut at x=880. Widths 480 and 720 (`COVER_TALL_WIDTHS`), never upscaled, so a 2240×600 cover gets only 480. Same table, with `shape = 'tall'` (the wide copies are `shape = 'wide'`; migration `0116_cover_tall_crops`), same lifecycle and rules, served at `/v1/covers/<page>/<version>-tall-<width>.webp`, in R2 as `covers/<page id>/<random>-tall-<width>-<salt>.webp`. The public profile lists them as `tall`. Measured on the same generated photo: 480×600 is 23 KB. The two width lists never overlap, so an API from before `shape` (blue/green) never serves a crop as a wide copy.
+
+**Covers uploaded before this release have no sizes.** They keep working: the public profile simply lists no `widths` (or no `tall`) for them, and pages use the full file. The backfill fills in whichever a cover lacks: the wide copies, the tall crop, or both; a shape a cover already has is never rewritten. To give them sizes, the owner runs the backfill once per copy (staging, then production), in the API image, which has the image library. It is a dry run unless `--write` is given, and safe to run again:
 
 ```sh
 # 1. Dry run: counts the covers without sizes, changes nothing.
@@ -48,10 +50,10 @@ Measured on a generated test photo (`apps/api/test/photo-like.mjs`): full cover 
   migrate node apps/api/dist/scripts/backfill-cover-renditions.js --write
 ```
 
-- **A run killed mid-cover** (stopped, out of memory, lost connection) can leave up to three salted objects in R2 (`covers/<page>/<random>-<width>-<salt>.webp`) that no row names. The backfill logs each key (`writing <key>`) before it writes it: after an interrupted run, delete in Cloudflare any key logged for a cover that has no matching `object_key` in `profile_cover_renditions`. Running it again is still safe; it writes new keys.
+- **A run killed mid-cover** (stopped, out of memory, lost connection) can leave up to five salted objects in R2 (`covers/<page>/<random>-<width>-<salt>.webp`, `…-tall-<width>-<salt>.webp`) that no row names. The backfill logs each key (`writing <key>`) before it writes it: after an interrupted run, delete in Cloudflare any key logged for a cover that has no matching `object_key` in `profile_cover_renditions`. Running it again is still safe; it writes new keys.
 - **Blue/green overlap.** While the old API (from before renditions) and the new one both run, an upload or removal through the old one doesn't know about renditions. A replaced cover keeps rows for its previous version (never served or listed, and the next backfill drops them and their objects). A removal through the old API cascades the rows away and leaves their R2 objects unnamed. Keep the overlap short, and run the backfill after it.
 
-Pass the R2 variables only on a copy with R2 switched on; without them, covers kept in R2 are skipped and counted. Each line names a page by its id only. Without R2, the sizes add about 50 KB per cover to Postgres (dumps and WAL), on top of the cover itself: count them in the 500-cover threshold below.
+Pass the R2 variables only on a copy with R2 switched on; without them, covers kept in R2 are skipped and counted. Each line names a page by its id only. Without R2, the sizes add about 70 KB per cover to Postgres (dumps and WAL; the tall crop is 23 KB of it), on top of the cover itself: count them in the 500-cover threshold below.
 
 ## How it behaves
 

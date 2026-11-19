@@ -813,6 +813,13 @@
       "when": 1795015481658,
       "tag": "0115_studio_photo_accent",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1795058393539,
+      "tag": "0116_cover_tall_crops",
+      "breakpoints": true
     }
   ]
 }

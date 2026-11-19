@@ -92,6 +92,7 @@ import {
   deleteCoverRenditions,
   removeObjects,
 } from './page-images.js';
+
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
@@ -556,9 +557,7 @@ const toMine = async (
   avatarPath: row.profile.avatarPath,
   cover: resolveCover({
     ...row.profile,
-    coverWidths: row.profile.coverPath
-      ? await coverWidthsOf(db, row.profile.id)
-      : [],
+    ...(row.profile.coverPath ? await coverWidthsOf(db, row.profile.id) : {}),
   }),
   coverChoice: {
     design: row.profile.coverDesign,
@@ -1039,9 +1038,7 @@ export function publicProfile(
       acceptingTips,
       cover: resolveCover({
         ...profile,
-        coverWidths: profile.coverPath
-          ? await coverWidthsOf(db, profile.id)
-          : [],
+        ...(profile.coverPath ? await coverWidthsOf(db, profile.id) : {}),
       }),
       plan: profile.plan as PagePlan,
       ...(options.recognition === true && profile.plan === 'pro'
