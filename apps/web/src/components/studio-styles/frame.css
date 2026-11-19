@@ -384,10 +384,7 @@ html:has(.studio[data-style]) :is(.site-header, .site-footer) {
    footer stays. The Studio lab stands in for these pages in the tests (test copies only). A page
    kept hidden for the way back (React's Activity: an inline `display: none !important`) doesn't
    count, so the page someone moves on to has today's header. */
-body:has(
-    :is(main.studio-main, main.studio-lab):not([style*='display: none'])
-      > .studio[data-style]
-  )
+html:has(.studio[data-style]:is(main:not([style*='display: none']) > *))
   :is(.site-nav, .menu-toggle) {
   display: none;
 }
