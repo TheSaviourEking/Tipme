@@ -3,8 +3,7 @@
  * named. The routes answer 404 while Page Studio is switched off.
  */
 import { z } from 'zod';
-import type { StudioCheckResult } from './studio-check.js';
-import type { StudioCheckContext } from './studio-check-v3.js';
+import type { StudioCheckContext, StudioCheckResult } from './studio-check.js';
 import {
   studioDocumentSchema,
   type StudioDocument,

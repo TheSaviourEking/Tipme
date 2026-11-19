@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {
-  DESIGN_CHECK_VERSION,
-  DESIGN_CHECK_VERSION_V1,
-  deriveStudioPalette,
-  studioTokens,
-} from '@tipme/contracts';
+import { DESIGN_CHECK_VERSION, studioTokens } from '@tipme/contracts';
 import { studioFor } from '../src/lib/public-studio.ts';
 
 // Which public pages show a published Page Studio design (styles spec §11, §12.5, §13).
@@ -83,9 +78,10 @@ test('a v1 studio from an older API shows the standard page', () => {
   };
   const old = {
     document: v1,
-    palette: deriveStudioPalette(v1.brand),
+    // The v1 palette engine is gone; an older API still sends a palette, which is ignored.
+    palette: {},
     images: {},
-    checkVersion: DESIGN_CHECK_VERSION_V1,
+    checkVersion: 2,
   };
   assert.equal(studioFor(profile({ studio: old }), at), null);
 });

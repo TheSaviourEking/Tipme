@@ -3,9 +3,9 @@
  * with no `@/` imports, so its unit test runs in Node (test/studio-editor.test.mjs).
  */
 import {
-  STUDIO_ERROR_RULES_V3,
-  STUDIO_FIX_LINKS_V3,
-  STUDIO_FIX_NEEDS_INPUT_V3,
+  STUDIO_ERROR_RULES,
+  STUDIO_FIX_LINKS,
+  STUDIO_FIX_NEEDS_INPUT,
   STUDIO_WEIGHT,
   type StudioCheckResult,
   type StudioDocument,
@@ -34,19 +34,19 @@ export const checkBadge = (count: number) =>
 export function fixesNow(issue: StudioIssue): StudioFix[] {
   return issue.fixes.filter(
     (f) =>
-      !STUDIO_FIX_NEEDS_INPUT_V3.includes(f.id) &&
-      !STUDIO_FIX_LINKS_V3.includes(f.id),
+      !STUDIO_FIX_NEEDS_INPUT.includes(f.id) &&
+      !STUDIO_FIX_LINKS.includes(f.id),
   );
 }
 
 /** Fixes that need a choice, a photo, a link or words: they open the Style tab or a block's form. */
 export function fixesInput(issue: StudioIssue): StudioFix[] {
-  return issue.fixes.filter((f) => STUDIO_FIX_NEEDS_INPUT_V3.includes(f.id));
+  return issue.fixes.filter((f) => STUDIO_FIX_NEEDS_INPUT.includes(f.id));
 }
 
 /** Fixes that are a link ("See Pro"). */
 export function fixesLinks(issue: StudioIssue): StudioFix[] {
-  return issue.fixes.filter((f) => STUDIO_FIX_LINKS_V3.includes(f.id));
+  return issue.fixes.filter((f) => STUDIO_FIX_LINKS.includes(f.id));
 }
 
 /**
@@ -61,7 +61,7 @@ export function issueTab(issue: Pick<StudioIssue, 'at'>): 'style' | 'blocks' {
 }
 
 const PASSING: Record<
-  (typeof STUDIO_ERROR_RULES_V3)[number],
+  (typeof STUDIO_ERROR_RULES)[number],
   (check: StudioCheckResult) => string
 > = {
   'pro-only': () => 'Everything here comes with your plan',
@@ -77,8 +77,8 @@ const PASSING: Record<
 /** The passing list, in the check's order. */
 export function passingWords(check: StudioCheckResult): string[] {
   return check.passing
-    .filter((rule): rule is (typeof STUDIO_ERROR_RULES_V3)[number] =>
-      (STUDIO_ERROR_RULES_V3 as readonly StudioRuleId[]).includes(rule),
+    .filter((rule): rule is (typeof STUDIO_ERROR_RULES)[number] =>
+      (STUDIO_ERROR_RULES as readonly StudioRuleId[]).includes(rule),
     )
     .map((rule) => PASSING[rule](check));
 }

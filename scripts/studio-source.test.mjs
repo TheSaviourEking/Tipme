@@ -1,123 +1,10 @@
-// Page Studio renderer source rules (plan Task 5): no raw HTML or user-built styles, a grid that
-// matches the design check's layout model, and nothing that reaches into TipMe's tip block.
+// Page Studio source rules: no raw HTML or user-built styles, scoped selectors, and nothing that
+// reaches into TipMe's tip block. (The v1 renderer's rules left with it in PR 4b, below.)
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
-import { STUDIO_GRID } from '../packages/contracts/dist/index.js';
-import { STUDIO_COLOUR_TOKENS } from '../apps/web/src/components/studio/studio-theme.ts';
 
-const DIR = new URL('../apps/web/src/components/studio/', import.meta.url);
-const files = readdirSync(DIR).filter((f) => /\.(tsx?|css)$/.test(f));
-const read = (f) => readFileSync(new URL(f, DIR), 'utf8');
-const css = read('studio.css');
-const code = files.filter((f) => /\.tsx?$/.test(f)).map((f) => [f, read(f)]);
-
-test('no studio component renders raw HTML or builds a style from user content', () => {
-  for (const [file, src] of code) {
-    assert.doesNotMatch(
-      src,
-      /dangerouslySetInnerHTML|innerHTML|insertAdjacentHTML|document\.write/,
-      file,
-    );
-    // Inline styles only from the theme, which reads engine tokens and registry ids.
-    for (const m of src.matchAll(/style=\{([^}]*)\}/g))
-      assert.match(m[1], /^\s*studioStyle\(/, `${file}: style={${m[1]}}`);
-    assert.doesNotMatch(src, /\beval\(|new Function\(/, file);
-  }
-  // The stylesheet loader (it renders nothing; it keeps studio.css off the /@username route so a
-  // prefetch never preloads it, studio-styles.tsx). The video island moved to studio-styles/.
-  assert.deepEqual(
-    code.filter(([, src]) => /^['"]use client['"]/m.test(src)).map(([f]) => f),
-    ['studio-sheet.tsx', 'studio-styles.tsx'],
-  );
-  assert.match(read('studio-sheet.tsx'), /return null;/);
-});
-
-test('the grid CSS and the layout model use the same constants', () => {
-  const px = (name) => {
-    const m = new RegExp(`--studio-grid-${name}:\\s*([\\d.]+)px`).exec(css);
-    assert.ok(m, `--studio-grid-${name} is not set in studio.css`);
-    return Number(m[1]);
-  };
-  assert.equal(px('max'), STUDIO_GRID.maxWidth);
-  assert.equal(px('rail'), STUDIO_GRID.rail);
-  assert.equal(px('rail-gap'), STUDIO_GRID.railGap);
-  assert.equal(px('pad-phone'), STUDIO_GRID.padding.phone);
-  assert.equal(px('pad-tablet'), STUDIO_GRID.padding.tablet);
-  assert.equal(px('pad-desktop'), STUDIO_GRID.padding.desktop);
-  assert.equal(px('gap-phone'), STUDIO_GRID.gap.phone);
-  assert.equal(px('gap-tablet'), STUDIO_GRID.gap.tablet);
-  assert.equal(px('gap-desktop'), STUDIO_GRID.gap.desktop);
-  assert.equal(px('inset-phone'), STUDIO_GRID.inset.phone);
-  assert.equal(px('inset-wide'), STUDIO_GRID.inset.wide);
-  assert.equal(px('tile-gap'), STUDIO_GRID.tileGap);
-  const widths = [...css.matchAll(/@media \(min-width: (\d+)px\)/g)].map((m) =>
-    Number(m[1]),
-  );
-  assert.deepEqual(
-    [...new Set(widths)].sort((a, b) => a - b),
-    [STUDIO_GRID.tablet, STUDIO_GRID.desktop],
-  );
-  assert.match(css, /repeat\(12, minmax\(0, 1fr\)\)/);
-});
-
-test('studio.css never styles inside the tip block, and the fixed parts reset every studio token', () => {
-  const selectors = [...css.matchAll(/([^{}]+)\{/g)]
-    .map((m) => m[1].trim())
-    .filter((s) => !s.startsWith('@'));
-  for (const s of selectors)
-    assert.doesNotMatch(
-      s,
-      /tip-instrument|profile-composer|data-tip-panel|appreciation|tm-/,
-      s,
-    );
-  const fixed = /\.studio-fixed\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-  const declared = new Set(
-    [...css.matchAll(/(--studio-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
-  );
-  for (const t of STUDIO_COLOUR_TOKENS)
-    declared.add(`--studio-c-${t}`).add(`--studio-t-${t}`);
-  for (const name of declared)
-    if (!name.startsWith('--studio-grid-'))
-      assert.match(fixed, new RegExp(`${name}:\\s*initial`), name);
-});
-
-test('every user-text element wraps instead of overflowing', () => {
-  assert.match(
-    css,
-    /\.studio-text[^{]*\{[^}]*overflow-wrap:\s*anywhere[^}]*min-width:\s*0/,
-  );
-  assert.match(css, /max-inline-size:\s*68ch/);
-});
-
-test('text on a photo always sits on the scrim', () => {
-  const blocks = read('studio-blocks.tsx') + read('studio-row.tsx');
-  assert.match(blocks, /studio-scrim/);
-  assert.match(
-    css,
-    /\.studio-scrim\s*\{[^}]*background:\s*rgb\(0 0 0 \/ 0\.62\)/,
-  );
-});
-
-test('the services block ends with the fixed line the owner set (16 Nov 2026)', () => {
-  const blocks = read('studio-blocks.tsx');
-  // JSX text: the formatter may wrap it between any two words.
-  const line =
-    'Prices are for information. Tips here are a gift, not a payment for a service.';
-  assert.match(
-    blocks,
-    new RegExp(
-      line
-        .split(' ')
-        .map((w) => w.replace(/[.,]/g, '\\$&'))
-        .join('\\s+'),
-    ),
-  );
-  // The plan's first wording called a tip "thanks"; money is "tips" in TipMe's copy.
-  assert.doesNotMatch(blocks, /Tips here are thanks/);
-});
-
-// Page Studio styles (spec 2026-11-17-page-studio-styles §13): the same source rules for the style
+// Page Studio styles (spec 2026-11-17-page-studio-styles §13): the source rules for the style
 // renderer. Its only inline style is the token map (styleTokens), built from the registry; its
 // only client code is the video island, the per-style stylesheet loader and the sheets themselves.
 const STYLES_DIR = new URL(
@@ -173,11 +60,6 @@ test('no style component renders raw HTML or builds a style from user content', 
   assert.match(readStyle('sheets/horizon.tsx'), /return null;/);
   for (const style of ['signboard', 'sprint', 'tiles'])
     assert.match(readStyle(`sheets/${style}.tsx`), /return null;/, style);
-  // The old renderer uses the shared video island.
-  assert.match(
-    read('studio-blocks.tsx'),
-    /from '\.\.\/studio-styles\/video-embed'/,
-  );
 });
 
 /** A selector list split at its own commas, not those inside :is() or :has(). */
@@ -223,4 +105,92 @@ test('every style rule is scoped to a styled Studio page', () => {
         `${file}: "${s}"`,
       );
   }
+});
+
+// PR 4b (plan Task 13): the v1 renderer, layout model and check are retired. The editor writes v2
+// only and the API refuses v1 writes; stored v1 rows are still read through resolveStudio, which
+// needs only studio-document-v1.ts (schema and resolver).
+// A path ending in a v1 renderer module: '../studio/studio-theme', './studio-row', and the old
+// '../studio/studio-styles' (its stylesheet loader), but not the v2 folder components/studio-styles/.
+const V1_MODULE_IMPORT =
+  /['"][^'"\n]*\/studio(-(theme|row|blocks|sheet|page)|\/studio-styles)['"]/;
+
+test('the v1 module pattern matches v1 imports and not the v2 folder', () => {
+  for (const bad of [
+    "from '../studio/studio-theme'",
+    "from './studio-row'",
+    'from "@/components/studio/studio-page"',
+    "from '../studio/studio-styles'",
+  ])
+    assert.match(bad, V1_MODULE_IMPORT, bad);
+  for (const good of [
+    "from '@/components/studio-styles/style-page'",
+    "from '../studio-styles/video-embed'",
+    "from './studio-styles/parts'",
+    "from '../studio/studio-editor-model'",
+  ])
+    assert.doesNotMatch(good, V1_MODULE_IMPORT, good);
+});
+
+test('nothing imports the v1 renderer, layout model or v1 check', () => {
+  const root = new URL('../', import.meta.url);
+  const SKIP = new Set([
+    'node_modules',
+    '.next',
+    'dist',
+    '.turbo',
+    '.vercel',
+    'coverage',
+    'test-results',
+    'playwright-report',
+  ]);
+  const SOURCE = /\.(tsx?|mjs|cjs|js|css|json)$/;
+  const walk = (dir) =>
+    readdirSync(new URL(dir, root), { withFileTypes: true }).flatMap((e) =>
+      SKIP.has(e.name)
+        ? []
+        : e.isDirectory()
+          ? walk(`${dir}${e.name}/`)
+          : SOURCE.test(e.name) && !e.name.endsWith('.tsbuildinfo')
+            ? [`${dir}${e.name}`]
+            : [],
+    );
+  const packages = readdirSync(new URL('packages/', root)).map(
+    (p) => `packages/${p}/src/`,
+  );
+  // Package sources, and now also their tests, the browser tests and the support files. The v1
+  // fixtures (studio-examples.mjs) and the frozen v1 font table are stored-row data, not imports
+  // of the deleted modules, and name none of the banned words.
+  const scanned = [
+    ...walk('apps/'),
+    ...walk('tests/'),
+    ...packages.filter((p) => existsSync(new URL(p, root))).flatMap(walk),
+    ...readdirSync(new URL('packages/', root)).flatMap((p) =>
+      existsSync(new URL(`packages/${p}/test/`, root))
+        ? walk(`packages/${p}/test/`)
+        : [],
+    ),
+  ];
+  assert.ok(scanned.length > 500, `scanned ${scanned.length} files`);
+  const banned = [
+    /components\/studio\//,
+    // A relative import of a v1 renderer module, e.g. '../studio/studio-theme' or './studio-row'.
+    V1_MODULE_IMPORT,
+    /studio-layout/,
+    /studio-check-v3/,
+    /\bcheckDesignV1\b/,
+    /\bapplyStudioFixV1\b/,
+    /\bSTUDIO_GRID\b/,
+  ];
+  const hits = scanned.flatMap((file) => {
+    const text = readFileSync(new URL(file, root), 'utf8');
+    return banned.filter((re) => re.test(text)).map((re) => `${file}: ${re}`);
+  });
+  assert.deepEqual(hits, []);
+  for (const gone of [
+    'apps/web/src/components/studio/',
+    'packages/contracts/src/studio-layout.ts',
+    'packages/contracts/src/studio-check-v3.ts',
+  ])
+    assert.equal(existsSync(new URL(gone, root)), false, `${gone} is gone`);
 });
