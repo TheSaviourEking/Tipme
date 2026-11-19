@@ -100,8 +100,20 @@
 /* The publish dialog: the shared modal (dashboard.css .confirm-dialog), a little wider for the
    list, which scrolls inside it on a short phone. */
 .pst-publish {
-  width: min(32rem, calc(100vw - 2 * var(--space-4)));
   font-family: var(--font-interface);
+}
+
+/* Above the phone sheet (dashboard.css switches to a full-width sheet at 30rem). */
+@media (min-width: 30.0625rem) {
+  .pst-publish {
+    width: min(32rem, calc(100vw - 2 * var(--space-4)));
+  }
+}
+
+/* The editor's own face for the title (§10: the editor keeps Manrope), not the site's display h2. */
+.pst-publish h2 {
+  font: 800 22px / 28px var(--font-interface);
+  letter-spacing: -0.02em;
 }
 
 .pst-publish h2:focus {
