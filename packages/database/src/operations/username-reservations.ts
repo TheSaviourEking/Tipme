@@ -24,6 +24,10 @@ import { newId } from './ids.js';
 import { activeReservation, opsPageByHandle } from './profiles.js';
 import { checkedReason, withAuditChange } from './staff.js';
 import {
+  cancelOpenHandoverLinks,
+  openHandoverLink,
+} from './username-handovers.js';
+import {
   listTakeBacks,
   openTakeBackView,
   pendingTakeBacks,
@@ -188,8 +192,18 @@ export function releaseUsername(
             isNull(handleReservations.releasedAt),
           ),
         )
-        .returning({ takeBackId: handleReservations.takeBackId });
+        .returning({
+          id: handleReservations.id,
+          takeBackId: handleReservations.takeBackId,
+        });
       if (!released) throw new OperationError('USERNAME_NOT_RESERVED');
+      // Its claim link ends with it (handover, 18 Nov 2026).
+      await cancelOpenHandoverLinks(tx, {
+        reservationId: released.id,
+        staffId: null,
+        reason: 'The reservation was released',
+        now,
+      });
       await recordAudit(tx, {
         staffUserId: input.staffId,
         action: 'username.released',
@@ -218,7 +232,13 @@ export function checkUsername(
       return { name: key ?? raw.trim().toLowerCase(), state: 'built_in' };
     if (!key) return { name: raw.trim(), state: 'invalid' };
     const reservation = await activeRow(db, key);
-    if (reservation) return { name: key, state: 'reserved', reservation };
+    if (reservation)
+      return {
+        name: key,
+        state: 'reserved',
+        reservation,
+        handoverLink: await openHandoverLink(db, reservation.id),
+      };
     const page = await opsPageByHandle(db, key);
     if (page) {
       const pending = (await pendingTakeBacks(db, now)).find(
