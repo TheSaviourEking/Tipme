@@ -806,6 +806,13 @@
       "when": 1794990733667,
       "tag": "0114_cover_renditions",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1795015481658,
+      "tag": "0115_studio_photo_accent",
+      "breakpoints": true
     }
   ]
 }

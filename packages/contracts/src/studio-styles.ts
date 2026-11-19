@@ -15,6 +15,10 @@ import {
   type Hex,
   type StudioMode,
 } from './studio-colour.js';
+import type {
+  PhotoAccentFailed,
+  PhotoAccentValues,
+} from './studio-photo-accent.js';
 import type { StudioFontId } from './studio-type.js';
 
 export const STUDIO_STYLE_IDS = [
@@ -481,12 +485,14 @@ export const STUDIO_STYLES: Record<StudioStyleId, StudioStyle> = {
 export const STUDIO_FREE_STYLES: readonly StudioStyleId[] =
   STUDIO_STYLE_IDS.filter((id) => STUDIO_STYLES[id].plan === 'free');
 
-type PhotoAccent = ModePair;
+/** The stored photo accent as read (`photoAccentOf`): its values, or its curated fallback. */
+type PhotoAccent = PhotoAccentValues | PhotoAccentFailed;
 
 /**
  * The accent values a page uses. `null` is the style's default (TipMe purple on Classic).
- * `'photo'` without stored photo values (none computed yet, or the avatar was removed) also
- * falls back to the default, so a page always renders with a tested accent.
+ * `'photo'` takes the photo's values, or the curated accent it fell back to (§6 step 5); without
+ * a photo accent (none computed yet, or the avatar was removed) it is the default too, so a page
+ * always renders with a tested accent.
  */
 export function accentValues(
   style: StudioStyleId,
@@ -494,7 +500,10 @@ export function accentValues(
   mode: 'light' | 'dark',
   photo?: PhotoAccent | null,
 ): StudioAccentValues {
-  if (accent === 'photo' && photo) return photo[mode];
+  if (accent === 'photo' && photo)
+    return 'failed' in photo
+      ? STUDIO_ACCENTS[photo.fallback][mode]
+      : photo[mode];
   const id =
     accent && accent !== 'photo' ? accent : STUDIO_STYLES[style].defaultAccent;
   return id ? STUDIO_ACCENTS[id][mode] : CLASSIC_PURPLE[mode];

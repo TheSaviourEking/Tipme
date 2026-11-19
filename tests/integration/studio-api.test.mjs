@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { createRequire } from 'node:module';
 import { after, before, test } from 'node:test';
 import { startTelemetry } from '../../packages/observability/dist/index.js';
@@ -6,6 +7,7 @@ import { InMemorySpanExporter } from '../../packages/observability/dist/testing.
 import {
   DESIGN_CHECK_VERSION,
   DESIGN_CHECK_VERSION_V1,
+  photoAccentNotice,
   resolveStudio,
   studioTokens,
 } from '../../packages/contracts/dist/index.js';
@@ -18,9 +20,13 @@ import {
   staffRemoveStudioImage,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
+import { StudioPhotoAccent } from '../../apps/api/dist/studio/photo-accent.js';
 import {
+  REDIS_URL,
+  Redis,
   WEB,
   browserHeaders,
+  openEventStream,
   setSwitch,
   signIn,
   startStack,
@@ -40,17 +46,43 @@ const sharp = createRequire(
 
 let database;
 let stack;
+let revalidateServer;
+/** Each web revalidation, with the page's stored photo accent when it arrived. */
+const revalidations = [];
 const q = (text, values = []) =>
   database.pool.query(text, values).then((r) => r.rows);
 before(async () => {
   database = await openTestDatabase();
   await database.reset();
+  revalidateServer = createServer((request, response) => {
+    let raw = '';
+    request.on('data', (chunk) => (raw += chunk));
+    request.on('end', async () => {
+      const body = JSON.parse(raw);
+      const [studio] = await q(
+        `SELECT s.photo_accent FROM page_studios s JOIN profiles p ON p.id = s.profile_id
+          WHERE p.handle_lower = $1`,
+        [body.handle ?? ''],
+      ).catch(() => []);
+      revalidations.push({
+        handle: body.handle,
+        photoAccent: studio?.photo_accent ?? null,
+      });
+      response.writeHead(200).end('{}');
+    });
+  });
+  await new Promise((resolve) =>
+    revalidateServer.listen(0, '127.0.0.1', resolve),
+  );
   stack = await startStack({
     databaseUrl: database.url,
     apiEnv: {
       WEB_ORIGIN: WEB,
       RATE_LIMIT_AUTH_PER_HOUR: '1000',
       RATE_LIMIT_AVATARS_PER_HOUR: '1000',
+      LIVE_UPDATES_ENABLED: 'true',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
+      WEB_REVALIDATE_URL: `http://127.0.0.1:${revalidateServer.address().port}/api/revalidate`,
     },
   });
   // Page Studio is the `page_studio` admin switch (owner, 14 Nov 2026), off by default; no variable.
@@ -59,6 +91,7 @@ before(async () => {
 after(async () => {
   await stack.stop();
   await database.close();
+  revalidateServer.close();
 });
 
 let n = 0;
@@ -1023,4 +1056,361 @@ test('deleting the account deletes its Studio designs and photos', async () => {
     await q('SELECT 1 FROM studio_image_files WHERE image_id = $1', [imageId]),
     [],
   );
+});
+
+// "From your photo" (styles spec §6; plan Task 11, Review Focus 3). Generated avatars only.
+
+/** A generated avatar: a background and a large block of a second colour. */
+const avatarPhoto = (background, block) =>
+  sharp({ create: { width: 600, height: 600, channels: 3, background } })
+    .composite([
+      {
+        input: Buffer.from(
+          `<svg width="600" height="600"><rect x="0" y="360" width="600" height="240" fill="${block}"/></svg>`,
+        ),
+        top: 0,
+        left: 0,
+      },
+    ])
+    .jpeg()
+    .toBuffer();
+const BLUE = () => avatarPhoto({ r: 40, g: 110, b: 210 }, '#1e3a8a');
+const GREEN = () => avatarPhoto({ r: 11, g: 122, b: 75 }, '#d81b60');
+const GREY = () => avatarPhoto({ r: 128, g: 128, b: 128 }, '#5a5a5a');
+async function uploadAvatar(cookie, bytes) {
+  const response = await fetch(`${stack.api}/v1/me/avatar`, {
+    method: 'PUT',
+    headers: { ...browserHeaders(cookie), 'content-type': 'image/jpeg' },
+    body: await bytes,
+  });
+  assert.equal(response.status, 200, await response.text());
+}
+const removeAvatar = async (cookie) =>
+  assert.equal((await call(cookie, 'DELETE', '/v1/me/avatar')).status, 200);
+const storedAccent = async (profileId) =>
+  (
+    await q(
+      `SELECT s.photo_accent, p.avatar_version FROM page_studios s
+         JOIN profiles p ON p.id = s.profile_id WHERE s.profile_id = $1`,
+      [profileId],
+    )
+  )[0];
+/** The revalidation is sent after the answer: wait for it a moment. */
+async function revalidatedFor(handle, count) {
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const seen = revalidations.filter((r) => r.handle === handle);
+    if (seen.length >= count || Date.now() > deadline) return seen;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+/**
+ * Saves share one address here, and the whole file saves more than the 60 a minute a person gets
+ * (`studio_drafts`): each photo-accent test starts with a fresh allowance.
+ */
+async function freshSaveAllowance() {
+  const redis = new Redis(REDIS_URL);
+  try {
+    const keys = await redis.keys(`rl:${stack.prefix}:studio_drafts:*`);
+    if (keys.length) await redis.del(...keys);
+  } finally {
+    redis.disconnect();
+  }
+}
+const PROFILE_CHANGED = /^data: \{"type":"profile\.changed"\}$/;
+async function eventsOf(t, cookie) {
+  const stream = await openEventStream(`${stack.api}/v1/me/events`, {
+    cookie,
+    origin: WEB,
+  });
+  t.after(() => stream.close());
+  assert.equal(stream.status, 200);
+  await stream.waitFor(/^data: \{"type":"ready"\}$/);
+  return stream;
+}
+const changedCount = (stream) =>
+  stream.frames.filter((f) => PROFILE_CHANGED.test(f)).length;
+async function waitForChanged(stream, count) {
+  const deadline = Date.now() + 5000;
+  while (changedCount(stream) < count && Date.now() < deadline)
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(changedCount(stream), count, JSON.stringify(stream.frames));
+}
+
+test('choosing "From your photo" on Pro stores a photo accent for the current avatar', async () => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, BLUE());
+  const design = v2({ style: 'clear', accent: 'photo' });
+  const saved = await json(await save(cookie, 0, design));
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  const mine = saved.body.data.photoAccent;
+  assert.ok(mine && !('failed' in mine), JSON.stringify(mine));
+  const row = await storedAccent(profileId);
+  assert.equal(row.photo_accent.source, 'avatar');
+  assert.equal(row.photo_accent.avatarVersion, row.avatar_version);
+  assert.deepEqual(
+    { light: row.photo_accent.light, dark: row.photo_accent.dark },
+    mine,
+  );
+  assert.deepEqual((await studio(cookie)).photoAccent, mine);
+  assert.equal((await publish(cookie, saved.body.data.rev)).status, 200);
+  const shown = (await publicPage(handle)).studio;
+  assert.deepEqual(shown.document, design);
+  assert.deepEqual(shown.palette, studioTokens('clear', 'photo', mine));
+  assert.notDeepEqual(shown.palette, studioTokens('clear', null));
+});
+
+test('a new or removed avatar recomputes or clears the photo accent and revalidates the page', async (t) => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, BLUE());
+  const design = v2({ style: 'journal', accent: 'photo' });
+  const saved = (await json(await save(cookie, 0, design))).body.data;
+  assert.equal((await publish(cookie, saved.rev)).status, 200);
+  const before = await storedAccent(profileId);
+  const blue = (await publicPage(handle)).studio.palette;
+  assert.deepEqual(
+    blue,
+    studioTokens('journal', 'photo', {
+      light: before.photo_accent.light,
+      dark: before.photo_accent.dark,
+    }),
+  );
+  const events = await eventsOf(t, cookie);
+  const seen = (await revalidatedFor(handle, 0)).length;
+
+  // A new photo: a new accent for its version, stored before the page is refreshed.
+  await uploadAvatar(cookie, GREEN());
+  const after = await storedAccent(profileId);
+  assert.equal(after.avatar_version, before.avatar_version + 1);
+  assert.equal(after.photo_accent.avatarVersion, after.avatar_version);
+  const green = (await publicPage(handle)).studio.palette;
+  assert.notDeepEqual(green, blue);
+  assert.deepEqual(
+    green,
+    studioTokens('journal', 'photo', {
+      light: after.photo_accent.light,
+      dark: after.photo_accent.dark,
+    }),
+  );
+  const refreshed = await revalidatedFor(handle, seen + 1);
+  assert.equal(refreshed.length, seen + 1);
+  assert.equal(
+    refreshed.at(-1).photoAccent.avatarVersion,
+    after.avatar_version,
+    'the page is refreshed after the new accent is stored',
+  );
+  await waitForChanged(events, 1);
+
+  // No photo: the style's own accent, never the stale one, never an error.
+  await removeAvatar(cookie);
+  assert.equal((await storedAccent(profileId)).photo_accent, null);
+  const none = await publicPage(handle);
+  assert.deepEqual(none.studio.document, design);
+  assert.deepEqual(none.studio.palette, studioTokens('journal', null));
+  assert.equal((await studio(cookie)).photoAccent, null);
+  const cleared = await revalidatedFor(handle, seen + 2);
+  assert.equal(cleared.length, seen + 2);
+  assert.equal(cleared.at(-1).photoAccent, null);
+  await waitForChanged(events, 2);
+
+  // A photo again: an accent again, for that photo.
+  await uploadAvatar(cookie, BLUE());
+  const again = await storedAccent(profileId);
+  assert.equal(again.photo_accent.avatarVersion, again.avatar_version);
+  assert.deepEqual((await publicPage(handle)).studio.palette, blue);
+});
+
+test('a stored photo accent for an older photo is never shown', async () => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, BLUE());
+  const saved = (
+    await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
+  ).body.data;
+  assert.equal((await publish(cookie, saved.rev)).status, 200);
+  // As if the photo changed while Page Studio was off: the stored values name the old photo.
+  await q(
+    'UPDATE profiles SET avatar_version = avatar_version + 1 WHERE id = $1',
+    [profileId],
+  );
+  assert.deepEqual(
+    (await publicPage(handle)).studio.palette,
+    studioTokens('linen', null),
+  );
+  assert.equal((await studio(cookie)).photoAccent, null);
+});
+
+test("Free can't choose the photo accent (403)", async () => {
+  await freshSaveAllowance();
+  const { cookie, profileId } = await page({ pro: false });
+  await uploadAvatar(cookie, BLUE());
+  const refused = await json(
+    await save(cookie, 0, v2({ style: 'clear', accent: 'photo' })),
+  );
+  assert.equal(refused.status, 403, JSON.stringify(refused.body));
+  assert.equal(refused.body.error.code, 'STUDIO_PRO_REQUIRED');
+  assert.equal(await storedAccent(profileId), undefined, 'nothing stored');
+});
+
+test('a grey photo publishes with the Ink fallback and the editor gets the no-clear-colour sentence', async () => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, GREY());
+  const saved = (
+    await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
+  ).body.data;
+  assert.deepEqual(saved.photoAccent, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
+  const stored = await storedAccent(profileId);
+  assert.deepEqual(stored.photo_accent, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+    avatarVersion: stored.avatar_version,
+  });
+  assert.equal(
+    photoAccentNotice(saved.photoAccent),
+    "We couldn't find a clear colour in your photo, so your page uses Ink.",
+  );
+  const done = await json(await publish(cookie, saved.rev));
+  assert.equal(done.status, 200, JSON.stringify(done.body));
+  assert.deepEqual(
+    (await publicPage(handle)).studio.palette,
+    studioTokens('linen', 'ink'),
+  );
+});
+
+test('with the page_studio switch off, a photo change leaves the photo accent as it is', async () => {
+  await freshSaveAllowance();
+  const { cookie, profileId } = await page();
+  await uploadAvatar(cookie, BLUE());
+  await save(cookie, 0, v2({ style: 'clear', accent: 'photo' }));
+  const before = await storedAccent(profileId);
+  assert.ok(before.photo_accent);
+  await setSwitch(database.pool, 'page_studio', false);
+  try {
+    await uploadAvatar(cookie, GREEN());
+    await removeAvatar(cookie);
+    assert.deepEqual(
+      (await storedAccent(profileId)).photo_accent,
+      before.photo_accent,
+    );
+  } finally {
+    await setSwitch(database.pool, 'page_studio', true);
+  }
+});
+
+test('a fallback never outlives its photo: a new photo that cannot be sampled shows the style’s own accent', async (t) => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, GREY());
+  const saved = (
+    await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
+  ).body.data;
+  assert.deepEqual(saved.photoAccent, {
+    failed: true,
+    fallback: 'ink',
+    noUsableColour: true,
+  });
+  assert.equal((await publish(cookie, saved.rev)).status, 200);
+  assert.deepEqual(
+    (await publicPage(handle)).studio.palette,
+    studioTokens('linen', 'ink'),
+  );
+  // The sampler fails for the next photo.
+  const service = stack.app.get(StudioPhotoAccent);
+  const sample = service.sample;
+  service.sample = async () => {
+    throw new Error('sampling failed');
+  };
+  t.after(() => (service.sample = sample));
+  await uploadAvatar(cookie, GREEN());
+  assert.equal(
+    (await storedAccent(profileId)).photo_accent,
+    null,
+    'cleared for the new photo, not kept from the old one',
+  );
+  // The style's own accent (Linen: Coral), not the old photo's Ink, and no sentence about it.
+  assert.deepEqual(
+    (await publicPage(handle)).studio.palette,
+    studioTokens('linen', null),
+  );
+  const mine = await studio(cookie);
+  assert.equal(mine.photoAccent, null);
+  assert.equal(photoAccentNotice(mine.photoAccent), null);
+  // A save with sampling still failing keeps it that way; once it works, the save computes it.
+  const again = (await json(await save(cookie, mine.rev, mine.draft))).body
+    .data;
+  assert.equal(again.photoAccent, null);
+  service.sample = sample;
+  const fixed = (await json(await save(cookie, again.rev, again.draft))).body
+    .data;
+  assert.ok(fixed.photoAccent && !('failed' in fixed.photoAccent));
+  const row = await storedAccent(profileId);
+  assert.equal(row.photo_accent.avatarVersion, row.avatar_version);
+});
+
+test('a fallback stored for an older photo is never shown', async () => {
+  await freshSaveAllowance();
+  const { cookie, handle, profileId } = await page();
+  await uploadAvatar(cookie, GREY());
+  const saved = (
+    await json(await save(cookie, 0, v2({ style: 'linen', accent: 'photo' })))
+  ).body.data;
+  assert.equal((await publish(cookie, saved.rev)).status, 200);
+  // As if the photo changed while Page Studio was off.
+  await q(
+    'UPDATE profiles SET avatar_version = avatar_version + 1 WHERE id = $1',
+    [profileId],
+  );
+  assert.deepEqual(
+    (await publicPage(handle)).studio.palette,
+    studioTokens('linen', null),
+  );
+  assert.equal((await studio(cookie)).photoAccent, null);
+});
+
+test('when Pro lapses, a published photo accent goes back to the style’s own accent', async () => {
+  await freshSaveAllowance();
+  const free = await page();
+  await uploadAvatar(free.cookie, BLUE());
+  const journal = v2({ style: 'journal', accent: 'photo' });
+  const a = (await json(await save(free.cookie, 0, journal))).body.data;
+  assert.ok(a.photoAccent && !('failed' in a.photoAccent));
+  assert.equal((await publish(free.cookie, a.rev)).status, 200);
+  assert.deepEqual(
+    (await publicPage(free.handle)).studio.palette,
+    studioTokens('journal', 'photo', a.photoAccent),
+  );
+  await setPlan(free.profileId, 'free');
+  const shown = (await publicPage(free.handle)).studio;
+  assert.equal(shown.document.accent, null);
+  assert.deepEqual(shown.palette, studioTokens('journal', null));
+  // Nothing is deleted: Pro again shows the photo accent again.
+  assert.ok((await storedAccent(free.profileId)).photo_accent);
+  await setPlan(free.profileId, 'pro');
+  assert.deepEqual(
+    (await publicPage(free.handle)).studio.palette,
+    studioTokens('journal', 'photo', a.photoAccent),
+  );
+
+  // A Pro style lapses to Classic, with Classic's own purple.
+  const pro = await page();
+  await uploadAvatar(pro.cookie, BLUE());
+  const b = (
+    await json(
+      await save(pro.cookie, 0, v2({ style: 'stage', accent: 'photo' })),
+    )
+  ).body.data;
+  assert.equal((await publish(pro.cookie, b.rev)).status, 200);
+  await setPlan(pro.profileId, 'free');
+  const classic = (await publicPage(pro.handle)).studio;
+  assert.equal(classic.document.style, 'classic');
+  assert.equal(classic.document.accent, null);
+  assert.deepEqual(classic.palette, studioTokens('classic', null));
 });

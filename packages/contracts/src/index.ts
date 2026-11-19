@@ -44,3 +44,4 @@ export * from './studio-check-v3.js';
 export * from './studio-api.js';
 export * from './studio-gate.js';
 export * from './studio-styles.js';
+export * from './studio-photo-accent.js';
