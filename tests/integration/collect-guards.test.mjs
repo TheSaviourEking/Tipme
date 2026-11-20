@@ -5,7 +5,29 @@ import { ApiExceptionFilter } from '../../apps/api/dist/http/api-exception.filte
 import * as ops from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { lagosDayStart } from '../../packages/domain/dist/index.js';
+import { createRequire } from 'node:module';
 import { setSwitch } from './helpers.mjs';
+
+// The database package's own pg, so every statement it sends can be seen (M4).
+const { Client } = createRequire(
+  new URL('../../packages/database/package.json', import.meta.url),
+)('pg');
+
+/** The SQL text of every statement sent while `work` runs. */
+async function statements(work) {
+  const seen = [];
+  const original = Client.prototype.query;
+  Client.prototype.query = function (config, ...rest) {
+    seen.push(typeof config === 'string' ? config : (config?.text ?? ''));
+    return original.call(this, config, ...rest);
+  };
+  try {
+    await work();
+  } finally {
+    Client.prototype.query = original;
+  }
+  return seen;
+}
 
 /*
  * You collect (plan Task 12, spec §2.1, §8, §9, §10): the guards around money TipMe holds for a
@@ -230,31 +252,52 @@ function answered(error) {
   return sent;
 }
 
-const quoteAt = (profile, now) =>
+/** A holding cap in force from `at` (the other settings at their defaults). */
+const capFrom = (capMinor, at) =>
+  q(
+    `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+       first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+       reserve_warning_minor, reserve_critical_minor, effective_from, reason)
+     VALUES (gen_random_uuid(), $1, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
+       50000000, 25000000, $2, 'Set in a test')`,
+    [String(capMinor), at],
+  );
+
+// ₦52,631 on Free: the recipient's ₦49,999.45 is just under the ₦50,000 cap.
+const NEAR_CAP_TIP = 5_263_100n;
+
+/** A waiting spell's name in a reminder's key: its first tip's Lagos calendar day. */
+const spellOf = (at) =>
+  new Date(at.getTime() + HOUR).toISOString().slice(0, 10);
+
+const quoteAt = (profile, now, tipMinor = GROSS) =>
   ops.createQuote(database.db, {
     handle: profile.handle,
-    tipMinor: GROSS,
+    tipMinor,
     currency: 'NGN',
     now,
   });
 
 test('the holding cap pauses the page at ₦50,000 held or after 30 days, whichever comes first', async () => {
-  // Amount first: five ₦9,500 shares are ₦47,500, still taking tips; the sixth makes ₦57,000.
-  for (let i = 0; i < 5; i += 1)
-    await collectTip(TOBI, new Date(NOW.getTime() - (10 - i) * MIN));
+  // Amount: ₦49,999.45 held. No tip may take it past ₦50,000 (P31): ₦100,000 is refused, and so is
+  // the smallest tip, as the room left is 55 kobo.
+  await collectTip(TOBI, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
   let status = await ops.collectStatus(database.db, TOBI.id, NOW);
   assert.equal(status.mode, 'collect');
   assert.equal(status.verified, false);
-  assert.equal(status.heldMinor, 5n * NET);
-  assert.equal(status.paused, false);
-  assert.equal(status.pausedReason, null);
-  await collectTip(TOBI, new Date(NOW.getTime() - 4 * MIN));
-  status = await ops.collectStatus(database.db, TOBI.id, NOW);
-  assert.equal(status.heldMinor, 6n * NET);
-  assert.deepEqual([status.paused, status.pausedReason], [true, 'amount']);
-  assert.equal(await refusal(() => quoteAt(TOBI, NOW)), 'PAGE_PAUSED');
-  // Nothing was written for the refused quote.
-  assert.equal((await q(`SELECT count(*)::int AS n FROM tip_quotes`))[0].n, 6);
+  const held = status.heldMinor;
+  assert.ok(held < 5_000_000n && held > 4_999_000n, String(held));
+  assert.deepEqual([status.paused, status.pausedReason], [false, null]);
+  assert.equal(
+    await refusal(() => quoteAt(TOBI, NOW, 10_000_000n)),
+    'TIP_TOO_LARGE_FOR_PAGE',
+  );
+  assert.equal(
+    await refusal(() => quoteAt(TOBI, NOW, 200_000n)),
+    'TIP_TOO_LARGE_FOR_PAGE',
+  );
+  // Nothing was written for the refused quotes.
+  assert.equal((await q(`SELECT count(*)::int AS n FROM tip_quotes`))[0].n, 1);
 
   // Days: one small tip 30 days ago pauses the page on day 30, to the minute, not before.
   const first = new Date(NOW.getTime() - 30 * DAY + HOUR);
@@ -263,7 +306,6 @@ test('the holding cap pauses the page at ₦50,000 held or after 30 days, whiche
   assert.equal(status.firstWaitingAt.getTime(), first.getTime());
   assert.equal(status.pauseOn.getTime(), first.getTime() + 30 * DAY);
   assert.equal(status.paused, false);
-  assert.equal((await quoteAt(ADA, NOW)).collectionMode, 'collect');
   const day30 = new Date(first.getTime() + 30 * DAY);
   status = await ops.collectStatus(database.db, ADA.id, day30);
   assert.deepEqual([status.paused, status.pausedReason], [true, 'days']);
@@ -273,21 +315,78 @@ test('the holding cap pauses the page at ₦50,000 held or after 30 days, whiche
     'collect',
   );
 
+  // At the cap the page pauses: here a cap lowered under what is held.
+  await capFrom(1_000_000n, new Date(NOW.getTime() - 2 * MIN));
+  status = await ops.collectStatus(database.db, TOBI.id, NOW);
+  assert.deepEqual([status.paused, status.pausedReason], [true, 'amount']);
+  assert.equal(await refusal(() => quoteAt(TOBI, NOW)), 'PAGE_PAUSED');
+
   // The cap is an admin setting, read when used: raised, Tobi takes tips again.
-  await q(
-    `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
-       first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
-       reserve_warning_minor, reserve_critical_minor, effective_from, reason)
-     VALUES (gen_random_uuid(), 10000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
-       50000000, 25000000, $1, 'Raised in a test')`,
-    [new Date(NOW.getTime() - MIN)],
-  );
+  await capFrom(10_000_000n, new Date(NOW.getTime() - MIN));
   assert.equal((await quoteAt(TOBI, NOW)).collectionMode, 'collect');
 });
 
+test('quotes still open count against the cap, so concurrent quotes never overshoot it', async () => {
+  await collect(TOBI);
+  // Three ₦20,000 quotes at once (₦19,000 each to Tobi): two fit under ₦50,000, the third doesn't.
+  const results = await Promise.allSettled(
+    [0, 1, 2].map(() => quoteAt(TOBI, NOW, 2_000_000n)),
+  );
+  assert.deepEqual(results.map((r) => r.status).sort(), [
+    'fulfilled',
+    'fulfilled',
+    'rejected',
+  ]);
+  assert.equal(
+    results.find((r) => r.status === 'rejected').reason.code,
+    'TIP_TOO_LARGE_FOR_PAGE',
+  );
+  // A ₦2,000 tip still fits in the ₦12,000 left.
+  assert.equal((await quoteAt(TOBI, NOW, 200_000n)).collectionMode, 'collect');
+  // Once those quotes expire unpaid, their room is free again.
+  const later = new Date(NOW.getTime() + 16 * MIN);
+  assert.equal(
+    (await quoteAt(TOBI, later, 2_000_000n)).collectionMode,
+    'collect',
+  );
+  // A direct page is never counted.
+  for (let i = 0; i < 4; i += 1)
+    assert.equal(
+      (await quoteAt(ADA, NOW, 2_000_000n)).collectionMode,
+      'direct',
+    );
+});
+
+test('the intent re-checks the cap, refusing a quote that no longer fits', async () => {
+  await collect(TOBI);
+  const quote = await quoteAt(TOBI, NOW, 2_000_000n);
+  // The cap was lowered after the quote: ₦19,000 no longer fits in ₦10,000.
+  await capFrom(1_000_000n, NOW);
+  const refused = await ops
+    .createPaymentIntent(database.db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+      now: new Date(NOW.getTime() + MIN),
+    })
+    .catch((error) => error);
+  assert.equal(refused.code, 'TIP_TOO_LARGE_FOR_PAGE');
+  assert.equal(
+    (await q(`SELECT count(*)::int AS n FROM payment_intents`))[0].n,
+    0,
+  );
+  // A quote that fits is paid as before.
+  await capFrom(5_000_000n, new Date(NOW.getTime() + 30_000));
+  const intent = await ops.createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+    now: new Date(NOW.getTime() + MIN),
+  });
+  assert.ok(intent.tipId);
+});
+
 test('adding verified bank details unpauses the page at once', async () => {
-  for (let i = 0; i < 6; i += 1)
-    await collectTip(TOBI, new Date(NOW.getTime() - (10 - i) * MIN));
+  await collectTip(TOBI, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
+  await capFrom(1_000_000n, new Date(NOW.getTime() - 5 * MIN));
   assert.equal(await refusal(() => quoteAt(TOBI, NOW)), 'PAGE_PAUSED');
   // Task 13 writes this when the name and bank account check out.
   await verify(TOBI);
@@ -295,7 +394,11 @@ test('adding verified bank details unpauses the page at once', async () => {
   assert.equal(status.verified, true);
   assert.deepEqual([status.paused, status.pausedReason], [false, null]);
   assert.equal((await quoteAt(TOBI, NOW)).collectionMode, 'collect');
-  // Old held money never pauses a verified page either.
+  // A verified page has no holding cap at all: any amount, however old the held money.
+  assert.equal(
+    (await quoteAt(TOBI, NOW, 10_000_000n)).collectionMode,
+    'collect',
+  );
   assert.equal(
     (await quoteAt(TOBI, new Date(NOW.getTime() + 40 * DAY))).collectionMode,
     'collect',
@@ -303,14 +406,27 @@ test('adding verified bank details unpauses the page at once', async () => {
 });
 
 test('a supporter of a paused page is told only that the person can’t take tips right now', async () => {
-  for (let i = 0; i < 6; i += 1)
-    await collectTip(TOBI, new Date(NOW.getTime() - (10 - i) * MIN));
-  let thrown;
-  try {
-    await quoteAt(TOBI, NOW);
-  } catch (error) {
-    thrown = error;
-  }
+  await collectTip(TOBI, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
+  // Too large for the room left: a generic line, no amount, no held total, no reason.
+  const tooLarge = await quoteAt(TOBI, NOW, 10_000_000n).catch((e) => e);
+  assert.equal(tooLarge.code, 'TIP_TOO_LARGE_FOR_PAGE');
+  const large = answered(tooLarge);
+  assert.equal(large.status, 409);
+  assert.deepEqual(Object.keys(large.body.error).sort(), [
+    'code',
+    'message',
+    'reference',
+  ]);
+  assert.equal(
+    large.body.error.message,
+    'This amount is more than this page can take right now. Try a smaller amount.',
+  );
+  assert.doesNotMatch(
+    `${large.body.error.code} ${large.body.error.message}`,
+    /bank|held|₦|NGN|days|verif|[0-9]/i,
+  );
+  await capFrom(1_000_000n, new Date(NOW.getTime() - MIN));
+  const thrown = await quoteAt(TOBI, NOW).catch((e) => e);
   assert.equal(thrown?.code, 'PAGE_PAUSED');
   // What the API answers for it, through the real filter.
   const sent = answered(thrown);
@@ -392,12 +508,14 @@ test('reminders go once each at 7, 21 and 28 days, and stop once verified', asyn
   ]);
   assert.deepEqual(
     (await mails()).map((m) => m.dedupe_key),
-    [7, 21, 28].map((day) => `collect_reminder.${TOBI.id}.${day}`),
+    [7, 21, 28].map(
+      (day) => `collect_reminder.${TOBI.id}.${spellOf(first)}.${day}`,
+    ),
   );
   // The email is rendered from the same words.
   const [mail] = await q(
     `SELECT data_sealed FROM mail_messages WHERE dedupe_key = $1`,
-    [`collect_reminder.${TOBI.id}.28`],
+    [`collect_reminder.${TOBI.id}.${spellOf(first)}.28`],
   );
   const data = JSON.parse(ops.openSecret(sealing.key, mail.data_sealed));
   assert.equal(data.kind, 'last');
@@ -412,7 +530,21 @@ test('reminders go once each at 7, 21 and 28 days, and stop once verified', asyn
   await collectTip(ADA, adaFirst);
   const adaAt = (days) => new Date(adaFirst.getTime() + days * DAY);
   assert.equal(await remind(adaAt(7)), 1);
-  await verify(ADA, adaAt(10));
+  // M6: a new waiting spell (the first spell's share gone, a later tip) is reminded again.
+  await q(
+    `UPDATE collect_transfers SET status = 'cancelled' WHERE profile_id = $1`,
+    [ADA.id],
+  );
+  const adaSecond = adaAt(12);
+  await collectTip(ADA, adaSecond);
+  assert.equal(await remind(new Date(adaSecond.getTime() + 7 * DAY)), 1);
+  assert.ok(
+    (await mails()).some(
+      (m) =>
+        m.dedupe_key === `collect_reminder.${ADA.id}.${spellOf(adaSecond)}.7`,
+    ),
+  );
+  await verify(ADA, adaAt(20));
   assert.equal(await remind(adaAt(21)), 0);
   assert.equal(
     (
@@ -421,7 +553,35 @@ test('reminders go once each at 7, 21 and 28 days, and stop once verified', asyn
         [ADA.userId],
       )
     )[0].n,
+    2,
+  );
+});
+
+test('the last reminder never says the page will pause when it already has, by amount', async () => {
+  const first = new Date(NOW.getTime() - 29 * DAY);
+  await q(`UPDATE profiles SET created_at = $1`, [
+    new Date(first.getTime() - DAY),
+  ]);
+  await collectTip(TOBI, first);
+  await collectTip(TOBI, new Date(first.getTime() + DAY));
+  // ₦19,000 held, then the cap is lowered under it: paused by amount before day 28.
+  await capFrom(1_000_000n, new Date(first.getTime() + 2 * DAY));
+  const day28 = new Date(first.getTime() + 28 * DAY);
+  assert.equal(
+    (await ops.collectStatus(database.db, TOBI.id, day28)).pausedReason,
+    'amount',
+  );
+  assert.equal(
+    await ops.sendCollectReminders(database.db, { now: day28, sealing }),
     1,
+  );
+  const [notice] = await q(
+    `SELECT body FROM notifications WHERE user_id = $1`,
+    [TOBI.userId],
+  );
+  assert.equal(
+    notice.body,
+    'You have ₦19,000 in tips waiting. Add your bank details to withdraw it.',
   );
 });
 
@@ -475,7 +635,7 @@ test('the first withdrawal is capped at ₦50,000', async () => {
 test('the daily limit for new accounts counts the Lagos day', async () => {
   for (let i = 0; i < 4; i += 1) await directTip(TOBI, 10_000_000n);
   await collect(TOBI);
-  await verify(TOBI);
+  await verify(TOBI, new Date(NOW.getTime() - 5 * DAY));
   await payoutRoute(TOBI);
   const midnight = lagosDayStart(NOW);
   // The first withdrawal, two days ago, so the first-time cap is behind them.
@@ -499,15 +659,12 @@ test('the daily limit for new accounts counts the Lagos day', async () => {
   assert.equal((await withdraw(TOBI, 10_000_000n, next)).status, 'REQUESTED');
 });
 
-test('the daily limit ends after 30 days', async () => {
+test('the daily limit ends 30 days after verification', async () => {
   for (let i = 0; i < 4; i += 1) await directTip(TOBI, 10_000_000n);
   await collect(TOBI);
-  await verify(TOBI);
+  // P32: the window runs from verification, not sign-up.
+  await verify(TOBI, new Date(NOW.getTime() - 30 * DAY - MIN));
   await payoutRoute(TOBI);
-  await q(`UPDATE profiles SET created_at = $2 WHERE id = $1`, [
-    TOBI.id,
-    new Date(NOW.getTime() - 30 * DAY - MIN),
-  ]);
   await withdraw(TOBI, 5_000_000n, new Date(NOW.getTime() - 2 * DAY));
   assert.equal(
     (await ops.collectStatus(database.db, TOBI.id, NOW)).dailyLimitMinor,
@@ -517,20 +674,49 @@ test('the daily limit ends after 30 days', async () => {
   assert.equal((await withdraw(TOBI, 10_000_000n)).status, 'REQUESTED');
 });
 
+test('an account that signed up 40 days ago and verifies today still has the first cap and the daily limit', async () => {
+  for (let i = 0; i < 4; i += 1) await directTip(TOBI, 10_000_000n);
+  await q(`UPDATE profiles SET created_at = $2 WHERE id = $1`, [
+    TOBI.id,
+    new Date(NOW.getTime() - 40 * DAY),
+  ]);
+  // A withdrawal from before You collect is not their first since verification.
+  await payoutRoute(TOBI);
+  await withdraw(TOBI, 1_000_000n, new Date(NOW.getTime() - 10 * DAY));
+  await collect(TOBI);
+  await verify(TOBI, new Date(NOW.getTime() - HOUR));
+  const status = await ops.collectStatus(database.db, TOBI.id, NOW);
+  assert.equal(status.firstWithdrawalCapMinor, 5_000_000n);
+  assert.equal(status.dailyLimitMinor, 20_000_000n);
+  assert.equal(
+    await refusal(() => withdraw(TOBI, 6_000_000n)),
+    'WITHDRAWAL_FIRST_CAP',
+  );
+  assert.equal((await withdraw(TOBI, 5_000_000n)).status, 'REQUESTED');
+  assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
+  assert.equal(
+    await refusal(() => withdraw(TOBI, 200_000n)),
+    'WITHDRAWAL_DAILY_LIMIT',
+  );
+});
+
 test('money on its way is shown and never withdrawable', async () => {
   await directTip(TOBI, 10_000_000n); // ₦95,000 already in their own account
   await collectTip(TOBI, new Date(NOW.getTime() - HOUR));
-  await verify(TOBI);
+  await verify(TOBI, new Date(NOW.getTime() - 3 * DAY));
   await payoutRoute(TOBI);
   await withdraw(TOBI, 1_000_000n, new Date(NOW.getTime() - 2 * DAY));
   const balance = await ops.balanceOf(database.db, TOBI.id);
-  assert.equal(balance.onItsWayMinor, NET);
+  assert.deepEqual([balance.keptMinor, balance.onItsWayMinor], [0n, NET]);
   assert.equal(balance.availableMinor, 9_500_000n - 1_000_000n);
   const status = await ops.collectStatus(database.db, TOBI.id, NOW);
   assert.equal(status.heldMinor, NET);
-  assert.equal(status.onItsWayMinor, NET);
+  assert.deepEqual([status.keptMinor, status.onItsWayMinor], [0n, NET]);
   const summary = await ops.dashboardSummary(database.db, TOBI.id, NOW);
-  assert.equal(summary.onItsWayMinor, String(NET));
+  assert.deepEqual(
+    [summary.keptMinor, summary.onItsWayMinor],
+    ['0', String(NET)],
+  );
   assert.equal(summary.availableMinor, String(9_500_000n - 1_000_000n));
   const quote = await ops.withdrawalQuote(database.db, {
     profileId: TOBI.id,
@@ -545,8 +731,20 @@ test('money on its way is shown and never withdrawable', async () => {
   // An unverified recipient's waiting money is not on its way yet: it is kept for them.
   await collectTip(ADA, new Date(NOW.getTime() - HOUR));
   const ada = await ops.collectStatus(database.db, ADA.id, NOW);
-  assert.deepEqual([ada.heldMinor, ada.onItsWayMinor], [NET, 0n]);
-  assert.equal((await ops.balanceOf(database.db, ADA.id)).availableMinor, 0n);
+  assert.deepEqual(
+    [ada.heldMinor, ada.keptMinor, ada.onItsWayMinor],
+    [NET, NET, 0n],
+  );
+  const adaBalance = await ops.balanceOf(database.db, ADA.id);
+  assert.deepEqual(
+    [adaBalance.availableMinor, adaBalance.keptMinor, adaBalance.onItsWayMinor],
+    [0n, NET, 0n],
+  );
+  const adaSummary = await ops.dashboardSummary(database.db, ADA.id, NOW);
+  assert.deepEqual(
+    [adaSummary.keptMinor, adaSummary.onItsWayMinor],
+    [String(NET), '0'],
+  );
 });
 
 test('a direct recipient’s withdrawals and page are unchanged', async () => {
@@ -577,13 +775,27 @@ test('a direct recipient’s withdrawals and page are unchanged', async () => {
     now: NOW,
   });
   assert.equal(quote.withdrawableMinor, 38_000_000n);
-  // A first withdrawal above ₦50,000 and ₦300,000 in a day: as today.
-  assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
+  // A first withdrawal above ₦50,000 and ₦300,000 in a day: as today, and (M4) without a single
+  // read of You collect's settings or transfers on the way.
+  const seen = await statements(async () => {
+    await ops.withdrawalQuote(database.db, {
+      profileId: TOBI.id,
+      provider: partner(),
+      now: NOW,
+    });
+    assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
+  });
+  assert.ok(seen.length > 0);
+  assert.deepEqual(
+    seen.filter((text) => /collect_settings|collect_transfers/.test(text)),
+    [],
+  );
   assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
   const balance = await ops.balanceOf(database.db, TOBI.id);
   assert.deepEqual(balance, {
     availableMinor: 8_000_000n,
     confirmingMinor: 0n,
+    keptMinor: 0n,
     onItsWayMinor: 0n,
   });
   // The page takes tips however long ago and however much: nothing is held.
