@@ -43,9 +43,12 @@ import { recordProviderEvent } from './provider-events.js';
 /**
  * What reconciliation needs from a provider: an authoritative, server-to-server status check.
  * `expectation` is TipMe's whole quoted share (processing included); a provider that reports
- * the platform fee it applied (Bachs) confirms success only when the two match.
+ * the platform fee it applied (Bachs) confirms success only when the two match. A collect tip
+ * (TipMe's own checkout) has none: there is no platform fee to check (Task 4).
  */
 export interface TransactionVerifier {
+  /** The partner environment this verifier reads (Bachs); a collect tip's transfer records it. */
+  environment?: 'sandbox' | 'live';
   verifyTransaction(
     providerReference: string,
     expectation?: { platformFeeMinor: bigint },
@@ -58,6 +61,8 @@ export interface TransactionVerifier {
     collected?: true;
     /** The provider settled the money in another currency than it was paid in. */
     settlementCurrency?: string;
+    /** TipMe's own account: the partner's charge, which a collect tip's refund or dispute names. */
+    chargeReference?: string;
   }>;
 }
 
@@ -88,7 +93,8 @@ export async function findAttemptsToReconcile(
     provider: string;
     providerReference: string;
     createdAt: Date;
-    expectation: { platformFeeMinor: bigint };
+    /** Undefined for a collect tip: its checkout is TipMe's own, with no platform fee. */
+    expectation: { platformFeeMinor: bigint } | undefined;
   }[]
 > {
   const rows = await db
@@ -99,6 +105,7 @@ export async function findAttemptsToReconcile(
       createdAt: paymentAttempts.createdAt,
       platformFeeMinor: tipQuotes.platformFeeMinor,
       providerFeeMinor: tipQuotes.providerFeeMinor,
+      collectionMode: tipQuotes.collectionMode,
     })
     .from(paymentAttempts)
     .innerJoin(paymentIntents, eq(paymentIntents.id, paymentAttempts.intentId))
@@ -128,17 +135,21 @@ export async function findAttemptsToReconcile(
       asc(paymentAttempts.createdAt),
     )
     .limit(input.limit);
-  return rows.flatMap(({ platformFeeMinor, providerFeeMinor, ...row }) =>
-    row.provider && row.providerReference
-      ? [
-          {
-            ...row,
-            provider: row.provider,
-            providerReference: row.providerReference,
-            expectation: quotedShare({ platformFeeMinor, providerFeeMinor }),
-          },
-        ]
-      : [],
+  return rows.flatMap(
+    ({ platformFeeMinor, providerFeeMinor, collectionMode, ...row }) =>
+      row.provider && row.providerReference
+        ? [
+            {
+              ...row,
+              provider: row.provider,
+              providerReference: row.providerReference,
+              expectation:
+                collectionMode === 'collect'
+                  ? undefined
+                  : quotedShare({ platformFeeMinor, providerFeeMinor }),
+            },
+          ]
+        : [],
   );
 }
 
@@ -174,10 +185,11 @@ export async function reconcileAttempts(input: {
   const errorKinds: Record<string, number> = {};
   for (const attempt of attempts) {
     try {
-      const answer = await providerFor(
-        input.provider,
-        attempt.provider,
-      ).verifyTransaction(attempt.providerReference, attempt.expectation);
+      const verifier = providerFor(input.provider, attempt.provider);
+      const answer = await verifier.verifyTransaction(
+        attempt.providerReference,
+        attempt.expectation,
+      );
       if (answer.status === 'succeeded' || answer.status === 'failed') {
         const result = await recordProviderEvent(input.db, {
           provider: attempt.provider,
@@ -191,6 +203,12 @@ export async function reconcileAttempts(input: {
           amountMinor: answer.amountMinor,
           currency: answer.currency,
           providerFeeMinor: answer.feeMinor,
+          ...(verifier.environment
+            ? { environment: verifier.environment }
+            : {}),
+          ...(answer.chargeReference
+            ? { chargeReference: answer.chargeReference }
+            : {}),
           signatureVerified: true,
           payload: { source: 'reconciliation' },
           now: input.now,

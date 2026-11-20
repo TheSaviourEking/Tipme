@@ -61,9 +61,21 @@ type Summary = {
   recipientDisplayName: string;
 };
 
+/**
+ * A collect checkout's reference has a colon (`platform:mock_collect_…`), which the path carries
+ * encoded; decoded once here whether or not the router already did (references never hold `%`).
+ */
+function pathReference(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /** A stand-in for a provider's hosted checkout. Deliberately not TipMe-branded. */
 export function MockCheckoutView() {
-  const { reference } = useParams<{ reference: string }>();
+  const reference = pathReference(useParams<{ reference: string }>().reference);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState('');
   const [paying, setPaying] = useState(false);

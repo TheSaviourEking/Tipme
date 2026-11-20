@@ -32,6 +32,8 @@ import { LOGGER } from '../tokens.js';
 import { PAYMENT_PROVIDER_TOKEN } from './payment-provider.provider.js';
 
 const REFERENCE = /^mock_pay_[0-9a-f-]{36}$/;
+// You collect (plan Task 7): a pretend tip checkout on TipMe's own account (Task 4's mock).
+const COLLECT_REFERENCE = /^platform:mock_collect_[0-9a-f-]{36}$/;
 // Paid Pro (ADR-0015): a pretend checkout on TipMe's own account.
 const PRO_REFERENCE = /^mock_pro_[0-9a-f-]{36}$/;
 const outcomeSchema = z
@@ -201,9 +203,10 @@ export class MockCheckoutController {
   }
 
   private async find(reference: string) {
-    const checkout = REFERENCE.test(reference)
-      ? await findCheckoutByReference(this.database.db, 'mock', reference)
-      : null;
+    const checkout =
+      REFERENCE.test(reference) || COLLECT_REFERENCE.test(reference)
+        ? await findCheckoutByReference(this.database.db, 'mock', reference)
+        : null;
     if (!checkout) throw new NotFoundException();
     // Like a real provider's expired hosted session: an expired tip can never be paid afterwards.
     if (checkout.attemptStatus === 'EXPIRED')
