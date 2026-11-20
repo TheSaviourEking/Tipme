@@ -1,0 +1,125 @@
+import type {
+  CollectTransferProvider,
+  CollectTransferRun,
+  Database,
+} from '@tipme/database';
+import { releaseWaitingTransfers, runCollectTransfers } from '@tipme/database';
+
+/*
+ * You collect (plan Task 8, spec §5): every 2 minutes, waiting shares whose recipient can receive
+ * them are released, then each provider's transfer machine runs. Always scheduled (the switch off
+ * still moves what is held, §12.5); with no rows it asks nothing of anyone.
+ */
+
+/** What a provider adapter may offer; only one with all three calls makes collect transfers. */
+type MaybeCollectProvider = {
+  name: string;
+  sendCollectTransfer?: CollectTransferProvider['sendCollectTransfer'];
+  listAccountTransfers?: CollectTransferProvider['listAccountTransfers'];
+  payoutCapability?: (
+    accountRef: string,
+  ) => ReturnType<CollectTransferProvider['payoutCapability']>;
+};
+
+/** The providers that can make collect transfers, each call bound to its own adapter. */
+export function collectTransferProviders(
+  providers: readonly (MaybeCollectProvider | null | undefined)[],
+): CollectTransferProvider[] {
+  return providers.flatMap((provider) => {
+    if (
+      !provider?.sendCollectTransfer ||
+      !provider.listAccountTransfers ||
+      !provider.payoutCapability
+    )
+      return [];
+    const { sendCollectTransfer, listAccountTransfers, payoutCapability } =
+      provider;
+    return [
+      {
+        name: provider.name,
+        sendCollectTransfer: (input) =>
+          sendCollectTransfer.call(provider, input),
+        listAccountTransfers: (accountRef) =>
+          listAccountTransfers.call(provider, accountRef),
+        payoutCapability: (accountRef) =>
+          payoutCapability.call(provider, accountRef),
+      },
+    ];
+  });
+}
+
+export type CollectTransfersLog = (entry: {
+  event: string;
+  provider?: string;
+  error?: string;
+}) => void;
+
+export interface CollectTransfersOutcome extends Omit<
+  CollectTransferRun,
+  'stopped'
+> {
+  released: number;
+  failed: number;
+  stopped?: CollectTransferRun['stopped'];
+}
+
+/**
+ * One sweep. A failure is logged by its error's name only (never a message: it can carry an
+ * account) and counted, never thrown: the run is safe to repeat, and the next sweep is 2 minutes
+ * away, so the queue retrying it would only add partner calls. Staff's pause and TipMe's debt are
+ * about every collect transfer, so they end the sweep; a FORBIDDEN that is TipMe's own key stops
+ * only that provider's run.
+ */
+export async function handleCollectTransfers(deps: {
+  db: Database;
+  providers: readonly CollectTransferProvider[];
+  log: CollectTransfersLog;
+  now?: Date;
+  /** Replaced in tests. */
+  release?: typeof releaseWaitingTransfers;
+  run?: typeof runCollectTransfers;
+}): Promise<CollectTransfersOutcome> {
+  const now = deps.now ?? new Date();
+  const release = deps.release ?? releaseWaitingTransfers;
+  const run = deps.run ?? runCollectTransfers;
+  const outcome: CollectTransfersOutcome = {
+    released: 0,
+    sent: 0,
+    paid: 0,
+    retried: 0,
+    review: 0,
+    failed: 0,
+  };
+  const errorName = (error: unknown) =>
+    error instanceof Error ? error.name : 'unknown';
+  try {
+    outcome.released = await release(deps.db, { now });
+  } catch (error) {
+    outcome.failed += 1;
+    deps.log({
+      event: 'collect_transfers.release_failed',
+      error: errorName(error),
+    });
+  }
+  for (const provider of deps.providers) {
+    let result: CollectTransferRun;
+    try {
+      result = await run(deps.db, { provider, now });
+    } catch (error) {
+      outcome.failed += 1;
+      deps.log({
+        event: 'collect_transfers.run_failed',
+        provider: provider.name,
+        error: errorName(error),
+      });
+      continue;
+    }
+    outcome.sent += result.sent;
+    outcome.paid += result.paid;
+    outcome.retried += result.retried;
+    outcome.review += result.review;
+    if (result.stopped) outcome.stopped = result.stopped;
+    if (result.stopped === 'paused' || result.stopped === 'in_debt') break;
+  }
+  return outcome;
+}

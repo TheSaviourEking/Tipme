@@ -80,6 +80,10 @@ import {
   warnIfNoAlertRoute,
 } from './handlers/payment-reserve.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
+import {
+  collectTransferProviders,
+  handleCollectTransfers,
+} from './handlers/collect-transfers.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
@@ -135,6 +139,13 @@ const PAYMENT_RESERVE_INTERVAL_MS = 15 * 60_000;
 // A reserve check takes seconds (the provider client gives up within 10 s, so does the alert). The
 // lock outlasts any run and frees itself well before the next one if the process dies mid-run.
 const PAYMENT_RESERVE_LOCK_TTL_MS = 5 * 60_000;
+// You collect (plan Task 8): held shares move to recipients' accounts. Every 2 minutes, always
+// scheduled (with no rows it asks the partner nothing). A run still going when the next fires makes
+// it skip; the lock frees itself before the following one if the process dies mid-run. Overlap
+// would be safe anyway: every move is conditional, so only the partner calls are saved.
+const COLLECT_TRANSFERS_JOB = 'collect.transfers';
+const COLLECT_TRANSFERS_INTERVAL_MS = 2 * 60_000;
+const COLLECT_TRANSFERS_LOCK_TTL_MS = 110_000;
 /** A release check takes minutes: anything still tagged after this was left behind. */
 const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
@@ -491,6 +502,16 @@ export async function startJobWorker(
         logger,
       })
     : null;
+  const collectTransfersSchedule = ensureSchedule({
+    queue,
+    id: COLLECT_TRANSFERS_JOB,
+    every: COLLECT_TRANSFERS_INTERVAL_MS,
+    logger,
+  });
+  const collectProviders = collectTransferProviders([
+    mockProvider,
+    bachsProvider,
+  ]);
   queue.on('error', () => undefined);
 
   const meter = getMeter(SERVICE_NAME);
@@ -842,6 +863,36 @@ export async function startJobWorker(
             processed.add(1, { outcome: `reserve_${result.value}` });
             return result.value;
           }
+          if (job.name === COLLECT_TRANSFERS_JOB) {
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${COLLECT_TRANSFERS_JOB}`,
+                ttlMs: COLLECT_TRANSFERS_LOCK_TTL_MS,
+              },
+              () =>
+                handleCollectTransfers({
+                  db: database.db,
+                  providers: collectProviders,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                }),
+            );
+            if (!result.ran) {
+              logger.info({
+                event: 'collect_transfers.skipped_running',
+                ...fields,
+              });
+              processed.add(1, { outcome: 'collect_transfers_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'collect_transfers.ran',
+              ...result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'collect_transfers' });
+            return result.value.stopped ?? 'ran';
+          }
           if (job.name === WITHDRAWALS_SWITCH_EVENT) {
             const outcome = await handleWithdrawalsSwitchChanged(job.data, {
               url: config.ALERT_WEBHOOK_URL,
@@ -1038,6 +1089,7 @@ export async function startJobWorker(
       await analyticsSchedule.stop();
       await payoutSetupSchedule?.stop();
       await reserveSchedule?.stop();
+      await collectTransfersSchedule.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();
