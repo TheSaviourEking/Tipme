@@ -658,7 +658,7 @@ async function send(
   } catch (error) {
     return claimed.kind === 'back'
       ? refusedBack(db, claimed, now, error)
-      : refused(db, claimed, provider, accountRef, now, error);
+      : refused(db, claimed, provider, accountRef, now, error, freshWindow);
   }
   if (answer.status === 'paid')
     return finishPaid(db, claimed, 'sent', answer.transferRef, now);
@@ -700,6 +700,12 @@ async function refused(
   accountRef: string,
   now: Date,
   error: unknown,
+  /**
+   * The refused send opened the key's window (never sent before, or a read-back on its account just
+   * found nothing): only then does a definite refusal prove nothing ever moved under the key. A
+   * refusal on a same-key retry after an uncertain answer proves only that this request didn't.
+   */
+  freshWindow: boolean,
 ): Promise<Outcome> {
   const reason = refusalOf(error);
   if (reason === null) {
@@ -791,7 +797,7 @@ async function refused(
     reason === 'not_found'
       ? 'The partner answered NOT_FOUND: it does not know the account. Nothing moved.'
       : 'The partner refused it for another reason. Nothing moved.',
-    true,
+    freshWindow,
   );
 }
 

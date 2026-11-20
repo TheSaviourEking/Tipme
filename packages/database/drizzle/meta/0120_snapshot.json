@@ -1,5 +1,5 @@
 {
-  "id": "c18967b4-2598-45d7-8ffc-0f306801b6a1",
+  "id": "c7ce7b39-bb8b-4286-8a6f-9c696370efad",
   "prevId": "fa3f68ce-aa62-4f94-aa1d-64f21073b798",
   "version": "7",
   "dialect": "postgresql",
@@ -11708,6 +11708,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "refused_at": {
+          "name": "refused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sent_at": {
           "name": "sent_at",
           "type": "timestamp with time zone",
@@ -11774,6 +11780,22 @@
           ],
           "isUnique": true,
           "where": "kind = 'fee_return'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_transfers_one_collect_recover": {
+          "name": "share_transfers_one_collect_recover",
+          "columns": [
+            {
+              "expression": "tip_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'collect_recover'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -11909,7 +11931,7 @@
         },
         "share_transfers_kind": {
           "name": "share_transfers_kind",
-          "value": "kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep')"
+          "value": "kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')"
         },
         "share_transfers_status": {
           "name": "share_transfers_status",
@@ -11925,7 +11947,7 @@
         },
         "share_transfers_one_leg": {
           "name": "share_transfers_one_leg",
-          "value": "kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')"
+          "value": "kind IN ('sweep', 'recover', 'collect_recover') OR status NOT IN ('waiting', 'out_sent', 'gap')"
         },
         "share_transfers_links": {
           "name": "share_transfers_links",
@@ -11934,6 +11956,10 @@
         "share_transfers_business": {
           "name": "share_transfers_business",
           "value": "kind = 'fee_return' OR business_id IS NOT NULL"
+        },
+        "share_transfers_refused": {
+          "name": "share_transfers_refused",
+          "value": "refused_at IS NULL OR status IN ('review', 'cancelled')"
         }
       },
       "isRLSEnabled": false

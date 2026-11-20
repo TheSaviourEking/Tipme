@@ -3971,6 +3971,9 @@ export const shareTransfers = pgTable(
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Task 9: a collect sweep held in review after its leg in was definitely refused again and
+    // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -3983,7 +3986,7 @@ export const shareTransfers = pgTable(
     // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')`,
     ),
     check(
       'share_transfers_status',
@@ -3997,7 +4000,7 @@ export const shareTransfers = pgTable(
     // Without an `out` leg there is nothing to wait for or claim on the way out.
     check(
       'share_transfers_one_leg',
-      sql`kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
+      sql`kind IN ('sweep', 'recover', 'collect_recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
     ),
     check(
       'share_transfers_links',
@@ -4020,6 +4023,14 @@ export const shareTransfers = pgTable(
     uniqueIndex('share_transfers_fee_once')
       .on(table.partnerReversalId)
       .where(sql`kind = 'fee_return'`),
+    check(
+      'share_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
+    ),
+    // Task 9 (P29): a lost dispute pulls a swept business share back once per tip.
+    uniqueIndex('share_transfers_one_collect_recover')
+      .on(table.tipId)
+      .where(sql`kind = 'collect_recover'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),

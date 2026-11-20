@@ -1050,9 +1050,20 @@ const sweepOf = async (tipId) =>
   )[0];
 function businessPartner() {
   const sent = [];
+  const pulled = [];
+  const state = { refuseBack: false };
   return {
     sent,
+    pulled,
+    state,
     provider: {
+      // P29: a swept share pulled back from the business's own account (as option B's recover).
+      async collectToPlatform(input) {
+        pulled.push([input.accountRef, input.amountMinor]);
+        if (state.refuseBack)
+          throw new PayoutRejectedError('other', 'INSUFFICIENT_BALANCE');
+        return { transferRef: `tr_p${pulled.length}`, status: 'paid' };
+      },
       name: 'bachs-sandbox',
       capabilities: { connectedAccounts: false },
       async payoutBalance() {
@@ -1106,19 +1117,67 @@ test("a business share's sweep is held while its dispute is open, and a loss rec
   assert.deepEqual(sent, []);
 });
 
-test('a business share already swept when the dispute is lost is absorbed, and staff are told', async () => {
-  const { tip, share } = await sharedTip();
-  const { provider, sent } = businessPartner();
+test('a business share already swept is pulled back from its account when the dispute is lost (P29)', async () => {
+  const { tip, businessId, share } = await sharedTip();
+  const { provider, sent, pulled } = businessPartner();
   await sweep(provider);
   assert.deepEqual(sent, [share]);
   await apply(disputeEvent(tip, { occurredAt: at(4 * HOUR) }), at(4 * HOUR));
   await apply(lost(tip, { occurredAt: at(5 * HOUR) }), at(5 * HOUR));
+  const row = await disputeOf(tip.disputeRef);
+  // Waiting for the money to come back from the business's account.
+  assert.equal(row.settled_at, null);
+  assert.deepEqual(await linesOf(`dispute_loss.${row.id}`), []);
+  await sweep(provider);
+  assert.deepEqual(pulled, [[businessId, share]]);
+  await steps(at(6 * HOUR));
+  const settled = await disputeOf(tip.disputeRef);
+  assert.ok(settled.settled_at);
+  // The business gives back its share: TipMe absorbs only the rest.
+  assert.equal(await lossTotal(row.id), String(GROSS - NET));
+  assert.deepEqual(await issuesOf('collect_transfer_review'), []);
+  // Pulled once, booked once.
+  await sweep(provider);
+  await steps(at(7 * HOUR));
+  assert.equal(pulled.length, 1);
+});
+
+test('a swept business share that is no longer in its account is absorbed, and staff are told', async () => {
+  const { tip, share } = await sharedTip();
+  const { provider, pulled, state } = businessPartner();
+  await sweep(provider);
+  await apply(disputeEvent(tip, { occurredAt: at(4 * HOUR) }), at(4 * HOUR));
+  await apply(lost(tip, { occurredAt: at(5 * HOUR) }), at(5 * HOUR));
+  state.refuseBack = true;
+  await sweep(provider);
+  assert.equal(pulled.length, 1);
+  await steps(at(6 * HOUR));
   const row = await disputeOf(tip.disputeRef);
   assert.ok(row.settled_at);
   assert.equal(await lossTotal(row.id), String(GROSS - NET + share));
   assert.deepEqual(
     (await issuesOf('collect_transfer_review')).map((i) => i.dedupe_key),
     [`dispute_business.${row.id}`],
+  );
+});
+
+test('a business sweep in review for a mismatch is not taken by a lost dispute: it waits for staff', async () => {
+  const { tip } = await sharedTip();
+  // As readBack leaves it when the partner lists the transfer with another amount: it may have moved.
+  await q(
+    `UPDATE share_transfers SET status = 'review' WHERE tip_id = $1 AND kind = 'collect_sweep'`,
+    [tip.tipId],
+  );
+  await apply(disputeEvent(tip));
+  await apply(lost(tip), at(2 * HOUR));
+  await steps(at(3 * HOUR));
+  const row = await disputeOf(tip.disputeRef);
+  assert.equal(row.settled_at, null);
+  assert.equal((await sweepOf(tip.tipId)).status, 'review');
+  assert.deepEqual(await linesOf(`dispute_loss.${row.id}`), []);
+  assert.deepEqual(
+    (await issuesOf('collect_transfer_review')).map((i) => i.dedupe_key),
+    [`dispute_business_review.${row.id}`],
   );
 });
 
@@ -1254,4 +1313,134 @@ test('a loss reported first takes back no more than this tip gave, never later t
   );
   assert.equal(back.amount, String(NET));
   assert.equal(await available(TOBI), NET);
+});
+
+const refusedOf = async (rowId) =>
+  (
+    await q(`SELECT status, refused_at FROM collect_transfers WHERE id = $1`, [
+      rowId,
+    ])
+  )[0];
+
+test('a refusal on a same-key retry after a lost answer proves nothing: a lost dispute waits for the read-back (I1)', async () => {
+  await verified(TOBI);
+  const { provider, state } = partner();
+  const tip = await paidTip(TOBI);
+  await release(T0);
+  state.answers.push('lost-unmoved', { refuse: 'not_found' });
+  await run(provider, T0);
+  assert.equal((await shareOf(tip.rowId)).status, 'unknown');
+  // Inside the key's window: the same key again, and this time a definite refusal.
+  await run(provider, at(10 * MIN));
+  assert.equal(state.sends.length, 2);
+  const refused = await refusedOf(tip.rowId);
+  assert.equal(refused.status, 'review');
+  assert.equal(refused.refused_at, null);
+  await apply(disputeEvent(tip));
+  await apply(lost(tip), at(2 * HOUR));
+  const row = await disputeOf(tip.disputeRef);
+  assert.equal(row.share_step, null);
+  assert.equal(row.settled_at, null);
+  assert.equal((await shareOf(tip.rowId)).status, 'review');
+  assert.deepEqual(await linesOf(`dispute_loss.${row.id}`), []);
+});
+
+test('the database refuses to mark a paid share refused, or to cancel it with that mark', async () => {
+  await verified(TOBI);
+  const { provider } = partner();
+  const tip = await movedTip(TOBI, provider);
+  for (const set of [
+    `status = 'cancelled', refused_at = now()`,
+    `status = 'review', review_reason = 'provider', refused_at = now()`,
+  ])
+    await assert.rejects(
+      q(`UPDATE collect_transfers SET ${set} WHERE id = $1`, [tip.rowId]),
+      /collect_transfers_refused_from_send/,
+    );
+  assert.equal((await shareOf(tip.rowId)).status, 'paid');
+});
+
+test('refused, retried by staff, then paid: the mark is cleared and the database refuses a cancel', async () => {
+  await verified(TOBI);
+  const { provider, state } = partner();
+  const tip = await paidTip(TOBI);
+  await release(T0);
+  state.answers.push({ refuse: 'not_found' });
+  await run(provider, T0);
+  assert.ok((await refusedOf(tip.rowId)).refused_at);
+  assert.equal(
+    await ops.retryCollectTransfer(database.db, {
+      transferId: tip.rowId,
+      now: at(HOUR),
+    }),
+    'ready',
+  );
+  assert.equal((await refusedOf(tip.rowId)).refused_at, null);
+  await run(provider, at(HOUR));
+  assert.equal((await shareOf(tip.rowId)).status, 'paid');
+  await assert.rejects(
+    q(`UPDATE collect_transfers SET status = 'cancelled' WHERE id = $1`, [
+      tip.rowId,
+    ]),
+    /collect_transfers_never_cancel_sent/,
+  );
+});
+
+test('releaseHeldShare lets go only of a never-sent share held for that reason', async () => {
+  const tip = await paidTip(TOBI);
+  const release = (reason) =>
+    database.db.transaction((tx) =>
+      ops.releaseHeldShare(tx, {
+        transferId: tip.rowId,
+        reason,
+        now: at(HOUR),
+      }),
+    );
+  await q(
+    `UPDATE collect_transfers SET status = 'review', review_reason = 'dispute', sent_at = $2 WHERE id = $1`,
+    [tip.rowId, at(MIN)],
+  );
+  // Sent once: it may have moved, so it is never released by a dispute.
+  assert.equal(await release('dispute'), false);
+  await q(`UPDATE collect_transfers SET sent_at = NULL WHERE id = $1`, [
+    tip.rowId,
+  ]);
+  // Held for another reason: not this one's to release.
+  assert.equal(await release('refund'), false);
+  assert.equal(await release('dispute'), true);
+  assert.equal((await shareOf(tip.rowId)).status, 'waiting');
+});
+
+test('a dispute on a collect payment with no tip is stored and raised to staff, never dropped', async () => {
+  const { db } = database;
+  await q(`UPDATE profiles SET collection_mode = 'collect' WHERE id = $1`, [
+    TOBI.id,
+  ]);
+  const quote = await ops.createQuote(db, {
+    handle: TOBI.handle,
+    tipMinor: GROSS,
+    currency: 'NGN',
+  });
+  const intent = await ops.createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await q(`DELETE FROM tips WHERE id = $1`, [intent.tipId]);
+  const event = disputeEvent(
+    { disputeRef: 'dp_notip', chargeReference: null },
+    { operationReference: intent.attemptId },
+  );
+  assert.equal((await apply(event)).outcome, 'unmatched');
+  assert.deepEqual(
+    await q(
+      `SELECT attempt_id FROM provider_events WHERE provider_event_id = $1`,
+      [event.eventId],
+    ),
+    [{ attempt_id: intent.attemptId }],
+  );
+  assert.deepEqual(
+    (await issuesOf('dispute_opened')).map((i) => i.dedupe_key),
+    ['dispute_no_tip.dp_notip'],
+  );
+  assert.deepEqual(await q(`SELECT 1 FROM disputes`), []);
 });

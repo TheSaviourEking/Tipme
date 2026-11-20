@@ -7,7 +7,17 @@ import {
   disputeStatusAfter,
   type DisputeStatus,
 } from '@tipme/domain';
-import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   collectTransfers,
@@ -37,6 +47,7 @@ import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
+import { scheduleCollectRecover } from './share-transfers.js';
 
 /*
  * You collect (plan Task 9, spec §6.2, R4, R6, P13, P14, P20, P27). A dispute on a tip TipMe
@@ -550,11 +561,16 @@ async function waiting(
 }
 
 type ShareSweepRow = typeof shareTransfers.$inferSelect;
+type RecoveredPart = { amountMinor: bigint } & (
+  { profileId: string } | { businessId: string }
+);
 
 /**
- * Lost: recovery from the recipient's unpaid balance first, then the business's share held for it,
- * then TipMe absorbs the rest (§6.2, R3). Nothing is changed unless the loss can be booked in the
- * payment's currency.
+ * Lost: recovery from what TipMe still holds or can take back first (the person's share, then the
+ * business's), then TipMe absorbs the rest (§6.2, R3, P29). Everything that decides whether the
+ * loss can be booked now is read first; only then is anything changed, all in this transaction with
+ * the booking. A step that has to wait for money in flight (a transfer back, a business share being
+ * pulled back) starts it and changes nothing else.
  */
 async function settleLost(
   tx: Tx,
@@ -569,20 +585,33 @@ async function settleLost(
       now,
       "the share's transfer is still being read back",
     );
-  const [businessSweep] = (await tx
+  const sweeps = (await tx
     .select()
     .from(shareTransfers)
     .where(
       and(
         eq(shareTransfers.tipId, row.tipId),
-        eq(shareTransfers.kind, 'collect_sweep'),
+        inArray(shareTransfers.kind, ['collect_sweep', 'collect_recover']),
       ),
     )
     .for('update')) as ShareSweepRow[];
+  const businessSweep = sweeps.find((t) => t.kind === 'collect_sweep');
+  const pullBack = sweeps.find((t) => t.kind === 'collect_recover');
   if (businessSweep?.status === 'in_sent')
     return waiting(tx, row, now, "the business share's transfer is in flight");
-  // The payment it reverses, and its currency, before anything is touched: a dispute TipMe can't
-  // book changes nothing, however often it is swept.
+  // A sweep in review that wasn't refused may have moved (the partner listed other money): a person
+  // decides, and nothing is touched until then.
+  if (businessSweep?.status === 'review' && !businessSweep.refusedAt) {
+    await openIssue(tx, {
+      dedupeKey: `dispute_business_review.${row.id}`,
+      kind: 'collect_transfer_review',
+      subject: { tipId: row.tipId },
+      note: `Dispute ${row.partnerDisputeId} was lost, but the business share's transfer ${businessSweep.id} is in review and may have moved. Nothing was booked; settle the share first.`,
+      now,
+    });
+    return 'waiting_back';
+  }
+  // The payment it reverses, and its currency: a dispute TipMe can't book changes nothing.
   const [payment] = await tx
     .select({
       id: ledgerTransactions.id,
@@ -606,42 +635,19 @@ async function settleLost(
     });
     return 'waiting_back';
   }
-  const share = position.row;
-  let recovered = 0n;
+
+  // The person's part: what it will be, before anything changes.
+  let personMinor = 0n;
+  let takeHeld: CollectTransferRow | null = null;
   if (position.state === 'held') {
-    const { row: held } = position;
     const recovery = disputeRecovery({
       disputedMinor: row.amountMinor,
-      netMinor: held.amountMinor,
-      share: { state: 'held', heldMinor: held.amountMinor },
+      netMinor: position.row.amountMinor,
+      share: { state: 'held', heldMinor: position.row.amountMinor },
     });
     if ('wait' in recovery) return 'waiting_back';
-    recovered = recovery.fromHeldMinor;
-    const took =
-      recovered === held.amountMinor
-        ? await takeUnsentShare(tx, {
-            transferId: held.id,
-            to: 'cancelled',
-            reviewReason: 'dispute',
-            now,
-          })
-        : // A partial dispute: the share keeps the rest (released if it was held for this dispute,
-          // else still held for its own reason).
-          await reduceUnsentShare(tx, {
-            transferId: held.id,
-            byMinor: recovered,
-            now,
-          });
-    if (!took) {
-      await openIssue(tx, {
-        dedupeKey: `dispute_share.${row.id}`,
-        kind: 'collect_transfer_review',
-        subject: { tipId: row.tipId },
-        note: `Dispute ${row.partnerDisputeId} was lost, but its share ${held.id} could not be taken back automatically. Nothing was booked.`,
-        now,
-      });
-      return 'waiting_back';
-    }
+    personMinor = recovery.fromHeldMinor;
+    takeHeld = position.row;
   } else if (position.state === 'moved') {
     const moved = position.row;
     const [back] = await tx
@@ -654,8 +660,9 @@ async function settleLost(
         ),
       );
     if (back) {
-      if (back.status !== 'paid') return 'waiting_back';
-      recovered = back.amountMinor;
+      if (back.status !== 'paid')
+        return waiting(tx, row, now, 'the transfer back is not paid yet');
+      personMinor = back.amountMinor;
     } else {
       // The same cap as on open: this tip's share, at most what is still in the balance.
       const inBalance =
@@ -700,6 +707,116 @@ async function settleLost(
       }
     }
   }
+
+  // The business's part (R3), up to what is still disputed.
+  const left = row.amountMinor - personMinor;
+  let businessMinor = 0n;
+  let takeSweep: ShareSweepRow | null = null;
+  let absorbedBusiness: bigint | null = null;
+  if (businessSweep?.businessId && left > 0n) {
+    const owed = businessSweep.deliverMinor ?? businessSweep.amountMinor;
+    if (
+      businessSweep.status === 'out_paid' ||
+      businessSweep.status === 'review'
+    ) {
+      // Still in TipMe's balance: its leg in never sent, or every try definitely refused.
+      businessMinor = min(owed, left);
+      takeSweep = businessSweep;
+    } else if (businessSweep.status === 'done') {
+      // P29: already in the business's account. Pulled back from there first, as option B does;
+      // only what isn't there any more is TipMe's to absorb.
+      if (!pullBack) {
+        await scheduleCollectRecover(tx, {
+          tipId: row.tipId,
+          businessId: businessSweep.businessId,
+          profileId: businessSweep.profileId,
+          amountMinor: min(owed, left),
+          currency: businessSweep.currency,
+          provider: businessSweep.provider,
+          now,
+        });
+        return 'waiting_back';
+      }
+      if (pullBack.status === 'done') businessMinor = pullBack.amountMinor;
+      else if (pullBack.status === 'gap')
+        absorbedBusiness = pullBack.amountMinor;
+      else
+        return waiting(
+          tx,
+          row,
+          now,
+          "the business share is being pulled back from the business's account",
+        );
+    }
+  }
+
+  // Everything is known: take what is held, and book the loss, together.
+  if (takeHeld) {
+    const took =
+      personMinor === takeHeld.amountMinor
+        ? await takeUnsentShare(tx, {
+            transferId: takeHeld.id,
+            to: 'cancelled',
+            reviewReason: 'dispute',
+            now,
+          })
+        : // A partial dispute: the share keeps the rest (released if it was held for this dispute,
+          // else still held for its own reason).
+          await reduceUnsentShare(tx, {
+            transferId: takeHeld.id,
+            byMinor: personMinor,
+            now,
+          });
+    if (!took) {
+      await openIssue(tx, {
+        dedupeKey: `dispute_share.${row.id}`,
+        kind: 'collect_transfer_review',
+        subject: { tipId: row.tipId },
+        note: `Dispute ${row.partnerDisputeId} was lost, but its share ${takeHeld.id} could not be taken back automatically. Nothing was booked.`,
+        now,
+      });
+      return 'waiting_back';
+    }
+  }
+  if (takeSweep) {
+    const owed = takeSweep.deliverMinor ?? takeSweep.amountMinor;
+    const [taken] = await tx
+      .update(shareTransfers)
+      .set(
+        businessMinor === owed
+          ? { status: 'cancelled', updatedAt: now }
+          : {
+              amountMinor: sql`${shareTransfers.amountMinor} - ${businessMinor}`,
+              deliverMinor: owed - businessMinor,
+              updatedAt: now,
+            },
+      )
+      .where(
+        and(
+          eq(shareTransfers.id, takeSweep.id),
+          or(
+            eq(shareTransfers.status, 'out_paid'),
+            and(
+              eq(shareTransfers.status, 'review'),
+              isNotNull(shareTransfers.refusedAt),
+            ),
+          ),
+        ),
+      )
+      .returning({ id: shareTransfers.id });
+    // Raced into a send: nothing booked now, so the next sweep decides again.
+    if (!taken)
+      throw new Error('the business share moved while its dispute was settled');
+  }
+  if (absorbedBusiness !== null)
+    await openIssue(tx, {
+      dedupeKey: `dispute_business.${row.id}`,
+      kind: 'collect_transfer_review',
+      subject: { tipId: row.tipId },
+      note: `Dispute ${row.partnerDisputeId} was lost after the business's share (${naira(absorbedBusiness)}) had moved to its account, and it could not be pulled back. TipMe absorbed it.`,
+      now,
+    });
+  const share = position.row;
   const profileId =
     share?.profileId ??
     (
@@ -708,53 +825,14 @@ async function settleLost(
         .from(tips)
         .where(eq(tips.id, row.tipId))
     )[0]?.profileId;
-  const parts: ({ amountMinor: bigint } & (
-    { profileId: string } | { businessId: string }
-  ))[] =
-    recovered > 0n && profileId ? [{ amountMinor: recovered, profileId }] : [];
-  // R3: the business's share of the tip, while TipMe still holds it (its leg in never sent, or
-  // refused), comes back next, up to what is still disputed.
-  if (businessSweep?.businessId) {
-    const left = row.amountMinor - recovered;
-    const owed = businessSweep.deliverMinor ?? businessSweep.amountMinor;
-    if (
-      (businessSweep.status === 'out_paid' ||
-        businessSweep.status === 'review') &&
-      left > 0n &&
-      owed > 0n
-    ) {
-      const take = min(owed, left);
-      const [taken] = await tx
-        .update(shareTransfers)
-        .set(
-          take === owed
-            ? { status: 'cancelled', updatedAt: now }
-            : {
-                amountMinor: sql`${shareTransfers.amountMinor} - ${take}`,
-                deliverMinor: owed - take,
-                updatedAt: now,
-              },
-        )
-        .where(
-          and(
-            eq(shareTransfers.id, businessSweep.id),
-            inArray(shareTransfers.status, ['out_paid', 'review']),
-          ),
-        )
-        .returning({ id: shareTransfers.id });
-      if (taken)
-        parts.push({ amountMinor: take, businessId: businessSweep.businessId });
-    } else if (businessSweep.status === 'done')
-      // Already in the business's own account: TipMe absorbs it, and a person decides whether to
-      // ask the business for it (option B's reverseTip path), with the amount on record.
-      await openIssue(tx, {
-        dedupeKey: `dispute_business.${row.id}`,
-        kind: 'collect_transfer_review',
-        subject: { tipId: row.tipId },
-        note: `Dispute ${row.partnerDisputeId} was lost after the business's share (${naira(owed)}) had moved to its account. TipMe absorbed it; recover it from the business by hand if that is decided.`,
-        now,
-      });
-  }
+  const parts: RecoveredPart[] = [];
+  if (personMinor > 0n && profileId)
+    parts.push({ amountMinor: personMinor, profileId });
+  if (businessMinor > 0n && businessSweep?.businessId)
+    parts.push({
+      amountMinor: businessMinor,
+      businessId: businessSweep.businessId,
+    });
   await postLedgerTransaction(tx, {
     operationType: 'reversal',
     operationKey: `dispute_loss.${row.id}`,
