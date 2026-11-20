@@ -142,16 +142,41 @@ export async function collectStatus(
 }
 
 /**
- * The holding cap's upper bound (spec §2.1 step 7, ruling P31; fix round 2), for a tip to an
- * unverified collect page: what is held, plus the recipient's net on every collect tip that isn't
- * final yet (awaiting payment with a live attempt, whatever its quote's expiry, as a checkout
- * outlives its quote and a late success is still booked; or paid and being confirmed), plus this
- * tip's net, may never exceed `cap_minor`. Bare quotes never count: they are anonymous and free, so
- * counting them would let anyone block a page. The quote asks this as a courtesy; the intent's ask
- * (`binding`) is the one that holds, after taking the profile row lock, so intents made at once are
- * counted one after another and together never overshoot. Every refusal is the same
- * `PAGE_PAUSED`, paused or not enough room alike, so trying amounts reveals nothing about what is
- * held (§2.2). A verified page has no cap, and is never locked here.
+ * A collect tip to this profile that isn't final yet (ruling P34), as a SQL condition on `tips`
+ * joined to its `tip_quotes`: paid and being confirmed, or awaiting payment with an attempt still
+ * live. An attempt whose checkout has opened, or is being opened, or whose outcome is unknown
+ * (STARTING, INITIATED, PENDING, UNKNOWN) counts whatever its quote's expiry, as a checkout
+ * outlives its quote and a late success is still booked. One still CREATED (no checkout opened)
+ * counts only until its quote expires: no checkout can open after that, so an abandoned intent
+ * stops holding room. Mirrors `balanceQuery`'s "confirming", widened to every live attempt.
+ */
+function unfinishedTip(now: Date) {
+  return sql`(tips.status = 'PENDING_VERIFICATION'
+    OR (tips.status = 'AWAITING_PAYMENT' AND EXISTS (
+          SELECT 1 FROM payment_attempts pa
+           WHERE pa.intent_id = tips.intent_id
+             AND (pa.status IN ('STARTING', 'INITIATED', 'PENDING', 'UNKNOWN')
+                  OR (pa.status = 'CREATED'
+                      AND tip_quotes.expires_at > ${now.toISOString()}::timestamptz)))))`;
+}
+
+/** Unfinished collect intents one supporter address may hold on a page at once (ruling P34). */
+export const UNFINISHED_INTENTS_PER_ADDRESS = 2;
+
+/**
+ * The holding cap's upper bound (spec §2.1 step 7, rulings P31 and P34; fix rounds 2 and 3), for a
+ * tip to an unverified collect page: what is held, plus the recipient's net on every collect tip
+ * that isn't final yet (`unfinishedTip`), plus this tip's net, may never exceed `cap_minor`. The
+ * net counted is the tip's whole net to the recipient, before any business share is taken from it:
+ * on purpose, as counting too much only errs safe. Bare quotes never count: they are anonymous and
+ * free, so counting them would let anyone block a page. The quote asks this as a courtesy; the
+ * intent's ask (`binding`) is the one that holds, after taking the profile row lock, so intents
+ * made at once are counted one after another and together never overshoot. At the intent one
+ * supporter address (`addressKey`) may also hold at most `UNFINISHED_INTENTS_PER_ADDRESS`
+ * unfinished intents on the page, so one person's abandoned checkouts can't keep it paused. Every
+ * refusal is the same `PAGE_PAUSED`, paused, no room or too many from one address alike, so trying
+ * amounts reveals nothing about what is held (§2.2). A verified page has no cap, and is never
+ * locked here.
  */
 export async function refuseOverHoldingCap(
   tx: Tx,
@@ -162,6 +187,8 @@ export async function refuseOverHoldingCap(
     addMinor: bigint;
     /** The intent's check: take the profile lock first. */
     binding: boolean;
+    /** At the intent: the keyed hash of the supporter's address, when it is known. */
+    addressKey?: string | undefined;
   },
 ): Promise<void> {
   const [mark] = (
@@ -175,24 +202,31 @@ export async function refuseOverHoldingCap(
     await tx.execute(
       sql`SELECT 1 FROM profiles WHERE profiles.id = ${i.profileId} FOR UPDATE`,
     );
-  const status = await collectStatus(tx, i.profileId, i.now);
-  // Verified while this waited for the lock: no cap any more.
-  if (status.verified) return;
-  if (status.paused) throw new OperationError('PAGE_PAUSED');
-  const settings = await collectSettingsInForce(tx, i.now);
-  const open = await tx.execute<{ pending: string }>(sql`
-    SELECT COALESCE(SUM(tip_quotes.recipient_net_minor), 0)::text AS pending
+  // Tips still being paid are read BEFORE held money, and the order matters. Each statement sees
+  // what had committed when it began (READ COMMITTED), and a booking moves a tip from one to the
+  // other in one commit. Read in this order, a booking committing between the two is counted twice
+  // (safe: a refusal); the other way round it would be in neither, and the cap could be overshot.
+  const open = await tx.execute<{ pending: string; mine: number }>(sql`
+    SELECT COALESCE(SUM(tip_quotes.recipient_net_minor), 0)::text AS pending,
+           count(*) FILTER (WHERE payment_intents.address_key = ${i.addressKey ?? null})::int AS mine
       FROM tips
       JOIN payment_intents ON payment_intents.id = tips.intent_id
       JOIN tip_quotes ON tip_quotes.id = payment_intents.quote_id
      WHERE tips.profile_id = ${i.profileId}
        AND ${tipQuotes.collectionMode} = 'collect'
-       AND (tips.status = 'PENDING_VERIFICATION'
-            OR (tips.status = 'AWAITING_PAYMENT' AND EXISTS (
-                  SELECT 1 FROM payment_attempts pa
-                   WHERE pa.intent_id = tips.intent_id
-                     AND pa.status IN ('CREATED', 'STARTING', 'INITIATED', 'PENDING', 'UNKNOWN'))))`);
+       AND ${unfinishedTip(i.now)}`);
   const pending = BigInt(open.rows[0]?.pending ?? '0');
+  const status = await collectStatus(tx, i.profileId, i.now);
+  // Verified while this waited for the lock: no cap any more.
+  if (status.verified) return;
+  if (status.paused) throw new OperationError('PAGE_PAUSED');
+  if (
+    i.binding &&
+    i.addressKey &&
+    (open.rows[0]?.mine ?? 0) >= UNFINISHED_INTENTS_PER_ADDRESS
+  )
+    throw new OperationError('PAGE_PAUSED');
+  const settings = await collectSettingsInForce(tx, i.now);
   if (status.heldMinor + pending + i.addMinor > settings.capMinor)
     throw new OperationError('PAGE_PAUSED');
 }

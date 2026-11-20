@@ -42,6 +42,7 @@ import {
   PAYMENT_PROVIDER_TOKEN,
   type CheckoutPaymentProvider,
 } from './payment-provider.provider.js';
+import { intentAddressKey } from './address-key.js';
 import { createStatusToken } from './status-token.js';
 
 /** Guest checkout through the PR-005 operations; prices and fees only ever come from the server. */
@@ -207,6 +208,8 @@ export class CheckoutService {
   async createIntent(
     request: TipIntentRequest,
     idempotencyKey: string,
+    /** The supporter's address, as the rate limit sees it; stored only as a keyed hash. */
+    ip?: string,
   ): Promise<TipIntentCreated> {
     await this.refuseWhileClosed(() =>
       quoteHandleOf(this.database.db, request.quoteId),
@@ -217,6 +220,8 @@ export class CheckoutService {
       featureOn(db, 'business'),
       featureOn(db, 'business_shares'),
     ]);
+    // Keyed with the receipt-token secret under its own label (see intentAddressKey).
+    const addressKey = intentAddressKey(this.config.STATUS_TOKEN_SECRET, ip);
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
       idempotencyKey,
@@ -227,6 +232,7 @@ export class CheckoutService {
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
       recognitionOn,
+      ...(addressKey ? { addressKey } : {}),
       // Campaign Studio: which campaign link the page was opened from; ignored when not one.
       ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).

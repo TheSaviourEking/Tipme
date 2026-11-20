@@ -59,6 +59,12 @@ export interface CreatePaymentIntentInput {
   /** The API's SUPPORTER_RECOGNITION switch. Off unless passed. */
   recognitionOn?: boolean;
   /**
+   * You collect (ruling P34): the API's keyed hash of the supporter's address, never the address.
+   * Stored on the intent so one address holds only a few unfinished intents on a collect page.
+   * Not in the fingerprint: a retry from another network still replays the tip.
+   */
+  addressKey?: string;
+  /**
    * The business membership the supporter's page named (TipMe for businesses). Checked against the
    * quote's page inside the transaction and ignored when it doesn't hold: never a refusal.
    */
@@ -233,6 +239,7 @@ export async function createPaymentIntent(
           now,
           addMinor: quote.recipientNetMinor,
           binding: true,
+          addressKey: input.addressKey,
         });
 
       // R2-C2: the supporter must have been shown the split in force now. A quote made before an
@@ -259,6 +266,7 @@ export async function createPaymentIntent(
           requestFingerprint: fingerprint,
           status: 'AWAITING_PAYMENT',
           expiresAt: quote.expiresAt,
+          addressKey: input.addressKey ?? null,
         })
         .onConflictDoNothing()
         .returning({ id: paymentIntents.id });

@@ -1242,9 +1242,16 @@ export const paymentIntents = pgTable(
     requestFingerprint: text('request_fingerprint').notNull(),
     status: tipStatus('status').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // You collect (Task 12 fix round 3, ruling P34): a keyed hash of the supporter's address (the
+    // rate-limit subject), never the address itself, so one address can hold only a few unfinished
+    // intents on a page under its holding cap. Null when the address is unknown.
+    addressKey: text('address_key'),
     createdAt: createdAt(),
   },
   (table) => [
+    index('payment_intents_profile_address')
+      .on(table.profileId, table.addressKey)
+      .where(sql`address_key IS NOT NULL`),
     unique('payment_intents_idempotency').on(
       table.profileId,
       table.idempotencyKey,
