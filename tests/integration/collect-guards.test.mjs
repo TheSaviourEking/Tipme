@@ -128,6 +128,45 @@ async function collectTip(profile, settledAt, tipMinor = GROSS) {
   return intent.tipId;
 }
 
+/** A supporter's intent for a quote, at `at`: a live tip (AWAITING_PAYMENT, attempt CREATED). */
+const intentFor = (quote, at = NOW) =>
+  ops.createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+    now: at,
+  });
+
+/** The partner confirms an intent's payment at `at`, however late (a checkout lives 30 minutes). */
+async function payAt(intent, tipMinor, at) {
+  const reference = `platform:cs_${randomUUID().slice(0, 8)}`;
+  await ops.markAttemptInitiated(database.db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: reference,
+  });
+  const result = await ops.reconcileAttempts({
+    db: database.db,
+    provider: {
+      environment: 'sandbox',
+      async verifyTransaction() {
+        return {
+          status: 'succeeded',
+          amountMinor: tipMinor,
+          currency: 'NGN',
+          feeMinor: 20_000n,
+          feePaidBy: 'platform',
+          method: 'NGN_CARD',
+          chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+        };
+      },
+    },
+    now: at,
+    minAgeMs: 0,
+    attemptId: intent.attemptId,
+  });
+  assert.equal(result.applied, 1);
+}
+
 /** A paid direct tip on the recipient's own partner account (today's flow). */
 async function directTip(profile, tipMinor) {
   const { db } = database;
@@ -280,7 +319,7 @@ const quoteAt = (profile, now, tipMinor = GROSS) =>
 
 test('the holding cap pauses the page at ₦50,000 held or after 30 days, whichever comes first', async () => {
   // Amount: ₦49,999.45 held. No tip may take it past ₦50,000 (P31): ₦100,000 is refused, and so is
-  // the smallest tip, as the room left is 55 kobo.
+  // the smallest tip, as the room left is 55 kobo. One refusal for every case (fix round 2).
   await collectTip(TOBI, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
   let status = await ops.collectStatus(database.db, TOBI.id, NOW);
   assert.equal(status.mode, 'collect');
@@ -290,11 +329,11 @@ test('the holding cap pauses the page at ₦50,000 held or after 30 days, whiche
   assert.deepEqual([status.paused, status.pausedReason], [false, null]);
   assert.equal(
     await refusal(() => quoteAt(TOBI, NOW, 10_000_000n)),
-    'TIP_TOO_LARGE_FOR_PAGE',
+    'PAGE_PAUSED',
   );
   assert.equal(
     await refusal(() => quoteAt(TOBI, NOW, 200_000n)),
-    'TIP_TOO_LARGE_FOR_PAGE',
+    'PAGE_PAUSED',
   );
   // Nothing was written for the refused quotes.
   assert.equal((await q(`SELECT count(*)::int AS n FROM tip_quotes`))[0].n, 1);
@@ -326,11 +365,22 @@ test('the holding cap pauses the page at ₦50,000 held or after 30 days, whiche
   assert.equal((await quoteAt(TOBI, NOW)).collectionMode, 'collect');
 });
 
-test('quotes still open count against the cap, so concurrent quotes never overshoot it', async () => {
+test('bare quotes never block a page; live intents count, and concurrent intents never overshoot the cap', async () => {
   await collect(TOBI);
-  // Three ₦20,000 quotes at once (₦19,000 each to Tobi): two fit under ₦50,000, the third doesn't.
+  // A burst of unpaid quotes, ₦95,000 to Tobi in all: anonymous and free, so none holds room.
+  const burst = [];
+  for (let i = 0; i < 5; i += 1)
+    burst.push(await quoteAt(TOBI, NOW, 2_000_000n));
+  // Another supporter's quote still goes through.
+  assert.equal(
+    (await quoteAt(TOBI, NOW, 2_000_000n)).collectionMode,
+    'collect',
+  );
+  // The binding check is the intent's, under the lock: of three at once (₦19,000 each to Tobi), two
+  // fit under ₦50,000 and the third is refused.
+  const at = new Date(NOW.getTime() + MIN);
   const results = await Promise.allSettled(
-    [0, 1, 2].map(() => quoteAt(TOBI, NOW, 2_000_000n)),
+    burst.slice(0, 3).map((quote) => intentFor(quote, at)),
   );
   assert.deepEqual(results.map((r) => r.status).sort(), [
     'fulfilled',
@@ -339,16 +389,15 @@ test('quotes still open count against the cap, so concurrent quotes never oversh
   ]);
   assert.equal(
     results.find((r) => r.status === 'rejected').reason.code,
-    'TIP_TOO_LARGE_FOR_PAGE',
+    'PAGE_PAUSED',
   );
-  // A ₦2,000 tip still fits in the ₦12,000 left.
-  assert.equal((await quoteAt(TOBI, NOW, 200_000n)).collectionMode, 'collect');
-  // Once those quotes expire unpaid, their room is free again.
-  const later = new Date(NOW.getTime() + 16 * MIN);
+  // Those two live tips now count at the quote too: ₦19,000 more doesn't fit in ₦12,000...
   assert.equal(
-    (await quoteAt(TOBI, later, 2_000_000n)).collectionMode,
-    'collect',
+    await refusal(() => quoteAt(TOBI, at, 2_000_000n)),
+    'PAGE_PAUSED',
   );
+  // ...while ₦1,900 does.
+  assert.equal((await quoteAt(TOBI, at, 200_000n)).collectionMode, 'collect');
   // A direct page is never counted.
   for (let i = 0; i < 4; i += 1)
     assert.equal(
@@ -357,30 +406,44 @@ test('quotes still open count against the cap, so concurrent quotes never oversh
     );
 });
 
+test('a late payment still counts: an unpaid tip holds its room after its quote expires', async () => {
+  await collect(TOBI);
+  // ₦40,000 at t=0: ₦38,000 to Tobi, its checkout open (it lives 30 minutes, the quote 15).
+  const first = await intentFor(await quoteAt(TOBI, NOW, 4_000_000n));
+  // At 16 minutes the quote has expired, but the tip may still be paid: a second supporter's
+  // ₦20,000 (₦19,000 more) would take the total past ₦50,000, so it is refused.
+  const later = new Date(NOW.getTime() + 16 * MIN);
+  assert.equal(
+    await refusal(() => quoteAt(TOBI, later, 2_000_000n)),
+    'PAGE_PAUSED',
+  );
+  // The first pays at 20 minutes and is booked: held stays under the cap.
+  await payAt(first, 4_000_000n, new Date(NOW.getTime() + 20 * MIN));
+  const status = await ops.collectStatus(
+    database.db,
+    TOBI.id,
+    new Date(NOW.getTime() + 21 * MIN),
+  );
+  assert.equal(status.heldMinor, 3_800_000n);
+  assert.ok(status.heldMinor <= 5_000_000n);
+});
+
 test('the intent re-checks the cap, refusing a quote that no longer fits', async () => {
   await collect(TOBI);
   const quote = await quoteAt(TOBI, NOW, 2_000_000n);
   // The cap was lowered after the quote: ₦19,000 no longer fits in ₦10,000.
   await capFrom(1_000_000n, NOW);
-  const refused = await ops
-    .createPaymentIntent(database.db, {
-      quoteId: quote.quoteId,
-      idempotencyKey: randomUUID(),
-      now: new Date(NOW.getTime() + MIN),
-    })
-    .catch((error) => error);
-  assert.equal(refused.code, 'TIP_TOO_LARGE_FOR_PAGE');
+  const refused = await intentFor(quote, new Date(NOW.getTime() + MIN)).catch(
+    (error) => error,
+  );
+  assert.equal(refused.code, 'PAGE_PAUSED');
   assert.equal(
     (await q(`SELECT count(*)::int AS n FROM payment_intents`))[0].n,
     0,
   );
   // A quote that fits is paid as before.
   await capFrom(5_000_000n, new Date(NOW.getTime() + 30_000));
-  const intent = await ops.createPaymentIntent(database.db, {
-    quoteId: quote.quoteId,
-    idempotencyKey: randomUUID(),
-    now: new Date(NOW.getTime() + MIN),
-  });
+  const intent = await intentFor(quote, new Date(NOW.getTime() + MIN));
   assert.ok(intent.tipId);
 });
 
@@ -406,44 +469,38 @@ test('adding verified bank details unpauses the page at once', async () => {
 });
 
 test('a supporter of a paused page is told only that the person can’t take tips right now', async () => {
-  await collectTip(TOBI, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
-  // Too large for the room left: a generic line, no amount, no held total, no reason.
-  const tooLarge = await quoteAt(TOBI, NOW, 10_000_000n).catch((e) => e);
-  assert.equal(tooLarge.code, 'TIP_TOO_LARGE_FOR_PAGE');
-  const large = answered(tooLarge);
-  assert.equal(large.status, 409);
-  assert.deepEqual(Object.keys(large.body.error).sort(), [
-    'code',
-    'message',
-    'reference',
-  ]);
-  assert.equal(
-    large.body.error.message,
-    'This amount is more than this page can take right now. Try a smaller amount.',
-  );
-  assert.doesNotMatch(
-    `${large.body.error.code} ${large.body.error.message}`,
-    /bank|held|₦|NGN|days|verif|[0-9]/i,
-  );
+  const body = (error) => {
+    const sent = answered(error);
+    assert.equal(sent.status, 409);
+    assert.deepEqual(Object.keys(sent.body.error).sort(), [
+      'code',
+      'message',
+      'reference',
+    ]);
+    return { code: sent.body.error.code, message: sent.body.error.message };
+  };
+  // Not enough room: a live ₦38,000 tip, and ₦19,000 more (₦12,000 left).
+  await collect(TOBI);
+  await intentFor(await quoteAt(TOBI, NOW, 4_000_000n));
+  const someRoom = await quoteAt(TOBI, NOW, 2_000_000n).catch((e) => e);
+  // Almost no room: ₦49,999.45 held, and the smallest tip.
+  await collectTip(ADA, new Date(NOW.getTime() - 10 * MIN), NEAR_CAP_TIP);
+  const noRoom = await quoteAt(ADA, NOW, 200_000n).catch((e) => e);
+  // Paused: the cap lowered under what Ada holds.
   await capFrom(1_000_000n, new Date(NOW.getTime() - MIN));
-  const thrown = await quoteAt(TOBI, NOW).catch((e) => e);
-  assert.equal(thrown?.code, 'PAGE_PAUSED');
-  // What the API answers for it, through the real filter.
-  const sent = answered(thrown);
-  assert.equal(sent.status, 409);
-  assert.deepEqual(Object.keys(sent.body.error).sort(), [
-    'code',
-    'message',
-    'reference',
-  ]);
-  assert.equal(sent.body.error.code, 'PAGE_PAUSED');
-  assert.equal(
-    sent.body.error.message,
-    'This page can’t take tips right now. Please try again later.',
+  const paused = await quoteAt(ADA, NOW).catch((e) => e);
+  // One body for all three, so probing amounts reveals nothing about the room left (fix round 2).
+  const expected = {
+    code: 'PAGE_PAUSED',
+    message: 'This page can’t take tips right now. Please try again later.',
+  };
+  assert.deepEqual(
+    [body(someRoom), body(noRoom), body(paused)],
+    [expected, expected, expected],
   );
   assert.doesNotMatch(
-    JSON.stringify(sent.body),
-    /bank|cap|held|₦|NGN|days|verif/i,
+    JSON.stringify(body(someRoom)),
+    /bank|cap|held|₦|NGN|days|verif|amount|[0-9]/i,
   );
 });
 
