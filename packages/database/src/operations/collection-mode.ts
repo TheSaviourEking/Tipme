@@ -18,7 +18,9 @@ export type CollectionMode = 'direct' | 'collect';
  * A refusal leaves the recipient undecided (null, so `direct`): it never moves anyone already on
  * `collect`.
  */
-export async function mayAssignCollect(_tx: Database | Tx): Promise<boolean> {
+export async function mayAssignCollect(tx: Database | Tx): Promise<boolean> {
+  // Task 11 reads TipMe's own money in this transaction; nothing to read yet.
+  void tx;
   return true;
 }
 
