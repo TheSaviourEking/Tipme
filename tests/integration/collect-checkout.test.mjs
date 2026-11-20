@@ -250,3 +250,67 @@ test('the tip status says a collect tip is collected by TipMe, and says nothing 
     false,
   );
 });
+
+// Rulings P22 and P23: the first quote while the switch is on decides by the status of the
+// person's payment account on this provider and environment.
+const BY_STATUS = [
+  // [status, mode written, quote's mode]
+  [null, 'collect', 'collect'],
+  ['CREATING', 'collect', 'collect'],
+  ['ONBOARDING', 'collect', 'collect'],
+  ['ACTIVE', 'direct', 'direct'],
+  // Restricted or failed by the partner: kept direct, so still blocked as today.
+  ['RESTRICTED', 'direct', 'direct'],
+  ['FAILED', 'direct', 'direct'],
+  // The account may exist at the partner: left undecided, and the quote is direct.
+  ['UNKNOWN', null, 'direct'],
+];
+
+for (const [status, written, quoted] of BY_STATUS) {
+  test(`switch on: a first quote with ${status ?? 'no'} payment account writes ${written ?? 'nothing'} and quotes ${quoted}`, async () => {
+    await setSwitch(database.pool, 'you_collect', true);
+    await database.pool.query(`DELETE FROM payment_accounts`);
+    if (status)
+      await database.pool.query(
+        `INSERT INTO payment_accounts (id, profile_id, provider, environment, status, charges_enabled)
+         VALUES (gen_random_uuid(), (SELECT id FROM profiles WHERE handle = 'tobi'), 'bachs', 'sandbox', $1, $2)`,
+        [status, status === 'ACTIVE'],
+      );
+    const providers = recordingProviders();
+    const checkout = services(database.db, providers);
+    const quote = await checkout.bachs.quote(QUOTE('tobi'));
+    assert.equal(await modeOf('tobi'), written);
+    assert.equal(await quoteModeOf(quote.quoteId), quoted);
+    assert.equal(
+      quote.collectedByTipMe,
+      quoted === 'collect' ? true : undefined,
+    );
+    if (quoted === 'direct' && status !== 'ACTIVE') {
+      // No ready account: refused before any partner call, exactly as today.
+      await assert.rejects(
+        checkout.bachs.createIntent({ quoteId: quote.quoteId }, randomUUID()),
+        { code: 'PAYMENT_ACCOUNT_REQUIRED' },
+      );
+      assert.deepEqual(providers.calls, []);
+    }
+  });
+}
+
+test('switch on: an account whose creation outcome was unknown is decided once its status is known', async () => {
+  await setSwitch(database.pool, 'you_collect', true);
+  await database.pool.query(`DELETE FROM payment_accounts`);
+  await database.pool.query(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, status)
+     VALUES (gen_random_uuid(), (SELECT id FROM profiles WHERE handle = 'tobi'), 'bachs', 'sandbox', 'UNKNOWN')`,
+  );
+  const checkout = services(database.db, recordingProviders());
+  await checkout.bachs.quote(QUOTE('tobi'));
+  await checkout.bachs.quote(QUOTE('tobi'));
+  assert.equal(await modeOf('tobi'), null);
+  await database.pool.query(
+    `UPDATE payment_accounts SET status = 'ONBOARDING'`,
+  );
+  const decided = await checkout.bachs.quote(QUOTE('tobi'));
+  assert.equal(await modeOf('tobi'), 'collect');
+  assert.equal(await quoteModeOf(decided.quoteId), 'collect');
+});

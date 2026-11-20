@@ -223,26 +223,35 @@ export function claimHandle(
     const rehearsalRunId = (await isOpenReleaseRun(db, input.rehearsalRunId))
       ? input.rehearsalRunId
       : null;
-    const inserted = await db
-      .insert(profiles)
-      .values({
-        id: profileId,
-        rehearsalRunId,
-        userId: input.userId,
-        handle,
-        handleLower: handle,
-        displayName: handle,
-        pageState: 'not_live',
-        collectionMode: await signUpCollectionMode(db, input.youCollectOn),
-      })
-      .onConflictDoNothing()
-      .returning({ id: profiles.id })
-      .catch((error: unknown) => {
-        // The database refused an old handle of another page (lost a race with a rename).
-        if (sqlStateOf(error) === '23505')
-          throw new OperationError('HANDLE_TAKEN');
-        throw error;
-      });
+    const insertPage = async (runner: Database | Tx) =>
+      runner
+        .insert(profiles)
+        .values({
+          id: profileId,
+          rehearsalRunId,
+          userId: input.userId,
+          handle,
+          handleLower: handle,
+          displayName: handle,
+          pageState: 'not_live',
+          collectionMode: await signUpCollectionMode(
+            runner,
+            input.youCollectOn,
+          ),
+        })
+        .onConflictDoNothing()
+        .returning({ id: profiles.id })
+        .catch((error: unknown) => {
+          // The database refused an old handle of another page (lost a race with a rename).
+          if (sqlStateOf(error) === '23505')
+            throw new OperationError('HANDLE_TAKEN');
+          throw error;
+        });
+    // You collect (P11): with the switch on, the gate and the insert share one transaction. Off,
+    // the page is written undecided, exactly as before.
+    const inserted = input.youCollectOn
+      ? await db.transaction(async (tx) => insertPage(tx))
+      : await insertPage(db);
     // Lost a race for the same handle (or the same user claimed twice at once).
     if (!inserted[0]) {
       if (await hasProfile(db, input.userId))
