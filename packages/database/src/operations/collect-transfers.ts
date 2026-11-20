@@ -392,9 +392,9 @@ function currentAccount(alias: string): SQL {
 
 /**
  * Whether the row's recipient can receive it now (spec §5, §8): verified, a `usable` bank that
- * hasn't been replaced, no shared bank account in review, no open dispute on the tip (nor a lost one TipMe is still
- * recovering: its share is about to be cancelled). Checked when
- * a share is released and again, with its account, when it is claimed to be sent.
+ * hasn't been replaced, no shared bank account in review, no open dispute on the tip (nor a lost one
+ * TipMe is still recovering: its share is about to be cancelled). Checked when a share is released
+ * and again, with its account, when it is claimed to be sent.
  */
 function canReceive(alias: string): SQL {
   const c = sql.raw(alias);
