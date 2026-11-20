@@ -60,6 +60,8 @@ export const apiErrorCodes = [
   'COUNTRY_NOT_SUPPORTED',
   'PAYMENT_START_REJECTED',
   'TIPPING_NOT_OPEN',
+  // You collect: the page has reached its holding cap and takes no new tips (refused from Task 12).
+  'PAGE_PAUSED',
   'NO_CONFIRMED_TEST',
   'EMAIL_TAKEN',
   'EMAIL_INVALID',

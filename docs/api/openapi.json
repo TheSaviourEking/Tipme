@@ -20146,6 +20146,7 @@
                   "COUNTRY_NOT_SUPPORTED",
                   "PAYMENT_START_REJECTED",
                   "TIPPING_NOT_OPEN",
+                  "PAGE_PAUSED",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",
