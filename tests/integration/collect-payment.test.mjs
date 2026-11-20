@@ -764,7 +764,9 @@ test('a collect tip with a business share holds the share for the business and s
 });
 
 test("a new recipient's transfer waits 24 hours; after 7 days it is released at settlement", async () => {
-  const settledAt = new Date('2026-11-20T10:00:00.000Z');
+  // A minute after now (whole seconds), so it follows the quotes created below and stays inside
+  // their life: a fixed date fails once the wall clock passes it.
+  const settledAt = new Date(Math.floor(Date.now() / 1000) * 1000 + 60_000);
   const confirm = async (tip) => {
     const result = await ops.reconcileAttempts({
       db: database.db,
