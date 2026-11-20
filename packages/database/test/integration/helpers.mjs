@@ -49,10 +49,17 @@ export async function useDatabase(t, options = {}) {
  * Puts the Pro price back at the ₦2,500 these tests were written around, as a newer price row
  * (prices are history and refuse edits). Since 12 Nov 2026 a reset leaves ₦5,000 (migration 0093);
  * tests about how Pro is paid, not what it costs, keep their figures this way.
+ *
+ * The row takes the seed's own effective_from and wins on its later created_at, so it is in force
+ * exactly when the seed is. Not clock_timestamp(): a purchase's `now` is a JS Date, whole
+ * milliseconds, so one made in the same millisecond as that insert read the row as not yet in force,
+ * found the seed's ₦5,000 and threw PRO_PRICE_CHANGED (seen in CI, collect-payment's routing test).
  */
 export async function atLaunchProPrice(database) {
   await database.pool.query(
-    `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, reason, created_at)
-     VALUES (gen_random_uuid(), 250000, 'NGN', clock_timestamp(), 'Test fixture: the launch price', clock_timestamp())`,
+    `INSERT INTO pro_prices (id, amount_minor, currency, effective_from, plan, reason, created_at)
+     VALUES (gen_random_uuid(), 250000, 'NGN',
+             (SELECT max(effective_from) FROM pro_prices WHERE plan = 'personal'),
+             'personal', 'Test fixture: the launch price', clock_timestamp())`,
   );
 }
