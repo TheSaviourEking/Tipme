@@ -358,12 +358,13 @@ export class WebhookService {
       Partial<Pick<BachsProvider, 'verifyTransaction'>>,
   ): Promise<string> {
     const stored = await findAttemptStart(this.database.db, attemptId);
-    const providerReference =
-      stored?.reference ??
-      (event.providerReference?.startsWith('platform:') &&
-      !event.providerReference.startsWith('platform-charge:')
-        ? event.providerReference
-        : null);
+    const named = event.providerReference?.startsWith('platform:')
+      ? event.providerReference
+      : null;
+    // An event naming another checkout than the attempt's own is never applied to it.
+    if (stored?.reference && named && named !== stored.reference)
+      return this.unmatchedBachs(event);
+    const providerReference = stored?.reference ?? named;
     if (!providerReference) return this.unmatchedBachs(event);
     return this.applyTipPayment(event, attemptId, providerReference, bachs);
   }

@@ -453,6 +453,14 @@ test('a platform-scoped event for a collect tip never reaches Pro billing, and a
   );
   assert.equal((await transactionsOf(tip.tipId)).length, 1);
 
+  // TipMe's reference with another checkout than the tip's own is never applied to the tip.
+  assert.equal(
+    await service().applyBachs(
+      collection(tip, { providerReference: 'platform:cs_someone_else' }),
+      reads(tip),
+    ),
+    'unmatched',
+  );
   // Anything else on TipMe's own account matches nothing and is kept as unmatched.
   const stray = collection(
     { reference: 'platform:cs_nobody', attemptId: randomUUID(), charge: null },
