@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import { ApiExceptionFilter } from '../../apps/api/dist/http/api-exception.filter.js';
@@ -128,22 +129,34 @@ async function collectTip(profile, settledAt, tipMinor = GROSS) {
   return intent.tipId;
 }
 
-/** A supporter's intent for a quote, at `at`: a live tip (AWAITING_PAYMENT, attempt CREATED). */
-const intentFor = (quote, at = NOW) =>
+/**
+ * A supporter's intent for a quote, at `at`: a live tip (AWAITING_PAYMENT, attempt CREATED), from
+ * the supporter address `addressKey` when given (the API's keyed hash of the rate-limit subject).
+ */
+const intentFor = (quote, at = NOW, addressKey) =>
   ops.createPaymentIntent(database.db, {
     quoteId: quote.quoteId,
     idempotencyKey: randomUUID(),
     now: at,
+    ...(addressKey ? { addressKey } : {}),
+  });
+
+/** The supporter opens the checkout: the attempt is INITIATED at the partner. */
+const openCheckout = (intent) =>
+  ops.markAttemptInitiated(database.db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
   });
 
 /** The partner confirms an intent's payment at `at`, however late (a checkout lives 30 minutes). */
 async function payAt(intent, tipMinor, at) {
-  const reference = `platform:cs_${randomUUID().slice(0, 8)}`;
-  await ops.markAttemptInitiated(database.db, {
-    attemptId: intent.attemptId,
-    provider: 'bachs',
-    providerReference: reference,
-  });
+  await openCheckout(intent);
+  await settleAt(intent, tipMinor, at);
+}
+
+/** The partner confirms an intent whose checkout is already open. */
+async function settleAt(intent, tipMinor, at) {
   const result = await ops.reconcileAttempts({
     db: database.db,
     provider: {
@@ -406,10 +419,11 @@ test('bare quotes never block a page; live intents count, and concurrent intents
     );
 });
 
-test('a late payment still counts: an unpaid tip holds its room after its quote expires', async () => {
+test('a slow payer with a checkout open still holds their room after the quote expires', async () => {
   await collect(TOBI);
   // ₦40,000 at t=0: ₦38,000 to Tobi, its checkout open (it lives 30 minutes, the quote 15).
   const first = await intentFor(await quoteAt(TOBI, NOW, 4_000_000n));
+  await openCheckout(first);
   // At 16 minutes the quote has expired, but the tip may still be paid: a second supporter's
   // ₦20,000 (₦19,000 more) would take the total past ₦50,000, so it is refused.
   const later = new Date(NOW.getTime() + 16 * MIN);
@@ -418,7 +432,7 @@ test('a late payment still counts: an unpaid tip holds its room after its quote 
     'PAGE_PAUSED',
   );
   // The first pays at 20 minutes and is booked: held stays under the cap.
-  await payAt(first, 4_000_000n, new Date(NOW.getTime() + 20 * MIN));
+  await settleAt(first, 4_000_000n, new Date(NOW.getTime() + 20 * MIN));
   const status = await ops.collectStatus(
     database.db,
     TOBI.id,
@@ -426,6 +440,116 @@ test('a late payment still counts: an unpaid tip holds its room after its quote 
   );
   assert.equal(status.heldMinor, 3_800_000n);
   assert.ok(status.heldMinor <= 5_000_000n);
+});
+
+test('an abandoned intent (no checkout opened) stops counting when its quote expires', async () => {
+  await collect(TOBI);
+  // ₦40,000 at t=0, ₦38,000 to Tobi: an intent made, its checkout never opened (attempt CREATED).
+  const abandoned = await intentFor(await quoteAt(TOBI, NOW, 4_000_000n));
+  // While its quote lives it holds its room: ₦19,000 more doesn't fit.
+  const during = new Date(NOW.getTime() + 10 * MIN);
+  assert.equal(
+    await refusal(() => quoteAt(TOBI, during, 2_000_000n)),
+    'PAGE_PAUSED',
+  );
+  // Once the quote has expired no checkout can open for it, so the page takes tips again.
+  const expired = new Date(NOW.getTime() + 16 * MIN);
+  const next = await quoteAt(TOBI, expired, 2_000_000n);
+  assert.equal(next.collectionMode, 'collect');
+  assert.ok((await intentFor(next, expired)).tipId);
+  assert.equal(
+    (
+      await q(`SELECT status FROM payment_attempts WHERE id = $1`, [
+        abandoned.attemptId,
+      ])
+    )[0].status,
+    'CREATED',
+  );
+});
+
+test('one supporter address holds at most 2 unfinished intents on a collect page', async () => {
+  await collect(TOBI);
+  // ₦10,000 tips (₦9,500 to Tobi): under the cap even all at once, so only the per-address limit
+  // can refuse.
+  const at = new Date(NOW.getTime() + MIN);
+  const quotes = [];
+  for (let i = 0; i < 5; i += 1) quotes.push(await quoteAt(TOBI, NOW));
+  assert.ok((await intentFor(quotes[0], at, 'address-a')).tipId);
+  assert.ok((await intentFor(quotes[1], at, 'address-a')).tipId);
+  // A third from the same address is refused like any other cap refusal, and leaves no intent.
+  const refused = await intentFor(quotes[2], at, 'address-a').catch((e) => e);
+  assert.equal(refused.code, 'PAGE_PAUSED');
+  assert.equal(
+    (
+      await q(
+        `SELECT count(*)::int AS n FROM payment_intents WHERE quote_id = $1`,
+        [quotes[2].quoteId],
+      )
+    )[0].n,
+    0,
+  );
+  // Another address still tips.
+  assert.ok((await intentFor(quotes[3], at, 'address-b')).tipId);
+  // Once one of the first two is paid it is final, and the address may start another.
+  const [first] = await q(
+    `SELECT pa.id AS "attemptId" FROM payment_attempts pa
+       JOIN payment_intents i ON i.id = pa.intent_id
+      WHERE i.quote_id = $1`,
+    [quotes[0].quoteId],
+  );
+  await payAt(first, GROSS, new Date(NOW.getTime() + 2 * MIN));
+  assert.ok(
+    (await intentFor(quotes[4], new Date(NOW.getTime() + 3 * MIN), 'address-a'))
+      .tipId,
+  );
+});
+
+test('a tip booked between the cap check’s two reads is never dropped from both', async () => {
+  await collect(TOBI);
+  // ₦40,000, ₦38,000 to Tobi, its checkout open: being paid when the next quote is checked.
+  const first = await intentFor(await quoteAt(TOBI, NOW, 4_000_000n));
+  await openCheckout(first);
+  // Right after the check's first read of held money or tips being paid, the partner's success is
+  // booked on another connection: the tip leaves "being paid" and enters held money. Bound here,
+  // outside the quote's transaction, so the booking takes a connection of its own.
+  const book = AsyncResource.bind(() =>
+    settleAt(first, 4_000_000n, new Date(NOW.getTime() + 2 * MIN)),
+  );
+  let fired = false;
+  const original = Client.prototype.query;
+  Client.prototype.query = function (config, ...rest) {
+    const text = typeof config === 'string' ? config : (config?.text ?? '');
+    const result = original.call(this, config, ...rest);
+    if (
+      fired ||
+      !/held_for_recipients|pa\.status IN/.test(text) ||
+      typeof result?.then !== 'function'
+    )
+      return result;
+    fired = true;
+    Client.prototype.query = original;
+    return result.then(async (value) => {
+      await book();
+      return value;
+    });
+  };
+  let answer;
+  try {
+    // ₦19,000 more would take ₦38,000 past ₦50,000, however the booking interleaves.
+    answer = await refusal(() =>
+      quoteAt(TOBI, new Date(NOW.getTime() + 2 * MIN), 2_000_000n),
+    );
+  } finally {
+    Client.prototype.query = original;
+  }
+  assert.ok(fired);
+  assert.equal(answer, 'PAGE_PAUSED');
+  const status = await ops.collectStatus(
+    database.db,
+    TOBI.id,
+    new Date(NOW.getTime() + 3 * MIN),
+  );
+  assert.equal(status.heldMinor, 3_800_000n);
 });
 
 test('the intent re-checks the cap, refusing a quote that no longer fits', async () => {
