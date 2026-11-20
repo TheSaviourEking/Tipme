@@ -1,0 +1,280 @@
+{
+  "steps": [
+    [
+      "bachs quote ada",
+      {
+        "ok": {
+          "quoteId": "<id:1>",
+          "handle": "ada",
+          "displayName": "Ada Okafor",
+          "currency": "NGN",
+          "tipMinor": "200000",
+          "platformFeeMinor": "7000",
+          "providerFeeMinor": "3000",
+          "recipientNetMinor": "190000",
+          "payerTotalMinor": "200000",
+          "expiresAt": "<time>",
+          "feePolicyVersion": "v3-free-500bps",
+          "feeFree": false
+        }
+      },
+      []
+    ],
+    [
+      "bachs intent ada",
+      {
+        "ok": {
+          "tipId": "<id:2>",
+          "statusToken": "<token>",
+          "checkoutUrl": "https://checkout.bachs.test/cs_1"
+        }
+      },
+      [
+        [
+          "bachs.initializePayment",
+          {
+            "attemptId": "<id:3>",
+            "amountMinor": "200000n",
+            "currency": "NGN",
+            "recipientAccountReference": "acct_ada123",
+            "tipmeShareMinor": "10000n",
+            "successUrl": "http://127.0.0.1:3000/tip/<id:2>",
+            "cancelUrl": "http://127.0.0.1:3000/tip/<id:2>",
+            "idempotencyKey": "tipme-checkout-<id:3>"
+          }
+        ]
+      ]
+    ],
+    [
+      "bachs intent ada, replayed",
+      {
+        "ok": {
+          "tipId": "<id:2>",
+          "statusToken": "<token>",
+          "checkoutUrl": "https://checkout.bachs.test/cs_1"
+        }
+      },
+      [["bachs.getCheckoutUrl", "acct_ada123:cs_1"]]
+    ],
+    [
+      "bachs quote tobi",
+      {
+        "ok": {
+          "quoteId": "<id:4>",
+          "handle": "tobi",
+          "displayName": "Tobi Adeyemi",
+          "currency": "NGN",
+          "tipMinor": "200000",
+          "platformFeeMinor": "7000",
+          "providerFeeMinor": "3000",
+          "recipientNetMinor": "190000",
+          "payerTotalMinor": "200000",
+          "expiresAt": "<time>",
+          "feePolicyVersion": "v3-free-500bps",
+          "feeFree": false
+        }
+      },
+      []
+    ],
+    [
+      "bachs intent tobi",
+      {
+        "error": "PAYMENT_ACCOUNT_REQUIRED",
+        "status": 409
+      },
+      []
+    ],
+    [
+      "mock quote ada",
+      {
+        "ok": {
+          "quoteId": "<id:5>",
+          "handle": "ada",
+          "displayName": "Ada Okafor",
+          "currency": "NGN",
+          "tipMinor": "200000",
+          "platformFeeMinor": "7000",
+          "providerFeeMinor": "3000",
+          "recipientNetMinor": "190000",
+          "payerTotalMinor": "200000",
+          "expiresAt": "<time>",
+          "feePolicyVersion": "v3-free-500bps",
+          "feeFree": false
+        }
+      },
+      []
+    ],
+    [
+      "mock intent ada",
+      {
+        "ok": {
+          "tipId": "<id:6>",
+          "statusToken": "<token>",
+          "checkoutUrl": "http://127.0.0.1:3000/mock-checkout/mock_pay_2"
+        }
+      },
+      [
+        [
+          "mock.initializePayment",
+          {
+            "attemptId": "<id:7>",
+            "amountMinor": "200000n",
+            "currency": "NGN"
+          }
+        ]
+      ]
+    ],
+    [
+      "sign-up",
+      {
+        "ok": {
+          "signedUp": true
+        }
+      },
+      []
+    ],
+    [
+      "bachs quote newcomer",
+      {
+        "ok": {
+          "quoteId": "<id:8>",
+          "handle": "newcomer",
+          "displayName": "newcomer",
+          "currency": "NGN",
+          "tipMinor": "200000",
+          "platformFeeMinor": "7000",
+          "providerFeeMinor": "3000",
+          "recipientNetMinor": "190000",
+          "payerTotalMinor": "200000",
+          "expiresAt": "<time>",
+          "feePolicyVersion": "v3-free-500bps",
+          "feeFree": false
+        }
+      },
+      []
+    ],
+    [
+      "bachs intent newcomer",
+      {
+        "error": "PAYMENT_ACCOUNT_REQUIRED",
+        "status": 409
+      },
+      []
+    ],
+    [
+      "mock quote newcomer",
+      {
+        "ok": {
+          "quoteId": "<id:9>",
+          "handle": "newcomer",
+          "displayName": "newcomer",
+          "currency": "NGN",
+          "tipMinor": "200000",
+          "platformFeeMinor": "7000",
+          "providerFeeMinor": "3000",
+          "recipientNetMinor": "190000",
+          "payerTotalMinor": "200000",
+          "expiresAt": "<time>",
+          "feePolicyVersion": "v3-free-500bps",
+          "feeFree": false
+        }
+      },
+      []
+    ],
+    [
+      "mock intent newcomer",
+      {
+        "ok": {
+          "tipId": "<id:10>",
+          "statusToken": "<token>",
+          "checkoutUrl": "http://127.0.0.1:3000/mock-checkout/mock_pay_3"
+        }
+      },
+      [
+        [
+          "mock.initializePayment",
+          {
+            "attemptId": "<id:11>",
+            "amountMinor": "200000n",
+            "currency": "NGN"
+          }
+        ]
+      ]
+    ]
+  ],
+  "stored": {
+    "profiles": [
+      {
+        "handle": "ada",
+        "collection_mode": null
+      },
+      {
+        "handle": "newcomer",
+        "collection_mode": null
+      },
+      {
+        "handle": "tobi",
+        "collection_mode": null
+      }
+    ],
+    "quotes": [
+      {
+        "collection_mode": "direct",
+        "payer_total_minor": "200000",
+        "platform_fee_minor": "7000"
+      },
+      {
+        "collection_mode": "direct",
+        "payer_total_minor": "200000",
+        "platform_fee_minor": "7000"
+      },
+      {
+        "collection_mode": "direct",
+        "payer_total_minor": "200000",
+        "platform_fee_minor": "7000"
+      },
+      {
+        "collection_mode": "direct",
+        "payer_total_minor": "200000",
+        "platform_fee_minor": "7000"
+      },
+      {
+        "collection_mode": "direct",
+        "payer_total_minor": "200000",
+        "platform_fee_minor": "7000"
+      }
+    ],
+    "attempts": [
+      {
+        "status": "INITIATED",
+        "provider": "bachs",
+        "provider_reference": "acct_ada123:cs_1",
+        "collection_mode": "direct"
+      },
+      {
+        "status": "INITIATED",
+        "provider": "mock",
+        "provider_reference": "mock_pay_2",
+        "collection_mode": "direct"
+      },
+      {
+        "status": "INITIATED",
+        "provider": "mock",
+        "provider_reference": "mock_pay_3",
+        "collection_mode": "direct"
+      },
+      {
+        "status": "CREATED",
+        "provider": null,
+        "provider_reference": null,
+        "collection_mode": "direct"
+      },
+      {
+        "status": "CREATED",
+        "provider": null,
+        "provider_reference": null,
+        "collection_mode": "direct"
+      }
+    ]
+  }
+}
