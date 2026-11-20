@@ -26,6 +26,7 @@ import {
   UncertainProviderOutcomeError,
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
+import { createBachsDisputes } from './disputes.js';
 import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
@@ -232,6 +233,9 @@ export interface BachsProvider
    */
   holdLocalCurrency(accountReference: string): Promise<BachsRecipientAccount>;
   getCheckoutUrl(providerReference: string): Promise<string>;
+  submitDisputeEvidence: NonNullable<PaymentProvider['submitDisputeEvidence']>;
+  uploadDisputeFile: NonNullable<PaymentProvider['uploadDisputeFile']>;
+  listDisputes: NonNullable<PaymentProvider['listDisputes']>;
 }
 
 const capabilities: ProviderCapabilities = {
@@ -1394,6 +1398,7 @@ export function createBachsProvider(
     holdLocalCurrency,
 
     ...createBachsPayouts(client, config.apiKey, config.onNote),
+    ...createBachsDisputes(client),
   };
 }
 

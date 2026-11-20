@@ -109,10 +109,55 @@ export type NormalizedProviderEvent =
       paymentMethodReference: string;
     }
   | {
+      /**
+       * You collect (plan Task 5, R1): a dispute on a charge on TipMe's own account (no top-level
+       * `account`), so TipMe is liable for it. Only a `dispute.created` or `dispute.updated` TipMe can
+       * read becomes this; an unreadable one, and a connected account's, stay a `reversal`, unchanged. Free text never leaves
+       * the adapter: `reason` is the partner's code, or null.
+       */
+      kind: 'dispute';
+      eventId: string;
+      eventType: 'dispute.created' | 'dispute.updated';
+      scope: 'platform';
+      partnerDisputeId: string;
+      /** The disputed charge (`data.charge_id`), which a collect attempt stores. */
+      chargeReference: string | null;
+      /** `platform:<checkout_id>`, when the event names a checkout (the docs show none). */
+      providerReference: string | null;
+      /** TipMe's own reference, when the event repeats one (the docs show none). */
+      operationReference: string | null;
+      status: DisputeStatus;
+      /** The disputed amount, in minor units of `currency`. Always positive. */
+      amountMinor: bigint;
+      currency: string;
+      reason: string | null;
+      /** When evidence is due (`response_deadline_at`); null when the partner gives none. */
+      respondBy: Date | null;
+      /**
+       * The dispute fee and its currency, when reported. The partner documents no such field on a
+       * dispute or its events, so both are null from Bachs today (R6: nothing is posted on a guess).
+       */
+      feeMinor: bigint | null;
+      feeCurrency: string | null;
+      /** When the event occurred (its `created_at`), to order deliveries. */
+      occurredAt: Date;
+    }
+  | {
       kind: 'ignored';
       eventId: string;
       eventType: string;
     };
+
+/**
+ * A dispute's state in TipMe's words. `open`: evidence is due. `responded`: submitted and being
+ * decided. `won`, `lost` and `closed` are final.
+ */
+export type DisputeStatus = 'open' | 'responded' | 'won' | 'lost' | 'closed';
+
+export type DisputeEvent = Extract<
+  NormalizedProviderEvent,
+  { kind: 'dispute' }
+>;
 
 export type WebhookVerification<TEvent = NormalizedProviderEvent> =
   | { ok: true; event: TEvent }
@@ -268,6 +313,36 @@ export interface PaymentProvider<
     providerReference: string;
     status: 'succeeded' | 'pending' | 'failed';
   }>;
+  /**
+   * You collect (plan Task 5): saves staff's evidence on one of TipMe's own disputes, then submits
+   * it (irreversible). The same key always sends the same partner keys, so a retry submits once.
+   * DisputeEvidenceRefusedError is definite (nothing submitted); UncertainProviderOutcomeError is not.
+   */
+  submitDisputeEvidence?(input: {
+    partnerDisputeId: string;
+    text: string;
+    fileRefs: string[];
+    idempotencyKey: string;
+  }): Promise<{ state: 'submitted' }>;
+  /** You collect: one evidence file for a dispute; the ref goes into submitDisputeEvidence. */
+  uploadDisputeFile?(input: {
+    partnerDisputeId: string;
+    bytes: Buffer;
+    contentType: 'application/pdf' | 'image/png' | 'image/jpeg';
+  }): Promise<{ fileRef: string }>;
+  /**
+   * You collect: TipMe's own disputes created since a time, across every page, for reconciliation.
+   * Anything unreadable throws: never a partial list.
+   */
+  listDisputes?(since: Date): Promise<
+    {
+      partnerDisputeId: string;
+      status: DisputeStatus;
+      amountMinor: bigint;
+      currency: string;
+      chargeReference: string | null;
+    }[]
+  >;
   verifyWebhook(
     rawBody: Buffer,
     headers: Record<string, string | string[] | undefined>,
@@ -551,6 +626,17 @@ export class TipRefundRefusedError extends Error {
   ) {
     super('The payment provider will not refund this tip');
     this.name = 'TipRefundRefusedError';
+  }
+}
+
+/**
+ * The partner definitely refused dispute evidence (for example the dispute is no longer editable):
+ * nothing was submitted by this request.
+ */
+export class DisputeEvidenceRefusedError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused the dispute evidence');
+    this.name = 'DisputeEvidenceRefusedError';
   }
 }
 

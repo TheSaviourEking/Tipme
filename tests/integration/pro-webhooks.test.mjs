@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { createHmac } from 'node:crypto';
+import { BachsWebhookController } from '../../apps/api/dist/webhooks/bachs-webhook.controller.js';
 import { WebhookService } from '../../apps/api/dist/webhooks/webhook.service.js';
+import { createBachsProvider } from '../../packages/payments/dist/index.js';
 import {
   buyProByCheckout,
   mailSealing,
@@ -252,4 +255,200 @@ test('a refund that is only created flags it and keeps Pro', async (t) => {
       .length,
     1,
   );
+});
+
+/*
+ * You collect, plan Task 5 (controller ruling P5): TipMe's own dispute.created and dispute.updated
+ * now normalise to `kind: 'dispute'`. Until Task 9 routes those, Pro billing must see exactly what it
+ * saw before. Events go through the real adapter from bodies shaped as the partner's dispute docs
+ * (https://docs.bachs.io/guides/webhooks/events/dispute-created and dispute-updated).
+ */
+const PLATFORM_ORG = 'acct_stWbI4933A4WVqkc';
+const BACHS_SECRET = 'current-secret-0123456789';
+const adapter = createBachsProvider({
+  apiKey: 'sk_sandbox_test',
+  environment: 'sandbox',
+  webhookSecrets: [BACHS_SECRET],
+  platformOrganizationId: PLATFORM_ORG,
+  fetchImpl: async () => {
+    throw new Error('no request expected');
+  },
+});
+function delivered(body) {
+  const rawBody = Buffer.from(JSON.stringify(body));
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signature = createHmac('sha256', BACHS_SECRET)
+    .update(Buffer.concat([Buffer.from(`${timestamp}.`), rawBody]))
+    .digest('hex');
+  const result = adapter.verifyWebhook(rawBody, {
+    'x-bachs-signature-v2': `t=${timestamp},v1=${signature}`,
+  });
+  assert.equal(result.ok, true);
+  return result.event;
+}
+const ownDispute = (purchaseId, type, status) => ({
+  id: `evt_${type.replace('.', '_')}_${status}`,
+  type,
+  created_at: new Date().toISOString(),
+  organization_id: PLATFORM_ORG,
+  data: {
+    dispute_id: 'dsp_1a2b3c4d5e',
+    charge_id: 'ch_9f4c1d2e7b6a',
+    // Not in the dispute docs; today's reversal reads it, so a Pro dispute can name its checkout.
+    checkout_id: `cs_${purchaseId}`,
+    amount: '2500.00',
+    currency: 'NGN',
+    status,
+    is_response_editable: status === 'needs_response',
+    reason: 'fraudulent',
+    response_deadline_at: '2026-12-02T00:00:00Z',
+  },
+});
+
+/** Everything Pro billing leaves behind for one event, after a paid purchase. */
+async function proStateAfter(t, makeEvent) {
+  const { q, service, purchaseId, reference } = await openPurchase(t);
+  await service.applyBachs(
+    collection(reference, purchaseId),
+    reads('succeeded'),
+  );
+  const outcome = await service.applyBachs(
+    makeEvent(purchaseId, reference),
+    reads('succeeded'),
+  );
+  return {
+    outcome,
+    plan: (await q(`SELECT plan FROM profiles WHERE id = $1`, [ADA]))[0].plan,
+    periods: (await q(`SELECT status FROM pro_periods ORDER BY 1`)).map(
+      (row) => row.status,
+    ),
+    outbox: (
+      await q(
+        `SELECT event_type FROM outbox_events WHERE event_type LIKE 'pro.%' ORDER BY 1`,
+      )
+    ).map((row) => row.event_type),
+    events: await q(
+      `SELECT provider_event_id, event_type, payload FROM provider_events
+        WHERE pro_purchase_id IS NOT NULL AND event_type LIKE 'dispute%'`,
+    ),
+    unmatched: (await q(`SELECT 1 FROM unmatched_provider_events`)).length,
+  };
+}
+
+test('a platform-scoped dispute on a Pro charge still ends Pro exactly as today', async (t) => {
+  // A lost dispute the adapter still reads as a reversal (`dispute.lost`, or a chargeback) ends Pro.
+  for (const type of ['dispute.lost', 'chargeback.created']) {
+    const state = await proStateAfter(t, (purchaseId) => {
+      const event = delivered({
+        ...ownDispute(purchaseId, 'dispute.created', 'lost'),
+        id: `evt_${type}`,
+        type,
+      });
+      assert.equal(event.kind, 'reversal');
+      return event;
+    });
+    assert.equal(state.outcome, 'pro_reversed', type);
+    assert.equal(state.plan, 'free', type);
+    assert.deepEqual(state.periods, ['ENDED'], type);
+  }
+
+  // The documented events are now disputes; Pro billing gets exactly the reversal it got before
+  // (recorded from the adapter at 167d7ee9), with the same outcome and the same rows.
+  for (const [type, status] of [
+    ['dispute.created', 'needs_response'],
+    ['dispute.updated', 'lost'],
+    ['dispute.updated', 'won'],
+  ]) {
+    const before = await proStateAfter(t, (purchaseId) => ({
+      kind: 'reversal',
+      eventId: `evt_${type.replace('.', '_')}_${status}`,
+      eventType: type,
+      scope: 'platform',
+      accountReference: null,
+      providerReference: `platform:cs_${purchaseId}`,
+      chargeReference: 'ch_9f4c1d2e7b6a',
+      operationReference: null,
+      partnerReversalId: 'dispute.dsp_1a2b3c4d5e',
+      disputeWon: status === 'won',
+      refundState: null,
+      refundedMinor: null,
+      refundFeeMinor: null,
+    }));
+    const now = await proStateAfter(t, (purchaseId) => {
+      const event = delivered(ownDispute(purchaseId, type, status));
+      assert.equal(event.kind, 'dispute');
+      return event;
+    });
+    // Purchase ids differ between the two databases; the stored payload names the checkout.
+    const strip = (state) => ({
+      ...state,
+      events: state.events.map((row) => ({
+        ...row,
+        payload: {
+          ...row.payload,
+          providerReference: 'platform:cs_<purchase>',
+        },
+      })),
+    });
+    assert.deepEqual(strip(now), strip(before), `${type} ${status}`);
+    assert.equal(now.events.length, 1);
+    assert.equal(now.unmatched, 0);
+  }
+});
+
+// Review fix 1: the partner reads a 4xx as a refusal and stops delivering, so a signed dispute TipMe
+// can't read as one must never be a 400. It is today's reversal, answered 200, and reaches Pro
+// billing exactly as before.
+test('an unreadable platform dispute still reaches Pro as today’s reversal, with a 2xx', async (t) => {
+  for (const [label, change] of [
+    ['unknown status', { status: 'pending_magic' }],
+    ['no dispute id', { dispute_id: undefined }],
+  ]) {
+    const { q, service, purchaseId, reference } = await openPurchase(t);
+    await service.applyBachs(
+      collection(reference, purchaseId),
+      reads('succeeded'),
+    );
+    const body = ownDispute(purchaseId, 'dispute.updated', 'lost');
+    body.data = { ...body.data, ...change };
+    const rawBody = Buffer.from(JSON.stringify(body));
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const signature = createHmac('sha256', BACHS_SECRET)
+      .update(Buffer.concat([Buffer.from(`${timestamp}.`), rawBody]))
+      .digest('hex');
+    const logs = [];
+    const controller = new BachsWebhookController(
+      adapter,
+      { info: (entry) => logs.push(entry), warn: (entry) => logs.push(entry) },
+      service,
+    );
+    // Resolving (not throwing) is the controller's 200.
+    const answer = await controller.receive({
+      rawBody,
+      headers: { 'x-bachs-signature-v2': `t=${timestamp},v1=${signature}` },
+    });
+    assert.deepEqual(answer, { data: { outcome: 'pro_reversed' } }, label);
+    assert.equal(
+      logs.some((entry) => entry.event === 'webhook.rejected'),
+      false,
+      label,
+    );
+    const [stored] = await q(
+      `SELECT payload FROM provider_events WHERE provider_event_id = $1`,
+      [body.id],
+    );
+    assert.equal(stored.payload.kind, 'reversal', label);
+    assert.equal(
+      stored.payload.partnerReversalId,
+      change.dispute_id === undefined && 'dispute_id' in change
+        ? null
+        : 'dispute.dsp_1a2b3c4d5e',
+      label,
+    );
+    assert.equal(
+      (await q(`SELECT plan FROM profiles WHERE id = $1`, [ADA]))[0].plan,
+      'pro',
+      label,
+    );
+  }
 });

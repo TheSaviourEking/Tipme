@@ -24,10 +24,12 @@ const USER_AGENT = 'TipMe/1.0 (+https://usetipme.xyz)';
 const timeoutSchema = z.number().int().min(100).max(120_000);
 
 interface RequestOptions<T> {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PATCH';
   path: string;
   schema: z.ZodType<T>;
   body?: unknown;
+  /** A multipart body (dispute uploads). fetch sets its content type and boundary. */
+  form?: FormData;
   accountReference?: string;
   idempotencyKey?: string;
   operationReference?: string;
@@ -86,8 +88,12 @@ export class BachsApiClient {
       // The partner's edge refuses requests without one (sandbox evidence, 9 Nov 2026).
       'User-Agent': USER_AGENT,
     };
+    if (options.body !== undefined && options.form !== undefined)
+      throw new TypeError('A Bachs request has one body');
     if (options.body !== undefined)
       headers['content-type'] = 'application/json';
+    // A write: an answer TipMe did not get is an unknown outcome, never "nothing happened".
+    const write = options.method !== 'GET';
     if (options.accountReference)
       headers['X-Account-Id'] = options.accountReference;
     if (options.idempotencyKey)
@@ -99,13 +105,16 @@ export class BachsApiClient {
         method: options.method,
         headers,
         body:
-          options.body === undefined ? undefined : JSON.stringify(options.body),
+          options.form ??
+          (options.body === undefined
+            ? undefined
+            : JSON.stringify(options.body)),
         redirect: 'error',
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (error) {
       if (!isFetchFailure(error)) throw error;
-      if (options.method === 'POST') {
+      if (write) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'the request may have reached the payment provider but its response was not received',
@@ -120,7 +129,7 @@ export class BachsApiClient {
       responseText = await response.text();
     } catch (error) {
       if (!isFetchFailure(error)) throw error;
-      if (options.method === 'POST') {
+      if (write) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'The payment provider accepted the request but its response could not be read',
@@ -132,10 +141,7 @@ export class BachsApiClient {
 
     if (!response.ok) {
       const providerCode = this.getProviderCode(responseText);
-      if (
-        options.method === 'POST' &&
-        (response.status >= 500 || response.status === 409)
-      ) {
+      if (write && (response.status >= 500 || response.status === 409)) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           `The payment provider returned HTTP ${response.status}`,
@@ -153,7 +159,7 @@ export class BachsApiClient {
     try {
       payload = JSON.parse(responseText);
     } catch {
-      if (options.method === 'POST') {
+      if (write) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'The payment provider returned a successful response that could not be parsed',
@@ -167,7 +173,7 @@ export class BachsApiClient {
 
     const parsed = options.schema.safeParse(payload);
     if (!parsed.success) {
-      if (options.method === 'POST') {
+      if (write) {
         throw new UncertainProviderOutcomeError(
           options.operationReference ?? 'unknown',
           'The payment provider returned a successful response with an invalid shape',

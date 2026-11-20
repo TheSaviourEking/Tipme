@@ -3,3 +3,6 @@
 d922e7fed2faaa76e81956659739d8e30eaa1567:apps/web/src/app/dashboard/reports/month/[month]/recap-view.tsx:generic-api-key:17
 # False positive on chore/leftovers: an earlier ignore note there quoted a browser storage key name.
 b574877d75a104f945424582f888bf1ee7a89fbb:.gitleaksignore:generic-api-key:2
+# False positives on feat/you-collect-5-disputes: a test idempotency key (tipme-dispute-evidence-…) in the dispute evidence tests.
+da348d4d61d0931d518d5dce2db33717b82bd1fa:packages/payments/test/bachs-disputes.test.mjs:generic-api-key:363
+9cccf7432f84d0c6368e7593f2ea1d6f1140de73:packages/payments/test/bachs-disputes.test.mjs:generic-api-key:492

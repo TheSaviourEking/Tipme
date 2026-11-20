@@ -2,6 +2,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { MockWebhook } from '@tipme/contracts';
 import {
   bachsAccountReadiness,
+  disputeAsReversal,
   type BachsProvider,
   type NormalizedProviderEvent,
 } from '@tipme/payments';
@@ -239,6 +240,10 @@ export class WebhookService {
       this.signalPending(result);
       return result.outcome;
     }
+    // You collect (plan Task 5): the pretend partner's disputes and capability changes are stored
+    // for review until Task 9 routes them; they never reach the payout path below.
+    if (!event.type.startsWith('payout.'))
+      return this.unmatched(event, 'unknown_attempt');
     const payoutId = await findPayoutByReference(db, PROVIDER, reference);
     if (!payoutId) return this.unmatched(event, 'unknown_payout');
     const result = await recordPayoutOutcome(db, {
@@ -269,6 +274,9 @@ export class WebhookService {
       >,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
+    // You collect (plan Task 5, P5): TipMe's own dispute is now modelled by the adapter, but routing
+    // it arrives with Task 9. Until then Pro billing gets the exact reversal it got before.
+    if (event.kind === 'dispute') event = disputeAsReversal(event);
     // Auto-renew (plan Task 10): a card saved on TipMe's own account. Only an opted-in customer
     // turns auto-renew on; any other is unmatched.
     if (event.kind === 'saved_method') {

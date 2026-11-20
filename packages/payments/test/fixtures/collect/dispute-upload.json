@@ -1,0 +1,8 @@
+{
+  "_source": "Built from the docs, not recorded: the 200 example of POST /v1/disputes/uploads (multipart/form-data, field `file`; PDF, JPEG, PNG or GIF up to 10 MB) in https://docs.bachs.io/api-reference/disputes/upload-dispute-document.md.",
+  "document_id": "upl_9f2c7b3d1e45",
+  "file_name": "dsp_1a2b3c4d5e.pdf",
+  "mime_type": "application/pdf",
+  "file_size_bytes": 204800,
+  "uploaded_at": "2026-11-20T10:00:00.000Z"
+}

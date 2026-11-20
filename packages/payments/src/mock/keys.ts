@@ -24,3 +24,12 @@ export const destinationKey = (prefix: string, destinationRef: string) =>
 /** TipMe's pretend balances, as set by markPlatformBalances. */
 export const platformBalancesKey = (prefix: string) =>
   `mockprovider:${prefix}:platform-balances`;
+/** You collect (plan Task 5): one pretend dispute on TipMe's own account. */
+export const disputeKey = (prefix: string, disputeId: string) =>
+  `mockprovider:${prefix}:dispute:${disputeId}`;
+/** Every pretend dispute, scored by when it was raised (ms). */
+export const disputesKey = (prefix: string) =>
+  `mockprovider:${prefix}:disputes`;
+/** Which dispute an evidence key submitted. */
+export const disputeEvidenceKey = (prefix: string, key: string) =>
+  `mockprovider:${prefix}:dispute-evidence:${key}`;
