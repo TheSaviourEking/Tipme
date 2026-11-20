@@ -3,7 +3,11 @@ import type {
   CollectTransferRun,
   Database,
 } from '@tipme/database';
-import { releaseWaitingTransfers, runCollectTransfers } from '@tipme/database';
+import {
+  releaseWaitingTransfers,
+  runCollectTransfers,
+  runDisputeSteps,
+} from '@tipme/database';
 
 /*
  * You collect (plan Task 8, spec §5): every 2 minutes, waiting shares whose recipient can receive
@@ -19,6 +23,14 @@ type MaybeCollectProvider = {
   payoutCapability?: (
     accountRef: string,
   ) => ReturnType<CollectTransferProvider['payoutCapability']>;
+  /** Task 9: a lost dispute's transfer back, as the recipient's account (`destination: "self"`). */
+  collectToPlatform?: (input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+    description?: string;
+  }) => Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
 };
 
 /** The providers that can make collect transfers, each call bound to its own adapter. */
@@ -32,11 +44,28 @@ export function collectTransferProviders(
       !provider.payoutCapability
     )
       return [];
-    const { sendCollectTransfer, listAccountTransfers, payoutCapability } =
-      provider;
+    const {
+      sendCollectTransfer,
+      listAccountTransfers,
+      payoutCapability,
+      collectToPlatform,
+    } = provider;
     return [
       {
         name: provider.name,
+        ...(collectToPlatform
+          ? {
+              collectBack: (
+                input: Parameters<
+                  NonNullable<CollectTransferProvider['collectBack']>
+                >[0],
+              ) =>
+                collectToPlatform.call(provider, {
+                  ...input,
+                  description: 'TipMe dispute',
+                }),
+            }
+          : {}),
         sendCollectTransfer: (input) =>
           sendCollectTransfer.call(provider, input),
         listAccountTransfers: (accountRef) =>
@@ -122,4 +151,28 @@ export async function handleCollectTransfers(deps: {
     if (result.stopped === 'paused' || result.stopped === 'in_debt') break;
   }
   return outcome;
+}
+
+/**
+ * Task 9: after the transfers, every unsettled dispute on a collect tip is moved on (a read-back
+ * settled its share, a transfer back was paid), and staff are reminded 48 hours before evidence is
+ * due. Database only; a failure is logged by name and never thrown, as above.
+ */
+export async function handleDisputeSteps(deps: {
+  db: Database;
+  log: CollectTransfersLog;
+  now?: Date;
+  /** Replaced in tests. */
+  steps?: typeof runDisputeSteps;
+}): Promise<{ reminded: number; advanced: number; failed: number }> {
+  const steps = deps.steps ?? runDisputeSteps;
+  try {
+    return await steps(deps.db, { now: deps.now ?? new Date() });
+  } catch (error) {
+    deps.log({
+      event: 'collect_disputes.run_failed',
+      error: error instanceof Error ? error.name : 'unknown',
+    });
+    return { reminded: 0, advanced: 0, failed: 1 };
+  }
 }

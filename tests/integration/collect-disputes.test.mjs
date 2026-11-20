@@ -32,6 +32,8 @@ const ACCOUNTS = {
   [ADA.id]: 'acct_ada_person',
 };
 
+const sealing = ops.mailSealing(Buffer.alloc(32, 9));
+
 let database;
 const q = (text, values = []) =>
   database.pool.query(text, values).then((result) => result.rows);
@@ -466,14 +468,34 @@ test('created then lost: partial recovery by transfer back, TipMe absorbs the re
       },
     ],
   );
-  assert.equal(
-    (
-      await q(
-        `SELECT 1 FROM outbox_events WHERE event_type = 'collect.dispute_hold' AND aggregate_id = $1`,
-        [opened.id],
-      )
-    ).length,
-    1,
+  // The email goes through the outbox and the mail queue, once.
+  const [hold] = await q(
+    `SELECT event_type, dedupe_key, payload FROM outbox_events
+      WHERE event_type = 'collect.dispute_hold' AND aggregate_id = $1`,
+    [opened.id],
+  );
+  assert.deepEqual(hold.payload, {
+    disputeId: opened.id,
+    profileId: TOBI.id,
+    heldMinor: '300000',
+  });
+  await q(
+    `UPDATE users SET email = coalesce(email, 'tobi@example.com'), email_verified_at = $2 WHERE id = (SELECT user_id FROM profiles WHERE id = $1)`,
+    [TOBI.id, at(-DAY)],
+  );
+  for (let n = 0; n < 2; n += 1)
+    await ops.mailForDomainEvent(
+      database.db,
+      sealing,
+      hold.event_type,
+      hold.payload,
+      hold.dedupe_key,
+    );
+  assert.deepEqual(
+    await q(
+      `SELECT type, dedupe_key FROM mail_messages WHERE type = 'dispute_hold'`,
+    ),
+    [{ type: 'dispute_hold', dedupe_key: `dispute_hold.${opened.id}` }],
   );
 
   assert.equal(

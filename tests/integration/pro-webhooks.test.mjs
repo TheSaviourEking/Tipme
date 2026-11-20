@@ -353,10 +353,11 @@ test('a platform-scoped dispute on a Pro charge still ends Pro exactly as today'
   }
 
   // The documented events are now disputes; Pro billing gets exactly the reversal it got before
-  // (recorded from the adapter at 167d7ee9), with the same outcome and the same rows.
+  // (recorded from the adapter at 167d7ee9), with the same outcome and the same rows. A lost one
+  // (`dispute.updated`, status lost) is the exception: before Task 9 it did not end Pro, which was
+  // a gap (owner told); it now does, below.
   for (const [type, status] of [
     ['dispute.created', 'needs_response'],
-    ['dispute.updated', 'lost'],
     ['dispute.updated', 'won'],
   ]) {
     const before = await proStateAfter(t, (purchaseId) => ({
@@ -393,6 +394,46 @@ test('a platform-scoped dispute on a Pro charge still ends Pro exactly as today'
     assert.deepEqual(strip(now), strip(before), `${type} ${status}`);
     assert.equal(now.events.length, 1);
     assert.equal(now.unmatched, 0);
+  }
+});
+
+// Task 9 (owner informed): a dispute ruled against TipMe on a Pro charge arrives as `dispute.updated`
+// with status lost. It ends Pro exactly as a `*.lost` event does; a won or still open one does not.
+test('a lost dispute on a Pro charge ends Pro as a lost event does; a won or open one does not', async (t) => {
+  const lostEvent = await proStateAfter(t, (purchaseId) => {
+    const event = delivered({
+      ...ownDispute(purchaseId, 'dispute.created', 'lost'),
+      id: 'evt_dispute_lost',
+      type: 'dispute.lost',
+    });
+    assert.equal(event.kind, 'reversal');
+    return event;
+  });
+  const lost = await proStateAfter(t, (purchaseId) => {
+    const event = delivered(ownDispute(purchaseId, 'dispute.updated', 'lost'));
+    assert.equal(event.kind, 'dispute');
+    return event;
+  });
+  for (const state of [lost, lostEvent]) {
+    assert.equal(state.outcome, 'pro_reversed');
+    assert.equal(state.plan, 'free');
+    assert.deepEqual(state.periods, ['ENDED']);
+    assert.equal(state.unmatched, 0);
+  }
+  assert.deepEqual(lost.outbox, lostEvent.outbox);
+  // Pro billing still keeps the event, against the purchase.
+  assert.equal(lost.events.length, 1);
+  for (const [type, status] of [
+    ['dispute.created', 'needs_response'],
+    ['dispute.updated', 'under_review'],
+    ['dispute.updated', 'won'],
+  ]) {
+    const state = await proStateAfter(t, (purchaseId) =>
+      delivered(ownDispute(purchaseId, type, status)),
+    );
+    assert.equal(state.outcome, 'pro_reversed', status);
+    assert.equal(state.plan, 'pro', status);
+    assert.deepEqual(state.periods, ['ACTIVE'], status);
   }
 });
 

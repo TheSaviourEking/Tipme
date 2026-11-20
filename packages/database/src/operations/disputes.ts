@@ -643,6 +643,8 @@ export function runDisputeSteps(
         and(
           eq(disputes.status, 'open'),
           lte(disputes.respondBy, new Date(now.getTime() + DEADLINE_NOTICE_MS)),
+          // Once each: a reminder already opened is not looked at again.
+          sql`NOT EXISTS (SELECT 1 FROM issues i WHERE i.dedupe_key = 'dispute_deadline.' || ${disputes.id}::text)`,
         ),
       )
       .orderBy(asc(disputes.respondBy))
@@ -676,22 +678,5 @@ export function runDisputeSteps(
       }
     }
     return { reminded, advanced, failed };
-  });
-}
-
-/** For the dispute-hold email: the recipient and what is held, or null when nothing is. */
-export function disputeHoldFacts(
-  db: Database,
-  disputeId: string,
-): Promise<{ profileId: string; heldMinor: bigint } | null> {
-  return guarded(async () => {
-    const [row] = await db
-      .select({ profileId: tips.profileId, heldMinor: disputes.heldMinor })
-      .from(disputes)
-      .innerJoin(tips, eq(tips.id, disputes.tipId))
-      .where(and(eq(disputes.id, disputeId), sql`${disputes.heldMinor} > 0`));
-    return row?.profileId
-      ? { profileId: row.profileId, heldMinor: row.heldMinor }
-      : null;
   });
 }
