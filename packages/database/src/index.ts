@@ -107,6 +107,7 @@ export * from './operations/pro-price.js';
 export * from './operations/plan-fee-rates.js';
 export * from './operations/collect-settings.js';
 export * from './operations/collection-mode.js';
+export * from './operations/collect-transfers.js';
 export * from './operations/feature-switches.js';
 export * from './operations/pro-periods.js';
 export * from './operations/plan-history.js';

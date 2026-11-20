@@ -28,7 +28,9 @@ import {
   updatePaymentAccountStatus,
   findBachsAttemptByReference,
   findAttemptByReference,
+  findAttemptStart,
   findPayoutByReference,
+  matchCollectAttempt,
   OperationError,
   reconcileAttempts,
   recordPayoutOutcome,
@@ -274,9 +276,20 @@ export class WebhookService {
       >,
   ): Promise<string> {
     if (event.kind === 'ignored') return 'ignored';
-    // You collect (plan Task 5, P5): TipMe's own dispute is now modelled by the adapter, but routing
-    // it arrives with Task 9. Until then Pro billing gets the exact reversal it got before.
-    if (event.kind === 'dispute') event = disputeAsReversal(event);
+    // You collect (plan Task 7, R2, P6). TipMe's own account carries Pro purchases and collect tips.
+    // A refund TipMe asked for is matched by its own reference first, so it always reaches the tip
+    // refund and never a payment or Pro. Then a collect tip is matched; only an event that matches
+    // none goes to Pro billing, as before.
+    if (event.kind === 'reversal' && event.scope === 'platform') {
+      const refunded = await this.applyTipRefund(event);
+      if (refunded) return refunded;
+    }
+    if (event.kind === 'dispute') {
+      // A collect tip's dispute is modelled by Task 9; until then it is kept for staff, never Pro.
+      if (await this.matchCollect(event)) return this.storeCollectEvent(event);
+      // Task 5 (P5): one that matches no tip reaches Pro billing in today's reversal shape.
+      event = disputeAsReversal(event);
+    }
     // Auto-renew (plan Task 10): a card saved on TipMe's own account. Only an opted-in customer
     // turns auto-renew on; any other is unmatched.
     if (event.kind === 'saved_method') {
@@ -288,11 +301,17 @@ export class WebhookService {
       });
       return profileId ? 'pro_card_saved' : this.unmatchedBachs(event);
     }
-    // TipMe's own account (paid Pro): never a tip, never an account of a recipient.
+    // TipMe's own account: a collect tip's, or else paid Pro's; never a recipient's account.
     if (
       (event.kind === 'payment' || event.kind === 'reversal') &&
       event.scope === 'platform'
-    )
+    ) {
+      const attemptId = await this.matchCollect(event);
+      if (attemptId)
+        return event.kind === 'payment'
+          ? this.applyCollectPayment(event, attemptId, bachs)
+          : // A refund or dispute TipMe did not ask for (Tasks 9 and 10 model them): for staff.
+            this.storeCollectEvent(event);
       return this.applyProEvent(
         event,
         'bachs',
@@ -303,6 +322,7 @@ export class WebhookService {
             }
           : null,
       );
+    }
     if (event.kind === 'payout') return this.applyBachsPayout(event, bachs);
     const { environment } = bachs;
     if (event.kind === 'account') return this.refreshBachsAccount(event, bachs);
@@ -311,7 +331,72 @@ export class WebhookService {
     const { providerReference } = event;
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId || !providerReference) return this.unmatchedBachs(event);
+    return this.applyTipPayment(event, attemptId, providerReference, bachs);
+  }
 
+  /** R2: the collect tip a platform-scoped event is about, by TipMe's reference, checkout or charge. */
+  private matchCollect(event: {
+    providerReference: string | null;
+    operationReference: string | null;
+    chargeReference?: string | null;
+  }): Promise<string | null> {
+    return matchCollectAttempt(this.database.db, {
+      providerReference: event.providerReference,
+      operationReference: event.operationReference,
+      chargeReference: event.chargeReference ?? null,
+    });
+  }
+
+  /**
+   * A payment event for a collect tip, on TipMe's own checkout: the tip path, as a direct tip's. The
+   * attempt's own checkout reference is used, so an event naming only the charge matches it too.
+   */
+  private async applyCollectPayment(
+    event: Extract<NormalizedProviderEvent, { kind: 'payment' }>,
+    attemptId: string,
+    bachs: Pick<BachsProvider, 'environment'> &
+      Partial<Pick<BachsProvider, 'verifyTransaction'>>,
+  ): Promise<string> {
+    const stored = await findAttemptStart(this.database.db, attemptId);
+    const providerReference =
+      stored?.reference ??
+      (event.providerReference?.startsWith('platform:') &&
+      !event.providerReference.startsWith('platform-charge:')
+        ? event.providerReference
+        : null);
+    if (!providerReference) return this.unmatchedBachs(event);
+    return this.applyTipPayment(event, attemptId, providerReference, bachs);
+  }
+
+  /**
+   * A collect tip's refund or dispute that TipMe does not model yet (plan Tasks 9 and 10): kept for
+   * staff as its own kind of unmatched event (the issues inbox raises it), and never sent to Pro
+   * billing or the payment path. Nothing is booked.
+   */
+  private async storeCollectEvent(
+    event: NormalizedProviderEvent,
+  ): Promise<string> {
+    await recordUnmatchedEvent(this.database.db, {
+      provider: 'bachs',
+      providerEventId: event.eventId,
+      eventType: event.eventType,
+      payload: event,
+      reason: 'collect_event',
+    });
+    return 'collect_event_stored';
+  }
+
+  /**
+   * The tip path for a payment event: stored once against the attempt, then the payment is read back
+   * from the partner with the worker's own checks, so the receipt turns paid at once.
+   */
+  private async applyTipPayment(
+    event: Extract<NormalizedProviderEvent, { kind: 'payment' }>,
+    attemptId: string,
+    providerReference: string,
+    bachs: Pick<BachsProvider, 'environment'> &
+      Partial<Pick<BachsProvider, 'verifyTransaction'>>,
+  ): Promise<string> {
     try {
       const result = await recordProviderEvent(this.database.db, {
         provider: 'bachs',
@@ -334,10 +419,11 @@ export class WebhookService {
       // the worker's own checks (quoted share, fee bearer), so the receipt turns paid at once.
       // A failed read changes nothing: the worker keeps checking.
       if (bachs.verifyTransaction) {
-        const { verifyTransaction } = bachs;
+        const { verifyTransaction, environment } = bachs;
         const checked = await reconcileAttempts({
           db: this.database.db,
           provider: {
+            environment,
             verifyTransaction: (reference, expectation) =>
               verifyTransaction(reference, expectation),
           },
@@ -450,6 +536,30 @@ export class WebhookService {
   }
 
   /**
+   * A refund TipMe asked for (staff "Refund tip", owner 14 Nov 2026): the partner repeats TipMe's
+   * reference, and its refund.paid books it. Not a staff money issue: two staff already approved it.
+   * From a recipient's account (a direct tip) or TipMe's own (a collect tip, P6). Null when the event
+   * is not one.
+   */
+  private async applyTipRefund(
+    event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
+  ): Promise<string | null> {
+    const tipRefundId = tipRefundIdOf(event.operationReference);
+    if (!tipRefundId || !event.refundState) return null;
+    const known = await findTipRefund(this.database.db, tipRefundId);
+    if (!known) return this.unmatchedBachs(event);
+    const outcome = await applyTipRefundEvent(this.database.db, {
+      tipRefundId,
+      refundState: event.refundState,
+      partnerReversalId: event.partnerReversalId,
+      refundedMinor: event.refundedMinor,
+      refundFeeMinor: event.refundFeeMinor,
+      now: new Date(),
+    });
+    return `tip_refund_${outcome}`;
+  }
+
+  /**
    * Refunds and disputes raise a money issue for staff, once per partner refund or dispute, and
    * pause that recipient's withdrawals. They never change a balance or the ledger here: staff
    * reverse a paid refund from the issue (`tip.reverse`, business release 2).
@@ -458,22 +568,8 @@ export class WebhookService {
     event: Extract<NormalizedProviderEvent, { kind: 'reversal' }>,
     environment: BachsProvider['environment'],
   ): Promise<string> {
-    // A refund TipMe asked for (staff "Refund tip", owner 14 Nov 2026): the partner repeats TipMe's
-    // reference, and its refund.paid books it. Not a staff money issue: two staff already approved it.
-    const tipRefundId = tipRefundIdOf(event.operationReference);
-    if (tipRefundId && event.refundState) {
-      const known = await findTipRefund(this.database.db, tipRefundId);
-      if (!known) return this.unmatchedBachs(event);
-      const outcome = await applyTipRefundEvent(this.database.db, {
-        tipRefundId,
-        refundState: event.refundState,
-        partnerReversalId: event.partnerReversalId,
-        refundedMinor: event.refundedMinor,
-        refundFeeMinor: event.refundFeeMinor,
-        now: new Date(),
-      });
-      return `tip_refund_${outcome}`;
-    }
+    const refunded = await this.applyTipRefund(event);
+    if (refunded) return refunded;
     const attemptId = await this.matchBachsAttempt(event, environment);
     if (!attemptId) return this.unmatchedBachs(event);
     // The `refund_fee_return` switch (owner, 12 and 14 Nov 2026): with it on, a final refund is

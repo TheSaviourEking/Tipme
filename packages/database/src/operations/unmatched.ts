@@ -14,8 +14,16 @@ export function recordUnmatchedEvent(
     providerEventId: string;
     eventType: string;
     payload: unknown;
-    /** `unknown_account`: an account event for an account TipMe does not have (not an issue). */
-    reason: 'unknown_attempt' | 'unknown_payout' | 'unknown_account';
+    /**
+     * `unknown_account`: an account event for an account TipMe does not have (not an issue).
+     * `collect_event`: a refund or dispute on a collect tip, which TipMe does not model yet (plan
+     * Tasks 9 and 10); kept for staff, never sent to Pro billing.
+     */
+    reason:
+      | 'unknown_attempt'
+      | 'unknown_payout'
+      | 'unknown_account'
+      | 'collect_event';
   },
 ): Promise<'stored' | 'duplicate' | 'conflict'> {
   return guarded(async () => {

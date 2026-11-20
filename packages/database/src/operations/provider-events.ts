@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
   ATTEMPT_TRANSITIONS,
+  buildCollectPaymentPosting,
   buildPaymentPosting,
   canTransition,
   formatMinor,
@@ -24,7 +25,8 @@ import { activeTraceId, newId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { recordTransition } from './transitions.js';
-import { scheduleShareSweep } from './share-transfers.js';
+import { scheduleCollectSweep, scheduleShareSweep } from './share-transfers.js';
+import { scheduleCollectTransfer } from './collect-transfers.js';
 import { personOf } from './owner.js';
 
 /** A provider message about a payment. Only signature-verified events may reach this function. */
@@ -37,6 +39,12 @@ export interface PaymentEvent {
   amountMinor?: bigint;
   currency?: string;
   providerFeeMinor?: bigint;
+  /**
+   * You collect: the partner environment the payment was read in, and the partner's charge its
+   * read-back named. Both are kept on a collect tip's transfer; a direct tip ignores them.
+   */
+  environment?: 'sandbox' | 'live';
+  chargeReference?: string | null;
   signatureVerified: true;
   payload: unknown;
   traceId?: string | null;
@@ -69,6 +77,8 @@ interface Locked {
     recipientNetMinor: bigint;
     tipMinor: bigint;
     waivedPlatformFeeMinor: bigint;
+    /** You collect (R7): fixed on the quote; never the profile's mode now. */
+    collectionMode: string;
   };
 }
 
@@ -103,6 +113,7 @@ async function lock(tx: Tx, attemptId: string): Promise<Locked | null> {
       recipientNetMinor: tipQuotes.recipientNetMinor,
       tipMinor: tipQuotes.tipMinor,
       waivedPlatformFeeMinor: tipQuotes.waivedPlatformFeeMinor,
+      collectionMode: tipQuotes.collectionMode,
     })
     .from(paymentIntents)
     .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
@@ -373,33 +384,68 @@ async function apply(
     })
     .from(tipBusinessShares)
     .where(eq(tipBusinessShares.tipId, tip.id));
-  await postLedgerTransaction(tx, {
-    operationType: 'payment',
-    operationKey: `payment.${attempt.id}`,
-    currency: tip.currency,
-    tipId: tip.id,
-    traceId,
-    lines: buildPaymentPosting({
-      grossMinor: quote.tipMinor,
-      platformFeeMinor: quote.platformFeeMinor,
-      quotedProviderFeeMinor: quote.providerFeeMinor,
-      actualProviderFeeMinor: providerFeeMinor,
-      recipientNetMinor: quote.recipientNetMinor,
-      profileId: tip.profileId,
-      ...(share ? { businessShare: share } : {}),
-    }),
-  });
-  // Option B (owner, 11 Nov 2026): the share's money is on the staff member's own account. It is
-  // moved to the business once it is available there, staff -> TipMe -> business (the worker).
-  if (share)
-    await scheduleShareSweep(tx, {
+  const posting = {
+    grossMinor: quote.tipMinor,
+    platformFeeMinor: quote.platformFeeMinor,
+    quotedProviderFeeMinor: quote.providerFeeMinor,
+    actualProviderFeeMinor: providerFeeMinor,
+    recipientNetMinor: quote.recipientNetMinor,
+    profileId: tip.profileId,
+    ...(share ? { businessShare: share } : {}),
+  };
+  const provider = recordedProviderName(event.provider);
+  if (quote.collectionMode === 'collect') {
+    // You collect (spec §4, R3): TipMe collected the tip on its own account, so the recipient's net
+    // (and a business's share) is held there, booked under the same key. In this transaction too: the
+    // one transfer of the recipient's part, and the business's leg in (its money is already here).
+    await postLedgerTransaction(tx, {
+      operationType: 'payment',
+      operationKey: `payment.${attempt.id}`,
+      currency: tip.currency,
+      tipId: tip.id,
+      traceId,
+      lines: buildCollectPaymentPosting(posting),
+    });
+    await scheduleCollectTransfer(tx, {
       tipId: tip.id,
       profileId: tip.profileId,
-      businessId: share.businessId,
-      amountMinor: share.amountMinor,
+      amountMinor: quote.recipientNetMinor - (share?.amountMinor ?? 0n),
       currency: tip.currency,
-      provider: recordedProviderName(event.provider),
+      provider,
+      chargeReference: event.chargeReference ?? null,
+      settledAt: now,
+      ...(event.environment ? { environment: event.environment } : {}),
     });
+    if (share)
+      await scheduleCollectSweep(tx, {
+        tipId: tip.id,
+        profileId: tip.profileId,
+        businessId: share.businessId,
+        amountMinor: share.amountMinor,
+        currency: tip.currency,
+        provider,
+      });
+  } else {
+    await postLedgerTransaction(tx, {
+      operationType: 'payment',
+      operationKey: `payment.${attempt.id}`,
+      currency: tip.currency,
+      tipId: tip.id,
+      traceId,
+      lines: buildPaymentPosting(posting),
+    });
+    // Option B (owner, 11 Nov 2026): the share's money is on the staff member's own account. It is
+    // moved to the business once it is available there, staff -> TipMe -> business (the worker).
+    if (share)
+      await scheduleShareSweep(tx, {
+        tipId: tip.id,
+        profileId: tip.profileId,
+        businessId: share.businessId,
+        amountMinor: share.amountMinor,
+        currency: tip.currency,
+        provider,
+      });
+  }
   await enqueueOutbox(tx, {
     eventType: 'tip.succeeded',
     aggregateId: tip.id,

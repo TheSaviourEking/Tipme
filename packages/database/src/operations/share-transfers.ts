@@ -1,5 +1,10 @@
 import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
-import { allocateHoldbacks, refundMoves, type LedgerLine } from '@tipme/domain';
+import {
+  allocateHoldbacks,
+  buildCollectTransferPosting,
+  refundMoves,
+  type LedgerLine,
+} from '@tipme/domain';
 import { and, asc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -14,6 +19,7 @@ import { businessManagerUsers } from './business-ops.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
+import { postLedgerTransaction } from './ledger.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -31,11 +37,13 @@ import { openIssue } from './issues.js';
  * worker at a time: every move from a sendable state is a conditional update that only one wins.
  *
  * Nothing here posts to the ledger: it already says who is owed what, and these transfers only make
- * each partner balance match it.
+ * each partner balance match it. The one exception is You collect's `collect_sweep` (R3): a business's
+ * share of a collect tip is held on TipMe's own account (`held_for_recipients`), so only the leg in
+ * runs, and once it is paid the money has changed place: `provider_clearing` <- `held_for_recipients`.
  */
 
 export type ShareTransferKind =
-  'sweep' | 'recover' | 'fee_return' | 'holdback_repay';
+  'sweep' | 'recover' | 'fee_return' | 'holdback_repay' | 'collect_sweep';
 export type ShareTransferStatus =
   | 'waiting'
   | 'out_sent'
@@ -114,12 +122,14 @@ const SOURCE: Record<ShareTransferKind, 'staff' | 'business' | null> = {
   recover: 'business',
   fee_return: null,
   holdback_repay: null,
+  collect_sweep: null,
 };
 const DESTINATION: Record<ShareTransferKind, 'staff' | 'business'> = {
   sweep: 'business',
   recover: 'staff',
   fee_return: 'staff',
   holdback_repay: 'staff',
+  collect_sweep: 'business',
 };
 
 type Row = typeof shareTransfers.$inferSelect;
@@ -159,6 +169,79 @@ export async function scheduleShareSweep(
       provider: input.provider,
     })
     .onConflictDoNothing();
+}
+
+/**
+ * You collect (R3): called with a collect tip's payment posting, in its transaction, when the tip has
+ * a business share. The share is already in TipMe's balance (held for the business), so only the leg
+ * into the business runs (`out_paid` from the start), once the tip has settled (`runShareTransfers`).
+ * Once per tip: the one-sweep index covers both kinds.
+ */
+export async function scheduleCollectSweep(
+  tx: Tx,
+  input: {
+    tipId: string;
+    profileId: string;
+    businessId: string;
+    amountMinor: bigint;
+    currency: string;
+    provider: string;
+  },
+): Promise<void> {
+  await tx
+    .insert(shareTransfers)
+    .values({
+      id: newId(),
+      tipId: input.tipId,
+      kind: 'collect_sweep',
+      businessId: input.businessId,
+      profileId: input.profileId,
+      currency: input.currency,
+      amountMinor: input.amountMinor,
+      deliverMinor: input.amountMinor,
+      status: 'out_paid',
+      provider: input.provider,
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * The leg in is confirmed paid. For a collect share (R3), the held money is booked as moved in the
+ * same transaction, keyed by the leg's own key, so it is booked once however often it is confirmed.
+ */
+async function finishIn(
+  db: Database,
+  row: Row,
+  transferRef: string,
+): Promise<void> {
+  if (row.kind !== 'collect_sweep') {
+    await claim(db, row, 'in_sent', {
+      status: 'done',
+      inReference: transferRef,
+    });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    if (
+      !(await claim(tx, row, 'in_sent', {
+        status: 'done',
+        inReference: transferRef,
+      }))
+    )
+      return;
+    const amountMinor = row.deliverMinor ?? row.amountMinor;
+    await postLedgerTransaction(tx, {
+      operationType: 'collect_transfer',
+      operationKey: shareInKey(row.id),
+      currency: row.currency,
+      tipId: row.tipId,
+      traceId: null,
+      lines: buildCollectTransferPosting({
+        amountMinor,
+        businessId: businessOf(row),
+      }),
+    });
+  });
 }
 
 /**
@@ -668,14 +751,8 @@ async function sendIn(
     });
     return;
   }
-  await claim(
-    db,
-    row,
-    'in_sent',
-    answer.status === 'paid'
-      ? { status: 'done', inReference: answer.transferRef }
-      : { inReference: answer.transferRef },
-  );
+  if (answer.status === 'paid') return finishIn(db, row, answer.transferRef);
+  await claim(db, row, 'in_sent', { inReference: answer.transferRef });
 }
 
 /** A leg whose answer was lost or pending: looked for by its key, never sent again blindly. */
@@ -711,11 +788,7 @@ async function readBack(
     );
   if (found?.status === 'paid') {
     if (out) return confirmOut(db, row, found.transferRef, now);
-    await claim(db, row, 'in_sent', {
-      status: 'done',
-      inReference: found.transferRef,
-    });
-    return;
+    return finishIn(db, row, found.transferRef);
   }
   if (found) {
     // Still pending at the partner: look again later.
@@ -777,6 +850,12 @@ export async function runShareTransfers(
             and(
               eq(shareTransfers.status, 'out_paid'),
               lte(shareTransfers.nextAttemptAt, now),
+              // A collect share waits for the tip to settle in TipMe's own balance, as a sweep does
+              // on the staff member's account.
+              or(
+                sql`${shareTransfers.kind} <> 'collect_sweep'`,
+                lte(shareTransfers.createdAt, settledBefore),
+              ),
             ),
             and(
               inArray(shareTransfers.status, ['out_sent', 'in_sent']),
@@ -815,7 +894,7 @@ export function businessShareMoney(
     const result = await db.execute<{ on_way: string; held: string }>(sql`
       SELECT
         (SELECT COALESCE(SUM(COALESCE(deliver_minor, amount_minor)), 0) FROM share_transfers
-          WHERE business_id = ${businessId} AND kind = 'sweep'
+          WHERE business_id = ${businessId} AND kind IN ('sweep', 'collect_sweep')
             AND status IN ('waiting', 'out_sent', 'out_paid', 'in_sent'))::text AS on_way,
         (SELECT COALESCE(SUM(remaining_minor), 0) FROM share_holdbacks
           WHERE business_id = ${businessId} AND remaining_minor > 0)::text AS held`);
