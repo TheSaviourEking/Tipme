@@ -386,27 +386,24 @@ test('a platform-scoped event for a collect tip never reaches Pro billing, and a
     [{ events: 2, pro: 0 }],
   );
 
-  // A dispute on the tip's charge (Task 9 models it): kept for staff, never Pro, nothing booked.
+  // A dispute on the tip's charge (Task 9): the tip's own dispute, stored against its payment,
+  // never Pro. Opening it books nothing (no fee is reported).
   const tipDispute = dispute({ chargeReference: tip.charge });
   assert.equal(
     await service().applyBachs(tipDispute, reads(tip)),
-    'collect_event_stored',
+    'dispute_opened',
   );
   assert.deepEqual(
     await q(
-      `SELECT reason FROM unmatched_provider_events WHERE provider_event_id = $1`,
+      `SELECT attempt_id, pro_purchase_id FROM provider_events WHERE provider_event_id = $1`,
       [tipDispute.eventId],
     ),
-    [{ reason: 'collect_event' }],
+    [{ attempt_id: tip.attemptId, pro_purchase_id: null }],
   );
-  assert.equal(
-    (
-      await q(`SELECT 1 FROM provider_events WHERE provider_event_id = $1`, [
-        tipDispute.eventId,
-      ])
-    ).length,
-    0,
-  );
+  assert.deepEqual(await q(`SELECT tip_id, status FROM disputes`), [
+    { tip_id: tip.tipId, status: 'open' },
+  ]);
+  assert.equal((await transactionsOf(tip.tipId)).length, 1);
   assert.equal(await purchaseStatus(), 'PAID');
   // A refund on the tip's checkout that TipMe did not ask for: kept for staff too, never Pro.
   const reversal = {
@@ -437,7 +434,7 @@ test('a platform-scoped event for a collect tip never reaches Pro billing, and a
     eventType: 'dispute.updated',
     status: 'lost',
   });
-  // Today a lost dispute.updated does not end Pro (Task 5 note): only routing is asserted here.
+  // (That it ends Pro is pinned in pro-webhooks.test.mjs; only routing is asserted here.)
   assert.equal(
     await service().applyBachs(proDispute, proReads(pro)),
     'pro_reversed',
