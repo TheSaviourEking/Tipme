@@ -54,6 +54,11 @@ import {
   type IssueSubject,
 } from '../schema.js';
 import { balanceIn, businessBalanceIn } from './balance.js';
+import {
+  collectWithdrawalRoom,
+  refuseOverCollectLimits,
+  withinCollectLimits,
+} from './collect-guards.js';
 import { freeFeeCredit } from './fee-credits.js';
 import { readFeatureSwitch } from './feature-switches.js';
 import { managerOf } from './business-access.js';
@@ -218,6 +223,11 @@ export async function createPayout(
       const amountMinor = rows.reduce(
         (sum, row) => sum + row.net - (row.share ?? 0n),
         0n,
+      );
+      // You collect (Task 12, spec §8): the same new-account limits as a withdrawal request.
+      refuseOverCollectLimits(
+        amountMinor,
+        await collectWithdrawalRoom(tx, input.profileId, new Date()),
       );
 
       const payoutId = newId();
@@ -1651,9 +1661,18 @@ async function quoteFor(
       ? 1
       : (await guarded(() => personsWithdrawalsToday(db, owner.profileId, now)))
           .counted + 1;
+  // You collect (Task 12, spec §8): a collect recipient's new-account limits lower what the quote
+  // offers, as the request would refuse more. Nothing for a direct recipient or a business.
+  const room =
+    'businessId' in owner
+      ? null
+      : await guarded(() => collectWithdrawalRoom(db, owner.profileId, now));
+  const withdrawable = notNegative(lower(ledgerMinor, providerMinor));
   return {
     state: 'ready',
-    withdrawableMinor: notNegative(lower(ledgerMinor, providerMinor)),
+    withdrawableMinor: room
+      ? notNegative(withinCollectLimits(withdrawable, room))
+      : withdrawable,
     ledgerMinor,
     providerMinor,
     feeMinor: read.feeMinor,
@@ -1893,6 +1912,18 @@ async function requestFor(
       );
       if (input.amountMinor > withdrawable)
         throw new OperationError('INSUFFICIENT_BALANCE');
+      // You collect (Task 12, spec §8): a collect recipient's first withdrawal is capped, and their
+      // Lagos day limited while the account is young. Under the profile lock, so two at once can't
+      // both use the same room. A direct recipient and a business have no such limits.
+      if (!('businessId' in owner))
+        refuseOverCollectLimits(
+          input.amountMinor,
+          await collectWithdrawalRoom(
+            tx,
+            owner.profileId,
+            input.now ?? new Date(),
+          ),
+        );
       // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), for a person and a
       // business alike, except to take all that can be taken: nobody is left with money they
       // cannot withdraw, or an account they cannot close.

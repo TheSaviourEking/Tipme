@@ -296,6 +296,10 @@ const messages: Record<ApiErrorCode, string> = {
     'The payment provider refused to start this payment. Nothing was charged.',
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PAGE_PAUSED: 'This page can’t take tips right now. Please try again later.',
+  // You collect (spec §8, §10). The amounts are admin settings: withdrawalLimitMessage puts them in.
+  WITHDRAWAL_FIRST_CAP: 'New accounts have a limit on their first withdrawal.',
+  WITHDRAWAL_DAILY_LIMIT:
+    'New accounts have a limit on what they can withdraw each day.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:
@@ -350,6 +354,10 @@ const operationErrors: Partial<
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_BELOW_FEE: { status: 409, code: 'WITHDRAWAL_BELOW_FEE' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
+  // You collect (Task 12). A paused page says no reason, to protect the recipient (spec §2.2).
+  PAGE_PAUSED: { status: 409, code: 'PAGE_PAUSED' },
+  WITHDRAWAL_FIRST_CAP: { status: 409, code: 'WITHDRAWAL_FIRST_CAP' },
+  WITHDRAWAL_DAILY_LIMIT: { status: 409, code: 'WITHDRAWAL_DAILY_LIMIT' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },
@@ -635,6 +643,26 @@ function changelogProblemsOf(exception: unknown): string | undefined {
     : undefined;
 }
 
+/**
+ * The withdrawal limits' words with the limit in force (spec §10: "New accounts can withdraw up to
+ * {amount} the first time."). The limit is the one OperationError detail these carry, the admin
+ * setting the refusal was decided on, re-checked here as whole minor units before it is shown.
+ */
+function withdrawalLimitMessage(exception: unknown): string | undefined {
+  if (
+    !(exception instanceof OperationError) ||
+    !exception.detail ||
+    !/^[1-9][0-9]{0,14}$/.test(exception.detail)
+  )
+    return undefined;
+  const amount = wholeNgn(BigInt(exception.detail));
+  if (exception.code === 'WITHDRAWAL_FIRST_CAP')
+    return `New accounts can withdraw up to ${amount} the first time.`;
+  if (exception.code === 'WITHDRAWAL_DAILY_LIMIT')
+    return `New accounts can withdraw up to ${amount} a day.`;
+  return undefined;
+}
+
 /** Fixed words and codes only: what the next person needs to tell one 503 from another. */
 function dependencyFields(failure: DatabaseFailure | null) {
   if (!failure) return { cause: 'not_database' };
@@ -702,6 +730,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     // The person's own draft, checked by the server: what the editor lists with its fixes.
     if (exception instanceof StudioCheckFailedException)
       body.error.issues = exception.issues;
+    const limit = withdrawalLimitMessage(exception);
+    if (limit) body.error.message = limit;
     const problems = changelogProblemsOf(exception);
     if (problems) body.error.reason = problems;
     if (

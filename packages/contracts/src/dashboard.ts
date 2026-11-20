@@ -6,6 +6,11 @@ export interface DashboardSummary {
   currency: string;
   availableMinor: string;
   confirmingMinor: string;
+  /**
+   * You collect: money TipMe holds for the recipient, kept for them or on its way to their account.
+   * Never part of `availableMinor` and never withdrawable until it arrives. "0" for everyone else.
+   */
+  onItsWayMinor: string;
   today: string;
   yesterday: string;
   thisWeek: string;

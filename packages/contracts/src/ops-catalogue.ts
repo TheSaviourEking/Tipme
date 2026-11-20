@@ -276,6 +276,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
   },
+  'OpsCollectSettingsController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'The You collect limits and their history: amounts, days, reasons and staff ids, nobody’s private details.',
+  },
   'OpsSwitchesController.list': {
     verb: 'GET',
     permission: 'switches.manage',
@@ -417,6 +423,10 @@ export const SERIOUS_ACTIONS = [
   'tip.refund',
   // Owner, 18 Nov 2026: TipMe's share per plan (Free, Pro), for new quotes only.
   'plan_fees.change',
+  // You collect (plan Task 12, spec §9, R11): its settings, and staff's pause of every collect transfer.
+  'collect_settings.change',
+  'collect_transfers.pause',
+  'collect_transfers.resume',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -444,6 +454,9 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'announcement.send': 'Send an announcement by email',
   'tip.refund': 'Refund a tip (TipMe keeps its fee)',
   'plan_fees.change': 'Change TipMe’s fee per plan',
+  'collect_settings.change': 'Change the You collect limits',
+  'collect_transfers.pause': 'Pause every You collect transfer',
+  'collect_transfers.resume': 'Resume You collect transfers',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -471,4 +484,7 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'announcement.send': 'announcements.send',
     'tip.refund': 'payments.repair',
     'plan_fees.change': 'fees.manage',
+    'collect_settings.change': 'fees.manage',
+    'collect_transfers.pause': 'payments.repair',
+    'collect_transfers.resume': 'payments.repair',
   };

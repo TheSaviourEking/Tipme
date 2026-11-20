@@ -56,6 +56,28 @@ const CASES = [
     'TipMe’s fee per plan: Free 7%, Pro 5% → Free 5%, Pro 3%; approved by staff …00c3d4',
   ],
   [
+    'collect_settings.changed',
+    'c',
+    {
+      from: { capMinor: '5000000', capDays: 30, reminderDays: [7, 21, 28] },
+      to: { capMinor: '10000000', capDays: 30, reminderDays: [7, 14, 28] },
+      approvedBy: B,
+    },
+    'You collect limits: holding cap ₦50,000 → ₦100,000, reminders days 7, 21, 28 → days 7, 14, 28; approved by staff …00c3d4',
+  ],
+  [
+    'collect_transfers.paused',
+    'c',
+    { from: false, to: true, approvedBy: null },
+    'You collect transfers paused',
+  ],
+  [
+    'collect_transfers.resumed',
+    'c',
+    { from: true, to: false, approvedBy: B },
+    'You collect transfers resumed; approved by staff …00c3d4',
+  ],
+  [
     'business_pro.price_changed',
     'p',
     { from: null, to: '700000', approvedBy: null },

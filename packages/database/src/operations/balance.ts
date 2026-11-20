@@ -15,6 +15,11 @@ export function balanceQuery(profileId: string) {
       + (SELECT COALESCE(SUM(pp.amount_minor), 0) FROM pro_purchases pp
           WHERE pp.profile_id = ${profileId} AND pp.method = 'balance'
             AND pp.status IN ('COLLECTING', 'UNKNOWN')) AS reserved,
+      -- You collect (Task 12): the person's money TipMe still holds on its own account, kept for them
+      -- or on its way to theirs. Part of what TipMe owes them, never in their account yet.
+      (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
+         FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+        WHERE a.code = 'held_for_recipients' AND a.profile_id = ${profileId}) AS on_its_way,
       (SELECT COALESCE(SUM(q.recipient_net_minor - COALESCE(s.share_minor, 0)), 0)
          FROM tips t
          JOIN payment_intents i ON i.id = t.intent_id
@@ -38,27 +43,41 @@ export function balanceQuery(profileId: string) {
  * owner 12 Nov 2026) and Pro paid from the balance still being moved
  * (COLLECTING / UNKNOWN), which are reserved. Money still being
  * confirmed by the provider is reported separately and is never part of the balance.
+ *
+ * You collect (Task 12, spec §2.1): money TipMe still holds for them on its own account
+ * (`held_for_recipients`) is owed but not in their account, so it is `onItsWayMinor`, never part of
+ * `availableMinor`. Zero for a direct recipient, whose balance is exactly as before.
  */
 export async function balanceIn(
   tx: Database | Tx,
   profileId: string,
-): Promise<{ availableMinor: bigint; confirmingMinor: bigint }> {
+): Promise<Balance> {
   const result = await tx.execute<{
     payable: string | null;
     reserved: string | null;
+    on_its_way: string | null;
     confirming: string | null;
   }>(balanceQuery(profileId));
   const row = result.rows[0];
+  const onItsWayMinor = BigInt(row?.on_its_way ?? '0');
   return {
-    availableMinor: BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0'),
+    availableMinor:
+      BigInt(row?.payable ?? '0') -
+      BigInt(row?.reserved ?? '0') -
+      onItsWayMinor,
     confirmingMinor: BigInt(row?.confirming ?? '0'),
+    onItsWayMinor,
   };
 }
 
-export function balanceOf(
-  db: Database,
-  profileId: string,
-): Promise<{ availableMinor: bigint; confirmingMinor: bigint }> {
+export interface Balance {
+  availableMinor: bigint;
+  confirmingMinor: bigint;
+  /** You collect: held by TipMe for them, kept or on its way; never withdrawable. */
+  onItsWayMinor: bigint;
+}
+
+export function balanceOf(db: Database, profileId: string): Promise<Balance> {
   return guarded(() => balanceIn(db, profileId));
 }
 

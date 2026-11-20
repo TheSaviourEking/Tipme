@@ -84,6 +84,7 @@ import {
   collectTransferProviders,
   handleCollectTransfers,
 } from './handlers/collect-transfers.js';
+import { handleCollectReminders } from './handlers/collect-reminders.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
@@ -870,12 +871,20 @@ export async function startJobWorker(
                 key: `${config.QUEUE_PREFIX}:lock:${COLLECT_TRANSFERS_JOB}`,
                 ttlMs: COLLECT_TRANSFERS_LOCK_TTL_MS,
               },
-              () =>
-                handleCollectTransfers({
+              async () => {
+                const transfers = await handleCollectTransfers({
                   db: database.db,
                   providers: collectProviders,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
-                }),
+                });
+                // Task 12: reminders to add bank details ride the same sweep and lock.
+                const reminders = await handleCollectReminders({
+                  db: database.db,
+                  sealing,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                return { ...transfers, reminded: reminders.reminded };
+              },
             );
             if (!result.ran) {
               logger.info({

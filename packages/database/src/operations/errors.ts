@@ -46,6 +46,10 @@ export type OperationErrorCode =
   | 'WITHDRAWAL_TOO_SMALL'
   | 'WITHDRAWAL_BELOW_FEE'
   | 'WITHDRAWAL_UNAVAILABLE'
+  // You collect (Task 12): the page at its holding cap, and a new account's withdrawal limits.
+  | 'PAGE_PAUSED'
+  | 'WITHDRAWAL_FIRST_CAP'
+  | 'WITHDRAWAL_DAILY_LIMIT'
   | 'WITHDRAWALS_PAUSED'
   | 'WITHDRAWALS_SWITCHED_OFF'
   | 'PAYOUT_SETUP_NEEDED'
