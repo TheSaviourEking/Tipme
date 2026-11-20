@@ -4107,6 +4107,14 @@ export const disputes = pgTable(
     heldMinor: minor('held_minor')
       .notNull()
       .default(sql`0`),
+    // What TipMe did with the tip's share when the dispute opened (Task 9): `held` (the share, never
+    // sent, held in review), `balance` (it had moved: `held_minor` of the balance is held), `none`
+    // (no share to hold). Null while the share's transfer may be in flight: decided after its
+    // read-back (Review Focus 3).
+    shareStep: text('share_step'),
+    // When TipMe finished acting on the outcome: the hold released (won), the loss booked (lost),
+    // or the share handed to the refund (closed). Null while anything is left to do.
+    settledAt: timestamp('settled_at', { withTimezone: true }),
     lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -4134,6 +4142,18 @@ export const disputes = pgTable(
       sql`set_aside_minor IS NULL OR set_aside_minor >= 0`,
     ),
     check('disputes_held', sql`held_minor >= 0 AND held_minor <= amount_minor`),
+    check(
+      'disputes_share_step',
+      sql`share_step IS NULL OR share_step IN ('held', 'balance', 'none')`,
+    ),
+    // Only a final dispute is settled.
+    check(
+      'disputes_settled',
+      sql`settled_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    index('disputes_unsettled')
+      .on(table.createdAt)
+      .where(sql`settled_at IS NULL`),
     index('disputes_tip').on(table.tipId),
     index('disputes_status').on(table.status, table.respondBy),
   ],
@@ -4232,6 +4252,13 @@ export const collectTransfers = pgTable(
     check(
       'collect_transfers_paid',
       sql`status <> 'paid' OR paid_at IS NOT NULL`,
+    ),
+    // P27: a share whose money may have moved (it was sent under its key) is never cancelled. Only a
+    // read-back on its account that found nothing clears `sent_at`. The guard all dispute and refund
+    // hooks use is `takeUnsentShare`; this makes it hold whatever the code does.
+    check(
+      'collect_transfers_never_cancel_sent',
+      sql`status <> 'cancelled' OR sent_at IS NULL`,
     ),
     uniqueIndex('collect_transfers_one_share')
       .on(table.tipId)

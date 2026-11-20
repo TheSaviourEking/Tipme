@@ -4,6 +4,7 @@ import {
   recordedProviderName,
 } from '@tipme/contracts';
 import {
+  buildCollectReturnPosting,
   buildCollectTransferPosting,
   canTransition,
   COLLECT_TRANSFER_TRANSITIONS,
@@ -240,6 +241,17 @@ export interface CollectTransferProvider {
   payoutCapability(
     accountRef: string,
   ): Promise<{ status: 'active' | 'restricted' | 'missing' }>;
+  /**
+   * Task 9: a `back` row, money from the recipient's account back to TipMe's (`collectToPlatform`,
+   * `transfer_group` = the key). PayoutRejectedError and PlatformRefusalError are definite refusals;
+   * anything else may have moved. Without it, `back` rows wait.
+   */
+  collectBack?(input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+  }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
 }
 
 export interface CollectTransferRun {
@@ -380,7 +392,8 @@ function currentAccount(alias: string): SQL {
 
 /**
  * Whether the row's recipient can receive it now (spec §5, §8): verified, a `usable` bank that
- * hasn't been replaced, no shared bank account in review, no open dispute on the tip. Checked when
+ * hasn't been replaced, no shared bank account in review, no open dispute on the tip (nor a lost one TipMe is still
+ * recovering: its share is about to be cancelled). Checked when
  * a share is released and again, with its account, when it is claimed to be sent.
  */
 function canReceive(alias: string): SQL {
@@ -398,7 +411,8 @@ function canReceive(alias: string): SQL {
          AND r.review_reason = 'same_bank')
     AND NOT EXISTS (
       SELECT 1 FROM disputes x
-       WHERE x.tip_id = ${c}.tip_id AND x.status IN ('open', 'responded'))`;
+       WHERE x.tip_id = ${c}.tip_id
+         AND (x.status IN ('open', 'responded') OR (x.status = 'lost' AND x.settled_at IS NULL)))`;
 }
 
 /**
@@ -470,16 +484,18 @@ async function finishPaid(
       paidAt: now,
     });
     if (!paid) return 'none';
+    const owner = { amountMinor: row.amountMinor, profileId: row.profileId };
     await postLedgerTransaction(tx, {
       operationType: 'collect_transfer',
       operationKey: `collect_transfer.${row.id}`,
       currency: row.currency,
       tipId: row.tipId,
       traceId: null,
-      lines: buildCollectTransferPosting({
-        amountMinor: row.amountMinor,
-        profileId: row.profileId,
-      }),
+      // A share moves held money to the recipient's account; a transfer back returns it (Task 9).
+      lines:
+        row.kind === 'back'
+          ? buildCollectReturnPosting(owner)
+          : buildCollectTransferPosting(owner),
     });
     return 'paid';
   });
@@ -521,6 +537,24 @@ const stillReceivable = sql`${collectTransfers.accountReference} = ${currentAcco
   AND ${canReceive('collect_transfers')}`;
 
 /**
+ * What a claim of this row must still hold. A share: its recipient can receive it on that account.
+ * A transfer back (Task 9) comes from the account the share went to, where the money is, whatever
+ * the recipient has done since: nothing about them gates it.
+ */
+const claimWhere = (row: Row): SQL =>
+  row.kind === 'back' ? sql`TRUE` : stillReceivable;
+
+/** Whether the row can be sent now (see claimWhere). */
+async function receivableNow(db: Database, row: Row): Promise<boolean> {
+  if (row.kind === 'back') return true;
+  const [receivable] = await db
+    .select({ id: collectTransfers.id })
+    .from(collectTransfers)
+    .where(and(eq(collectTransfers.id, row.id), stillReceivable));
+  return Boolean(receivable);
+}
+
+/**
  * Sends a `ready` row: the claim first, committed, then the one partner call.
  *
  * The claim re-checks what release checked: a recipient whose bank was replaced, who lost their
@@ -542,6 +576,8 @@ async function send(
   totals: CollectTransferRun,
   readJustNow = false,
 ): Promise<Outcome> {
+  // A transfer back needs its own call; without it the row waits, unclaimed.
+  if (row.kind === 'back' && !provider.collectBack) return 'none';
   const accountRef = row.accountReference;
   if (!accountRef || row.currency !== 'NGN')
     return toReview(
@@ -571,11 +607,7 @@ async function send(
   // Nothing has moved under this key: never sent, or a read-back on its own account just found
   // nothing in its group after the partner forgot the key.
   const provenUnmoved = neverSent || (forgotten && readJustNow);
-  const [receivable] = await db
-    .select({ id: collectTransfers.id })
-    .from(collectTransfers)
-    .where(and(eq(collectTransfers.id, row.id), stillReceivable));
-  if (!receivable) {
+  if (!(await receivableNow(db, row))) {
     if (provenUnmoved) {
       // Starts over: released again later, to the account the recipient has then.
       const back = await move(db, row, 'ready', 'waiting', now, {
@@ -598,7 +630,7 @@ async function send(
       attempts: sql`${collectTransfers.attempts} + 1`,
       ...(freshWindow ? { sentAt: now } : {}),
     },
-    { where: stillReceivable },
+    { where: claimWhere(row) },
   );
   if (!claimed) return 'none';
   if (forgotten && !readJustNow)
@@ -606,14 +638,20 @@ async function send(
   totals.sent += 1;
   let answer: { transferRef: string; status: 'paid' | 'pending' };
   try {
-    answer = await provider.sendCollectTransfer({
+    const input = {
       accountRef,
       amountMinor: claimed.amountMinor,
-      currency: 'NGN',
+      currency: 'NGN' as const,
       idempotencyKey: claimed.idempotencyKey,
-    });
+    };
+    answer =
+      claimed.kind === 'back'
+        ? await provider.collectBack!(input)
+        : await provider.sendCollectTransfer(input);
   } catch (error) {
-    return refused(db, claimed, provider, accountRef, now, error);
+    return claimed.kind === 'back'
+      ? refusedBack(db, claimed, now, error)
+      : refused(db, claimed, provider, accountRef, now, error);
   }
   if (answer.status === 'paid')
     return finishPaid(db, claimed, 'sent', answer.transferRef, now);
@@ -750,6 +788,43 @@ async function refused(
 }
 
 /**
+ * A failed transfer back (Task 9). It runs as the recipient's account, so its refusals are theirs:
+ * ORGANIZATION_IN_DEBT there is the RECIPIENT in debt (P14), never TipMe's, so it freezes nothing
+ * else. Every definite refusal goes to review with a money issue (the dispute waits for staff);
+ * TipMe's own key refused stops the run as for a share; anything else may have moved.
+ */
+async function refusedBack(
+  db: Database,
+  row: Row,
+  now: Date,
+  error: unknown,
+): Promise<Outcome> {
+  const name = error instanceof Error ? error.name : null;
+  const reason = (error as { failureReason?: unknown } | null)?.failureReason;
+  if (name === 'PlatformRefusalError' && reason === 'provider_key') {
+    await move(db, row, 'sent', 'ready', now, {
+      nextTryAt: backoff(row.attempts, now),
+    });
+    await reportProviderKeyRefused(db, { now });
+    return { stop: 'platform' };
+  }
+  if (name === 'PayoutRejectedError' || name === 'PlatformRefusalError')
+    return toReview(
+      db,
+      row,
+      'sent',
+      now,
+      reason === 'in_debt'
+        ? "The partner answered ORGANIZATION_IN_DEBT to this transfer back: the recipient's account is in debt (not TipMe's). Nothing moved; the lost dispute waits for it."
+        : 'The partner refused this transfer back. Nothing moved; the lost dispute waits for it.',
+    );
+  await move(db, row, 'sent', 'unknown', now, {
+    nextTryAt: unknownWait(row.attempts, now),
+  });
+  return 'retried';
+}
+
+/**
  * Looks for the row's transfer at the partner by its group. Found with the right money: paid.
  * Found otherwise (another amount, or two in one group): review. Pending: looked at again later.
  * Not found: sent again with the same key. A list that can't be read proves nothing.
@@ -858,11 +933,8 @@ async function resolveInFlight(
   // Inside the partner's window: the same key replays a transfer that moved, or makes the one. But
   // only to a recipient who can still receive it on the same account; otherwise it waits, with its
   // account, for a read-back there.
-  const [receivable] = await db
-    .select({ id: collectTransfers.id })
-    .from(collectTransfers)
-    .where(and(eq(collectTransfers.id, row.id), stillReceivable));
-  if (!receivable) return keepForReadBack(db, row, 'unknown', now);
+  if (!(await receivableNow(db, row)))
+    return keepForReadBack(db, row, 'unknown', now);
   const again = await move(db, row, 'unknown', 'ready', now, {
     nextTryAt: now,
   });
@@ -943,7 +1015,8 @@ export async function runCollectTransfers(
   const inScope = and(
     eq(collectTransfers.provider, scope.name),
     eq(collectTransfers.environment, scope.environment),
-    eq(collectTransfers.kind, 'share'),
+    // Shares, and transfers back for lost disputes (Task 9): the same machine.
+    inArray(collectTransfers.kind, ['share', 'back']),
   );
   const inFlight = await guarded(() =>
     db
@@ -974,7 +1047,7 @@ export async function runCollectTransfers(
                row_number() OVER (PARTITION BY c.profile_id ORDER BY t.created_at, c.id) AS n
           FROM collect_transfers c JOIN tips t ON t.id = c.tip_id
          WHERE c.provider = ${scope.name} AND c.environment = ${scope.environment}
-           AND c.kind = 'share' AND c.status = 'ready'
+           AND c.kind IN ('share', 'back') AND c.status = 'ready'
            AND c.next_try_at <= ${now.toISOString()}::timestamptz
       ) r
        WHERE n <= ${perRecipient}
@@ -1102,5 +1175,159 @@ export function hasWaitingCollectTransfers(
       )
       .limit(1);
     return Boolean(row);
+  });
+}
+
+/*
+ * P27: the one guard every dispute and refund hook uses before it holds, releases-for-cancel or
+ * cancels a share. A share whose money may have moved (it was sent under its key: `sent_at` set,
+ * whatever its status now) is never taken by a hook: only a read-back on the account it went to
+ * settles it, and the hook waits for that (Review Focus 3). The database's
+ * `collect_transfers_never_cancel_sent` check backs this up for `cancelled`.
+ */
+
+/** Where a tip's share is, for a refund or dispute (spec §6, ShareWhere in @tipme/domain). */
+export type SharePosition =
+  | { state: 'held'; row: Row }
+  | { state: 'moved'; row: Row }
+  | { state: 'in_flight'; row: Row }
+  | { state: 'gone'; row: Row | null };
+
+/** The tip's share row and where its money is. */
+export async function sharePosition(
+  tx: Database | Tx,
+  tipId: string,
+): Promise<SharePosition> {
+  const [row] = await tx
+    .select()
+    .from(collectTransfers)
+    .where(
+      and(
+        eq(collectTransfers.tipId, tipId),
+        eq(collectTransfers.kind, 'share'),
+      ),
+    );
+  if (!row) return { state: 'gone', row: null };
+  if (row.status === 'paid') return { state: 'moved', row };
+  if (row.status === 'cancelled') return { state: 'gone', row };
+  if (
+    row.sentAt === null &&
+    (row.status === 'waiting' ||
+      row.status === 'ready' ||
+      row.status === 'review')
+  )
+    return { state: 'held', row };
+  return { state: 'in_flight', row };
+}
+
+/**
+ * Takes a share that was never sent (or proved unmoved): to `review` (held, with its reason) or to
+ * `cancelled`. Conditional on `sent_at IS NULL` and a status it can leave, in the caller's
+ * transaction; false when the share may have moved, so nothing changed. A row already in review for
+ * another reason keeps that reason when it is held.
+ */
+export async function takeUnsentShare(
+  tx: Database | Tx,
+  i: {
+    transferId: string;
+    to: 'review' | 'cancelled';
+    reviewReason: 'dispute' | 'refund';
+    now: Date;
+  },
+): Promise<boolean> {
+  return guarded(async () => {
+    const moved = await tx
+      .update(collectTransfers)
+      .set({
+        status: i.to,
+        ...(i.to === 'review'
+          ? {
+              reviewReason: sql`CASE WHEN ${collectTransfers.status} = 'review' THEN ${collectTransfers.reviewReason} ELSE ${i.reviewReason} END`,
+            }
+          : {}),
+        updatedAt: i.now,
+      })
+      .where(
+        and(
+          eq(collectTransfers.id, i.transferId),
+          eq(collectTransfers.kind, 'share'),
+          isNull(collectTransfers.sentAt),
+          inArray(collectTransfers.status, ['waiting', 'ready', 'review']),
+        ),
+      )
+      .returning({ id: collectTransfers.id });
+    return moved.length === 1;
+  });
+}
+
+/**
+ * Lets go of a share a dispute (or refund) held (P13, P20): only a row in review for that reason,
+ * to `ready` with its account or `waiting` without one. A row held for another reason stays held.
+ * `as` hands it on to another reason instead (a closed dispute to the refund) without releasing it.
+ */
+export async function releaseHeldShare(
+  tx: Database | Tx,
+  i: {
+    transferId: string;
+    reason: 'dispute' | 'refund';
+    now: Date;
+    as?: 'refund';
+  },
+): Promise<boolean> {
+  return guarded(async () => {
+    const moved = await tx
+      .update(collectTransfers)
+      .set(
+        i.as
+          ? { reviewReason: i.as, updatedAt: i.now }
+          : {
+              status: sql`CASE WHEN ${collectTransfers.accountReference} IS NULL THEN 'waiting' ELSE 'ready' END`,
+              reviewReason: null,
+              nextTryAt: i.now,
+              updatedAt: i.now,
+            },
+      )
+      .where(
+        and(
+          eq(collectTransfers.id, i.transferId),
+          eq(collectTransfers.status, 'review'),
+          eq(collectTransfers.reviewReason, i.reason),
+        ),
+      )
+      .returning({ id: collectTransfers.id });
+    return moved.length === 1;
+  });
+}
+
+/**
+ * A lost dispute that took less than a held share (P27 guard, as takeUnsentShare): the share, never
+ * sent, keeps the rest and is released, to `ready` with its account or `waiting` without one.
+ */
+export async function reduceUnsentShare(
+  tx: Database | Tx,
+  i: { transferId: string; byMinor: bigint; now: Date },
+): Promise<boolean> {
+  return guarded(async () => {
+    const moved = await tx
+      .update(collectTransfers)
+      .set({
+        amountMinor: sql`${collectTransfers.amountMinor} - ${i.byMinor}`,
+        status: sql`CASE WHEN ${collectTransfers.accountReference} IS NULL THEN 'waiting' ELSE 'ready' END`,
+        reviewReason: null,
+        nextTryAt: i.now,
+        updatedAt: i.now,
+      })
+      .where(
+        and(
+          eq(collectTransfers.id, i.transferId),
+          eq(collectTransfers.kind, 'share'),
+          isNull(collectTransfers.sentAt),
+          eq(collectTransfers.status, 'review'),
+          eq(collectTransfers.reviewReason, 'dispute'),
+          sql`${collectTransfers.amountMinor} > ${i.byMinor}`,
+        ),
+      )
+      .returning({ id: collectTransfers.id });
+    return moved.length === 1;
   });
 }

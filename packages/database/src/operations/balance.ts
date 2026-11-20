@@ -14,7 +14,11 @@ export function balanceQuery(profileId: string) {
       -- booked (then the ledger has it) or fails.
       + (SELECT COALESCE(SUM(pp.amount_minor), 0) FROM pro_purchases pp
           WHERE pp.profile_id = ${profileId} AND pp.method = 'balance'
-            AND pp.status IN ('COLLECTING', 'UNKNOWN')) AS reserved,
+            AND pp.status IN ('COLLECTING', 'UNKNOWN'))
+      -- You collect (R4, plan Task 9): what a dispute holds of the balance while it is open, or lost
+      -- and still being recovered. Zero once it is released or booked.
+      + (SELECT COALESCE(SUM(x.held_minor), 0) FROM disputes x JOIN tips dt ON dt.id = x.tip_id
+          WHERE dt.profile_id = ${profileId}) AS reserved,
       (SELECT COALESCE(SUM(q.recipient_net_minor - COALESCE(s.share_minor, 0)), 0)
          FROM tips t
          JOIN payment_intents i ON i.id = t.intent_id
@@ -35,8 +39,8 @@ export function balanceQuery(profileId: string) {
  *
  * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
  * payouts still in flight (REQUESTED / PROCESSING; what is sent plus the fee a user pays from it,
- * owner 12 Nov 2026) and Pro paid from the balance still being moved
- * (COLLECTING / UNKNOWN), which are reserved. Money still being
+ * owner 12 Nov 2026), Pro paid from the balance still being moved
+ * (COLLECTING / UNKNOWN), and what a dispute holds (`disputes.held_minor`, R4), which are reserved. Money still being
  * confirmed by the provider is reported separately and is never part of the balance.
  */
 export async function balanceIn(
