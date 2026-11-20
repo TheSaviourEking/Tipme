@@ -1083,7 +1083,7 @@ test('a FORBIDDEN that is TipMe’s own key is reported as the key refused, with
   );
 });
 
-test('a share backing off in ready is not sent once its bank is replaced: it goes back to waiting', async () => {
+test('a share backing off in ready is not sent once its bank is replaced: it waits for a read-back, then starts over', async () => {
   await verified(TOBI);
   const tip = await paidTip(TOBI);
   assert.equal(await release(T0), 1);
@@ -1101,19 +1101,29 @@ test('a share backing off in ready is not sent once its bank is replaced: it goe
      VALUES ($1, $2, 'bachs', 'dest_tobi_new', '058', 'Pretend Guaranty Bank', '9876', 'pending_review')`,
     [randomUUID(), TOBI.id],
   );
+  // Not sent. It was sent once, so it keeps its account until a read-back there settles it.
   await run(provider, at(HOUR));
   assert.equal(state.sends.length, 1);
-  const row = await rowOf(tip.rowId);
+  let row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'ready');
+  assert.equal(row.account_reference, ACCOUNTS[TOBI.id]);
+  assert.deepEqual(row.next_try_at, at(23 * HOUR));
+  // Read back once the key is no longer trusted: nothing in the group, so it starts over.
+  await run(provider, at(23 * HOUR));
+  assert.deepEqual(state.lists, [ACCOUNTS[TOBI.id]]);
+  row = await rowOf(tip.rowId);
   assert.equal(row.status, 'waiting');
   assert.equal(row.account_reference, null);
+  assert.equal(state.sends.length, 1);
   // Once the new bank is usable it is released again, with the account read then.
   await q(
     `UPDATE payout_destinations SET status = 'usable' WHERE profile_id = $1 AND replaced_at IS NULL`,
     [TOBI.id],
   );
-  assert.equal(await release(at(2 * HOUR)), 1);
-  await run(provider, at(2 * HOUR));
+  assert.equal(await release(at(24 * HOUR)), 1);
+  await run(provider, at(24 * HOUR));
   assert.equal((await rowOf(tip.rowId)).status, 'paid');
+  assert.equal(state.inGroup(tip.key), 1);
 });
 
 test('a share cycling on a lost capability for over a day raises one issue for that recipient', async () => {
@@ -1161,4 +1171,140 @@ test('a pause that lands mid-run stops it before the next send', async () => {
   const result = await run(provider, T0);
   assert.equal(result.stopped, 'paused');
   assert.equal(state.sends.length, 1);
+});
+
+const NEW_ACCOUNT = 'acct_tobi_new';
+/** The recipient's account changes (a failed account set up again under a new reference). */
+const accountChanges = () =>
+  q(
+    `UPDATE payment_accounts SET provider_account_reference = $2 WHERE profile_id = $1`,
+    [TOBI.id, NEW_ACCOUNT],
+  );
+
+/** A share whose first send's answer was lost (`lost`: it moved; `lost-unmoved`: it didn't). */
+async function inFlight(answer) {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  state.answers.push(answer);
+  await run(provider, T0);
+  assert.equal((await rowOf(tip.rowId)).status, 'unknown');
+  return { tip, provider, state };
+}
+
+test('a share whose answer was lost keeps its account when the recipient’s account changes, and is read back there', async () => {
+  const { tip, provider, state } = await inFlight('lost');
+  await accountChanges();
+  // Inside the window: it can't go to the new account and isn't sent; it keeps the old one.
+  await run(provider, at(HOUR));
+  let row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'unknown');
+  assert.equal(row.account_reference, ACCOUNTS[TOBI.id]);
+  assert.equal(state.sends.length, 1);
+  // Two days later, with the key forgotten: nothing to release; it is read back on the account
+  // the money went to, and found.
+  state.forget(tip.key);
+  assert.equal(await release(at(2 * DAY)), 0);
+  await run(provider, at(2 * DAY));
+  row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'paid');
+  assert.equal(state.sends.length, 1);
+  assert.equal(state.inGroup(tip.key), 1);
+  assert.deepEqual([...new Set(state.lists)], [ACCOUNTS[TOBI.id]]);
+  assert.equal((await postingsOf(tip.tipId)).length, 1);
+});
+
+test('a share that may have moved is never returned to waiting or held while its recipient is unverified', async () => {
+  const { tip, provider, state } = await inFlight('lost');
+  await q(`UPDATE profiles SET collect_verified_at = NULL WHERE id = $1`, [
+    TOBI.id,
+  ]);
+  await run(provider, at(HOUR));
+  const row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'unknown');
+  assert.equal(row.account_reference, ACCOUNTS[TOBI.id]);
+  assert.equal(
+    await ops.holdCollectTransfer(database.db, {
+      transferId: tip.rowId,
+      now: at(2 * HOUR),
+    }),
+    false,
+  );
+  assert.equal(state.inGroup(tip.key), 1);
+  // Read back on its own account once the key is no longer trusted: it had moved, so it is paid.
+  await run(provider, at(DAY));
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+  assert.equal(state.sends.length, 1);
+});
+
+test('only once a read-back on the old account finds nothing does a share move to the new account', async () => {
+  const { tip, provider, state } = await inFlight('lost-unmoved');
+  await accountChanges();
+  await run(provider, at(HOUR));
+  assert.equal((await rowOf(tip.rowId)).status, 'unknown');
+  // Past the trusted window: the old account shows nothing in the group, so the share starts over.
+  await run(provider, at(DAY));
+  let row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'waiting');
+  assert.equal(row.account_reference, null);
+  assert.equal(row.sent_at, null);
+  assert.deepEqual(state.lists, [ACCOUNTS[TOBI.id]]);
+  assert.equal(await release(at(DAY)), 1);
+  await run(provider, at(DAY + MIN));
+  row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'paid');
+  assert.deepEqual(
+    state.sends.map((send) => send.accountRef),
+    [ACCOUNTS[TOBI.id], NEW_ACCOUNT],
+  );
+  assert.equal(state.inGroup(tip.key), 1);
+});
+
+test('staff can hold a share only if it was never sent, or a read-back proved it never moved', async () => {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  state.answers.push({ refuse: 'insufficient' });
+  await run(provider, T0);
+  const row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'ready');
+  assert.notEqual(row.sent_at, null);
+  assert.equal(
+    await ops.holdCollectTransfer(database.db, {
+      transferId: tip.rowId,
+      now: at(MIN),
+    }),
+    false,
+  );
+  const fresh = await paidTip(TOBI);
+  assert.equal(
+    await ops.holdCollectTransfer(database.db, {
+      transferId: fresh.rowId,
+      now: at(MIN),
+    }),
+    true,
+  );
+});
+
+test('eight workers racing on a lost answer whose account changed send nothing more, and book it once', async () => {
+  const { tip, provider, state } = await inFlight('lost');
+  await accountChanges();
+  state.delayMs = 20;
+  await Promise.all(
+    Array.from({ length: 8 }, () => q(`SELECT pg_sleep(0.05)`)),
+  );
+  await Promise.all(Array.from({ length: 8 }, () => run(provider, at(HOUR))));
+  assert.equal(state.sends.length, 1);
+  assert.equal((await rowOf(tip.rowId)).account_reference, ACCOUNTS[TOBI.id]);
+  state.forget(tip.key);
+  await Promise.all(
+    Array.from({ length: 8 }, () => run(provider, at(2 * DAY))),
+  );
+  assert.equal(state.sends.length, 1);
+  assert.equal(state.inGroup(tip.key), 1);
+  assert.deepEqual([...new Set(state.lists)], [ACCOUNTS[TOBI.id]]);
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+  assert.equal((await postingsOf(tip.tipId)).length, 1);
 });

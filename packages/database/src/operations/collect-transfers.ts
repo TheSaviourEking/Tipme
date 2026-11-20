@@ -345,7 +345,10 @@ export function releaseWaitingTransfers(
     const now = i.now.toISOString();
     const result = await db.execute<{ id: string }>(sql`
       UPDATE collect_transfers c
-         SET status = 'ready', account_reference = a.reference, next_try_at = ${now}::timestamptz,
+         SET status = 'ready',
+             -- A share sent before keeps the account its key went to: a read-back must look there.
+             account_reference = CASE WHEN c.sent_at IS NULL THEN a.reference ELSE c.account_reference END,
+             next_try_at = ${now}::timestamptz,
              updated_at = ${now}::timestamptz
         FROM (
           SELECT w.id, ${currentAccount('w')} AS reference
@@ -356,6 +359,7 @@ export function releaseWaitingTransfers(
              AND ${canReceive('w')}
         ) a
        WHERE c.id = a.id AND c.status = 'waiting' AND a.reference IS NOT NULL
+         AND (c.sent_at IS NULL OR c.account_reference IS NOT NULL)
       RETURNING c.id`);
     return result.rows.length;
   });
@@ -547,20 +551,43 @@ async function send(
       now,
       'This share names no account, or a currency the partner cannot send.',
     );
+  const neverSent = row.sentAt === null;
+  const forgotten = !neverSent && !keyTrusted(row.sentAt, now);
+  if (forgotten && !readJustNow) {
+    // Read back first, on the account the key was sent to, whatever else has changed since:
+    // nothing is sent by this claim, so the recipient's current state doesn't gate it.
+    const claimed = await move(
+      db,
+      row,
+      'ready',
+      'sent',
+      now,
+      { attempts: sql`${collectTransfers.attempts} + 1` },
+      { where: sql`TRUE` },
+    );
+    if (!claimed) return 'none';
+    return readBack(db, claimed, 'sent', provider, now, totals);
+  }
+  // Nothing has moved under this key: never sent, or a read-back on its own account just found
+  // nothing in its group after the partner forgot the key.
+  const provenUnmoved = neverSent || (forgotten && readJustNow);
   const [receivable] = await db
     .select({ id: collectTransfers.id })
     .from(collectTransfers)
     .where(and(eq(collectTransfers.id, row.id), stillReceivable));
   if (!receivable) {
-    const back = await move(db, row, 'ready', 'waiting', now, {
-      accountReference: null,
-      nextTryAt: now,
-    });
-    return back ? 'retried' : 'none';
+    if (provenUnmoved) {
+      // Starts over: released again later, to the account the recipient has then.
+      const back = await move(db, row, 'ready', 'waiting', now, {
+        accountReference: null,
+        sentAt: null,
+        nextTryAt: now,
+      });
+      return back ? 'retried' : 'none';
+    }
+    return keepForReadBack(db, row, 'ready', now);
   }
-  const neverSent = row.sentAt === null;
-  const forgotten = !neverSent && !keyTrusted(row.sentAt, now);
-  const freshWindow = neverSent || (forgotten && readJustNow);
+  const freshWindow = provenUnmoved;
   const claimed = await move(
     db,
     row,
@@ -778,6 +805,27 @@ async function readBack(
   return send(db, again, provider, now, totals, true);
 }
 
+/**
+ * A share that may have moved under a key the partner still replays, but can't be sent now (its
+ * recipient's account changed, or they can't receive). It keeps its account and is not sent, held
+ * back, or returned to waiting: once the key is no longer trusted it is read back on that account,
+ * the only place the money could have gone. Found, it is paid; not found, it starts over.
+ */
+async function keepForReadBack(
+  db: Database,
+  row: Row,
+  from: 'ready' | 'unknown',
+  now: Date,
+): Promise<Outcome> {
+  const readBackAt = new Date(
+    (row.sentAt ?? now).getTime() + KEY_TRUSTED_FOR_MS,
+  );
+  const kept = await move(db, row, from, from, now, {
+    nextTryAt: readBackAt > now ? readBackAt : now,
+  });
+  return kept ? 'retried' : 'none';
+}
+
 /** A claimed row nobody answered for, or a lost answer due another try. */
 async function resolveInFlight(
   db: Database,
@@ -790,7 +838,14 @@ async function resolveInFlight(
     return readBack(db, row, 'sent', provider, now, totals);
   if (!keyTrusted(row.sentAt, now))
     return readBack(db, row, 'unknown', provider, now, totals);
-  // Inside the partner's window: the same key replays a transfer that moved, or makes the one.
+  // Inside the partner's window: the same key replays a transfer that moved, or makes the one. But
+  // only to a recipient who can still receive it on the same account; otherwise it waits, with its
+  // account, for a read-back there.
+  const [receivable] = await db
+    .select({ id: collectTransfers.id })
+    .from(collectTransfers)
+    .where(and(eq(collectTransfers.id, row.id), stillReceivable));
+  if (!receivable) return keepForReadBack(db, row, 'unknown', now);
   const again = await move(db, row, 'unknown', 'ready', now, {
     nextTryAt: now,
   });
@@ -954,8 +1009,9 @@ export async function runCollectTransfers(
 }
 
 /**
- * Staff hold a share for a manual check (P13 `staff`). Only one that hasn't been sent: a share in
- * flight (`sent`, `unknown`) is never held by hand, since its money may be moving.
+ * Staff hold a share for a manual check (P13 `staff`). Only one never sent, or one a read-back on
+ * its own account has proved unmoved (that clears `sent_at`): a share that may have been sent is
+ * never held by hand, whatever its status, since its money may have moved.
  */
 export function holdCollectTransfer(
   db: Database,
@@ -969,6 +1025,8 @@ export function holdCollectTransfer(
         and(
           eq(collectTransfers.id, i.transferId),
           inArray(collectTransfers.status, ['waiting', 'ready']),
+          // Never one that may have been sent: only a read-back on its account settles that.
+          isNull(collectTransfers.sentAt),
         ),
       )
       .returning({ id: collectTransfers.id });
