@@ -946,3 +946,25 @@ test('a deadline reminder opens 48 hours before the response is due, once', asyn
     [`dispute_deadline.${row.id}`],
   );
 });
+
+test('with the switch off, a dispute on an existing collect tip is still held and recovered', async () => {
+  const tip = await paidTip(TOBI);
+  // §12.5: switching off stops new collect sign-ups, never the money already held.
+  await setSwitch(database.pool, 'you_collect', false);
+  assert.equal((await apply(disputeEvent(tip))).outcome, 'opened');
+  assert.equal((await shareOf(tip.rowId)).review_reason, 'dispute');
+  await apply(
+    disputeEvent(tip, {
+      eventType: 'dispute.updated',
+      status: 'lost',
+      occurredAt: at(2 * HOUR),
+    }),
+    at(2 * HOUR),
+  );
+  const row = await disputeOf(tip.disputeRef);
+  assert.equal((await shareOf(tip.rowId)).status, 'cancelled');
+  assert.deepEqual(
+    await linesOf(`dispute_loss.${row.id}`),
+    lossLines(NET, GROSS - NET),
+  );
+});
