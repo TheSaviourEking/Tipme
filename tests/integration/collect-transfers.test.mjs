@@ -209,7 +209,13 @@ function partner() {
         );
       return [...state.moved.values()]
         .filter((transfer) => transfer.accountRef === accountRef)
-        .map(({ accountRef: _account, ...transfer }) => transfer);
+        .map((transfer) => ({
+          transferRef: transfer.transferRef,
+          status: transfer.status,
+          amountMinor: transfer.amountMinor,
+          currency: transfer.currency,
+          group: transfer.group,
+        }));
     },
     async payoutCapability(accountRef) {
       state.capabilityReads.push(accountRef);
