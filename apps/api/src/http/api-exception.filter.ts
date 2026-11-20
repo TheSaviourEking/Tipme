@@ -295,6 +295,7 @@ const messages: Record<ApiErrorCode, string> = {
   PAYMENT_START_REJECTED:
     'The payment provider refused to start this payment. Nothing was charged.',
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
+  PAGE_PAUSED: 'This page can’t take tips right now. Please try again later.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:

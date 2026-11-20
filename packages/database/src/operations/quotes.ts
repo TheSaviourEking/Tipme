@@ -16,6 +16,11 @@ import { newId } from './ids.js';
 import { opsPageByHandle, tipAmountsOf } from './profiles.js';
 import { personOf } from './owner.js';
 import { planFeeRatesInForce } from './plan-fee-rates.js';
+import {
+  collectionModeOf,
+  decideCollectionMode,
+  type CollectionMode,
+} from './collection-mode.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -32,6 +37,8 @@ export interface QuoteResult {
   expiresAt: Date;
   /** Business release 2 (R2-C2): the share in force at the business, shown before paying. */
   share?: { businessBps: number; businessName: string };
+  /** You collect (R7): the recipient's mode, fixed on this quote. */
+  collectionMode: CollectionMode;
 }
 
 type QuoteInput = {
@@ -43,7 +50,21 @@ type QuoteInput = {
   businessMemberId?: string;
   /** The `business` and `business_shares` switches. Off unless passed: no share is ever looked up. */
   sharesOn?: boolean;
-};
+} & (
+  | {
+      /**
+       * The `you_collect` switch, read once for this quote. Off, the quote takes the recipient's
+       * mode as it stands (undecided is `direct`) and decides nothing.
+       */
+      youCollectOn: false;
+    }
+  | {
+      /** On, an undecided recipient is decided once (R7), against this provider's accounts. */
+      youCollectOn: true;
+      provider: string;
+      environment: string;
+    }
+);
 
 /** Server-side price for a tip. Hidden, suspended and unknown profiles are indistinguishable. */
 export function createQuote(
@@ -111,58 +132,74 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
   // Fee-free tips are granted by staff (ADR-0014) and honoured while credits last. Open
   // fee-free quotes reserve their credit, under a lock on the credits row, so quotes made before
   // any of them is paid can never use more credits than were granted.
-  const { waivedPlatformFeeMinor, finalBreakdown, feePolicyVersion, shared } =
-    await db.transaction(async (tx) => {
-      const [credits] = await tx
-        .select({ remaining: feeFreeCredits.remaining })
-        .from(feeFreeCredits)
-        .where(eq(feeFreeCredits.profileId, profile.id))
-        .for('update');
-      let waived = 0n;
-      let chosen = priced;
-      let version: string = baseVersion;
-      const share = priced.platformFeeMinor + priced.providerFeeMinor;
-      if ((credits?.remaining ?? 0) > 0 && share > 0n) {
-        const open = await openFeeFreeQuotes(
-          tx,
-          profile.id,
-          expiresAt.getTime() - QUOTE_TTL_MS,
-        );
-        if ((credits?.remaining ?? 0) - open.count > 0) {
-          // TipMe gives up its whole share, the processing it would have paid from it included.
-          waived = share;
-          chosen = priceTip(input.tipMinor, policy, {
-            feeFree: true,
-            minTipMinor,
-          });
-          version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
-        }
+  const {
+    waivedPlatformFeeMinor,
+    finalBreakdown,
+    feePolicyVersion,
+    shared,
+    collectionMode,
+  } = await db.transaction(async (tx) => {
+    const [credits] = await tx
+      .select({ remaining: feeFreeCredits.remaining })
+      .from(feeFreeCredits)
+      .where(eq(feeFreeCredits.profileId, profile.id))
+      .for('update');
+    let waived = 0n;
+    let chosen = priced;
+    let version: string = baseVersion;
+    const share = priced.platformFeeMinor + priced.providerFeeMinor;
+    if ((credits?.remaining ?? 0) > 0 && share > 0n) {
+      const open = await openFeeFreeQuotes(
+        tx,
+        profile.id,
+        expiresAt.getTime() - QUOTE_TTL_MS,
+      );
+      if ((credits?.remaining ?? 0) - open.count > 0) {
+        // TipMe gives up its whole share, the processing it would have paid from it included.
+        waived = share;
+        chosen = priceTip(input.tipMinor, policy, {
+          feeFree: true,
+          minTipMinor,
+        });
+        version = `${baseVersion}${FEE_FREE_VERSION_SUFFIX}`;
       }
-      // Fixed on the quote, so the intent can tell whether the supporter saw the split in force.
-      const shared = input.sharesOn
-        ? await shareInForce(tx, profile.id, input.businessMemberId)
-        : null;
-      await tx.insert(tipQuotes).values({
-        id: quoteId,
-        shareAgreementId: shared?.agreementId ?? null,
-        profileId: profile.id,
-        currency: input.currency,
-        tipMinor: chosen.tipMinor,
-        platformFeeMinor: chosen.platformFeeMinor,
-        providerFeeMinor: chosen.providerFeeMinor,
-        payerTotalMinor: chosen.payerTotalMinor,
-        recipientNetMinor: chosen.recipientNetMinor,
-        feePolicyVersion: version,
-        waivedPlatformFeeMinor: waived,
-        expiresAt,
-      });
-      return {
-        waivedPlatformFeeMinor: waived,
-        finalBreakdown: chosen,
-        feePolicyVersion: version,
-        shared,
-      };
+    }
+    // Fixed on the quote, so the intent can tell whether the supporter saw the split in force.
+    const shared = input.sharesOn
+      ? await shareInForce(tx, profile.id, input.businessMemberId)
+      : null;
+    // Fixed on the quote: every later step reads this, never the profile's mode then.
+    const collectionMode = input.youCollectOn
+      ? await decideCollectionMode(tx, {
+          profileId: profile.id,
+          switchOn: true,
+          provider: input.provider,
+          environment: input.environment,
+        })
+      : await collectionModeOf(tx, profile.id);
+    await tx.insert(tipQuotes).values({
+      id: quoteId,
+      shareAgreementId: shared?.agreementId ?? null,
+      profileId: profile.id,
+      currency: input.currency,
+      tipMinor: chosen.tipMinor,
+      platformFeeMinor: chosen.platformFeeMinor,
+      providerFeeMinor: chosen.providerFeeMinor,
+      payerTotalMinor: chosen.payerTotalMinor,
+      recipientNetMinor: chosen.recipientNetMinor,
+      feePolicyVersion: version,
+      waivedPlatformFeeMinor: waived,
+      collectionMode,
+      expiresAt,
     });
+    return {
+      waivedPlatformFeeMinor: waived,
+      finalBreakdown: chosen,
+      feePolicyVersion: version,
+      shared,
+      collectionMode,
+    };
+  });
   breakdown = finalBreakdown;
   return {
     quoteId,
@@ -174,6 +211,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     feePolicyVersion,
     feeFree: waivedPlatformFeeMinor > 0n,
     expiresAt,
+    collectionMode,
     ...(shared
       ? {
           share: {
@@ -195,6 +233,8 @@ export function findQuoteCharge(
   platformFeeMinor: bigint;
   providerFeeMinor: bigint;
   currency: string;
+  /** You collect: the mode the quote was made under, which the checkout follows. */
+  collectionMode: CollectionMode;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -204,10 +244,18 @@ export function findQuoteCharge(
         platformFeeMinor: tipQuotes.platformFeeMinor,
         providerFeeMinor: tipQuotes.providerFeeMinor,
         currency: tipQuotes.currency,
+        collectionMode: tipQuotes.collectionMode,
       })
       .from(tipQuotes)
       .where(eq(tipQuotes.id, quoteId));
-    return row ? { ...row, profileId: personOf(row.profileId) } : null;
+    return row
+      ? {
+          ...row,
+          profileId: personOf(row.profileId),
+          collectionMode:
+            row.collectionMode === 'collect' ? 'collect' : 'direct',
+        }
+      : null;
   });
 }
 

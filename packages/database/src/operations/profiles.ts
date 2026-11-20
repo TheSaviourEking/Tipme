@@ -111,6 +111,7 @@ import {
   getReadyPaymentAccount,
   type PaymentAccountEnvironment,
 } from './payment-accounts.js';
+import { signUpCollectionMode } from './collection-mode.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
 /** Handle changes a Pro page gets in total, including switching back; staff can allow more. */
@@ -206,6 +207,8 @@ export function claimHandle(
     now?: Date;
     /** Release check only (PR-010): honoured only for an open run. */
     rehearsalRunId?: string;
+    /** The `you_collect` switch (ADR-0016, proposed): on, a new page is put on `collect` (R7, P11). */
+    youCollectOn?: boolean;
   },
 ): Promise<{ profileId: string; handle: string }> {
   const now = input.now ?? new Date();
@@ -230,6 +233,7 @@ export function claimHandle(
         handleLower: handle,
         displayName: handle,
         pageState: 'not_live',
+        collectionMode: await signUpCollectionMode(db, input.youCollectOn),
       })
       .onConflictDoNothing()
       .returning({ id: profiles.id })
