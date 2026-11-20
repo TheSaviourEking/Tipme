@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lagosDayStart } from '@tipme/domain';
 import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { notifications } from '../schema.js';
+import { notifications, profiles } from '../schema.js';
 import { collectSettingsInForce } from './collect-settings.js';
 import type { CollectionMode } from './collection-mode.js';
 import { guarded, OperationError } from './errors.js';
@@ -63,19 +63,19 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
     first_ms: string | null;
     withdrawals: number;
   }>(sql`
-    SELECT p.collection_mode AS mode,
-           p.collect_verified_at IS NOT NULL AS verified,
-           (extract(epoch FROM p.created_at) * 1000)::bigint::text AS created_ms,
+    SELECT ${profiles.collectionMode} AS mode,
+           profiles.collect_verified_at IS NOT NULL AS verified,
+           (extract(epoch FROM profiles.created_at) * 1000)::bigint::text AS created_ms,
            (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
               FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
-             WHERE a.code = 'held_for_recipients' AND a.profile_id = p.id)::text AS held,
+             WHERE a.code = 'held_for_recipients' AND a.profile_id = profiles.id)::text AS held,
            (SELECT (extract(epoch FROM min(t.completed_at)) * 1000)::bigint::text
               FROM collect_transfers c JOIN tips t ON t.id = c.tip_id
-             WHERE c.profile_id = p.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE}) AS first_ms,
+             WHERE c.profile_id = profiles.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE}) AS first_ms,
            (SELECT count(*)::int FROM payouts o
-             WHERE o.profile_id = p.id AND o.status <> 'FAILED') AS withdrawals
-      FROM profiles p
-     WHERE p.id = ${profileId}`);
+             WHERE o.profile_id = profiles.id AND o.status <> 'FAILED') AS withdrawals
+      FROM profiles
+     WHERE profiles.id = ${profileId}`);
   const row = result.rows[0];
   if (!row) throw new OperationError('PROFILE_NOT_FOUND');
   return {
@@ -270,11 +270,11 @@ export function sendCollectReminders(
     const settings = await collectSettingsInForce(db, i.now);
     const lastDay = Math.max(...settings.reminderDays);
     const result = await db.execute<{ id: string }>(sql`
-      SELECT p.id FROM profiles p
-       WHERE p.collection_mode = 'collect' AND p.collect_verified_at IS NULL
-         AND p.user_id IS NOT NULL
+      SELECT profiles.id FROM profiles
+       WHERE ${profiles.collectionMode} = 'collect' AND profiles.collect_verified_at IS NULL
+         AND profiles.user_id IS NOT NULL
          AND EXISTS (SELECT 1 FROM collect_transfers c
-                      WHERE c.profile_id = p.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE})`);
+                      WHERE c.profile_id = profiles.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE})`);
     let sent = 0;
     for (const { id: profileId } of result.rows) {
       const status = await collectStatus(db, profileId, i.now);
