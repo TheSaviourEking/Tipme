@@ -47,8 +47,11 @@ import { recordProviderEvent } from './provider-events.js';
  * (TipMe's own checkout) has none: there is no platform fee to check (Task 4).
  */
 export interface TransactionVerifier {
-  /** The partner environment this verifier reads (Bachs); a collect tip's transfer records it. */
-  environment?: 'sandbox' | 'live';
+  /**
+   * The partner environment this verifier reads (the pretend provider: `sandbox`); a collect tip's
+   * transfer records it.
+   */
+  environment: 'sandbox' | 'live';
   verifyTransaction(
     providerReference: string,
     expectation?: { platformFeeMinor: bigint },
@@ -203,9 +206,7 @@ export async function reconcileAttempts(input: {
           amountMinor: answer.amountMinor,
           currency: answer.currency,
           providerFeeMinor: answer.feeMinor,
-          ...(verifier.environment
-            ? { environment: verifier.environment }
-            : {}),
+          environment: verifier.environment,
           ...(answer.chargeReference
             ? { chargeReference: answer.chargeReference }
             : {}),

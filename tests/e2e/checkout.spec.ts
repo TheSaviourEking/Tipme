@@ -614,6 +614,7 @@ test('fix: an expired tip is described honestly and cannot be paid afterwards', 
       db: database.db,
       provider: {
         name: 'mock',
+        environment: 'sandbox',
         findPayment: async () => null,
         verifyTransaction: async () => ({
           status: 'pending',

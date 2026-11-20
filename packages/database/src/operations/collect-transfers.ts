@@ -28,8 +28,8 @@ export const collectKey = (tipId: string) => `tipme-collect-${tipId}`;
  * `delay_for_days` at `settledAt`, otherwise `settledAt`. Once per tip (the key and the one-share
  * index), so a repeat delivery inserts nothing.
  *
- * `environment` is the partner environment the tip was paid in; required for Bachs (TipMe's copies
- * run one environment each, but the row says which). The pretend provider's tips are `sandbox`.
+ * `environment` is the partner environment the tip was paid in (TipMe's copies run one environment
+ * each, but the row says which). The pretend provider's tips are `sandbox`.
  */
 export async function scheduleCollectTransfer(
   tx: Tx,
@@ -41,13 +41,10 @@ export async function scheduleCollectTransfer(
     provider: string;
     chargeReference: string | null;
     settledAt: Date;
-    environment?: 'sandbox' | 'live';
+    environment: 'sandbox' | 'live';
   },
 ): Promise<void> {
-  const environment =
-    i.environment ?? (i.provider === 'bachs' ? null : 'sandbox');
-  if (!environment)
-    throw new Error('a collect transfer on Bachs needs its environment');
+  const { environment } = i;
   if (i.amountMinor <= 0n) return;
   const settings = await collectSettingsInForce(tx, i.settledAt);
   const [profile] = await tx

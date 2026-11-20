@@ -41,7 +41,9 @@ export interface PaymentEvent {
   providerFeeMinor?: bigint;
   /**
    * You collect: the partner environment the payment was read in, and the partner's charge its
-   * read-back named. Both are kept on a collect tip's transfer; a direct tip ignores them.
+   * read-back named. Both are kept on a collect tip's transfer; a direct tip ignores them. A collect
+   * tip on Bachs is never booked without the environment (the whole event rolls back); any other
+   * provider is the pretend one, whose money is `sandbox`.
    */
   environment?: 'sandbox' | 'live';
   chargeReference?: string | null;
@@ -414,7 +416,7 @@ async function apply(
       provider,
       chargeReference: event.chargeReference ?? null,
       settledAt: now,
-      ...(event.environment ? { environment: event.environment } : {}),
+      environment: collectEnvironment(event),
     });
     if (share)
       await scheduleCollectSweep(tx, {
@@ -458,6 +460,16 @@ async function apply(
     },
   });
   return 'applied';
+}
+
+/** The environment a collect tip was paid in: required from Bachs, `sandbox` for the pretend one. */
+function collectEnvironment(event: PaymentEvent): 'sandbox' | 'live' {
+  if (event.environment) return event.environment;
+  if (recordedProviderName(event.provider) === 'bachs')
+    throw new Error(
+      'a collect tip on Bachs needs the environment it was paid in',
+    );
+  return 'sandbox';
 }
 
 /** JSON-safe copy of a provider payload: bigint becomes a decimal string, undefined is dropped. */

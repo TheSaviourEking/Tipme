@@ -794,6 +794,67 @@ test("a new recipient's transfer waits 24 hours; after 7 days it is released at 
     TOBI.id,
   ]);
   assert.deepEqual(await confirm(await collectTip()), settledAt);
+  // The boundary: exactly 7 days old is no longer new; a millisecond younger still is.
+  await q(`UPDATE profiles SET created_at = $1 WHERE id = $2`, [
+    new Date(settledAt.getTime() - 7 * DAY),
+    TOBI.id,
+  ]);
+  assert.deepEqual(await confirm(await collectTip()), settledAt);
+  await q(`UPDATE profiles SET created_at = $1 WHERE id = $2`, [
+    new Date(settledAt.getTime() - 7 * DAY + 1),
+    TOBI.id,
+  ]);
+  assert.deepEqual(
+    await confirm(await collectTip()),
+    new Date(settledAt.getTime() + 24 * HOUR),
+  );
+});
+
+test('a collect tip found paid when its quote expires is booked as held money, with no fee expectation', async () => {
+  const tip = await collectTip();
+  // The supporter paid, but no webhook came and the quote ran out while the attempt was INITIATED.
+  await q(
+    `UPDATE tip_quotes SET expires_at = now() - interval '1 hour'
+      WHERE id = (SELECT i.quote_id FROM payment_intents i JOIN tips t ON t.intent_id = i.id
+                   WHERE t.id = $1)`,
+    [tip.tipId],
+  );
+  const bachs = { ...reads(tip), name: 'bachs', findPayment: async () => null };
+  const result = await ops.expireStaleTips({
+    db: database.db,
+    provider: bachs,
+    now: new Date(),
+  });
+  assert.deepEqual(result, { expired: 0, paid: 1, errors: 0 });
+  // Like reconciliation: TipMe's own checkout has no platform fee to expect.
+  assert.deepEqual(bachs.calls, [[tip.reference, undefined]]);
+  assert.equal(await tipStatusOf(tip.tipId), 'SUCCEEDED');
+  assert.deepEqual(await linesOf(tip.tipId), HELD_LINES);
+  const [transfer] = await transfersOf(tip.tipId);
+  assert.equal(transfer.environment, 'sandbox');
+  assert.equal(transfer.charge_reference, tip.charge);
+});
+
+test('a collect tip on the partner is never booked without its environment', async () => {
+  const tip = await collectTip();
+  const before = await tipStatusOf(tip.tipId);
+  await assert.rejects(
+    ops.recordProviderEvent(database.db, {
+      provider: 'bachs',
+      providerEventId: `evt_${randomUUID()}`,
+      eventType: 'payment.succeeded',
+      attemptId: tip.attemptId,
+      providerReference: tip.reference,
+      amountMinor: GROSS,
+      currency: 'NGN',
+      providerFeeMinor: FEE,
+      signatureVerified: true,
+      payload: {},
+    }),
+  );
+  assert.equal(await tipStatusOf(tip.tipId), before);
+  assert.equal((await transactionsOf(tip.tipId)).length, 0);
+  assert.equal((await transfersOf(tip.tipId)).length, 0);
 });
 
 test('a pretend collect checkout can be paid in development, and books held money', async (t) => {

@@ -124,6 +124,8 @@ export interface MockProvider
   extends
     Omit<PaymentProvider<MockWebhook>, keyof PayoutPort>,
     Omit<PayoutPort, 'initiatePayout'> {
+  /** Pretend money is never live: a collect tip's transfer records `sandbox` (plan Task 7). */
+  readonly environment: 'sandbox';
   initializePayment(input: {
     attemptId: string;
     amountMinor: bigint;
@@ -226,6 +228,7 @@ export function createMockProvider(options: {
 
   return {
     name: 'mock',
+    environment: 'sandbox',
     capabilities: {
       hostedCheckout: true,
       connectedAccounts: false,

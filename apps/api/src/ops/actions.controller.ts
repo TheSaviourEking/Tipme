@@ -429,6 +429,7 @@ export class OpsActionsController {
         amountMinor: answer.amountMinor,
         currency: answer.currency,
         providerFeeMinor: answer.feeMinor,
+        environment,
         signatureVerified: true,
         payload: { source: 'staff_checkout_recovery' },
       });
@@ -543,6 +544,7 @@ export class OpsActionsController {
       amountMinor: answer.amountMinor,
       currency: answer.currency,
       providerFeeMinor: answer.feeMinor,
+      environment: this.bachsProvider.environment,
       signatureVerified: true,
       payload: { source: 'staff_fee_bearer_confirmation' },
     });

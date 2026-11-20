@@ -38,10 +38,10 @@ export class StatusController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(BACHS_PROVIDER_TOKEN)
-    private readonly bachs:
-      | (Pick<BachsProvider, 'verifyTransaction'> &
-          Partial<Pick<BachsProvider, 'environment'>>)
-      | null,
+    private readonly bachs: Pick<
+      BachsProvider,
+      'verifyTransaction' | 'environment'
+    > | null,
   ) {}
 
   @Get(':tipId/status')
@@ -108,7 +108,7 @@ export class StatusController {
     await reconcileAttempts({
       db: this.database.db,
       provider: {
-        ...(bachs.environment ? { environment: bachs.environment } : {}),
+        environment: bachs.environment,
         verifyTransaction: (reference, expectation) =>
           bachs.verifyTransaction(reference, expectation),
       },
