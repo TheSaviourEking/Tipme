@@ -45,3 +45,38 @@
 ## Manual payouts not set (`payment_account_setup_failed`)
 
 Manual payouts could not be set on a recipient's payment account. Until they are, the recipient can't withdraw and an account still in setup gets no onboarding link. Accounts are retried on every account event, every setup visit and every 15-minute sweep; a sweep stops trying accounts after 5 manual-payouts failures in a row and logs `payout_setup.sweep_stopped`, which usually means the provider is down. It still reads banks under review. The issue closes itself once manual payouts are set. If it stays open, look for `payment_account.manual_payouts_failed` in the logs and check the account at the provider. There is one issue per account: closing it by hand while the failure continues won't raise another, so leave it open.
+
+## Collect transfer stuck (You collect)
+
+Under You collect (ADR-0016, proposed) TipMe takes the tip on its own Bachs account and holds the recipient's share (`held_for_recipients`). One `collect_transfers` row per tip (`kind = 'share'`) moves it to the recipient's own Bachs account. The `collect.transfers` worker job runs every 2 minutes, with the switch on or off. Each share is sent with the idempotency key `tipme-collect-<tipId>`, and the transfer's `transfer_group` is the same value, so Bachs can always find it by group.
+
+What each status means:
+
+- **`waiting`**: the share is not ready to send. Either the recipient isn't verified, or their bank isn't `usable`, or the new-recipient delay (`release_after`) hasn't passed. It also waits while a shared bank account is in review or a dispute is open on the tip. It can also be back from a lost `transfers` capability. In that case it waits out a backoff unless `capability.updated` arrives and the account reads active. The account (`account_reference`) is read when the row becomes `ready`, never earlier.
+- **`ready`**: the share is due at `next_try_at`. After `INSUFFICIENT_BALANCE` (TipMe's available balance doesn't cover it yet) it backs off: 5 minutes, doubling, at most 6 hours. A row that has been ready and tried for over an hour opens **one** `collect_transfer_stuck` issue (dedupe key `collect_transfer_stuck.ready.<id>`), however many rows are stuck. Check TipMe's own available balance in the Bachs dashboard.
+- **`sent`**: a worker claimed the share and committed the claim before calling Bachs. If no answer was recorded within 2 minutes, the job lists the recipient's transfers (`GET /v1/transfers?connected_account_id=`, every page) and matches on `transfer_group`:
+  - found with the right amount: `paid`;
+  - found with another amount, or two in one group: `review`;
+  - not found: sent again with the **same key**.
+- **`unknown`**: an answer was lost. Within 24 hours of the key's first send, the job asks again with the same key, and Bachs replays the transfer it made or makes the one. After 24 hours it never sends blindly. It reads back by group instead:
+  - found and paid: `paid`;
+  - not found: `ready`, sent again with the same key;
+  - another amount: `review`;
+  - the list can't be read: it stays `unknown`.
+- **`paid`**: the transfer posting (`collect_transfer.<rowId>`: `provider_clearing` ← `held_for_recipients`) was written in the same transaction.
+- **`review`** (`review_reason` says why): `provider` is `NOT_FOUND`, another refusal, or another amount at Bachs, with a `collect_transfer_review` issue per transfer and no posting. `staff` is a manual hold. `dispute`, `refund` and `same_bank` belong to their own flows, and only those flows release them. A staff retry releases only `provider` and `staff` reviews: to `ready` when the row has an account, to `waiting` when it has none.
+
+Platform-wide stops:
+
+- **`collect_in_debt`**: Bachs answered `ORGANIZATION_IN_DEBT`. A negative balance on TipMe's own account blocks every transfer. The first such answer stops the run, and **every** collect transfer stays stopped while the issue is open. Rows stay `ready`, and nothing is marked failed. Top up TipMe's balance in every currency (a USD dispute fee can cause it), check `/v1/balances`, then resolve the issue. The next run (within 2 minutes) moves the backlog. Each spell opens its own issue (`collect_in_debt.<id>`), so a resolved one never hides the next.
+- **`collect_transfer_stuck` with dedupe key `collect_transfer_stuck.platform.<id>`**: Bachs refused a transfer as `FORBIDDEN`, yet the recipient's account reads `transfers: active`. That means TipMe's own key has probably lost `transfers:write`. The run stops at the first one, and nobody is sent back to waiting. Check the key's permissions in the Bachs dashboard.
+- **Staff pause** (`collect_settings.paused`, set through the serious actions `collect_transfers.pause` and `collect_transfers.resume` once the settings admin is built): the run stops before anything is asked, and resuming continues from where it stopped.
+
+What to read: the row (`status`, `review_reason`, `attempts`, `sent_at` = when the key's current 24-hour window began, `next_try_at`, `transfer_reference`), the issue's note (it names the transfer and its group), and the recipient's transfers in the Bachs dashboard, where you look for the group `tipme-collect-<tipId>`.
+
+Never:
+
+- Send a new transfer by hand, or with a new key, for a share TipMe has a row for. The row is the link from tip to transfer. A second transfer pays the recipient twice, and a transfer can't be reversed.
+- Retry a `provider` review before checking Bachs for a transfer in its group. If one exists, the share was paid: record that rather than retry.
+- Move `sent` or `unknown` rows by hand. Money may be on its way; only a read-back decides.
+- Withdraw TipMe's own money from the Bachs dashboard below what it holds for recipients.
