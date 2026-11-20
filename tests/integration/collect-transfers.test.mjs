@@ -149,7 +149,9 @@ function partner() {
     sends: [],
     lists: [],
     capabilityReads: [],
+    // What the partner replays by key (it forgets a key after its window), and what it lists.
     moved: new Map(),
+    listed: [],
     answers: [],
     capability: 'active',
     listFails: false,
@@ -159,6 +161,7 @@ function partner() {
     name: 'bachs-sandbox',
     async sendCollectTransfer(input) {
       state.sends.push({ ...input });
+      if (state.onSend) await state.onSend(input);
       if (state.delayMs)
         await new Promise((done) => setTimeout(done, state.delayMs));
       const answer = state.answers.shift();
@@ -178,7 +181,7 @@ function partner() {
       let transfer = state.moved.get(input.idempotencyKey);
       if (!transfer) {
         transfer = {
-          transferRef: `tr_${state.moved.size + 1}`,
+          transferRef: `tr_${state.listed.length + 1}`,
           status: 'paid',
           amountMinor: answer?.moveMinor ?? input.amountMinor,
           currency: input.currency,
@@ -186,6 +189,7 @@ function partner() {
           accountRef: input.accountRef,
         };
         state.moved.set(input.idempotencyKey, transfer);
+        state.listed.push(transfer);
       }
       if (answer === 'lost' || transfer.amountMinor !== input.amountMinor)
         throw new UncertainProviderOutcomeError(
@@ -207,7 +211,7 @@ function partner() {
             cause: 'http_error',
           },
         );
-      return [...state.moved.values()]
+      return state.listed
         .filter((transfer) => transfer.accountRef === accountRef)
         .map((transfer) => ({
           transferRef: transfer.transferRef,
@@ -222,6 +226,17 @@ function partner() {
       return { status: state.capability, requirementsDue: [] };
     },
   };
+  /** A transfer the partner has made (and replays by its key). */
+  state.put = (transfer) => {
+    state.moved.set(transfer.group, transfer);
+    state.listed.push(transfer);
+  };
+  /** The partner's key window is over: a send with it makes a new transfer; the list keeps the old. */
+  state.forget = (key) => state.moved.delete(key);
+  /** How many transfers the partner holds in a group: more than one is a double payment. */
+  state.inGroup = (key) =>
+    state.listed.filter((transfer) => transfer.group === key).length;
+  state.onSend = null;
   return { provider, state };
 }
 
@@ -384,7 +399,7 @@ test('a crash after the claim is read back by transfer group: found means paid, 
   assert.equal(await release(T0), 2);
   const { provider, state } = partner();
   // The first one reached the partner before the worker died; the second never left.
-  state.moved.set(moved.key, {
+  state.put({
     transferRef: 'tr_before_crash',
     status: 'paid',
     amountMinor: NET,
@@ -619,9 +634,9 @@ test('FORBIDDEN while the recipient can receive is TipMe’s own problem: the ru
   assert.equal((await rowOf(ada.rowId)).status, 'ready');
   // A later run hits it again: still one issue.
   await run(provider, at(10 * MIN));
-  const platform = await issuesOf('collect_transfer_stuck');
+  const platform = await issuesOf('provider_key_refused');
   assert.equal(platform.length, 1);
-  assert.match(platform[0].dedupe_key, /^collect_transfer_stuck\.platform\./);
+  assert.match(platform[0].dedupe_key, /^provider_key_refused\./);
   assert.equal((await rowOf(tobi.rowId)).status, 'ready');
   assert.equal((await rowOf(ada.rowId)).status, 'ready');
   // The key is fixed: both move, each with its own key.
@@ -714,7 +729,7 @@ test('a crashed claim read back with another amount goes to review, with no post
   const tip = await paidTip(TOBI);
   assert.equal(await release(T0), 1);
   const { provider, state } = partner();
-  state.moved.set(tip.key, {
+  state.put({
     transferRef: 'tr_odd',
     status: 'paid',
     amountMinor: NET - 1n,
@@ -886,7 +901,7 @@ test('a share sent before is read back by group before it is sent again once its
   // what count), the other had not.
   state.answers.push({ refuse: 'other' }, { refuse: 'other' });
   assert.equal((await run(provider, T0)).review, 2);
-  state.moved.set(moved.key, {
+  state.put({
     transferRef: 'tr_moved',
     status: 'paid',
     amountMinor: NET,
@@ -896,6 +911,8 @@ test('a share sent before is read back by group before it is sent again once its
   });
   // Staff retry both two days later: the partner no longer knows the key, so a send could make a
   // second transfer. Each is read back first.
+  state.forget(moved.key);
+  state.forget(unmoved.key);
   for (const tip of [moved, unmoved])
     assert.equal(
       await ops.retryCollectTransfer(database.db, {
@@ -914,4 +931,234 @@ test('a share sent before is read back by group before it is sent again once its
   );
   assert.equal((await postingsOf(moved.tipId)).length, 1);
   assert.equal((await postingsOf(unmoved.tipId)).length, 1);
+  assert.equal(state.inGroup(moved.key), 1);
+  assert.equal(state.inGroup(unmoved.key), 1);
+});
+
+/** A share refused once, then found to have moved after all: staff retry it two days later. */
+async function retriedAfterMoving(state, provider) {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  state.answers.push({ refuse: 'other' });
+  assert.equal((await run(provider, T0)).review, 1);
+  state.put({
+    transferRef: 'tr_moved',
+    status: 'paid',
+    amountMinor: NET,
+    currency: 'NGN',
+    group: tip.key,
+    accountRef: ACCOUNTS[TOBI.id],
+  });
+  // The partner's window on the key is long over: a send now would make a second transfer.
+  state.forget(tip.key);
+  assert.equal(
+    await ops.retryCollectTransfer(database.db, {
+      transferId: tip.rowId,
+      now: at(2 * DAY),
+    }),
+    'ready',
+  );
+  return tip;
+}
+
+test('a forgotten key whose read-back fails stays forgotten: the next run reads back, never sends', async () => {
+  const { provider, state } = partner();
+  const tip = await retriedAfterMoving(state, provider);
+  state.listFails = true;
+  await run(provider, at(2 * DAY));
+  const afterFailure = await rowOf(tip.rowId);
+  assert.equal(afterFailure.status, 'unknown');
+  // The key's window was not restarted by a read that proved nothing.
+  assert.deepEqual(afterFailure.sent_at, T0);
+  state.listFails = false;
+  const lists = state.lists.length;
+  await run(provider, at(2 * DAY + 10 * MIN));
+  assert.ok(state.lists.length > lists);
+  assert.equal(state.sends.length, 1);
+  assert.equal(state.inGroup(tip.key), 1);
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+  assert.equal((await postingsOf(tip.tipId)).length, 1);
+});
+
+test('a worker that dies between the claim and the read-back of a forgotten key leaves it forgotten', async () => {
+  const { provider, state } = partner();
+  const tip = await retriedAfterMoving(state, provider);
+  // The first worker claims, then hangs reading back (as good as dead): whatever its claim wrote
+  // is what the next workers see.
+  let wake;
+  const hung = new Promise((done) => {
+    wake = done;
+  });
+  const list = provider.listAccountTransfers;
+  provider.listAccountTransfers = async (accountRef) => {
+    provider.listAccountTransfers = list;
+    await hung;
+    return list(accountRef);
+  };
+  const dead = run(provider, at(2 * DAY));
+  while ((await rowOf(tip.rowId)).status !== 'sent')
+    await new Promise((done) => setTimeout(done, 10));
+  assert.deepEqual((await rowOf(tip.rowId)).sent_at, T0);
+  // Another worker reads it back and the list fails: still the old window.
+  state.listFails = true;
+  await run(provider, at(2 * DAY + 5 * MIN));
+  assert.equal((await rowOf(tip.rowId)).status, 'unknown');
+  assert.deepEqual((await rowOf(tip.rowId)).sent_at, T0);
+  // The next run reads back rather than trusting a window that never restarted.
+  state.listFails = false;
+  await run(provider, at(2 * DAY + 30 * MIN));
+  wake();
+  await dead;
+  assert.equal(state.sends.length, 1);
+  assert.equal(state.inGroup(tip.key), 1);
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+  assert.equal((await postingsOf(tip.tipId)).length, 1);
+});
+
+test('a key is trusted for 23 hours: half an hour before the partner forgets it, it is read back', async () => {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  state.answers.push('lost');
+  await run(provider, T0);
+  assert.equal((await rowOf(tip.rowId)).status, 'unknown');
+  await run(provider, at(23 * HOUR + 30 * MIN));
+  assert.equal(state.sends.length, 1);
+  assert.ok(state.lists.length >= 1);
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+});
+
+const alerts = () =>
+  q(
+    `SELECT payload FROM outbox_events WHERE event_type = 'payouts.platform_refused'
+      ORDER BY created_at`,
+  );
+
+test('in debt pages staff once per spell, in the same transaction as its issue', async () => {
+  await verified(TOBI);
+  await verified(ADA);
+  await paidTip(TOBI);
+  await paidTip(ADA);
+  assert.equal(await release(T0), 2);
+  const { provider, state } = partner();
+  state.answers.push({ refuse: 'in_debt' });
+  await run(provider, T0);
+  await run(provider, at(HOUR));
+  assert.deepEqual(
+    (await alerts()).map((row) => row.payload),
+    [{ cause: 'collect_in_debt' }],
+  );
+  const [{ id }] = await q(
+    `SELECT id FROM issues WHERE kind = 'collect_in_debt'`,
+  );
+  await resolve(id);
+  await paidTip(TOBI, at(4 * HOUR));
+  assert.equal(await release(at(4 * HOUR)), 1);
+  state.answers.push({ refuse: 'in_debt' });
+  await run(provider, at(4 * HOUR));
+  assert.deepEqual(
+    (await alerts()).map((row) => row.payload),
+    [{ cause: 'collect_in_debt' }, { cause: 'collect_in_debt' }],
+  );
+});
+
+test('a FORBIDDEN that is TipMe’s own key is reported as the key refused, with its alert', async () => {
+  await verified(TOBI);
+  await paidTip(TOBI);
+  await paidTip(TOBI);
+  assert.equal(await release(T0), 2);
+  const { provider, state } = partner();
+  state.answers.push({ refuse: 'capability' }, { refuse: 'capability' });
+  assert.equal((await run(provider, T0)).stopped, 'platform');
+  assert.equal((await run(provider, at(10 * MIN))).stopped, 'platform');
+  const refused = await issuesOf('provider_key_refused');
+  assert.equal(refused.length, 1);
+  assert.equal(refused[0].status, 'open');
+  assert.deepEqual(await issuesOf('collect_transfer_stuck'), []);
+  assert.deepEqual(
+    (await alerts()).map((row) => row.payload),
+    [{ cause: 'provider_key' }],
+  );
+});
+
+test('a share backing off in ready is not sent once its bank is replaced: it goes back to waiting', async () => {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  state.answers.push({ refuse: 'insufficient' });
+  await run(provider, T0);
+  assert.equal((await rowOf(tip.rowId)).status, 'ready');
+  // The recipient changes their bank while it waits; the new one is still in review.
+  await q(
+    `UPDATE payout_destinations SET replaced_at = $2 WHERE profile_id = $1`,
+    [TOBI.id, at(MIN)],
+  );
+  await q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code, bank_name, account_last4, status)
+     VALUES ($1, $2, 'bachs', 'dest_tobi_new', '058', 'Pretend Guaranty Bank', '9876', 'pending_review')`,
+    [randomUUID(), TOBI.id],
+  );
+  await run(provider, at(HOUR));
+  assert.equal(state.sends.length, 1);
+  const row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'waiting');
+  assert.equal(row.account_reference, null);
+  // Once the new bank is usable it is released again, with the account read then.
+  await q(
+    `UPDATE payout_destinations SET status = 'usable' WHERE profile_id = $1 AND replaced_at IS NULL`,
+    [TOBI.id],
+  );
+  assert.equal(await release(at(2 * HOUR)), 1);
+  await run(provider, at(2 * HOUR));
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+});
+
+test('a share cycling on a lost capability for over a day raises one issue for that recipient', async () => {
+  await verified(TOBI);
+  const one = await paidTip(TOBI);
+  await paidTip(TOBI);
+  assert.equal(await release(T0), 2);
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const cycle = async (now) => {
+    state.answers.push({ refuse: 'capability' });
+    await q(
+      `UPDATE collect_transfers SET status = 'ready', next_try_at = $2
+        WHERE profile_id = $1 AND status = 'waiting'`,
+      [TOBI.id, now],
+    );
+    await run(provider, now);
+    assert.equal((await rowOf(one.rowId)).status, 'waiting');
+  };
+  await cycle(at(HOUR));
+  await cycle(at(12 * HOUR));
+  const ofTobi = async () =>
+    (await issuesOf('collect_transfer_stuck')).filter(
+      (issue) => issue.subject.profileId === TOBI.id,
+    );
+  assert.deepEqual(await ofTobi(), []);
+  await cycle(at(25 * HOUR));
+  await cycle(at(30 * HOUR));
+  const raised = await ofTobi();
+  assert.equal(raised.length, 1);
+  assert.match(raised[0].dedupe_key, /^collect_transfer_stuck\.capability\./);
+});
+
+test('a pause that lands mid-run stops it before the next send', async () => {
+  await verified(TOBI);
+  await verified(ADA);
+  await paidTip(TOBI);
+  await paidTip(ADA);
+  assert.equal(await release(T0), 2);
+  const { provider, state } = partner();
+  state.onSend = async () => {
+    state.onSend = null;
+    await settings(true, at(-MIN));
+  };
+  const result = await run(provider, T0);
+  assert.equal(result.stopped, 'paused');
+  assert.equal(state.sends.length, 1);
 });

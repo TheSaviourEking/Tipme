@@ -1,4 +1,8 @@
-import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
+import {
+  bachsEnvironment,
+  PLATFORM_REFUSAL_EVENT,
+  recordedProviderName,
+} from '@tipme/contracts';
 import {
   buildCollectTransferPosting,
   canTransition,
@@ -30,6 +34,8 @@ import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
+import { enqueueOutbox } from './outbox.js';
+import { reportProviderKeyRefused } from './payout-start.js';
 
 /*
  * You collect (spec §5, §8; plan Task 7). A collect tip's net is held on TipMe's own partner account
@@ -189,15 +195,23 @@ export function matchCollectAttempt(
  * Exactly once: the claim (`ready → sent`) is a conditional update committed before the partner is
  * called, so of any number of workers one sends. Every later move is conditional on the state it
  * leaves. The key is always `tipme-collect-<tipId>` (also the `transfer_group`). An answer that was
- * lost is asked again with that key while the partner still knows it (SAME_KEY_WITHIN_MS from the
- * first send of the key), and read back by `transfer_group` after that. Never a new key, never a
- * blind send after the window. `sent_at` is when the key was first sent in its current window.
+ * lost is asked again with that key while the partner surely still knows it (KEY_TRUSTED_FOR_MS
+ * from the first send of the key), and read back by `transfer_group` after that. Never a new key,
+ * never a send on a forgotten key without a read-back. `sent_at` is when the key was first sent in
+ * its current window; only a send after a read-back that found nothing starts a new one.
  */
 
 /** A claimed row whose worker gave no word for this long is read back. */
 export const READ_BACK_AFTER_MS = 2 * 60_000;
 /** How long the partner replays a key (its idempotency window). */
 export const SAME_KEY_WITHIN_MS = 24 * 3_600_000;
+/**
+ * How long TipMe trusts the partner to replay a key: an hour short of its window, so a clock
+ * difference or a slow request never lands a same-key retry on a key it has forgotten (I1).
+ */
+export const KEY_TRUSTED_FOR_MS = SAME_KEY_WITHIN_MS - 3_600_000;
+/** A share bouncing on a lost capability for longer than this raises an issue for its recipient. */
+const CAPABILITY_STUCK_AFTER_MS = 24 * 3_600_000;
 /** A share ready (and tried) for longer than this raises `collect_transfer_stuck`. */
 const STUCK_AFTER_MS = 3_600_000;
 const PER_RECIPIENT_PER_RUN = 5;
@@ -283,7 +297,7 @@ function refusalOf(
 
 /**
  * A conditional move: only from `from` and only as this worker last saw the row (its `attempts`,
- * which every claim raises), and for a claim only once due. So of any number of workers exactly one
+ * which every claim raises), and for a claim only once due and while `claim.where` holds. So of any number of workers exactly one
  * gets it, and a slow read-back can never move a row someone has claimed since. The transition
  * must be one R10 allows. Returns the row as moved, or null.
  */
@@ -294,7 +308,7 @@ async function move(
   to: Status,
   now: Date,
   set: RowSet = {},
-  due = false,
+  claim?: { where: SQL },
 ): Promise<Row | null> {
   if (from !== to && !canTransition(COLLECT_TRANSFER_TRANSITIONS, from, to))
     throw new Error(`a collect transfer can't go from ${from} to ${to}`);
@@ -306,7 +320,7 @@ async function move(
         eq(collectTransfers.id, row.id),
         eq(collectTransfers.status, from),
         eq(collectTransfers.attempts, row.attempts),
-        ...(due ? [lte(collectTransfers.nextTryAt, now)] : []),
+        ...(claim ? [lte(collectTransfers.nextTryAt, now), claim.where] : []),
       ),
     )
     .returning();
@@ -334,34 +348,53 @@ export function releaseWaitingTransfers(
          SET status = 'ready', account_reference = a.reference, next_try_at = ${now}::timestamptz,
              updated_at = ${now}::timestamptz
         FROM (
-          SELECT w.id,
-                 COALESCE(pa.provider_account_reference,
-                          CASE WHEN w.provider = ${PRETEND_PROVIDER} THEN w.profile_id::text END) AS reference
+          SELECT w.id, ${currentAccount('w')} AS reference
             FROM collect_transfers w
-            JOIN profiles p ON p.id = w.profile_id
-            LEFT JOIN payment_accounts pa
-              ON pa.profile_id = w.profile_id AND pa.provider = w.provider
-             AND pa.environment = w.environment
            WHERE w.status = 'waiting' AND w.kind = 'share'
              AND (w.release_after IS NULL OR w.release_after <= ${now}::timestamptz)
              AND ${i.profileId ? sql`w.profile_id = ${i.profileId}` : sql`w.next_try_at <= ${now}::timestamptz`}
-             AND p.collect_verified_at IS NOT NULL
-             AND EXISTS (
-               SELECT 1 FROM payout_destinations d
-                WHERE d.profile_id = w.profile_id AND d.provider = w.provider
-                  AND d.replaced_at IS NULL AND d.status = 'usable')
-             AND NOT EXISTS (
-               SELECT 1 FROM collect_transfers r
-                WHERE r.profile_id = w.profile_id AND r.status = 'review'
-                  AND r.review_reason = 'same_bank')
-             AND NOT EXISTS (
-               SELECT 1 FROM disputes x
-                WHERE x.tip_id = w.tip_id AND x.status IN ('open', 'responded'))
+             AND ${canReceive('w')}
         ) a
        WHERE c.id = a.id AND c.status = 'waiting' AND a.reference IS NOT NULL
       RETURNING c.id`);
     return result.rows.length;
   });
+}
+
+/**
+ * The recipient's account now, for a collect transfer row aliased `alias`: their payment account
+ * for its provider and environment (the pretend provider's is the profile id).
+ */
+function currentAccount(alias: string): SQL {
+  const c = sql.raw(alias);
+  return sql`COALESCE(
+    (SELECT pa.provider_account_reference FROM payment_accounts pa
+      WHERE pa.profile_id = ${c}.profile_id AND pa.provider = ${c}.provider
+        AND pa.environment = ${c}.environment),
+    CASE WHEN ${c}.provider = ${PRETEND_PROVIDER} THEN ${c}.profile_id::text END)`;
+}
+
+/**
+ * Whether the row's recipient can receive it now (spec §5, §8): verified, a `usable` bank that
+ * hasn't been replaced, no shared bank account in review, no open dispute on the tip. Checked when
+ * a share is released and again, with its account, when it is claimed to be sent.
+ */
+function canReceive(alias: string): SQL {
+  const c = sql.raw(alias);
+  return sql`EXISTS (
+      SELECT 1 FROM profiles p
+       WHERE p.id = ${c}.profile_id AND p.collect_verified_at IS NOT NULL)
+    AND EXISTS (
+      SELECT 1 FROM payout_destinations d
+       WHERE d.profile_id = ${c}.profile_id AND d.provider = ${c}.provider
+         AND d.replaced_at IS NULL AND d.status = 'usable')
+    AND NOT EXISTS (
+      SELECT 1 FROM collect_transfers r
+       WHERE r.profile_id = ${c}.profile_id AND r.status = 'review'
+         AND r.review_reason = 'same_bank')
+    AND NOT EXISTS (
+      SELECT 1 FROM disputes x
+       WHERE x.tip_id = ${c}.tip_id AND x.status IN ('open', 'responded'))`;
 }
 
 /**
@@ -378,7 +411,7 @@ async function openOnce(
     note: string;
     now: Date;
   },
-): Promise<void> {
+): Promise<string | null> {
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(hashtext(${`collect_issue:${input.prefix}`}::text))`,
   );
@@ -392,18 +425,21 @@ async function openOnce(
       ),
     )
     .limit(1);
-  if (open) return;
+  if (open) return null;
+  const spell = newId();
   await openIssue(tx, {
-    dedupeKey: `${input.prefix}${newId()}`,
+    dedupeKey: `${input.prefix}${spell}`,
     kind: input.kind,
     subject: input.subject,
     note: input.note,
     now: input.now,
   });
+  return spell;
 }
 
 const DEBT_PREFIX = 'collect_in_debt.';
-const PLATFORM_PREFIX = 'collect_transfer_stuck.platform.';
+const capabilityPrefix = (profileId: string) =>
+  `collect_transfer_stuck.capability.${profileId}.`;
 const STUCK_PREFIX = 'collect_transfer_stuck.ready.';
 
 /** R11: an open `collect_in_debt` issue stops every collect transfer until staff resolve it. */
@@ -469,11 +505,30 @@ async function toReview(
   });
 }
 
+/** Whether a key sent at `sentAt` is still one the partner replays (with a margin, I1). */
+function keyTrusted(sentAt: Date | null, now: Date): boolean {
+  return (
+    sentAt !== null && now.getTime() - sentAt.getTime() < KEY_TRUSTED_FOR_MS
+  );
+}
+
+/** The row still goes to its recipient's current account, and they can receive it (I4). */
+const stillReceivable = sql`${collectTransfers.accountReference} = ${currentAccount('collect_transfers')}
+  AND ${canReceive('collect_transfers')}`;
+
 /**
- * Sends a `ready` row: the claim first, committed, then the one partner call. A share sent before
- * whose key the partner no longer knows (its window is over) is read back by group first, unless
- * the caller has just done so: a send then could make a second transfer (a staff retry of a review
- * whose money had in fact moved).
+ * Sends a `ready` row: the claim first, committed, then the one partner call.
+ *
+ * The claim re-checks what release checked: a recipient whose bank was replaced, who lost their
+ * verification, whose bank is shared or whose tip is disputed, or whose account is no longer the
+ * row's, is not sent to; the share goes back to `waiting` without an account, to be released again.
+ *
+ * `sent_at` is the start of the key's window at the partner. The claim never restarts it while the
+ * key is forgotten (C1): only the send that follows a read-back finding nothing in the group starts
+ * a new window (`readJustNow`). A share sent before whose key is no longer trusted is claimed and
+ * read back first, so a lost read, or a worker dying between the claim and the read, leaves the key
+ * still forgotten and the next run reads back again. Never a send on a key the partner may have
+ * forgotten without proof that nothing moved under it.
  */
 async function send(
   db: Database,
@@ -492,7 +547,20 @@ async function send(
       now,
       'This share names no account, or a currency the partner cannot send.',
     );
-  const windowFrom = new Date(now.getTime() - SAME_KEY_WITHIN_MS);
+  const [receivable] = await db
+    .select({ id: collectTransfers.id })
+    .from(collectTransfers)
+    .where(and(eq(collectTransfers.id, row.id), stillReceivable));
+  if (!receivable) {
+    const back = await move(db, row, 'ready', 'waiting', now, {
+      accountReference: null,
+      nextTryAt: now,
+    });
+    return back ? 'retried' : 'none';
+  }
+  const neverSent = row.sentAt === null;
+  const forgotten = !neverSent && !keyTrusted(row.sentAt, now);
+  const freshWindow = neverSent || (forgotten && readJustNow);
   const claimed = await move(
     db,
     row,
@@ -501,17 +569,12 @@ async function send(
     now,
     {
       attempts: sql`${collectTransfers.attempts} + 1`,
-      // The key's window at the partner: kept while it lasts, started again once it is over.
-      sentAt: sql`CASE WHEN ${collectTransfers.sentAt} > ${windowFrom} THEN ${collectTransfers.sentAt} ELSE ${now} END`,
+      ...(freshWindow ? { sentAt: now } : {}),
     },
-    true,
+    { where: stillReceivable },
   );
   if (!claimed) return 'none';
-  const keyForgotten =
-    row.attempts > 0 &&
-    (row.sentAt === null ||
-      now.getTime() - row.sentAt.getTime() >= SAME_KEY_WITHIN_MS);
-  if (keyForgotten && !readJustNow)
+  if (forgotten && !readJustNow)
     return readBack(db, claimed, 'sent', provider, now, totals);
   totals.sent += 1;
   let answer: { transferRef: string; status: 'paid' | 'pending' };
@@ -532,6 +595,29 @@ async function send(
     transferReference: answer.transferRef,
   });
   return 'none';
+}
+
+/**
+ * M1: a share that could have moved for over a day (since it was due and its recipient verified)
+ * and still bounces on their lost capability needs a person: one issue per recipient at a time.
+ */
+async function capabilityStuck(tx: Tx, row: Row, now: Date): Promise<void> {
+  const [profile] = await tx
+    .select({ verifiedAt: profiles.collectVerifiedAt })
+    .from(profiles)
+    .where(eq(profiles.id, row.profileId));
+  const since = Math.max(
+    (row.releaseAfter ?? row.createdAt).getTime(),
+    profile?.verifiedAt?.getTime() ?? now.getTime(),
+  );
+  if (now.getTime() - since <= CAPABILITY_STUCK_AFTER_MS) return;
+  await openOnce(tx, {
+    prefix: capabilityPrefix(row.profileId),
+    kind: 'collect_transfer_stuck',
+    subject: { tipId: row.tipId, profileId: row.profileId },
+    note: `The partner keeps refusing transfer ${row.id} because the recipient's account can't receive transfers, and has for over a day. Check the account's capabilities at the partner.`,
+    now,
+  });
 }
 
 /** What a failed send means. Only a definite refusal proves no money moved. */
@@ -559,16 +645,24 @@ async function refused(
     return 'retried';
   }
   if (reason === 'in_debt') {
-    // R11: TipMe's own account is in debt. Every collect transfer stops behind one issue.
+    // R11: TipMe's own account is in debt. Every collect transfer stops behind one issue, and
+    // staff are paged once per spell, in the issue's transaction (as openPlatformRefusalIssue).
     await db.transaction(async (tx) => {
       await move(tx, row, 'sent', 'ready', now, { nextTryAt: now });
-      await openOnce(tx, {
+      const spell = await openOnce(tx, {
         prefix: DEBT_PREFIX,
         kind: 'collect_in_debt',
         subject: {},
         note: `The partner answered ORGANIZATION_IN_DEBT to transfer ${row.id}. Nothing moved.`,
         now,
       });
+      // The cause only: the alert route is a chat room.
+      if (spell)
+        await enqueueOutbox(tx, {
+          eventType: PLATFORM_REFUSAL_EVENT,
+          aggregateId: spell,
+          payload: { cause: 'collect_in_debt' },
+        });
     });
     return { stop: 'in_debt' };
   }
@@ -588,18 +682,12 @@ async function refused(
       return 'retried';
     }
     if (status === 'active') {
-      await db.transaction(async (tx) => {
-        await move(tx, row, 'sent', 'ready', now, {
-          nextTryAt: backoff(row.attempts, now),
-        });
-        await openOnce(tx, {
-          prefix: PLATFORM_PREFIX,
-          kind: 'collect_transfer_stuck',
-          subject: {},
-          note: `The partner refused transfer ${row.id} as FORBIDDEN, yet the recipient's account can receive transfers: TipMe's own key may have lost transfers:write. Every collect transfer stops at the first such refusal; nothing moved.`,
-          now,
-        });
+      // The recipient's account can receive: the refusal was TipMe's key. Reported as every refusal
+      // of TipMe's key is (one issue per spell, with its alert); nobody goes back to waiting.
+      await move(db, row, 'sent', 'ready', now, {
+        nextTryAt: backoff(row.attempts, now),
       });
+      await reportProviderKeyRefused(db, { now });
       return { stop: 'platform' };
     }
     // The recipient's account can't receive now: this share and their other ready ones wait for
@@ -619,6 +707,7 @@ async function refused(
             eq(collectTransfers.status, 'ready'),
           ),
         );
+      await capabilityStuck(tx, row, now);
     });
     return 'retried';
   }
@@ -699,10 +788,8 @@ async function resolveInFlight(
 ): Promise<Outcome> {
   if (row.status === 'sent')
     return readBack(db, row, 'sent', provider, now, totals);
-  const inWindow =
-    row.sentAt !== null &&
-    now.getTime() - row.sentAt.getTime() < SAME_KEY_WITHIN_MS;
-  if (!inWindow) return readBack(db, row, 'unknown', provider, now, totals);
+  if (!keyTrusted(row.sentAt, now))
+    return readBack(db, row, 'unknown', provider, now, totals);
   // Inside the partner's window: the same key replays a transfer that moved, or makes the one.
   const again = await move(db, row, 'unknown', 'ready', now, {
     nextTryAt: now,
@@ -839,7 +926,14 @@ export async function runCollectTransfers(
       return row ? [{ row, step: 'send' as const }] : [];
     }),
   ];
-  for (const { row, step } of work) {
+  for (const [index, { row, step }] of work.entries()) {
+    // M2: staff's pause, or a debt another worker ran into, stops the rest of this run too.
+    if (index > 0) {
+      if ((await guarded(() => collectSettingsInForce(db, now))).paused)
+        return { ...totals, stopped: 'paused' };
+      if (await guarded(() => frozenByDebt(db)))
+        return { ...totals, stopped: 'in_debt' };
+    }
     let outcome: Outcome;
     try {
       outcome = await guarded(() =>
