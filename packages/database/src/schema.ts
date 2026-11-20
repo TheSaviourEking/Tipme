@@ -4112,9 +4112,13 @@ export const disputes = pgTable(
     // (no share to hold). Null while the share's transfer may be in flight: decided after its
     // read-back (Review Focus 3).
     shareStep: text('share_step'),
-    // When TipMe finished acting on the outcome: the hold released (won), the loss booked (lost),
-    // or the share handed to the refund (closed). Null while anything is left to do.
+    // When TipMe finished acting on the outcome: the hold released (won, or closed with no refund),
+    // or the loss booked (lost). Null while anything is left to do, and nothing moves meanwhile.
     settledAt: timestamp('settled_at', { withTimezone: true }),
+    // When TipMe first saw it reach a final status (won, lost or closed): a closed dispute's hold is
+    // released 14 days on when no refund booked it, and a lost one waiting on a transfer in flight
+    // for a day is raised to staff.
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
     lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -4150,6 +4154,10 @@ export const disputes = pgTable(
     check(
       'disputes_settled',
       sql`settled_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    check(
+      'disputes_decided',
+      sql`decided_at IS NULL OR status IN ('won', 'lost', 'closed')`,
     ),
     index('disputes_unsettled')
       .on(table.createdAt)
@@ -4207,6 +4215,9 @@ export const collectTransfers = pgTable(
       .notNull()
       .defaultNow(),
     sentAt: timestamp('sent_at', { withTimezone: true }),
+    // Task 9: the last send under the key was definitely refused by the partner (nothing moved), so
+    // the row, held in review, is proven unmoved. Cleared by any later claim.
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -4256,9 +4267,14 @@ export const collectTransfers = pgTable(
     // P27: a share whose money may have moved (it was sent under its key) is never cancelled. Only a
     // read-back on its account that found nothing clears `sent_at`. The guard all dispute and refund
     // hooks use is `takeUnsentShare`; this makes it hold whatever the code does.
+    // The one exception: a row whose last send the partner definitely refused (`refused_at`).
     check(
       'collect_transfers_never_cancel_sent',
-      sql`status <> 'cancelled' OR sent_at IS NULL`,
+      sql`status <> 'cancelled' OR sent_at IS NULL OR refused_at IS NOT NULL`,
+    ),
+    check(
+      'collect_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
     ),
     uniqueIndex('collect_transfers_one_share')
       .on(table.tipId)

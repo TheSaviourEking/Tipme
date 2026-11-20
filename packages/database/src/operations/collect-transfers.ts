@@ -393,7 +393,7 @@ function currentAccount(alias: string): SQL {
 /**
  * Whether the row's recipient can receive it now (spec §5, §8): verified, a `usable` bank that
  * hasn't been replaced, no shared bank account in review, no open dispute on the tip (nor a lost one
- * TipMe is still recovering: its share is about to be cancelled). Checked when a share is released
+ * TipMe is still recovering, nor a closed one whose hold is kept for a refund). Checked when a share is released
  * and again, with its account, when it is claimed to be sent.
  */
 function canReceive(alias: string): SQL {
@@ -412,7 +412,8 @@ function canReceive(alias: string): SQL {
     AND NOT EXISTS (
       SELECT 1 FROM disputes x
        WHERE x.tip_id = ${c}.tip_id
-         AND (x.status IN ('open', 'responded') OR (x.status = 'lost' AND x.settled_at IS NULL)))`;
+         AND (x.status IN ('open', 'responded')
+              OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))`;
 }
 
 /**
@@ -508,10 +509,16 @@ async function toReview(
   from: Status,
   now: Date,
   note: string,
+  /**
+   * The partner definitely refused this send (Task 9): nothing moved under the key, so the row is
+   * proven unmoved and a dispute or refund may take it (`refused_at`, P27).
+   */
+  definitelyRefused = false,
 ): Promise<Outcome> {
   return db.transaction(async (tx) => {
     const held = await move(tx, row, from, 'review', now, {
       reviewReason: 'provider',
+      ...(definitelyRefused ? { refusedAt: now } : {}),
     });
     if (!held) return 'none';
     await openIssue(tx, {
@@ -784,6 +791,7 @@ async function refused(
     reason === 'not_found'
       ? 'The partner answered NOT_FOUND: it does not know the account. Nothing moved.'
       : 'The partner refused it for another reason. Nothing moved.',
+    true,
   );
 }
 
@@ -1141,6 +1149,7 @@ export function retryCollectTransfer(
       .set({
         status: sql`CASE WHEN ${collectTransfers.accountReference} IS NULL THEN 'waiting' ELSE 'ready' END`,
         reviewReason: null,
+        refusedAt: null,
         nextTryAt: i.now,
         updatedAt: i.now,
       })
@@ -1193,6 +1202,14 @@ export type SharePosition =
   | { state: 'in_flight'; row: Row }
   | { state: 'gone'; row: Row | null };
 
+/**
+ * Proven unmoved (P27): never sent, or held in review after the partner definitely refused its last
+ * send (`refused_at`). Anything else that was sent may have moved.
+ */
+const unmovedShare = sql`${collectTransfers.kind} = 'share' AND (
+  (${collectTransfers.sentAt} IS NULL AND ${collectTransfers.status} IN ('waiting', 'ready', 'review'))
+  OR (${collectTransfers.status} = 'review' AND ${collectTransfers.refusedAt} IS NOT NULL))`;
+
 /** The tip's share row and where its money is. */
 export async function sharePosition(
   tx: Database | Tx,
@@ -1211,20 +1228,20 @@ export async function sharePosition(
   if (row.status === 'paid') return { state: 'moved', row };
   if (row.status === 'cancelled') return { state: 'gone', row };
   if (
-    row.sentAt === null &&
-    (row.status === 'waiting' ||
-      row.status === 'ready' ||
-      row.status === 'review')
+    (row.sentAt === null &&
+      (row.status === 'waiting' ||
+        row.status === 'ready' ||
+        row.status === 'review')) ||
+    (row.status === 'review' && row.refusedAt !== null)
   )
     return { state: 'held', row };
   return { state: 'in_flight', row };
 }
 
 /**
- * Takes a share that was never sent (or proved unmoved): to `review` (held, with its reason) or to
- * `cancelled`. Conditional on `sent_at IS NULL` and a status it can leave, in the caller's
- * transaction; false when the share may have moved, so nothing changed. A row already in review for
- * another reason keeps that reason when it is held.
+ * Takes a share that is proven unmoved: to `review` (held, with its reason) or to `cancelled`.
+ * Conditional on `unmovedShare`, in the caller's transaction; false when the share may have moved,
+ * so nothing changed. A row already in review for another reason keeps that reason when held.
  */
 export async function takeUnsentShare(
   tx: Database | Tx,
@@ -1247,23 +1264,17 @@ export async function takeUnsentShare(
           : {}),
         updatedAt: i.now,
       })
-      .where(
-        and(
-          eq(collectTransfers.id, i.transferId),
-          eq(collectTransfers.kind, 'share'),
-          isNull(collectTransfers.sentAt),
-          inArray(collectTransfers.status, ['waiting', 'ready', 'review']),
-        ),
-      )
+      .where(and(eq(collectTransfers.id, i.transferId), unmovedShare))
       .returning({ id: collectTransfers.id });
     return moved.length === 1;
   });
 }
 
 /**
- * Lets go of a share a dispute (or refund) held (P13, P20): only a row in review for that reason,
- * to `ready` with its account or `waiting` without one. A row held for another reason stays held.
- * `as` hands it on to another reason instead (a closed dispute to the refund) without releasing it.
+ * Lets go of a share a dispute (or refund) held (P13, P20): only a never-sent share in review for
+ * that reason, to `ready` with its account or `waiting` without one. A row held for another reason
+ * stays held. `as` hands it on to another reason instead (a closed dispute to the refund) without
+ * releasing it.
  */
 export async function releaseHeldShare(
   tx: Database | Tx,
@@ -1290,6 +1301,8 @@ export async function releaseHeldShare(
       .where(
         and(
           eq(collectTransfers.id, i.transferId),
+          eq(collectTransfers.kind, 'share'),
+          isNull(collectTransfers.sentAt),
           eq(collectTransfers.status, 'review'),
           eq(collectTransfers.reviewReason, i.reason),
         ),
@@ -1300,30 +1313,33 @@ export async function releaseHeldShare(
 }
 
 /**
- * A lost dispute that took less than a held share (P27 guard, as takeUnsentShare): the share, never
- * sent, keeps the rest and is released, to `ready` with its account or `waiting` without one.
+ * A lost dispute that took less than a share proven unmoved (P27 guard, as takeUnsentShare): the
+ * share keeps the rest. Held for the dispute, it is released (to `ready` with its account or
+ * `waiting` without one); held for another reason, or not held, it stays as it is.
  */
 export async function reduceUnsentShare(
   tx: Database | Tx,
   i: { transferId: string; byMinor: bigint; now: Date },
 ): Promise<boolean> {
   return guarded(async () => {
+    const forDispute = sql`${collectTransfers.status} = 'review' AND ${collectTransfers.reviewReason} = 'dispute'`;
     const moved = await tx
       .update(collectTransfers)
       .set({
         amountMinor: sql`${collectTransfers.amountMinor} - ${i.byMinor}`,
-        status: sql`CASE WHEN ${collectTransfers.accountReference} IS NULL THEN 'waiting' ELSE 'ready' END`,
-        reviewReason: null,
+        status: sql`CASE WHEN ${forDispute}
+          THEN (CASE WHEN ${collectTransfers.accountReference} IS NULL THEN 'waiting' ELSE 'ready' END)
+          ELSE ${collectTransfers.status} END`,
+        reviewReason: sql`CASE WHEN ${forDispute} THEN NULL ELSE ${collectTransfers.reviewReason} END`,
         nextTryAt: i.now,
         updatedAt: i.now,
       })
       .where(
         and(
           eq(collectTransfers.id, i.transferId),
-          eq(collectTransfers.kind, 'share'),
-          isNull(collectTransfers.sentAt),
-          eq(collectTransfers.status, 'review'),
-          eq(collectTransfers.reviewReason, 'dispute'),
+          unmovedShare,
+          // A refused row released for a dispute would carry its refusal out of review.
+          sql`NOT (${forDispute} AND ${collectTransfers.refusedAt} IS NOT NULL)`,
           sql`${collectTransfers.amountMinor} > ${i.byMinor}`,
         ),
       )

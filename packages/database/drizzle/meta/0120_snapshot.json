@@ -1,5 +1,5 @@
 {
-  "id": "1acea045-4d5f-4df6-a021-6f65b5cc24ab",
+  "id": "c18967b4-2598-45d7-8ffc-0f306801b6a1",
   "prevId": "fa3f68ce-aa62-4f94-aa1d-64f21073b798",
   "version": "7",
   "dialect": "postgresql",
@@ -3113,6 +3113,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "refused_at": {
+          "name": "refused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "paid_at": {
           "name": "paid_at",
           "type": "timestamp with time zone",
@@ -3297,7 +3303,11 @@
         },
         "collect_transfers_never_cancel_sent": {
           "name": "collect_transfers_never_cancel_sent",
-          "value": "status <> 'cancelled' OR sent_at IS NULL"
+          "value": "status <> 'cancelled' OR sent_at IS NULL OR refused_at IS NOT NULL"
+        },
+        "collect_transfers_refused": {
+          "name": "collect_transfers_refused",
+          "value": "refused_at IS NULL OR status IN ('review', 'cancelled')"
         }
       },
       "isRLSEnabled": false
@@ -3543,6 +3553,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_event_at": {
           "name": "last_event_at",
           "type": "timestamp with time zone",
@@ -3678,6 +3694,10 @@
         "disputes_settled": {
           "name": "disputes_settled",
           "value": "settled_at IS NULL OR status IN ('won', 'lost', 'closed')"
+        },
+        "disputes_decided": {
+          "name": "disputes_decided",
+          "value": "decided_at IS NULL OR status IN ('won', 'lost', 'closed')"
         }
       },
       "isRLSEnabled": false

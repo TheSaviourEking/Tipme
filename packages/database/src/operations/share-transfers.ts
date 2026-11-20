@@ -5,7 +5,7 @@ import {
   refundMoves,
   type LedgerLine,
 } from '@tipme/domain';
-import { and, asc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   businesses,
@@ -436,11 +436,18 @@ async function claim(
   row: Row,
   from: ShareTransferStatus,
   set: Partial<typeof shareTransfers.$inferInsert>,
+  also?: SQL,
 ): Promise<boolean> {
   const moved = await db
     .update(shareTransfers)
     .set({ ...set, updatedAt: sql`now()` })
-    .where(and(eq(shareTransfers.id, row.id), eq(shareTransfers.status, from)))
+    .where(
+      and(
+        eq(shareTransfers.id, row.id),
+        eq(shareTransfers.status, from),
+        ...(also ? [also] : []),
+      ),
+    )
     .returning({ id: shareTransfers.id });
   return moved.length === 1;
 }
@@ -454,6 +461,17 @@ async function lockRow(tx: Tx, id: string): Promise<Row> {
   if (!row) throw new Error('share transfer vanished');
   return row;
 }
+
+/**
+ * You collect (Task 9, §6.2): a business's share of a collect tip is held in TipMe's balance while a
+ * dispute on the tip is open (or lost and still being recovered, or closed with its hold kept): a
+ * lost dispute takes it back from there before TipMe absorbs anything.
+ */
+const undisputed = sql`NOT EXISTS (
+  SELECT 1 FROM disputes x
+   WHERE x.tip_id = ${shareTransfers.tipId}
+     AND (x.status IN ('open', 'responded')
+          OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))`;
 
 /** A person needs to look: TipMe may hold money it could not send on. Nothing is sent again. */
 async function toReview(
@@ -716,11 +734,18 @@ async function sendIn(
   );
   if (!accountRef) return postpone(db, row, now);
   if (
-    !(await claim(db, row, 'out_paid', {
-      status: 'in_sent',
-      sentAt: now,
-      attempts: row.attempts + 1,
-    }))
+    !(await claim(
+      db,
+      row,
+      'out_paid',
+      {
+        status: 'in_sent',
+        sentAt: now,
+        attempts: row.attempts + 1,
+      },
+      // Checked again at the claim: a dispute opened since the row was read holds it.
+      kind === 'collect_sweep' ? undisputed : undefined,
+    ))
   )
     return;
   let answer: Transfer;
@@ -854,7 +879,7 @@ export async function runShareTransfers(
               // on the staff member's account.
               or(
                 sql`${shareTransfers.kind} <> 'collect_sweep'`,
-                lte(shareTransfers.createdAt, settledBefore),
+                and(lte(shareTransfers.createdAt, settledBefore), undisputed),
               ),
             ),
             and(

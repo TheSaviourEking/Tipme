@@ -7,11 +7,12 @@ import {
   disputeStatusAfter,
   type DisputeStatus,
 } from '@tipme/domain';
-import { and, asc, eq, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   collectTransfers,
   disputes,
+  shareTransfers,
   ledgerTransactions,
   notifications,
   paymentAttempts,
@@ -28,6 +29,8 @@ import {
   takeUnsentShare,
   type SharePosition,
 } from './collect-transfers.js';
+
+type CollectTransferRow = typeof collectTransfers.$inferSelect;
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
@@ -41,18 +44,24 @@ import { jsonSafe } from './provider-events.js';
  * folded into one `disputes` row (out-of-order safe: `disputeStatusAfter`). Then the dispute is
  * advanced as far as it can go:
  *
- *   open      the share is held: never sent → `review` (reason `dispute`); moved → that amount of
- *             the recipient's balance (`held_minor`, R4) and a notice; in flight → nothing until its
- *             read-back settles it (Review Focus 3, P26), then one of those.
+ *   open      the share is held: proven unmoved (never sent, or its last send definitely refused)
+ *             → `review` (reason `dispute`); moved → that amount of the recipient's balance
+ *             (`held_minor`, R4) and a notice; in flight → nothing until its read-back settles it
+ *             (Review Focus 3, P26), then one of those. A business's share still in TipMe's balance
+ *             (its `collect_sweep`) is not sent while the dispute is unsettled (R3).
  *   won       the hold is released (P20); the fee stays an expense.
  *   closed    no ruling (the partner's `prevented` reads as closed: the supporter got their money
- *             back by refund, which the refund event books). No loss, and no release that would pay
- *             the same money twice: the share is handed to the refund (`review`, reason `refund`)
- *             and staff are told.
- *   lost      recovered from the recipient's unpaid balance first (disputeRecovery): the held share
- *             is cancelled, or a `back` transfer takes what is still in their account (the transfer
- *             machine sends it), then the loss is booked (`dispute_loss.<id>`, a reversal of the
- *             payment). TipMe absorbs the rest.
+ *             back by refund, which the refund event books). No loss, no notice, and no release
+ *             that would pay the same money twice: the hold is kept for the refund (P28; Task 10
+ *             releases or consumes it) and staff are told. With no refund for the tip after
+ *             CLOSED_HOLD_KEPT_MS it is released and the dispute settled.
+ *   lost      recovered from what TipMe still holds or can take back first (disputeRecovery): the
+ *             person's held share is cancelled (or reduced), or a `back` transfer takes what is still
+ *             in their account (the transfer machine sends it); then the business's unswept share;
+ *             then the loss is booked (`dispute_loss.<id>`, a reversal of the payment) and TipMe
+ *             absorbs the rest. A business share already swept is absorbed and raised to staff.
+ *             Nothing changes unless the loss can be booked in the payment's currency. Waiting a
+ *             day on money in flight raises `dispute_waiting.<id>`.
  *
  * Every step is conditional and idempotent; the transfer sweep (`runDisputeSteps`) retries what
  * could not be done yet. The partner documents no dispute fee field, so a fee is booked only when
@@ -85,6 +94,13 @@ type DisputeRow = typeof disputes.$inferSelect;
 
 /** How long before evidence is due staff get a reminder. */
 const DEADLINE_NOTICE_MS = 48 * 3_600_000;
+/**
+ * A closed dispute's hold is kept this long for the refund that may book it (P28: Task 10 releases
+ * or consumes it); with no refund for the tip by then, it is released.
+ */
+export const CLOSED_HOLD_KEPT_MS = 14 * 24 * 3_600_000;
+/** A lost dispute waiting this long on a transfer in flight is raised to staff. */
+const LOST_WAITING_ALERT_MS = 24 * 3_600_000;
 const SWEEP_LIMIT = 100;
 
 const min = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -99,6 +115,8 @@ function naira(minor: bigint): string {
 /** The spec's words (§10), with the amount held. */
 export const disputeHoldCopy = (heldMinor: bigint) =>
   `A payment to you is being questioned. We've held ${naira(heldMinor)} until it's settled.`;
+
+const FINAL: ReadonlySet<DisputeStatus> = new Set(['won', 'lost', 'closed']);
 
 const outcomeOf = (status: DisputeStatus): DisputeOutcome =>
   status === 'won' ? 'won' : status === 'lost' ? 'lost' : 'updated';
@@ -125,7 +143,6 @@ export function applyDisputeEvent(
       .from(paymentAttempts)
       .innerJoin(tips, eq(tips.intentId, paymentAttempts.intentId))
       .where(eq(paymentAttempts.id, attemptId));
-    if (!tip) return { outcome: 'unmatched' };
     const folded = await db.transaction(async (tx) => {
       const payload = jsonSafe(event);
       const stored = await tx
@@ -148,6 +165,17 @@ export function applyDisputeEvent(
         })
         .returning({ id: providerEvents.id });
       if (!stored[0]) return { outcome: 'duplicate' as const, disputeId: null };
+      if (!tip) {
+        // A collect payment with no tip should not exist: the event is kept, and a person looks.
+        await openIssue(tx, {
+          dedupeKey: `dispute_no_tip.${event.partnerDisputeId}`,
+          kind: 'dispute_opened',
+          subject: { attemptId },
+          note: `Dispute ${event.partnerDisputeId} names collect payment ${attemptId}, which has no tip. Nothing was held or booked.`,
+          now,
+        });
+        return { outcome: 'unmatched' as const, disputeId: null };
+      }
       const disputeId = newId();
       const inserted = await tx
         .insert(disputes)
@@ -161,6 +189,7 @@ export function applyDisputeEvent(
           reason: event.reason,
           status: event.status,
           respondBy: event.respondBy,
+          decidedAt: FINAL.has(event.status) ? now : null,
           lastEventAt: event.occurredAt,
           createdAt: now,
           updatedAt: now,
@@ -203,6 +232,9 @@ export function applyDisputeEvent(
             .update(disputes)
             .set({
               status,
+              ...(FINAL.has(status) && !row.decidedAt
+                ? { decidedAt: now }
+                : {}),
               ...(newer
                 ? {
                     lastEventAt: event.occurredAt,
@@ -294,9 +326,26 @@ async function recipientAvailable(tx: Tx, profileId: string): Promise<bigint> {
 }
 
 /**
- * Holds the share for a dispute (or, closed, for the refund): never sent → review; moved → that much
- * of the balance; gone → nothing. Null while the share is in flight: nothing is held under a transfer
- * that may land; the read-back decides first.
+ * How much of a moved share can be held or taken back: this tip's share at most, never more than is
+ * disputed, and never more than is still in the balance. The same cap on open and on loss, so a
+ * dispute never reaches the recipient's later tips.
+ */
+async function fromMovedShare(
+  tx: Tx,
+  row: DisputeRow,
+  share: CollectTransferRow,
+): Promise<bigint> {
+  return min(
+    min(share.amountMinor, row.amountMinor),
+    await recipientAvailable(tx, share.profileId),
+  );
+}
+
+/**
+ * Holds the share for a dispute (or, closed, for the refund): proven unmoved → review; moved → that
+ * much of the balance; gone → nothing. Null while the share is in flight: nothing is held under a
+ * transfer that may land; the read-back decides first. The recipient is told only while the
+ * dispute is open (never after it closed).
  */
 async function holdShare(
   tx: Tx,
@@ -317,15 +366,13 @@ async function holdShare(
     return took ? 'held' : null;
   }
   const share = position.row;
-  const held = min(
-    min(share.amountMinor, row.amountMinor),
-    await recipientAvailable(tx, share.profileId),
-  );
+  const held = await fromMovedShare(tx, row, share);
   await tx
     .update(disputes)
     .set({ heldMinor: held, updatedAt: now })
     .where(eq(disputes.id, row.id));
-  if (held > 0n) await tellRecipient(tx, row, share.profileId, held, now);
+  if (held > 0n && reason === 'dispute')
+    await tellRecipient(tx, row, share.profileId, held, now);
   return 'balance';
 }
 
@@ -363,7 +410,8 @@ async function tellRecipient(
 
 /**
  * Moves a dispute on as far as it can go now (see the header). Idempotent; a step that has to wait
- * (a transfer in flight, a transfer back not paid yet) is left for the sweep.
+ * (a transfer in flight, a transfer back not paid yet, a closed dispute's hold kept for a refund) is
+ * left for the sweep.
  */
 export function advanceDispute(
   db: Database,
@@ -409,9 +457,34 @@ export function advanceDispute(
 }
 
 /**
+ * Whether a refund of the tip has been asked for, booked, or reported by the partner: then a closed
+ * dispute's hold stays for it (P28, Task 10).
+ */
+async function refundSeen(tx: Tx, tipId: string): Promise<boolean> {
+  const result = await tx.execute<{ seen: boolean }>(sql`
+    SELECT EXISTS (SELECT 1 FROM tip_refunds r WHERE r.tip_id = ${tipId} AND r.status <> 'FAILED')
+        OR EXISTS (SELECT 1 FROM ledger_transactions t
+                    WHERE t.tip_id = ${tipId} AND t.operation_type = 'reversal')
+        OR EXISTS (
+          SELECT 1 FROM unmatched_provider_events u
+            JOIN payment_attempts pa ON TRUE
+            JOIN tips tp ON tp.intent_id = pa.intent_id AND tp.id = ${tipId}
+           WHERE u.reason = 'collect_event' AND u.event_type LIKE '%refund%'
+             AND (u.payload->>'operationReference' = pa.id::text
+                  OR u.payload->>'providerReference' = pa.provider_reference
+                  OR u.payload->>'chargeReference' IN (
+                       SELECT c.charge_reference FROM collect_transfers c
+                        WHERE c.tip_id = ${tipId} AND c.charge_reference IS NOT NULL)))
+      AS seen`);
+  return result.rows[0]?.seen === true;
+}
+
+/**
  * Closed without a ruling. The supporter may have been refunded (the partner's `prevented`), and
  * the refund event books that money: releasing the share to the recipient as well would pay it
- * twice. So nothing is booked here, the hold is kept for the refund (Task 10), and staff decide.
+ * twice. So nothing is booked, the hold is kept for the refund (P28) and staff are told; the
+ * recipient is not told anything new. With no refund for the tip after CLOSED_HOLD_KEPT_MS, the hold
+ * is released and the dispute settled.
  */
 async function closeWithoutRuling(
   tx: Tx,
@@ -430,28 +503,109 @@ async function closeWithoutRuling(
   if (step === null) {
     step = await holdShare(tx, row, position, 'refund', now);
     if (step === null) return; // In flight: wait for the read-back.
+    await tx
+      .update(disputes)
+      .set({ shareStep: step, updatedAt: now })
+      .where(eq(disputes.id, row.id));
   }
-  await tx
-    .update(disputes)
-    .set({ shareStep: step, settledAt: now, updatedAt: now })
-    .where(eq(disputes.id, row.id));
   await openIssue(tx, {
     dedupeKey: `dispute_closed.${row.id}`,
     kind: 'collect_transfer_review',
     subject: { tipId: row.tipId },
-    note: `Dispute ${row.partnerDisputeId} closed without a ruling. Nothing was booked as lost. The share stays held for the refund that event books; if there is none, release the share.`,
+    note: `Dispute ${row.partnerDisputeId} closed without a ruling. Nothing was booked as lost. The share stays held for a refund for ${CLOSED_HOLD_KEPT_MS / 86_400_000} days; with none, it is released.`,
     now,
   });
+  const since = (row.decidedAt ?? now).getTime();
+  if (now.getTime() - since < CLOSED_HOLD_KEPT_MS) return;
+  if (await refundSeen(tx, row.tipId)) return;
+  if (step === 'held' && position.row)
+    await releaseHeldShare(tx, {
+      transferId: position.row.id,
+      reason: 'refund',
+      now,
+    });
+  await tx
+    .update(disputes)
+    .set({ heldMinor: 0n, settledAt: now, updatedAt: now })
+    .where(eq(disputes.id, row.id));
 }
 
-/** Lost: recovery from the recipient's unpaid balance first, then the loss booked (§6.2). */
+/** A lost dispute waiting on money in flight: after a day, staff hear of it (once). */
+async function waiting(
+  tx: Tx,
+  row: DisputeRow,
+  now: Date,
+  what: string,
+): Promise<'waiting_back'> {
+  const since = (row.decidedAt ?? row.lastEventAt).getTime();
+  if (now.getTime() - since > LOST_WAITING_ALERT_MS)
+    await openIssue(tx, {
+      dedupeKey: `dispute_waiting.${row.id}`,
+      kind: 'collect_transfer_stuck',
+      subject: { tipId: row.tipId },
+      note: `Dispute ${row.partnerDisputeId} was lost over a day ago and is still waiting: ${what}. Nothing has been booked as lost yet.`,
+      now,
+    });
+  return 'waiting_back';
+}
+
+type ShareSweepRow = typeof shareTransfers.$inferSelect;
+
+/**
+ * Lost: recovery from the recipient's unpaid balance first, then the business's share held for it,
+ * then TipMe absorbs the rest (§6.2, R3). Nothing is changed unless the loss can be booked in the
+ * payment's currency.
+ */
 async function settleLost(
   tx: Tx,
   row: DisputeRow,
   position: SharePosition,
   now: Date,
 ): Promise<'posted' | 'waiting_back'> {
-  if (position.state === 'in_flight') return 'waiting_back';
+  if (position.state === 'in_flight')
+    return waiting(
+      tx,
+      row,
+      now,
+      "the share's transfer is still being read back",
+    );
+  const [businessSweep] = (await tx
+    .select()
+    .from(shareTransfers)
+    .where(
+      and(
+        eq(shareTransfers.tipId, row.tipId),
+        eq(shareTransfers.kind, 'collect_sweep'),
+      ),
+    )
+    .for('update')) as ShareSweepRow[];
+  if (businessSweep?.status === 'in_sent')
+    return waiting(tx, row, now, "the business share's transfer is in flight");
+  // The payment it reverses, and its currency, before anything is touched: a dispute TipMe can't
+  // book changes nothing, however often it is swept.
+  const [payment] = await tx
+    .select({
+      id: ledgerTransactions.id,
+      currency: ledgerTransactions.currency,
+    })
+    .from(ledgerTransactions)
+    .where(
+      and(
+        eq(ledgerTransactions.tipId, row.tipId),
+        eq(ledgerTransactions.operationType, 'payment'),
+      ),
+    );
+  if (!payment) throw new Error('a collect tip has its payment posting');
+  if (payment.currency !== row.currency) {
+    await openIssue(tx, {
+      dedupeKey: `dispute_currency.${row.id}`,
+      kind: 'collect_recon_mismatch',
+      subject: { tipId: row.tipId },
+      note: `Dispute ${row.partnerDisputeId} is in ${row.currency}, the tip in ${payment.currency}. Nothing was held back, cancelled or booked.`,
+      now,
+    });
+    return 'waiting_back';
+  }
   const share = position.row;
   let recovered = 0n;
   if (position.state === 'held') {
@@ -471,21 +625,23 @@ async function settleLost(
             reviewReason: 'dispute',
             now,
           })
-        : // A partial dispute: the share keeps the rest and goes on to the recipient.
-          (held.status === 'review' && held.reviewReason === 'dispute') ||
-            (await takeUnsentShare(tx, {
-              transferId: held.id,
-              to: 'review',
-              reviewReason: 'dispute',
-              now,
-            }))
-          ? await reduceUnsentShare(tx, {
-              transferId: held.id,
-              byMinor: recovered,
-              now,
-            })
-          : false;
-    if (!took) return 'waiting_back';
+        : // A partial dispute: the share keeps the rest (released if it was held for this dispute,
+          // else still held for its own reason).
+          await reduceUnsentShare(tx, {
+            transferId: held.id,
+            byMinor: recovered,
+            now,
+          });
+    if (!took) {
+      await openIssue(tx, {
+        dedupeKey: `dispute_share.${row.id}`,
+        kind: 'collect_transfer_review',
+        subject: { tipId: row.tipId },
+        note: `Dispute ${row.partnerDisputeId} was lost, but its share ${held.id} could not be taken back automatically. Nothing was booked.`,
+        now,
+      });
+      return 'waiting_back';
+    }
   } else if (position.state === 'moved') {
     const moved = position.row;
     const [back] = await tx
@@ -501,10 +657,11 @@ async function settleLost(
       if (back.status !== 'paid') return 'waiting_back';
       recovered = back.amountMinor;
     } else {
+      // The same cap as on open: this tip's share, at most what is still in the balance.
       const inBalance =
         row.shareStep === 'balance'
           ? row.heldMinor
-          : await recipientAvailable(tx, moved.profileId);
+          : await fromMovedShare(tx, row, moved);
       const recovery = disputeRecovery({
         disputedMinor: row.amountMinor,
         netMinor: moved.amountMinor,
@@ -543,30 +700,6 @@ async function settleLost(
       }
     }
   }
-  const [payment] = await tx
-    .select({
-      id: ledgerTransactions.id,
-      currency: ledgerTransactions.currency,
-    })
-    .from(ledgerTransactions)
-    .where(
-      and(
-        eq(ledgerTransactions.tipId, row.tipId),
-        eq(ledgerTransactions.operationType, 'payment'),
-      ),
-    );
-  if (!payment) throw new Error('a collect tip has its payment posting');
-  if (payment.currency !== row.currency) {
-    // The partner disputed another currency than the tip was paid in: a person books it.
-    await openIssue(tx, {
-      dedupeKey: `dispute_currency.${row.id}`,
-      kind: 'collect_recon_mismatch',
-      subject: { tipId: row.tipId },
-      note: `Dispute ${row.partnerDisputeId} is in ${row.currency}, the tip in ${payment.currency}. Nothing was booked.`,
-      now,
-    });
-    return 'waiting_back';
-  }
   const profileId =
     share?.profileId ??
     (
@@ -575,6 +708,53 @@ async function settleLost(
         .from(tips)
         .where(eq(tips.id, row.tipId))
     )[0]?.profileId;
+  const parts: ({ amountMinor: bigint } & (
+    { profileId: string } | { businessId: string }
+  ))[] =
+    recovered > 0n && profileId ? [{ amountMinor: recovered, profileId }] : [];
+  // R3: the business's share of the tip, while TipMe still holds it (its leg in never sent, or
+  // refused), comes back next, up to what is still disputed.
+  if (businessSweep?.businessId) {
+    const left = row.amountMinor - recovered;
+    const owed = businessSweep.deliverMinor ?? businessSweep.amountMinor;
+    if (
+      (businessSweep.status === 'out_paid' ||
+        businessSweep.status === 'review') &&
+      left > 0n &&
+      owed > 0n
+    ) {
+      const take = min(owed, left);
+      const [taken] = await tx
+        .update(shareTransfers)
+        .set(
+          take === owed
+            ? { status: 'cancelled', updatedAt: now }
+            : {
+                amountMinor: sql`${shareTransfers.amountMinor} - ${take}`,
+                deliverMinor: owed - take,
+                updatedAt: now,
+              },
+        )
+        .where(
+          and(
+            eq(shareTransfers.id, businessSweep.id),
+            inArray(shareTransfers.status, ['out_paid', 'review']),
+          ),
+        )
+        .returning({ id: shareTransfers.id });
+      if (taken)
+        parts.push({ amountMinor: take, businessId: businessSweep.businessId });
+    } else if (businessSweep.status === 'done')
+      // Already in the business's own account: TipMe absorbs it, and a person decides whether to
+      // ask the business for it (option B's reverseTip path), with the amount on record.
+      await openIssue(tx, {
+        dedupeKey: `dispute_business.${row.id}`,
+        kind: 'collect_transfer_review',
+        subject: { tipId: row.tipId },
+        note: `Dispute ${row.partnerDisputeId} was lost after the business's share (${naira(owed)}) had moved to its account. TipMe absorbed it; recover it from the business by hand if that is decided.`,
+        now,
+      });
+  }
   await postLedgerTransaction(tx, {
     operationType: 'reversal',
     operationKey: `dispute_loss.${row.id}`,
@@ -584,10 +764,7 @@ async function settleLost(
     traceId: null,
     lines: buildDisputeLossPosting({
       disputedMinor: row.amountMinor,
-      recovered:
-        recovered > 0n && profileId
-          ? [{ amountMinor: recovered, profileId }]
-          : [],
+      recovered: parts,
     }),
   });
   await tx
