@@ -596,7 +596,13 @@ async function settleLost(
     )
     .for('update')) as ShareSweepRow[];
   const businessSweep = sweeps.find((t) => t.kind === 'collect_sweep');
-  const pullBack = sweeps.find((t) => t.kind === 'collect_recover');
+  // This dispute's own pull-back; another dispute's on the same tip took its own part already.
+  const pullBack = sweeps.find(
+    (t) => t.kind === 'collect_recover' && t.disputeId === row.id,
+  );
+  const pulledByOthers = sweeps
+    .filter((t) => t.kind === 'collect_recover' && t.disputeId !== row.id)
+    .reduce((sum, t) => sum + t.amountMinor, 0n);
   if (businessSweep?.status === 'in_sent')
     return waiting(tx, row, now, "the business share's transfer is in flight");
   // A sweep in review that wasn't refused may have moved (the partner listed other money): a person
@@ -724,29 +730,34 @@ async function settleLost(
       takeSweep = businessSweep;
     } else if (businessSweep.status === 'done') {
       // P29: already in the business's account. Pulled back from there first, as option B does;
-      // only what isn't there any more is TipMe's to absorb.
-      if (!pullBack) {
-        await scheduleCollectRecover(tx, {
-          tipId: row.tipId,
-          businessId: businessSweep.businessId,
-          profileId: businessSweep.profileId,
-          amountMinor: min(owed, left),
-          currency: businessSweep.currency,
-          provider: businessSweep.provider,
-          now,
-        });
-        return 'waiting_back';
+      // only what isn't there any more is TipMe's to absorb. Never what another dispute took.
+      const target = min(owed - pulledByOthers, left);
+      if (target > 0n) {
+        if (!pullBack) {
+          await scheduleCollectRecover(tx, {
+            tipId: row.tipId,
+            disputeId: row.id,
+            businessId: businessSweep.businessId,
+            profileId: businessSweep.profileId,
+            amountMinor: target,
+            currency: businessSweep.currency,
+            provider: businessSweep.provider,
+            now,
+          });
+          return 'waiting_back';
+        }
+        if (pullBack.status === 'done') {
+          businessMinor = min(pullBack.amountMinor, target);
+          if (target > businessMinor) absorbedBusiness = target - businessMinor;
+        } else if (pullBack.status === 'gap') absorbedBusiness = target;
+        else
+          return waiting(
+            tx,
+            row,
+            now,
+            "the business share is being pulled back from the business's account",
+          );
       }
-      if (pullBack.status === 'done') businessMinor = pullBack.amountMinor;
-      else if (pullBack.status === 'gap')
-        absorbedBusiness = pullBack.amountMinor;
-      else
-        return waiting(
-          tx,
-          row,
-          now,
-          "the business share is being pulled back from the business's account",
-        );
     }
   }
 

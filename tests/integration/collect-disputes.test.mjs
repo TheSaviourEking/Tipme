@@ -6,6 +6,7 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import {
   CollectTransferRefusedError,
   PayoutRejectedError,
+  PlatformRefusalError,
   UncertainProviderOutcomeError,
 } from '../../packages/payments/dist/index.js';
 import {
@@ -216,6 +217,8 @@ function partner() {
     async collectBack(input) {
       state.backs.push({ ...input });
       const answer = state.backAnswers.shift();
+      if (answer?.keyRefused)
+        throw new PlatformRefusalError('provider_key', 'FORBIDDEN');
       if (answer?.reject)
         throw new PayoutRejectedError(answer.reject, answer.code);
       const transfer = movedTo(input, input.accountRef);
@@ -1051,7 +1054,15 @@ const sweepOf = async (tipId) =>
 function businessPartner() {
   const sent = [];
   const pulled = [];
-  const state = { refuseBack: false };
+  // What the business still has in its account (null: plenty); how a pull-back is refused; and a
+  // hook run inside the leg in, as another runner would.
+  const state = {
+    refuseBack: false,
+    balance: null,
+    keyRefused: 0,
+    onSendIn: null,
+    refuseIn: false,
+  };
   return {
     sent,
     pulled,
@@ -1059,6 +1070,10 @@ function businessPartner() {
     provider: {
       // P29: a swept share pulled back from the business's own account (as option B's recover).
       async collectToPlatform(input) {
+        if (state.keyRefused > 0) {
+          state.keyRefused -= 1;
+          throw new PlatformRefusalError('provider_key', 'FORBIDDEN');
+        }
         pulled.push([input.accountRef, input.amountMinor]);
         if (state.refuseBack)
           throw new PayoutRejectedError('other', 'INSUFFICIENT_BALANCE');
@@ -1067,9 +1082,12 @@ function businessPartner() {
       name: 'bachs-sandbox',
       capabilities: { connectedAccounts: false },
       async payoutBalance() {
-        return { availableMinor: 0n };
+        return { availableMinor: state.balance ?? 100_000_000n };
       },
       async transferToAccount(input) {
+        if (state.onSendIn) await state.onSendIn(input);
+        if (state.refuseIn)
+          throw new PayoutRejectedError('other', 'VALIDATION_ERROR');
         sent.push(input.amountMinor);
         return { transferRef: `tr_b${sent.length}`, status: 'paid' };
       },
@@ -1443,4 +1461,154 @@ test('a dispute on a collect payment with no tip is stored and raised to staff, 
     ['dispute_no_tip.dp_notip'],
   );
   assert.deepEqual(await q(`SELECT 1 FROM disputes`), []);
+});
+
+test('two partial lost disputes on one swept business tip each pull back their own part, once', async () => {
+  const { tip, businessId, share } = await sharedTip();
+  const { provider, pulled } = businessPartner();
+  await sweep(provider);
+  const half = share / 2n;
+  // The first takes the person's whole held share and half the business's; the second the rest.
+  const first = { ...tip, disputeRef: `${tip.disputeRef}_a` };
+  const second = { ...tip, disputeRef: `${tip.disputeRef}_b` };
+  const firstMinor = NET - share + half;
+  await apply(disputeEvent(first, { amountMinor: firstMinor }), at(4 * HOUR));
+  await apply(
+    lost(first, { amountMinor: firstMinor, occurredAt: at(5 * HOUR) }),
+    at(5 * HOUR),
+  );
+  await sweep(provider);
+  await steps(at(6 * HOUR));
+  await apply(
+    disputeEvent(second, { amountMinor: half, occurredAt: at(7 * HOUR) }),
+    at(7 * HOUR),
+  );
+  await apply(
+    lost(second, { amountMinor: half, occurredAt: at(8 * HOUR) }),
+    at(8 * HOUR),
+  );
+  await sweep(provider);
+  await steps(at(9 * HOUR));
+  await sweep(provider);
+  await steps(at(10 * HOUR));
+  const a = await disputeOf(first.disputeRef);
+  const b = await disputeOf(second.disputeRef);
+  assert.ok(a.settled_at);
+  assert.ok(b.settled_at);
+  assert.deepEqual(pulled, [
+    [businessId, half],
+    [businessId, half],
+  ]);
+  assert.deepEqual(
+    (
+      await q(
+        `SELECT dispute_id, amount_minor::text AS amount, status FROM share_transfers
+          WHERE kind = 'collect_recover' ORDER BY created_at`,
+      )
+    ).map((r) => [r.dispute_id, r.amount, r.status]),
+    [
+      [a.id, String(half), 'done'],
+      [b.id, String(half), 'done'],
+    ],
+  );
+  // Nothing absorbed: each loss is covered by what it took back, and nothing is booked twice.
+  assert.equal(await lossTotal(a.id), '0');
+  assert.equal(await lossTotal(b.id), '0');
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM ledger_transactions WHERE operation_key LIKE 'dispute_loss.%'`,
+      )
+    ).length,
+    2,
+  );
+});
+
+test('a refused leg in never marks a sweep another runner has claimed since', async () => {
+  const { tip } = await sharedTip();
+  const { provider, state } = businessPartner();
+  // The fifth refusal would hold it for review; meanwhile another runner has taken it (its claim).
+  await q(
+    `UPDATE share_transfers SET attempts = 4 WHERE tip_id = $1 AND kind = 'collect_sweep'`,
+    [tip.tipId],
+  );
+  state.refuseIn = true;
+  state.onSendIn = async () => {
+    await q(
+      `UPDATE share_transfers SET attempts = attempts + 1, sent_at = now()
+        WHERE tip_id = $1 AND kind = 'collect_sweep'`,
+      [tip.tipId],
+    );
+  };
+  await sweep(provider);
+  const [row] = await q(
+    `SELECT status, refused_at FROM share_transfers WHERE tip_id = $1 AND kind = 'collect_sweep'`,
+    [tip.tipId],
+  );
+  assert.equal(row.status, 'in_sent');
+  assert.equal(row.refused_at, null);
+});
+
+test("TipMe's own key refused on a pull-back stops it for a retry, and absorbs nothing", async () => {
+  const { tip, businessId, share } = await sharedTip();
+  const { provider, pulled, state } = businessPartner();
+  await sweep(provider);
+  await apply(disputeEvent(tip, { occurredAt: at(4 * HOUR) }), at(4 * HOUR));
+  await apply(lost(tip, { occurredAt: at(5 * HOUR) }), at(5 * HOUR));
+  state.keyRefused = 1;
+  await sweep(provider);
+  const [refused] = await q(
+    `SELECT status FROM share_transfers WHERE kind = 'collect_recover'`,
+  );
+  assert.equal(refused.status, 'waiting');
+  assert.equal((await issuesOf('provider_key_refused')).length, 1);
+  await steps(at(6 * HOUR));
+  assert.equal((await disputeOf(tip.disputeRef)).settled_at, null);
+  // Fixed: the retry pulls it back, and TipMe absorbs only its own part.
+  await q(
+    `UPDATE share_transfers SET next_attempt_at = now() WHERE kind = 'collect_recover'`,
+  );
+  await sweep(provider);
+  assert.deepEqual(pulled, [[businessId, share]]);
+  await steps(at(7 * HOUR));
+  const row = await disputeOf(tip.disputeRef);
+  assert.ok(row.settled_at);
+  assert.equal(await lossTotal(row.id), String(GROSS - NET));
+});
+
+test('a business that withdrew part of its share gives back what is left; TipMe absorbs only the rest', async () => {
+  const { tip, businessId, share } = await sharedTip();
+  const { provider, pulled, state } = businessPartner();
+  await sweep(provider);
+  await apply(disputeEvent(tip, { occurredAt: at(4 * HOUR) }), at(4 * HOUR));
+  await apply(lost(tip, { occurredAt: at(5 * HOUR) }), at(5 * HOUR));
+  const left = share / 4n;
+  state.balance = left;
+  await sweep(provider);
+  assert.deepEqual(pulled, [[businessId, left]]);
+  await steps(at(6 * HOUR));
+  const row = await disputeOf(tip.disputeRef);
+  assert.ok(row.settled_at);
+  assert.equal(await lossTotal(row.id), String(GROSS - NET + (share - left)));
+  assert.deepEqual(
+    (await issuesOf('collect_transfer_review')).map((i) => i.dedupe_key),
+    [`dispute_business.${row.id}`],
+  );
+});
+
+test("TipMe's own key refused on a transfer back stops the run and keeps it for a retry", async () => {
+  await verified(TOBI);
+  const { provider, state } = partner();
+  const tip = await movedTip(TOBI, provider);
+  await apply(disputeEvent(tip));
+  await apply(lost(tip), at(2 * HOUR));
+  state.backAnswers.push({ keyRefused: true });
+  const result = await run(provider, at(3 * HOUR));
+  assert.equal(result.stopped, 'platform');
+  const [back] = await q(
+    `SELECT status, review_reason FROM collect_transfers WHERE kind = 'back'`,
+  );
+  assert.deepEqual(back, { status: 'ready', review_reason: null });
+  assert.equal((await issuesOf('provider_key_refused')).length, 1);
+  assert.deepEqual(await issuesOf('collect_transfer_review'), []);
 });

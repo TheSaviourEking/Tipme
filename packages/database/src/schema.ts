@@ -3973,6 +3973,8 @@ export const shareTransfers = pgTable(
       .defaultNow(),
     // Task 9: a collect sweep held in review after its leg in was definitely refused again and
     // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
+    // Task 9 (P29): the lost dispute a `collect_recover` pull-back answers (one each).
+    disputeId: uuid('dispute_id').references((): AnyPgColumn => disputes.id),
     refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
@@ -4006,7 +4008,8 @@ export const shareTransfers = pgTable(
       'share_transfers_links',
       sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
-        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)`,
+        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)
+        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)`,
     ),
     check(
       'share_transfers_business',
@@ -4027,9 +4030,9 @@ export const shareTransfers = pgTable(
       'share_transfers_refused',
       sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
     ),
-    // Task 9 (P29): a lost dispute pulls a swept business share back once per tip.
+    // Task 9 (P29): each lost dispute pulls its part of a swept business share back once.
     uniqueIndex('share_transfers_one_collect_recover')
-      .on(table.tipId)
+      .on(table.disputeId)
       .where(sql`kind = 'collect_recover'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)

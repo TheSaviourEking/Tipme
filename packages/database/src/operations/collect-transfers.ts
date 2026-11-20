@@ -814,8 +814,13 @@ async function refusedBack(
   error: unknown,
 ): Promise<Outcome> {
   const name = error instanceof Error ? error.name : null;
-  const reason = (error as { failureReason?: unknown } | null)?.failureReason;
-  if (name === 'PlatformRefusalError' && reason === 'provider_key') {
+  // PayoutRejectedError says why as `failureReason`; PlatformRefusalError as `refusal`.
+  const fields = (error ?? {}) as {
+    failureReason?: unknown;
+    refusal?: unknown;
+  };
+  const reason = fields.failureReason;
+  if (name === 'PlatformRefusalError' && fields.refusal === 'provider_key') {
     await move(db, row, 'sent', 'ready', now, {
       nextTryAt: backoff(row.attempts, now),
     });

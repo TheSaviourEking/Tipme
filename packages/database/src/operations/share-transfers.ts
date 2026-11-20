@@ -21,6 +21,7 @@ import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
+import { reportProviderKeyRefused } from './payout-start.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -220,12 +221,15 @@ export async function scheduleCollectSweep(
  * reached the business's account. As option B's `recover`, the share is pulled back from that
  * account to TipMe's, out leg only, key `tipme-share-out-<id>`. Once paid, the money is held for the
  * business again (`buildCollectReturnPosting`) and the dispute's loss takes it from there. Refused
- * (the business has withdrawn it), it ends in `gap` and TipMe absorbs it. Once per tip.
+ * (the business has withdrawn it), it ends in `gap` and TipMe absorbs it. Once per dispute. If the
+ * business has withdrawn part of it, what is left is pulled back and TipMe absorbs only the rest:
+ * option B's hold-back can't be reused, because it repays the staff member, not TipMe.
  */
 export async function scheduleCollectRecover(
   tx: Tx,
   input: {
     tipId: string;
+    disputeId: string;
     businessId: string;
     profileId: string;
     amountMinor: bigint;
@@ -239,6 +243,7 @@ export async function scheduleCollectRecover(
     .values({
       id: newId(),
       tipId: input.tipId,
+      disputeId: input.disputeId,
       kind: 'collect_recover',
       businessId: input.businessId,
       profileId: input.profileId,
@@ -525,19 +530,13 @@ async function toReview(
   row: Row,
   now: Date,
   note: string,
-  /** Every try was definitely refused (Task 9): held, proven unmoved. */
-  definitelyRefused = false,
 ): Promise<void> {
   await db.transaction(async (tx) => {
     const current = await lockRow(tx, row.id);
     if (current.status === 'done' || current.status === 'review') return;
     await tx
       .update(shareTransfers)
-      .set({
-        status: 'review',
-        ...(definitelyRefused ? { refusedAt: now } : {}),
-        updatedAt: now,
-      })
+      .set({ status: 'review', updatedAt: now })
       .where(eq(shareTransfers.id, row.id));
     await openIssue(tx, {
       dedupeKey: `share_transfer_stuck.${row.id}`,
@@ -723,11 +722,12 @@ async function postpone(db: Database, row: Row, now: Date): Promise<void> {
 
 async function sendOut(
   db: Database,
-  row: Row,
+  given: Row,
   kind: ShareTransferKind,
   provider: ShareTransferProvider,
   now: Date,
 ): Promise<void> {
+  let row = given;
   const collect = provider.collectToPlatform;
   const source = SOURCE[kind];
   if (!collect || !source) return;
@@ -749,6 +749,28 @@ async function sendOut(
   }
   const accountRef = await accountOf(db, sideOf(row, source), provider);
   if (!accountRef) return postpone(db, row, now);
+  if (kind === 'collect_recover') {
+    // Task 9: what the business still has. All of it comes back; part of it, that part (TipMe
+    // absorbs the rest); none, a gap. A failed read waits.
+    let available: bigint;
+    try {
+      ({ availableMinor: available } = await provider.payoutBalance(
+        accountRef,
+        'NGN',
+      ));
+    } catch {
+      return postpone(db, row, now);
+    }
+    if (available <= 0n) {
+      await claim(db, row, 'waiting', { status: 'gap' });
+      return;
+    }
+    if (available < row.amountMinor) {
+      if (!(await claim(db, row, 'waiting', { amountMinor: available })))
+        return;
+      row = { ...row, amountMinor: available };
+    }
+  }
   if (kind === 'sweep') {
     // Transfers draw only on the available balance: until the tip has settled there, wait.
     try {
@@ -781,6 +803,20 @@ async function sendOut(
   } catch (error) {
     if (!definitelyNotMoved(error)) return; // It may have moved: read back, never re-sent now.
     if (kind === 'recover') return recordGap(db, row, now);
+    if (
+      kind === 'collect_recover' &&
+      error instanceof Error &&
+      error.name === 'PlatformRefusalError' &&
+      (error as { refusal?: unknown }).refusal === 'provider_key'
+    ) {
+      // TipMe's own key, not the business's money: staff are told once, and it is asked again.
+      await claim(db, row, 'out_sent', {
+        status: 'waiting',
+        nextAttemptAt: backoff(row.attempts + 1, now),
+      });
+      await reportProviderKeyRefused(db, { now });
+      return;
+    }
     // Task 9: the business no longer has it. Nothing moved; the dispute's loss absorbs it.
     if (kind === 'collect_recover') {
       await claim(db, row, 'out_sent', { status: 'gap' });
@@ -845,16 +881,8 @@ async function sendIn(
     if (!definitelyNotMoved(error)) return;
     // TipMe is holding the money: the same key is asked again later, and a person is told if it
     // keeps being refused.
-    if (row.attempts + 1 >= IN_ATTEMPTS_BEFORE_REVIEW) {
-      await claim(db, row, 'in_sent', { status: 'out_paid' });
-      return toReview(
-        db,
-        row,
-        now,
-        'Our partner refused TipMe’s transfer on, again and again.',
-        true,
-      );
-    }
+    if (row.attempts + 1 >= IN_ATTEMPTS_BEFORE_REVIEW)
+      return refusedToReview(db, row, now);
     await claim(db, row, 'in_sent', {
       status: 'out_paid',
       nextAttemptAt: backoff(row.attempts + 1, now),
@@ -863,6 +891,40 @@ async function sendIn(
   }
   if (answer.status === 'paid') return finishIn(db, row, answer.transferRef);
   await claim(db, row, 'in_sent', { inReference: answer.transferRef });
+}
+
+/**
+ * TipMe's leg in was definitely refused again and again: held for a person, and marked refused
+ * (Task 9: proven unmoved, so a lost dispute may take it). One conditional update from this
+ * runner's own claim (`in_sent` at its attempt), so the mark can never land on a row another runner
+ * has claimed since.
+ */
+async function refusedToReview(
+  db: Database,
+  row: Row,
+  now: Date,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [held] = await tx
+      .update(shareTransfers)
+      .set({ status: 'review', refusedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(shareTransfers.id, row.id),
+          eq(shareTransfers.status, 'in_sent'),
+          eq(shareTransfers.attempts, row.attempts + 1),
+        ),
+      )
+      .returning({ id: shareTransfers.id });
+    if (!held) return;
+    await openIssue(tx, {
+      dedupeKey: `share_transfer_stuck.${row.id}`,
+      kind: 'share_transfer_stuck',
+      subject: { tipId: row.tipId, profileId: row.profileId },
+      note: `Our partner refused TipMe’s transfer on, again and again. Share transfer ${row.id}, keys ${shareOutKey(row.id)} and ${shareInKey(row.id)}.`,
+      now,
+    });
+  });
 }
 
 /** A leg whose answer was lost or pending: looked for by its key, never sent again blindly. */

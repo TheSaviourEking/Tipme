@@ -1,5 +1,5 @@
 {
-  "id": "c7ce7b39-bb8b-4286-8a6f-9c696370efad",
+  "id": "2313f2f2-a3b7-4886-a99d-7ae67f54d5e8",
   "prevId": "fa3f68ce-aa62-4f94-aa1d-64f21073b798",
   "version": "7",
   "dialect": "postgresql",
@@ -11708,6 +11708,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "dispute_id": {
+          "name": "dispute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "refused_at": {
           "name": "refused_at",
           "type": "timestamp with time zone",
@@ -11788,7 +11794,7 @@
           "name": "share_transfers_one_collect_recover",
           "columns": [
             {
-              "expression": "tip_id",
+              "expression": "dispute_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -11919,6 +11925,15 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "share_transfers_dispute_id_disputes_id_fk": {
+          "name": "share_transfers_dispute_id_disputes_id_fk",
+          "tableFrom": "share_transfers",
+          "tableTo": "disputes",
+          "columnsFrom": ["dispute_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11951,7 +11966,7 @@
         },
         "share_transfers_links": {
           "name": "share_transfers_links",
-          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)"
+          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)\n        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)"
         },
         "share_transfers_business": {
           "name": "share_transfers_business",
