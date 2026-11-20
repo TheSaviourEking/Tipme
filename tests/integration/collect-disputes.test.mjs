@@ -211,7 +211,13 @@ function partner() {
     async listAccountTransfers(accountRef) {
       return state.listed
         .filter((t) => t.accountRef === accountRef)
-        .map(({ accountRef: _a, ...t }) => t);
+        .map((t) => ({
+          transferRef: t.transferRef,
+          status: t.status,
+          amountMinor: t.amountMinor,
+          currency: t.currency,
+          group: t.group,
+        }));
     },
     async payoutCapability() {
       return { status: 'active', requirementsDue: [] };
