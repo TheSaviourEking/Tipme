@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
+import { profiles } from '../schema.js';
 import { guarded } from './errors.js';
 
 export function balanceQuery(profileId: string) {
@@ -16,10 +17,15 @@ export function balanceQuery(profileId: string) {
           WHERE pp.profile_id = ${profileId} AND pp.method = 'balance'
             AND pp.status IN ('COLLECTING', 'UNKNOWN')) AS reserved,
       -- You collect (Task 12): the person's money TipMe still holds on its own account, kept for them
-      -- or on its way to theirs. Part of what TipMe owes them, never in their account yet.
+      -- (not verified yet) or on its way to theirs (verified). Owed, never in their account yet.
       (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
-        WHERE a.code = 'held_for_recipients' AND a.profile_id = ${profileId}) AS on_its_way,
+        WHERE a.code = 'held_for_recipients' AND a.profile_id = ${profileId}) AS held,
+      (SELECT profiles.collect_verified_at IS NOT NULL FROM profiles
+        WHERE profiles.id = ${profileId}) AS verified,
+      -- Read here so a direct recipient's withdrawal needs no query of its own about You collect.
+      (SELECT ${profiles.collectionMode} = 'collect' FROM profiles
+        WHERE profiles.id = ${profileId}) AS collecting,
       (SELECT COALESCE(SUM(q.recipient_net_minor - COALESCE(s.share_minor, 0)), 0)
          FROM tips t
          JOIN payment_intents i ON i.id = t.intent_id
@@ -35,46 +41,57 @@ export function balanceQuery(profileId: string) {
 }
 
 /**
- * What TipMe owes a recipient, from the ledger. It can read below zero after a reversal (Q8): a
- * refund or chargeback is booked even when the money was already withdrawn.
- *
  * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
  * payouts still in flight (REQUESTED / PROCESSING; what is sent plus the fee a user pays from it,
- * owner 12 Nov 2026) and Pro paid from the balance still being moved
- * (COLLECTING / UNKNOWN), which are reserved. Money still being
- * confirmed by the provider is reported separately and is never part of the balance.
+ * owner 12 Nov 2026) and Pro paid from the balance still being moved (COLLECTING / UNKNOWN), which
+ * are reserved. It can read below zero after a reversal (Q8). Money still being confirmed by the
+ * provider is reported separately and is never part of the balance.
  *
- * You collect (Task 12, spec §2.1): money TipMe still holds for them on its own account
- * (`held_for_recipients`) is owed but not in their account, so it is `onItsWayMinor`, never part of
- * `availableMinor`. Zero for a direct recipient, whose balance is exactly as before.
+ * You collect (Task 12, spec §2.1, §10): money TipMe still holds for them on its own account
+ * (`held_for_recipients`) is owed but not in their account, so it is never part of
+ * `availableMinor`. Unverified it is `keptMinor` ("Kept for you until you add your bank details");
+ * verified, `onItsWayMinor` ("On its way to you"). Both zero for a direct recipient.
  */
+export interface Balance {
+  availableMinor: bigint;
+  confirmingMinor: bigint;
+  keptMinor: bigint;
+  onItsWayMinor: bigint;
+}
+
+/** The balance, and whether the person is on You collect (so callers need no second read). */
+export async function balanceWithModeIn(
+  tx: Database | Tx,
+  profileId: string,
+): Promise<Balance & { collecting: boolean }> {
+  const result = await tx.execute<{
+    payable: string | null;
+    reserved: string | null;
+    held: string | null;
+    verified: boolean | null;
+    collecting: boolean | null;
+    confirming: string | null;
+  }>(balanceQuery(profileId));
+  const row = result.rows[0];
+  const held = BigInt(row?.held ?? '0');
+  const verified = row?.verified === true;
+  return {
+    availableMinor:
+      BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0') - held,
+    confirmingMinor: BigInt(row?.confirming ?? '0'),
+    keptMinor: verified ? 0n : held,
+    onItsWayMinor: verified ? held : 0n,
+    collecting: row?.collecting === true,
+  };
+}
+
 export async function balanceIn(
   tx: Database | Tx,
   profileId: string,
 ): Promise<Balance> {
-  const result = await tx.execute<{
-    payable: string | null;
-    reserved: string | null;
-    on_its_way: string | null;
-    confirming: string | null;
-  }>(balanceQuery(profileId));
-  const row = result.rows[0];
-  const onItsWayMinor = BigInt(row?.on_its_way ?? '0');
-  return {
-    availableMinor:
-      BigInt(row?.payable ?? '0') -
-      BigInt(row?.reserved ?? '0') -
-      onItsWayMinor,
-    confirmingMinor: BigInt(row?.confirming ?? '0'),
-    onItsWayMinor,
-  };
-}
-
-export interface Balance {
-  availableMinor: bigint;
-  confirmingMinor: bigint;
-  /** You collect: held by TipMe for them, kept or on its way; never withdrawable. */
-  onItsWayMinor: bigint;
+  const { collecting, ...balance } = await balanceWithModeIn(tx, profileId);
+  void collecting;
+  return balance;
 }
 
 export function balanceOf(db: Database, profileId: string): Promise<Balance> {

@@ -53,7 +53,7 @@ import {
   withdrawalHolds,
   type IssueSubject,
 } from '../schema.js';
-import { balanceIn, businessBalanceIn } from './balance.js';
+import { balanceWithModeIn, businessBalanceIn } from './balance.js';
 import {
   collectWithdrawalRoom,
   refuseOverCollectLimits,
@@ -111,9 +111,28 @@ async function ownerAvailable(
   tx: Database | Tx,
   owner: MoneyOwner,
 ): Promise<bigint> {
-  return 'businessId' in owner
-    ? (await businessBalanceIn(tx, owner.businessId)).availableMinor
-    : (await balanceIn(tx, owner.profileId)).availableMinor;
+  return (await ownerBalance(tx, owner)).availableMinor;
+}
+
+/**
+ * The same read, and whether the owner is a person on You collect. That comes from the balance's
+ * own query, so a direct recipient's withdrawal makes no You collect query at all (Task 12, M4).
+ */
+async function ownerBalance(
+  tx: Database | Tx,
+  owner: MoneyOwner,
+): Promise<{ availableMinor: bigint; collecting: boolean }> {
+  if ('businessId' in owner)
+    return {
+      availableMinor: (await businessBalanceIn(tx, owner.businessId))
+        .availableMinor,
+      collecting: false,
+    };
+  const balance = await balanceWithModeIn(tx, owner.profileId);
+  return {
+    availableMinor: balance.availableMinor,
+    collecting: balance.collecting,
+  };
 }
 
 export interface PayoutResult {
@@ -175,8 +194,11 @@ export async function createPayout(
           // ...and a tip a refund or chargeback took back (in part) is not paid out tip by tip.
           reversed: sql<boolean>`EXISTS (SELECT 1 FROM ledger_transactions r
             WHERE r.tip_id = ${tips.id} AND r.operation_type = 'reversal')`,
+          // You collect: read with the tips, so a direct recipient's payout asks nothing more.
+          collecting: sql<boolean>`${profiles.collectionMode} IS NOT DISTINCT FROM 'collect'`,
         })
         .from(tips)
+        .innerJoin(profiles, eq(profiles.id, tips.profileId))
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
         .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
         .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
@@ -225,10 +247,11 @@ export async function createPayout(
         0n,
       );
       // You collect (Task 12, spec §8): the same new-account limits as a withdrawal request.
-      refuseOverCollectLimits(
-        amountMinor,
-        await collectWithdrawalRoom(tx, input.profileId, new Date()),
-      );
+      if (rows.some((row) => row.collecting))
+        refuseOverCollectLimits(
+          amountMinor,
+          await collectWithdrawalRoom(tx, input.profileId, new Date()),
+        );
 
       const payoutId = newId();
       const inserted = await tx
@@ -1626,10 +1649,11 @@ async function quoteFor(
   const gate = await quoteGate(db, owner, input.provider);
   if ('block' in gate) return gate.block;
   const { route } = gate;
-  const { ledgerMinor, queuedMinor } = await guarded(async () => ({
-    ledgerMinor: await ownerAvailable(db, owner),
+  const { ledger, queuedMinor } = await guarded(async () => ({
+    ledger: await ownerBalance(db, owner),
     queuedMinor: await queuedNotStarted(db, owner),
   }));
+  const ledgerMinor = ledger.availableMinor;
   const { cache } = input;
   const entries = cache
     ? await safely(() =>
@@ -1664,7 +1688,7 @@ async function quoteFor(
   // You collect (Task 12, spec §8): a collect recipient's new-account limits lower what the quote
   // offers, as the request would refuse more. Nothing for a direct recipient or a business.
   const room =
-    'businessId' in owner
+    'businessId' in owner || !ledger.collecting
       ? null
       : await guarded(() => collectWithdrawalRoom(db, owner.profileId, now));
   const withdrawable = notNegative(lower(ledgerMinor, providerMinor));
@@ -1902,7 +1926,7 @@ async function requestFor(
         throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
       if (await activeHold(tx, owner))
         throw new OperationError('WITHDRAWALS_PAUSED');
-      const availableMinor = await ownerAvailable(tx, owner);
+      const { availableMinor, collecting } = await ownerBalance(tx, owner);
       // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
       // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
       if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
@@ -1915,7 +1939,7 @@ async function requestFor(
       // You collect (Task 12, spec §8): a collect recipient's first withdrawal is capped, and their
       // Lagos day limited while the account is young. Under the profile lock, so two at once can't
       // both use the same room. A direct recipient and a business have no such limits.
-      if (!('businessId' in owner))
+      if (!('businessId' in owner) && collecting)
         refuseOverCollectLimits(
           input.amountMinor,
           await collectWithdrawalRoom(

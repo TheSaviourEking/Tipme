@@ -296,6 +296,8 @@ const messages: Record<ApiErrorCode, string> = {
     'The payment provider refused to start this payment. Nothing was charged.',
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
   PAGE_PAUSED: 'This page can’t take tips right now. Please try again later.',
+  TIP_TOO_LARGE_FOR_PAGE:
+    'This amount is more than this page can take right now. Try a smaller amount.',
   // You collect (spec §8, §10). The amounts are admin settings: withdrawalLimitMessage puts them in.
   WITHDRAWAL_FIRST_CAP: 'New accounts have a limit on their first withdrawal.',
   WITHDRAWAL_DAILY_LIMIT:
@@ -356,6 +358,7 @@ const operationErrors: Partial<
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   // You collect (Task 12). A paused page says no reason, to protect the recipient (spec §2.2).
   PAGE_PAUSED: { status: 409, code: 'PAGE_PAUSED' },
+  TIP_TOO_LARGE_FOR_PAGE: { status: 409, code: 'TIP_TOO_LARGE_FOR_PAGE' },
   WITHDRAWAL_FIRST_CAP: { status: 409, code: 'WITHDRAWAL_FIRST_CAP' },
   WITHDRAWAL_DAILY_LIMIT: { status: 409, code: 'WITHDRAWAL_DAILY_LIMIT' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },

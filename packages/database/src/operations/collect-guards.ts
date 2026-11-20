@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { lagosDayStart } from '@tipme/domain';
 import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { notifications, profiles } from '../schema.js';
+import { notifications, profiles, tipQuotes } from '../schema.js';
 import { collectSettingsInForce } from './collect-settings.js';
 import type { CollectionMode } from './collection-mode.js';
 import { guarded, OperationError } from './errors.js';
@@ -29,7 +29,9 @@ export interface CollectStatusResult {
   verified: boolean;
   /** What TipMe holds for them on its own account now (their `held_for_recipients`). */
   heldMinor: bigint;
-  /** The part of it already on its way to their account: all of it once verified, none before. */
+  /** Held while they have no verified bank details: "Kept for you until you add your bank details". */
+  keptMinor: bigint;
+  /** Held once verified, its transfers still to arrive: "On its way to you". */
   onItsWayMinor: bigint;
   /** When the oldest tip whose share TipMe still holds settled. */
   firstWaitingAt: Date | null;
@@ -38,34 +40,33 @@ export interface CollectStatusResult {
   pausedReason: 'amount' | 'days' | null;
   /** When the days part of the cap is reached, while unverified with money waiting. */
   pauseOn: Date | null;
-  /** The most their next withdrawal may be, while it is their first; null otherwise. */
+  /** The most their next withdrawal may be, while it is their first since verification. */
   firstWithdrawalCapMinor: bigint | null;
-  /** Their limit per Lagos day while the account is young; null otherwise. */
+  /** Their limit per Lagos day for the first days after verification (or until it); else null. */
   dailyLimitMinor: bigint | null;
 }
 
 interface Facts {
   mode: CollectionMode;
-  verified: boolean;
-  createdAt: Date;
+  verifiedAt: Date | null;
   heldMinor: bigint;
   firstWaitingAt: Date | null;
-  /** Withdrawals ever asked for and not failed. */
+  /** Withdrawals asked for and not failed, since verification (all of them before it). */
   withdrawals: number;
 }
+
+const msOf = (text: string | null) => (text ? new Date(Number(text)) : null);
 
 async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
   const result = await db.execute<{
     mode: string | null;
-    verified: boolean;
-    created_ms: string;
+    verified_ms: string | null;
     held: string;
     first_ms: string | null;
     withdrawals: number;
   }>(sql`
     SELECT ${profiles.collectionMode} AS mode,
-           profiles.collect_verified_at IS NOT NULL AS verified,
-           (extract(epoch FROM profiles.created_at) * 1000)::bigint::text AS created_ms,
+           (extract(epoch FROM profiles.collect_verified_at) * 1000)::bigint::text AS verified_ms,
            (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
               FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
              WHERE a.code = 'held_for_recipients' AND a.profile_id = profiles.id)::text AS held,
@@ -73,22 +74,28 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
               FROM collect_transfers c JOIN tips t ON t.id = c.tip_id
              WHERE c.profile_id = profiles.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE}) AS first_ms,
            (SELECT count(*)::int FROM payouts o
-             WHERE o.profile_id = profiles.id AND o.status <> 'FAILED') AS withdrawals
+             WHERE o.profile_id = profiles.id AND o.status <> 'FAILED'
+               AND (profiles.collect_verified_at IS NULL
+                    OR o.created_at >= profiles.collect_verified_at)) AS withdrawals
       FROM profiles
      WHERE profiles.id = ${profileId}`);
   const row = result.rows[0];
   if (!row) throw new OperationError('PROFILE_NOT_FOUND');
   return {
     mode: row.mode === 'collect' ? 'collect' : 'direct',
-    verified: row.verified,
-    createdAt: new Date(Number(row.created_ms)),
+    verifiedAt: msOf(row.verified_ms),
     heldMinor: BigInt(row.held),
-    firstWaitingAt: row.first_ms ? new Date(Number(row.first_ms)) : null,
+    firstWaitingAt: msOf(row.first_ms),
     withdrawals: row.withdrawals,
   };
 }
 
-/** A recipient's You collect state now, from the settings in force. Never writes. */
+/**
+ * A recipient's You collect state now, from the settings in force. Never writes. The withdrawal
+ * guards run from verification (ruling P32): the first withdrawal after it is capped, and the daily
+ * limit holds for `new_daily_limit_days` after it (and before it), so a recipient who signs up early
+ * and verifies late still gets the whole guard.
+ */
 export async function collectStatus(
   db: Database | Tx,
   profileId: string,
@@ -99,8 +106,9 @@ export async function collectStatus(
     collectSettingsInForce(db, now),
   ]);
   const collecting = facts.mode === 'collect';
+  const verified = facts.verifiedAt !== null;
   // The cap holds only money waiting for bank details: a verified recipient's moves on (§5).
-  const capped = collecting && !facts.verified;
+  const capped = collecting && !verified;
   const pauseOn =
     capped && facts.firstWaitingAt
       ? new Date(facts.firstWaitingAt.getTime() + settings.capDays * DAY_MS)
@@ -112,13 +120,15 @@ export async function collectStatus(
         ? 'days'
         : null;
   const young =
-    now.getTime() - facts.createdAt.getTime() <
-    settings.newDailyLimitDays * DAY_MS;
+    facts.verifiedAt === null ||
+    now.getTime() - facts.verifiedAt.getTime() <
+      settings.newDailyLimitDays * DAY_MS;
   return {
     mode: facts.mode,
-    verified: facts.verified,
+    verified,
     heldMinor: facts.heldMinor,
-    onItsWayMinor: facts.verified ? facts.heldMinor : 0n,
+    keptMinor: verified ? 0n : facts.heldMinor,
+    onItsWayMinor: verified ? facts.heldMinor : 0n,
     firstWaitingAt: facts.firstWaitingAt,
     paused: pausedReason !== null,
     pausedReason,
@@ -132,16 +142,48 @@ export async function collectStatus(
 }
 
 /**
- * Refuses a new tip for a collect page at its holding cap (`PAGE_PAUSED`, spec §2.1 step 7). The
- * refusal names no reason: a supporter is told only that the page can't take tips (§2.2).
+ * The holding cap's upper bound (spec §2.1 step 7, ruling P31), for a tip to an unverified collect
+ * page, at its quote and again at its intent. What is held, plus the recipient's net on every other
+ * collect quote still live (unexpired and unpaid, or paid and still being confirmed), plus this tip's
+ * net, may never exceed `cap_minor`. The profile row is locked first, so quotes made at once are
+ * counted one after another and together never overshoot. No room at all (or the cap's days
+ * passed) refuses `PAGE_PAUSED`; a tip larger than the room left refuses `TIP_TOO_LARGE_FOR_PAGE`.
+ * Neither names an amount or a reason (§2.2). A verified page has no cap.
  */
-export async function refusePausedPage(
-  tx: Database | Tx,
-  profileId: string,
-  now: Date,
+export async function refuseOverHoldingCap(
+  tx: Tx,
+  i: {
+    profileId: string;
+    now: Date;
+    /** This tip's net to the recipient. */
+    addMinor: bigint;
+    /** The quote being paid, at its intent: its own net is `addMinor`, not counted twice. */
+    quoteId?: string;
+  },
 ): Promise<void> {
-  if ((await collectStatus(tx, profileId, now)).paused)
-    throw new OperationError('PAGE_PAUSED');
+  await tx.execute(
+    sql`SELECT 1 FROM profiles WHERE profiles.id = ${i.profileId} FOR UPDATE`,
+  );
+  const status = await collectStatus(tx, i.profileId, i.now);
+  if (status.verified) return;
+  if (status.paused) throw new OperationError('PAGE_PAUSED');
+  const settings = await collectSettingsInForce(tx, i.now);
+  const at = i.now.toISOString();
+  const open = await tx.execute<{ pending: string }>(sql`
+    SELECT COALESCE(SUM(tip_quotes.recipient_net_minor), 0)::text AS pending
+      FROM tip_quotes
+      LEFT JOIN payment_intents ON payment_intents.quote_id = tip_quotes.id
+      LEFT JOIN tips ON tips.intent_id = payment_intents.id
+     WHERE tip_quotes.profile_id = ${i.profileId}
+       AND ${tipQuotes.collectionMode} = 'collect'
+       ${i.quoteId ? sql`AND tip_quotes.id <> ${i.quoteId}` : sql``}
+       AND ((tips.id IS NULL AND tip_quotes.expires_at > ${at}::timestamptz)
+            OR (tips.status = 'AWAITING_PAYMENT' AND tip_quotes.expires_at > ${at}::timestamptz)
+            OR tips.status = 'PENDING_VERIFICATION')`);
+  const pending = BigInt(open.rows[0]?.pending ?? '0');
+  const room = settings.capMinor - status.heldMinor - pending;
+  if (room <= 0n) throw new OperationError('PAGE_PAUSED');
+  if (i.addMinor > room) throw new OperationError('TIP_TOO_LARGE_FOR_PAGE');
 }
 
 /**
@@ -257,7 +299,8 @@ function idFromKey(key: string): string {
 /**
  * Reminds collect recipients with money waiting and no verified bank details (spec §2.1 step 3):
  * an in-app notice and an email, on each day in `reminder_days` after their first waiting tip,
- * once per (profile, day) by the dedupe key `collect_reminder.<profileId>.<day>`. Only the latest
+ * once per (profile, waiting spell, day) by the dedupe key `collect_reminder.<profileId>.<spell>.<day>`
+ * (the spell is the first waiting tip's Lagos day). Only the latest
  * reminder day reached is sent, so a sweep that missed a day never sends two at once; none is sent
  * once the cap's days have passed (the page has paused). The last reminder day says when the page
  * pauses: `firstWaitingAt + cap_days`, on the Lagos calendar. Returns how many were sent.
@@ -290,7 +333,12 @@ export function sendCollectReminders(
       const due = settings.reminderDays.filter((d) => elapsed >= d * DAY_MS);
       const day = due.at(-1);
       if (day === undefined) continue;
-      const kind = day === lastDay ? 'last' : 'waiting';
+      // The last reminder says the page will pause; a page already paused by amount gets the
+      // waiting words instead (M7), which stay true.
+      const kind =
+        day === lastDay && status.pausedReason !== 'amount'
+          ? 'last'
+          : 'waiting';
       const byDate = lagosDay(
         new Date(status.firstWaitingAt.getTime() + settings.capDays * DAY_MS),
       );
@@ -298,7 +346,12 @@ export function sendCollectReminders(
         kind === 'last'
           ? `Add your bank details by ${byDate}, or your page will pause new tips.`
           : `You have ${naira(status.heldMinor)} in tips waiting. Add your bank details to withdraw it.`;
-      const dedupeKey = `collect_reminder.${profileId}.${day}`;
+      // The waiting spell is in the key (M6): once every held share is settled and money waits
+      // again, its first tip's day differs, so the new spell is reminded from day one.
+      const spell = new Date(status.firstWaitingAt.getTime() + 3_600_000)
+        .toISOString()
+        .slice(0, 10);
+      const dedupeKey = `collect_reminder.${profileId}.${spell}.${day}`;
       const created = await db.transaction(async (tx) => {
         const facts = await tx.execute<{
           user_id: string;

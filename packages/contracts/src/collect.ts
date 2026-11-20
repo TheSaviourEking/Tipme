@@ -9,15 +9,18 @@ import { opsReasonSchema } from './ops.js';
 
 /**
  * A recipient's You collect state (plan Task 12; read by `GET /v1/me/collect`, Task 13). `heldMinor`
- * is what TipMe holds for them now; `onItsWayMinor` is the part already on its way (they are
- * verified), never withdrawable yet. The page pauses at the holding cap (`pausedReason`) until they
+ * is what TipMe holds for them now: `keptMinor` while they have no verified bank details ("Kept for
+ * you until you add your bank details"), `onItsWayMinor` once verified ("On its way to you"); neither
+ * is withdrawable yet. The page pauses at the holding cap (`pausedReason`) until they
  * are verified; `pauseOn` is when the days part of the cap is reached. The two withdrawal limits are
- * null when they don't apply (a direct recipient, a first withdrawal already made, an older account).
+ * null when they don't apply (a direct recipient, a first withdrawal since verification already made,
+ * or more than the setting's days since verification).
  */
 export interface CollectStatus {
   mode: 'direct' | 'collect';
   verified: boolean;
   heldMinor: string;
+  keptMinor: string;
   onItsWayMinor: string;
   firstWaitingAt: string | null;
   paused: boolean;

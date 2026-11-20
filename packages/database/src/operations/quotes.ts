@@ -21,7 +21,7 @@ import {
   decideCollectionMode,
   type CollectionMode,
 } from './collection-mode.js';
-import { refusePausedPage } from './collect-guards.js';
+import { refuseOverHoldingCap } from './collect-guards.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -178,10 +178,15 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
           environment: input.environment,
         })
       : await collectionModeOf(tx, profile.id);
-    // You collect (Task 12, spec §2.1 step 7): a collect page at its holding cap takes no new tip
-    // until the recipient is verified. A direct page is never asked. No reason is given (§2.2).
+    // You collect (Task 12, spec §2.1 step 7, P31): a collect page takes no tip that would take
+    // what is held, with its other open quotes, past the holding cap, until the recipient is
+    // verified. A direct page is never asked. No reason is given (§2.2).
     if (collectionMode === 'collect')
-      await refusePausedPage(tx, profile.id, input.now ?? new Date());
+      await refuseOverHoldingCap(tx, {
+        profileId: profile.id,
+        now: input.now ?? new Date(),
+        addMinor: chosen.recipientNetMinor,
+      });
     await tx.insert(tipQuotes).values({
       id: quoteId,
       shareAgreementId: shared?.agreementId ?? null,

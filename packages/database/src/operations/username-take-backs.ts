@@ -629,6 +629,7 @@ export async function takeBackFacts(
     hasBalance:
       balance.availableMinor > 0n ||
       balance.confirmingMinor > 0n ||
+      balance.keptMinor > 0n ||
       balance.onItsWayMinor > 0n,
     withdrawalInFlight: inFlight !== undefined,
     verifiedEmail: Boolean(

@@ -18,6 +18,7 @@ import { activeTraceId, newId } from './ids.js';
 import { recordSupporter, supporterKeyHash } from './supporters.js';
 import { attributeTip } from './campaigns.js';
 import { recordTransition } from './transitions.js';
+import { refuseOverHoldingCap } from './collect-guards.js';
 
 /** Only a moment this recipient actually shared can label a tip; anything else is ignored. */
 async function sharedMomentOf(
@@ -224,6 +225,15 @@ export async function createPaymentIntent(
         .where(eq(profiles.id, profileId));
       if (page?.pageState !== 'live' || page.status !== 'active')
         throw new OperationError('TIP_NOT_PAYABLE');
+      // You collect (P31): the holding cap is asked again here, as held money or the cap may have
+      // moved since the quote. A replay above never is: that tip already exists.
+      if (quote.collectionMode === 'collect')
+        await refuseOverHoldingCap(tx, {
+          profileId,
+          now,
+          addMinor: quote.recipientNetMinor,
+          quoteId: quote.id,
+        });
 
       // R2-C2: the supporter must have been shown the split in force now. A quote made before an
       // agreement started, changed or ended is stale: they re-quote and see the current one.
