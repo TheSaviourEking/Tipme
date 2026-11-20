@@ -30,12 +30,14 @@ import {
   findAttemptByReference,
   findAttemptStart,
   findPayoutByReference,
+  hasWaitingCollectTransfers,
   matchCollectAttempt,
   OperationError,
   reconcileAttempts,
   recordPayoutOutcome,
   recordProviderEvent,
   recordUnmatchedEvent,
+  releaseWaitingTransfers,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import { DatabaseProvider } from '../infra/database.js';
@@ -655,12 +657,44 @@ export class WebhookService {
         },
         log: (entry) => this.logger?.warn(entry),
       });
+    await this.releaseCollectShares(
+      known.profileId,
+      remote.accountReference,
+      accounts,
+    );
     // After the account's status (and its payout setup) committed: Settings and the notices re-read.
     void this.publishLive({
       to: { profile: known.profileId },
       type: 'payments.changed',
     });
     return 'account_refreshed';
+  }
+
+  /**
+   * You collect (plan Task 8, spec §5): a recipient's held shares start moving once their account
+   * can receive transfers. The event only triggers it: the account's `transfers` capability is read
+   * now, and that answer decides, so an older event delivered after a newer one can't release
+   * shares the account can't take. Only worth the read with shares waiting. A failure is left for
+   * the worker's sweep (it releases them after their wait), never a reason to refuse the delivery.
+   */
+  private async releaseCollectShares(
+    profileId: string,
+    accountReference: string,
+    accounts: Partial<Pick<BachsProvider, 'payoutCapability'>>,
+  ): Promise<void> {
+    if (!accounts.payoutCapability) return;
+    const { db } = this.database;
+    try {
+      if (!(await hasWaitingCollectTransfers(db, profileId))) return;
+      const { status } = await accounts.payoutCapability(accountReference);
+      if (status !== 'active') return;
+      await releaseWaitingTransfers(db, { profileId, now: new Date() });
+    } catch (error) {
+      this.logger?.warn({
+        event: 'collect_transfers.release_failed',
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+    }
   }
 
   /**
