@@ -799,6 +799,23 @@ async function readBack(
     });
     return 'none';
   }
+  // The group is optional on the partner's list items: a transfer to this account with no group and
+  // this share's money may be this one. Never "not found", so never a second send; a person checks.
+  if (
+    listed.some(
+      (t) =>
+        t.group === null &&
+        t.amountMinor === row.amountMinor &&
+        t.currency === row.currency,
+    )
+  )
+    return toReview(
+      db,
+      row,
+      from,
+      now,
+      'The partner lists a transfer with this amount and no group, so TipMe cannot tell whether this share moved.',
+    );
   // Nothing moved under this key: the same key again (the claim starts a new window if it's over).
   const again = await move(db, row, from, 'ready', now, { nextTryAt: now });
   if (!again) return 'none';

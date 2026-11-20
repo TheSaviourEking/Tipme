@@ -1308,3 +1308,51 @@ test('eight workers racing on a lost answer whose account changed send nothing m
   assert.equal((await rowOf(tip.rowId)).status, 'paid');
   assert.equal((await postingsOf(tip.tipId)).length, 1);
 });
+
+test('a transfer listed with no group but this share’s amount is never “not found”: review, not a second send', async () => {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  // The partner left the group off the list item of a transfer that did move.
+  state.listed.push({
+    transferRef: 'tr_no_group',
+    status: 'paid',
+    amountMinor: NET,
+    currency: 'NGN',
+    group: null,
+    accountRef: ACCOUNTS[TOBI.id],
+  });
+  await crashedAfterClaim(tip.rowId, T0);
+  const result = await run(provider, at(5 * MIN));
+  assert.equal(result.review, 1);
+  assert.equal(state.sends.length, 0);
+  const row = await rowOf(tip.rowId);
+  assert.equal(row.status, 'review');
+  assert.equal(row.review_reason, 'provider');
+  assert.equal(row.account_reference, ACCOUNTS[TOBI.id]);
+  assert.deepEqual(await postingsOf(tip.tipId), []);
+  assert.equal((await issuesOf('collect_transfer_review')).length, 1);
+});
+
+test('transfers with no group and other amounts still leave a share not found', async () => {
+  await verified(TOBI);
+  const tip = await paidTip(TOBI);
+  assert.equal(await release(T0), 1);
+  const { provider, state } = partner();
+  state.listed.push({
+    transferRef: 'tr_other',
+    status: 'paid',
+    amountMinor: NET + 100n,
+    currency: 'NGN',
+    group: null,
+    accountRef: ACCOUNTS[TOBI.id],
+  });
+  await crashedAfterClaim(tip.rowId, T0);
+  await run(provider, at(5 * MIN));
+  assert.deepEqual(
+    state.sends.map((send) => send.idempotencyKey),
+    [tip.key],
+  );
+  assert.equal((await rowOf(tip.rowId)).status, 'paid');
+});
