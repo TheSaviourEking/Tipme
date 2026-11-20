@@ -869,3 +869,43 @@ test('only a provider or staff review is retried, to ready with an account or wa
     false,
   );
 });
+
+test('a share sent before is read back by group before it is sent again once its key is forgotten', async () => {
+  await verified(TOBI);
+  const moved = await paidTip(TOBI);
+  const unmoved = await paidTip(TOBI);
+  assert.equal(await release(T0), 2);
+  const { provider, state } = partner();
+  // Both went to review on a refusal; one of them had in fact moved (the partner's records are
+  // what count), the other had not.
+  state.answers.push({ refuse: 'other' }, { refuse: 'other' });
+  assert.equal((await run(provider, T0)).review, 2);
+  state.moved.set(moved.key, {
+    transferRef: 'tr_moved',
+    status: 'paid',
+    amountMinor: NET,
+    currency: 'NGN',
+    group: moved.key,
+    accountRef: ACCOUNTS[TOBI.id],
+  });
+  // Staff retry both two days later: the partner no longer knows the key, so a send could make a
+  // second transfer. Each is read back first.
+  for (const tip of [moved, unmoved])
+    assert.equal(
+      await ops.retryCollectTransfer(database.db, {
+        transferId: tip.rowId,
+        now: at(2 * DAY),
+      }),
+      'ready',
+    );
+  await run(provider, at(2 * DAY));
+  assert.equal((await rowOf(moved.rowId)).status, 'paid');
+  assert.equal((await rowOf(moved.rowId)).transfer_reference, 'tr_moved');
+  assert.equal((await rowOf(unmoved.rowId)).status, 'paid');
+  assert.deepEqual(
+    state.sends.slice(2).map((send) => send.idempotencyKey),
+    [unmoved.key],
+  );
+  assert.equal((await postingsOf(moved.tipId)).length, 1);
+  assert.equal((await postingsOf(unmoved.tipId)).length, 1);
+});

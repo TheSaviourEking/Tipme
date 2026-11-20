@@ -469,13 +469,19 @@ async function toReview(
   });
 }
 
-/** Sends a `ready` row: the claim first, committed, then the one partner call. */
+/**
+ * Sends a `ready` row: the claim first, committed, then the one partner call. A share sent before
+ * whose key the partner no longer knows (its window is over) is read back by group first, unless
+ * the caller has just done so: a send then could make a second transfer (a staff retry of a review
+ * whose money had in fact moved).
+ */
 async function send(
   db: Database,
   row: Row,
   provider: CollectTransferProvider,
   now: Date,
   totals: CollectTransferRun,
+  readJustNow = false,
 ): Promise<Outcome> {
   const accountRef = row.accountReference;
   if (!accountRef || row.currency !== 'NGN')
@@ -501,6 +507,12 @@ async function send(
     true,
   );
   if (!claimed) return 'none';
+  const keyForgotten =
+    row.attempts > 0 &&
+    (row.sentAt === null ||
+      now.getTime() - row.sentAt.getTime() >= SAME_KEY_WITHIN_MS);
+  if (keyForgotten && !readJustNow)
+    return readBack(db, claimed, 'sent', provider, now, totals);
   totals.sent += 1;
   let answer: { transferRef: string; status: 'paid' | 'pending' };
   try {
@@ -674,7 +686,7 @@ async function readBack(
   // Nothing moved under this key: the same key again (the claim starts a new window if it's over).
   const again = await move(db, row, from, 'ready', now, { nextTryAt: now });
   if (!again) return 'none';
-  return send(db, again, provider, now, totals);
+  return send(db, again, provider, now, totals, true);
 }
 
 /** A claimed row nobody answered for, or a lost answer due another try. */
