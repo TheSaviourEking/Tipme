@@ -31,7 +31,7 @@ export interface CollectSettings {
   firstWithdrawalCapMinor: bigint;
   /** The most a new account can withdraw in a Lagos day (kobo)... */
   newDailyLimitMinor: bigint;
-  /** ...for this many days after it is verified. */
+  /** ...for this many days after it signs up (spec §8 "for the first 30 days"; plan Task 12). */
   newDailyLimitDays: number;
   /** TipMe's own money above what it holds for recipients: alert levels (kobo). */
   reserveWarningMinor: bigint;
