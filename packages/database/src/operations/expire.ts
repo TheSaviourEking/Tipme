@@ -40,6 +40,7 @@ export async function expireStaleTips(input: {
         providerReference: paymentAttempts.providerReference,
         platformFeeMinor: tipQuotes.platformFeeMinor,
         providerFeeMinor: tipQuotes.providerFeeMinor,
+        collectionMode: tipQuotes.collectionMode,
       })
       .from(paymentAttempts)
       .innerJoin(
@@ -85,9 +86,12 @@ export async function expireStaleTips(input: {
         }
       }
       if (candidate.provider && candidate.providerReference) {
+        // A collect tip is TipMe's own checkout: no platform fee to expect, as in reconciliation.
         const answer = await provider.verifyTransaction(
           candidate.providerReference,
-          quotedShare(candidate),
+          candidate.collectionMode === 'collect'
+            ? undefined
+            : quotedShare(candidate),
         );
         if (answer.status === 'pending' && answer.collected) {
           // The provider took the money but its settlement evidence is not final: never cancel
@@ -118,6 +122,10 @@ export async function expireStaleTips(input: {
             amountMinor: answer.amountMinor,
             currency: answer.currency,
             providerFeeMinor: answer.feeMinor,
+            environment: provider.environment,
+            ...(answer.chargeReference
+              ? { chargeReference: answer.chargeReference }
+              : {}),
             signatureVerified: true,
             payload: { source: 'expiry' },
             now,
