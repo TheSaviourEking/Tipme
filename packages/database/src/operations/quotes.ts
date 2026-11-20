@@ -179,13 +179,14 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
         })
       : await collectionModeOf(tx, profile.id);
     // You collect (Task 12, spec §2.1 step 7, P31): a collect page takes no tip that would take
-    // what is held, with its other open quotes, past the holding cap, until the recipient is
-    // verified. A direct page is never asked. No reason is given (§2.2).
+    // what is held, with its tips still being paid, past the holding cap, until the recipient is
+    // verified. Here as a courtesy; the intent's check binds. A direct page is never asked.
     if (collectionMode === 'collect')
       await refuseOverHoldingCap(tx, {
         profileId: profile.id,
         now: input.now ?? new Date(),
         addMinor: chosen.recipientNetMinor,
+        binding: false,
       });
     await tx.insert(tipQuotes).values({
       id: quoteId,

@@ -232,7 +232,7 @@ export async function createPaymentIntent(
           profileId,
           now,
           addMinor: quote.recipientNetMinor,
-          quoteId: quote.id,
+          binding: true,
         });
 
       // R2-C2: the supporter must have been shown the split in force now. A quote made before an

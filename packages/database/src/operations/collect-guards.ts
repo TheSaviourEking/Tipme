@@ -142,13 +142,16 @@ export async function collectStatus(
 }
 
 /**
- * The holding cap's upper bound (spec §2.1 step 7, ruling P31), for a tip to an unverified collect
- * page, at its quote and again at its intent. What is held, plus the recipient's net on every other
- * collect quote still live (unexpired and unpaid, or paid and still being confirmed), plus this tip's
- * net, may never exceed `cap_minor`. The profile row is locked first, so quotes made at once are
- * counted one after another and together never overshoot. No room at all (or the cap's days
- * passed) refuses `PAGE_PAUSED`; a tip larger than the room left refuses `TIP_TOO_LARGE_FOR_PAGE`.
- * Neither names an amount or a reason (§2.2). A verified page has no cap.
+ * The holding cap's upper bound (spec §2.1 step 7, ruling P31; fix round 2), for a tip to an
+ * unverified collect page: what is held, plus the recipient's net on every collect tip that isn't
+ * final yet (awaiting payment with a live attempt, whatever its quote's expiry, as a checkout
+ * outlives its quote and a late success is still booked; or paid and being confirmed), plus this
+ * tip's net, may never exceed `cap_minor`. Bare quotes never count: they are anonymous and free, so
+ * counting them would let anyone block a page. The quote asks this as a courtesy; the intent's ask
+ * (`binding`) is the one that holds, after taking the profile row lock, so intents made at once are
+ * counted one after another and together never overshoot. Every refusal is the same
+ * `PAGE_PAUSED`, paused or not enough room alike, so trying amounts reveals nothing about what is
+ * held (§2.2). A verified page has no cap, and is never locked here.
  */
 export async function refuseOverHoldingCap(
   tx: Tx,
@@ -157,33 +160,41 @@ export async function refuseOverHoldingCap(
     now: Date;
     /** This tip's net to the recipient. */
     addMinor: bigint;
-    /** The quote being paid, at its intent: its own net is `addMinor`, not counted twice. */
-    quoteId?: string;
+    /** The intent's check: take the profile lock first. */
+    binding: boolean;
   },
 ): Promise<void> {
-  await tx.execute(
-    sql`SELECT 1 FROM profiles WHERE profiles.id = ${i.profileId} FOR UPDATE`,
-  );
+  const [mark] = (
+    await tx.execute<{ verified: boolean }>(
+      sql`SELECT profiles.collect_verified_at IS NOT NULL AS verified
+            FROM profiles WHERE profiles.id = ${i.profileId}`,
+    )
+  ).rows;
+  if (!mark || mark.verified) return;
+  if (i.binding)
+    await tx.execute(
+      sql`SELECT 1 FROM profiles WHERE profiles.id = ${i.profileId} FOR UPDATE`,
+    );
   const status = await collectStatus(tx, i.profileId, i.now);
+  // Verified while this waited for the lock: no cap any more.
   if (status.verified) return;
   if (status.paused) throw new OperationError('PAGE_PAUSED');
   const settings = await collectSettingsInForce(tx, i.now);
-  const at = i.now.toISOString();
   const open = await tx.execute<{ pending: string }>(sql`
     SELECT COALESCE(SUM(tip_quotes.recipient_net_minor), 0)::text AS pending
-      FROM tip_quotes
-      LEFT JOIN payment_intents ON payment_intents.quote_id = tip_quotes.id
-      LEFT JOIN tips ON tips.intent_id = payment_intents.id
-     WHERE tip_quotes.profile_id = ${i.profileId}
+      FROM tips
+      JOIN payment_intents ON payment_intents.id = tips.intent_id
+      JOIN tip_quotes ON tip_quotes.id = payment_intents.quote_id
+     WHERE tips.profile_id = ${i.profileId}
        AND ${tipQuotes.collectionMode} = 'collect'
-       ${i.quoteId ? sql`AND tip_quotes.id <> ${i.quoteId}` : sql``}
-       AND ((tips.id IS NULL AND tip_quotes.expires_at > ${at}::timestamptz)
-            OR (tips.status = 'AWAITING_PAYMENT' AND tip_quotes.expires_at > ${at}::timestamptz)
-            OR tips.status = 'PENDING_VERIFICATION')`);
+       AND (tips.status = 'PENDING_VERIFICATION'
+            OR (tips.status = 'AWAITING_PAYMENT' AND EXISTS (
+                  SELECT 1 FROM payment_attempts pa
+                   WHERE pa.intent_id = tips.intent_id
+                     AND pa.status IN ('CREATED', 'STARTING', 'INITIATED', 'PENDING', 'UNKNOWN'))))`);
   const pending = BigInt(open.rows[0]?.pending ?? '0');
-  const room = settings.capMinor - status.heldMinor - pending;
-  if (room <= 0n) throw new OperationError('PAGE_PAUSED');
-  if (i.addMinor > room) throw new OperationError('TIP_TOO_LARGE_FOR_PAGE');
+  if (status.heldMinor + pending + i.addMinor > settings.capMinor)
+    throw new OperationError('PAGE_PAUSED');
 }
 
 /**

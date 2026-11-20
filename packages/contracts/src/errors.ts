@@ -62,8 +62,6 @@ export const apiErrorCodes = [
   'TIPPING_NOT_OPEN',
   // You collect: the page has reached its holding cap and takes no new tips (refused from Task 12).
   'PAGE_PAUSED',
-  // You collect (P31): the tip would take the page past its holding cap; a smaller one may fit.
-  'TIP_TOO_LARGE_FOR_PAGE',
   // You collect (Task 12): a new account's first withdrawal is capped, and its Lagos day limited.
   'WITHDRAWAL_FIRST_CAP',
   'WITHDRAWAL_DAILY_LIMIT',
