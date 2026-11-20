@@ -20423,6 +20423,7 @@
                   "PAYMENT_START_REJECTED",
                   "TIPPING_NOT_OPEN",
                   "PAGE_PAUSED",
+                  "TIP_TOO_LARGE_FOR_PAGE",
                   "WITHDRAWAL_FIRST_CAP",
                   "WITHDRAWAL_DAILY_LIMIT",
                   "NO_CONFIRMED_TEST",
