@@ -693,7 +693,7 @@ test('a refund during an in-flight transfer waits for the read-back and recovers
   assert.equal((await reversalsOf(tip.tipId)).length, 1);
 });
 
-test('a direct tip is still refunded as its recipient, never from TipMe’s balance', async () => {
+test("a direct tip's refund is unchanged", async () => {
   // The direct path is unchanged (tip-refund.test.mjs): no collect plan, refundAccountCharge.
   await q(`UPDATE profiles SET collection_mode = 'direct' WHERE id = $1`, [
     TOBI.id,
