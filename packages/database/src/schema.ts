@@ -3851,6 +3851,9 @@ export const tipRefunds = pgTable(
       .default(sql`0`),
     // When everything to take back had come back: only then is the refund sent.
     recoveredAt: timestamp('recovered_at', { withTimezone: true }),
+    // A collect refund's first send under its key: the partner's replay window counts from here
+    // (P24's 23 hours), not from when it was asked.
+    firstSentAt: timestamp('first_sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -3867,7 +3870,7 @@ export const tipRefunds = pgTable(
     ),
     check(
       'tip_refunds_failure',
-      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered'))`,
+      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered', 'disputed'))`,
     ),
     check('tip_refunds_amount_positive', sql`${table.amountMinor} > 0`),
     check(

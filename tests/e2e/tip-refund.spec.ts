@@ -144,7 +144,7 @@ test('staff see the gap and the second-person step on a withdrawn collect tip', 
   );
   await expect(panel).toContainText('Part of this tip can’t be taken back');
   await expect(panel).toContainText(
-    'Up to NGN 6,500.00 has already been withdrawn, so TipMe would pay it from its own balance as a loss.',
+    'Up to NGN 6,500.00 is no longer there to take back: the recipient (or the business) has already withdrawn it. TipMe would pay that from its own balance as a loss.',
   );
   // The plain refund isn't offered: only the step a second person decides.
   await expect(

@@ -175,9 +175,10 @@ function CollectPlan({
       <strong>
         <Money code minor={plan.gapMinor} />
       </strong>{' '}
-      has already been withdrawn, so TipMe would pay it from its own balance as
-      a loss. Whatever is still there is taken back first. A second person
-      decides whether TipMe goes ahead.
+      is no longer there to take back: the recipient (or the business) has
+      already withdrawn it. TipMe would pay that from its own balance as a loss.
+      Whatever is still there is taken back first. A second person decides
+      whether TipMe goes ahead.
     </Slip>
   );
 }

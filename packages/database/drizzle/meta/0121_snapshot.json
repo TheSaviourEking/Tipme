@@ -1,5 +1,5 @@
 {
-  "id": "e3c17232-8d17-44a1-87c7-bdd0a004af84",
+  "id": "45e0e5ba-089a-450d-adc3-2cec48312299",
   "prevId": "2313f2f2-a3b7-4886-a99d-7ae67f54d5e8",
   "version": "7",
   "dialect": "postgresql",
@@ -13725,6 +13725,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "first_sent_at": {
+          "name": "first_sent_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -13818,7 +13824,7 @@
         },
         "tip_refunds_failure": {
           "name": "tip_refunds_failure",
-          "value": "\"tip_refunds\".\"failure\" IS NULL OR (\"tip_refunds\".\"status\" = 'FAILED' AND \"tip_refunds\".\"failure\" IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered'))"
+          "value": "\"tip_refunds\".\"failure\" IS NULL OR (\"tip_refunds\".\"status\" = 'FAILED' AND \"tip_refunds\".\"failure\" IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered', 'disputed'))"
         },
         "tip_refunds_amount_positive": {
           "name": "tip_refunds_amount_positive",
