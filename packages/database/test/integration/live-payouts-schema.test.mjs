@@ -370,7 +370,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        ADD COLUMN staff_pro boolean NOT NULL DEFAULT false,
        ADD COLUMN collection_mode text,
        ADD COLUMN collect_verified_at timestamptz,
-       ADD COLUMN collect_legal_name text`,
+       ADD COLUMN collect_legal_name text,
+       ADD COLUMN collect_partner_name_digest text`,
   );
   await pool.query(`ALTER TABLE users ADD COLUMN email_changed_at timestamptz`);
   await seedDemoProfiles(old.db);
@@ -395,7 +396,8 @@ test('live payouts schema: applies on top of existing payouts', async (t) => {
        DROP COLUMN staff_pro,
        DROP COLUMN collection_mode,
        DROP COLUMN collect_verified_at,
-       DROP COLUMN collect_legal_name`,
+       DROP COLUMN collect_legal_name,
+       DROP COLUMN collect_partner_name_digest`,
   );
   const payoutId = randomUUID();
   await pool.query(
