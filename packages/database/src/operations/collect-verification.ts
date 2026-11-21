@@ -267,6 +267,32 @@ export function flagSharedBank(
   );
 }
 
+/**
+ * C1b: whether our payment partner's answer for this destination is proven for another name. A
+ * destination is checked against the name it was first saved under: any row of this profile with
+ * the same reference (current or replaced) under another digest, or none, means this answer may be a
+ * replay decided against that name, and proves nothing about this one.
+ */
+export function bankCheckedForAnotherName(
+  db: Database | Tx,
+  input: {
+    profileId: string;
+    provider: string;
+    destinationRef: string;
+    nameDigest: string;
+  },
+): Promise<boolean> {
+  return guarded(async () => {
+    const result = await db.execute<{ n: number }>(sql`
+      SELECT count(*)::int AS n FROM payout_destinations
+       WHERE profile_id = ${input.profileId}
+         AND provider = ${recordedProviderName(input.provider)}
+         AND destination_reference = ${input.destinationRef}
+         AND name_digest IS DISTINCT FROM ${input.nameDigest}`);
+    return (result.rows[0]?.n ?? 0) > 0;
+  });
+}
+
 /** What the verification check asks of our payment partner (Task 4's adapter and the mock). */
 export interface CollectVerificationProvider {
   name: string;
@@ -348,6 +374,7 @@ async function markVerified(
         .select({
           status: payoutDestinations.status,
           nameDigest: payoutDestinations.nameDigest,
+          destinationRef: payoutDestinations.destinationReference,
         })
         .from(payoutDestinations)
         .where(
@@ -362,9 +389,17 @@ async function markVerified(
         )
         .for('share');
       // C1: only the name our payment partner checked this bank against is ever verified.
+      const digest = legalNameDigest(legalName);
       if (
         bank?.status !== 'usable' ||
-        bank.nameDigest !== legalNameDigest(legalName)
+        bank.nameDigest !== digest ||
+        // C1b: never on a destination first checked under another name.
+        (await bankCheckedForAnotherName(tx, {
+          profileId: input.profileId,
+          provider: input.provider,
+          destinationRef: bank.destinationRef,
+          nameDigest: digest,
+        }))
       )
         return false;
       await tx

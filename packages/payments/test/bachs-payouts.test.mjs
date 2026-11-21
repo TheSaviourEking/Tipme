@@ -485,6 +485,35 @@ test('a destination retry keeps its key, and the key does not reveal the account
   assert.doesNotMatch(first, new RegExp(ACCOUNT_NUMBER));
 });
 
+test('You collect: the destination key carries the checked name, so a corrected name is a fresh check', async () => {
+  const answer = () =>
+    jsonResponse({ id: 'pd_1', status: 'approved', is_usable: true }, 201);
+  const { provider, calls } = fake(answer);
+  const typo = 'a'.repeat(64);
+  const corrected = 'b'.repeat(64);
+  await provider.addPayoutDestination(ACCOUNT, { ...bank, nameDigest: typo });
+  await provider.addPayoutDestination(ACCOUNT, { ...bank, nameDigest: typo });
+  await provider.addPayoutDestination(ACCOUNT, {
+    ...bank,
+    nameDigest: corrected,
+  });
+  await provider.addPayoutDestination(ACCOUNT, bank);
+  const [first, retry, fresh, unnamed] = calls.map(
+    (call) => call.headers['Idempotency-Key'],
+  );
+  assert.equal(first, retry, 'a true retry replays');
+  assert.notEqual(first, fresh, 'another name is a new check');
+  assert.match(first, /^destination\.[0-9a-f]{40}\.[0-9a-f]{32}$/);
+  assert.ok(first.length <= 255);
+  // Without a name (today's bank form) the key is unchanged.
+  assert.match(unnamed, /^destination\.[0-9a-f]{40}$/);
+  // A digest that isn't one is refused before anything is sent.
+  await assert.rejects(
+    provider.addPayoutDestination(ACCOUNT, { ...bank, nameDigest: 'x y' }),
+  );
+  assert.equal(calls.length, 4);
+});
+
 test('reading a destination asks for it on the account, and is_usable decides', async () => {
   for (const [answer, status] of [
     [{ id: 'pd_1', status: 'approved', is_usable: true }, 'usable'],

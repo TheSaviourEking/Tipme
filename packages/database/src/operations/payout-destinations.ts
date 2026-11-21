@@ -235,6 +235,22 @@ export function setPayoutDestination(
         if (heldUntil(acting?.changedAt ?? null, now))
           throw new OperationError('BANK_CHANGE_HELD');
       }
+      // C1b (You collect): an answer for a destination saved under another name proves nothing.
+      if (input.nameDigest !== undefined) {
+        const [other] = await tx
+          .select({ id: payoutDestinations.id })
+          .from(payoutDestinations)
+          .where(
+            and(
+              destinationOf(owner),
+              eq(payoutDestinations.provider, input.provider),
+              eq(payoutDestinations.destinationReference, input.destinationRef),
+              sql`${payoutDestinations.nameDigest} IS DISTINCT FROM ${input.nameDigest}`,
+            ),
+          )
+          .limit(1);
+        if (other) throw new OperationError('BANK_RECHECK_LATER');
+      }
       const [current] = await tx
         .select()
         .from(payoutDestinations)

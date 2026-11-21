@@ -71,6 +71,8 @@ export const apiErrorCodes = [
   'NAME_MISMATCH',
   'NAME_LOCKED',
   'NAME_NOT_LOCKED',
+  // Task 13 fix round 2: our payment partner answered for a bank checked under another name.
+  'BANK_RECHECK_LATER',
   'NO_CONFIRMED_TEST',
   'EMAIL_TAKEN',
   'EMAIL_INVALID',

@@ -27,6 +27,7 @@ import {
 } from '@tipme/contracts';
 import {
   bankAccountHash,
+  bankCheckedForAnotherName,
   beginPaymentAccountCreation,
   collectAccountReference,
   collectBankFacts,
@@ -35,7 +36,6 @@ import {
   ensurePayoutSetup,
   flagSharedBank,
   getPaymentAccountRecipient,
-  getPayoutDestination,
   legalNameDigest,
   markPaymentAccountCreationFailed,
   markPaymentAccountCreationUnknown,
@@ -234,6 +234,7 @@ export class CollectBankController {
           accountNumber: body.accountNumber,
           accountName: `${body.legalName.first} ${body.legalName.last}`,
           bankCode: body.bankCode,
+          nameDigest: digest,
         }),
       );
       // The add's key is fixed per account number, so its answer can be an old one replayed: the
@@ -253,18 +254,18 @@ export class CollectBankController {
         this.logger.warn({ event: 'collect_bank.name_mismatch' });
         throw new CodedHttpException(422, 'NAME_MISMATCH');
       }
-      // C1: this answer is for a destination already checked against another name (a replay inside
-      // the partner's window): it proves nothing about this name. Try again later.
-      const current = await getPayoutDestination(db, {
-        profileId,
-        provider: recordedProviderName(this.provider.name),
-      });
+      // C1b: an answer for a destination already checked under another name (current or replaced)
+      // may be a replay decided against that name, and proves nothing about this one.
       if (
-        current?.destinationRef === added.destinationRef &&
-        current.nameDigest !== digest
+        await bankCheckedForAnotherName(db, {
+          profileId,
+          provider: this.provider.name,
+          destinationRef: added.destinationRef,
+          nameDigest: digest,
+        })
       ) {
         this.logger.warn({ event: 'collect_bank.replayed_for_another_name' });
-        throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
+        throw new CodedHttpException(409, 'BANK_RECHECK_LATER');
       }
       accountHash = bankAccountHash(
         this.sealing,

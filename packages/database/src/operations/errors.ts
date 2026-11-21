@@ -54,6 +54,7 @@ export type OperationErrorCode =
   // needs one that is locked.
   | 'NAME_LOCKED'
   | 'NAME_NOT_LOCKED'
+  | 'BANK_RECHECK_LATER'
   | 'WITHDRAWALS_PAUSED'
   | 'WITHDRAWALS_SWITCHED_OFF'
   | 'PAYOUT_SETUP_NEEDED'

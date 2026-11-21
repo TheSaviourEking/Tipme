@@ -308,6 +308,8 @@ const messages: Record<ApiErrorCode, string> = {
   NAME_LOCKED:
     'Your verified name can only be changed by support. Contact support@usetipme.xyz.',
   NAME_NOT_LOCKED: 'This person has no verified name to change.',
+  BANK_RECHECK_LATER:
+    "We're still checking this account. Try again tomorrow, or use another account.",
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:
@@ -368,6 +370,7 @@ const operationErrors: Partial<
   WITHDRAWAL_DAILY_LIMIT: { status: 409, code: 'WITHDRAWAL_DAILY_LIMIT' },
   NAME_LOCKED: { status: 409, code: 'NAME_LOCKED' },
   NAME_NOT_LOCKED: { status: 409, code: 'NAME_NOT_LOCKED' },
+  BANK_RECHECK_LATER: { status: 409, code: 'BANK_RECHECK_LATER' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },

@@ -501,8 +501,28 @@ export function createMockProvider(options: {
         : { accountName: 'PRETEND ACCOUNT HOLDER' };
     },
 
-    async addPayoutDestination(accountRef, { accountNumber, bankCode }) {
-      const destinationRef = `mock_dest_${accountRef}_${bankCode}_${accountNumber.slice(-4)}`;
+    async addPayoutDestination(
+      accountRef,
+      { accountNumber, bankCode, nameDigest },
+    ) {
+      // You collect: like the partner, one add per key (the account, bank, number and checked name):
+      // the same name again replays its first answer, a corrected name is a fresh check.
+      const destinationRef = `mock_dest_${accountRef}_${bankCode}_${accountNumber.slice(-4)}${nameDigest ? `_${nameDigest.slice(0, 12)}` : ''}`;
+      if (nameDigest) {
+        const replayed = await redis.get(
+          destinationKey(prefix, destinationRef),
+        );
+        if (
+          replayed === 'usable' ||
+          replayed === 'pending_review' ||
+          replayed === 'rejected'
+        )
+          return {
+            destinationRef,
+            usable: replayed === 'usable',
+            status: replayed,
+          };
+      }
       // You collect: a destination told to wait for review, or be refused, once.
       const answer = await redis.getdel(collectAnswerKey(prefix, accountRef));
       const status =
@@ -511,7 +531,7 @@ export function createMockProvider(options: {
           : answer === 'destination-rejected'
             ? ('rejected' as const)
             : ('usable' as const);
-      if (status === 'usable')
+      if (status === 'usable' && !nameDigest)
         await redis.del(destinationKey(prefix, destinationRef));
       else await redis.set(destinationKey(prefix, destinationRef), status);
       return { destinationRef, usable: status === 'usable', status };

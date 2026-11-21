@@ -11,7 +11,7 @@ import {
 } from '../../packages/database/dist/test-support.js';
 import { newTotpSecret } from '../../packages/domain/dist/index.js';
 import { UncertainProviderOutcomeError } from '../../packages/payments/dist/index.js';
-import { OPS_TOTP_KEY, setSwitch } from './helpers.mjs';
+import { OPS_TOTP_KEY, Redis, setSwitch } from './helpers.mjs';
 
 /*
  * You collect (plan Task 13, spec §2.1 steps 4–5, §8, §10; rulings R7, R8, P12, P13, P22–P26, P32):
@@ -1018,7 +1018,7 @@ test('a replayed usable answer for the same number never certifies a different n
     return { destinationRef, usable: status === 'usable', status };
   };
   const answer = await refused(() => addBank(controller, TOBI));
-  assert.equal(answer.status, 503);
+  assert.deepEqual(answer, { status: 409, code: 'BANK_RECHECK_LATER' });
   state.capability = 'active';
   await controller.status({ userId: TOBI.userId });
   const row = await profileRow(TOBI);
@@ -1050,7 +1050,7 @@ test('a refused add leaves the partner holding the name TipMe holds (I2)', async
   assert.deepEqual(partnerName(state), TOBI_NAME);
 });
 
-test('the partner name is written per change, so X then Y then X holds X; an unchanged name is not sent (I1)', async () => {
+test('the partner name is written per change, so X, Y, X, Y each really write; an unchanged name is not sent (I1)', async () => {
   await paidTip(TOBI, ago(DAY));
   const { provider, state } = partner();
   state.capability = 'restricted';
@@ -1067,9 +1067,17 @@ test('the partner name is written per change, so X then Y then X holds X; an unc
   assert.deepEqual(partnerName(state), Y);
   await addBank(controller, TOBI, { accountNumber: accountNumber(3) });
   assert.deepEqual(partnerName(state), TOBI_NAME);
+  // Y again: a key per name would be replayed here and leave X at the partner (M-R2).
+  await addBank(controller, TOBI, {
+    legalName: Y,
+    accountNumber: accountNumber(4),
+  });
+  assert.deepEqual(partnerName(state), Y);
+  await addBank(controller, TOBI, { accountNumber: accountNumber(5) });
+  assert.deepEqual(partnerName(state), TOBI_NAME);
   const keys = state.of('name').map(([, , key]) => key);
-  assert.equal(keys.length, 2);
-  assert.equal(new Set(keys).size, 2);
+  assert.equal(keys.length, 4);
+  assert.equal(new Set(keys).size, 4);
   state.capability = 'active';
   assert.equal(
     (await controller.status({ userId: TOBI.userId })).data.verified,
@@ -1115,4 +1123,153 @@ test("a collect recipient's bank is never set without the name check (M6)", asyn
     }),
     { code: 'NAME_LOCKED' },
   );
+});
+
+// Fix round 2 (re-review C1b, point 3, M-R3).
+
+test('a replayed answer for an earlier, replaced bank never certifies a new name (C1b)', async () => {
+  await paidTip(TOBI, ago(DAY));
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const controller = controllerFor(provider);
+  // Bank B checked against REAL, then bank C also under REAL: B is no longer current.
+  await addBank(controller, TOBI, { legalName: REAL });
+  await addBank(controller, TOBI, {
+    legalName: REAL,
+    accountNumber: accountNumber(2),
+  });
+  // A partner that answers B again for the same number (its first answer, decided against REAL).
+  const realAdd = provider.addPayoutDestination;
+  provider.addPayoutDestination = async (reference, input) => {
+    const destinationRef = `dest_${reference}_${input.bankCode}_${input.accountNumber.slice(-4)}`;
+    if (state.destinations.has(destinationRef)) {
+      const status = state.destinations.get(destinationRef);
+      return { destinationRef, usable: status === 'usable', status };
+    }
+    return realAdd(reference, input);
+  };
+  assert.deepEqual(
+    await refused(() =>
+      addBank(controller, TOBI, { accountNumber: accountNumber(1) }),
+    ),
+    { status: 409, code: 'BANK_RECHECK_LATER' },
+  );
+  state.capability = 'active';
+  const view = await controller.status({ userId: TOBI.userId });
+  // Verified, if at all, only as the name the current bank was checked against.
+  assert.deepEqual(
+    JSON.parse((await profileRow(TOBI)).collect_legal_name),
+    REAL,
+  );
+  assert.deepEqual(partnerName(state), REAL);
+  assert.equal(view.data.bank.last4, accountNumber(2).slice(-4));
+  assert.equal(
+    (
+      await q(
+        `SELECT count(*)::int AS n FROM payout_destinations WHERE profile_id = $1`,
+        [TOBI.id],
+      )
+    )[0].n,
+    2,
+  );
+});
+
+test('a verified name needs a bank checked against that very name (M-R3)', async () => {
+  await collect(TOBI);
+  await q(`UPDATE profiles SET collect_legal_name = $2 WHERE id = $1`, [
+    TOBI.id,
+    JSON.stringify(TOBI_NAME),
+  ]);
+  await q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code,
+       bank_name, account_last4, status, name_digest)
+     VALUES (gen_random_uuid(), $1, 'bachs', 'dest_checked', '058', 'Pretend Guaranty Bank', '1234',
+       'usable', $2)`,
+    [TOBI.id, ops.legalNameDigest(REAL)],
+  );
+  const provider = {
+    name: 'bachs-sandbox',
+    async payoutCapability() {
+      return { status: 'active' };
+    },
+    async payoutDestinationStatus() {
+      return 'usable';
+    },
+  };
+  const settle = () =>
+    ops.settleCollectVerification(database.db, {
+      profileId: TOBI.id,
+      provider,
+      accountReference: 'acct_any',
+      now: new Date(),
+    });
+  assert.equal(await settle(), 'checking');
+  assert.equal((await profileRow(TOBI)).collect_verified_at, null);
+  // The same bank, checked against the name held: verified.
+  await q(
+    `UPDATE payout_destinations SET name_digest = $2 WHERE profile_id = $1`,
+    [TOBI.id, ops.legalNameDigest(TOBI_NAME)],
+  );
+  assert.equal(await settle(), 'verified');
+});
+
+/** The pretend provider (as dev and e2e run it), answering like the partner per idempotency key. */
+async function mockStack() {
+  const { createMockProvider } =
+    await import('../../packages/payments/dist/index.js');
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+  const provider = createMockProvider({
+    redis,
+    prefix: `t13-${randomUUID().slice(0, 8)}`,
+  });
+  return { provider, close: () => redis.quit() };
+}
+
+test('a typo corrected on the same number gets a fresh check, and verifies when our payment partner says usable', async (t) => {
+  await paidTip(TOBI, ago(DAY));
+  const mock = await mockStack();
+  t.after(mock.close);
+  const controller = controllerFor(mock.provider);
+  await mock.provider.markCollectAnswer(TOBI.id, 'destination-pending-review');
+  assert.deepEqual(
+    await addBank(controller, TOBI, {
+      legalName: { first: 'Tobi', last: 'Adeyemmi' },
+    }),
+    { data: { state: 'manual_review' } },
+  );
+  assert.deepEqual(await addBank(controller, TOBI), {
+    data: { state: 'verified' },
+  });
+  assert.deepEqual(
+    JSON.parse((await profileRow(TOBI)).collect_legal_name),
+    TOBI_NAME,
+  );
+});
+
+test('a refused name, then the corrected one on the same number, is not stuck on the refusal', async (t) => {
+  await paidTip(TOBI, ago(DAY));
+  const mock = await mockStack();
+  t.after(mock.close);
+  const controller = controllerFor(mock.provider);
+  await mock.provider.markCollectAnswer(TOBI.id, 'destination-rejected');
+  assert.deepEqual(
+    await refused(() =>
+      addBank(controller, TOBI, {
+        legalName: { first: 'Tobi', last: 'Adeyemmi' },
+      }),
+    ),
+    { status: 422, code: 'NAME_MISMATCH' },
+  );
+  // The same name again is the same check: still refused, never re-decided.
+  assert.deepEqual(
+    await refused(() =>
+      addBank(controller, TOBI, {
+        legalName: { first: 'Tobi', last: 'Adeyemmi' },
+      }),
+    ),
+    { status: 422, code: 'NAME_MISMATCH' },
+  );
+  assert.deepEqual(await addBank(controller, TOBI), {
+    data: { state: 'verified' },
+  });
 });

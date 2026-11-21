@@ -20648,6 +20648,7 @@
                   "NAME_MISMATCH",
                   "NAME_LOCKED",
                   "NAME_NOT_LOCKED",
+                  "BANK_RECHECK_LATER",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",

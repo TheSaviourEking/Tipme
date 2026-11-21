@@ -371,7 +371,16 @@ export interface PayoutPort {
   }): Promise<{ accountName: string } | null>;
   addPayoutDestination(
     accountRef: string,
-    input: { accountNumber: string; accountName: string; bankCode: string },
+    input: {
+      accountNumber: string;
+      accountName: string;
+      bankCode: string;
+      /**
+       * You collect: the SHA-256 hex digest of the legal name this bank is checked against. A new
+       * name is a new add (a fresh check); the same name replays the same add.
+       */
+      nameDigest?: string;
+    },
   ): Promise<{
     destinationRef: string;
     usable: boolean;
