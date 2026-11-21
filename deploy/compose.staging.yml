@@ -13,6 +13,10 @@ x-app: &app
   tmpfs: ['/tmp']
   security_opt: ['no-new-privileges:true']
   networks: [internal]
+  # As production: staging shares the server's disk, and an unbounded log filled it (21 Nov 2026).
+  logging: &logging
+    driver: json-file
+    options: { max-size: 10m, max-file: '3' }
 
 services:
   api:
@@ -270,6 +274,7 @@ services:
       - ./scripts/offsite-loop.sh:/offsite-loop.sh:ro
     networks: [egress]
     mem_limit: 128m
+    logging: *logging
 
   postgres:
     image: postgres:16.13-alpine
@@ -315,6 +320,7 @@ services:
       retries: 12
     networks: [internal]
     mem_limit: 1g
+    logging: *logging
 
   redis:
     image: redis:7.4.5-alpine
@@ -337,6 +343,7 @@ services:
       retries: 12
     networks: [internal]
     mem_limit: 256m
+    logging: *logging
 
 networks:
   # The edge Caddy's network, created once by deploy/edge/setup-networks.sh (deploy.sh checks it).
