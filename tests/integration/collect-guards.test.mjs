@@ -467,6 +467,173 @@ test('an abandoned intent (no checkout opened) stops counting when its quote exp
   );
 });
 
+test('no checkout opens for a collect intent whose quote has expired, so a late retry never overshoots the cap', async () => {
+  await collect(TOBI);
+  // ₦40,000 at t=0, ₦38,000 to Tobi: the intent is made, then the provider blips and its attempt
+  // stays CREATED (no checkout opened).
+  const key = randomUUID();
+  const a = await ops.createPaymentIntent(database.db, {
+    quoteId: (await quoteAt(TOBI, NOW, 4_000_000n)).quoteId,
+    idempotencyKey: key,
+    now: NOW,
+  });
+  // At 16 minutes A's quote has expired and A stops counting, so B's ₦20,000 (₦19,000) is taken,
+  // its checkout opened and paid.
+  const at16 = new Date(NOW.getTime() + 16 * MIN);
+  const b = await intentFor(await quoteAt(TOBI, at16, 2_000_000n), at16);
+  const claimB = await ops.claimAttemptStart(database.db, {
+    attemptId: b.attemptId,
+    provider: 'bachs',
+    now: at16,
+  });
+  assert.equal(claimB.outcome, 'claimed');
+  await openCheckout(b);
+  await settleAt(b, 2_000_000n, new Date(NOW.getTime() + 17 * MIN));
+  // At 20 minutes A retries with the same key: the tip replays, but no checkout may open for it,
+  // on the partner's path (the claim) or the pretend provider's (straight to INITIATED).
+  const at20 = new Date(NOW.getTime() + 20 * MIN);
+  const replayed = await ops.createPaymentIntent(database.db, {
+    quoteId: (
+      await q(`SELECT quote_id FROM payment_intents WHERE id = $1`, [
+        a.intentId,
+      ])
+    )[0].quote_id,
+    idempotencyKey: key,
+    now: at20,
+  });
+  assert.equal(replayed.replayed, true);
+  assert.equal(
+    await refusal(() =>
+      ops.claimAttemptStart(database.db, {
+        attemptId: a.attemptId,
+        provider: 'bachs',
+        now: at20,
+      }),
+    ),
+    'QUOTE_EXPIRED',
+  );
+  assert.equal(
+    await refusal(() =>
+      ops.markAttemptInitiated(database.db, {
+        attemptId: a.attemptId,
+        provider: 'mock',
+        providerReference: `platform:mock_collect_${randomUUID().slice(0, 8)}`,
+        opensCheckout: true,
+        now: at20,
+      }),
+    ),
+    'QUOTE_EXPIRED',
+  );
+  const [attempt] = await q(
+    `SELECT status, provider, provider_reference FROM payment_attempts WHERE id = $1`,
+    [a.attemptId],
+  );
+  assert.deepEqual(attempt, {
+    status: 'CREATED',
+    provider: null,
+    provider_reference: null,
+  });
+  const status = await ops.collectStatus(
+    database.db,
+    TOBI.id,
+    new Date(NOW.getTime() + 21 * MIN),
+  );
+  assert.equal(status.heldMinor, 1_900_000n);
+  assert.ok(status.heldMinor <= 5_000_000n);
+  // Recording a payment the provider says it did start (the expiry job's lookup) is evidence,
+  // not a checkout opening, and is never refused.
+  assert.equal(
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: a.attemptId,
+      provider: 'bachs',
+      providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+    }),
+    'initiated',
+  );
+});
+
+test('a direct tip’s checkout still opens after its quote expires, as today', async () => {
+  const quote = await quoteAt(ADA, NOW);
+  assert.equal(quote.collectionMode, 'direct');
+  const intent = await intentFor(quote, NOW);
+  const claim = await ops.claimAttemptStart(database.db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    now: new Date(NOW.getTime() + 20 * MIN),
+  });
+  assert.equal(claim.outcome, 'claimed');
+  const other = await intentFor(await quoteAt(ADA, NOW), NOW);
+  assert.equal(
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: other.attemptId,
+      provider: 'mock',
+      providerReference: `mock_${randomUUID().slice(0, 8)}`,
+      opensCheckout: true,
+      now: new Date(NOW.getTime() + 20 * MIN),
+    }),
+    'initiated',
+  );
+});
+
+test('the address key is kept only on unfinished collect intents', async () => {
+  // A direct intent never stores it.
+  const direct = await intentFor(await quoteAt(ADA, NOW), NOW, 'address-d');
+  const keyOf = async (intent) =>
+    (
+      await q(`SELECT address_key FROM payment_intents WHERE id = $1`, [
+        intent.intentId,
+      ])
+    )[0].address_key;
+  assert.equal(await keyOf(direct), null);
+
+  await collect(TOBI);
+  const paid = await intentFor(await quoteAt(TOBI, NOW), NOW, 'address-p');
+  const abandoned = await intentFor(await quoteAt(TOBI, NOW), NOW, 'address-a');
+  const failed = await intentFor(await quoteAt(TOBI, NOW), NOW, 'address-f');
+  const at35 = new Date(NOW.getTime() + 35 * MIN);
+  const live = await intentFor(await quoteAt(TOBI, at35), at35, 'address-l');
+  for (const intent of [paid, abandoned, failed, live])
+    assert.notEqual(await keyOf(intent), null);
+
+  await payAt(paid, GROSS, new Date(NOW.getTime() + 2 * MIN));
+  await openCheckout(failed);
+  const [{ provider_reference: failedRef }] = await q(
+    `SELECT provider_reference FROM payment_attempts WHERE id = $1`,
+    [failed.attemptId],
+  );
+  await ops.recordProviderEvent(database.db, {
+    provider: 'bachs',
+    providerEventId: `evt_${randomUUID()}`,
+    eventType: 'payment.failed',
+    attemptId: failed.attemptId,
+    providerReference: failedRef,
+    signatureVerified: true,
+    payload: {},
+  });
+  // The expiry job cancels the abandoned one and clears the key of every intent now final, however
+  // it finished; the live one keeps its key, as it still counts.
+  const result = await ops.expireStaleTips({
+    db: database.db,
+    provider: {
+      name: 'bachs',
+      environment: 'sandbox',
+      async findPayment() {
+        return null;
+      },
+      async verifyTransaction() {
+        throw new Error('nothing here has a reference to ask about');
+      },
+    },
+    now: new Date(NOW.getTime() + 40 * MIN),
+  });
+  assert.equal(result.expired, 1);
+  assert.equal(result.addressKeysCleared, 3);
+  assert.equal(await keyOf(paid), null);
+  assert.equal(await keyOf(abandoned), null);
+  assert.equal(await keyOf(failed), null);
+  assert.equal(await keyOf(live), 'address-l');
+});
+
 test('one supporter address holds at most 2 unfinished intents on a collect page', async () => {
   await collect(TOBI);
   // ₦10,000 tips (₦9,500 to Tobi): under the cap even all at once, so only the per-address limit
