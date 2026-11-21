@@ -3852,6 +3852,28 @@ export const tipRefunds = pgTable(
     reason: text('reason').notNull(),
     // Set when TipMe claims the partner call, before making it.
     sentAt: timestamp('sent_at', { withTimezone: true }),
+    // You collect (plan Task 10): how the recipient's part comes back before TipMe refunds from its
+    // own balance. Null for a direct tip (refunded as its recipient, unchanged). `cancel_held`: the
+    // share never moved and is held for the refund; `take_back`: it moved and is taken back first;
+    // `absorb`: some of it can't be taken back, and a second person decided TipMe absorbs up to
+    // `gap_minor` (serious action `tip_refund.absorb_gap`).
+    collectPlan: text('collect_plan'),
+    gapMinor: minor('gap_minor'),
+    // What this refund holds of the recipient's balance while it is open (as a dispute's, R4):
+    // their part being cancelled or taken back. Zero once it is booked, or let go on a failure that
+    // moved nothing; kept on a failure after money was already taken back (staff are told).
+    heldMinor: minor('held_minor')
+      .notNull()
+      .default(sql`0`),
+    // When everything to take back had come back: only then is the refund sent.
+    recoveredAt: timestamp('recovered_at', { withTimezone: true }),
+    // A collect refund's first send under its key: the partner's replay window counts from here
+    // (P24's 23 hours), not from when it was asked.
+    firstSentAt: timestamp('first_sent_at', { withTimezone: true }),
+    // Fix round 2 (RM1): a send that never left the building waits before it is tried again
+    // (backoff), and after a few such tries staff are told.
+    retryAfter: timestamp('retry_after', { withTimezone: true }),
+    notSentCount: integer('not_sent_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -3868,9 +3890,17 @@ export const tipRefunds = pgTable(
     ),
     check(
       'tip_refunds_failure',
-      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed'))`,
+      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered', 'disputed'))`,
     ),
     check('tip_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'tip_refunds_collect_plan',
+      sql`(${table.collectPlan} IS NULL OR ${table.collectPlan} IN ('cancel_held', 'take_back', 'absorb'))
+        AND ((COALESCE(${table.collectPlan}, '') = 'absorb') = (${table.gapMinor} IS NOT NULL))
+        AND (${table.gapMinor} IS NULL OR ${table.gapMinor} > 0)
+        AND ${table.heldMinor} >= 0 AND ${table.heldMinor} <= ${table.amountMinor}
+        AND (${table.collectPlan} IS NOT NULL OR (${table.heldMinor} = 0 AND ${table.recoveredAt} IS NULL))`,
+    ),
     currencyCheck('tip_refunds'),
   ],
 );
@@ -3991,6 +4021,10 @@ export const shareTransfers = pgTable(
     // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
     // Task 9 (P29): the lost dispute a `collect_recover` pull-back answers (one each).
     disputeId: uuid('dispute_id').references((): AnyPgColumn => disputes.id),
+    // Task 10: or the collect tip refund it answers (one each).
+    tipRefundId: uuid('tip_refund_id').references(
+      (): AnyPgColumn => tipRefunds.id,
+    ),
     refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
@@ -4025,7 +4059,8 @@ export const shareTransfers = pgTable(
       sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
         AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)
-        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)`,
+        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL OR tip_refund_id IS NOT NULL)
+        AND (dispute_id IS NULL OR tip_refund_id IS NULL)`,
     ),
     check(
       'share_transfers_business',
@@ -4049,6 +4084,10 @@ export const shareTransfers = pgTable(
     // Task 9 (P29): each lost dispute pulls its part of a swept business share back once.
     uniqueIndex('share_transfers_one_collect_recover')
       .on(table.disputeId)
+      .where(sql`kind = 'collect_recover'`),
+    // Task 10: each collect tip refund pulls a swept business share back once.
+    uniqueIndex('share_transfers_one_refund_recover')
+      .on(table.tipRefundId)
       .where(sql`kind = 'collect_recover'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
@@ -4197,7 +4236,7 @@ export const disputes = pgTable(
   ],
 );
 
-export const COLLECT_TRANSFER_KINDS = ['share', 'back'] as const;
+export const COLLECT_TRANSFER_KINDS = ['share', 'back', 'return'] as const;
 /** Why a collect transfer is in `review` (P13): a release or retry clears only its own reason. */
 export const COLLECT_REVIEW_REASONS = [
   'dispute',
@@ -4210,7 +4249,7 @@ export const COLLECT_REVIEW_REASONS = [
 /**
  * One money movement between TipMe's partner balance and a collect recipient's own account (spec §5).
  * `share`: a tip's held share on to the recipient (one per tip, key `tipme-collect-<tipId>`). `back`:
- * money taken back for a refund or a dispute (key `tipme-collect-back-<refundId|disputeId>`). The key
+ * money taken back for a refund or a dispute (key `tipme-collect-back-<refundId|disputeId>`). `return`: money a failed refund took back, sent back to the recipient by staff (Task 10, key `tipme-collect-return-<refundId>`). The key
  * is also the transfer's `transfer_group`, so a lost answer is read back, never sent blindly. The
  * account is filled when the row moves to `ready` (P8), from the account verified then.
  */
@@ -4271,13 +4310,15 @@ export const collectTransfers = pgTable(
     check(
       'collect_transfers_back_source',
       sql`(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)
-        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))`,
+        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))
+        OR (kind = 'return' AND refund_id IS NOT NULL AND dispute_id IS NULL)`,
     ),
     // The plan's exact keys, so a key can never name another tip, refund or dispute.
     check(
       'collect_transfers_key',
       sql`(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)
-        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)`,
+        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)
+        OR (kind = 'return' AND idempotency_key = 'tipme-collect-return-' || refund_id::text)`,
     ),
     // A row in review says why (P13).
     check(

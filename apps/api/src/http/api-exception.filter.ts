@@ -156,6 +156,10 @@ const messages: Record<ApiErrorCode, string> = {
     'Our payment partner couldn’t take this from your balance. Nothing was paid. You can pay by card or bank transfer instead.',
   PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
   TIP_REFUND_REFUSED: 'This tip can’t be refunded.',
+  TIP_REFUND_NEEDS_DECISION:
+    'Part of this tip can’t be taken back first. Going ahead means TipMe absorbs it, which a second person decides.',
+  TIP_REFUND_NO_GAP:
+    'Everything this tip gave can be taken back first, so there is nothing for TipMe to absorb. Ask for the refund instead.',
   PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
   SWITCH_NOT_BUILT:
     'Nothing is built behind this switch yet, so it can’t be turned on.',
