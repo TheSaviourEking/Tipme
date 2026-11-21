@@ -2031,3 +2031,87 @@ test('RM7: money held for a refund shows as held for a refund, never “On its w
     refundHeld: 'Held while a refund is settled',
   });
 });
+
+/* RM8 (fix round 5): each of these fails when its own check is removed. */
+
+/** One moved tip whose money a failed refund took back: all they have is held for the refund. */
+async function onlyRefundHeld(profile) {
+  await verified(profile);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(profile, transfers);
+  await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  state.refuse = 'CHARGE_ALREADY_REFUNDED';
+  await send(provider);
+  assert.equal((await refundRow(tip.tipId)).status, 'FAILED');
+  const balance = await ops.balanceOf(database.db, profile.id);
+  assert.deepEqual(balance, {
+    availableMinor: 0n,
+    confirmingMinor: 0n,
+    keptMinor: 0n,
+    onItsWayMinor: 0n,
+    refundHeldMinor: NET,
+  });
+  return tip;
+}
+
+test('RM8: an account whose only money is held for a refund cannot be deleted', async () => {
+  await onlyRefundHeld(TOBI);
+  let [{ user_id: userId }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [TOBI.id],
+  );
+  if (!userId) {
+    [{ id: userId }] = await q(
+      `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+      [`collectrefund.owner.${randomUUID().slice(0, 8)}@example.com`],
+    );
+    await q(`UPDATE profiles SET user_id = $2 WHERE id = $1`, [
+      TOBI.id,
+      userId,
+    ]);
+  }
+  await assert.rejects(ops.deleteAccount(database.db, { userId, sealing }), {
+    code: 'HAS_BALANCE',
+  });
+});
+
+test('RM8: a page whose only money is held for a refund shows as having a balance to a take-back', async () => {
+  await onlyRefundHeld(TOBI);
+  const facts = await ops.takeBackFacts(database.db, TOBI.id);
+  assert.equal(facts.hasBalance, true);
+});
+
+test('RM8: a re-ask after a closed dispute’s hold was taken back reads only what is still in their account', async () => {
+  // ₦6,500 is on its way to their bank, so the closed dispute keeps the ₦3,000 left (P28).
+  await verified(TOBI);
+  const { provider: transfers, state: moves } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await withdrawing(TOBI, 650_000n);
+  await disputeSays(tip, 'closed');
+  assert.deepEqual((await facts(tip.tipId)).collect, {
+    plan: 'staff_decides',
+    gapMinor: 650_000n,
+  });
+  await refundAsked(tip.tipId, 'tip_refund.absorb_gap');
+  const { provider, state } = refunder();
+  state.balance = 100_000_000n;
+  await send(provider);
+  await run(transfers, new Date());
+  assert.deepEqual(
+    moves.backs.map((b) => b.amountMinor),
+    [300_000n],
+  );
+  state.refuse = 'CHARGE_ALREADY_REFUNDED';
+  await send(provider);
+  assert.equal((await refundRow(tip.tipId)).status, 'FAILED');
+  // The ₦3,000 the hold kept is now held by TipMe for the tip: nothing of it is in their account,
+  // so the rest (₦6,500) is all a gap, never a second transfer back of money that isn't there.
+  assert.equal(await available(TOBI), 0n);
+  assert.deepEqual((await facts(tip.tipId)).collect, {
+    plan: 'staff_decides',
+    gapMinor: 650_000n,
+  });
+});
