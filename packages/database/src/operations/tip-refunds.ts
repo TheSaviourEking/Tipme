@@ -486,9 +486,15 @@ async function readCollect(
     )
   )
     return { ...base, plan: 'wait', refusal: 'disputed' };
-  const keptForRefund = onTip
+  // RI4: of that hold, what an earlier refund of the tip already took back is held by TipMe now
+  // (counted once, in held_for_recipients): only the rest is still in their account.
+  const closedHold = onTip
     .filter((d) => d.status === 'closed' && !d.settledAt)
     .reduce((sum, d) => sum + d.heldMinor, 0n);
+  const keptForRefund =
+    closedHold > recovered.personMinor
+      ? closedHold - recovered.personMinor
+      : 0n;
   let wait = false;
   let gap = 0n;
   let moved = false;

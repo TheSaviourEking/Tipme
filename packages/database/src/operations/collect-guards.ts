@@ -3,6 +3,7 @@ import { lagosDayStart } from '@tipme/domain';
 import { sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { notifications, profiles, tipQuotes } from '../schema.js';
+import { heldParts, refundHeldSql } from './balance.js';
 import { collectSettingsInForce } from './collect-settings.js';
 import type { CollectionMode } from './collection-mode.js';
 import { guarded, OperationError } from './errors.js';
@@ -33,6 +34,8 @@ export interface CollectStatusResult {
   keptMinor: bigint;
   /** Held once verified, its transfers still to arrive: "On its way to you". */
   onItsWayMinor: bigint;
+  /** RM7: held while a refund of one of their tips is settled (neither of the two above). */
+  refundHeldMinor: bigint;
   /** When the oldest tip whose share TipMe still holds settled. */
   firstWaitingAt: Date | null;
   /** The page takes no new tips (holding cap reached, not verified). */
@@ -50,6 +53,7 @@ interface Facts {
   mode: CollectionMode;
   verifiedAt: Date | null;
   heldMinor: bigint;
+  refundHeldMinor: bigint;
   firstWaitingAt: Date | null;
   /** Withdrawals asked for and not failed, since verification (all of them before it). */
   withdrawals: number;
@@ -62,6 +66,7 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
     mode: string | null;
     verified_ms: string | null;
     held: string;
+    refund_held: string;
     first_ms: string | null;
     withdrawals: number;
   }>(sql`
@@ -70,6 +75,7 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
            (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
               FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
              WHERE a.code = 'held_for_recipients' AND a.profile_id = profiles.id)::text AS held,
+           ${refundHeldSql(sql`profiles.id`)}::text AS refund_held,
            (SELECT (extract(epoch FROM min(t.completed_at)) * 1000)::bigint::text
               FROM collect_transfers c JOIN tips t ON t.id = c.tip_id
              WHERE c.profile_id = profiles.id AND c.kind = 'share' AND c.status IN ${HELD_SHARE}) AS first_ms,
@@ -85,6 +91,7 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
     mode: row.mode === 'collect' ? 'collect' : 'direct',
     verifiedAt: msOf(row.verified_ms),
     heldMinor: BigInt(row.held),
+    refundHeldMinor: BigInt(row.refund_held),
     firstWaitingAt: msOf(row.first_ms),
     withdrawals: row.withdrawals,
   };
@@ -127,8 +134,7 @@ export async function collectStatus(
     mode: facts.mode,
     verified,
     heldMinor: facts.heldMinor,
-    keptMinor: verified ? 0n : facts.heldMinor,
-    onItsWayMinor: verified ? facts.heldMinor : 0n,
+    ...heldParts(facts.heldMinor, facts.refundHeldMinor, verified),
     firstWaitingAt: facts.firstWaitingAt,
     paused: pausedReason !== null,
     pausedReason,

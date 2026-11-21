@@ -10,9 +10,12 @@ export interface DashboardSummary {
    * You collect: money TipMe holds for the recipient, never part of `availableMinor` and never
    * withdrawable until it arrives. Before they are verified it is `keptMinor` ("Kept for you until
    * you add your bank details"); after, `onItsWayMinor` ("On its way to you"). "0" for everyone else.
+   * What is held while a refund of one of their tips is settled is neither: `refundHeldMinor`
+   * ("Held while a refund is settled"). The words are `COLLECT_HELD_WORDS`.
    */
   keptMinor: string;
   onItsWayMinor: string;
+  refundHeldMinor: string;
   today: string;
   yesterday: string;
   thisWeek: string;
