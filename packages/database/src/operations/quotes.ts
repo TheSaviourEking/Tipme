@@ -21,6 +21,7 @@ import {
   decideCollectionMode,
   type CollectionMode,
 } from './collection-mode.js';
+import { refuseOverHoldingCap } from './collect-guards.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -177,6 +178,16 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
           environment: input.environment,
         })
       : await collectionModeOf(tx, profile.id);
+    // You collect (Task 12, spec §2.1 step 7, P31): a collect page takes no tip that would take
+    // what is held, with its tips still being paid, past the holding cap, until the recipient is
+    // verified. Here as a courtesy; the intent's check binds. A direct page is never asked.
+    if (collectionMode === 'collect')
+      await refuseOverHoldingCap(tx, {
+        profileId: profile.id,
+        now: input.now ?? new Date(),
+        addMinor: chosen.recipientNetMinor,
+        binding: false,
+      });
     await tx.insert(tipQuotes).values({
       id: quoteId,
       shareAgreementId: shared?.agreementId ?? null,
@@ -235,6 +246,7 @@ export function findQuoteCharge(
   currency: string;
   /** You collect: the mode the quote was made under, which the checkout follows. */
   collectionMode: CollectionMode;
+  expiresAt: Date;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -245,6 +257,7 @@ export function findQuoteCharge(
         providerFeeMinor: tipQuotes.providerFeeMinor,
         currency: tipQuotes.currency,
         collectionMode: tipQuotes.collectionMode,
+        expiresAt: tipQuotes.expiresAt,
       })
       .from(tipQuotes)
       .where(eq(tipQuotes.id, quoteId));

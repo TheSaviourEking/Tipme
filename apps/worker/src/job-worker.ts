@@ -86,6 +86,7 @@ import {
   handleDisputeSteps,
   handleCollectTransfers,
 } from './handlers/collect-transfers.js';
+import { handleCollectReminders } from './handlers/collect-reminders.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
@@ -878,6 +879,12 @@ export async function startJobWorker(
                   providers: collectProviders,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
+                // Task 12: reminders to add bank details ride the same sweep and lock.
+                const reminders = await handleCollectReminders({
+                  db: database.db,
+                  sealing,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
                 // Task 9: disputes whose share was settled by this run move on (Review Focus 3).
                 const disputes = await handleDisputeSteps({
                   db: database.db,
@@ -885,6 +892,7 @@ export async function startJobWorker(
                 });
                 return {
                   ...transfers,
+                  reminded: reminders.reminded,
                   disputesAdvanced: disputes.advanced,
                   disputeReminders: disputes.reminded,
                 };

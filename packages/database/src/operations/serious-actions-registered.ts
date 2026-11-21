@@ -73,6 +73,17 @@ import {
   setPlanFeeRates,
 } from './plan-fee-rates.js';
 import {
+  checkedCollectSettings,
+  COLLECT_SETTINGS_CHANGE_ACTION,
+  COLLECT_TRANSFERS_PAUSE_ACTION,
+  COLLECT_TRANSFERS_RESUME_ACTION,
+  collectSettingsInForce,
+  collectSettingsPayload,
+  describeCollectSettingsChange,
+  setCollectSettings,
+  setCollectTransfersPaused,
+} from './collect-settings.js';
+import {
   qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
@@ -635,6 +646,65 @@ const planFeesChange = acting<{
     }));
   },
 });
+
+/*
+ * You collect's settings (plan Task 12, spec §9), as the plan fee rates: a money change, so a second
+ * person decides (or a lone admin acts alone, with the alert). Pinned on the settings in force, so a
+ * change made while this waited makes it stale. Nobody is its subject: it applies to everyone on
+ * You collect from now.
+ */
+const collectSettingsChange = acting<Record<string, unknown>>({
+  name: COLLECT_SETTINGS_CHANGE_ACTION,
+  permission: 'fees.manage',
+  target: () => 'collect_settings',
+  current: async (tx) => {
+    const settings = await collectSettingsInForce(tx);
+    return { id: settings.rowId, ...collectSettingsPayload(settings) };
+  },
+  describe: async (tx, payload) =>
+    describeCollectSettingsChange(
+      await collectSettingsInForce(tx),
+      checkedCollectSettings(payload),
+    ),
+  act: (tx, payload, context) =>
+    setCollectSettings(tx, {
+      values: checkedCollectSettings(payload),
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }),
+});
+
+/*
+ * Staff's emergency pause of every collect transfer, and its resume (R11, spec §12.5): a new settings
+ * row with `paused`, which the transfer machine reads before each row. Pinned on the pause as it
+ * stands, so a request the pause has since moved past goes stale.
+ */
+const collectTransfersPaused = (paused: boolean) =>
+  acting<Record<string, never>>({
+    name: paused
+      ? COLLECT_TRANSFERS_PAUSE_ACTION
+      : COLLECT_TRANSFERS_RESUME_ACTION,
+    permission: 'payments.repair',
+    target: () => 'collect_transfers',
+    current: async (tx) => {
+      const settings = await collectSettingsInForce(tx);
+      return { id: settings.rowId, paused: settings.paused };
+    },
+    describe: async () =>
+      paused
+        ? 'Pause every You collect transfer: held tips stay with TipMe until resumed'
+        : 'Resume You collect transfers: held tips move to recipients again',
+    act: (tx, _payload, context) =>
+      setCollectTransfersPaused(tx, {
+        paused,
+        staffUserId: context.actorId,
+        approvedBy: context.approverId ?? null,
+        reason: context.reason,
+        now: context.now,
+      }),
+  });
 
 /*
  * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
@@ -1305,6 +1375,9 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(announcementSendAction);
   registerSeriousAction(tipRefund);
   registerSeriousAction(planFeesChange);
+  registerSeriousAction(collectSettingsChange);
+  registerSeriousAction(collectTransfersPaused(true));
+  registerSeriousAction(collectTransfersPaused(false));
 }
 
 /* Routes whose seriousness depends on what is being done */

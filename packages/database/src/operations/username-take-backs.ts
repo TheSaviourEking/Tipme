@@ -626,7 +626,11 @@ export async function takeBackFacts(
     plan: page.plan as PagePlan,
     pageState: page.pageState as PageState,
     suspended: page.status === 'suspended',
-    hasBalance: balance.availableMinor > 0n || balance.confirmingMinor > 0n,
+    hasBalance:
+      balance.availableMinor > 0n ||
+      balance.confirmingMinor > 0n ||
+      balance.keptMinor > 0n ||
+      balance.onItsWayMinor > 0n,
     withdrawalInFlight: inFlight !== undefined,
     verifiedEmail: Boolean(
       page.email && page.emailVerifiedAt && !page.deletedAt,

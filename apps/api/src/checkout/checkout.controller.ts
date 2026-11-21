@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Inject, Post } from '@nestjs/common';
+import { Body, Controller, Headers, Inject, Post, Req } from '@nestjs/common';
 import {
   tipIntentRequestSchema,
   tipQuoteRequestSchema,
@@ -8,6 +8,7 @@ import {
   type TipQuote,
   type TipQuoteRequest,
 } from '@tipme/contracts';
+import type { Request } from 'express';
 import { z } from 'zod';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { CheckoutService } from './checkout.service.js';
@@ -35,11 +36,15 @@ export class CheckoutController {
   async intent(
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(tipIntentRequestSchema)) body: TipIntentRequest,
+    @Req() request: Request,
   ): Promise<ApiDataResponse<TipIntentCreated>> {
     const key = idempotencyKeyPipe.transform(idempotencyKey, {
       type: 'custom',
       data: 'idempotency-key',
     });
-    return { data: await this.checkout.createIntent(body, key) };
+    // The same address the intents rate limit counts (You collect, ruling P34).
+    return {
+      data: await this.checkout.createIntent(body, key, request.ip),
+    };
   }
 }

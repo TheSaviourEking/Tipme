@@ -59,8 +59,21 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-two', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 22);
+test('the serious actions are the agreed twenty-five', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 25);
+  // You collect (plan Task 12, spec §9, R11): its settings and staff's pause are money changes.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_settings.change'],
+    'fees.manage',
+  );
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_transfers.pause'],
+    'payments.repair',
+  );
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_transfers.resume'],
+    'payments.repair',
+  );
   // Owner, 18 Nov 2026: TipMe's fee per plan is a money change, with a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['plan_fees.change'], 'fees.manage');
   // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) needs a second person.

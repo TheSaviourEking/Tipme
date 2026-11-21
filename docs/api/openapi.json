@@ -12624,6 +12624,282 @@
         ]
       }
     },
+    "/v1/ops/collect-settings": {
+      "get": {
+        "operationId": "OpsCollectSettings.state",
+        "tags": [
+          "OpsCollectSettings"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      },
+      "post": {
+        "operationId": "OpsCollectSettings.change",
+        "tags": [
+          "OpsCollectSettings"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "capMinor": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,11})$"
+                  },
+                  "capDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "reminderDays": {
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 365
+                    }
+                  },
+                  "delayHours": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "delayForDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "firstWithdrawalCapMinor": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,11})$"
+                  },
+                  "newDailyLimitMinor": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,11})$"
+                  },
+                  "newDailyLimitDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "reserveWarningMinor": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,11})$"
+                  },
+                  "reserveCriticalMinor": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]{0,11})$"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "capMinor",
+                  "capDays",
+                  "reminderDays",
+                  "delayHours",
+                  "delayForDays",
+                  "firstWithdrawalCapMinor",
+                  "newDailyLimitMinor",
+                  "newDailyLimitDays",
+                  "reserveWarningMinor",
+                  "reserveCriticalMinor"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "fees.manage"
+      }
+    },
+    "/v1/ops/collect-transfers/pause": {
+      "post": {
+        "operationId": "OpsCollectSettings.pause",
+        "tags": [
+          "OpsCollectSettings"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
+      }
+    },
+    "/v1/ops/collect-transfers/resume": {
+      "post": {
+        "operationId": "OpsCollectSettings.resume",
+        "tags": [
+          "OpsCollectSettings"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
+      }
+    },
     "/v1/ops/database-budget": {
       "get": {
         "operationId": "OpsDatabaseBudget.read",
@@ -20147,6 +20423,8 @@
                   "PAYMENT_START_REJECTED",
                   "TIPPING_NOT_OPEN",
                   "PAGE_PAUSED",
+                  "WITHDRAWAL_FIRST_CAP",
+                  "WITHDRAWAL_DAILY_LIMIT",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",

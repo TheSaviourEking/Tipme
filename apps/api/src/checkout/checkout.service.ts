@@ -42,6 +42,7 @@ import {
   PAYMENT_PROVIDER_TOKEN,
   type CheckoutPaymentProvider,
 } from './payment-provider.provider.js';
+import { intentAddressKey } from './address-key.js';
 import { createStatusToken } from './status-token.js';
 
 /** Guest checkout through the PR-005 operations; prices and fees only ever come from the server. */
@@ -207,6 +208,8 @@ export class CheckoutService {
   async createIntent(
     request: TipIntentRequest,
     idempotencyKey: string,
+    /** The supporter's address, as the rate limit sees it; stored only as a keyed hash. */
+    ip?: string,
   ): Promise<TipIntentCreated> {
     await this.refuseWhileClosed(() =>
       quoteHandleOf(this.database.db, request.quoteId),
@@ -217,6 +220,8 @@ export class CheckoutService {
       featureOn(db, 'business'),
       featureOn(db, 'business_shares'),
     ]);
+    // Keyed with the receipt-token secret under its own label (see intentAddressKey).
+    const addressKey = intentAddressKey(this.config.STATUS_TOKEN_SECRET, ip);
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
       idempotencyKey,
@@ -227,6 +232,7 @@ export class CheckoutService {
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
       recognitionOn,
+      ...(addressKey ? { addressKey } : {}),
       // Campaign Studio: which campaign link the page was opened from; ignored when not one.
       ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).
@@ -407,6 +413,9 @@ export class CheckoutService {
       if (!collectCheckout)
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
       if (currency !== 'NGN') throw new OperationError('TIP_NOT_PAYABLE');
+      // A courtesy before the pretend provider is asked; markAttemptInitiated's check binds.
+      if (quote.expiresAt.getTime() <= Date.now())
+        throw new OperationError('QUOTE_EXPIRED');
       started = await collectCheckout({
         attemptId: intent.attemptId,
         amountMinor: quote.payerTotalMinor,
@@ -422,10 +431,13 @@ export class CheckoutService {
         currency: quote.currency,
       });
     }
+    // You collect (fix round 4): opening a checkout, so an expired collect quote is refused here
+    // as the partner's claim refuses it. A direct tip is unaffected.
     const outcome = await markAttemptInitiated(db, {
       attemptId: intent.attemptId,
       provider: 'mock',
       providerReference: started.providerReference,
+      opensCheckout: true,
     });
     const reference =
       outcome === 'initiated'

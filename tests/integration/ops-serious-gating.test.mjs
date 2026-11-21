@@ -364,6 +364,58 @@ const wired = {
         JSON.stringify(await latest()) === JSON.stringify(next),
     };
   },
+  // You collect (plan Task 12): one day more on the holding cap than the settings in force.
+  'collect_settings.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT cap_days FROM collect_settings ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? row.cap_days : 30;
+    };
+    const capDays = (await latest()) === 90 ? 89 : (await latest()) + 1;
+    return {
+      payload: {
+        capMinor: '5000000',
+        capDays,
+        reminderDays: [7, 21, 28],
+        delayHours: 24,
+        delayForDays: 7,
+        firstWithdrawalCapMinor: '5000000',
+        newDailyLimitMinor: '20000000',
+        newDailyLimitDays: 30,
+        reserveWarningMinor: '50000000',
+        reserveCriticalMinor: '25000000',
+      },
+      happened: async () => (await latest()) === capDays,
+    };
+  },
+  // R11: staff's pause of every collect transfer, and its resume from a pause set here.
+  'collect_transfers.pause': async () => {
+    const paused = async () =>
+      (await ops.collectSettingsInForce(database.db)).paused;
+    if (await paused())
+      await q(
+        `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+           first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+           reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
+         VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
+           50000000, 25000000, false, now(), 'Running for the test')`,
+      );
+    return { payload: {}, happened: paused };
+  },
+  'collect_transfers.resume': async () => {
+    const paused = async () =>
+      (await ops.collectSettingsInForce(database.db)).paused;
+    if (!(await paused()))
+      await q(
+        `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+           first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+           reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
+         VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
+           50000000, 25000000, true, now(), 'Paused for the test')`,
+      );
+    return { payload: {}, happened: async () => !(await paused()) };
+  },
   // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
   'pro.refund': async () => {
     const [{ id: userId }] = await q(

@@ -55,30 +55,33 @@ Every role except `release_check` holds `changelog.edit` (the owner's default, 6
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                         | Needs                                                                     |
-| --------------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
-| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                                       |
-| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                                         |
-| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it               |
-| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                             |
-| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                             |
-| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                                     |
-| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                            |
-| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                            |
-| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                             |
-| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                                        |
-| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it                      |
-| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers)              |
-| `business.owner_remove`     | Remove a business owner                | `businesses.manage` (not one of the business’s own managers)              |
-| `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (any tip, whatever the business switches)               |
-| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`             |
-| `pro_price.change`          | Change the Pro price                   | `pro.price`                                                               |
-| `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                               |
-| `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                                         |
-| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)               |
-| `announcement.send`         | Send an announcement by email          | `announcements.send`                                                      |
-| `tip.refund`                | Refund a tip (TipMe keeps its fee)     | `payments.repair` (behind the `tip_refunds` switch)                       |
-| `plan_fees.change`          | Change TipMe’s fee per plan            | `fees.manage` (Free and Pro rates, for new quotes only, `/ops/plan-fees`) |
+| Action                      | In plain words                         | Needs                                                                                                        |
+| --------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `email_recovery.start`      | Move an account to a new email address | `recoveries.manage`                                                                                          |
+| `payout.settle`             | Settle a stuck withdrawal              | `payouts.resolve`                                                                                            |
+| `money_issue.close`         | Close a money issue                    | `payouts.resolve`, and `issues.resolve` to decide or run it                                                  |
+| `fee.change`                | Change a page’s fee                    | `fees.manage`                                                                                                |
+| `fee.free`                  | Give a page fee-free tips              | `fees.manage`                                                                                                |
+| `staff.grant_owner`         | Make someone an owner                  | `staff.manage`; only an owner decides                                                                        |
+| `staff.grant_sensitive`     | Give someone sensitive access          | `staff.manage`                                                                                               |
+| `role.add_sensitive`        | Add sensitive access to a role         | `staff.manage`                                                                                               |
+| `staff.reset_authenticator` | Reset someone’s authenticator          | An owner, asking and deciding                                                                                |
+| `mail_provider.switch`      | Switch the active email provider       | `providers.manage`                                                                                           |
+| `username.take_back`        | Take a username back from a page       | `usernames.manage`; the page’s owner can’t decide it                                                         |
+| `business.verify`           | Verify a business                      | `businesses.manage` (not one of the business’s own managers)                                                 |
+| `business.owner_remove`     | Remove a business owner                | `businesses.manage` (not one of the business’s own managers)                                                 |
+| `tip.reverse`               | Reverse a refunded or charged-back tip | `payments.repair` (any tip, whatever the business switches)                                                  |
+| `changelog.publish`         | Show users a What’s new entry          | Asked with `changelog.edit`, decided with `changelog.publish`                                                |
+| `pro_price.change`          | Change the Pro price                   | `pro.price`                                                                                                  |
+| `business_pro_price.change` | Change the Business Pro price          | `pro.price`                                                                                                  |
+| `pro.refund`                | Refund a Pro card payment              | `payments.repair`                                                                                            |
+| `feature_switch.set`        | Turn a money switch on or off          | `switches.manage` (other switches need a reason and a code)                                                  |
+| `announcement.send`         | Send an announcement by email          | `announcements.send`                                                                                         |
+| `tip.refund`                | Refund a tip (TipMe keeps its fee)     | `payments.repair` (behind the `tip_refunds` switch)                                                          |
+| `plan_fees.change`          | Change TipMe’s fee per plan            | `fees.manage` (Free and Pro rates, for new quotes only, `/ops/plan-fees`)                                    |
+| `collect_settings.change`   | Change the You collect limits          | `fees.manage` (holding cap, reminders, delay, withdrawal limits, reserve levels; `/v1/ops/collect-settings`) |
+| `collect_transfers.pause`   | Pause every You collect transfer       | `payments.repair` (emergency stop, R11; held tips stay with TipMe)                                           |
+| `collect_transfers.resume`  | Resume You collect transfers           | `payments.repair`                                                                                            |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 

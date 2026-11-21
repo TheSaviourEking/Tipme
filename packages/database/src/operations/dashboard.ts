@@ -34,6 +34,8 @@ export function dashboardSummary(
       last_week: string;
       payable: string;
       reserved: string;
+      held: string;
+      verified: boolean | null;
       confirming: string;
       date: string;
       net: string;
@@ -81,17 +83,24 @@ export function dashboardSummary(
       ),
       balance AS (${balanceQuery(profileId)})
       SELECT totals.today, totals.yesterday, totals.this_week, totals.last_week,
-             balance.payable, balance.reserved, balance.confirming, days.date, days.net
+             balance.payable, balance.reserved, balance.held, balance.verified, balance.confirming,
+             days.date, days.net
         FROM totals CROSS JOIN balance CROSS JOIN days
        ORDER BY days.day
     `);
     const row = rows.rows[0];
     return {
       currency: 'NGN',
+      // You collect: what TipMe still holds for them is shown apart, never as available (Task 12).
       availableMinor: (
-        BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0')
+        BigInt(row?.payable ?? '0') -
+        BigInt(row?.reserved ?? '0') -
+        BigInt(row?.held ?? '0')
       ).toString(),
       confirmingMinor: BigInt(row?.confirming ?? '0').toString(),
+      // Kept for them until they are verified, then on its way (spec §10).
+      keptMinor: row?.verified ? '0' : BigInt(row?.held ?? '0').toString(),
+      onItsWayMinor: row?.verified ? BigInt(row?.held ?? '0').toString() : '0',
       today: row?.today ?? '0',
       yesterday: row?.yesterday ?? '0',
       thisWeek: row?.this_week ?? '0',

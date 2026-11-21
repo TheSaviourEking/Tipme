@@ -1,6 +1,6 @@
 import { and, eq, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { recordedProviderName } from '@tipme/contracts';
-import type { Database } from '../client.js';
+import type { Database, Tx } from '../client.js';
 import {
   paymentAttempts,
   paymentIntents,
@@ -42,6 +42,42 @@ export type AttemptStartClaim =
   | { outcome: 'not_found' };
 
 /**
+ * You collect (fix round 4): no checkout may open for a CREATED collect attempt once its quote has
+ * expired. The holding cap stops counting such an attempt at that moment (`unfinishedTip`, ruling
+ * P34), so another tip may already have taken its room; opening it late could overshoot the cap.
+ * Raises QUOTE_EXPIRED. Called under the attempt's row lock, then takes the page's profile row lock
+ * (attempt before profile, as the cap's intent never locks an existing attempt) and reads the clock
+ * after it: a cap check running at once either finishes first, and this then sees the later time,
+ * or waits and sees the attempt STARTING or INITIATED, which always counts. A direct tip's checkout
+ * is unchanged: its quote's expiry guards no cap, and a late retry there only prices what the
+ * supporter was shown.
+ */
+async function refuseExpiredCollectStart(
+  tx: Tx,
+  attemptId: string,
+  now: Date | undefined,
+): Promise<void> {
+  const [quote] = await tx
+    .select({
+      mode: tipQuotes.collectionMode,
+      profileId: tipQuotes.profileId,
+      expiresAt: tipQuotes.expiresAt,
+    })
+    .from(paymentAttempts)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, paymentAttempts.intentId))
+    .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
+    .where(eq(paymentAttempts.id, attemptId));
+  if (quote?.mode !== 'collect') return;
+  if (quote.profileId)
+    await tx.execute(
+      sql`SELECT 1 FROM profiles WHERE profiles.id = ${quote.profileId} FOR SHARE`,
+    );
+  const at = now ?? new Date();
+  if (quote.expiresAt.getTime() <= at.getTime())
+    throw new OperationError('QUOTE_EXPIRED');
+}
+
+/**
  * Claims an attempt before a provider create call. The row lock makes concurrent/replayed requests
  * converge on one winner; STARTING is never claimable a second time.
  */
@@ -54,7 +90,6 @@ export function claimAttemptStart(
     traceId?: string | null;
   },
 ): Promise<AttemptStartClaim> {
-  const now = input.now ?? new Date();
   const traceId = input.traceId ?? activeTraceId();
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -76,13 +111,14 @@ export function claimAttemptStart(
           reference: attempt.reference,
         };
       }
+      await refuseExpiredCollectStart(tx, input.attemptId, input.now);
 
       await tx
         .update(paymentAttempts)
         .set({
           status: 'STARTING',
           provider: input.provider,
-          startClaimedAt: now,
+          startClaimedAt: input.now ?? new Date(),
         })
         .where(eq(paymentAttempts.id, input.attemptId));
       await recordTransition(tx, {
@@ -113,6 +149,13 @@ export function markAttemptInitiated(
     attemptId: string;
     provider: string;
     providerReference: string;
+    /**
+     * A checkout is being opened (the pretend provider's start, which skips the claim): refused
+     * like the claim for a CREATED collect attempt whose quote has expired. Left out when recording
+     * a payment the provider says it already started (the expiry job), which is evidence.
+     */
+    opensCheckout?: boolean;
+    now?: Date;
     traceId?: string | null;
   },
 ): Promise<InitiationResult> {
@@ -136,6 +179,8 @@ export function markAttemptInitiated(
       }
       if (attempt.status === 'STARTING' && attempt.provider !== input.provider)
         return 'conflict' as const;
+      if (attempt.status === 'CREATED' && input.opensCheckout)
+        await refuseExpiredCollectStart(tx, input.attemptId, input.now);
       const fromStatus = attempt.status;
       await tx
         .update(paymentAttempts)

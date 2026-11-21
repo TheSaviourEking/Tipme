@@ -1242,9 +1242,19 @@ export const paymentIntents = pgTable(
     requestFingerprint: text('request_fingerprint').notNull(),
     status: tipStatus('status').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // You collect (Task 12 fix round 3, ruling P34): a keyed hash of the supporter's address (the
+    // rate-limit subject), never the address itself, so one address can hold only a few unfinished
+    // intents on a page under its holding cap. Kept on collect intents only, and only until the tip
+    // is final (`expireStaleTips` clears it); null for a direct intent or an unknown address.
+    addressKey: text('address_key'),
     createdAt: createdAt(),
   },
   (table) => [
+    // The few intents still holding an address key, for the expiry job's clearing sweep. The cap's
+    // per-address count needs none: it reads one page's unfinished tips, found from `tips`.
+    index('payment_intents_address_key_held')
+      .on(table.id)
+      .where(sql`address_key IS NOT NULL`),
     unique('payment_intents_idempotency').on(
       table.profileId,
       table.idempotencyKey,

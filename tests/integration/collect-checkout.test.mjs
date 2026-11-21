@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
-import { tipStatusView } from '../../packages/database/dist/index.js';
+import {
+  createPaymentIntent,
+  tipStatusView,
+} from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { UncertainProviderOutcomeError } from '../../packages/payments/dist/index.js';
 import {
@@ -227,6 +230,64 @@ test('a collect checkout start that times out stays unknown and is never retried
   assert.deepEqual(namesOf(providers.calls), [
     'bachs.initializeCollectCheckout',
   ]);
+});
+
+/**
+ * An intent made with `key` whose checkout never opened (the API stopped after making it), its
+ * quote then aged past expiry: a retry with the same key is all that is left.
+ */
+async function staleCreatedIntent(checkout, handle, key) {
+  const quote = await checkout.quote(QUOTE(handle));
+  await createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: key,
+  });
+  await database.pool.query(
+    `UPDATE tip_quotes SET expires_at = now() - interval '5 minutes' WHERE id = $1`,
+    [quote.quoteId],
+  );
+  return quote;
+}
+
+test('a collect checkout never opens once its quote has expired, on the partner or the pretend provider', async () => {
+  await setSwitch(database.pool, 'you_collect', true);
+  const providers = recordingProviders();
+  const checkout = services(database.db, providers);
+  for (const path of ['bachs', 'mock']) {
+    const key = randomUUID();
+    const quote = await staleCreatedIntent(checkout[path], 'tobi', key);
+    assert.equal(await quoteModeOf(quote.quoteId), 'collect');
+    await assert.rejects(
+      checkout[path].createIntent({ quoteId: quote.quoteId }, key),
+      { code: 'QUOTE_EXPIRED' },
+    );
+    const { rows } = await database.pool.query(
+      `SELECT a.status, a.provider, a.provider_reference
+         FROM payment_attempts a JOIN payment_intents i ON i.id = a.intent_id
+        WHERE i.quote_id = $1`,
+      [quote.quoteId],
+    );
+    assert.deepEqual(rows, [
+      { status: 'CREATED', provider: null, provider_reference: null },
+    ]);
+  }
+  // No checkout was asked for on either path.
+  assert.deepEqual(providers.calls, []);
+});
+
+test('a direct checkout still opens after its quote expires, as today', async () => {
+  await setSwitch(database.pool, 'you_collect', true);
+  const providers = recordingProviders();
+  const checkout = services(database.db, providers);
+  const key = randomUUID();
+  const quote = await staleCreatedIntent(checkout.bachs, 'ada', key);
+  assert.equal(await quoteModeOf(quote.quoteId), 'direct');
+  const created = await checkout.bachs.createIntent(
+    { quoteId: quote.quoteId },
+    key,
+  );
+  assert.ok(created.checkoutUrl);
+  assert.deepEqual(namesOf(providers.calls), ['bachs.initializePayment']);
 });
 
 test('the tip status says a collect tip is collected by TipMe, and says nothing for a direct one', async () => {
