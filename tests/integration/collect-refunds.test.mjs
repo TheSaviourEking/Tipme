@@ -14,6 +14,7 @@ import {
   seedBusiness,
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
+import * as contracts from '../../packages/contracts/dist/index.js';
 import { MAIL_SEAL_KEY, OPS_TOTP_KEY, setSwitch } from './helpers.mjs';
 
 /*
@@ -1710,4 +1711,323 @@ test('the send claim refuses a tip with a lost dispute, and a tip whose money al
     }),
     false,
   );
+});
+
+/*
+ * RI4 (fix round 4): every unit of a recipient's money is counted once. A dispute's hold on a tip
+ * and that tip's refund take-back can name the same money: the dispute's hold counts only what the
+ * tip's refunds don't already hold (their reservation, or the money their transfers back brought in,
+ * net of returns). Two moved tips of NET each: the disputed or refunded one, and the other's money.
+ */
+
+/** Payable less reserved less held, and the two parts, as `balanceQuery` reads them. */
+async function moneyOf(profile) {
+  const {
+    rows: [row],
+  } = await database.db.execute(ops.balanceQuery(profile.id));
+  const balance = await ops.balanceOf(database.db, profile.id);
+  return {
+    available: balance.availableMinor,
+    reserved: BigInt(row.reserved),
+    held: BigInt(row.held),
+  };
+}
+/** Every posting balances: debits equal credits, per currency. */
+const ledgerBalanced = async () =>
+  (
+    await q(
+      `SELECT t.currency, SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END)::text AS net
+         FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+        GROUP BY t.currency HAVING SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END) <> 0`,
+    )
+  ).length === 0;
+
+async function moneyCase(profile) {
+  await verified(profile);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(profile, transfers);
+  await movedTip(profile, transfers);
+  const refunds = refunder();
+  const later = (hours) => new Date(Date.now() + hours * HOUR);
+  const ctx = { tip, refund: null };
+  const steps = {
+    closed: () => disputeSays(tip, 'closed'),
+    open: () => disputeSays(tip, 'open'),
+    won: () => disputeSays(tip, 'won', 1),
+    lost: async () => {
+      await disputeSays(tip, 'lost', 1);
+      await ops.runDisputeSteps(database.db, { now: later(2) });
+      await run(transfers, later(3));
+      await ops.runDisputeSteps(database.db, { now: later(4) });
+    },
+    ask: async () => {
+      ctx.refund = await refundAsked(tip.tipId);
+    },
+    // The worker releases the transfer back, and the transfer machine pays it.
+    back: async () => {
+      await send(refunds.provider);
+      await run(transfers, new Date());
+    },
+    send: () => send(refunds.provider),
+    refundPaid: () => paid(ctx.refund.id),
+    refundFails: async () => {
+      refunds.state.refuse = 'CHARGE_ALREADY_REFUNDED';
+      await send(refunds.provider);
+      refunds.state.refuse = null;
+      assert.equal((await refundRow(tip.tipId)).status, 'FAILED');
+    },
+    return: async () => {
+      const requester = await person();
+      const approver = await person();
+      const asked = await ask(requester, tip.tipId, 'tip_refund.return');
+      assert.equal(asked.state, 'pending', JSON.stringify(asked));
+      assert.equal(
+        (await approve(asked.requestId, approver)).status,
+        'approved',
+      );
+      await run(transfers, new Date());
+    },
+    release: () => ops.runDisputeSteps(database.db, { now: later(15 * 24) }),
+  };
+  return { ctx, steps };
+}
+
+const N = NET;
+/** [step, available, reserved, held] after each step; the other tip's NET is always theirs. */
+const MONEY_CASES = [
+  {
+    name: 'no dispute: asked, taken back, sent, paid',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['send', N, 0n, N],
+      ['refundPaid', N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'no dispute: taken back, the refund fails, returned',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['refundFails', N, 0n, N],
+      ['return', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'closed dispute kept (P28), then the refund takes it back and is paid',
+    steps: [
+      ['closed', N, N, 0n],
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['send', N, 0n, N],
+      ['refundPaid', N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'closed dispute kept, taken back, the refund fails, returned, then the dispute’s release',
+    steps: [
+      ['closed', N, N, 0n],
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['refundFails', N, 0n, N],
+      // Back in their account, and still kept for a refund until the dispute's own release.
+      ['return', N, N, 0n],
+      ['release', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'closed dispute kept, taken back, the refund fails, the dispute released, then returned',
+    steps: [
+      ['closed', N, N, 0n],
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['refundFails', N, 0n, N],
+      ['release', N, 0n, N],
+      ['return', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'asked, then a dispute opens before anything is taken back, and is won',
+    steps: [
+      ['ask', N, N, 0n],
+      ['open', N, N, 0n],
+      ['send', N, N, 0n],
+      ['won', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'taken back, then a dispute opens and is won, then returned',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['open', N, 0n, N],
+      ['send', N, 0n, N],
+      ['won', N, 0n, N],
+      ['return', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'taken back, then a dispute opens and closes (kept), returned, then released',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['open', N, 0n, N],
+      ['send', N, 0n, N],
+      ['closed', N, 0n, N],
+      ['return', N, N, 0n],
+      ['release', 2n * N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'taken back, then a dispute opens and is lost: the refund’s money pays it',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['open', N, 0n, N],
+      ['send', N, 0n, N],
+      ['lost', N, 0n, 0n],
+    ],
+  },
+  {
+    name: 'taken back, the refund fails, then a dispute opens and is won, then returned',
+    steps: [
+      ['ask', N, N, 0n],
+      ['back', N, 0n, N],
+      ['refundFails', N, 0n, N],
+      ['open', N, 0n, N],
+      ['won', N, 0n, N],
+      ['return', 2n * N, 0n, 0n],
+    ],
+  },
+];
+
+for (const scenario of MONEY_CASES)
+  test(`RI4 money counted once: ${scenario.name}`, async () => {
+    const { steps } = await moneyCase(TOBI);
+    assert.deepEqual(await moneyOf(TOBI), {
+      available: 2n * N,
+      reserved: 0n,
+      held: 0n,
+    });
+    for (const [step, available, reserved, held] of scenario.steps) {
+      await steps[step]();
+      assert.deepEqual(
+        await moneyOf(TOBI),
+        { available, reserved, held },
+        `after ${step}`,
+      );
+      assert.ok(await ledgerBalanced(), `ledger balanced after ${step}`);
+    }
+  });
+
+test('RI4: a closed dispute’s kept hold and the refund’s paid take-back never count the same money twice', async () => {
+  // The reviewer's probe 8b: one moved tip, the dispute closed, the refund's transfer back paid.
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await disputeSays(tip, 'closed');
+  assert.equal(await available(TOBI), 0n);
+  const refund = await refundAsked(tip.tipId);
+  assert.equal(refund.held, '0');
+  assert.equal(await available(TOBI), 0n);
+  const { provider } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  assert.deepEqual(await moneyOf(TOBI), {
+    available: 0n,
+    reserved: 0n,
+    held: NET,
+  });
+  await send(provider);
+  assert.equal(await paid(refund.id), 'refunded');
+  assert.deepEqual(await moneyOf(TOBI), {
+    available: 0n,
+    reserved: 0n,
+    held: 0n,
+  });
+  assert.ok(await ledgerBalanced());
+});
+
+test('RM6: the refund’s reservation ends when its transfer back is paid, with other money present', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  assert.equal(refund.held, String(NET));
+  const before = await available(TOBI);
+  assert.equal(before, NET);
+  const { provider } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  assert.equal((await backsOf(refund.id))[0].status, 'paid');
+  assert.equal((await refundRow(tip.tipId)).held, '0');
+  assert.equal(await available(TOBI), before);
+});
+
+test('RM7: money held for a refund shows as held for a refund, never “On its way to you”', async () => {
+  // Verified: a moved tip's money taken back for its refund.
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  const now = new Date();
+  const seen = async (profile) => {
+    const balance = await ops.balanceOf(database.db, profile.id);
+    const dashboard = await ops.dashboardSummary(database.db, profile.id, now);
+    const status = await ops.collectStatus(database.db, profile.id, now);
+    return {
+      balance: [
+        balance.keptMinor,
+        balance.onItsWayMinor,
+        balance.refundHeldMinor,
+      ],
+      dashboard: [
+        dashboard.keptMinor,
+        dashboard.onItsWayMinor,
+        dashboard.refundHeldMinor,
+      ],
+      status: [status.keptMinor, status.onItsWayMinor, status.refundHeldMinor],
+    };
+  };
+  assert.deepEqual(await seen(TOBI), {
+    balance: [0n, 0n, NET],
+    dashboard: ['0', '0', String(NET)],
+    status: [0n, 0n, NET],
+  });
+  // The refund fails: still held for it, not on its way.
+  state.refuse = 'CHARGE_ALREADY_REFUNDED';
+  await send(provider);
+  assert.deepEqual((await seen(TOBI)).balance, [0n, 0n, NET]);
+  // Returned: theirs again, in their account.
+  const requester = await person();
+  const approver = await person();
+  const asked = await ask(requester, tip.tipId, 'tip_refund.return');
+  await approve(asked.requestId, approver);
+  await run(transfers, new Date());
+  assert.deepEqual(await seen(TOBI), {
+    balance: [0n, 0n, 0n],
+    dashboard: ['0', '0', '0'],
+    status: [0n, 0n, 0n],
+  });
+
+  // Not verified: a share still held, held for its refund, is not "Kept for you" either.
+  const held = await paidTip(ADA);
+  const another = await paidTip(ADA);
+  void another;
+  await refundAsked(held.tipId);
+  const ada = await ops.balanceOf(database.db, ADA.id);
+  assert.deepEqual(
+    [ada.keptMinor, ada.onItsWayMinor, ada.refundHeldMinor],
+    [NET, 0n, NET],
+  );
+  // The recipient's words for each part; none names the payment partner.
+  assert.deepEqual(contracts.COLLECT_HELD_WORDS, {
+    kept: 'Kept for you until you add your bank details',
+    onItsWay: 'On its way to you',
+    refundHeld: 'Held while a refund is settled',
+  });
 });
