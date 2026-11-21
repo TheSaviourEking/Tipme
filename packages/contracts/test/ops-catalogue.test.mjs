@@ -59,8 +59,13 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-five', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 25);
+test('the serious actions are the agreed twenty-six', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 26);
+  // You collect (plan Task 13): a verified name changes only through support, with a second person.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_name.change'],
+    'recoveries.manage',
+  );
   // You collect (plan Task 12, spec §9, R11): its settings and staff's pause are money changes.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['collect_settings.change'],

@@ -263,7 +263,13 @@ function partner(prefix = 'acct_person') {
       state.calls.push(['list', reference]);
       return state.listed
         .filter((transfer) => transfer.accountRef === reference)
-        .map(({ accountRef: _, ...transfer }) => transfer);
+        .map((transfer) => ({
+          transferRef: transfer.transferRef,
+          status: transfer.status,
+          amountMinor: transfer.amountMinor,
+          currency: transfer.currency,
+          group: transfer.group,
+        }));
     },
   };
   state.of = (kind) => state.calls.filter(([what]) => what === kind);
@@ -721,7 +727,7 @@ test('a transfer waits while the destination is pending review, and a shared ban
   assert.ok(!state.of('send').some(([, , key]) => key === second.key));
 
   // Ada adds the same bank account: her name matches, but the account is Tobi's too.
-  const adaTip = await paidTip(ADA, ago(DAY));
+  await paidTip(ADA, ago(DAY));
   const ada = partner('acct_ada');
   const adaController = controllerFor(ada.provider);
   assert.deepEqual(
@@ -752,7 +758,6 @@ test('a transfer waits while the destination is pending review, and a shared ban
     (await shares(ADA)).find((s) => s.id === adaLater.rowId).status,
     'waiting',
   );
-  void adaTip;
   // Tobi, the first to use it, is not held for it.
   assert.equal(
     (
