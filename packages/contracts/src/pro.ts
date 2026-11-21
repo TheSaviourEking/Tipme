@@ -181,6 +181,7 @@ export interface OpsTipRefund {
     | 'no_charge'
     | 'in_flight'
     | 'disputed'
+    | 'paid_unbooked'
     | null;
   /** Why not, or that it can be, in plain words. */
   words: string;
@@ -217,6 +218,8 @@ export interface OpsTipRefund {
    * TipMe holds for the tip's refund. Staff may return it (`POST …/refund/return`).
    */
   heldMinor?: string;
+  /** A collect tip (fix round 3, RI3): what the partner refunded that TipMe didn't book. */
+  unbookedMinor?: string;
 }
 
 /** `POST /v1/ops/tips/:tipId/refund`: why, in staff's words (a second person approves). */

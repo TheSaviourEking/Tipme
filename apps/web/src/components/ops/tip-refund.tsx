@@ -116,6 +116,16 @@ export function TipRefund({ tipId }: { tipId: string }) {
           {facts.lastFailure}
         </Slip>
       )}
+      {facts.unbookedMinor && facts.unbookedMinor !== '0' && (
+        <Slip dense tone="error" title="A refund TipMe didn’t record">
+          Our payment partner refunded{' '}
+          <strong>
+            <Money code minor={facts.unbookedMinor} />
+          </strong>{' '}
+          of this tip, but TipMe didn’t expect it and hasn’t recorded it. Settle
+          the money issue first.
+        </Slip>
+      )}
       {facts.heldMinor && facts.heldMinor !== '0' && (
         <Slip dense tone="unsure" title="Money held for this tip">
           <strong>

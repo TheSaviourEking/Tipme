@@ -24,6 +24,7 @@ import {
   disputes,
   shareTransfers,
   ledgerTransactions,
+  tipRefunds,
   notifications,
   paymentAttempts,
   profiles,
@@ -48,7 +49,10 @@ import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { scheduleCollectRecover } from './share-transfers.js';
-import { yieldRefundsToLostDispute } from './tip-refunds.js';
+import {
+  tellRefundAndDispute,
+  yieldRefundsToLostDispute,
+} from './tip-refunds.js';
 
 /*
  * You collect (plan Task 9, spec §6.2, R4, R6, P13, P14, P20, P27). A dispute on a tip TipMe
@@ -859,6 +863,18 @@ async function settleLost(
     )[0]?.profileId;
   // The refunds' holds end with this posting, and an unsent refund is stopped (RC1).
   await refunds.release();
+  // RC2: a refund of the tip was paid as well (its answer had been lost): both went out.
+  const [refunded] = await tx
+    .select({ refundedMinor: tipRefunds.refundedMinor })
+    .from(tipRefunds)
+    .where(and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'PAID')));
+  if (refunded)
+    await tellRefundAndDispute(tx, {
+      tipId: row.tipId,
+      refundMinor: refunded.refundedMinor ?? 0n,
+      disputeMinor: row.amountMinor,
+      now,
+    });
   const parts: RecoveredPart[] = [];
   if (personMinor > 0n && profileId)
     parts.push({ amountMinor: personMinor, profileId });

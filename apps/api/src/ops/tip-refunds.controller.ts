@@ -141,6 +141,7 @@ export class OpsTipRefundsController {
               },
               lastFailure: facts.lastFailure,
               heldMinor: String(facts.heldMinor),
+              unbookedMinor: String(facts.unbookedMinor),
             }
           : {}),
       },
