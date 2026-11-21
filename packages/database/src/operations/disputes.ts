@@ -123,6 +123,25 @@ function naira(minor: bigint): string {
   return `₦${whole}${kobo === 0n ? '' : `.${String(kobo).padStart(2, '0')}`}`;
 }
 
+/**
+ * What is held from a recipient's balance for disputes on their tips still open (spec §6.2, §10;
+ * Task 14's "A payment to you is being questioned"): the sum of `held_minor` over their disputes not
+ * yet settled. A settled dispute's hold is released, so it counts for nothing. Never negative.
+ */
+export async function collectDisputeHeldMinor(
+  db: Database | Tx,
+  profileId: string,
+): Promise<bigint> {
+  const [row] = await db
+    .select({
+      held: sql<string>`COALESCE(SUM(${disputes.heldMinor}), 0)::text`,
+    })
+    .from(disputes)
+    .innerJoin(tips, eq(tips.id, disputes.tipId))
+    .where(and(eq(tips.profileId, profileId), isNull(disputes.settledAt)));
+  return BigInt(row?.held ?? '0');
+}
+
 /** The spec's words (§10), with the amount held. */
 export const disputeHoldCopy = (heldMinor: bigint) =>
   `A payment to you is being questioned. We've held ${naira(heldMinor)} until it's settled.`;

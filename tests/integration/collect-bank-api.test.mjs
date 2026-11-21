@@ -1358,3 +1358,45 @@ test('a current bank under the held name is not verified while an older row with
   assert.equal(state, 'checking');
   assert.equal((await profileRow(TOBI)).collect_verified_at, null);
 });
+
+test('the status says what is held for disputes still open on their tips, and nothing once settled (Task 14)', async () => {
+  const first = await paidTip(TOBI, ago(DAY));
+  const second = await paidTip(TOBI, ago(DAY));
+  const theirs = await paidTip(ADA, ago(DAY));
+  const controller = controllerFor(partner().provider);
+  const held = async (profile) =>
+    (await controller.status({ userId: profile.userId })).data.disputeHeldMinor;
+  assert.equal(await held(TOBI), '0');
+
+  const dispute = (tipId, status, heldMinor, settled) =>
+    q(
+      `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+         status, held_minor, settled_at, decided_at, last_event_at)
+       VALUES ($1, 'bachs', $2, $3, $4, 'NGN', $5, $6, $7, $7, now())`,
+      [
+        randomUUID(),
+        `dp_${randomUUID().slice(0, 8)}`,
+        tipId,
+        GROSS,
+        status,
+        heldMinor,
+        settled ? NOW : null,
+      ],
+    );
+  await dispute(first.tipId, 'open', 300_000n, false);
+  await dispute(second.tipId, 'responded', 250_000n, false);
+  // Settled: its hold is released (held_minor 0 and settled), so it counts for nothing.
+  await dispute(second.tipId, 'won', 0n, true);
+  // Another recipient's dispute is never theirs.
+  await dispute(theirs.tipId, 'open', 400_000n, false);
+
+  assert.equal(await held(TOBI), '550000');
+  assert.equal(await held(ADA), '400000');
+
+  await q(
+    `UPDATE disputes SET status = 'won', held_minor = 0, settled_at = now(), decided_at = now()
+      WHERE tip_id = ANY($1)`,
+    [[first.tipId, second.tipId]],
+  );
+  assert.equal(await held(TOBI), '0');
+});

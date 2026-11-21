@@ -173,6 +173,12 @@ export interface CollectBankView {
 /** `GET /v1/me/collect`: their You collect state, and their bank once added. */
 export interface CollectStatusView extends CollectStatus {
   bank: CollectBankView | null;
+  /**
+   * What is held from their balance for disputes on their tips still open (spec §6.2), in minor
+   * units, never negative: "A payment to you is being questioned. We've held {amount} until it's
+   * settled." "0" when nothing is held.
+   */
+  disputeHeldMinor: string;
 }
 
 /**
