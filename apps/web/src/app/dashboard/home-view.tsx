@@ -8,7 +8,7 @@ import type {
   WeeklyReportData,
 } from '@tipme/contracts';
 import { COLLECT_COPY } from '@tipme/contracts';
-import { Button, Skeleton, StandingWarning } from '@tipme/ui';
+import { Button, Skeleton, Slip, StandingWarning } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
 import { WhatsNewSlip } from '@/components/dashboard/whats-new-slip';
@@ -22,6 +22,7 @@ import { usePanel } from '@/components/dashboard/use-panel';
 import {
   CollectHeldNotes,
   useCollectStatus,
+  withAmount,
 } from '@/components/dashboard/collect-status';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
@@ -93,7 +94,7 @@ export default function DashboardHome() {
   const balanceRose = useBalanceRose(summary);
   const latestWeek = week.data?.[0] ?? null;
   // You collect (plan Task 14, spec §2.1): null for everyone not on it, so nothing below changes.
-  const { collect } = useCollectStatus();
+  const { collect, known: collectKnown } = useCollectStatus();
   const [shared, setShared] = useState('');
   const firstName = profile.displayName.split(/\s+/)[0];
 
@@ -165,12 +166,15 @@ export default function DashboardHome() {
       title={COLLECT_COPY.pausedRecipient}
       className="collect-paused"
       actions={
-        <Link
-          className="tm-button tm-button--continue"
-          href="/dashboard/withdraw"
-        >
-          {COLLECT_COPY.withdrawNoBank}
-        </Link>
+        // Bank details already being checked: Withdraw says so; there is nothing to add.
+        !collect.bank && (
+          <Link
+            className="tm-button tm-button--continue"
+            href="/dashboard/withdraw"
+          >
+            {COLLECT_COPY.withdrawNoBank}
+          </Link>
+        )
       }
     />
   ) : collect && !collect.verified && !collect.bank ? (
@@ -179,6 +183,14 @@ export default function DashboardHome() {
       <Link href="/dashboard/withdraw">{COLLECT_COPY.withdrawNoBank}</Link>
     </p>
   ) : null;
+  // A dispute on one of their tips holds part of their balance (spec §6.2, §10), while it does.
+  const disputeNotice = collect && collect.disputeHeldMinor !== '0' && (
+    <Slip
+      tone="neutral"
+      title={withAmount(COLLECT_COPY.disputeHold, collect.disputeHeldMinor)}
+      className="collect-dispute"
+    />
+  );
 
   const shareStatus = (
     <p role="status" className="tm-hint dashboard-share-status">
@@ -195,6 +207,7 @@ export default function DashboardHome() {
         <UsernameTakeBackBanner />
         <WhatsNewSlip />
         {collectNotice}
+        {disputeNotice}
         {firstDay ? (
           <section className="first-day recipient-setup" aria-labelledby="next">
             <div>
@@ -243,6 +256,7 @@ export default function DashboardHome() {
               {/* Nothing until known, so the step never flips from one story to another. A
                   recipient on You collect has nothing to set up: TipMe takes their tips. */}
               {collect ||
+              !collectKnown ||
               paymentsNeedSetup === null ? null : paymentsNeedSetup ? (
                 <li>
                   <div>

@@ -54,17 +54,26 @@ function Checking() {
  * their bank has it, the bank and the number; TipMe shows the bank's name for the account ("Is this
  * you?"), they confirm, a code from their email proves it is them (a stolen session can't add a
  * bank), and our payment partner compares the names. A mismatch is said at the account number and
- * nothing is kept. `bank` is what `GET /v1/me/collect` holds; `onAdded` tells the page to read it again.
+ * nothing is kept. `bank` is what `GET /v1/me/collect` holds; `onAdded` tells the page to read it again,
+ * and `onCheckAgain` reads it again for "Check again". Settings reuses it to change a verified bank
+ * (`title`), under the same locked name.
  */
 export function CollectBankForm({
   bank,
+  read,
   banks,
   onAdded,
+  onCheckAgain,
+  title = COLLECT_COPY.withdrawNoBank,
 }: {
   bank: CollectBankView | null;
+  /** The status read `bank` came from: a new object for each read, even when `bank` is unchanged. */
+  read: object;
   /** The partner's list (`GET /v1/payout-banks`), or null while it loads or when it failed. */
   banks: PayoutBank[] | null;
   onAdded: (state: CollectBankState | null) => void;
+  onCheckAgain: () => Promise<void>;
+  title?: string;
 }) {
   const id = useId();
   const [step, setStep] = useState<Step>({ kind: 'details' });
@@ -83,8 +92,16 @@ export function CollectBankForm({
   // A refusal the person can recover from, on a slip under the form.
   const [error, setError] = useState('');
   const [resent, setResent] = useState(false);
-  // What the last add answered, until the page's own read catches up.
-  const [added, setAdded] = useState<CollectBankState | null>(null);
+  // What the last add answered, with the read it was answered over: kept only until the page's next
+  // read arrives, which always wins. usePanel drops a read started before the add's own, so a newer
+  // read is never older than the add.
+  const [added, setAdded] = useState<{
+    state: CollectBankState;
+    over: object;
+  } | null>(null);
+  // One request per tap: a second tap while one is on its way does nothing.
+  const inFlight = useRef(false);
+  const [checkingAgain, setCheckingAgain] = useState(false);
   const codeField = useRef<HTMLInputElement>(null);
   const confirmKey = useRef<HTMLButtonElement>(null);
   const section = useRef<HTMLElement>(null);
@@ -104,7 +121,18 @@ export function CollectBankForm({
       ?.focus();
   }, [refused]);
 
-  const state = added ?? bank?.state ?? null;
+  if (added && read !== added.over) {
+    setAdded(null);
+    // Answered as being checked, and now no bank at all: our payment partner refused it, and a
+    // refused bank is never kept. Said at the account number, as a mismatch at the add is.
+    if (bank === null && added.state !== 'verified') {
+      setStep({ kind: 'details' });
+      setFieldErrors({ number: COLLECT_COPY.nameMismatch });
+      setRefused((n) => n + 1);
+    }
+  }
+  const state =
+    (added && read === added.over ? added.state : null) ?? bank?.state ?? null;
   if (state === 'manual_review')
     return (
       <Slip tone="neutral" title={COLLECT_COPY.manualCheck}>
@@ -115,7 +143,16 @@ export function CollectBankForm({
     return (
       <div className="collect-bank__waiting">
         <Checking />
-        <Button variant="secondary" onClick={() => onAdded(null)}>
+        <Button
+          variant="secondary"
+          disabled={checkingAgain}
+          aria-busy={checkingAgain}
+          onClick={async () => {
+            setCheckingAgain(true);
+            await onCheckAgain();
+            setCheckingAgain(false);
+          }}
+        >
           Check again
         </Button>
       </div>
@@ -136,7 +173,20 @@ export function CollectBankForm({
     setResent(false);
   };
 
-  const lookUp = async (event: FormEvent) => {
+  /** Runs one request at a time: a double tap sends one. */
+  const once =
+    <A extends unknown[]>(run: (...args: A) => Promise<void>) =>
+    async (...args: A) => {
+      if (inFlight.current) return;
+      inFlight.current = true;
+      try {
+        await run(...args);
+      } finally {
+        inFlight.current = false;
+      }
+    };
+
+  const lookUp = once(async (event: FormEvent) => {
     event.preventDefault();
     const errors: typeof fieldErrors = {};
     if (!validPart(first))
@@ -179,9 +229,9 @@ export function CollectBankForm({
     } else if (result.code === 'RATE_LIMITED')
       setError('You’ve used today’s account checks. Try again tomorrow.');
     else setError(words(result));
-  };
+  });
 
-  const sendCode = async (bankName: string) => {
+  const sendCode = once(async (bankName: string) => {
     setStep({ kind: 'sending', bankName });
     setError('');
     const result = await apiFetch('/v1/me/payout-destination/code', {
@@ -196,9 +246,9 @@ export function CollectBankForm({
     setCode('');
     setFieldErrors({});
     setStep({ kind: 'code', bankName });
-  };
+  });
 
-  const add = async (event: FormEvent, bankName: string) => {
+  const add = once(async (event: FormEvent, bankName: string) => {
     event.preventDefault();
     if (!/^\d{6}$/.test(code)) {
       setFieldErrors({ code: 'Enter the 6-digit code from your email.' });
@@ -222,7 +272,7 @@ export function CollectBankForm({
       },
     );
     if (result.ok) {
-      setAdded(result.data.state);
+      setAdded({ state: result.data.state, over: read });
       onAdded(result.data.state);
       return;
     }
@@ -250,7 +300,7 @@ export function CollectBankForm({
         ? words(result)
         : `${words(result)} You’ll need a new code to try again.`,
     );
-  };
+  });
 
   const errorSlip = error && (
     <Slip tone="error" title="Not added">
@@ -261,7 +311,7 @@ export function CollectBankForm({
   if (step.kind === 'adding')
     return (
       <section className="collect-bank" aria-labelledby={`${id}-title`}>
-        <h2 id={`${id}-title`}>{COLLECT_COPY.withdrawNoBank}</h2>
+        <h2 id={`${id}-title`}>{title}</h2>
         <Checking />
       </section>
     );
@@ -272,7 +322,7 @@ export function CollectBankForm({
       className="collect-bank"
       aria-labelledby={`${id}-title`}
     >
-      <h2 id={`${id}-title`}>{COLLECT_COPY.withdrawNoBank}</h2>
+      <h2 id={`${id}-title`}>{title}</h2>
       <p className="tm-hint">{COLLECT_COPY.withdrawOwnName}</p>
       <Surface material="paper" className="collect-bank__panel">
         {(step.kind === 'details' || step.kind === 'looking') && (

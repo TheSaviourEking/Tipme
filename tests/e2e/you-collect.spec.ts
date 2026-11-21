@@ -108,8 +108,11 @@ const hintOf = (email: string) => {
   return `${local.slice(0, 1)}•••@${domain}`;
 };
 
-/** The newest bank-account code email to this address, once it has arrived. */
-async function bankCode(page: Page, email: string) {
+/**
+ * The newest bank-account code email to this address, once it has arrived. `notBefore`: codes
+ * already used, so a second add waits for its own email.
+ */
+async function bankCode(page: Page, email: string, notBefore: string[] = []) {
   const inbox = await page.context().newPage();
   try {
     let found = '';
@@ -123,7 +126,8 @@ async function bankCode(page: Page, email: string) {
         .allTextContents();
       found = /\b(\d{6})\b/.exec(mails[0] ?? '')?.[1] ?? '';
       expect(found).not.toBe('');
-    }).toPass({ timeout: 15_000 });
+      expect(notBefore).not.toContain(found);
+    }).toPass({ timeout: 20_000 });
     return found;
   } finally {
     await inbox.close();
@@ -457,6 +461,9 @@ for (const [label, viewport] of VIEWPORTS) {
         await chooseByKeys(page, search);
         await expect(trigger).toHaveAccessibleName(`Bank ${BANK}`);
         await expect(trigger).toBeFocused();
+        // The sheet's close event (a task after it closes) puts focus on the Bank key again: let it
+        // run before the next Tab, or that Tab's focus is taken back.
+        await page.evaluate(() => new Promise((done) => setTimeout(done, 50)));
       } else {
         const bank = form.getByRole('combobox', { name: 'Bank' });
         await expect(bank).toBeFocused();
@@ -516,4 +523,378 @@ test('nothing changes for a recipient who is not on You collect', async ({
   await expect(main.getByTestId('withdraw-available')).toBeVisible();
   await expect(bankForm(page)).toHaveCount(0);
   await expect(main.getByText(/New accounts can withdraw/)).toHaveCount(0);
+  // Today's bank chip, with its Change into Get paid.
+  await expect(main.getByRole('link', { name: 'Change' })).toHaveAttribute(
+    'href',
+    '/dashboard/settings#get-paid',
+  );
+  // Get paid is today's card: its own form, never the You collect one.
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  await expect(card.getByRole('heading', { name: 'Get paid' })).toBeVisible();
+  await expect(bankForm(page)).toHaveCount(0);
+});
+
+/** Answers `GET /v1/me/collect` with the real status, changed by `patch` (read at each request). */
+async function stubCollect(page: Page, patch: () => Record<string, unknown>) {
+  await page.route('**/v1/me/events**', (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  await page.route('**/v1/me/collect', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, ...patch() } },
+    });
+  });
+}
+
+const LIVE_PARTNER = {
+  enabled: true,
+  environment: 'live',
+  payoutsEnabled: false,
+  feeCollector: null,
+  requirementsDue: [],
+  lastSyncedAt: null,
+};
+
+test('a collect recipient is never told to set up payments, even with a live payment partner', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  // A direct recipient on a live partner with no account: today's notice, so the stub is real.
+  let account: Record<string, unknown> = {
+    ...LIVE_PARTNER,
+    status: null,
+    chargesEnabled: false,
+  };
+  await page.route('**/v1/me/payment-account', (route) =>
+    route.fulfill({ json: { data: account } }),
+  );
+  await page.goto('/dashboard');
+  const attention = page.getByRole('region', { name: 'Needs your attention' });
+  await expect(
+    attention.getByText('Set up payments to start receiving tips'),
+  ).toBeVisible();
+
+  await putOnCollect(handle);
+  for (const next of [
+    { status: null, chargesEnabled: false },
+    // After a bank: the receive-only account takes no charges of its own.
+    { status: 'ACTIVE', chargesEnabled: false },
+  ]) {
+    account = { ...LIVE_PARTNER, ...next };
+    for (const path of ['/dashboard', '/dashboard/withdraw']) {
+      await page.goto(path);
+      await expect(
+        page.getByRole('main').getByRole('heading').first(),
+      ).toBeVisible();
+      await expect(page.getByText(/^Set up payments/)).toHaveCount(0);
+      await expect(page.getByText('Finish setting up payments')).toHaveCount(0);
+      await expect(page.getByText(/Supporters can’t tip you/)).toHaveCount(0);
+    }
+  }
+  // The first-day steps say nothing about payments either.
+  await page.goto('/dashboard');
+  await expect(page.getByRole('main').getByText(COPY.noBank)).toBeVisible();
+  await expect(page.getByText('Set up payments and payouts')).toHaveCount(0);
+});
+
+test('Get paid in Settings is the You collect form: add a bank, then a verified recipient changes it', async ({
+  page,
+}, testInfo) => {
+  const { email } = await collectRecipient(page, testInfo);
+  // Sign-up ends on Settings, read before the page went on collect: a fresh load.
+  await page.goto('/dashboard');
+  await page.goto('/dashboard/settings#get-paid');
+  const card = page.locator('#get-paid');
+  const form = card.getByRole('region', { name: COPY.addBank });
+  await expect(form.getByLabel('First name')).toBeVisible();
+  // Never today's form, whose save the API refuses for a collect recipient.
+  await expect(
+    card.getByRole('button', { name: 'Email me a code' }),
+  ).toHaveCount(0);
+  // Nor the payment account card: nothing to set up.
+  await expect(page.locator('#payments')).toHaveCount(0);
+
+  await enterDetails(page, form);
+  await confirmAndEnterCode(page, form, email);
+  const first = await form.getByLabel('6-digit code').inputValue();
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  await expect(card.getByText('Pretend Guaranty Bank ••6789')).toBeVisible();
+
+  // Withdraw's Change leads here.
+  await page.goto('/dashboard/withdraw');
+  await expect(
+    page.getByRole('main').getByRole('link', { name: 'Change' }),
+  ).toHaveAttribute('href', '/dashboard/settings#get-paid');
+  await page.getByRole('main').getByRole('link', { name: 'Change' }).click();
+  await page.waitForURL(/\/dashboard\/settings#get-paid$/);
+
+  // A verified recipient changes bank under the same (locked) name.
+  await card.getByRole('button', { name: 'Change bank account' }).click();
+  const change = card.getByRole('region', { name: 'Change bank account' });
+  await enterDetails(page, change, '0123456788');
+  await expect(
+    change.getByText('Is this you? PRETEND ACCOUNT HOLDER'),
+  ).toBeVisible();
+  await change.getByRole('button', { name: 'Confirm' }).click();
+  await change
+    .getByLabel('6-digit code')
+    .fill(await bankCode(page, email, [first]));
+  await change.getByRole('button', { name: 'Add bank details' }).click();
+  await expect(card.getByText('Pretend Guaranty Bank ••6788')).toBeVisible();
+  await expect(change).toHaveCount(0);
+  await page.reload();
+  await expect(card.getByText('Pretend Guaranty Bank ••6788')).toBeVisible();
+});
+
+test('a collect status that fails to load is a load error with Try again, never the direct Withdraw screen', async ({
+  page,
+}, testInfo) => {
+  await collectRecipient(page, testInfo);
+  const failures: [
+    string,
+    (route: import('@playwright/test').Route) => Promise<void>,
+  ][] = [
+    [
+      '429',
+      (route) =>
+        route.fulfill({
+          status: 429,
+          json: { error: { code: 'RATE_LIMITED' } },
+        }),
+    ],
+    [
+      '5xx',
+      (route) =>
+        route.fulfill({
+          status: 503,
+          json: { error: { code: 'DEPENDENCY_UNAVAILABLE' } },
+        }),
+    ],
+    ['timeout', (route) => route.abort('timedout')],
+    ['network', (route) => route.abort('internetdisconnected')],
+  ];
+  const main = page.getByRole('main');
+  for (const [kind, fail] of failures) {
+    await page.route('**/v1/me/collect', fail);
+    await page.goto('/dashboard/withdraw');
+    await expect(
+      main.getByText('We couldn’t load your balance'),
+      kind,
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(main.getByTestId('withdraw-available'), kind).toHaveCount(0);
+    await expect(main.getByLabel('Amount (NGN)'), kind).toHaveCount(0);
+    await page.unroute('**/v1/me/collect');
+    await main.getByRole('button', { name: 'Try again' }).click();
+    await expect(bankForm(page).getByLabel('First name'), kind).toBeVisible();
+  }
+});
+
+test('fresh server state wins over the last answer: manual review that is then refused', async ({
+  page,
+}, testInfo) => {
+  const { email, profileId } = await collectRecipient(page, testInfo);
+  await page.goto('/dashboard/withdraw');
+  const form = bankForm(page);
+  await enterDetails(page, form);
+  await confirmAndEnterCode(page, form, email);
+  await partnerAnswers(profileId, 'destination-pending-review');
+  // The add answers manual review, and the page's next read (right after it) already has no bank:
+  // our payment partner's team refused it, and a refused bank is never kept.
+  await stubCollect(page, () => ({ bank: null }));
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  const main = page.getByRole('main');
+  // The read wins: the form again, saying so at the account number.
+  const number = bankForm(page).getByLabel('Account number');
+  await expect(number).toHaveAttribute('aria-invalid', 'true');
+  await expect(number).toHaveAccessibleDescription(
+    new RegExp(COPY.mismatch.replace(/[.?]/g, '\\$&')),
+  );
+  await expect(main.getByText(COPY.manual)).toHaveCount(0);
+});
+
+test('fresh server state wins over the last answer: checking, then Check again shows manual review', async ({
+  page,
+}, testInfo) => {
+  const { email } = await collectRecipient(page, testInfo);
+  await page.goto('/dashboard/withdraw');
+  const form = bankForm(page);
+  await enterDetails(page, form);
+  await confirmAndEnterCode(page, form, email);
+  // The page may read again by itself at any time (its fallback when live updates are off), and
+  // each such read still says checking. Only the read Check again makes (asked while that key is
+  // busy) has the newer state, so the test proves it is Check again that reads.
+  await page.route('**/v1/me/events**', (route) =>
+    route.fulfill({ status: 204 }),
+  );
+  const checkAgain = page
+    .getByRole('main')
+    .getByRole('button', { name: 'Check again' });
+  await page.route('**/v1/me/collect', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const asked =
+      (await checkAgain.getAttribute('aria-busy').catch(() => null)) === 'true';
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: {
+          ...body.data,
+          bank: {
+            state: asked ? 'manual_review' : 'checking',
+            last4: '6789',
+            bankName: 'Pretend Guaranty Bank',
+          },
+        },
+      },
+    });
+  });
+  await page.route('**/v1/me/collect/bank', (route) =>
+    route.fulfill({ json: { data: { state: 'checking' } } }),
+  );
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  const main = page.getByRole('main');
+  await expect(main.getByText(COPY.checking)).toBeVisible();
+  await checkAgain.click();
+  await expect(main.getByText(COPY.manual)).toBeVisible();
+  await expect(main.getByText(COPY.checking)).toHaveCount(0);
+});
+
+test('the add form: the server’s words for an account it can’t check again, a wrong code, a dropped connection, and one request per tap', async ({
+  page,
+}, testInfo) => {
+  const { email } = await collectRecipient(page, testInfo);
+  const posts: string[] = [];
+  page.on('request', (request) => {
+    if (
+      request.method() === 'POST' &&
+      /\/v1\/me\/(collect|payout-destination)/.test(request.url())
+    )
+      posts.push(new URL(request.url()).pathname);
+  });
+  const count = (path: string) => posts.filter((p) => p === path).length;
+  await page.goto('/dashboard/withdraw');
+  const form = bankForm(page);
+  await form.getByLabel('First name').fill('Ada');
+  await form.getByLabel('Last name').fill('Okafor');
+  await pickBank(page, form);
+  await form.getByLabel('Account number').fill('0123456789');
+
+  // A double tap on each key sends one request.
+  await form.getByRole('button', { name: 'Continue' }).dblclick();
+  await expect(
+    form.getByText('Is this you? PRETEND ACCOUNT HOLDER'),
+  ).toBeVisible();
+  expect(count('/v1/me/collect/bank/lookup')).toBe(1);
+  await form.getByRole('button', { name: 'Confirm' }).dblclick();
+  const code = form.getByLabel('6-digit code');
+  await expect(code).toBeVisible();
+  expect(count('/v1/me/payout-destination/code')).toBe(1);
+
+  // A wrong code: the code step stays, the field says so and has focus.
+  await code.fill('000000');
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  await expect(code).toHaveAttribute('aria-invalid', 'true');
+  await expect(code).toHaveAccessibleDescription(/That code isn’t right/);
+  await expect(code).toBeFocused();
+
+  // The server's own words when it can't check this account again.
+  const recheck =
+    "We can't check this account again right now. Use another account, or contact support@usetipme.xyz.";
+  await page.route('**/v1/me/collect/bank', (route) =>
+    route.fulfill({
+      status: 409,
+      json: { error: { code: 'BANK_RECHECK_LATER', message: recheck } },
+    }),
+  );
+  const used = [await bankCode(page, email)];
+  await code.fill(used[0]!);
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  const slip = form.getByRole('alert').filter({ hasText: 'Not added' });
+  await expect(slip).toHaveText(new RegExp(recheck.replace(/[.?]/g, '\\$&')));
+  await page.unroute('**/v1/me/collect/bank');
+
+  // A dropped connection on the add: the form stays usable and the page reads where it stands.
+  let reads = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'GET' &&
+      new URL(request.url()).pathname === '/v1/me/collect'
+    )
+      reads += 1;
+  });
+  await form.getByRole('button', { name: 'Continue' }).click();
+  await form.getByRole('button', { name: 'Confirm' }).click();
+  await expect(code).toBeVisible();
+  used.push(await bankCode(page, email, used));
+  await code.fill(used[1]!);
+  await page.route('**/v1/me/collect/bank', (route) =>
+    route.abort('internetdisconnected'),
+  );
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  await expect(
+    form.getByRole('alert').filter({ hasText: 'Not added' }),
+  ).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await expect.poll(() => reads).toBeGreaterThan(0);
+  await page.unroute('**/v1/me/collect/bank');
+
+  // And the real add, double tapped: one request, all set.
+  await form.getByRole('button', { name: 'Continue' }).click();
+  await form.getByRole('button', { name: 'Confirm' }).click();
+  await expect(code).toBeVisible();
+  await code.fill(await bankCode(page, email, used));
+  const before = count('/v1/me/collect/bank');
+  await form.getByRole('button', { name: 'Add bank details' }).dblclick();
+  await expect(page.getByRole('main').getByText(COPY.verified)).toBeVisible();
+  expect(count('/v1/me/collect/bank') - before).toBe(1);
+});
+
+test('a payment being questioned: Home says how much is held while it is, and nothing once settled', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { handle, profileId } = await collectRecipient(page, testInfo);
+  await tipAsVisitor(browser, handle);
+  const db = await database();
+  let disputeId = '';
+  try {
+    const { rows } = await db.pool.query<{ id: string; amount: string }>(
+      `SELECT id, gross_minor::text AS amount FROM tips WHERE profile_id = $1`,
+      [profileId],
+    );
+    expect(rows).toHaveLength(1);
+    disputeId = crypto.randomUUID();
+    await db.pool.query(
+      `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+         status, held_minor, last_event_at)
+       VALUES ($1, 'mock', $2, $3, $4, 'NGN', 'open', 150000, now())`,
+      [disputeId, `dp_${disputeId.slice(0, 8)}`, rows[0]!.id, rows[0]!.amount],
+    );
+  } finally {
+    await db.close();
+  }
+  const held =
+    "A payment to you is being questioned. We've held ₦1,500 until it's settled.";
+  await page.goto('/dashboard');
+  await expect(page.getByRole('main').getByText(held)).toBeVisible();
+
+  const again = await database();
+  try {
+    await again.pool.query(
+      `UPDATE disputes SET status = 'won', held_minor = 0, settled_at = now(), decided_at = now()
+        WHERE id = $1`,
+      [disputeId],
+    );
+  } finally {
+    await again.close();
+  }
+  await page.reload();
+  await expect(page.getByRole('main').getByTestId('kept')).toBeVisible();
+  await expect(page.getByText(/is being questioned/)).toHaveCount(0);
 });

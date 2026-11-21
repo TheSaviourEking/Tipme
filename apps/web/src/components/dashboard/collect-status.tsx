@@ -8,13 +8,17 @@ import { Money } from '@/components/money';
 
 /**
  * You collect (plan Task 14, spec §2.1): the signed-in recipient's collect state, from
- * `GET /v1/me/collect`. Anyone not on You collect is answered 404 there, and any failure reads the
- * same: `collect` stays null, so a page shows exactly what it showed before. `known` is false only
- * until the first answer, so a page can wait rather than flash today's screen at a collect recipient.
+ * `GET /v1/me/collect`. Only a 404 means "not on You collect" (`direct`): a page then shows exactly
+ * what it showed before. Any other failure before a first answer (a 429, 5xx, time limit or no
+ * connection) is `failed`, never read as direct, so a collect recipient is never shown today's
+ * screens by mistake. After a first answer, a failed re-read keeps it.
  */
 export function useCollectStatus(): {
   collect: CollectStatusView | null;
+  /** The read answered: the status arrived, or a 404 said they are not on You collect. */
   known: boolean;
+  /** No answer yet, and the last read failed with anything but a 404. */
+  failed: boolean;
   reload: () => Promise<void>;
 } {
   // A tip changes what is kept, a check that ends writes a notification, and a withdrawal ends
@@ -28,9 +32,14 @@ export function useCollectStatus(): {
     ],
   });
   const collect = panel.data?.mode === 'collect' ? panel.data : null;
+  const direct = panel.data === null && panel.failedStatus === 404;
   return {
     collect,
-    known: panel.data !== null || panel.failedStatus !== null,
+    known: panel.data !== null || direct,
+    failed:
+      panel.data === null &&
+      panel.failedStatus !== null &&
+      panel.failedStatus !== 404,
     reload: panel.reload,
   };
 }

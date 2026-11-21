@@ -257,3 +257,44 @@ test('while supporters can’t tip yet, the owner hears how often the page was o
     /opened/,
   );
 });
+
+test('You collect: a collect recipient is never told to set up payments; nothing is said about them until the mode is known', () => {
+  const offline = { ...ready, pageState: 'not_live' };
+  for (const account of [
+    payments(null),
+    payments('FAILED'),
+    payments('CREATING'),
+    // After a bank: the receive-only account takes no charges of its own.
+    payments('ACTIVE', { chargesEnabled: false }),
+    payments('ONBOARDING', { requirementsDue: ['individual.id_number'] }),
+  ]) {
+    assert.deepEqual(
+      ids(
+        ownerAttention({ profile: offline, payments: account, collect: true }),
+      ),
+      ['page_offline'],
+    );
+    // Not known yet (the read is on its way, or failed): no payment notice either way.
+    assert.deepEqual(
+      ids(
+        ownerAttention({ profile: offline, payments: account, collect: null }),
+      ),
+      ['page_offline'],
+    );
+  }
+  // A direct recipient: as today.
+  assert.deepEqual(
+    ids(
+      ownerAttention({
+        profile: ready,
+        payments: payments(null),
+        collect: false,
+      }),
+    ),
+    ['set_up_payments'],
+  );
+  assert.deepEqual(
+    ids(ownerAttention({ profile: ready, payments: payments(null) })),
+    ['set_up_payments'],
+  );
+});

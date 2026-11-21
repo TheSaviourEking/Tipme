@@ -243,6 +243,7 @@ export default function WithdrawPage({
   const {
     collect,
     known: collectKnown,
+    failed: collectFailed,
     reload: reloadCollect,
   } = useCollectStatus();
   const collecting = collect !== null && !collect.verified;
@@ -299,6 +300,15 @@ export default function WithdrawPage({
         onRetry={balance.reload}
       />
     );
+  // Whether they are on You collect decides this whole page: a read that failed (anything but
+  // "not on it") is a load error, never today's screen shown to a collect recipient.
+  if (collectFailed)
+    return (
+      <LoadFailed
+        title="We couldn’t load your balance"
+        onRetry={reloadCollect}
+      />
+    );
   if (!summary || !collectKnown)
     return <Skeleton label="Loading your balance" />;
   const history = (
@@ -326,7 +336,9 @@ export default function WithdrawPage({
             )}
             <CollectBankForm
               bank={collect.bank}
+              read={collect}
               banks={banks}
+              onCheckAgain={reloadCollect}
               onAdded={(state) => {
                 void reloadCollect();
                 if (state === 'verified') reloadAll();
@@ -525,11 +537,8 @@ export default function WithdrawPage({
             {ready && (
               <p className="withdraw__chip">
                 <span>{bankLine(ready.destination)}</span>
-                {/* A collect recipient's bank goes through our payment partner's name check, which
-                    Get paid's form doesn't do (the API refuses it there). */}
-                {!collect && (
-                  <Link href="/dashboard/settings#get-paid">Change</Link>
-                )}
+                {/* Get paid shows a collect recipient the You collect form (name check, step-up). */}
+                <Link href="/dashboard/settings#get-paid">Change</Link>
               </p>
             )}
             {pilotNotice}

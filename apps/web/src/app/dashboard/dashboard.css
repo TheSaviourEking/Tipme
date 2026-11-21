@@ -9972,3 +9972,7 @@ body:has(
 .withdraw__meter .withdraw__held-note {
   color: var(--text-on-night-quiet);
 }
+
+.collect-dispute {
+  margin-bottom: var(--space-4);
+}
