@@ -8,6 +8,8 @@ export function redisErrorCode(error: unknown): string {
   return match?.[1] ?? 'unknown';
 }
 
+const MAX_WINDOWS = 64;
+
 /**
  * Logs at most one line per key per window. The next line that does get through carries
  * `suppressed`: how many were held back since the last one. A failing Redis makes BullMQ raise
@@ -22,6 +24,13 @@ export function createRateLimitedWarn(options: {
   const windows = new Map<string, { loggedAt: number; suppressed: number }>();
   return (key, fields) => {
     const at = now();
+    // Bounded: closed windows are dropped, and past 64 open ones new keys share 'other'.
+    if (!windows.has(key) && windows.size >= MAX_WINDOWS) {
+      for (const [k, w] of windows)
+        if (at - w.loggedAt >= windowMs && w.suppressed === 0)
+          windows.delete(k);
+      if (windows.size >= MAX_WINDOWS) key = 'other';
+    }
     const window = windows.get(key);
     if (window && at - window.loggedAt < windowMs) {
       window.suppressed += 1;

@@ -31,7 +31,7 @@ Logs never contain request bodies, headers, query strings, messages or job paylo
 
 ## 3. Check a job directly (development)
 
-For a diagnostic probe: `curl http://127.0.0.1:4000/v1/diagnostics/trace-probe/<jobId>` returns `{ "data": { state, attemptsMade } }`. Failed jobs are kept (up to 1000) in BullMQ's failed set; `tipme_jobs_failed` on the worker metrics port (`curl http://127.0.0.1:9465/metrics`) counts them.
+For a diagnostic probe: `curl http://127.0.0.1:4000/v1/diagnostics/trace-probe/<jobId>` returns `{ "data": { state, attemptsMade } }`. Failed jobs stay in BullMQ's failed set for 7 days (a diagnostic probe also trims that set to its newest 1000 each time one finishes); `tipme_jobs_failed` on the worker metrics port (`curl http://127.0.0.1:9465/metrics`) counts them.
 
 ## 4. Check health
 
