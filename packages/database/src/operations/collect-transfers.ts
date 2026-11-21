@@ -393,9 +393,10 @@ function currentAccount(alias: string): SQL {
 
 /**
  * Whether the row's recipient can receive it now (spec §5, §8): verified, a `usable` bank that
- * hasn't been replaced, no shared bank account in review, no open dispute on the tip (nor a lost one
- * TipMe is still recovering, nor a closed one whose hold is kept for a refund). Checked when a share is released
- * and again, with its account, when it is claimed to be sent.
+ * hasn't been replaced, no shared bank account in review or open as an issue (Task 13), no open
+ * dispute on the tip (nor a lost one TipMe is still recovering, nor a closed one whose hold is kept
+ * for a refund). Checked when a share is released and again, with its account, when it is claimed
+ * to be sent.
  */
 function canReceive(alias: string): SQL {
   const c = sql.raw(alias);
@@ -410,6 +411,10 @@ function canReceive(alias: string): SQL {
       SELECT 1 FROM collect_transfers r
        WHERE r.profile_id = ${c}.profile_id AND r.status = 'review'
          AND r.review_reason = 'same_bank')
+    AND NOT EXISTS (
+      SELECT 1 FROM issues s
+       WHERE s.kind = 'collect_same_bank' AND s.status = 'open'
+         AND s.subject->>'profileId' = ${c}.profile_id::text)
     AND NOT EXISTS (
       SELECT 1 FROM disputes x
        WHERE x.tip_id = ${c}.tip_id
@@ -487,6 +492,13 @@ async function finishPaid(
     });
     if (!paid) return 'none';
     const owner = { amountMinor: row.amountMinor, profileId: row.profileId };
+    if (row.kind === 'back' && row.refundId)
+      // Task 10: the refund's money is back in TipMe's balance (held for them, never withdrawable),
+      // so its reservation of their account ends with this posting.
+      await tx
+        .update(tipRefunds)
+        .set({ heldMinor: 0n, updatedAt: now })
+        .where(eq(tipRefunds.id, row.refundId));
     if (row.kind === 'return')
       // Task 10 (RI1): what a failed refund took back is theirs again, in their account; the hold
       // that kept it from their balance ends with the posting, once.

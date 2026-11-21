@@ -630,11 +630,22 @@ export function createBachsPayouts(
         .update(`${accountRef}|${bankCode}|${accountNumber}`)
         .digest('hex')
         .slice(0, 40);
+      // You collect: the name the partner checks this bank against is part of the key, so a
+      // corrected name is a fresh check while a true retry still replays (Task 13 fix round 2).
+      // 32 hex characters (128 bits) of the name's digest; the key stays well inside 255.
+      if (
+        input.nameDigest !== undefined &&
+        !/^[0-9a-f]{64}$/.test(input.nameDigest)
+      )
+        throw refused('Invalid name digest');
+      const nameKey = input.nameDigest
+        ? `.${input.nameDigest.slice(0, 32)}`
+        : '';
       const destination = await client.request({
         method: 'POST',
         path: '/v1/payouts/destinations',
         accountReference: accountRef,
-        idempotencyKey: `destination.${fingerprint}`,
+        idempotencyKey: checkedKey(`destination.${fingerprint}${nameKey}`),
         operationReference: `destination.${accountRef}`,
         body: {
           type: 'bank_account',

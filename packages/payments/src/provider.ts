@@ -371,7 +371,16 @@ export interface PayoutPort {
   }): Promise<{ accountName: string } | null>;
   addPayoutDestination(
     accountRef: string,
-    input: { accountNumber: string; accountName: string; bankCode: string },
+    input: {
+      accountNumber: string;
+      accountName: string;
+      bankCode: string;
+      /**
+       * You collect: the SHA-256 hex digest of the legal name this bank is checked against. A new
+       * name is a new add (a fresh check); the same name replays the same add.
+       */
+      nameDigest?: string;
+    },
   ): Promise<{
     destinationRef: string;
     usable: boolean;
@@ -453,6 +462,14 @@ export interface PayoutPort {
   createReceiveOnlyPersonAccount?(input: {
     contactEmail: string;
     country: 'NG';
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+    /** Told the reference as soon as create answers, before the name is sent (Task 13). */
+    onCreated?: (accountReference: string) => Promise<void>;
+  }): Promise<BachsRecipientAccount>;
+  /** You collect: the person's legal name on an existing account, with the caller's key (R8). */
+  nameReceiveOnlyPerson?(input: {
+    accountReference: string;
     legalName: { first: string; last: string };
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;

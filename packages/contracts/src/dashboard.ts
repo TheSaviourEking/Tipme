@@ -6,6 +6,13 @@ export interface DashboardSummary {
   currency: string;
   availableMinor: string;
   confirmingMinor: string;
+  /**
+   * You collect: money TipMe holds for the recipient, never part of `availableMinor` and never
+   * withdrawable until it arrives. Before they are verified it is `keptMinor` ("Kept for you until
+   * you add your bank details"); after, `onItsWayMinor` ("On its way to you"). "0" for everyone else.
+   */
+  keptMinor: string;
+  onItsWayMinor: string;
   today: string;
   yesterday: string;
   thisWeek: string;

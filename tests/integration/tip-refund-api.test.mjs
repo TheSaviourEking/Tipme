@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { after, before, test } from 'node:test';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
+import { postLedgerTransaction } from '../../packages/database/dist/operations/ledger.js';
+import { buildCollectTransferPosting } from '../../packages/domain/dist/index.js';
 import {
   REDIS_URL,
   Redis,
@@ -225,10 +227,25 @@ async function collectTip(withdrawnMinor) {
     attemptId: intent.attemptId,
   });
   assert.equal(settled.applied, 1);
-  await q(
+  const [share] = await q(
     `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
-            account_reference = 'acct_collectrf' WHERE tip_id = $1 AND kind = 'share'`,
+            account_reference = 'acct_collectrf' WHERE tip_id = $1 AND kind = 'share'
+      RETURNING id, amount_minor`,
     [intent.tipId],
+  );
+  // The share's move, booked as the transfer machine books it: the money left TipMe's balance.
+  await database.db.transaction((tx) =>
+    postLedgerTransaction(tx, {
+      operationType: 'collect_transfer',
+      operationKey: `collect_transfer.${share.id}`,
+      currency: 'NGN',
+      tipId: intent.tipId,
+      traceId: null,
+      lines: buildCollectTransferPosting({
+        amountMinor: BigInt(share.amount_minor),
+        profileId,
+      }),
+    }),
   );
   if (withdrawnMinor > 0n)
     await q(

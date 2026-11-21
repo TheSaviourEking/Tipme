@@ -237,15 +237,69 @@ test(
   },
 );
 
-test('every long-running service caps its json-file logs', { skip }, () => {
+const CAPPED_LOGS = {
+  driver: 'json-file',
+  options: { 'max-size': '10m', 'max-file': '3' },
+};
+
+test('every production service caps its json-file logs', { skip }, () => {
   const { services } = parse();
   for (const name of ['api-blue', 'api-green', 'worker-a', 'worker-b', 'redis'])
-    assert.deepEqual(
-      services[name].logging,
-      { driver: 'json-file', options: { 'max-size': '10m', 'max-file': '3' } },
-      `${name} has no log limit`,
-    );
+    assert.ok(name in services, `${name} is missing`);
+  for (const [name, service] of Object.entries(services))
+    assert.deepEqual(service.logging, CAPPED_LOGS, `${name} has no log limit`);
 });
+
+// Staging shares its server's disk with production: on 21 Nov 2026 a staging worker logging a full
+// Redis's error ~3,000 times a second wrote 26 GB, filled the disk and took production down.
+test(
+  'every staging service caps its json-file logs, as production does',
+  { skip },
+  () => {
+    const stagingUrl = new URL(
+      '../deploy/compose.staging.yml',
+      import.meta.url,
+    );
+    const stagingRaw = readFileSync(stagingUrl, 'utf8');
+    const env = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' };
+    for (const [, name] of stagingRaw.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g))
+      // A path for directories and files, so bind mounts stay bind mounts.
+      env[name] = /_(DIR|FILE)$/.test(name) ? '/srv/dummy' : 'dummy';
+    const result = spawnSync(
+      'docker',
+      [
+        'compose',
+        '-f',
+        stagingUrl.pathname,
+        '--profile',
+        'tools',
+        '--profile',
+        'offsite',
+        'config',
+        '--format',
+        'json',
+      ],
+      { encoding: 'utf8', env },
+    );
+    assert.equal(result.status, 0, `compose config failed: ${result.stderr}`);
+    const { services } = JSON.parse(result.stdout);
+    for (const name of [
+      'api',
+      'worker',
+      'postgres',
+      'redis',
+      'offsite',
+      'backup',
+    ])
+      assert.ok(name in services, `${name} is missing`);
+    for (const [name, service] of Object.entries(services))
+      assert.deepEqual(
+        service.logging,
+        CAPPED_LOGS,
+        `${name} has no log limit`,
+      );
+  },
+);
 
 // Not Docker-dependent.
 test('production.env.example names every ${VAR} the compose file reads, with no values for secrets', () => {

@@ -321,6 +321,91 @@ test('a person account needs a whole legal name; nothing is sent without one', a
   assert.equal(calls.length, 0);
 });
 
+test('the account reference is handed back the moment create returns, before the name is sent (Task 13)', async () => {
+  const seen = [];
+  const { provider, calls } = fake([
+    answer('individual-account-created', 201),
+    (call) => {
+      seen.push(['name', call.path]);
+      return answer('individual-account-named');
+    },
+  ]);
+  await provider.createReceiveOnlyPersonAccount({
+    contactEmail: 'ada@example.com',
+    country: 'NG',
+    legalName: { first: 'Ada', last: 'Okafor' },
+    idempotencyKey: `tipme-person-acct-${TIP}`,
+    async onCreated(reference) {
+      seen.push(['created', reference]);
+    },
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(seen, [
+    ['created', PERSON],
+    ['name', `/v1/accounts/${PERSON}`],
+  ]);
+});
+
+test('a create whose reference could not be kept sends no name', async () => {
+  const { provider, calls } = fake([answer('individual-account-created', 201)]);
+  await assert.rejects(
+    provider.createReceiveOnlyPersonAccount({
+      contactEmail: 'ada@example.com',
+      country: 'NG',
+      legalName: { first: 'Ada', last: 'Okafor' },
+      idempotencyKey: `tipme-person-acct-${TIP}`,
+      async onCreated() {
+        throw new Error('database down');
+      },
+    }),
+    /database down/,
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("an existing account is named on its own, with the caller's key, and nothing is created", async () => {
+  const { provider, calls } = fake([answer('individual-account-named')]);
+  const account = await provider.nameReceiveOnlyPerson({
+    accountReference: PERSON,
+    legalName: { first: ' Ada ', last: 'Okafor' },
+    idempotencyKey: `tipme-collect-name-${TIP}`,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].path, `/v1/accounts/${PERSON}`);
+  assert.equal(
+    calls[0].headers['Idempotency-Key'],
+    `tipme-collect-name-${TIP}`,
+  );
+  assert.deepEqual(calls[0].body, {
+    fields: {
+      persons: [
+        {
+          first_name: 'Ada',
+          last_name: 'Okafor',
+          relationship: { representative: true },
+        },
+      ],
+    },
+  });
+  assert.equal(account.accountReference, PERSON);
+});
+
+test('naming an account needs a whole name and a real reference; nothing is sent otherwise', async () => {
+  const { provider, calls } = fake([]);
+  for (const input of [
+    { accountReference: PERSON, legalName: { first: '', last: 'Okafor' } },
+    { accountReference: 'acct:bad', legalName: { first: 'Ada', last: 'O' } },
+  ])
+    await assert.rejects(
+      provider.nameReceiveOnlyPerson({
+        ...input,
+        idempotencyKey: `tipme-collect-name-${TIP}`,
+      }),
+    );
+  assert.equal(calls.length, 0);
+});
+
 test('a person account is made to hold naira with holdLocalCurrency (P12)', async () => {
   const usdOnly = body('individual-account-named');
   assert.deepEqual(usdOnly.balance_currencies, ['USD']);

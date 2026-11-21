@@ -69,6 +69,7 @@ import {
 import { Redis } from 'ioredis';
 import { closeWithin } from './close-within.js';
 import { ensureSchedule } from './ensure-schedule.js';
+import { workerErrorLogger } from './redis-error-log.js';
 import { SERVICE_NAME, type WorkerConfig } from './config.js';
 import {
   DOMAIN_EVENT_NAMES,
@@ -85,6 +86,7 @@ import {
   handleDisputeSteps,
   handleCollectTransfers,
 } from './handlers/collect-transfers.js';
+import { handleCollectReminders } from './handlers/collect-reminders.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
@@ -877,6 +879,12 @@ export async function startJobWorker(
                   providers: collectProviders,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
+                // Task 12: reminders to add bank details ride the same sweep and lock.
+                const reminders = await handleCollectReminders({
+                  db: database.db,
+                  sealing,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
                 // Task 9: disputes whose share was settled by this run move on (Review Focus 3).
                 const disputes = await handleDisputeSteps({
                   db: database.db,
@@ -884,6 +892,7 @@ export async function startJobWorker(
                 });
                 return {
                   ...transfers,
+                  reminded: reminders.reminded,
                   disputesAdvanced: disputes.advanced,
                   disputeReminders: disputes.reminded,
                 };
@@ -1026,9 +1035,8 @@ export async function startJobWorker(
     },
     { connection, prefix: config.QUEUE_PREFIX, concurrency: 4 },
   );
-  worker.on('error', (error) =>
-    logger.warn({ event: 'worker.error', error: error.name }),
-  );
+  // Rate-limited per Redis code: a full Redis raised this ~3,000 times a second (21 Nov 2026).
+  worker.on('error', workerErrorLogger({ logger }));
   const relay = startOutboxRelay({
     db: database.db,
     queue,

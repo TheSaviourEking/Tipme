@@ -646,6 +646,15 @@ test('confirm and recovery links say how long they work, in a quiet line', () =>
  * before a deploy carries data like this and is rendered by the new templates.
  */
 const PREVIOUS_SAMPLES = {
+  // You collect (plan Task 13): new in this release, so its first sample.
+  collect_verified: { firstName: 'Ada' },
+  // You collect (plan Task 12): new in this release, so its first sample.
+  collect_reminder: {
+    firstName: 'Ada',
+    kind: 'last',
+    heldMinor: '950000',
+    byDate: '20 December',
+  },
   tip_received: {
     firstName: 'Ada',
     netMinor: '450000',

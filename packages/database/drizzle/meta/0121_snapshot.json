@@ -1,5 +1,5 @@
 {
-  "id": "2ccde937-65f6-4bb5-99fb-f2ba4003c3cb",
+  "id": "137f7e7a-c444-4dea-8ddf-f23057be579a",
   "prevId": "2313f2f2-a3b7-4886-a99d-7ae67f54d5e8",
   "version": "7",
   "dialect": "postgresql",
@@ -3263,7 +3263,7 @@
         },
         "collect_transfers_kind": {
           "name": "collect_transfers_kind",
-          "value": "kind IN ('share', 'back', 'return')"
+          "value": "kind IN ('share', 'back')"
         },
         "collect_transfers_status": {
           "name": "collect_transfers_status",
@@ -3283,11 +3283,11 @@
         },
         "collect_transfers_back_source": {
           "name": "collect_transfers_back_source",
-          "value": "(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)\n        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))\n        OR (kind = 'return' AND refund_id IS NOT NULL AND dispute_id IS NULL)"
+          "value": "(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)\n        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))"
         },
         "collect_transfers_key": {
           "name": "collect_transfers_key",
-          "value": "(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)\n        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)\n        OR (kind = 'return' AND idempotency_key = 'tipme-collect-return-' || refund_id::text)"
+          "value": "(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)\n        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)"
         },
         "collect_transfers_review_reason": {
           "name": "collect_transfers_review_reason",
@@ -7438,6 +7438,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "address_key": {
+          "name": "address_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7446,7 +7452,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "payment_intents_address_key_held": {
+          "name": "payment_intents_address_key_held",
+          "columns": [
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "address_key IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "payment_intents_quote_id_tip_quotes_id_fk": {
           "name": "payment_intents_quote_id_tip_quotes_id_fk",
@@ -11714,12 +11737,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "tip_refund_id": {
-          "name": "tip_refund_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "refused_at": {
           "name": "refused_at",
           "type": "timestamp with time zone",
@@ -11801,22 +11818,6 @@
           "columns": [
             {
               "expression": "dispute_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "kind = 'collect_recover'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "share_transfers_one_refund_recover": {
-          "name": "share_transfers_one_refund_recover",
-          "columns": [
-            {
-              "expression": "tip_refund_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -11956,15 +11957,6 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "share_transfers_tip_refund_id_tip_refunds_id_fk": {
-          "name": "share_transfers_tip_refund_id_tip_refunds_id_fk",
-          "tableFrom": "share_transfers",
-          "tableTo": "tip_refunds",
-          "columnsFrom": ["tip_refund_id"],
-          "columnsTo": ["id"],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11997,7 +11989,7 @@
         },
         "share_transfers_links": {
           "name": "share_transfers_links",
-          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)\n        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL OR tip_refund_id IS NOT NULL)\n        AND (dispute_id IS NULL OR tip_refund_id IS NULL)"
+          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)\n        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)"
         },
         "share_transfers_business": {
           "name": "share_transfers_business",
@@ -13700,50 +13692,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "collect_plan": {
-          "name": "collect_plan",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "gap_minor": {
-          "name": "gap_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "held_minor": {
-          "name": "held_minor",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "0"
-        },
-        "recovered_at": {
-          "name": "recovered_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "first_sent_at": {
-          "name": "first_sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "retry_after": {
-          "name": "retry_after",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "not_sent_count": {
-          "name": "not_sent_count",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -13837,15 +13785,11 @@
         },
         "tip_refunds_failure": {
           "name": "tip_refunds_failure",
-          "value": "\"tip_refunds\".\"failure\" IS NULL OR (\"tip_refunds\".\"status\" = 'FAILED' AND \"tip_refunds\".\"failure\" IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered', 'disputed'))"
+          "value": "\"tip_refunds\".\"failure\" IS NULL OR (\"tip_refunds\".\"status\" = 'FAILED' AND \"tip_refunds\".\"failure\" IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed'))"
         },
         "tip_refunds_amount_positive": {
           "name": "tip_refunds_amount_positive",
           "value": "\"tip_refunds\".\"amount_minor\" > 0"
-        },
-        "tip_refunds_collect_plan": {
-          "name": "tip_refunds_collect_plan",
-          "value": "(\"tip_refunds\".\"collect_plan\" IS NULL OR \"tip_refunds\".\"collect_plan\" IN ('cancel_held', 'take_back', 'absorb'))\n        AND ((COALESCE(\"tip_refunds\".\"collect_plan\", '') = 'absorb') = (\"tip_refunds\".\"gap_minor\" IS NOT NULL))\n        AND (\"tip_refunds\".\"gap_minor\" IS NULL OR \"tip_refunds\".\"gap_minor\" > 0)\n        AND \"tip_refunds\".\"held_minor\" >= 0 AND \"tip_refunds\".\"held_minor\" <= \"tip_refunds\".\"amount_minor\"\n        AND (\"tip_refunds\".\"collect_plan\" IS NOT NULL OR (\"tip_refunds\".\"held_minor\" = 0 AND \"tip_refunds\".\"recovered_at\" IS NULL))"
         },
         "tip_refunds_currency_iso": {
           "name": "tip_refunds_currency_iso",

@@ -500,7 +500,9 @@ async function readCollect(
     if (share.state === 'in_flight') wait = true;
     else if (share.state === 'gone')
       return { ...base, plan: 'wait', refusal: 'already' };
-    else if (share.state === 'held') holdMinor = person;
+    // Held by TipMe already (held_for_recipients, Task 12): never part of what they can withdraw,
+    // so nothing more to reserve.
+    else if (share.state === 'held') holdMinor = 0n;
     else {
       moved = true;
       // What an earlier refund already took back is used, never taken again (C1).
@@ -1203,7 +1205,11 @@ async function failCollectRefund(
   const taken =
     recovered.personMinor +
     (pullBack?.status === 'done' ? pullBack.amountMinor : 0n);
-  if (recovered.personMinor === 0n)
+  // The hold reserves only money still in their account and about to come back. Money already back
+  // is in held_for_recipients (never withdrawable, Task 12); a transfer back still moving keeps it.
+  const backMoving =
+    back !== null && ['ready', 'sent', 'unknown'].includes(back.status);
+  if (!backMoving)
     await tx
       .update(tipRefunds)
       .set({ heldMinor: 0n, updatedAt: now })

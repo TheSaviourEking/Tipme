@@ -136,6 +136,28 @@ const planFees = (value: unknown): string => {
   return `Free ${pct(freeBps)}, Pro ${pct(proBps)}`;
 };
 
+/** You collect's settings (Task 12): only those that moved, as staff read them. */
+const COLLECT_SETTING_WORDS: [string, string, (v: unknown) => string][] = [
+  ['capMinor', 'holding cap', naira],
+  ['capDays', 'holding days', (v) => `${text(v)} days`],
+  ['reminderDays', 'reminders', (v) => `days ${listOr(v)}`],
+  ['delayHours', 'new-recipient delay', (v) => `${text(v)} h`],
+  ['delayForDays', 'delay for', (v) => `${text(v)} days`],
+  ['firstWithdrawalCapMinor', 'first withdrawal cap', naira],
+  ['newDailyLimitMinor', 'new-account daily limit', naira],
+  ['newDailyLimitDays', 'daily limit for', (v) => `${text(v)} days`],
+  ['reserveWarningMinor', 'reserve warning', naira],
+  ['reserveCriticalMinor', 'reserve critical', naira],
+];
+const collectSettingsMoved = (from: unknown, to: unknown): string => {
+  const a = (typeof from === 'object' && from !== null ? from : {}) as Change;
+  const b = (typeof to === 'object' && to !== null ? to : {}) as Change;
+  const moved = COLLECT_SETTING_WORDS.filter(
+    ([key, , say]) => say(a[key]) !== say(b[key]),
+  ).map(([key, name, say]) => `${name} ${say(a[key])} → ${say(b[key])}`);
+  return moved.join(', ') || 'no change';
+};
+
 /** Each known action's record, as a sentence. */
 const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
   'feature_switch.set': (c, s) =>
@@ -149,6 +171,15 @@ const SENTENCES: Record<string, (c: Change, subject: string) => string> = {
       `TipMe’s fee per plan: ${planFees(c.from)} → ${planFees(c.to)}`,
       approved(c),
     ),
+  'collect_settings.changed': (c) =>
+    parts(
+      `You collect limits: ${collectSettingsMoved(c.from, c.to)}`,
+      approved(c),
+    ),
+  'collect_transfers.paused': (c) =>
+    parts('You collect transfers paused', approved(c)),
+  'collect_transfers.resumed': (c) =>
+    parts('You collect transfers resumed', approved(c)),
   'business_pro.price_changed': (c) =>
     parts(
       `Business Pro price: ${naira(c.from)} → ${naira(c.to)} a month`,

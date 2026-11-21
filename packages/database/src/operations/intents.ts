@@ -18,6 +18,7 @@ import { activeTraceId, newId } from './ids.js';
 import { recordSupporter, supporterKeyHash } from './supporters.js';
 import { attributeTip } from './campaigns.js';
 import { recordTransition } from './transitions.js';
+import { refuseOverHoldingCap } from './collect-guards.js';
 
 /** Only a moment this recipient actually shared can label a tip; anything else is ignored. */
 async function sharedMomentOf(
@@ -57,6 +58,12 @@ export interface CreatePaymentIntentInput {
   supporterKey?: string;
   /** The API's SUPPORTER_RECOGNITION switch. Off unless passed. */
   recognitionOn?: boolean;
+  /**
+   * You collect (ruling P34): the API's keyed hash of the supporter's address, never the address.
+   * Stored on a collect intent (never a direct one) so one address holds only a few unfinished
+   * intents on a collect page, and cleared once its tip is final. Not in the fingerprint: a retry from another network still replays the tip.
+   */
+  addressKey?: string;
   /**
    * The business membership the supporter's page named (TipMe for businesses). Checked against the
    * quote's page inside the transaction and ignored when it doesn't hold: never a refusal.
@@ -224,6 +231,16 @@ export async function createPaymentIntent(
         .where(eq(profiles.id, profileId));
       if (page?.pageState !== 'live' || page.status !== 'active')
         throw new OperationError('TIP_NOT_PAYABLE');
+      // You collect (P31): the holding cap is asked again here, as held money or the cap may have
+      // moved since the quote. A replay above never is: that tip already exists.
+      if (quote.collectionMode === 'collect')
+        await refuseOverHoldingCap(tx, {
+          profileId,
+          now,
+          addMinor: quote.recipientNetMinor,
+          binding: true,
+          addressKey: input.addressKey,
+        });
 
       // R2-C2: the supporter must have been shown the split in force now. A quote made before an
       // agreement started, changed or ended is stale: they re-quote and see the current one.
@@ -249,6 +266,12 @@ export async function createPaymentIntent(
           requestFingerprint: fingerprint,
           status: 'AWAITING_PAYMENT',
           expiresAt: quote.expiresAt,
+          // Only a collect intent keeps it, and only while unfinished: the expiry job clears it
+          // once the tip is final (`expireStaleTips`). A direct tip has no cap to guard.
+          addressKey:
+            quote.collectionMode === 'collect'
+              ? (input.addressKey ?? null)
+              : null,
         })
         .onConflictDoNothing()
         .returning({ id: paymentIntents.id });

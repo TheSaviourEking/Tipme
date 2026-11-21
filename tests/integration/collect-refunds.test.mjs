@@ -596,7 +596,8 @@ test('a refund refused for low balance moves nothing and says why', async () => 
   assert.equal(share.status, 'waiting');
   assert.equal(share.review_reason, null);
   assert.deepEqual(await reversalsOf(tip.tipId), []);
-  assert.equal(await available(TOBI), NET);
+  // Back with TipMe, kept for them as before (Task 12: not withdrawable until they verify).
+  assert.equal((await ops.balanceOf(database.db, TOBI.id)).keptMinor, NET);
   const seen = await facts(tip.tipId);
   assert.equal(seen.refundable, true);
   assert.equal(
@@ -1082,7 +1083,9 @@ test('a refund refused after its part was taken back keeps that money for the ne
     gapMinor: 0n,
   });
   const second = await refundAsked(tip.tipId);
-  assert.equal(second.held, String(NET));
+  // The money is already back with TipMe (held_for_recipients): nothing more to reserve.
+  assert.equal(second.held, '0');
+  assert.equal((await facts(tip.tipId)).heldMinor, NET);
   assert.equal((await refundRow(tip.tipId)).id, second.id);
   assert.equal(
     (
@@ -1228,7 +1231,8 @@ test('a dispute opened after the ask stops the refund before it is sent', async 
   const stopped = await refundRow(moved.tipId);
   assert.equal(stopped.status, 'FAILED');
   assert.equal(stopped.failure, 'disputed');
-  assert.equal(stopped.held, String(NET));
+  assert.equal(stopped.held, '0');
+  assert.equal((await facts(moved.tipId)).heldMinor, NET);
 });
 
 test('a refund whose recovery took over a day is still sent again after a lost answer', async () => {
@@ -1326,7 +1330,8 @@ test('a dispute lost after the take-back takes the recipient’s part once, and 
   const stopped = await refundRow(tip.tipId);
   assert.equal(stopped.status, 'FAILED');
   assert.equal(stopped.failure, 'disputed');
-  assert.equal(stopped.held, String(NET));
+  assert.equal(stopped.held, '0');
+  assert.equal((await facts(tip.tipId)).heldMinor, NET);
   await disputeSays(tip, 'lost', 1);
   await ops.runDisputeSteps(database.db, {
     now: new Date(Date.now() + 2 * HOUR),
@@ -1378,7 +1383,8 @@ test('a dispute won after the take-back keeps the part held and sends nothing; a
   assert.deepEqual(state.refunds, []);
   const stopped = await refundRow(tip.tipId);
   assert.equal(stopped.status, 'FAILED');
-  assert.equal(stopped.held, String(NET));
+  assert.equal(stopped.held, '0');
+  assert.equal((await facts(tip.tipId)).heldMinor, NET);
   assert.equal(await available(TOBI), NET);
   // Only a new staff ask restarts it, using what is held.
   const again = await refundAsked(tip.tipId);
