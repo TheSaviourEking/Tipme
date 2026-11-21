@@ -35,6 +35,12 @@ const COPY = {
     'Your page has paused tips. Add your bank details to start taking tips again.',
 } as const;
 
+// A route stub still running when a test ends (its page or a visitor's context closing) must not
+// fail the test with "Response has been disposed" (re-review 2 R2-M2).
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const VIEWPORTS = [
   ['phone', { width: 390, height: 844 }],
   ['desktop', { width: 1440, height: 900 }],
@@ -250,6 +256,11 @@ for (const [label, viewport] of VIEWPORTS) {
       await page.goto('/dashboard/withdraw');
       const form = bankForm(page);
       await expect(form.getByText(COPY.ownName)).toBeVisible();
+      // The owner's words (fix round 3): the name fields' hint is just this.
+      await expect(
+        form.getByText('Your full name.', { exact: true }),
+      ).toBeVisible();
+      await expect(form).not.toContainText('as your bank has it');
 
       await enterDetails(page, form);
       await confirmAndEnterCode(page, form, email);
@@ -1113,4 +1124,58 @@ test('a status read answered while the add is on its way never says the account 
     () => document.activeElement?.getAttribute('inputmode') ?? '',
   );
   expect(focused).not.toBe('numeric');
+});
+
+test('with the switch on, an undecided recipient whose first tip would go to TipMe is shown You collect at once, and nothing is written @alone', async ({
+  page,
+}, testInfo) => {
+  // Two switch changes, each up to 15 s to reach the API's cache.
+  test.setTimeout(150_000);
+  // Signed up with the switch off: undecided, no payment account.
+  const { handle } = await signUpRecipient(page, testInfo);
+  expect(await collectionModeOf(handle)).toBeNull();
+  await livePartner(page, () => ({
+    ...LIVE_PARTNER,
+    status: null,
+    chargesEnabled: false,
+  }));
+  const main = page.getByRole('main');
+  const notice = page
+    .getByRole('region', { name: 'Needs your attention' })
+    .getByText('Set up payments to start receiving tips');
+  await page.goto('/dashboard');
+  await expect(notice).toBeVisible();
+  await expect(main.getByText(COPY.noBank)).toHaveCount(0);
+
+  const db = await database();
+  try {
+    // Staff turn the switch on (written directly). The API reads switches within 15 seconds.
+    await db.pool.query(
+      `INSERT INTO feature_switches (key, enabled, source, changed_at, reason)
+       VALUES ('you_collect', true, 'staff', now(), 'e2e: the mode preview')
+       ON CONFLICT (key) DO UPDATE SET enabled = true, source = 'staff'`,
+    );
+    // Their next quote would put them on You collect (no account of their own), so the screens say
+    // so now: no set-up notice, and "You can take tips now".
+    await expect(async () => {
+      await page.goto('/dashboard');
+      await expect(main.getByText(COPY.noBank)).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 40_000, intervals: [2000] });
+    await expect(notice).toHaveCount(0);
+    // Read-only: still undecided. The first quote (or adding bank details) fixes it.
+    expect(await collectionModeOf(handle)).toBeNull();
+  } finally {
+    // Back to the lane's seed: off.
+    await db.pool.query(
+      `DELETE FROM feature_switches WHERE key = 'you_collect'`,
+    );
+    await db.close();
+  }
+  // Off again: undecided reads as direct, as before.
+  await expect(async () => {
+    await page.goto('/dashboard');
+    await expect(notice).toBeVisible({ timeout: 2000 });
+  }).toPass({ timeout: 40_000, intervals: [2000] });
+  await expect(main.getByText(COPY.noBank)).toHaveCount(0);
+  expect(await collectionModeOf(handle)).toBeNull();
 });

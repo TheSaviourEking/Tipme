@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import type {
   CollectBankAddResponse,
@@ -102,7 +102,8 @@ export function CollectBankForm({
   // The latest status read the page has shown, for pinning the add's answer when it arrives: a read
   // answered while the add was on its way is older than the answer, never newer (re-review N1).
   const latestRead = useRef(read);
-  useEffect(() => {
+  // Before paint, not after: an answer can't arrive between a read's commit and this (R2-M1).
+  useLayoutEffect(() => {
     latestRead.current = read;
   }, [read]);
   // One request per tap: a second tap while one is on its way does nothing.
@@ -333,7 +334,7 @@ export function CollectBankForm({
       <Surface material="paper" className="collect-bank__panel">
         {(step.kind === 'details' || step.kind === 'looking') && (
           <form className="settings-form" onSubmit={lookUp} noValidate>
-            <p className="tm-hint">Your full name, as your bank has it.</p>
+            <p className="tm-hint">Your full name.</p>
             <InputField
               id={`${id}-first`}
               label="First name"
