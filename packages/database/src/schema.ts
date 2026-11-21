@@ -3836,6 +3836,21 @@ export const tipRefunds = pgTable(
     reason: text('reason').notNull(),
     // Set when TipMe claims the partner call, before making it.
     sentAt: timestamp('sent_at', { withTimezone: true }),
+    // You collect (plan Task 10): how the recipient's part comes back before TipMe refunds from its
+    // own balance. Null for a direct tip (refunded as its recipient, unchanged). `cancel_held`: the
+    // share never moved and is held for the refund; `take_back`: it moved and is taken back first;
+    // `absorb`: some of it can't be taken back, and a second person decided TipMe absorbs up to
+    // `gap_minor` (serious action `tip_refund.absorb_gap`).
+    collectPlan: text('collect_plan'),
+    gapMinor: minor('gap_minor'),
+    // What this refund holds of the recipient's balance while it is open (as a dispute's, R4):
+    // their part being cancelled or taken back. Zero once it is booked, or let go on a failure that
+    // moved nothing; kept on a failure after money was already taken back (staff are told).
+    heldMinor: minor('held_minor')
+      .notNull()
+      .default(sql`0`),
+    // When everything to take back had come back: only then is the refund sent.
+    recoveredAt: timestamp('recovered_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -3852,9 +3867,17 @@ export const tipRefunds = pgTable(
     ),
     check(
       'tip_refunds_failure',
-      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed'))`,
+      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered'))`,
     ),
     check('tip_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'tip_refunds_collect_plan',
+      sql`(${table.collectPlan} IS NULL OR ${table.collectPlan} IN ('cancel_held', 'take_back', 'absorb'))
+        AND ((COALESCE(${table.collectPlan}, '') = 'absorb') = (${table.gapMinor} IS NOT NULL))
+        AND (${table.gapMinor} IS NULL OR ${table.gapMinor} > 0)
+        AND ${table.heldMinor} >= 0 AND ${table.heldMinor} <= ${table.amountMinor}
+        AND (${table.collectPlan} IS NOT NULL OR (${table.heldMinor} = 0 AND ${table.recoveredAt} IS NULL))`,
+    ),
     currencyCheck('tip_refunds'),
   ],
 );
@@ -3975,6 +3998,10 @@ export const shareTransfers = pgTable(
     // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
     // Task 9 (P29): the lost dispute a `collect_recover` pull-back answers (one each).
     disputeId: uuid('dispute_id').references((): AnyPgColumn => disputes.id),
+    // Task 10: or the collect tip refund it answers (one each).
+    tipRefundId: uuid('tip_refund_id').references(
+      (): AnyPgColumn => tipRefunds.id,
+    ),
     refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
@@ -4009,7 +4036,8 @@ export const shareTransfers = pgTable(
       sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
         AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)
-        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)`,
+        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL OR tip_refund_id IS NOT NULL)
+        AND (dispute_id IS NULL OR tip_refund_id IS NULL)`,
     ),
     check(
       'share_transfers_business',
@@ -4033,6 +4061,10 @@ export const shareTransfers = pgTable(
     // Task 9 (P29): each lost dispute pulls its part of a swept business share back once.
     uniqueIndex('share_transfers_one_collect_recover')
       .on(table.disputeId)
+      .where(sql`kind = 'collect_recover'`),
+    // Task 10: each collect tip refund pulls a swept business share back once.
+    uniqueIndex('share_transfers_one_refund_recover')
+      .on(table.tipRefundId)
       .where(sql`kind = 'collect_recover'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)

@@ -174,7 +174,14 @@ export interface OpsTipRefund {
   tipId: string;
   refundable: boolean;
   refusal:
-    'not_paid' | 'team' | 'already' | 'bank_transfer' | 'no_charge' | null;
+    | 'not_paid'
+    | 'team'
+    | 'already'
+    | 'bank_transfer'
+    | 'no_charge'
+    | 'in_flight'
+    | 'disputed'
+    | null;
   /** Why not, or that it can be, in plain words. */
   words: string;
   handle: string | null;
@@ -190,6 +197,21 @@ export interface OpsTipRefund {
   refund: {
     status: 'REQUESTED' | 'PROCESSING' | 'UNKNOWN' | 'PAID' | 'FAILED';
   } | null;
+  /**
+   * You collect (plan Task 10): the tip was charged to TipMe's own account, so the refund comes from
+   * TipMe's balance once the recipient's part is back. `cancel_held`: their share never moved and is
+   * cancelled; `take_back`: it is taken back from their account first; `staff_decides`: up to
+   * `gapMinor` can't be taken back, and going ahead (`POST …/refund/absorb-gap`) has TipMe absorb it,
+   * with a second person; `wait`: their share is moving now. Absent for a direct tip.
+   */
+  collect?: {
+    plan: 'cancel_held' | 'take_back' | 'staff_decides' | 'wait';
+    gapMinor: string;
+  };
+  /**
+   * A collect tip: why its latest refund failed, in plain words, when it did and none is open.
+   */
+  lastFailure?: string | null;
 }
 
 /** `POST /v1/ops/tips/:tipId/refund`: why, in staff's words (a second person approves). */

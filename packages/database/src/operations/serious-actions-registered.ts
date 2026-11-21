@@ -722,7 +722,12 @@ const tipRefund = acting<{ tipId: string }>({
   target: ({ tipId }) => tipId,
   current: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
-    return { refund: facts.refund?.status ?? null, refusal: facts.refusal };
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      // You collect (Task 10): a plan that changed since asking makes it stale. Direct: unchanged.
+      ...(facts.collect ? { plan: facts.collect.plan } : {}),
+    };
   },
   describe: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
@@ -742,6 +747,49 @@ const tipRefund = acting<{ tipId: string }>({
       approvedBy: context.approverId ?? null,
       reason: context.reason,
       now: context.now,
+    });
+  },
+});
+
+/**
+ * You collect (plan Task 10, spec §6.1 case 3): a collect tip whose recipient (or business) no longer
+ * has all of their part to give back. Going ahead is this serious action: a second person decides
+ * that TipMe absorbs up to the gap from its own balance. Pinned on the plan and the gap, so money
+ * that moved since asking makes it stale. What can still be taken back is, first.
+ */
+const tipRefundAbsorbGap = acting<{ tipId: string }>({
+  name: 'tip_refund.absorb_gap',
+  permission: 'payments.repair',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      plan: facts.collect?.plan ?? null,
+      gap: facts.collect ? String(facts.collect.gapMinor) : null,
+    };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'a page';
+    const gap = facts.collect?.gapMinor ?? 0n;
+    return `Refund ${naira(facts.refundMinor)} of a ${naira(facts.grossMinor)} tip to ${page} (tip ending ${tipId.slice(-6)}) from TipMe's own balance, although up to ${naira(gap)} of it can't be taken back from the recipients first: TipMe absorbs that as a loss. What can still be taken back is, before the refund is sent. TipMe keeps its ${naira(facts.feeMinor)} fee.`;
+  },
+  act: async (tx, { tipId }, context) => {
+    if (!(await readFeatureSwitch(tx, 'tip_refunds')))
+      throw new OperationError('TIP_REFUND_REFUSED', 'switched_off');
+    return askTipRefund(tx, {
+      tipId,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+      absorbGap: true,
     });
   },
 });
@@ -1304,6 +1352,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(businessProPriceChange);
   registerSeriousAction(announcementSendAction);
   registerSeriousAction(tipRefund);
+  registerSeriousAction(tipRefundAbsorbGap);
   registerSeriousAction(planFeesChange);
 }
 

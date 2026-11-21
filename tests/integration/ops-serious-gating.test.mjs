@@ -446,6 +446,79 @@ const wired = {
           .length === 1,
     };
   },
+  // You collect (plan Task 10): a collect tip whose recipient already withdrew their share, so
+  // TipMe absorbs it; the refund is recorded only.
+  'tip_refund.absorb_gap': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `tipgap_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: profileId }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect') RETURNING id`,
+      [userId, handle],
+    );
+    const quote = await ops.createQuote(database.db, {
+      handle,
+      tipMinor: 1_000_000n,
+      currency: 'NGN',
+    });
+    const intent = await ops.createPaymentIntent(database.db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: intent.attemptId,
+      provider: 'bachs',
+      providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+    });
+    await q(
+      `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+      [intent.attemptId],
+    );
+    const settled = await ops.reconcileAttempts({
+      db: database.db,
+      provider: {
+        environment: 'sandbox',
+        async verifyTransaction() {
+          return {
+            status: 'succeeded',
+            amountMinor: 1_000_000n,
+            currency: 'NGN',
+            feeMinor: 20_000n,
+            feePaidBy: 'platform',
+            method: 'NGN_CARD',
+            chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+          };
+        },
+      },
+      now: new Date(),
+      minAgeMs: 0,
+      attemptId: intent.attemptId,
+    });
+    assert.equal(settled.applied, 1);
+    // Its share moved to their account, and all of it is on its way to their bank.
+    await q(
+      `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
+              account_reference = 'acct_gate' WHERE tip_id = $1 AND kind = 'share'`,
+      [intent.tipId],
+    );
+    await q(
+      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+       VALUES (gen_random_uuid(), $1, 'NGN', 950000, 'REQUESTED', $2, 'test')`,
+      [profileId, randomUUID()],
+    );
+    return {
+      payload: { tipId: intent.tipId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM tip_refunds WHERE tip_id = $1 AND collect_plan = 'absorb'`,
+            [intent.tipId],
+          )
+        ).length === 1,
+    };
+  },
   'username.take_back': async () => {
     const handle = `gate_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
     const [{ id: userId }] = await q(

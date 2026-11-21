@@ -417,6 +417,8 @@ export const SERIOUS_ACTIONS = [
   'tip.refund',
   // Owner, 18 Nov 2026: TipMe's share per plan (Free, Pro), for new quotes only.
   'plan_fees.change',
+  // You collect (plan Task 10, §6.1 case 3): refund a collect tip TipMe can't fully recover first.
+  'tip_refund.absorb_gap',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -444,6 +446,8 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'announcement.send': 'Send an announcement by email',
   'tip.refund': 'Refund a tip (TipMe keeps its fee)',
   'plan_fees.change': 'Change TipMe’s fee per plan',
+  'tip_refund.absorb_gap':
+    'Refund a tip when TipMe has to absorb what can’t be taken back',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -471,4 +475,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'announcement.send': 'announcements.send',
     'tip.refund': 'payments.repair',
     'plan_fees.change': 'fees.manage',
+    'tip_refund.absorb_gap': 'payments.repair',
   };

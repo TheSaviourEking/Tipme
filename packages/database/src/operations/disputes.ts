@@ -63,9 +63,10 @@ import { scheduleCollectRecover } from './share-transfers.js';
  *   won       the hold is released (P20); the fee stays an expense.
  *   closed    no ruling (the partner's `prevented` reads as closed: the supporter got their money
  *             back by refund, which the refund event books). No loss, no notice, and no release
- *             that would pay the same money twice: the hold is kept for the refund (P28; Task 10
- *             releases or consumes it) and staff are told. With no refund for the tip after
- *             CLOSED_HOLD_KEPT_MS it is released and the dispute settled.
+ *             that would pay the same money twice: the hold is kept for the refund (P28) and staff
+ *             are told. TipMe's refund of the tip, once paid, consumes the hold and settles the
+ *             dispute in the refund's own booking (Task 10, `tip-refunds.ts`). With no refund for
+ *             the tip after CLOSED_HOLD_KEPT_MS it is released and the dispute settled.
  *   lost      recovered from what TipMe still holds or can take back first (disputeRecovery): the
  *             person's held share is cancelled (or reduced), or a `back` transfer takes what is still
  *             in their account (the transfer machine sends it); then the business's unswept share;
@@ -468,12 +469,17 @@ export function advanceDispute(
 }
 
 /**
- * Whether a refund of the tip has been asked for, booked, or reported by the partner: then a closed
- * dispute's hold stays for it (P28, Task 10).
+ * Whether a closed dispute's hold must stay past CLOSED_HOLD_KEPT_MS (P28). TipMe's own refund of the
+ * tip books the real thing: a paid one settles the dispute in its own transaction (consuming the
+ * hold, Task 10), so the dispute never gets here; one still open (asked, sent, or unanswered)
+ * keeps the hold until it is paid or fails. Otherwise only money already booked back (a reversal)
+ * or a refund the partner made that TipMe didn't ask for (stored unmatched: nothing books it, and
+ * releasing the share would pay it twice) keeps it, and staff were told by the closed issue.
  */
-async function refundSeen(tx: Tx, tipId: string): Promise<boolean> {
-  const result = await tx.execute<{ seen: boolean }>(sql`
-    SELECT EXISTS (SELECT 1 FROM tip_refunds r WHERE r.tip_id = ${tipId} AND r.status <> 'FAILED')
+async function refundKeepsHold(tx: Tx, tipId: string): Promise<boolean> {
+  const result = await tx.execute<{ keeps: boolean }>(sql`
+    SELECT EXISTS (SELECT 1 FROM tip_refunds r WHERE r.tip_id = ${tipId}
+                      AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))
         OR EXISTS (SELECT 1 FROM ledger_transactions t
                     WHERE t.tip_id = ${tipId} AND t.operation_type = 'reversal')
         OR EXISTS (
@@ -486,8 +492,8 @@ async function refundSeen(tx: Tx, tipId: string): Promise<boolean> {
                   OR u.payload->>'chargeReference' IN (
                        SELECT c.charge_reference FROM collect_transfers c
                         WHERE c.tip_id = ${tipId} AND c.charge_reference IS NOT NULL)))
-      AS seen`);
-  return result.rows[0]?.seen === true;
+      AS keeps`);
+  return result.rows[0]?.keeps === true;
 }
 
 /**
@@ -528,7 +534,7 @@ async function closeWithoutRuling(
   });
   const since = (row.decidedAt ?? now).getTime();
   if (now.getTime() - since < CLOSED_HOLD_KEPT_MS) return;
-  if (await refundSeen(tx, row.tipId)) return;
+  if (await refundKeepsHold(tx, row.tipId)) return;
   if (step === 'held' && position.row)
     await releaseHeldShare(tx, {
       transferId: position.row.id,

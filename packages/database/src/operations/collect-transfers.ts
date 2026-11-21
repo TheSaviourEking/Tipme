@@ -657,7 +657,7 @@ async function send(
         : await provider.sendCollectTransfer(input);
   } catch (error) {
     return claimed.kind === 'back'
-      ? refusedBack(db, claimed, now, error)
+      ? refusedBack(db, claimed, now, error, freshWindow)
       : refused(db, claimed, provider, accountRef, now, error, freshWindow);
   }
   if (answer.status === 'paid')
@@ -802,7 +802,7 @@ async function refused(
 }
 
 /**
- * A failed transfer back (Task 9). It runs as the recipient's account, so its refusals are theirs:
+ * A failed transfer back (Task 9, and Task 10's refunds). It runs as the recipient's account, so its refusals are theirs:
  * ORGANIZATION_IN_DEBT there is the RECIPIENT in debt (P14), never TipMe's, so it freezes nothing
  * else. Every definite refusal goes to review with a money issue (the dispute waits for staff);
  * TipMe's own key refused stops the run as for a share; anything else may have moved.
@@ -812,6 +812,11 @@ async function refusedBack(
   row: Row,
   now: Date,
   error: unknown,
+  /**
+   * As for a share (P30): only a refusal of the send that opened the key's window proves nothing
+   * ever moved under it, so only then is the row marked refused (a refund then fails cleanly).
+   */
+  freshWindow: boolean,
 ): Promise<Outcome> {
   const name = error instanceof Error ? error.name : null;
   // PayoutRejectedError says why as `failureReason`; PlatformRefusalError as `refusal`.
@@ -834,8 +839,9 @@ async function refusedBack(
       'sent',
       now,
       reason === 'in_debt'
-        ? "The partner answered ORGANIZATION_IN_DEBT to this transfer back: the recipient's account is in debt (not TipMe's). Nothing moved; the lost dispute waits for it."
-        : 'The partner refused this transfer back. Nothing moved; the lost dispute waits for it.',
+        ? `The partner answered ORGANIZATION_IN_DEBT to this transfer back: the recipient's account is in debt (not TipMe's). Nothing moved; the ${row.refundId ? 'refund' : 'lost dispute'} waits for it.`
+        : `The partner refused this transfer back. Nothing moved; the ${row.refundId ? 'refund' : 'lost dispute'} waits for it.`,
+      freshWindow,
     );
   await move(db, row, 'sent', 'unknown', now, {
     nextTryAt: unknownWait(row.attempts, now),

@@ -525,10 +525,10 @@ test("a withdrawn share stops for staff; going ahead needs a second person and b
   // The plain refund can't go ahead: it would have TipMe absorb money nobody decided to.
   const requester = await person();
   const approver = await person();
-  const plain = await ask(requester, tip.tipId);
-  assert.equal(plain.state, 'pending');
-  const refused = await approve(plain.requestId, approver).catch((e) => e);
-  assert.notEqual(refused?.status, 'approved');
+  await assert.rejects(ask(requester, tip.tipId), {
+    code: 'TIP_REFUND_REFUSED',
+    detail: 'staff_decides',
+  });
   assert.deepEqual(
     await q(`SELECT 1 FROM tip_refunds WHERE tip_id = $1`, [tip.tipId]),
     [],
@@ -595,9 +595,10 @@ test('a refund refused for low balance moves nothing and says why', async () => 
     seen.lastFailure,
     "TipMe's balance can't cover this refund right now.",
   );
-  const [issue] = await q(`SELECT note FROM issues WHERE dedupe_key = $1`, [
-    `tip_refund_failed.${refund.id}`,
-  ]);
+  const [issue] = await q(
+    `SELECT summary AS note FROM issues WHERE dedupe_key = $1`,
+    [`tip_refund_failed.${refund.id}`],
+  );
   assert.match(issue.note, /TipMe's balance can't cover this refund right now/);
 
   // A moved share with TipMe's balance read too low: nothing is taken back from them either.
@@ -609,7 +610,11 @@ test('a refund refused for low balance moves nothing and says why', async () => 
   state.balance = NET - 1n;
   await send(provider);
   assert.equal((await refundRow(moved.tipId)).failure, 'balance');
-  assert.deepEqual(await backsOf(second.id), []);
+  // Its transfer back was recorded, waiting, and is cancelled without ever being released.
+  assert.deepEqual(
+    (await backsOf(second.id)).map((b) => b.status),
+    ['cancelled'],
+  );
   await run(transfers, new Date());
   assert.deepEqual(moves.backs, []);
   assert.equal(await available(ADA), NET);
