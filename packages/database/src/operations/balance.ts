@@ -56,6 +56,10 @@ export function heldParts(
  * back, net of returns), so a dispute counts only the rest: per tip, GREATEST(held - covered, 0).
  * A lost dispute's own transfer back set its hold net of the refunds already (settleLost's
  * fromRefund), so that one counts as it is.
+ *
+ * RM10: every `collect_transfers` read here is scoped by `profile_id` (the tip's recipient, whose
+ * account every share, transfer back and return of the tip uses), so it runs on the
+ * `(profile_id, status)` index, never a scan of every recipient's transfers.
  */
 function disputeTermOnce(profileId: string): SQL {
   return sql`+ (SELECT COALESCE(SUM(GREATEST(h.held - h.covered, 0)), 0) FROM (
@@ -63,19 +67,22 @@ function disputeTermOnce(profileId: string): SQL {
                  GREATEST((SELECT COALESCE(SUM(CASE c.kind WHEN 'back' THEN c.amount_minor
                                                            ELSE -c.amount_minor END), 0)
                              FROM collect_transfers c
-                            WHERE c.tip_id = x.tip_id AND c.refund_id IS NOT NULL
+                            WHERE c.profile_id = ${profileId} AND c.tip_id = x.tip_id
+                              AND c.refund_id IS NOT NULL
                               AND c.kind IN ('back', 'return') AND c.status = 'paid'), 0)
                  + (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
                      WHERE r.tip_id = x.tip_id) AS covered
             FROM disputes x JOIN tips dt ON dt.id = x.tip_id
            WHERE dt.profile_id = ${profileId} AND x.held_minor > 0
              AND NOT EXISTS (SELECT 1 FROM collect_transfers b
-                              WHERE b.dispute_id = x.id AND b.kind = 'back')
+                              WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                                AND b.kind = 'back')
            GROUP BY x.tip_id) h)
       + (SELECT COALESCE(SUM(x.held_minor), 0) FROM disputes x JOIN tips dt ON dt.id = x.tip_id
           WHERE dt.profile_id = ${profileId}
             AND EXISTS (SELECT 1 FROM collect_transfers b
-                         WHERE b.dispute_id = x.id AND b.kind = 'back'))`;
+                         WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                           AND b.kind = 'back'))`;
 }
 
 /** The same for someone with no dispute or collect refund at all (`collect_money` false): zero. */
