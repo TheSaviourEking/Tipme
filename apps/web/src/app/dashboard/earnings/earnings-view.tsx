@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import type {
+  DashboardSummary,
   EarningsPeriod,
   EarningsPeriodView,
   EarningsSummary,
@@ -12,6 +13,7 @@ import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useRecipient } from '@/components/account/recipient-context';
 import { BarChart, type Bar } from '@/components/dashboard/bar-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
+import { CollectHeldNotes } from '@/components/dashboard/collect-status';
 import { naira } from '@/lib/money';
 import { apiDownload } from '@/lib/session-client';
 import { dayRange, monthNameOf } from '@/lib/month-share';
@@ -429,6 +431,10 @@ export default function EarningsPage() {
   const summary = usePanel<EarningsSummary>('/v1/me/earnings', {
     live: ['tips.changed'],
   });
+  // You collect (spec §2.1): what TipMe holds for them, kept or on its way; "0" for everyone else.
+  const held = usePanel<DashboardSummary>('/v1/me/dashboard', {
+    live: ['tips.changed', 'withdrawals.changed'],
+  }).data;
   if (summary.error === 'load' && !summary.data)
     return (
       <LoadFailed
@@ -466,6 +472,11 @@ export default function EarningsPage() {
         What you received from confirmed tips, after TipMe’s fee. Days and weeks
         are in Lagos time; weeks start on Monday.
       </p>
+      {held && (held.keptMinor !== '0' || held.onItsWayMinor !== '0') && (
+        <p className="earnings-held">
+          <CollectHeldNotes summary={held} className="earnings-held__note" />
+        </p>
+      )}
       {summary.data ? (
         <Summary summary={summary.data} pro={pro} />
       ) : (

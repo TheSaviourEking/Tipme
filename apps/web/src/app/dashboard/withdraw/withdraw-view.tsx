@@ -1,12 +1,14 @@
 'use client';
 import Link from 'next/link';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type {
   DashboardSummary,
+  PayoutBank,
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
   Button,
@@ -21,6 +23,11 @@ import {
 } from '@tipme/ui';
 import type { StampTone } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
+import {
+  CollectHeldNotes,
+  useCollectStatus,
+  withAmount,
+} from '@/components/dashboard/collect-status';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
@@ -46,6 +53,7 @@ import {
   withdrawUnsure,
 } from '@/lib/withdraw-state';
 import { Money } from '@/components/money';
+import { CollectBankForm } from './collect-bank-form';
 
 /**
  * Re-read on a withdrawal change or a tip (live updates, PR 2), but never on a resync, a tab focus
@@ -230,12 +238,57 @@ export default function WithdrawPage({
   const [busy, setBusy] = useState(false);
   // One key per request, so a double tap never withdraws twice.
   const key = useRef<string | null>(null);
+  // You collect (plan Task 14): a recipient on collect adds their first bank details here, checked
+  // by our payment partner, before anything else on this page applies. Everyone else: unchanged.
+  const {
+    collect,
+    known: collectKnown,
+    reload: reloadCollect,
+  } = useCollectStatus();
+  const collecting = collect !== null && !collect.verified;
+  // The partner's bank list, only for the add-bank-details form, read once it is needed.
+  const [banks, setBanks] = useState<PayoutBank[] | null>(null);
+  useEffect(() => {
+    if (!collecting) return;
+    let current = true;
+    void apiFetch<PayoutBank[]>('/v1/payout-banks').then((result) => {
+      if (current && result.ok) setBanks(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [collecting]);
+  // Verified while this page was open: "You're all set" stays for this visit.
+  const [wasCollecting, setWasCollecting] = useState(false);
+  if (collecting && !wasCollecting) setWasCollecting(true);
+  const allSet = wasCollecting && collect?.verified === true;
   const reloadAll = () =>
     void Promise.all([
       balance.reload(),
       latest.reload(),
       withdrawalsPanel.reload(),
     ]);
+  // The extra pages belong to the first page they followed; a fresh first page drops them.
+  const extra = more && more.source === withdrawalsPanel.data ? more : null;
+  const withdrawals = withdrawalsPanel.data
+    ? [...withdrawalsPanel.data.items, ...(extra?.items ?? [])]
+    : null;
+  const nextWithdrawals = extra
+    ? extra.next
+    : (withdrawalsPanel.data?.nextCursor ?? null);
+  const showMoreWithdrawals = async () => {
+    const source = withdrawalsPanel.data;
+    if (!source || !nextWithdrawals) return;
+    const result = await apiFetch<WithdrawalsPage>(
+      `${firstPath}?cursor=${encodeURIComponent(nextWithdrawals)}`,
+    );
+    if (result.ok)
+      setMore({
+        source,
+        items: [...(extra?.items ?? []), ...result.data.items],
+        next: result.data.nextCursor,
+      });
+  };
 
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
   const summary = balance.data;
@@ -246,8 +299,46 @@ export default function WithdrawPage({
         onRetry={balance.reload}
       />
     );
+  if (!summary || !collectKnown)
+    return <Skeleton label="Loading your balance" />;
+  const history = (
+    <History
+      rows={withdrawals}
+      failed={withdrawalsPanel.error === 'load'}
+      refreshFailed={withdrawalsPanel.error === 'refresh'}
+      next={nextWithdrawals}
+      onMore={() => void showMoreWithdrawals()}
+    />
+  );
+  if (collect && collecting)
+    return (
+      <div className="dashboard-section withdraw">
+        <h1>Withdraw</h1>
+        <div className="withdraw__layout">
+          <div className="withdraw__money">
+            {summary.keptMinor !== '0' && (
+              <p className="withdraw__held">
+                <CollectHeldNotes
+                  summary={summary}
+                  className="withdraw__held-note"
+                />
+              </p>
+            )}
+            <CollectBankForm
+              bank={collect.bank}
+              banks={banks}
+              onAdded={(state) => {
+                void reloadCollect();
+                if (state === 'verified') reloadAll();
+              }}
+            />
+          </div>
+          {history}
+        </div>
+      </div>
+    );
   // A quote that failed to refresh is no quote: it is never read as a yes.
-  if (!summary || (!latest.data && !latest.error && !latest.needsCheck))
+  if (!latest.data && !latest.error && !latest.needsCheck)
     return <Skeleton label="Loading your balance" />;
   const quote = latest.error ? null : latest.data;
   const state = withdrawState({
@@ -325,27 +416,6 @@ export default function WithdrawPage({
     key.current = null;
   };
   const shortcuts = SHORTCUTS_MINOR.filter((minor) => minor < withdrawable);
-  // The extra pages belong to the first page they followed; a fresh first page drops them.
-  const extra = more && more.source === withdrawalsPanel.data ? more : null;
-  const withdrawals = withdrawalsPanel.data
-    ? [...withdrawalsPanel.data.items, ...(extra?.items ?? [])]
-    : null;
-  const nextWithdrawals = extra
-    ? extra.next
-    : (withdrawalsPanel.data?.nextCursor ?? null);
-  const showMoreWithdrawals = async () => {
-    const source = withdrawalsPanel.data;
-    if (!source || !nextWithdrawals) return;
-    const result = await apiFetch<WithdrawalsPage>(
-      `${firstPath}?cursor=${encodeURIComponent(nextWithdrawals)}`,
-    );
-    if (result.ok)
-      setMore({
-        source,
-        items: [...(extra?.items ?? []), ...result.data.items],
-        next: result.data.nextCursor,
-      });
-  };
   const smallest = formatNaira(withdrawalMinimumMinor());
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
@@ -374,6 +444,13 @@ export default function WithdrawPage({
         <StandingWarning title={notice.title} className="withdraw__warning">
           {notice.body}
         </StandingWarning>
+      )}
+      {allSet && (
+        <Slip
+          tone="done"
+          title={COLLECT_COPY.verified}
+          className="withdraw__done"
+        />
       )}
       {done && (
         <Slip
@@ -405,6 +482,23 @@ export default function WithdrawPage({
             {readyWithMoney && feeLine && (
               <p className="withdraw__fine">{feeLine}</p>
             )}
+            {/* You collect (spec §2.1 step 6, §8): what is still on its way, and the first cap. */}
+            {summary.onItsWayMinor !== '0' && (
+              <p className="withdraw__fine">
+                <CollectHeldNotes
+                  summary={summary}
+                  className="withdraw__held-note"
+                />
+              </p>
+            )}
+            {collect?.firstWithdrawalCapMinor && (
+              <p className="withdraw__fine" data-testid="first-withdrawal-cap">
+                {withAmount(
+                  COLLECT_COPY.firstWithdrawalCap,
+                  collect.firstWithdrawalCapMinor,
+                )}
+              </p>
+            )}
             {state.place === 'instrument' && !readyWithMoney && (
               <p className="withdraw__fine">
                 {notice.body}
@@ -431,7 +525,11 @@ export default function WithdrawPage({
             {ready && (
               <p className="withdraw__chip">
                 <span>{bankLine(ready.destination)}</span>
-                <Link href="/dashboard/settings#get-paid">Change</Link>
+                {/* A collect recipient's bank goes through our payment partner's name check, which
+                    Get paid's form doesn't do (the API refuses it there). */}
+                {!collect && (
+                  <Link href="/dashboard/settings#get-paid">Change</Link>
+                )}
               </p>
             )}
             {pilotNotice}
@@ -576,13 +674,7 @@ export default function WithdrawPage({
             </Surface>
           )}
         </div>
-        <History
-          rows={withdrawals}
-          failed={withdrawalsPanel.error === 'load'}
-          refreshFailed={withdrawalsPanel.error === 'refresh'}
-          next={nextWithdrawals}
-          onMore={() => void showMoreWithdrawals()}
-        />
+        {history}
       </div>
     </div>
   );

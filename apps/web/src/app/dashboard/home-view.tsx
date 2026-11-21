@@ -7,7 +7,8 @@ import type {
   DashboardSummary,
   WeeklyReportData,
 } from '@tipme/contracts';
-import { Button, Skeleton } from '@tipme/ui';
+import { COLLECT_COPY } from '@tipme/contracts';
+import { Button, Skeleton, StandingWarning } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
 import { WhatsNewSlip } from '@/components/dashboard/whats-new-slip';
@@ -18,6 +19,10 @@ import { PageCard } from '@/components/dashboard/page-card';
 import { RecapTeaser } from '@/components/dashboard/recap-teaser';
 import { TrendChart } from '@/components/dashboard/trend-chart';
 import { usePanel } from '@/components/dashboard/use-panel';
+import {
+  CollectHeldNotes,
+  useCollectStatus,
+} from '@/components/dashboard/collect-status';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
 import { withdrawalInFlight } from '@/lib/quote-merge';
@@ -87,6 +92,8 @@ export default function DashboardHome() {
   const { arriving, highlighted } = useArrivals(activity);
   const balanceRose = useBalanceRose(summary);
   const latestWeek = week.data?.[0] ?? null;
+  // You collect (plan Task 14, spec §2.1): null for everyone not on it, so nothing below changes.
+  const { collect } = useCollectStatus();
   const [shared, setShared] = useState('');
   const firstName = profile.displayName.split(/\s+/)[0];
 
@@ -146,6 +153,33 @@ export default function DashboardHome() {
         })
       : BigInt(0);
 
+  // Collect: the balance is everything TipMe holds for them too, with notes saying what is kept and
+  // what is on its way (neither withdrawable yet). Both are "0" for everyone else.
+  const balanceMinor = (
+    BigInt(summary.availableMinor) +
+    BigInt(summary.keptMinor) +
+    BigInt(summary.onItsWayMinor)
+  ).toString();
+  const collectNotice = collect?.paused ? (
+    <StandingWarning
+      title={COLLECT_COPY.pausedRecipient}
+      className="collect-paused"
+      actions={
+        <Link
+          className="tm-button tm-button--continue"
+          href="/dashboard/withdraw"
+        >
+          {COLLECT_COPY.withdrawNoBank}
+        </Link>
+      }
+    />
+  ) : collect && !collect.verified && !collect.bank ? (
+    <p className="collect-line">
+      {COLLECT_COPY.dashboardNoBank}{' '}
+      <Link href="/dashboard/withdraw">{COLLECT_COPY.withdrawNoBank}</Link>
+    </p>
+  ) : null;
+
   const shareStatus = (
     <p role="status" className="tm-hint dashboard-share-status">
       {shared}
@@ -160,6 +194,7 @@ export default function DashboardHome() {
       <div className="dashboard-home__main">
         <UsernameTakeBackBanner />
         <WhatsNewSlip />
+        {collectNotice}
         {firstDay ? (
           <section className="first-day recipient-setup" aria-labelledby="next">
             <div>
@@ -205,8 +240,10 @@ export default function DashboardHome() {
                   </Link>
                 )}
               </li>
-              {/* Nothing until known, so the step never flips from one story to another. */}
-              {paymentsNeedSetup === null ? null : paymentsNeedSetup ? (
+              {/* Nothing until known, so the step never flips from one story to another. A
+                  recipient on You collect has nothing to set up: TipMe takes their tips. */}
+              {collect ||
+              paymentsNeedSetup === null ? null : paymentsNeedSetup ? (
                 <li>
                   <div>
                     <strong>Set up payments</strong>
@@ -274,9 +311,13 @@ export default function DashboardHome() {
                   className={`balance-card__figure${balanceRose ? ' balance-card__figure--rose' : ''}`}
                 >
                   <strong data-testid="balance">
-                    <Money minor={summary.availableMinor} />
+                    <Money minor={balanceMinor} />
                   </strong>
                 </span>
+                <CollectHeldNotes
+                  summary={summary}
+                  className="balance-card__note"
+                />
                 {withdrawable > BigInt(0) && (
                   <span className="balance-card__note" data-testid="ready">
                     Ready to withdraw <Money minor={withdrawable.toString()} />
@@ -358,7 +399,7 @@ export default function DashboardHome() {
           <div className="first-day-balance">
             <span>Your balance:</span>{' '}
             <strong data-testid="balance">
-              <Money minor={summary.availableMinor} />
+              <Money minor={balanceMinor} />
             </strong>
             {shareStatus}
           </div>
