@@ -20,6 +20,7 @@ import {
 } from '@tipme/contracts';
 import {
   beginPaymentAccountCreation,
+  collectionModeOf,
   ensurePayoutSetup,
   getPaymentAccountForProfile,
   getPaymentAccountRecipient,
@@ -101,7 +102,12 @@ export class PaymentAccountsController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<BachsPaymentAccountStatus>> {
     const bachs = this.bachs();
-    if (!bachs)
+    if (!bachs) {
+      // No page yet answers as before (no account, nothing collecting): only the mode is read.
+      const owner = await getPaymentAccountRecipient(
+        this.database.db,
+        auth.userId,
+      );
       return {
         data: {
           enabled: false,
@@ -112,8 +118,10 @@ export class PaymentAccountsController {
           feeCollector: null,
           requirementsDue: [],
           lastSyncedAt: null,
+          collecting: owner ? await this.collecting(owner.profileId) : false,
         },
       };
+    }
 
     const recipient = await this.recipient(auth.userId);
     const account = await getPaymentAccountForProfile(this.database.db, {
@@ -137,8 +145,17 @@ export class PaymentAccountsController {
         feeCollector,
         requirementsDue: account?.requirementsDue ?? [],
         lastSyncedAt: account?.lastSyncedAt?.toISOString() ?? null,
+        collecting: await this.collecting(recipient.profileId),
       },
     };
+  }
+
+  /**
+   * You collect (plan Task 14): TipMe takes this recipient's tips, so there is no account of their
+   * own to set up. The balance's rule: `collection_mode = 'collect'`; undecided reads as direct.
+   */
+  private async collecting(profileId: string): Promise<boolean> {
+    return (await collectionModeOf(this.database.db, profileId)) === 'collect';
   }
 
   @Post('onboarding')
