@@ -18001,6 +18001,76 @@
         "x-tipme-permission": "payments.repair"
       }
     },
+    "/v1/ops/tips/{tipId}/refund/absorb-gap": {
+      "post": {
+        "operationId": "OpsTipRefunds.absorbGap",
+        "tags": [
+          "OpsTipRefunds"
+        ],
+        "parameters": [
+          {
+            "name": "tipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "payments.repair"
+      }
+    },
     "/v1/ops/usernames": {
       "get": {
         "operationId": "OpsUsernames.list",
@@ -20188,6 +20258,8 @@
                   "PRO_BALANCE_REFUSED",
                   "PRO_REFUND_REFUSED",
                   "TIP_REFUND_REFUSED",
+                  "TIP_REFUND_NEEDS_DECISION",
+                  "TIP_REFUND_NO_GAP",
                   "PRO_REFUNDS_OFF",
                   "SWITCH_NOT_BUILT",
                   "TIP_REFUNDS_OFF",

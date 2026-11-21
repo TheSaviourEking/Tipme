@@ -26,8 +26,10 @@ import {
   collectTransfers,
   disputes,
   ledgerTransactions,
+  paymentIntents,
   profiles,
   shareTransfers,
+  tipQuotes,
   tipRefunds,
   tips,
 } from '../schema.js';
@@ -171,9 +173,8 @@ export async function tipRefundFacts(
     provider: string | null;
     provider_reference: string | null;
     reversed: boolean;
-    collection_mode: string | null;
   }>(sql`
-    SELECT t.id AS tip_id, t.status, t.profile_id, p.handle, q.collection_mode,
+    SELECT t.id AS tip_id, t.status, t.profile_id, p.handle,
            q.tip_minor::text AS gross, q.recipient_net_minor::text AS net,
            s.share_minor::text AS share, b.name AS business_name,
            a.provider, a.provider_reference,
@@ -217,7 +218,7 @@ export async function tipRefundFacts(
       : { refundMinor: 0n, personMinor: 0n, businessMinor: 0n };
   // A collect tip (the mode it was quoted under, never the page's now): how its part comes back.
   const collect =
-    row.collection_mode === 'collect' &&
+    (await quotedMode(db, row.tip_id)) === 'collect' &&
     row.status === 'SUCCEEDED' &&
     row.profile_id &&
     netMinor > 0n
@@ -269,6 +270,20 @@ export async function tipRefundFacts(
         ? (FAILURE_WORDS[latest.failure ?? ''] ?? FAILURE_WORDS['refused']!)
         : null,
   };
+}
+
+/** The mode the tip was quoted under (never the page's mode now: a tip keeps its quote's). */
+async function quotedMode(
+  db: Database | Tx,
+  tipId: string,
+): Promise<string | null> {
+  const [quoted] = await db
+    .select({ mode: tipQuotes.collectionMode })
+    .from(tips)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
+    .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
+    .where(eq(tips.id, tipId));
+  return quoted?.mode ?? null;
 }
 
 /** What a collect tip's refund would do with the recipient's part, read now (see the header). */
@@ -418,23 +433,13 @@ export async function askTipRefund(
     .where(eq(tips.id, input.tipId))
     .for('update');
   if (!tip) throw new OperationError('TIP_REFUND_REFUSED', 'not_paid');
-  if (tip.profileId) {
-    // A collect tip's plan reads the recipient's balance: under their lock, as a withdrawal is.
-    const [collect] = await tx
-      .execute<{ collect: boolean }>(
-        sql`
-      SELECT q.collection_mode = 'collect' AS collect FROM tips t
-        JOIN payment_intents i ON i.id = t.intent_id JOIN tip_quotes q ON q.id = i.quote_id
-       WHERE t.id = ${input.tipId}`,
-      )
-      .then((r) => r.rows);
-    if (collect?.collect)
-      await tx
-        .select({ id: profiles.id })
-        .from(profiles)
-        .where(eq(profiles.id, tip.profileId))
-        .for('update');
-  }
+  // A collect tip's plan reads the recipient's balance: under their lock, as a withdrawal is.
+  if (tip.profileId && (await quotedMode(tx, input.tipId)) === 'collect')
+    await tx
+      .select({ id: profiles.id })
+      .from(profiles)
+      .where(eq(profiles.id, tip.profileId))
+      .for('update');
   const facts = await tipRefundFacts(tx, input.tipId);
   if (!facts.refundable || !facts.provider || !facts.providerReference)
     throw new OperationError('TIP_REFUND_REFUSED', facts.refusal ?? 'not_paid');
@@ -1062,7 +1067,8 @@ async function sendCollectRefunds(
         ),
       )
       .orderBy(asc(tipRefunds.createdAt))
-      .limit(input.limit ?? 20),
+      // Refunds waiting for money to come back are looked at every run: room for them and new ones.
+      .limit(input.limit ?? 100),
   );
   let sent = 0;
   let failed = 0;

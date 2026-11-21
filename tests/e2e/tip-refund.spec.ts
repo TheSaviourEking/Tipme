@@ -80,3 +80,102 @@ test('the supporter’s receipt says what was refunded, and that TipMe’s fee i
   await expect(receipt).toContainText('Refunded ₦9,500 (TipMe’s fee is kept)');
   await expectAccessible(page);
 });
+
+// You collect (plan Task 10): a collect tip is refunded from TipMe's own balance once the
+// recipient's part is back. When they have already withdrawn part of it, staff see the gap, the
+// plain refund is not offered, and going ahead is a second person's decision. The API's answers
+// for a withdrawn collect tip are held here (the integration tests cover the API itself:
+// tip-refund-api.test.mjs and collect-refunds.test.mjs).
+test('staff see the gap and the second-person step on a withdrawn collect tip', async ({
+  page,
+  browser,
+  request,
+}, testInfo) => {
+  const recipientPage = await (await browser.newContext()).newPage();
+  const who = await signUpRecipient(recipientPage, testInfo);
+  await recipientPage.close();
+  const { tipId } = await payAtBusiness(request, {
+    handle: who.handle,
+    amountMinor: '1000000',
+  });
+  const refundPath = `**/v1/ops/tips/${tipId}/refund`;
+  await page.route(refundPath, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    await route.fulfill({
+      json: {
+        data: {
+          tipId,
+          refundable: true,
+          refusal: null,
+          words: 'This tip can be refunded. TipMe keeps its fee.',
+          handle: who.handle,
+          businessName: null,
+          currency: 'NGN',
+          grossMinor: '1000000',
+          feeMinor: '50000',
+          refundMinor: '950000',
+          personMinor: '950000',
+          businessMinor: '0',
+          refund: null,
+          collect: { plan: 'staff_decides', gapMinor: '650000' },
+          lastFailure: null,
+        },
+      },
+    });
+  });
+  let asked: { reason?: string } | null = null;
+  await page.route(`${refundPath}/absorb-gap`, async (route) => {
+    asked = route.request().postDataJSON() as { reason?: string };
+    await route.fulfill({
+      status: 202,
+      json: { data: { requestId: '00000000-0000-4000-8000-000000000001' } },
+    });
+  });
+  await enrolOwner(page, testInfo);
+  await page.goto('/ops/search');
+  await page.getByLabel('Search').fill(tipId);
+  await page.getByRole('button', { name: 'Search' }).click();
+  const tips = page.getByRole('heading', { name: 'Tips' }).locator('..');
+  const row = tips.getByRole('listitem').filter({ hasText: tipId });
+  await row.getByRole('button', { name: 'Refund tip…' }).click();
+  const panel = row.getByTestId('tip-refund');
+  await expect(panel).toContainText(
+    'The supporter gets back NGN 9,500.00: the NGN 10,000.00 tip minus TipMe’s NGN 500.00 fee, which TipMe keeps.',
+  );
+  await expect(panel).toContainText('Part of this tip can’t be taken back');
+  await expect(panel).toContainText(
+    'Up to NGN 6,500.00 has already been withdrawn, so TipMe would pay it from its own balance as a loss.',
+  );
+  // The plain refund isn't offered: only the step a second person decides.
+  await expect(
+    panel.getByRole('button', { name: 'Ask to refund' }),
+  ).toHaveCount(0);
+  await expect(panel).not.toContainText(/bachs/i);
+  await expectAccessible(page);
+  expect(await fitsViewport(page)).toBe(true);
+  await testInfo.attach('gap', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
+  await panel
+    .getByRole('button', { name: 'Refund and absorb the gap' })
+    .click();
+  await panel
+    .getByLabel('Why should TipMe refund this and absorb the gap?')
+    .fill('The supporter was charged twice; the recipient already withdrew.');
+  await testInfo.attach('reason', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
+  await panel.getByRole('button', { name: 'Ask a second person' }).click();
+  await expect(
+    row.getByTestId('action-outcome').getByText(/Waiting for a second person/),
+  ).toBeVisible();
+  expect(asked).toEqual({
+    reason: 'The supporter was charged twice; the recipient already withdrew.',
+  });
+  await testInfo.attach('waiting', {
+    body: await page.screenshot({ fullPage: true }),
+    contentType: 'image/png',
+  });
+});

@@ -59,8 +59,13 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-two', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 22);
+test('the serious actions are the agreed twenty-three', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 23);
+  // You collect (plan Task 10, §6.1 case 3): TipMe absorbing what a refund can't take back.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['tip_refund.absorb_gap'],
+    'payments.repair',
+  );
   // Owner, 18 Nov 2026: TipMe's fee per plan is a money change, with a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['plan_fees.change'], 'fees.manage');
   // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) needs a second person.
