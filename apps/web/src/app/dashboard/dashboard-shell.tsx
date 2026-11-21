@@ -10,6 +10,7 @@ import {
 } from 'react';
 import type {
   BachsPaymentAccountStatus,
+  CollectStatusView,
   MyAccount,
   MyBusinessRoles,
   MyProfile,
@@ -249,10 +250,26 @@ export function DashboardShell({
       ),
     [],
   );
+  // You collect: whether this recipient is on it, read once (a mode never changes back). Only a 404
+  // means not; until an answer, payment notices wait (ownerAttention's `collect: null`).
+  const [collect, setCollect] = useState<boolean | null>(null);
+  const readCollect = useCallback(
+    () =>
+      apiFetch<CollectStatusView>('/v1/me/collect').then((result) => {
+        if (result.ok) setCollect(result.data.mode === 'collect');
+        else if (result.status === 404) setCollect(false);
+      }),
+    [],
+  );
   const refreshAttention = useCallback(
     () => void readPayments(),
     [readPayments],
   );
+  // Asked again on each page change until it answers.
+  const hasProfile = profile !== null;
+  useEffect(() => {
+    if (collect === null && hasProfile) void readCollect();
+  }, [collect, hasProfile, pathname, readCollect]);
   useEffect(refreshAttention, [refreshAttention, pathname]);
   const [needsRecoveryEmail, setNeedsRecoveryEmail] = useState(false);
   const [accountRound, setAccountRound] = useState(0);
@@ -272,7 +289,13 @@ export function DashboardShell({
   }, []);
   const attention =
     profile && payments !== undefined
-      ? ownerAttention({ profile, payments, needsRecoveryEmail, visitsToday })
+      ? ownerAttention({
+          profile,
+          payments,
+          needsRecoveryEmail,
+          visitsToday,
+          collect,
+        })
       : null;
   // The nav dots keep the full list; the reminders shown are this page's own.
   const needsFix = new Set(attention?.map((item) => item.navHref));

@@ -32,6 +32,7 @@ import {
   collectAccountReference,
   collectBankFacts,
   collectBankView,
+  collectDisputeHeldMinor,
   collectStatus,
   ensurePayoutSetup,
   flagSharedBank,
@@ -160,6 +161,9 @@ export class CollectBankController {
           profileId,
           provider: this.provider.name,
         }),
+        disputeHeldMinor: (
+          await collectDisputeHeldMinor(this.database.db, profileId)
+        ).toString(),
       },
     };
   }

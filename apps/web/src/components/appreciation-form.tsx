@@ -8,6 +8,7 @@ import type {
   TipPurpose,
   TipQuote,
 } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts';
 import {
   AmountChoice,
   Badge,
@@ -49,8 +50,16 @@ const PANEL_MARGIN_PX = 32;
 const MESSAGE_LIMIT = 280;
 const NAME_LIMIT = 60;
 
-const failureMessage = (failure: ApiFailure, rangeText: string): string => {
+const failureMessage = (
+  failure: ApiFailure,
+  rangeText: string,
+  recipient: string,
+): string => {
   if (failure.code === 'NETWORK') return CONNECTION_COPY.tipDropped;
+  // You collect (spec §2.2): refused before paying, so nothing was charged. No reason, amount or
+  // cap is given, to protect the recipient's privacy.
+  if (failure.code === 'PAGE_PAUSED')
+    return COLLECT_COPY.pausedSupporter(recipient);
   if (failure.code === 'RATE_LIMITED')
     return 'That was a lot of tries. Please wait a minute, then try again.';
   if (failure.code === 'VALIDATION_FAILED')
@@ -229,7 +238,7 @@ export function AppreciationForm({
       setQuote({
         kind: 'failed',
         amount: minor,
-        message: failureMessage(result, options.rangeText),
+        message: failureMessage(result, options.rangeText, recipient),
       });
       return null;
     }
@@ -418,7 +427,7 @@ export function AppreciationForm({
       return;
     }
     setReachedUs(result.code !== 'NETWORK');
-    setNotice(failureMessage(result, options.rangeText));
+    setNotice(failureMessage(result, options.rangeText, recipient));
   };
 
   // On a phone the Tip bar can be pressed from anywhere on the page: bring a problem into view,
