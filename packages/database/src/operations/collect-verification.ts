@@ -45,8 +45,10 @@ import {
 export interface CollectBankFacts {
   mode: CollectionMode;
   verifiedAt: Date | null;
-  /** The legal name TipMe holds (the one last given to our payment partner), or null. */
+  /** The legal name TipMe holds: the one its current bank was checked against, or null. */
   legalName: CollectLegalName | null;
+  /** The digest of the name our payment partner last confirmed holding, or null. */
+  partnerNameDigest: string | null;
 }
 
 /** The stored name (JSON `{ first, last }`), or null when absent or unreadable. */
@@ -89,6 +91,7 @@ export function collectBankFacts(
         mode: profiles.collectionMode,
         verifiedAt: profiles.collectVerifiedAt,
         legalName: profiles.collectLegalName,
+        partnerNameDigest: profiles.collectPartnerNameDigest,
       })
       .from(profiles)
       .where(eq(profiles.id, profileId));
@@ -97,6 +100,7 @@ export function collectBankFacts(
       mode: row.mode === 'collect' ? 'collect' : 'direct',
       verifiedAt: row.verifiedAt,
       legalName: parseLegalName(row.legalName),
+      partnerNameDigest: row.partnerNameDigest,
     };
   });
 }
@@ -120,17 +124,31 @@ export function bankAccountHash(
 }
 
 /**
- * A short keyed digest of a legal name, for the partner write's idempotency key: the same name
- * replays the same write, a new one is a new write, and the key never spells the name.
+ * A legal name's digest (case and spacing aside), to bind a name to the check our payment partner
+ * made (fix C1) and to know whether the partner already holds it (fix I1). Unkeyed: the name it
+ * stands for sits beside it in the same row set, so a key would hide nothing.
  */
-export function legalNameDigest(
-  sealing: MailSealing,
-  name: CollectLegalName,
-): string {
-  return createHmac('sha256', keyOf(sealing, 'collect-legal-name'))
+export function legalNameDigest(name: CollectLegalName): string {
+  return createHash('sha256')
     .update(`${folded(name.first)}\n${folded(name.last)}`)
-    .digest('hex')
-    .slice(0, 20);
+    .digest('hex');
+}
+
+/** Records what the partner now holds for this person (null: unknown, so the next add sends it). */
+export function recordPartnerName(
+  db: Database,
+  input: { profileId: string; legalName: CollectLegalName | null },
+): Promise<void> {
+  return guarded(async () => {
+    await db
+      .update(profiles)
+      .set({
+        collectPartnerNameDigest: input.legalName
+          ? legalNameDigest(input.legalName)
+          : null,
+      })
+      .where(eq(profiles.id, input.profileId));
+  });
 }
 
 /**
@@ -293,8 +311,8 @@ export async function collectBankView(
 
 /**
  * Sets `collect_verified_at`, once, in one transaction with its notice: only for a `collect`
- * recipient not yet verified, with a legal name, whose current bank is `usable` (the capability was
- * read active just before). Returns whether this call verified them.
+ * recipient not yet verified, with a legal name, whose current bank is `usable` and was checked
+ * against that very name (the capability was read active just before). Returns whether this call verified them.
  */
 async function markVerified(
   db: Database,
@@ -318,15 +336,19 @@ async function markVerified(
         .from(profiles)
         .where(eq(profiles.id, input.profileId))
         .for('update');
+      const legalName = parseLegalName(row?.legalName ?? null);
       if (
         !row ||
         row.mode !== 'collect' ||
         row.verifiedAt !== null ||
-        !parseLegalName(row.legalName)
+        !legalName
       )
         return false;
       const [bank] = await tx
-        .select({ status: payoutDestinations.status })
+        .select({
+          status: payoutDestinations.status,
+          nameDigest: payoutDestinations.nameDigest,
+        })
         .from(payoutDestinations)
         .where(
           and(
@@ -339,7 +361,12 @@ async function markVerified(
           ),
         )
         .for('share');
-      if (bank?.status !== 'usable') return false;
+      // C1: only the name our payment partner checked this bank against is ever verified.
+      if (
+        bank?.status !== 'usable' ||
+        bank.nameDigest !== legalNameDigest(legalName)
+      )
+        return false;
       await tx
         .update(profiles)
         .set({ collectVerifiedAt: input.now })

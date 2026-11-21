@@ -700,6 +700,9 @@ export const profiles = pgTable(
     // then, locked from that moment (Tasks 12 and 13).
     collectVerifiedAt: timestamp('collect_verified_at', { withTimezone: true }),
     collectLegalName: text('collect_legal_name'),
+    // You collect (Task 13 fix C1/I1): the digest of the legal name our payment partner last confirmed
+    // holding for this person, so a name is sent only when it changed, and a refused one is put back.
+    collectPartnerNameDigest: text('collect_partner_name_digest'),
     createdAt: createdAt(),
   },
   (table) => [
@@ -1516,6 +1519,9 @@ export const payoutDestinations = pgTable(
     // You collect (P4, Task 13): a keyed hash of the bank and full account number, never the number
     // itself, so a second recipient adding the same account can be sent to review.
     accountHash: text('account_hash'),
+    // You collect (Task 13 fix C1): the digest of the legal name the partner checked this bank
+    // against. A recipient is verified only while it is their own name's.
+    nameDigest: text('name_digest'),
     createdAt: createdAt(),
     replacedAt: timestamp('replaced_at', { withTimezone: true }),
   },

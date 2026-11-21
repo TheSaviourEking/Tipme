@@ -139,6 +139,7 @@ async function paidTip(profile, settledAt) {
  */
 function partner(prefix = 'acct_person') {
   const state = {
+    nameKeys: new Set(),
     calls: [],
     accounts: new Map(),
     destinations: new Map(),
@@ -201,6 +202,10 @@ function partner(prefix = 'acct_person') {
           cause: 'no_response',
         });
       }
+      // As the partner: a key it has seen replays its first answer and applies nothing.
+      if (state.nameKeys.has(input.idempotencyKey))
+        return account(input.accountReference);
+      state.nameKeys.add(input.idempotencyKey);
       const known = state.accounts.get(input.accountReference) ?? {
         ngn: false,
       };
@@ -948,5 +953,166 @@ test('another person’s profile, a direct recipient, or the switch off with mod
       ),
     ),
     { status: 404, code: 'NOT_FOUND' },
+  );
+});
+
+// Fix round 1 (review C1, I1, I2, M2, M6): a name is verified only once our payment partner has
+// checked it against the bank that is current; the partner's record follows TipMe's.
+
+const REAL = { first: 'Real', last: 'Holder' };
+const partnerName = (state, reference = 'acct_person_1') =>
+  state.accounts.get(reference)?.name;
+
+test('a later add that fails after the rename never verifies the new name on the old bank (C1)', async () => {
+  await paidTip(TOBI, ago(DAY));
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const controller = controllerFor(provider);
+  assert.deepEqual(await addBank(controller, TOBI, { legalName: REAL }), {
+    data: { state: 'checking' },
+  });
+  const realAdd = provider.addPayoutDestination;
+  for (const failure of ['add', 'hold']) {
+    if (failure === 'add')
+      provider.addPayoutDestination = async () => {
+        throw new Error('partner down');
+      };
+    else
+      provider.holdLocalCurrency = async () => {
+        throw new Error('partner down');
+      };
+    const answer = await refused(() =>
+      addBank(controller, TOBI, { accountNumber: accountNumber(2) }),
+    );
+    assert.equal(answer.status, 503, failure);
+    provider.addPayoutDestination = realAdd;
+    delete provider.holdLocalCurrency;
+    provider.holdLocalCurrency = partner().provider.holdLocalCurrency;
+    // TipMe and the partner both still hold the name the bank was checked against.
+    assert.deepEqual(
+      JSON.parse((await profileRow(TOBI)).collect_legal_name),
+      REAL,
+    );
+    assert.deepEqual(partnerName(state), REAL);
+  }
+  state.capability = 'active';
+  const view = await controller.status({ userId: TOBI.userId });
+  assert.equal(view.data.verified, true);
+  assert.deepEqual(
+    JSON.parse((await profileRow(TOBI)).collect_legal_name),
+    REAL,
+  );
+  assert.equal(view.data.bank.last4, accountNumber(1).slice(-4));
+});
+
+test('a replayed usable answer for the same number never certifies a different name (C1)', async () => {
+  await paidTip(TOBI, ago(DAY));
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const controller = controllerFor(provider);
+  await addBank(controller, TOBI, { legalName: REAL });
+  // Within the partner's window the add replays its first answer, decided against REAL.
+  provider.addPayoutDestination = async (reference, input) => {
+    const destinationRef = `dest_${reference}_${input.bankCode}_${input.accountNumber.slice(-4)}`;
+    const status = state.destinations.get(destinationRef);
+    return { destinationRef, usable: status === 'usable', status };
+  };
+  const answer = await refused(() => addBank(controller, TOBI));
+  assert.equal(answer.status, 503);
+  state.capability = 'active';
+  await controller.status({ userId: TOBI.userId });
+  const row = await profileRow(TOBI);
+  // Verified, if at all, only with the name the bank was checked against.
+  assert.deepEqual(JSON.parse(row.collect_legal_name), REAL);
+  assert.deepEqual(partnerName(state), REAL);
+});
+
+test('a refused add leaves the partner holding the name TipMe holds (I2)', async () => {
+  await paidTip(TOBI, ago(DAY));
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const controller = controllerFor(provider);
+  await addBank(controller, TOBI);
+  state.next.push('rejected');
+  assert.deepEqual(
+    await refused(() =>
+      addBank(controller, TOBI, {
+        legalName: { first: 'Some', last: 'Stranger' },
+        accountNumber: accountNumber(2),
+      }),
+    ),
+    { status: 422, code: 'NAME_MISMATCH' },
+  );
+  assert.deepEqual(
+    JSON.parse((await profileRow(TOBI)).collect_legal_name),
+    TOBI_NAME,
+  );
+  assert.deepEqual(partnerName(state), TOBI_NAME);
+});
+
+test('the partner name is written per change, so X then Y then X holds X; an unchanged name is not sent (I1)', async () => {
+  await paidTip(TOBI, ago(DAY));
+  const { provider, state } = partner();
+  state.capability = 'restricted';
+  const controller = controllerFor(provider);
+  const Y = { first: 'Tobi', last: 'Adeyemii' };
+  await addBank(controller, TOBI, { accountNumber: accountNumber(1) });
+  // The same name again: nothing to write.
+  await addBank(controller, TOBI, { accountNumber: accountNumber(1) });
+  assert.equal(state.of('name').length, 0);
+  await addBank(controller, TOBI, {
+    legalName: Y,
+    accountNumber: accountNumber(2),
+  });
+  assert.deepEqual(partnerName(state), Y);
+  await addBank(controller, TOBI, { accountNumber: accountNumber(3) });
+  assert.deepEqual(partnerName(state), TOBI_NAME);
+  const keys = state.of('name').map(([, , key]) => key);
+  assert.equal(keys.length, 2);
+  assert.equal(new Set(keys).size, 2);
+  state.capability = 'active';
+  assert.equal(
+    (await controller.status({ userId: TOBI.userId })).data.verified,
+    true,
+  );
+  assert.deepEqual(
+    JSON.parse((await profileRow(TOBI)).collect_legal_name),
+    TOBI_NAME,
+  );
+});
+
+test('an open shared-bank issue alone holds a tip that arrives after the bank was added (M2)', async () => {
+  await collect(TOBI);
+  const { provider } = partner();
+  await addBank(controllerFor(provider), TOBI);
+  // Ada has nothing waiting when she adds Tobi's account, so no row moves to review.
+  await collect(ADA);
+  const ada = partner('acct_ada');
+  await addBank(controllerFor(ada.provider), ADA);
+  assert.deepEqual(await shares(ADA), []);
+  const later = await paidTip(ADA, ago(HOUR));
+  await ops.releaseWaitingTransfers(database.db, { now: new Date() });
+  await run(ada.provider);
+  assert.equal(
+    (await shares(ADA)).find((share) => share.id === later.rowId).status,
+    'waiting',
+  );
+  assert.equal(ada.state.of('send').length, 0);
+});
+
+test("a collect recipient's bank is never set without the name check (M6)", async () => {
+  await collect(TOBI);
+  await assert.rejects(
+    ops.setPayoutDestination(database.db, {
+      sealing,
+      profileId: TOBI.id,
+      provider: 'bachs',
+      destinationRef: 'dest_direct',
+      bankCode: '058',
+      bankName: 'Pretend Guaranty Bank',
+      last4: '1234',
+      status: 'usable',
+    }),
+    { code: 'NAME_LOCKED' },
   );
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   Body,
   Controller,
@@ -34,11 +35,13 @@ import {
   ensurePayoutSetup,
   flagSharedBank,
   getPaymentAccountRecipient,
+  getPayoutDestination,
   legalNameDigest,
   markPaymentAccountCreationFailed,
   markPaymentAccountCreationUnknown,
   payoutBankChangesFrom,
   recordCollectLegalName,
+  recordPartnerName,
   reportProviderKeyRefused,
   sameLegalName,
   setPayoutDestination,
@@ -46,6 +49,7 @@ import {
   spendPayoutDestinationCode,
   updatePaymentAccountStatus,
   withdrawalsFrozen,
+  type CollectBankFacts,
   type MailSealing,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
@@ -218,58 +222,79 @@ export class CollectBankController {
     if (!bank) throw new CodedHttpException(400, 'PAYOUT_DESTINATION_REFUSED');
     await this.spendCode(auth.userId, body.emailCode);
 
-    const reference = await this.personAccount(
-      collector,
-      body.legalName,
-      facts.legalName,
-    );
-    const added = await this.calling('add', () =>
-      this.provider.addPayoutDestination(reference, {
-        accountNumber: body.accountNumber,
-        accountName: `${body.legalName.first} ${body.legalName.last}`,
-        bankCode: body.bankCode,
-      }),
-    );
-    // The add's key is fixed per account number, so its answer can be an old one replayed: the
-    // read decides. Unread means under review, and the next read finishes it.
-    let status = added.status;
-    try {
-      status = await this.provider.payoutDestinationStatus(
-        reference,
-        added.destinationRef,
-      );
-    } catch (error) {
-      this.logFailure('read', error);
-      if (status !== 'rejected') status = 'pending_review';
-    }
-    if (status === 'rejected') {
-      // Nothing is saved: not the bank, and not a name the partner refused (unless locked).
-      if (!facts.verifiedAt)
-        await recordCollectLegalName(db, {
-          profileId,
-          legalName: facts.legalName,
-        });
-      this.logger.warn({ event: 'collect_bank.name_mismatch' });
-      throw new CodedHttpException(422, 'NAME_MISMATCH');
-    }
-    const accountHash = bankAccountHash(
-      this.sealing,
-      body.bankCode,
-      body.accountNumber,
-    );
+    const digest = legalNameDigest(body.legalName);
+    let reference: string | null = null;
+    let accountHash: string;
     const now = new Date();
-    await setPayoutDestination(db, {
-      sealing: this.sealing,
-      profileId,
-      provider: recordedProviderName(this.provider.name),
-      destinationRef: added.destinationRef,
-      bankCode: bank.code,
-      bankName: bank.name,
-      last4: body.accountNumber.slice(-4),
-      status,
-      accountHash,
-      now,
-    });
+    try {
+      reference = await this.personAccount(collector, body.legalName, facts);
+      const account = reference;
+      const added = await this.calling('add', () =>
+        this.provider.addPayoutDestination(account, {
+          accountNumber: body.accountNumber,
+          accountName: `${body.legalName.first} ${body.legalName.last}`,
+          bankCode: body.bankCode,
+        }),
+      );
+      // The add's key is fixed per account number, so its answer can be an old one replayed: the
+      // read decides. Unread means under review, and the next read finishes it.
+      let status = added.status;
+      try {
+        status = await this.provider.payoutDestinationStatus(
+          account,
+          added.destinationRef,
+        );
+      } catch (error) {
+        this.logFailure('read', error);
+        if (status !== 'rejected') status = 'pending_review';
+      }
+      if (status === 'rejected') {
+        // Nothing is saved: not the bank, and not the refused name.
+        this.logger.warn({ event: 'collect_bank.name_mismatch' });
+        throw new CodedHttpException(422, 'NAME_MISMATCH');
+      }
+      // C1: this answer is for a destination already checked against another name (a replay inside
+      // the partner's window): it proves nothing about this name. Try again later.
+      const current = await getPayoutDestination(db, {
+        profileId,
+        provider: recordedProviderName(this.provider.name),
+      });
+      if (
+        current?.destinationRef === added.destinationRef &&
+        current.nameDigest !== digest
+      ) {
+        this.logger.warn({ event: 'collect_bank.replayed_for_another_name' });
+        throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
+      }
+      accountHash = bankAccountHash(
+        this.sealing,
+        body.bankCode,
+        body.accountNumber,
+      );
+      await setPayoutDestination(db, {
+        sealing: this.sealing,
+        profileId,
+        provider: recordedProviderName(this.provider.name),
+        destinationRef: added.destinationRef,
+        bankCode: bank.code,
+        bankName: bank.name,
+        last4: body.accountNumber.slice(-4),
+        status,
+        accountHash,
+        nameDigest: digest,
+        now,
+      });
+      // The name TipMe holds is the one its current bank was checked against: only now (C1).
+      await recordCollectLegalName(db, {
+        profileId,
+        legalName: body.legalName,
+      });
+    } catch (error) {
+      // I2: whatever failed after the partner was given this name, it goes back to the one TipMe
+      // holds, so their record never keeps a refused or unfinished name.
+      await this.restorePartnerName(profileId, facts);
+      throw error;
+    }
     // Before verification can release anything: a shared account holds the second recipient.
     if (await flagSharedBank(db, { profileId, accountHash, now }))
       this.logger.warn({ event: 'collect_bank.same_bank' });
@@ -290,27 +315,24 @@ export class CollectBankController {
   }
 
   /**
-   * The partner account the bank hangs from, named with the legal name. The pretend provider has no
-   * accounts, so the profile stands in. A new account's reference is kept the moment create answers
+   * The partner account the bank hangs from, holding the legal name (sent only if it changed). The
+   * pretend provider has no accounts, so the profile stands in. A new account's reference is kept the moment create answers
    * (Task 4 note), so a retry names that account and never creates a second; an existing one, such
    * as a never-verified recipient's from before You collect (R7, P22), is reused, never duplicated.
    */
   private async personAccount(
     collector: Collector,
     legalName: CollectLegalName,
-    heldName: CollectLegalName | null,
+    facts: CollectBankFacts,
   ): Promise<string> {
     const { db } = this.database;
     const { profileId } = collector;
-    if (this.provider.capabilities?.connectedAccounts === false) {
-      await recordCollectLegalName(db, { profileId, legalName });
+    if (this.provider.capabilities?.connectedAccounts === false)
       return profileId;
-    }
     const environment = bachsEnvironment(this.provider.name);
     const create = this.provider.createReceiveOnlyPersonAccount;
-    const rename = this.provider.nameReceiveOnlyPerson;
     const hold = this.provider.holdLocalCurrency;
-    if (!environment || !create || !rename || !hold || !collector.verifiedEmail)
+    if (!environment || !create || !hold || !collector.verifiedEmail)
       throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
     const claim = await beginPaymentAccountCreation(db, {
       profileId,
@@ -360,6 +382,7 @@ export class CollectBankController {
         await markPaymentAccountCreationUnknown(db, where);
         throw new CodedHttpException(503, 'PROVIDER_OUTCOME_UNKNOWN');
       }
+      await recordPartnerName(db, { profileId, legalName });
     } else {
       if (!reference)
         throw new CodedHttpException(
@@ -368,22 +391,13 @@ export class CollectBankController {
             ? 'PROVIDER_OUTCOME_UNKNOWN'
             : 'DEPENDENCY_UNAVAILABLE',
         );
-      const existing = reference;
-      // Sent every time: the partner holds whatever was sent last (a support change, a new
-      // spelling before verification). The key is the name's, so a repeat replays the write.
-      await this.calling('name', () =>
-        rename.call(this.provider, {
-          accountReference: existing,
-          legalName,
-          idempotencyKey: `tipme-collect-name-${claim.account.id}-${legalNameDigest(this.sealing, legalName)}`,
-        }),
-      );
+      // I1: only a changed name is sent (a support change, a new spelling before verification).
+      if (facts.partnerNameDigest !== legalNameDigest(legalName))
+        await this.namePartner(profileId, reference, legalName);
     }
     if (!reference)
       throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
     const account = reference;
-    if (!heldName || !sameLegalName(heldName, legalName) || claim.created)
-      await recordCollectLegalName(db, { profileId, legalName });
     // P12: a new account holds only USD, and a naira transfer to it would be converted.
     await this.calling('hold', () => hold.call(this.provider, account));
     // A bank on an account with automatic payouts could be paid out with no record here: manual
@@ -405,6 +419,50 @@ export class CollectBankController {
     if (!setup.manualPayouts)
       throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
     return account;
+  }
+
+  /**
+   * Gives the partner this legal name. Each write has its own key (I1): a name sent before, then
+   * changed, then sent again is really written again, never replayed. Recorded once answered; an
+   * unknown answer leaves the record unknown, so the next add sends it again.
+   */
+  private async namePartner(
+    profileId: string,
+    reference: string,
+    legalName: CollectLegalName,
+  ): Promise<void> {
+    const rename = this.provider.nameReceiveOnlyPerson;
+    if (!rename)
+      throw new CodedHttpException(503, 'PAYOUT_PROVIDER_UNAVAILABLE');
+    await recordPartnerName(this.database.db, { profileId, legalName: null });
+    await this.calling('name', () =>
+      rename.call(this.provider, {
+        accountReference: reference,
+        legalName,
+        idempotencyKey: `tipme-collect-name-${randomUUID()}`,
+      }),
+    );
+    await recordPartnerName(this.database.db, { profileId, legalName });
+  }
+
+  /** After a failed or refused add: the partner gets back the name TipMe holds (I2). */
+  private async restorePartnerName(
+    profileId: string,
+    before: CollectBankFacts,
+  ): Promise<void> {
+    if (this.provider.capabilities?.connectedAccounts === false) return;
+    const held = before.legalName;
+    if (!held) return;
+    try {
+      const now = await collectBankFacts(this.database.db, profileId);
+      if (now.partnerNameDigest === legalNameDigest(held)) return;
+      const reference = await this.accountReference(profileId);
+      if (!reference) return;
+      await this.namePartner(profileId, reference, held);
+    } catch {
+      // Left unknown: the next add sends the held name again, and nothing verifies meanwhile (C1).
+      this.logger.warn({ event: 'collect_bank.name_restore_failed' });
+    }
   }
 
   private async spendCode(userId: string, code: string): Promise<void> {

@@ -149,6 +149,12 @@ type DestinationInput = {
    * checks the name with our payment partner and looks for the same account on another page.
    */
   accountHash?: string;
+  /**
+   * You collect (fix C1): the digest of the legal name our payment partner checked this bank
+   * against (`legalNameDigest`). Kept from the first save of a destination: a replayed answer for
+   * the same destination never moves it to another name.
+   */
+  nameDigest?: string;
   now?: Date;
 };
 
@@ -274,6 +280,7 @@ export function setPayoutDestination(
         accountLast4: input.last4,
         status: input.status,
         accountHash: input.accountHash ?? null,
+        nameDigest: input.nameDigest ?? null,
         createdAt: now,
       });
       if (current) {
@@ -334,6 +341,8 @@ export function getPayoutDestination(
   status: PayoutDestinationStatus;
   bankName: string;
   last4: string;
+  /** The legal name's digest this bank was checked against (You collect), or null. */
+  nameDigest: string | null;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -343,6 +352,7 @@ export function getPayoutDestination(
         status: payoutDestinations.status,
         bankName: payoutDestinations.bankName,
         last4: payoutDestinations.accountLast4,
+        nameDigest: payoutDestinations.nameDigest,
       })
       .from(payoutDestinations)
       .where(
