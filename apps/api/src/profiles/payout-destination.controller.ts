@@ -24,6 +24,7 @@ import {
   recordedProviderName,
 } from '@tipme/contracts';
 import {
+  collectionModeOf,
   getBachsAccountRecoveryTarget,
   getPaymentAccountRecipient,
   getPayoutDestination,
@@ -180,6 +181,13 @@ export class PayoutDestinationController {
     body: PayoutDestinationUpdateRequest,
   ): Promise<ApiDataResponse<PayoutDestinationView | null>> {
     const recipient = await this.recipient(auth.userId);
+    // You collect (Task 13): a collect recipient's bank goes through /v1/me/collect/bank, where our
+    // payment partner checks it against their locked name. This form is not theirs.
+    if (
+      (await collectionModeOf(this.database.db, recipient.profileId)) ===
+      'collect'
+    )
+      throw new CodedHttpException(404, 'NOT_FOUND');
     if (!recipient.verifiedEmail)
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
     const { profileId } = recipient;

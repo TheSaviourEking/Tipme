@@ -65,6 +65,12 @@ export const apiErrorCodes = [
   // You collect (Task 12): a new account's first withdrawal is capped, and its Lagos day limited.
   'WITHDRAWAL_FIRST_CAP',
   'WITHDRAWAL_DAILY_LIMIT',
+  // You collect (Task 13): the bank couldn't name the account; no match with the recipient's name;
+  // their verified name is locked (support changes it).
+  'BANK_NAME_UNKNOWN',
+  'NAME_MISMATCH',
+  'NAME_LOCKED',
+  'NAME_NOT_LOCKED',
   'NO_CONFIRMED_TEST',
   'EMAIL_TAKEN',
   'EMAIL_INVALID',

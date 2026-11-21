@@ -300,6 +300,14 @@ const messages: Record<ApiErrorCode, string> = {
   WITHDRAWAL_FIRST_CAP: 'New accounts have a limit on their first withdrawal.',
   WITHDRAWAL_DAILY_LIMIT:
     'New accounts have a limit on what they can withdraw each day.',
+  // You collect (Task 13, spec §10).
+  BANK_NAME_UNKNOWN:
+    'We couldn’t find the name on this account. Check the bank and account number.',
+  NAME_MISMATCH:
+    "This account isn't in your name. Use a bank account in your own name.",
+  NAME_LOCKED:
+    'Your verified name can only be changed by support. Contact support@usetipme.xyz.',
+  NAME_NOT_LOCKED: 'This person has no verified name to change.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:
@@ -358,6 +366,8 @@ const operationErrors: Partial<
   PAGE_PAUSED: { status: 409, code: 'PAGE_PAUSED' },
   WITHDRAWAL_FIRST_CAP: { status: 409, code: 'WITHDRAWAL_FIRST_CAP' },
   WITHDRAWAL_DAILY_LIMIT: { status: 409, code: 'WITHDRAWAL_DAILY_LIMIT' },
+  NAME_LOCKED: { status: 409, code: 'NAME_LOCKED' },
+  NAME_NOT_LOCKED: { status: 409, code: 'NAME_NOT_LOCKED' },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },

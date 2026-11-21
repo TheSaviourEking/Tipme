@@ -38,6 +38,8 @@ import {
   recordProviderEvent,
   recordUnmatchedEvent,
   releaseWaitingTransfers,
+  collectBankFacts,
+  settleCollectVerification,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import { DatabaseProvider } from '../infra/database.js';
@@ -657,7 +659,7 @@ export class WebhookService {
         },
         log: (entry) => this.logger?.warn(entry),
       });
-    await this.releaseCollectShares(
+    await this.settleCollect(
       known.profileId,
       remote.accountReference,
       accounts,
@@ -668,6 +670,58 @@ export class WebhookService {
       type: 'payments.changed',
     });
     return 'account_refreshed';
+  }
+
+  /**
+   * You collect (plan Task 13, P12): a recipient whose bank check hasn't finished is checked again
+   * (a bank under review read, the capability read), and verified once both say so, which releases
+   * their shares. Anyone else goes on as Task 8 has it. A failure is left for the next event or
+   * visit, never a reason to refuse the delivery.
+   */
+  private async settleCollect(
+    profileId: string,
+    accountReference: string,
+    accounts: Partial<
+      Pick<
+        BachsProvider,
+        'name' | 'payoutCapability' | 'payoutDestinationStatus'
+      >
+    >,
+  ): Promise<void> {
+    const { db } = this.database;
+    const { name, payoutCapability, payoutDestinationStatus } = accounts;
+    try {
+      const facts = await collectBankFacts(db, profileId);
+      if (
+        facts.mode === 'collect' &&
+        !facts.verifiedAt &&
+        name &&
+        payoutCapability &&
+        payoutDestinationStatus
+      ) {
+        await settleCollectVerification(db, {
+          profileId,
+          provider: {
+            name,
+            payoutCapability: (ref) => payoutCapability.call(accounts, ref),
+            payoutDestinationStatus: (ref, dest) =>
+              payoutDestinationStatus.call(accounts, ref, dest),
+          },
+          accountReference,
+          sealing: this.sealing,
+          now: new Date(),
+          log: (entry) => this.logger?.warn(entry),
+        });
+        return;
+      }
+    } catch (error) {
+      this.logger?.warn({
+        event: 'collect_bank.settle_failed',
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+      return;
+    }
+    await this.releaseCollectShares(profileId, accountReference, accounts);
   }
 
   /**

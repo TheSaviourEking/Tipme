@@ -50,6 +50,10 @@ export type OperationErrorCode =
   | 'PAGE_PAUSED'
   | 'WITHDRAWAL_FIRST_CAP'
   | 'WITHDRAWAL_DAILY_LIMIT'
+  // You collect (Task 13): a verified legal name changes only through support; support's change
+  // needs one that is locked.
+  | 'NAME_LOCKED'
+  | 'NAME_NOT_LOCKED'
   | 'WITHDRAWALS_PAUSED'
   | 'WITHDRAWALS_SWITCHED_OFF'
   | 'PAYOUT_SETUP_NEEDED'

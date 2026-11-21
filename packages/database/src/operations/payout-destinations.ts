@@ -143,6 +143,12 @@ type DestinationInput = {
   last4: string;
   status: PayoutDestinationStatus;
   sealing: MailSealing;
+  /**
+   * You collect (P13): the keyed hash of bank and number (`bankAccountHash`), never the number. A
+   * `collect` recipient's bank is only ever set with it, through the bank-details route, which
+   * checks the name with our payment partner and looks for the same account on another page.
+   */
+  accountHash?: string;
   now?: Date;
 };
 
@@ -167,7 +173,9 @@ export function setPayoutDestination(
     input.destinationRef.trim() === '' ||
     input.bankName.trim() === '' ||
     !/^\d{4}$/.test(input.last4) ||
-    !STATUSES.has(input.status)
+    !STATUSES.has(input.status) ||
+    (input.accountHash !== undefined &&
+      !/^[0-9a-f]{64}$/.test(input.accountHash))
   )
     return Promise.reject(new OperationError('INVALID_INPUT'));
   const owner: MoneyOwner =
@@ -194,11 +202,18 @@ export function setPayoutDestination(
         actingUserId = input.userId;
       } else {
         const [profile] = await tx
-          .select({ userId: profiles.userId })
+          .select({
+            userId: profiles.userId,
+            mode: profiles.collectionMode,
+          })
           .from(profiles)
           .where(eq(profiles.id, input.profileId))
           .for('update');
         if (!profile) throw new OperationError('NO_PAGE');
+        // The name lock (Task 13): a collect recipient's bank goes only through the route that has
+        // our payment partner check it against their locked name.
+        if (profile.mode === 'collect' && input.accountHash === undefined)
+          throw new OperationError('NAME_LOCKED');
         // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
         if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
           throw new OperationError('WITHDRAWALS_PAUSED');
@@ -231,7 +246,10 @@ export function setPayoutDestination(
         if (current.status !== 'rejected')
           await tx
             .update(payoutDestinations)
-            .set({ status: input.status })
+            .set({
+              status: input.status,
+              ...(input.accountHash ? { accountHash: input.accountHash } : {}),
+            })
             .where(eq(payoutDestinations.id, current.id));
         return { replaced: false };
       }
@@ -255,6 +273,7 @@ export function setPayoutDestination(
         bankName: input.bankName,
         accountLast4: input.last4,
         status: input.status,
+        accountHash: input.accountHash ?? null,
         createdAt: now,
       });
       if (current) {
