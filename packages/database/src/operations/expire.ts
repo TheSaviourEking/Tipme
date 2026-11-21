@@ -11,6 +11,9 @@ import { recordTransition } from './transitions.js';
 
 const EXPIRABLE = ['CREATED', 'INITIATED'] as const;
 
+/** Most address keys one expiry run clears. */
+export const ADDRESS_KEY_SWEEP_LIMIT = 500;
+
 /** Reconciliation's verifier, plus a lookup by TipMe's own attempt id (the merchant reference). */
 export interface PaymentLookup extends TransactionVerifier {
   name: string;
@@ -161,14 +164,23 @@ export async function expireStaleTips(input: {
  * cleared. One sweep after the expiry pass covers every path; it reads only the intents still
  * holding a key (`payment_intents_address_key_held`), which are few.
  */
-export async function clearFinishedAddressKeys(db: Database): Promise<number> {
+export async function clearFinishedAddressKeys(
+  db: Database,
+  limit: number = ADDRESS_KEY_SWEEP_LIMIT,
+): Promise<number> {
+  // Bounded per run (the job runs every minute), so a day of worker downtime never becomes one
+  // statement that row-locks every key; leftovers are cleared on the next run. The subselect keeps
+  // the partial index in use.
   const result = await guarded(() =>
     db.execute(sql`
       UPDATE payment_intents SET address_key = NULL
-       WHERE payment_intents.address_key IS NOT NULL
-         AND EXISTS (SELECT 1 FROM tips
-                      WHERE tips.intent_id = payment_intents.id
-                        AND tips.status IN ('SUCCEEDED', 'FAILED', 'CANCELLED'))`),
+       WHERE payment_intents.id IN (
+         SELECT pi.id FROM payment_intents pi
+          WHERE pi.address_key IS NOT NULL
+            AND EXISTS (SELECT 1 FROM tips
+                         WHERE tips.intent_id = pi.id
+                           AND tips.status IN ('SUCCEEDED', 'FAILED', 'CANCELLED'))
+          LIMIT ${limit})`),
   );
   return result.rowCount ?? 0;
 }

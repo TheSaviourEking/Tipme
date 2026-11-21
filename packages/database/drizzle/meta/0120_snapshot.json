@@ -1,5 +1,5 @@
 {
-  "id": "88cec2cf-30d9-4e8c-a2c3-8069df5333f4",
+  "id": "2313f2f2-a3b7-4886-a99d-7ae67f54d5e8",
   "prevId": "fa3f68ce-aa62-4f94-aa1d-64f21073b798",
   "version": "7",
   "dialect": "postgresql",
@@ -3113,6 +3113,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "refused_at": {
+          "name": "refused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "paid_at": {
           "name": "paid_at",
           "type": "timestamp with time zone",
@@ -3294,6 +3300,14 @@
         "collect_transfers_paid": {
           "name": "collect_transfers_paid",
           "value": "status <> 'paid' OR paid_at IS NOT NULL"
+        },
+        "collect_transfers_never_cancel_sent": {
+          "name": "collect_transfers_never_cancel_sent",
+          "value": "status <> 'cancelled' OR sent_at IS NULL OR refused_at IS NOT NULL"
+        },
+        "collect_transfers_refused": {
+          "name": "collect_transfers_refused",
+          "value": "refused_at IS NULL OR status IN ('review', 'cancelled')"
         }
       },
       "isRLSEnabled": false
@@ -3527,6 +3541,24 @@
           "notNull": true,
           "default": "0"
         },
+        "share_step": {
+          "name": "share_step",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "settled_at": {
+          "name": "settled_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "decided_at": {
+          "name": "decided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_event_at": {
           "name": "last_event_at",
           "type": "timestamp with time zone",
@@ -3549,6 +3581,22 @@
         }
       },
       "indexes": {
+        "disputes_unsettled": {
+          "name": "disputes_unsettled",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "settled_at IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "disputes_tip": {
           "name": "disputes_tip",
           "columns": [
@@ -3638,6 +3686,18 @@
         "disputes_held": {
           "name": "disputes_held",
           "value": "held_minor >= 0 AND held_minor <= amount_minor"
+        },
+        "disputes_share_step": {
+          "name": "disputes_share_step",
+          "value": "share_step IS NULL OR share_step IN ('held', 'balance', 'none')"
+        },
+        "disputes_settled": {
+          "name": "disputes_settled",
+          "value": "settled_at IS NULL OR status IN ('won', 'lost', 'closed')"
+        },
+        "disputes_decided": {
+          "name": "disputes_decided",
+          "value": "decided_at IS NULL OR status IN ('won', 'lost', 'closed')"
         }
       },
       "isRLSEnabled": false
@@ -7378,12 +7438,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "address_key": {
-          "name": "address_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7392,24 +7446,7 @@
           "default": "now()"
         }
       },
-      "indexes": {
-        "payment_intents_address_key_held": {
-          "name": "payment_intents_address_key_held",
-          "columns": [
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "address_key IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "payment_intents_quote_id_tip_quotes_id_fk": {
           "name": "payment_intents_quote_id_tip_quotes_id_fk",
@@ -11671,6 +11708,18 @@
           "notNull": true,
           "default": "now()"
         },
+        "dispute_id": {
+          "name": "dispute_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "refused_at": {
+          "name": "refused_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "sent_at": {
           "name": "sent_at",
           "type": "timestamp with time zone",
@@ -11737,6 +11786,22 @@
           ],
           "isUnique": true,
           "where": "kind = 'fee_return'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_transfers_one_collect_recover": {
+          "name": "share_transfers_one_collect_recover",
+          "columns": [
+            {
+              "expression": "dispute_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'collect_recover'",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -11860,6 +11925,15 @@
           "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
+        },
+        "share_transfers_dispute_id_disputes_id_fk": {
+          "name": "share_transfers_dispute_id_disputes_id_fk",
+          "tableFrom": "share_transfers",
+          "tableTo": "disputes",
+          "columnsFrom": ["dispute_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -11872,7 +11946,7 @@
         },
         "share_transfers_kind": {
           "name": "share_transfers_kind",
-          "value": "kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep')"
+          "value": "kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')"
         },
         "share_transfers_status": {
           "name": "share_transfers_status",
@@ -11888,15 +11962,19 @@
         },
         "share_transfers_one_leg": {
           "name": "share_transfers_one_leg",
-          "value": "kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')"
+          "value": "kind IN ('sweep', 'recover', 'collect_recover') OR status NOT IN ('waiting', 'out_sent', 'gap')"
         },
         "share_transfers_links": {
           "name": "share_transfers_links",
-          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)"
+          "value": "(kind = 'recover') = (reversal_transaction_id IS NOT NULL)\n        AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)\n        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)\n        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)"
         },
         "share_transfers_business": {
           "name": "share_transfers_business",
           "value": "kind = 'fee_return' OR business_id IS NOT NULL"
+        },
+        "share_transfers_refused": {
+          "name": "share_transfers_refused",
+          "value": "refused_at IS NULL OR status IN ('review', 'cancelled')"
         }
       },
       "isRLSEnabled": false

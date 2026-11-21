@@ -19,6 +19,7 @@ import {
 } from './types/sign-in-code.js';
 import {
   accountDeletedNotice,
+  disputeHold,
   milestone,
   pagePaused,
   pageImageRemoved,
@@ -117,6 +118,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     withdrawalPaid,
     withdrawalFailed,
     tipReversed,
+    disputeHold,
     milestone,
     usernameTakeBackNotice,
     usernameTakeBackReminder,

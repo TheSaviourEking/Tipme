@@ -634,6 +634,39 @@ test('the address key is kept only on unfinished collect intents', async () => {
   assert.equal(await keyOf(live), 'address-l');
 });
 
+test('the address-key sweep clears at most its limit per run and never touches unfinished intents', async () => {
+  await collect(TOBI);
+  const keyed = [];
+  for (const k of ['sweep-1', 'sweep-2', 'sweep-3']) {
+    keyed.push(await intentFor(await quoteAt(TOBI, NOW), NOW, k));
+  }
+  const live = await intentFor(await quoteAt(TOBI, NOW), NOW, 'sweep-live');
+  for (const intent of keyed)
+    await q(`UPDATE tips SET status = 'CANCELLED' WHERE intent_id = $1`, [
+      intent.intentId,
+    ]);
+  const held = async () =>
+    Number(
+      (
+        await q(
+          `SELECT count(*)::int AS n FROM payment_intents
+            WHERE address_key LIKE 'sweep-%' AND address_key <> 'sweep-live'`,
+        )
+      )[0].n,
+    );
+  assert.equal(await held(), 3);
+  assert.equal(await ops.clearFinishedAddressKeys(database.db, 2), 2);
+  assert.equal(await held(), 1);
+  assert.equal(await ops.clearFinishedAddressKeys(database.db, 2), 1);
+  assert.equal(await held(), 0);
+  assert.equal(await ops.clearFinishedAddressKeys(database.db, 2), 0);
+  const [{ address_key }] = await q(
+    `SELECT address_key FROM payment_intents WHERE id = $1`,
+    [live.intentId],
+  );
+  assert.equal(address_key, 'sweep-live');
+});
+
 test('one supporter address holds at most 2 unfinished intents on a collect page', async () => {
   await collect(TOBI);
   // ₦10,000 tips (₦9,500 to Tobi): under the cap even all at once, so only the per-address limit

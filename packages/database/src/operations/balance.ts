@@ -15,7 +15,11 @@ export function balanceQuery(profileId: string) {
       -- booked (then the ledger has it) or fails.
       + (SELECT COALESCE(SUM(pp.amount_minor), 0) FROM pro_purchases pp
           WHERE pp.profile_id = ${profileId} AND pp.method = 'balance'
-            AND pp.status IN ('COLLECTING', 'UNKNOWN')) AS reserved,
+            AND pp.status IN ('COLLECTING', 'UNKNOWN'))
+      -- You collect (R4, plan Task 9): what a dispute holds of the balance while it is open, or lost
+      -- and still being recovered. Zero once it is released or booked.
+      + (SELECT COALESCE(SUM(x.held_minor), 0) FROM disputes x JOIN tips dt ON dt.id = x.tip_id
+          WHERE dt.profile_id = ${profileId}) AS reserved,
       -- You collect (Task 12): the person's money TipMe still holds on its own account, kept for them
       -- (not verified yet) or on its way to theirs (verified). Owed, never in their account yet.
       (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
@@ -43,7 +47,7 @@ export function balanceQuery(profileId: string) {
 /**
  * What TipMe owes a recipient, from the ledger: `recipient_payable` credits minus debits, less
  * payouts still in flight (REQUESTED / PROCESSING; what is sent plus the fee a user pays from it,
- * owner 12 Nov 2026) and Pro paid from the balance still being moved (COLLECTING / UNKNOWN), which
+ * owner 12 Nov 2026) and Pro paid from the balance still being moved (COLLECTING / UNKNOWN), and what a dispute holds (`disputes.held_minor`, R4), which
  * are reserved. It can read below zero after a reversal (Q8). Money still being confirmed by the
  * provider is reported separately and is never part of the balance.
  *

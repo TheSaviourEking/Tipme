@@ -1,4 +1,5 @@
 import {
+  DISPUTE_HOLD_EVENT,
   PAYOUT_START_EVENT,
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
@@ -73,6 +74,8 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   [PAYOUT_START_EVENT]: none,
   [PLATFORM_REFUSAL_EVENT]: none,
   [WITHDRAWAL_FREEZE_OPENED_EVENT]: toProfile('withdrawals.changed'),
+  // You collect (Task 9): written with the hold, so the recipient's balance has changed.
+  [DISPUTE_HOLD_EVENT]: toProfile('withdrawals.changed'),
   // TipMe-wide: every open dashboard re-reads, each after its own random wait (live-refetch.ts).
   [WITHDRAWALS_SWITCH_EVENT]: toAll('withdrawals.changed'),
 };

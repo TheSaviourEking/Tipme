@@ -1,4 +1,4 @@
-import { SERIOUS_ACTION_WORDS } from '@tipme/contracts';
+import { DISPUTE_HOLD_EVENT, SERIOUS_ACTION_WORDS } from '@tipme/contracts';
 import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
@@ -38,6 +38,8 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'pro.reversed',
   'pro.collect_unknown',
   'pro.refund_failed',
+  // You collect (Task 9): a dispute holds part of a recipient's balance; they are emailed.
+  DISPUTE_HOLD_EVENT,
 ]);
 
 const UUID = /^[0-9a-f-]{36}$/;

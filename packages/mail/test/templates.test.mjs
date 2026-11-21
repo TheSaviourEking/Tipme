@@ -748,6 +748,8 @@ const PREVIOUS_SAMPLES = {
   // Staff announcements: a new type.
   announcement: MAIL_TYPES.announcement.sample,
   service_notice: MAIL_TYPES.service_notice.sample,
+  // You collect (plan Task 9): a new type.
+  dispute_hold: MAIL_TYPES.dispute_hold.sample,
 };
 
 const settingsCtx = {
@@ -1409,4 +1411,19 @@ test('a username given by TipMe says so in fixed words, with no reason field', (
       ctx,
     ),
   );
+});
+
+test('the dispute hold email says the spec’s words with the amount, and nothing in the preview names it (You collect, Task 9)', () => {
+  const out = renderMail('dispute_hold', { heldMinor: '950000' }, ctx);
+  assert.ok(
+    out.text.includes(
+      "A payment to you is being questioned. We've held ₦9,500 until it's settled.",
+    ),
+  );
+  assert.doesNotMatch(out.subject, /₦|9,500/);
+  assert.doesNotMatch(
+    `${out.subject} ${out.text} ${out.html}`,
+    /bachs|wallet|insured|protected/i,
+  );
+  assert.throws(() => renderMail('dispute_hold', { heldMinor: '0' }, ctx));
 });
