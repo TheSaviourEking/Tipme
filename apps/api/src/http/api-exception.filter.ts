@@ -309,7 +309,7 @@ const messages: Record<ApiErrorCode, string> = {
     'Your verified name can only be changed by support. Contact support@usetipme.xyz.',
   NAME_NOT_LOCKED: 'This person has no verified name to change.',
   BANK_RECHECK_LATER:
-    "We're still checking this account. Try again tomorrow, or use another account.",
+    "We can't check this account again right now. Use another account, or contact support@usetipme.xyz.",
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:

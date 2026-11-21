@@ -1273,3 +1273,88 @@ test('a refused name, then the corrected one on the same number, is not stuck on
     data: { state: 'verified' },
   });
 });
+
+// Fix round 3 (M-R5): each C1b layer on its own, below the controller.
+
+const insertDestination = (
+  profile,
+  { reference, digest, status = 'usable', replaced = false, last4 = '1234' },
+) =>
+  q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code,
+       bank_name, account_last4, status, name_digest, created_at, replaced_at)
+     VALUES (gen_random_uuid(), $1, 'bachs', $2, '058', 'Pretend Guaranty Bank', $3, $4, $5,
+       now() - interval '1 hour' * $6, CASE WHEN $7 THEN now() ELSE NULL END)`,
+    [profile.id, reference, last4, status, digest, replaced ? 2 : 0, replaced],
+  );
+
+test('saving a bank whose reference was saved under another name is refused in the database (M-R5)', async () => {
+  await collect(TOBI);
+  await insertDestination(TOBI, {
+    reference: 'dest_b',
+    digest: ops.legalNameDigest(REAL),
+    replaced: true,
+  });
+  await insertDestination(TOBI, {
+    reference: 'dest_c',
+    digest: ops.legalNameDigest(REAL),
+    last4: '5678',
+  });
+  await assert.rejects(
+    ops.setPayoutDestination(database.db, {
+      sealing,
+      profileId: TOBI.id,
+      provider: 'bachs',
+      destinationRef: 'dest_b',
+      bankCode: '058',
+      bankName: 'Pretend Guaranty Bank',
+      last4: '1234',
+      status: 'usable',
+      accountHash: 'a'.repeat(64),
+      nameDigest: ops.legalNameDigest(TOBI_NAME),
+    }),
+    { code: 'BANK_RECHECK_LATER' },
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT count(*)::int AS n FROM payout_destinations WHERE profile_id = $1`,
+        [TOBI.id],
+      )
+    )[0].n,
+    2,
+  );
+});
+
+test('a current bank under the held name is not verified while an older row with its reference was checked under another (M-R5)', async () => {
+  await collect(TOBI);
+  await q(`UPDATE profiles SET collect_legal_name = $2 WHERE id = $1`, [
+    TOBI.id,
+    JSON.stringify(TOBI_NAME),
+  ]);
+  await insertDestination(TOBI, {
+    reference: 'dest_b',
+    digest: ops.legalNameDigest(REAL),
+    replaced: true,
+  });
+  await insertDestination(TOBI, {
+    reference: 'dest_b',
+    digest: ops.legalNameDigest(TOBI_NAME),
+  });
+  const state = await ops.settleCollectVerification(database.db, {
+    profileId: TOBI.id,
+    provider: {
+      name: 'bachs-sandbox',
+      async payoutCapability() {
+        return { status: 'active' };
+      },
+      async payoutDestinationStatus() {
+        return 'usable';
+      },
+    },
+    accountReference: 'acct_any',
+    now: new Date(),
+  });
+  assert.equal(state, 'checking');
+  assert.equal((await profileRow(TOBI)).collect_verified_at, null);
+});
