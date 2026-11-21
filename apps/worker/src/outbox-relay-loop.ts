@@ -7,6 +7,15 @@ import { liveSignalFor } from './live-signals.js';
 
 const RETENTION_SECONDS = 7 * 24 * 60 * 60;
 
+/**
+ * Finished relay jobs are kept for 7 days so a re-published row is deduped by job ID. Exported so
+ * the scheduled-run retention test can check that the schedulers never cut this short.
+ */
+export const RELAY_JOB_RETENTION = {
+  removeOnComplete: { age: RETENTION_SECONDS },
+  removeOnFail: { age: RETENTION_SECONDS },
+} as const;
+
 export interface OutboxRelay {
   stop(): Promise<void>;
 }
@@ -48,9 +57,7 @@ export function startOutboxRelay(options: {
           { ...row.payload, _trace: row.trace },
           {
             jobId: row.dedupeKey,
-            // Keep finished relay jobs for 7 days so a re-published row is deduped by job ID.
-            removeOnComplete: { age: RETENTION_SECONDS },
-            removeOnFail: { age: RETENTION_SECONDS },
+            ...RELAY_JOB_RETENTION,
             ...RELAY_JOB_RETRIES,
           },
         );

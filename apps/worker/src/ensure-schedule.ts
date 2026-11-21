@@ -16,14 +16,19 @@ interface Scheduler {
 }
 
 /**
- * Finished scheduled runs kept in Redis: the last 100 done, and failures for a week (at most 500)
- * so they can still be looked at. With no limit every run was kept for good, and the every-minute
- * schedules filled Redis until it refused all writes (21 Nov 2026, docs/runbooks/production.md).
- * The outbox relay keeps its own 7-day window on purpose (dedupe by job ID); this is not that.
+ * What happens to a finished scheduled run. With no options every run stayed in Redis for good,
+ * and the every-minute schedules filled it until it refused all writes (21 Nov 2026,
+ * docs/runbooks/production.md §12).
+ *
+ * No `count` on purpose: BullMQ applies a count to the queue's WHOLE completed or failed set, and
+ * the outbox relay's jobs share this queue and must stay 7 days (their job ID is the dedupe key).
+ * `true` removes only the run that finished. A failed run is kept 7 days, the relay's own age, so
+ * trimming by age never removes a relay job sooner than it would go anyway. The cost: no cap on
+ * failed runs, so a week of every schedule failing could keep about 100k (watch tipme.jobs.failed).
  */
 export const SCHEDULED_RUN_RETENTION = {
-  removeOnComplete: { count: 100 },
-  removeOnFail: { count: 500, age: 7 * 24 * 3600 },
+  removeOnComplete: true,
+  removeOnFail: { age: 7 * 24 * 3600 },
 } satisfies JobSchedulerTemplateOptions;
 
 /**

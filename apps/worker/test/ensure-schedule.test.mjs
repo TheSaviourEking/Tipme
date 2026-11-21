@@ -67,8 +67,8 @@ test('a schedule can be a cron pattern in a time zone', async () => {
       template: {
         name: 'reports.weekly',
         opts: {
-          removeOnComplete: { count: 100 },
-          removeOnFail: { count: 500, age: 7 * 24 * 3600 },
+          removeOnComplete: true,
+          removeOnFail: { age: 7 * 24 * 3600 },
         },
       },
     },
@@ -76,8 +76,9 @@ test('a schedule can be a cron pattern in a time zone', async () => {
   await schedule.stop();
 });
 
-test('each scheduled run is kept only briefly: the last 100 done, failures for a week (at most 500)', async () => {
-  // Without these, every finished run stayed in Redis for good and filled it (21 Nov 2026).
+test('a scheduled run is removed when it completes, and kept a week when it fails, with no count', async () => {
+  // Without these, every finished run stayed in Redis for good and filled it (21 Nov 2026). A
+  // count would trim the whole queue's sets, relay dedupe jobs included, so there is none.
   const templates = [];
   const queue = {
     upsertJobScheduler: async (_id, _repeat, template) => {
@@ -92,10 +93,7 @@ test('each scheduled run is kept only briefly: the last 100 done, failures for a
   });
   await schedule.ready;
   assert.equal(templates.length, 1);
-  assert.deepEqual(templates[0].opts.removeOnComplete, { count: 100 });
-  assert.deepEqual(templates[0].opts.removeOnFail, {
-    count: 500,
-    age: 604_800,
-  });
+  assert.equal(templates[0].opts.removeOnComplete, true);
+  assert.deepEqual(templates[0].opts.removeOnFail, { age: 604_800 });
   await schedule.stop();
 });
