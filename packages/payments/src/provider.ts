@@ -455,6 +455,14 @@ export interface PayoutPort {
     country: 'NG';
     legalName: { first: string; last: string };
     idempotencyKey: string;
+    /** Told the reference as soon as create answers, before the name is sent (Task 13). */
+    onCreated?: (accountReference: string) => Promise<void>;
+  }): Promise<BachsRecipientAccount>;
+  /** You collect: the person's legal name on an existing account, with the caller's key (R8). */
+  nameReceiveOnlyPerson?(input: {
+    accountReference: string;
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
   /**
    * You collect (R9): a recipient's share from TipMe's balance to their account, `transfer_group` =
