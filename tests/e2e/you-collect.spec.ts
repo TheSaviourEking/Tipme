@@ -86,7 +86,12 @@ async function partnerAnswers(
   // ioredis is the payments package's own dependency, as scripts/mock-pay.mjs loads it.
   const { Redis } = createRequire(
     join(__dirname, '../../packages/payments/package.json'),
-  )('ioredis') as typeof import('ioredis');
+  )('ioredis') as {
+    Redis: new (url: string) => {
+      set(key: string, value: string): Promise<unknown>;
+      disconnect(): void;
+    };
+  };
   const redis = new Redis(E2E_REDIS_URL);
   try {
     await redis.set(
