@@ -8,7 +8,7 @@ import {
   signUpRecipient,
   tipAsVisitor,
 } from './helpers';
-import { API_ORIGIN, E2E_REDIS_URL, LANE } from './stack';
+import { API_ORIGIN, E2E_REDIS_URL, LANE, stackEnv } from './stack';
 import { tipFromProfile } from '../shared/tip-flow';
 
 /*
@@ -551,6 +551,21 @@ async function stubCollect(page: Page, patch: () => Record<string, unknown>) {
   });
 }
 
+/**
+ * Answers `GET /v1/me/payment-account` as a live payment partner would, with `account()` over the
+ * real answer: the real `collecting` (the recipient's mode) stays, so the shell's choice is the API's.
+ */
+async function livePartner(page: Page, account: () => Record<string, unknown>) {
+  await page.route('**/v1/me/payment-account', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { data: { ...body.data, ...account() } },
+    });
+  });
+}
+
 const LIVE_PARTNER = {
   enabled: true,
   environment: 'live',
@@ -570,9 +585,7 @@ test('a collect recipient is never told to set up payments, even with a live pay
     status: null,
     chargesEnabled: false,
   };
-  await page.route('**/v1/me/payment-account', (route) =>
-    route.fulfill({ json: { data: account } }),
-  );
+  await livePartner(page, () => account);
   await page.goto('/dashboard');
   const attention = page.getByRole('region', { name: 'Needs your attention' });
   await expect(
@@ -859,42 +872,245 @@ test('a payment being questioned: Home says how much is held while it is, and no
   page,
   browser,
 }, testInfo) => {
-  const { handle, profileId } = await collectRecipient(page, testInfo);
-  await tipAsVisitor(browser, handle);
+  // Task 9 holds a share that has already moved into the balance: a verified recipient whose
+  // tip's share our payment partner has paid. Long-standing, so no new-recipient delay (§8).
+  const { email, handle, profileId } = await collectRecipient(page, testInfo);
   const db = await database();
   let disputeId = '';
   try {
-    const { rows } = await db.pool.query<{ id: string; amount: string }>(
-      `SELECT id, gross_minor::text AS amount FROM tips WHERE profile_id = $1`,
+    await db.pool.query(
+      `UPDATE profiles SET created_at = now() - interval '60 days' WHERE id = $1`,
       [profileId],
     );
-    expect(rows).toHaveLength(1);
+    await page.goto('/dashboard/withdraw');
+    const form = bankForm(page);
+    // An account number of its own: one another recipient already used would hold this recipient's
+    // transfers for review (a shared bank account, Task 13).
+    const own = `5${String(Date.now()).slice(-8)}${testInfo.workerIndex % 10}`;
+    await enterDetails(
+      page,
+      form,
+      own.endsWith('0000') ? `${own.slice(0, 9)}1` : own,
+    );
+    await confirmAndEnterCode(page, form, email);
+    await form.getByRole('button', { name: 'Add bank details' }).click();
+    await expect(page.getByRole('main').getByText(COPY.verified)).toBeVisible();
+    await tipAsVisitor(browser, handle);
+
+    // The worker's sweep, run now rather than on its 2-minute timer: release, send, paid.
+    const share = async () =>
+      (
+        await db.pool.query<{ tip: string; amount: string; status: string }>(
+          `SELECT t.tip_id AS tip, t.amount_minor::text AS amount, t.status
+             FROM collect_transfers t JOIN tips p ON p.id = t.tip_id
+            WHERE p.profile_id = $1 AND t.kind = 'share'`,
+          [profileId],
+        )
+      ).rows[0];
+    await expect
+      .poll(async () => (await share())?.status ?? 'none', { timeout: 20_000 })
+      .not.toBe('none');
+    await sweepTransfers(db);
+    await expect
+      .poll(
+        async () => {
+          if ((await share())?.status !== 'paid') await sweepTransfers(db);
+          return (await share())?.status;
+        },
+        { timeout: 30_000 },
+      )
+      .toBe('paid');
+    const moved = (await share())!;
+    // The partner opens a dispute; Task 9 holds the moved share from the balance.
     disputeId = crypto.randomUUID();
     await db.pool.query(
       `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
-         status, held_minor, last_event_at)
-       VALUES ($1, 'mock', $2, $3, $4, 'NGN', 'open', 150000, now())`,
-      [disputeId, `dp_${disputeId.slice(0, 8)}`, rows[0]!.id, rows[0]!.amount],
+         status, held_minor, share_step, last_event_at)
+       SELECT $1, 'mock', $2, p.id, p.gross_minor, 'NGN', 'open', $3, 'balance', now()
+         FROM tips p WHERE p.id = $4`,
+      [disputeId, `dp_${disputeId.slice(0, 8)}`, moved.amount, moved.tip],
     );
-  } finally {
-    await db.close();
-  }
-  const held =
-    "A payment to you is being questioned. We've held ₦1,500 until it's settled.";
-  await page.goto('/dashboard');
-  await expect(page.getByRole('main').getByText(held)).toBeVisible();
+    await page.goto('/dashboard');
+    const main = page.getByRole('main');
+    const amount = new Intl.NumberFormat('en').format(
+      Number(moved.amount) / 100,
+    );
+    await expect(
+      main.getByText(
+        `A payment to you is being questioned. We've held ₦${amount} until it's settled.`,
+      ),
+    ).toBeVisible();
+    // A real state: nothing kept or on its way, and the balance is not below zero.
+    await expect(main.getByTestId('kept')).toHaveCount(0);
+    await expect(main.getByTestId('on-its-way')).toHaveCount(0);
+    await expect(main.getByTestId('balance')).toHaveText('₦0');
 
-  const again = await database();
-  try {
-    await again.pool.query(
+    await db.pool.query(
       `UPDATE disputes SET status = 'won', held_minor = 0, settled_at = now(), decided_at = now()
         WHERE id = $1`,
       [disputeId],
     );
+    await page.reload();
+    await expect(main.getByTestId('balance')).toHaveText(`₦${amount}`);
+    await expect(page.getByText(/is being questioned/)).toHaveCount(0);
   } finally {
-    await again.close();
+    await db.close();
   }
-  await page.reload();
-  await expect(page.getByRole('main').getByTestId('kept')).toBeVisible();
-  await expect(page.getByText(/is being questioned/)).toHaveCount(0);
+});
+
+/** One run of the worker's collect-transfers sweep against the pretend partner. */
+async function sweepTransfers(db: { db: unknown }) {
+  // The worker's build has no type declarations: its two exports, typed here.
+  const workerModule = '../../apps/worker/dist/handlers/collect-transfers.js';
+  const { handleCollectTransfers, collectTransferProviders } = (await import(
+    workerModule
+  )) as {
+    handleCollectTransfers: (deps: {
+      db: never;
+      providers: unknown;
+      log: (entry: unknown) => void;
+    }) => Promise<unknown>;
+    collectTransferProviders: (providers: never[]) => unknown;
+  };
+  const { createMockProvider } =
+    await import('../../packages/payments/dist/index.js');
+  const { Redis } = createRequire(
+    join(__dirname, '../../packages/payments/package.json'),
+  )('ioredis') as { Redis: new (url: string) => { disconnect(): void } };
+  const redis = new Redis(E2E_REDIS_URL);
+  try {
+    const provider = createMockProvider({
+      redis: redis as never,
+      secret: stackEnv.MOCK_PROVIDER_WEBHOOK_SECRET,
+      prefix: LANE.queuePrefix,
+    });
+    await handleCollectTransfers({
+      db: db.db as never,
+      providers: collectTransferProviders([provider as never]),
+      log: (entry: unknown) => console.log('sweep', JSON.stringify(entry)),
+    });
+  } finally {
+    redis.disconnect();
+  }
+}
+
+test('an undecided recipient who goes on You collect stops seeing set-up notices at the next page, with no reload', async ({
+  page,
+}, testInfo) => {
+  const { handle } = await signUpRecipient(page, testInfo);
+  expect(await collectionModeOf(handle)).toBeNull();
+  await livePartner(page, () => ({
+    ...LIVE_PARTNER,
+    status: null,
+    chargesEnabled: false,
+  }));
+  await page.goto('/dashboard');
+  const notice = page
+    .getByRole('region', { name: 'Needs your attention' })
+    .getByText('Set up payments to start receiving tips');
+  await expect(notice).toBeVisible();
+  // Their first quote with the switch on decides `collect` (decideCollectionMode); here, the lane's
+  // database stands in for it. Then a click in the app, never a reload.
+  await putOnCollect(handle);
+  const marker = await page.evaluate(() => {
+    (window as unknown as { stayed: boolean }).stayed = true;
+    return true;
+  });
+  expect(marker).toBe(true);
+  await page
+    .getByRole('navigation')
+    .getByRole('link', { name: 'Tips', exact: true })
+    .first()
+    .click();
+  await page.waitForURL(/\/dashboard\/tips$/);
+  await expect(notice).toHaveCount(0);
+  // Visible only: the app keeps the page it left (Home, with its own steps) hidden for going back.
+  await expect(
+    page.getByText(/^Set up payments/).filter({ visible: true }),
+  ).toHaveCount(0);
+  // The same document: nothing reloaded it.
+  expect(
+    await page.evaluate(
+      () => (window as unknown as { stayed?: boolean }).stayed === true,
+    ),
+  ).toBe(true);
+});
+
+test('a status read answered while the add is on its way never says the account isn’t in their name', async ({
+  page,
+  browser,
+}, testInfo) => {
+  const { email, handle } = await collectRecipient(page, testInfo);
+  await page.goto('/dashboard/withdraw');
+  const form = bankForm(page);
+  await enterDetails(page, form);
+  await confirmAndEnterCode(page, form, email);
+
+  // Watch for the mismatch words or an invalid field at any moment, not only at the end.
+  await page.evaluate((words) => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    new MutationObserver(() => {
+      const main = document.querySelector('main');
+      if (main?.textContent?.includes(words)) seen.push('words');
+      if (main?.querySelector('[aria-invalid="true"]')) seen.push('invalid');
+      if (main?.querySelector('[role="alert"]')) seen.push('alert');
+    }).observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+  }, COPY.mismatch);
+
+  // The add is held. Meanwhile a tip arrives (tips.changed), and the page reads the status again:
+  // still no bank, as the add has not answered yet.
+  let answered = false;
+  let readsDuringAdd = 0;
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/v1/me/collect', async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    if (!answered) readsDuringAdd += 1;
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        data: {
+          ...body.data,
+          bank: answered
+            ? { state: 'checking', last4: '6789', bankName: BANK }
+            : null,
+        },
+      },
+    });
+  });
+  await page.route('**/v1/me/collect/bank', async (route) => {
+    await held;
+    answered = true;
+    await route.fulfill({ json: { data: { state: 'checking' } } });
+  });
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  const main = page.getByRole('main');
+  await expect(main.getByText(COPY.checking)).toBeVisible();
+  const before = readsDuringAdd;
+  await tipAsVisitor(browser, handle);
+  await expect
+    .poll(() => readsDuringAdd, { timeout: 20_000 })
+    .toBeGreaterThan(before);
+  release();
+
+  await expect(main.getByText(COPY.checking)).toBeVisible();
+  await expect(main.getByRole('button', { name: 'Check again' })).toBeVisible();
+  // Give any late render a moment to show itself, then check nothing ever did.
+  await page.waitForTimeout(500);
+  expect(
+    await page.evaluate(() => (window as unknown as { seen: string[] }).seen),
+  ).toEqual([]);
+  await expect(main.getByText(COPY.mismatch)).toHaveCount(0);
+  const focused = await page.evaluate(
+    () => document.activeElement?.getAttribute('inputmode') ?? '',
+  );
+  expect(focused).not.toBe('numeric');
 });

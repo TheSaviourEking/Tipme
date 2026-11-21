@@ -92,13 +92,19 @@ export function CollectBankForm({
   // A refusal the person can recover from, on a slip under the form.
   const [error, setError] = useState('');
   const [resent, setResent] = useState(false);
-  // What the last add answered, with the read it was answered over: kept only until the page's next
-  // read arrives, which always wins. usePanel drops a read started before the add's own, so a newer
-  // read is never older than the add.
+  // What the last add answered, with the latest read shown when it answered: kept only until the
+  // page's next read arrives, which always wins. usePanel drops a read started before the add's own
+  // re-read, so a newer read is never older than the answer.
   const [added, setAdded] = useState<{
     state: CollectBankState;
     over: object;
   } | null>(null);
+  // The latest status read the page has shown, for pinning the add's answer when it arrives: a read
+  // answered while the add was on its way is older than the answer, never newer (re-review N1).
+  const latestRead = useRef(read);
+  useEffect(() => {
+    latestRead.current = read;
+  }, [read]);
   // One request per tap: a second tap while one is on its way does nothing.
   const inFlight = useRef(false);
   const [checkingAgain, setCheckingAgain] = useState(false);
@@ -272,7 +278,7 @@ export function CollectBankForm({
       },
     );
     if (result.ok) {
-      setAdded({ state: result.data.state, over: read });
+      setAdded({ state: result.data.state, over: latestRead.current });
       onAdded(result.data.state);
       return;
     }

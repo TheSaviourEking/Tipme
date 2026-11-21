@@ -1387,6 +1387,8 @@ test('the status says what is held for disputes still open on their tips, and no
   await dispute(second.tipId, 'responded', 250_000n, false);
   // Settled: its hold is released (held_minor 0 and settled), so it counts for nothing.
   await dispute(second.tipId, 'won', 0n, true);
+  // Settled is what counts: a settled row's held_minor is never counted, even if not zeroed (N3).
+  await dispute(first.tipId, 'closed', 50_000n, true);
   // Another recipient's dispute is never theirs.
   await dispute(theirs.tipId, 'open', 400_000n, false);
 
