@@ -1508,6 +1508,13 @@ test('a refund that keeps failing to leave backs off, then tells staff', async (
   // Not again at once: it waits.
   await send(provider, new Date(t0 + MIN));
   assert.equal(state.refunds.length, 1);
+  // One try that never left is no news for staff yet (RM4).
+  assert.deepEqual(
+    await q(`SELECT 1 FROM issues WHERE dedupe_key = $1`, [
+      `tip_refund_not_sent.${refund.id}`,
+    ]),
+    [],
+  );
   for (let n = 1; n <= 6; n += 1)
     await send(provider, new Date(t0 + n * 7 * HOUR));
   assert.equal((await refundRow(tip.tipId)).status, 'REQUESTED');
@@ -1518,5 +1525,183 @@ test('a refund that keeps failing to leave backs off, then tells staff', async (
       ])
     ).length,
     1,
+  );
+});
+
+/* Fix round 3 (re-review RC2, RI3, RM3, RM4). */
+
+/** A held share whose refund was sent but the partner's answer was lost: UNKNOWN. */
+async function unknownRefund() {
+  const tip = await paidTip(TOBI);
+  const refund = await refundAsked(tip.tipId);
+  const partnerSide = refunder();
+  partnerSide.state.lost = true;
+  await send(partnerSide.provider);
+  partnerSide.state.lost = false;
+  assert.equal((await refundRow(tip.tipId)).status, 'UNKNOWN');
+  return { tip, refund, ...partnerSide };
+}
+
+test('a dispute on a refund whose answer was lost leaves it unknown: a win releases nothing and a re-ask is refused', async () => {
+  const { tip, refund, provider, state } = await unknownRefund();
+  await disputeSays(tip, 'open');
+  // Never failed, never resent while a dispute is open: it may already be made.
+  await send(provider, new Date(Date.now() + 5 * MIN));
+  assert.equal(state.refunds.length, 1);
+  assert.equal((await refundRow(tip.tipId)).status, 'UNKNOWN');
+  assert.equal(
+    (
+      await q(`SELECT 1 FROM issues WHERE dedupe_key = $1`, [
+        `tip_refund_disputed_unknown.${refund.id}`,
+      ])
+    ).length,
+    1,
+  );
+  await disputeSays(tip, 'won', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  // Still held for the refund that may be made: nothing goes back to the recipient.
+  const share = await shareOf(tip.rowId);
+  assert.equal(share.status, 'review');
+  assert.equal(share.review_reason, 'refund');
+  assert.equal(await available(TOBI), 0n);
+  assert.equal((await facts(tip.tipId)).refusal, 'already');
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+});
+
+test('a dispute on a refund whose answer was lost, then the partner says paid: booked once', async () => {
+  const { tip, refund } = await unknownRefund();
+  await disputeSays(tip, 'open');
+  assert.equal(await paid(refund.id), 'refunded');
+  assert.equal(await paid(refund.id), 'already');
+  assert.deepEqual(await reversalsOf(tip.tipId), [
+    { operation_key: refundKey(refund.id) },
+  ]);
+  assert.equal((await shareOf(tip.rowId)).status, 'cancelled');
+});
+
+test('a dispute lost while a refund was unknown, then the partner says paid: staff told both went out, books balanced', async () => {
+  const { tip, refund } = await unknownRefund();
+  await disputeSays(tip, 'open');
+  await disputeSays(tip, 'lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  // The loss waits for the refund that may be made.
+  const [waiting] = await q(
+    `SELECT id, settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.equal(waiting.settled_at, null);
+  assert.equal(await paid(refund.id), 'refunded');
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 3 * HOUR),
+  });
+  const [issue] = await q(
+    `SELECT severity, summary FROM issues WHERE dedupe_key = $1`,
+    [`tip_refund_and_dispute.${tip.tipId}`],
+  );
+  assert.equal(issue.severity, 'money');
+  assert.match(issue.summary, /refund of ₦9,500/);
+  assert.match(issue.summary, /dispute of ₦9,500/);
+  assert.equal((await reversalsOf(tip.tipId)).length, 2);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('an unexpected refund.paid leaves the tip unrefundable and shows what was not booked', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  await disputeSays(tip, 'open');
+  await send(provider);
+  await disputeSays(tip, 'won', 1);
+  assert.equal(await paid(refund.id), 'noted');
+  const seen = await facts(tip.tipId);
+  assert.equal(seen.refusal, 'paid_unbooked');
+  assert.equal(seen.unbookedMinor, NET);
+  // Held money stays reported for what it is; the unbooked refund is shown beside it.
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  await send(provider, new Date(Date.now() + HOUR));
+  assert.deepEqual(state.refunds, []);
+});
+
+test('after a lost dispute used what a refund took back, nothing is reported held', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await refundAsked(tip.tipId);
+  const { provider } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  await disputeSays(tip, 'open');
+  await send(provider);
+  await disputeSays(tip, 'lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  assert.equal((await facts(tip.tipId)).heldMinor, 0n);
+});
+
+test('the send claim refuses a tip with a lost dispute, and a tip whose money already went back (RM4)', async () => {
+  // A lost dispute on record, nothing booked yet: the claim alone refuses.
+  const lostTip = await paidTip(TOBI);
+  const lostRefund = await refundAsked(lostTip.tipId);
+  await q(`UPDATE tip_refunds SET recovered_at = now() WHERE id = $1`, [
+    lostRefund.id,
+  ]);
+  await q(
+    `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency, status, last_event_at, decided_at)
+     VALUES (gen_random_uuid(), 'bachs', $1, $2, 950000, 'NGN', 'lost', now(), now())`,
+    [`dp_${randomUUID().slice(0, 8)}`, lostTip.tipId],
+  );
+  assert.equal(
+    await ops.claimCollectRefund(database.db, {
+      refundId: lostRefund.id,
+      now: new Date(),
+    }),
+    false,
+  );
+  // A tip whose refund was already booked, with a stray unsent refund row: refused.
+  const doneTip = await paidTip(ADA);
+  const done = await refundAsked(doneTip.tipId);
+  const { provider } = refunder();
+  await send(provider);
+  await paid(done.id);
+  await q(
+    `UPDATE tip_refunds SET status = 'FAILED', failure = 'refused' WHERE id = $1`,
+    [done.id],
+  );
+  const [{ id: stray }] = await q(
+    `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider, provider_reference,
+            requested_by, reason, collect_plan, recovered_at)
+     SELECT gen_random_uuid(), tip_id, 'REQUESTED', amount_minor, currency, provider, provider_reference,
+            requested_by, reason, 'cancel_held', now() FROM tip_refunds WHERE id = $1 RETURNING id`,
+    [done.id],
+  );
+  assert.equal(
+    await ops.claimCollectRefund(database.db, {
+      refundId: stray,
+      now: new Date(),
+    }),
+    false,
   );
 });
