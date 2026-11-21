@@ -82,6 +82,7 @@ import {
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
 import {
   collectTransferProviders,
+  handleDisputeSteps,
   handleCollectTransfers,
 } from './handlers/collect-transfers.js';
 import { handleCollectReminders } from './handlers/collect-reminders.js';
@@ -883,7 +884,17 @@ export async function startJobWorker(
                   sealing,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
-                return { ...transfers, reminded: reminders.reminded };
+                // Task 9: disputes whose share was settled by this run move on (Review Focus 3).
+                const disputes = await handleDisputeSteps({
+                  db: database.db,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                return {
+                  ...transfers,
+                  reminded: reminders.reminded,
+                  disputesAdvanced: disputes.advanced,
+                  disputeReminders: disputes.reminded,
+                };
               },
             );
             if (!result.ran) {

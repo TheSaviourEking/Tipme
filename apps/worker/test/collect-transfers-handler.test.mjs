@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   collectTransferProviders,
   handleCollectTransfers,
+  handleDisputeSteps,
 } from '../dist/handlers/collect-transfers.js';
 
 // You collect (plan Task 8): the 2-minute sweep releases waiting shares, then runs the transfer
@@ -144,4 +145,76 @@ test('a failure is logged by name and counted, never thrown, and never stops the
     },
   ]);
   assert.ok(!JSON.stringify(logged).includes('acct_secret'));
+});
+
+test('a lost dispute’s transfer back is the adapter’s collectToPlatform, on itself, named for the dispute (Task 9)', async () => {
+  const calls = [];
+  const bachs = {
+    ...capable('bachs-sandbox'),
+    async collectToPlatform(input) {
+      calls.push([this === bachs, input]);
+      return { transferRef: 'tr_back', status: 'paid' };
+    },
+  };
+  const [withBack, without] = collectTransferProviders([
+    bachs,
+    capable('mock'),
+  ]);
+  const { collectBack } = withBack;
+  assert.deepEqual(
+    await collectBack({
+      accountRef: 'acct_x',
+      amountMinor: 5n,
+      currency: 'NGN',
+      idempotencyKey: 'tipme-collect-back-x',
+    }),
+    { transferRef: 'tr_back', status: 'paid' },
+  );
+  assert.deepEqual(calls, [
+    [
+      true,
+      {
+        accountRef: 'acct_x',
+        amountMinor: 5n,
+        currency: 'NGN',
+        idempotencyKey: 'tipme-collect-back-x',
+        description: 'TipMe dispute',
+      },
+    ],
+  ]);
+  assert.equal(without.collectBack, undefined);
+});
+
+test('the dispute steps run on the sweep, and a failure is logged by name and never thrown (Task 9)', async () => {
+  assert.deepEqual(
+    await handleDisputeSteps({
+      db,
+      now: NOW,
+      log: () => assert.fail('nothing to log'),
+      steps: async (database, input) => {
+        assert.equal(database, db);
+        assert.deepEqual(input, { now: NOW });
+        return { reminded: 1, advanced: 2, failed: 0 };
+      },
+    }),
+    { reminded: 1, advanced: 2, failed: 0 },
+  );
+  const logged = [];
+  class SecretError extends Error {
+    name = 'OperationError';
+  }
+  assert.deepEqual(
+    await handleDisputeSteps({
+      db,
+      now: NOW,
+      log: (entry) => logged.push(entry),
+      steps: async () => {
+        throw new SecretError('acct_secret');
+      },
+    }),
+    { reminded: 0, advanced: 0, failed: 1 },
+  );
+  assert.deepEqual(logged, [
+    { event: 'collect_disputes.run_failed', error: 'OperationError' },
+  ]);
 });

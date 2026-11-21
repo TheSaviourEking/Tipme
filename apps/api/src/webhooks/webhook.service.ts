@@ -8,6 +8,7 @@ import {
 } from '@tipme/payments';
 import { z } from 'zod';
 import {
+  applyDisputeEvent,
   applyPayoutSignal,
   applyProRefundEvent,
   applyTipRefundEvent,
@@ -116,6 +117,11 @@ export class WebhookService {
     reader: {
       verifyTransaction(reference: string): Promise<ProVerified>;
     } | null,
+    /**
+     * A platform dispute the partner ruled against TipMe (`dispute.updated`, status lost), which
+     * reaches Pro in the reversal shape: it ends Pro as a `*.lost` event does (Task 9).
+     */
+    disputeLost = false,
   ): Promise<string> {
     const { db } = this.database;
     const purchaseId = await findProPurchaseByReference(db, {
@@ -151,7 +157,8 @@ export class WebhookService {
     if (event.kind === 'reversal') {
       const endPro =
         event.refundState === 'paid' ||
-        (!event.disputeWon && /chargeback|\.lost$/.test(event.eventType));
+        (!event.disputeWon &&
+          (disputeLost || /chargeback|\.lost$/.test(event.eventType)));
       this.signalPlan(
         await endProForReversal(db, { purchaseId, eventRowId, endPro, now }),
       );
@@ -286,10 +293,20 @@ export class WebhookService {
       const refunded = await this.applyTipRefund(event);
       if (refunded) return refunded;
     }
+    let disputeLost = false;
     if (event.kind === 'dispute') {
-      // A collect tip's dispute is modelled by Task 9; until then it is kept for staff, never Pro.
-      if (await this.matchCollect(event)) return this.storeCollectEvent(event);
-      // Task 5 (P5): one that matches no tip reaches Pro billing in today's reversal shape.
+      // A collect tip's dispute is TipMe's (plan Task 9): modelled, held and recovered there.
+      if (await this.matchCollect(event)) {
+        const { outcome } = await applyDisputeEvent(this.database.db, {
+          event,
+          provider: 'bachs',
+          now: new Date(),
+        });
+        return `dispute_${outcome}`;
+      }
+      // Task 5 (P5): one that matches no tip reaches Pro billing in today's reversal shape. A lost
+      // one ends Pro, as a `*.lost` event always did (Task 9 closes that gap).
+      disputeLost = event.status === 'lost';
       event = disputeAsReversal(event);
     }
     // Auto-renew (plan Task 10): a card saved on TipMe's own account. Only an opted-in customer
@@ -323,6 +340,7 @@ export class WebhookService {
                 bachs.verifyTransaction!(reference),
             }
           : null,
+        disputeLost,
       );
     }
     if (event.kind === 'payout') return this.applyBachsPayout(event, bachs);
@@ -372,7 +390,8 @@ export class WebhookService {
   }
 
   /**
-   * A collect tip's refund or dispute that TipMe does not model yet (plan Tasks 9 and 10): kept for
+   * A collect tip's refund (or a dispute event the adapter could not read) that TipMe does not model
+   * yet (plan Task 10; Task 9 models readable disputes): kept for
    * staff as its own kind of unmatched event (the issues inbox raises it), and never sent to Pro
    * billing or the payment path. Nothing is booked.
    */

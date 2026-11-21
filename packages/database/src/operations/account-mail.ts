@@ -1,4 +1,8 @@
-import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
+import {
+  DISPUTE_HOLD_EVENT,
+  SERIOUS_ACTION_WORDS,
+  type SeriousAction,
+} from '@tipme/contracts';
 import { eq, and, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   approvalRequests,
@@ -324,6 +328,26 @@ export function mailForDomainEvent(
         type,
         data: { amountMinor: payout.amount.toString() },
         dedupeKey: `${type}.${payoutId}`,
+      });
+      return;
+    }
+    // You collect (Task 9): the in-app notice went with the hold; this is its email.
+    if (name === DISPUTE_HOLD_EVENT) {
+      const disputeId = idOf(payload['disputeId']);
+      const profileId = idOf(payload['profileId']);
+      const heldMinor = payload['heldMinor'];
+      if (
+        !disputeId ||
+        !profileId ||
+        typeof heldMinor !== 'string' ||
+        !/^[1-9][0-9]{0,14}$/.test(heldMinor)
+      )
+        return;
+      await mailOwner(db, sealing, {
+        profileId,
+        type: 'dispute_hold',
+        data: { heldMinor },
+        dedupeKey: `dispute_hold.${disputeId}`,
       });
       return;
     }
