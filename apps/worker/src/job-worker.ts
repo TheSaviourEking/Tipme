@@ -69,6 +69,7 @@ import {
 import { Redis } from 'ioredis';
 import { closeWithin } from './close-within.js';
 import { ensureSchedule } from './ensure-schedule.js';
+import { workerErrorLogger } from './redis-error-log.js';
 import { SERVICE_NAME, type WorkerConfig } from './config.js';
 import {
   DOMAIN_EVENT_NAMES,
@@ -1026,9 +1027,8 @@ export async function startJobWorker(
     },
     { connection, prefix: config.QUEUE_PREFIX, concurrency: 4 },
   );
-  worker.on('error', (error) =>
-    logger.warn({ event: 'worker.error', error: error.name }),
-  );
+  // Rate-limited per Redis code: a full Redis raised this ~3,000 times a second (21 Nov 2026).
+  worker.on('error', workerErrorLogger({ logger }));
   const relay = startOutboxRelay({
     db: database.db,
     queue,
