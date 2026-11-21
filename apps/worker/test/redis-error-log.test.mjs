@@ -122,3 +122,21 @@ test("the worker's error handler logs the name and code only, once per 10 second
   ]);
   assert.ok(!JSON.stringify(lines).includes('secret-key'));
 });
+
+test('the windows kept stay bounded: expired ones go, and past 64 codes new ones share "other"', () => {
+  const { warn, lines, advance } = harness(10_000);
+  const code = (i) =>
+    `C${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + Math.floor(i / 26))}`;
+  for (let i = 0; i < 64; i += 1) warn(code(i), { i });
+  assert.equal(lines.length, 64);
+  // Past the limit, and every window still open: new codes are limited together.
+  warn(code(64), { i: 64 });
+  warn(code(65), { i: 65 });
+  assert.equal(lines.length, 65);
+  assert.deepEqual(lines[64], { i: 64, suppressed: 0 });
+  // Once the open windows have expired they are dropped, and a new code gets its own again.
+  advance(10_000);
+  warn(code(66), { i: 66 });
+  warn(code(67), { i: 67 });
+  assert.equal(lines.length, 67);
+});
