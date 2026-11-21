@@ -20,7 +20,6 @@ import {
 } from '@tipme/contracts';
 import {
   beginPaymentAccountCreation,
-  collectionModeOf,
   ensurePayoutSetup,
   getPaymentAccountForProfile,
   getPaymentAccountRecipient,
@@ -50,6 +49,7 @@ import {
 } from '../auth/session.guard.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { effectiveCollectionMode } from '../checkout/collection-mode.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { LOGGER } from '../tokens.js';
 import { ProfileRevalidator } from './revalidate.js';
@@ -152,10 +152,17 @@ export class PaymentAccountsController {
 
   /**
    * You collect (plan Task 14): TipMe takes this recipient's tips, so there is no account of their
-   * own to set up. The balance's rule: `collection_mode = 'collect'`; undecided reads as direct.
+   * own to set up. Their mode, or, undecided, the one their next quote would fix now (re-review 2
+   * R2-I1), read without writing.
    */
   private async collecting(profileId: string): Promise<boolean> {
-    return (await collectionModeOf(this.database.db, profileId)) === 'collect';
+    return (
+      (await effectiveCollectionMode(
+        this.database.db,
+        profileId,
+        this.config.PAYMENT_PROVIDER,
+      )) === 'collect'
+    );
   }
 
   @Post('onboarding')

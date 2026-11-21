@@ -2,11 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PaymentAccountsController } from '../../apps/api/dist/profiles/payment-accounts.controller.js';
 import {
+  beginPaymentAccountCreation,
   mailSealing,
   seedDemoProfiles,
+  updatePaymentAccountStatus,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { TOBI } from '../../packages/database/test/integration/helpers.mjs';
+import { setSwitch } from './helpers.mjs';
 
 /*
  * You collect (plan Task 14, re-review 1 point 3): GET /v1/me/payment-account says whether the
@@ -33,6 +36,7 @@ test('the payment account read says whether the recipient is on You collect, wit
   t.after(() => database.close());
   await database.reset();
   await seedDemoProfiles(database.db);
+  await setSwitch(database.pool, 'you_collect', false);
   const views = [
     // A partner that needs an account of the recipient's own.
     controller(
@@ -64,4 +68,66 @@ test('the payment account read says whether the recipient is on You collect, wit
   // On You collect: true, so the shell leaves out payment set-up notices.
   await mode('collect');
   assert.deepEqual(await collecting(), [true, true]);
+});
+
+test('with the switch on, an undecided recipient whose first quote would go to collect reads as collecting, and nothing is written', async (t) => {
+  const database = await openTestDatabase();
+  t.after(async () => {
+    await setSwitch(database.pool, 'you_collect', false);
+    await database.close();
+  });
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  const partner = controller(
+    database.db,
+    { PAYMENT_PROVIDER: 'bachs-sandbox' },
+    { environment: 'sandbox' },
+  );
+  const pretend = controller(database.db, { PAYMENT_PROVIDER: 'mock' }, null);
+  const read = async () => [
+    (await partner.status({ userId: TOBI_USER })).data.collecting,
+    (await pretend.status({ userId: TOBI_USER })).data.collecting,
+  ];
+  const stored = async () =>
+    (
+      await database.pool.query(
+        `SELECT collection_mode FROM profiles WHERE id = $1`,
+        [TOBI],
+      )
+    ).rows[0].collection_mode;
+  await database.pool.query(
+    `UPDATE profiles SET collection_mode = NULL WHERE id = $1`,
+    [TOBI],
+  );
+
+  // Switch off: undecided is direct, as today.
+  await setSwitch(database.pool, 'you_collect', false);
+  assert.deepEqual(await read(), [false, false]);
+  // Switch on, no payment account: the next quote would put them on collect (P22), so they read as
+  // collecting now. The preview writes nothing: the row stays undecided.
+  await setSwitch(database.pool, 'you_collect', true);
+  assert.deepEqual(await read(), [true, true]);
+  assert.equal(await stored(), null);
+
+  // An active account of their own on this partner: the next quote would keep them direct.
+  await beginPaymentAccountCreation(database.db, {
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await updatePaymentAccountStatus(database.db, {
+    sealing,
+    profileId: TOBI,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_tobi_active',
+    status: 'ACTIVE',
+    chargesEnabled: true,
+    payoutsEnabled: true,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  // Test payments route through no account of theirs, so that copy would still put them on collect.
+  assert.deepEqual(await read(), [false, true]);
+  assert.equal(await stored(), null);
 });

@@ -870,9 +870,32 @@ test('another person’s profile, a direct recipient, or the switch off with mod
     bankCode: '058',
     accountNumber: accountNumber(1),
   };
-  // Ada is undecided (null) and the switch is on: not on You collect, so none of this is hers.
+  // Ada is undecided (null) and the switch is on, but her next quote would keep her direct (an
+  // active account of her own): not on You collect, so none of this is hers. (Undecided with no
+  // account is previewed onto You collect: see the R2-I1 tests below.)
   for (const [who, setUp] of [
-    ['undecided, switch on', async () => {}],
+    [
+      'undecided, switch on, an active account',
+      async () => {
+        await ops.beginPaymentAccountCreation(database.db, {
+          profileId: ADA.id,
+          provider: 'bachs',
+          environment: 'sandbox',
+        });
+        await ops.updatePaymentAccountStatus(database.db, {
+          sealing,
+          profileId: ADA.id,
+          provider: 'bachs',
+          environment: 'sandbox',
+          providerAccountReference: 'acct_ada_active',
+          status: 'ACTIVE',
+          chargesEnabled: true,
+          payoutsEnabled: true,
+          feeCollector: 'platform',
+          requirementsDue: [],
+        });
+      },
+    ],
     [
       'direct',
       () =>
@@ -1401,4 +1424,85 @@ test('the status says what is held for disputes still open on their tips, and no
     [[first.tipId, second.tipId]],
   );
   assert.equal(await held(TOBI), '0');
+});
+
+test('with the switch on, an undecided recipient whose first quote would go to collect has a collect status, and adding a bank fixes the mode as a quote would (Task 14 R2-I1)', async () => {
+  const controller = controllerFor(partner().provider);
+  const stored = async () =>
+    (
+      await q(`SELECT collection_mode FROM profiles WHERE id = $1`, [TOBI.id])
+    )[0].collection_mode;
+  // Undecided (the beforeEach leaves the demo profiles so), never verified, no account.
+  assert.equal(await stored(), null);
+
+  // The switch on (beforeEach): their next quote would decide collect, so the status says so, and
+  // reading it writes nothing.
+  const view = await controller.status({ userId: TOBI.userId });
+  assert.equal(view.data.mode, 'collect');
+  assert.equal(view.data.verified, false);
+  assert.equal(view.data.bank, null);
+  assert.equal(await stored(), null);
+  assert.deepEqual(
+    await controller.lookup(
+      { userId: TOBI.userId },
+      {
+        legalName: TOBI_NAME,
+        bankCode: '058',
+        accountNumber: accountNumber(1),
+      },
+    ),
+    { data: { bankName: 'TOBI ADEYEMI' } },
+  );
+  assert.equal(await stored(), null);
+
+  // Switch off: undecided is direct, and there is nothing here (404), as today.
+  await setSwitch(database.pool, 'you_collect', false);
+  assert.deepEqual(
+    await refused(() => controller.status({ userId: TOBI.userId })),
+    { status: 404, code: 'NOT_FOUND' },
+  );
+  assert.equal(await stored(), null);
+  await setSwitch(database.pool, 'you_collect', true);
+
+  // Adding a bank fixes the mode through the quote's own decision, then goes on as for any
+  // collect recipient.
+  assert.deepEqual(await addBank(controller, TOBI), {
+    data: { state: 'verified' },
+  });
+  assert.equal(await stored(), 'collect');
+});
+
+test('with the switch on, an undecided recipient whose first quote would stay direct is unchanged (Task 14 R2-I1)', async () => {
+  const controller = controllerFor(partner().provider);
+  await ops.beginPaymentAccountCreation(database.db, {
+    profileId: TOBI.id,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await ops.updatePaymentAccountStatus(database.db, {
+    sealing,
+    profileId: TOBI.id,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_tobi_active',
+    status: 'ACTIVE',
+    chargesEnabled: true,
+    payoutsEnabled: true,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  assert.deepEqual(
+    await refused(() => controller.status({ userId: TOBI.userId })),
+    { status: 404, code: 'NOT_FOUND' },
+  );
+  assert.deepEqual(await refused(() => addBank(controller, TOBI)), {
+    status: 404,
+    code: 'NOT_FOUND',
+  });
+  assert.equal(
+    (
+      await q(`SELECT collection_mode FROM profiles WHERE id = $1`, [TOBI.id])
+    )[0].collection_mode,
+    null,
+  );
 });

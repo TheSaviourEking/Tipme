@@ -62,6 +62,10 @@ import {
 } from '@tipme/payments';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import {
+  effectiveCollectionMode,
+  fixCollectionMode,
+} from '../checkout/collection-mode.js';
+import {
   CurrentUser,
   SessionGuard,
   type AuthContext,
@@ -145,7 +149,8 @@ export class CollectBankController {
     const status = await collectStatus(this.database.db, profileId, now);
     return {
       data: {
-        mode: status.mode,
+        // On You collect, or undecided and previewed onto it (collector): never direct here.
+        mode: 'collect',
         verified: status.verified,
         heldMinor: status.heldMinor.toString(),
         keptMinor: status.keptMinor.toString(),
@@ -207,7 +212,7 @@ export class CollectBankController {
     body: CollectBankAddRequest,
   ): Promise<ApiDataResponse<CollectBankAddResponse>> {
     const { db } = this.database;
-    const collector = await this.collector(auth.userId);
+    const collector = await this.collector(auth.userId, { fix: true });
     const { profileId } = collector;
     if (!collector.verifiedEmail)
       throw new CodedHttpException(409, 'EMAIL_VERIFICATION_REQUIRED');
@@ -496,16 +501,27 @@ export class CollectBankController {
     });
   }
 
-  /** The signed-in recipient, only while they are on You collect (whatever the switch says now). */
-  private async collector(userId: string): Promise<Collector> {
+  /**
+   * The signed-in recipient, only while they are on You collect (whatever the switch says now), or
+   * undecided while their next quote would put them on it (re-review 2 R2-I1). `fix`: adding bank
+   * details settles an undecided mode through the quote's own decision first, so the two can never
+   * disagree later; a read only previews it and writes nothing.
+   */
+  private async collector(
+    userId: string,
+    { fix = false }: { fix?: boolean } = {},
+  ): Promise<Collector> {
     const recipient = await getPaymentAccountRecipient(
       this.database.db,
       userId,
     );
     if (!recipient) throw new CodedHttpException(404, 'NOT_FOUND');
-    const facts = await collectBankFacts(this.database.db, recipient.profileId);
-    if (facts.mode !== 'collect')
-      throw new CodedHttpException(404, 'NOT_FOUND');
+    const mode = await (fix ? fixCollectionMode : effectiveCollectionMode)(
+      this.database.db,
+      recipient.profileId,
+      this.config.PAYMENT_PROVIDER,
+    );
+    if (mode !== 'collect') throw new CodedHttpException(404, 'NOT_FOUND');
     return {
       profileId: recipient.profileId,
       verifiedEmail: recipient.verifiedEmail,
