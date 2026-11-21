@@ -427,6 +427,8 @@ export const SERIOUS_ACTIONS = [
   'collect_settings.change',
   'collect_transfers.pause',
   'collect_transfers.resume',
+  // You collect (plan Task 13): a recipient's verified legal name, changed only through support.
+  'collect_name.change',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -457,6 +459,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'collect_settings.change': 'Change the You collect limits',
   'collect_transfers.pause': 'Pause every You collect transfer',
   'collect_transfers.resume': 'Resume You collect transfers',
+  'collect_name.change': 'Change a recipient’s verified name',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -487,4 +490,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'collect_settings.change': 'fees.manage',
     'collect_transfers.pause': 'payments.repair',
     'collect_transfers.resume': 'payments.repair',
+    'collect_name.change': 'recoveries.manage',
   };

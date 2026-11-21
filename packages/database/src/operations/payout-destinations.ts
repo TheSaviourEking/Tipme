@@ -143,6 +143,18 @@ type DestinationInput = {
   last4: string;
   status: PayoutDestinationStatus;
   sealing: MailSealing;
+  /**
+   * You collect (P13): the keyed hash of bank and number (`bankAccountHash`), never the number. A
+   * `collect` recipient's bank is only ever set with it, through the bank-details route, which
+   * checks the name with our payment partner and looks for the same account on another page.
+   */
+  accountHash?: string;
+  /**
+   * You collect (fix C1): the digest of the legal name our payment partner checked this bank
+   * against (`legalNameDigest`). Kept from the first save of a destination: a replayed answer for
+   * the same destination never moves it to another name.
+   */
+  nameDigest?: string;
   now?: Date;
 };
 
@@ -167,7 +179,9 @@ export function setPayoutDestination(
     input.destinationRef.trim() === '' ||
     input.bankName.trim() === '' ||
     !/^\d{4}$/.test(input.last4) ||
-    !STATUSES.has(input.status)
+    !STATUSES.has(input.status) ||
+    (input.accountHash !== undefined &&
+      !/^[0-9a-f]{64}$/.test(input.accountHash))
   )
     return Promise.reject(new OperationError('INVALID_INPUT'));
   const owner: MoneyOwner =
@@ -194,11 +208,18 @@ export function setPayoutDestination(
         actingUserId = input.userId;
       } else {
         const [profile] = await tx
-          .select({ userId: profiles.userId })
+          .select({
+            userId: profiles.userId,
+            mode: profiles.collectionMode,
+          })
           .from(profiles)
           .where(eq(profiles.id, input.profileId))
           .for('update');
         if (!profile) throw new OperationError('NO_PAGE');
+        // The name lock (Task 13): a collect recipient's bank goes only through the route that has
+        // our payment partner check it against their locked name.
+        if (profile.mode === 'collect' && input.accountHash === undefined)
+          throw new OperationError('NAME_LOCKED');
         // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
         if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
           throw new OperationError('WITHDRAWALS_PAUSED');
@@ -213,6 +234,22 @@ export function setPayoutDestination(
           .for('share');
         if (heldUntil(acting?.changedAt ?? null, now))
           throw new OperationError('BANK_CHANGE_HELD');
+      }
+      // C1b (You collect): an answer for a destination saved under another name proves nothing.
+      if (input.nameDigest !== undefined) {
+        const [other] = await tx
+          .select({ id: payoutDestinations.id })
+          .from(payoutDestinations)
+          .where(
+            and(
+              destinationOf(owner),
+              eq(payoutDestinations.provider, input.provider),
+              eq(payoutDestinations.destinationReference, input.destinationRef),
+              sql`${payoutDestinations.nameDigest} IS DISTINCT FROM ${input.nameDigest}`,
+            ),
+          )
+          .limit(1);
+        if (other) throw new OperationError('BANK_RECHECK_LATER');
       }
       const [current] = await tx
         .select()
@@ -231,7 +268,10 @@ export function setPayoutDestination(
         if (current.status !== 'rejected')
           await tx
             .update(payoutDestinations)
-            .set({ status: input.status })
+            .set({
+              status: input.status,
+              ...(input.accountHash ? { accountHash: input.accountHash } : {}),
+            })
             .where(eq(payoutDestinations.id, current.id));
         return { replaced: false };
       }
@@ -255,6 +295,8 @@ export function setPayoutDestination(
         bankName: input.bankName,
         accountLast4: input.last4,
         status: input.status,
+        accountHash: input.accountHash ?? null,
+        nameDigest: input.nameDigest ?? null,
         createdAt: now,
       });
       if (current) {
@@ -315,6 +357,8 @@ export function getPayoutDestination(
   status: PayoutDestinationStatus;
   bankName: string;
   last4: string;
+  /** The legal name's digest this bank was checked against (You collect), or null. */
+  nameDigest: string | null;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -324,6 +368,7 @@ export function getPayoutDestination(
         status: payoutDestinations.status,
         bankName: payoutDestinations.bankName,
         last4: payoutDestinations.accountLast4,
+        nameDigest: payoutDestinations.nameDigest,
       })
       .from(payoutDestinations)
       .where(

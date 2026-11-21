@@ -84,6 +84,10 @@ import {
   setCollectTransfersPaused,
 } from './collect-settings.js';
 import {
+  changeCollectLegalName,
+  collectNameStamp,
+} from './collect-verification.js';
+import {
   qualifiedApprovers,
   registerSeriousAction,
   requestSeriousAction,
@@ -705,6 +709,35 @@ const collectTransfersPaused = (paused: boolean) =>
         now: context.now,
       }),
   });
+
+/*
+ * You collect (plan Task 13, spec §2.1 "Name lock", §8): a recipient's verified legal name, changed
+ * by support after checking it, with a second person. Pinned on the name in force, so a request the
+ * name has moved past goes stale. The new name is in the payload only while it waits: the summary
+ * names no one, and the decided request keeps the page alone.
+ */
+const collectNameChange = acting<{
+  profileId: string;
+  first?: string;
+  last?: string;
+}>({
+  name: 'collect_name.change',
+  permission: 'recoveries.manage',
+  subjects: ({ profileId }, db) => pageOwner(db, profileId),
+  target: ({ profileId }) => profileId,
+  current: (tx, { profileId }) => collectNameStamp(tx, profileId),
+  describe: async (tx, { profileId }) =>
+    `Change @${await handleOf(tx, profileId)}’s verified name, as support checked it`,
+  afterClose: ({ profileId }) => ({ profileId }),
+  act: (tx, { profileId, first, last }, context) =>
+    changeCollectLegalName(tx, {
+      profileId,
+      legalName: { first: first ?? '', last: last ?? '' },
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+    }),
+});
 
 /*
  * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
@@ -1378,6 +1411,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(collectSettingsChange);
   registerSeriousAction(collectTransfersPaused(true));
   registerSeriousAction(collectTransfersPaused(false));
+  registerSeriousAction(collectNameChange);
 }
 
 /* Routes whose seriousness depends on what is being done */

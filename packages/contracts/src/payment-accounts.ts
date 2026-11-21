@@ -42,8 +42,12 @@ export type BachsOnboardingResponse =
       requirementsDue: string[];
     };
 
-const bankCodeSchema = z.string().regex(/^[\w-]{1,20}$/);
-const accountNumberSchema = z.string().regex(/^\d{10}$/);
+/** A bank's code and a ten-digit account number (NUBAN), as the bank forms send them. */
+export const bankCodeSchema = z.string().regex(/^[\w-]{1,20}$/);
+export const accountNumberSchema = z.string().regex(/^\d{10}$/);
+
+/** The six-digit code sent to the account's own verified address before a bank is added. */
+export const emailCodeSchema = z.string().regex(/^\d{6}$/);
 
 export const payoutBankResolveSchema = z
   .object({ bankCode: bankCodeSchema, accountNumber: accountNumberSchema })
@@ -55,7 +59,7 @@ export const payoutDestinationUpdateSchema = z
     bankCode: bankCodeSchema,
     accountNumber: accountNumberSchema,
     accountName: z.string().trim().min(1).max(100),
-    emailCode: z.string().regex(/^\d{6}$/),
+    emailCode: emailCodeSchema,
   })
   .strict();
 export type PayoutDestinationUpdateRequest = z.infer<

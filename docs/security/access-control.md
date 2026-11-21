@@ -224,6 +224,9 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | PATCH | `/v1/me/campaigns/{id}` | yes | – | – |
 | PUT | `/v1/me/campaigns/{id}/page` | yes | – | – |
 | POST | `/v1/me/campaigns/{id}/stop` | yes | – | – |
+| GET | `/v1/me/collect` | n/a (read) | `bank_read` | – |
+| POST | `/v1/me/collect/bank` | yes | `auth_verify` | – |
+| POST | `/v1/me/collect/bank/lookup` | yes | `bank_resolve` | – |
 | DELETE | `/v1/me/cover` | yes | – | – |
 | GET | `/v1/me/cover` | n/a (read) | – | – |
 | PUT | `/v1/me/cover` | yes | `avatars` | – |

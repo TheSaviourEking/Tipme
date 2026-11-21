@@ -134,15 +134,25 @@ const namePartSchema = z
   .min(1)
   .max(255)
   .regex(/^[^\u0000-\u001f\u007f]+$/);
+const personKeySchema = z
+  .string()
+  .min(1)
+  .max(250)
+  .regex(/^[\w.:-]+$/);
+const legalNameSchema = z.object({
+  first: namePartSchema,
+  last: namePartSchema,
+});
 const personAccountInputSchema = z.object({
   contactEmail: z.email(),
   country: z.literal('NG'),
-  legalName: z.object({ first: namePartSchema, last: namePartSchema }),
-  idempotencyKey: z
-    .string()
-    .min(1)
-    .max(250)
-    .regex(/^[\w.:-]+$/),
+  legalName: legalNameSchema,
+  idempotencyKey: personKeySchema,
+});
+const personNameInputSchema = z.object({
+  accountReference: z.string(),
+  legalName: legalNameSchema,
+  idempotencyKey: personKeySchema,
 });
 
 const urlInputSchema = z.string().url();
@@ -218,6 +228,21 @@ export interface BachsProvider
   createReceiveOnlyPersonAccount(input: {
     contactEmail: string;
     country: 'NG';
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+    /**
+     * Told the new account's reference the moment create answers, before the name is sent, so the
+     * caller keeps it and a retry names that account instead of creating another (Task 13). If it
+     * throws, no name is sent and the error is raised.
+     */
+    onCreated?: (accountReference: string) => Promise<void>;
+  }): Promise<BachsRecipientAccount>;
+  /**
+   * You collect: the person's legal name on an existing account (`fields.persons`, R8), with the
+   * caller's key: a retry with the key replays the write, a new name needs a new key.
+   */
+  nameReceiveOnlyPerson(input: {
+    accountReference: string;
     legalName: { first: string; last: string };
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
@@ -512,6 +537,44 @@ export function createBachsProvider(
       schema: accountSchema,
     });
     return normalizedAccount(updated);
+  }
+
+  /**
+   * The person's legal name as `fields.persons` on POST /v1/accounts/{id}. Create's own first_name
+   * and last_name only label the account and do not satisfy `persons.name`, and create silently
+   * ignores fields it does not read (https://docs.bachs.io/connect/accounts.md,
+   * https://docs.bachs.io/api-reference/accounts/create-an-account.md,
+   * https://docs.bachs.io/connect/requirements.md "The persons shape").
+   */
+  async function namePerson(
+    accountReference: string,
+    legalName: { first: string; last: string },
+    operation: string,
+  ) {
+    const named = await client.request({
+      method: 'POST',
+      path: `/v1/accounts/${encodeURIComponent(accountReference)}`,
+      idempotencyKey: operation,
+      operationReference: operation,
+      body: {
+        fields: {
+          persons: [
+            {
+              first_name: legalName.first,
+              last_name: legalName.last,
+              // The person opening the account is its representative.
+              relationship: { representative: true },
+            },
+          ],
+        },
+      },
+      schema: accountSchema,
+    });
+    if (named.id !== accountReference)
+      throw new BachsProtocolError(
+        'Bachs answered the name with another account',
+      );
+    return normalizedAccount(named);
   }
 
   /** What every checkout on TipMe's own account checks before sending (Pro and You collect). */
@@ -1309,11 +1372,7 @@ export function createBachsProvider(
     },
 
     // You collect: POST /v1/accounts as an individual with only the recipient persona, then the
-    // person's legal name as `fields.persons` on POST /v1/accounts/{id}. Create's own first_name and
-    // last_name only label the account and do not satisfy `persons.name`, and create silently
-    // ignores fields it does not read (https://docs.bachs.io/connect/accounts.md,
-    // https://docs.bachs.io/api-reference/accounts/create-an-account.md,
-    // https://docs.bachs.io/connect/requirements.md "The persons shape").
+    // person's legal name (namePerson).
     async createReceiveOnlyPersonAccount(input) {
       let valid: z.infer<typeof personAccountInputSchema>;
       try {
@@ -1341,38 +1400,38 @@ export function createBachsProvider(
         },
         schema: accountSchema,
       });
-      // Always sent, whatever the requirements list: an absent entry proves nothing about the
-      // person (it may be eventually_due, or not computed yet). Its own key makes a retry replay the
-      // same write rather than add a second person.
       const accountReference = providerIdentifier(
         created.id,
         'account reference',
       );
-      const operation = `${valid.idempotencyKey}.name`;
-      const named = await client.request({
-        method: 'POST',
-        path: `/v1/accounts/${encodeURIComponent(accountReference)}`,
-        idempotencyKey: operation,
-        operationReference: operation,
-        body: {
-          fields: {
-            persons: [
-              {
-                first_name: first,
-                last_name: last,
-                // The person opening the account is its representative.
-                relationship: { representative: true },
-              },
-            ],
-          },
-        },
-        schema: accountSchema,
-      });
-      if (named.id !== created.id)
-        throw new BachsProtocolError(
-          'Bachs answered the name with another account',
-        );
-      return normalizedAccount(named);
+      // Kept by the caller before anything else is sent: a later failure must never lead to a
+      // second create for this person (Task 4 note).
+      await input.onCreated?.(accountReference);
+      // Always sent, whatever the requirements list: an absent entry proves nothing about the
+      // person (it may be eventually_due, or not computed yet). Its own key makes a retry replay the
+      // same write rather than add a second person.
+      return namePerson(
+        accountReference,
+        valid.legalName,
+        `${valid.idempotencyKey}.name`,
+      );
+    },
+
+    async nameReceiveOnlyPerson(input) {
+      let valid: z.infer<typeof personNameInputSchema>;
+      try {
+        valid = personNameInputSchema.parse(input);
+        providerIdentifier(valid.accountReference, 'account reference');
+      } catch (error) {
+        throw new BachsRequestNotSentError('Invalid person name', {
+          cause: error,
+        });
+      }
+      return namePerson(
+        valid.accountReference,
+        valid.legalName,
+        valid.idempotencyKey,
+      );
     },
 
     async createOnboardingLink(input) {

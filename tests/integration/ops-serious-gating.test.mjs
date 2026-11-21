@@ -389,6 +389,33 @@ const wired = {
       happened: async () => (await latest()) === capDays,
     };
   },
+  // You collect (plan Task 13): a verified name, changed by support. The name is never in the log.
+  'collect_name.change': async () => {
+    // A page of its own, so no other action's fixture meets a collect recipient.
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `named_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: page }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state,
+                             collection_mode, collect_verified_at, collect_legal_name)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect', now(),
+               '{"first":"Tobi","last":"Adeyemi"}') RETURNING id`,
+      [userId, handle],
+    );
+    const last = `Bello${'x'.repeat(Math.floor(Math.random() * 5))}`;
+    return {
+      payload: { profileId: page, first: 'Tobi', last },
+      happened: async () =>
+        JSON.parse(
+          (
+            await q(`SELECT collect_legal_name FROM profiles WHERE id = $1`, [
+              page,
+            ])
+          )[0].collect_legal_name,
+        ).last === last,
+    };
+  },
   // R11: staff's pause of every collect transfer, and its resume from a pause set here.
   'collect_transfers.pause': async () => {
     const paused = async () =>

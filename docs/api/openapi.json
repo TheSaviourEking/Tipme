@@ -4505,6 +4505,225 @@
         ]
       }
     },
+    "/v1/me/collect": {
+      "get": {
+        "operationId": "CollectBank.status",
+        "tags": [
+          "CollectBank"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-rate-limit": "bank_read",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/collect/bank": {
+      "post": {
+        "operationId": "CollectBank.add",
+        "tags": [
+          "CollectBank"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "legalName": {
+                    "type": "object",
+                    "properties": {
+                      "first": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                      },
+                      "last": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                      }
+                    },
+                    "required": [
+                      "first",
+                      "last"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "bankCode": {
+                    "type": "string",
+                    "pattern": "^[\\w-]{1,20}$"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$"
+                  },
+                  "confirmed": {
+                    "type": "boolean",
+                    "const": true
+                  },
+                  "emailCode": {
+                    "type": "string",
+                    "pattern": "^\\d{6}$"
+                  }
+                },
+                "required": [
+                  "legalName",
+                  "bankCode",
+                  "accountNumber",
+                  "confirmed",
+                  "emailCode"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "auth_verify",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
+    "/v1/me/collect/bank/lookup": {
+      "post": {
+        "operationId": "CollectBank.lookup",
+        "tags": [
+          "CollectBank"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "legalName": {
+                    "type": "object",
+                    "properties": {
+                      "first": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                      },
+                      "last": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 60,
+                        "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                      }
+                    },
+                    "required": [
+                      "first",
+                      "last"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "bankCode": {
+                    "type": "string",
+                    "pattern": "^[\\w-]{1,20}$"
+                  },
+                  "accountNumber": {
+                    "type": "string",
+                    "pattern": "^\\d{10}$"
+                  }
+                },
+                "required": [
+                  "legalName",
+                  "bankCode",
+                  "accountNumber"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "recipient",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "bank_resolve",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/me/cover": {
       "delete": {
         "operationId": "Cover.remove",
@@ -20425,6 +20644,11 @@
                   "PAGE_PAUSED",
                   "WITHDRAWAL_FIRST_CAP",
                   "WITHDRAWAL_DAILY_LIMIT",
+                  "BANK_NAME_UNKNOWN",
+                  "NAME_MISMATCH",
+                  "NAME_LOCKED",
+                  "NAME_NOT_LOCKED",
+                  "BANK_RECHECK_LATER",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",
