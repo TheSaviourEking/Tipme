@@ -1252,6 +1252,10 @@ test('a refund whose recovery took over a day is still sent again after a lost a
   // Inside the key's window counted from its first send, the same key again.
   await send(provider, new Date(later.getTime() + 5 * MIN));
   assert.equal(state.refunds.length, 2);
+  assert.equal(
+    state.refunds[1].idempotencyKey,
+    `tipme-tip-refund-${refund.id}`,
+  );
   assert.equal((await refundRow(tip.tipId)).status, 'PROCESSING');
 
   // Past it: never resent blindly; staff are told.
