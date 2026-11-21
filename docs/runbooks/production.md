@@ -244,6 +244,64 @@ The **Record final refunds at once** switch (`refund_fee_return`, a money switch
 
 **To turn it off:** turn the switch off at `/ops/switches`. Business pages show as unavailable and tips go on as plain tips to each person; nothing is deleted, and a person's own data stays downloadable (`/v1/me/exports/work.csv`).
 
+## 12. Redis memory (staging and production)
+
+Each project runs its own Redis with `--maxmemory 192mb` and `noeviction`: when it is full it refuses every write (`OOM command not allowed`) rather than dropping queued jobs.
+
+### Incident, 21 Nov 2026
+
+From about 00:33 UTC until the owner freed disk space, production was down.
+
+1. Job schedulers were registered with no job options, so every finished scheduled run (`repeat:` job IDs) stayed in Redis for good. Several run every minute or faster. Staging had 163,941 completed jobs.
+2. Both Redis copies reached 192 MB and refused all writes.
+3. Each worker's BullMQ `error` handler then logged `{event: 'worker.error', error: 'ReplyError'}` about 3,000 times a second.
+4. Staging had no Docker log limit. A 26 GB log filled the server's shared 48 GB disk, and production went down with it.
+
+Fixed by: each scheduler keeps its last 100 completed runs and failed runs for 7 days (at most 500) (`apps/worker/src/ensure-schedule.ts`). `worker.error` logs a short Redis code (`OOM`, `MISCONF`, `LOADING`...) at most once per code per 10 seconds, with a `suppressed` count (`apps/worker/src/redis-error-log.ts`). Every staging service has production's `json-file` log limit (10 MB × 3). The outbox relay's 7-day keep is on purpose (it dedupes by job ID) and was left as it was.
+
+### Check Redis memory
+
+```bash
+# P = tipme-production or tipme-staging
+docker compose -p "$P" exec -T redis redis-cli INFO memory | grep -E '^(used_memory_human|maxmemory_human|used_memory_peak_human):'
+docker compose -p "$P" exec -T redis redis-cli ZCARD tipme:tipme-jobs:completed
+docker compose -p "$P" exec -T redis redis-cli ZCARD tipme:tipme-jobs:failed
+df -h /    # the disk both projects share
+```
+
+With retention in place, completed stays at a few hundred per scheduler at most (plus the relay's 7 days). Memory near 192 MB, or completed growing by thousands, means look now.
+
+### Clearing old scheduled runs
+
+Only completed jobs whose ID starts with `repeat:` are deleted; relay jobs (needed for dedupe) and anything waiting, active or failed are left. The script works in batches through `ZSCAN`, so Redis is never blocked for long, and its commands (`ZSCAN`, `DEL`, `ZREM`) are allowed while Redis is full. Try it on staging first.
+
+```bash
+cat > /tmp/clear-repeat.lua <<'LUA'
+-- KEYS[1] = <prefix>:<queue>:completed  ARGV[1] = <prefix>:<queue>:  ARGV[2] = cursor  ARGV[3] = batch
+local scan = redis.call('ZSCAN', KEYS[1], ARGV[2], 'COUNT', tonumber(ARGV[3]))
+local removed = 0
+for i = 1, #scan[2], 2 do
+  local id = scan[2][i]
+  if string.sub(id, 1, 7) == 'repeat:' then
+    redis.call('DEL', ARGV[1] .. id, ARGV[1] .. id .. ':logs')
+    redis.call('ZREM', KEYS[1], id)
+    removed = removed + 1
+  end
+end
+return { scan[1], removed }
+LUA
+cursor=0; total=0
+while :; do
+  out=$(docker compose -p "$P" exec -T redis redis-cli EVAL "$(cat /tmp/clear-repeat.lua)" 1 \
+    tipme:tipme-jobs:completed tipme:tipme-jobs: "$cursor" 500)
+  cursor=$(sed -n 1p <<<"$out"); total=$((total + $(sed -n 2p <<<"$out")))
+  [ "$cursor" = 0 ] && break
+done
+echo "removed $total"
+```
+
+The key prefix is `QUEUE_PREFIX` (default `tipme`) then the queue name `tipme-jobs`. If the disk is full too, free space first: a container's log is at `/var/lib/docker/containers/<id>/<id>-json.log`; `truncate -s 0` on it frees the space without restarting the container.
+
 ## Staff access
 
 Add and remove staff in the dashboard: `docs/runbooks/admin-roles.md`. `pnpm ops:grant-owner` on the server is only for when every owner is locked out, and it is logged. Server access and GitHub deploy rights go around every role and approval, so keep them with very few people.
