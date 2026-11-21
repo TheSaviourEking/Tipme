@@ -60,8 +60,8 @@ export interface CreatePaymentIntentInput {
   recognitionOn?: boolean;
   /**
    * You collect (ruling P34): the API's keyed hash of the supporter's address, never the address.
-   * Stored on the intent so one address holds only a few unfinished intents on a collect page.
-   * Not in the fingerprint: a retry from another network still replays the tip.
+   * Stored on a collect intent (never a direct one) so one address holds only a few unfinished
+   * intents on a collect page, and cleared once its tip is final. Not in the fingerprint: a retry from another network still replays the tip.
    */
   addressKey?: string;
   /**
@@ -266,7 +266,12 @@ export async function createPaymentIntent(
           requestFingerprint: fingerprint,
           status: 'AWAITING_PAYMENT',
           expiresAt: quote.expiresAt,
-          addressKey: input.addressKey ?? null,
+          // Only a collect intent keeps it, and only while unfinished: the expiry job clears it
+          // once the tip is final (`expireStaleTips`). A direct tip has no cap to guard.
+          addressKey:
+            quote.collectionMode === 'collect'
+              ? (input.addressKey ?? null)
+              : null,
         })
         .onConflictDoNothing()
         .returning({ id: paymentIntents.id });

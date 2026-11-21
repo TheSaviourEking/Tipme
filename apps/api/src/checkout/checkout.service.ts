@@ -413,6 +413,9 @@ export class CheckoutService {
       if (!collectCheckout)
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
       if (currency !== 'NGN') throw new OperationError('TIP_NOT_PAYABLE');
+      // A courtesy before the pretend provider is asked; markAttemptInitiated's check binds.
+      if (quote.expiresAt.getTime() <= Date.now())
+        throw new OperationError('QUOTE_EXPIRED');
       started = await collectCheckout({
         attemptId: intent.attemptId,
         amountMinor: quote.payerTotalMinor,
@@ -428,10 +431,13 @@ export class CheckoutService {
         currency: quote.currency,
       });
     }
+    // You collect (fix round 4): opening a checkout, so an expired collect quote is refused here
+    // as the partner's claim refuses it. A direct tip is unaffected.
     const outcome = await markAttemptInitiated(db, {
       attemptId: intent.attemptId,
       provider: 'mock',
       providerReference: started.providerReference,
+      opensCheckout: true,
     });
     const reference =
       outcome === 'initiated'

@@ -246,6 +246,7 @@ export function findQuoteCharge(
   currency: string;
   /** You collect: the mode the quote was made under, which the checkout follows. */
   collectionMode: CollectionMode;
+  expiresAt: Date;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -256,6 +257,7 @@ export function findQuoteCharge(
         providerFeeMinor: tipQuotes.providerFeeMinor,
         currency: tipQuotes.currency,
         collectionMode: tipQuotes.collectionMode,
+        expiresAt: tipQuotes.expiresAt,
       })
       .from(tipQuotes)
       .where(eq(tipQuotes.id, quoteId));

@@ -1,5 +1,5 @@
 {
-  "id": "dde1300e-d699-4751-8c0e-3999bad7c54d",
+  "id": "88cec2cf-30d9-4e8c-a2c3-8069df5333f4",
   "prevId": "fa3f68ce-aa62-4f94-aa1d-64f21073b798",
   "version": "7",
   "dialect": "postgresql",
@@ -7393,17 +7393,11 @@
         }
       },
       "indexes": {
-        "payment_intents_profile_address": {
-          "name": "payment_intents_profile_address",
+        "payment_intents_address_key_held": {
+          "name": "payment_intents_address_key_held",
           "columns": [
             {
-              "expression": "profile_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "address_key",
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

@@ -626,8 +626,8 @@ test('the address key is kept only on unfinished collect intents', async () => {
     },
     now: new Date(NOW.getTime() + 40 * MIN),
   });
-  assert.equal(result.expired, 1);
-  assert.equal(result.addressKeysCleared, 3);
+  // The direct tip's abandoned intent is cancelled too; it never had a key to clear.
+  assert.deepEqual(result, { expired: 2, paid: 0, errors: 0 });
   assert.equal(await keyOf(paid), null);
   assert.equal(await keyOf(abandoned), null);
   assert.equal(await keyOf(failed), null);

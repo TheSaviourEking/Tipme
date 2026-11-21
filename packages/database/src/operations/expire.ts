@@ -147,7 +147,30 @@ export async function expireStaleTips(input: {
         .catch(() => undefined);
     }
   }
+  // Last, so the tips cancelled above lose their key in this same run.
+  await clearFinishedAddressKeys(db).catch(() => {
+    errors += 1;
+  });
   return { expired, paid, errors };
+}
+
+/**
+ * You collect (ruling P34, fix round 4): a supporter's address key is needed only while their tip
+ * is unfinished, since only unfinished tips count against the per-address limit. Once the tip is
+ * final, however it got there (booked, failed, cancelled here or by a provider event), the key is
+ * cleared. One sweep after the expiry pass covers every path; it reads only the intents still
+ * holding a key (`payment_intents_address_key_held`), which are few.
+ */
+export async function clearFinishedAddressKeys(db: Database): Promise<number> {
+  const result = await guarded(() =>
+    db.execute(sql`
+      UPDATE payment_intents SET address_key = NULL
+       WHERE payment_intents.address_key IS NOT NULL
+         AND EXISTS (SELECT 1 FROM tips
+                      WHERE tips.intent_id = payment_intents.id
+                        AND tips.status IN ('SUCCEEDED', 'FAILED', 'CANCELLED'))`),
+  );
+  return result.rowCount ?? 0;
 }
 
 /** Attempt → EXPIRED and tip → CANCELLED together, only if nothing moved them meanwhile. */

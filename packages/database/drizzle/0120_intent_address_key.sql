@@ -1,2 +1,2 @@
 ALTER TABLE "payment_intents" ADD COLUMN "address_key" text;--> statement-breakpoint
-CREATE INDEX "payment_intents_profile_address" ON "payment_intents" USING btree ("profile_id","address_key") WHERE address_key IS NOT NULL;
+CREATE INDEX "payment_intents_address_key_held" ON "payment_intents" USING btree ("id") WHERE address_key IS NOT NULL;
