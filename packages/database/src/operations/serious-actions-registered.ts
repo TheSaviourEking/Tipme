@@ -57,7 +57,11 @@ import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
-import { askTipRefund, tipRefundFacts } from './tip-refunds.js';
+import {
+  askTipRefund,
+  returnHeldRefundMoney,
+  tipRefundFacts,
+} from './tip-refunds.js';
 import {
   checkedProPrice,
   currentProPrice,
@@ -794,6 +798,39 @@ const tipRefundAbsorbGap = acting<{ tipId: string }>({
   },
 });
 
+/**
+ * You collect (plan Task 10, fix round 2, RI1): money a failed refund of a collect tip took back from
+ * the recipient goes back to them (a `return` transfer from TipMe's balance to their account). A
+ * second person decides. Pinned on what is held, so a change since asking makes it stale.
+ */
+const tipRefundReturn = acting<{ tipId: string }>({
+  name: 'tip_refund.return',
+  permission: 'payments.repair',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      held: String(facts.heldMinor),
+    };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'the page';
+    return `Return ${naira(facts.heldMinor)} that a failed refund of a tip to ${page} (tip ending ${tipId.slice(-6)}) took back: TipMe sends it from its own balance to their account with our payment partner (Bachs), and it is theirs to withdraw again. No refund is made.`;
+  },
+  act: async (tx, { tipId }, context) => {
+    if (!(await readFeatureSwitch(tx, 'tip_refunds')))
+      throw new OperationError('TIP_REFUND_REFUSED', 'switched_off');
+    return returnHeldRefundMoney(tx, { tipId, now: context.now });
+  },
+});
+
 /* TipMe for businesses */
 
 /**
@@ -1353,6 +1390,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(announcementSendAction);
   registerSeriousAction(tipRefund);
   registerSeriousAction(tipRefundAbsorbGap);
+  registerSeriousAction(tipRefundReturn);
   registerSeriousAction(planFeesChange);
 }
 

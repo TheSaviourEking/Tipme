@@ -1,5 +1,5 @@
 {
-  "id": "45e0e5ba-089a-450d-adc3-2cec48312299",
+  "id": "2ccde937-65f6-4bb5-99fb-f2ba4003c3cb",
   "prevId": "2313f2f2-a3b7-4886-a99d-7ae67f54d5e8",
   "version": "7",
   "dialect": "postgresql",
@@ -3263,7 +3263,7 @@
         },
         "collect_transfers_kind": {
           "name": "collect_transfers_kind",
-          "value": "kind IN ('share', 'back')"
+          "value": "kind IN ('share', 'back', 'return')"
         },
         "collect_transfers_status": {
           "name": "collect_transfers_status",
@@ -3283,11 +3283,11 @@
         },
         "collect_transfers_back_source": {
           "name": "collect_transfers_back_source",
-          "value": "(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)\n        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))"
+          "value": "(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)\n        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))\n        OR (kind = 'return' AND refund_id IS NOT NULL AND dispute_id IS NULL)"
         },
         "collect_transfers_key": {
           "name": "collect_transfers_key",
-          "value": "(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)\n        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)"
+          "value": "(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)\n        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)\n        OR (kind = 'return' AND idempotency_key = 'tipme-collect-return-' || refund_id::text)"
         },
         "collect_transfers_review_reason": {
           "name": "collect_transfers_review_reason",
@@ -13730,6 +13730,19 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "retry_after": {
+          "name": "retry_after",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "not_sent_count": {
+          "name": "not_sent_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",

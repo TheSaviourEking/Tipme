@@ -72,7 +72,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `pages.plan` | POST `/v1/ops/pages/{handle}/handle-changes`<br>POST `/v1/ops/pages/{profileId}/plan`<br>GET `/v1/ops/pages/{profileId}/pro` |
 | `pages.suspend` | GET `/v1/ops/pages/{profileId}/images/{image}`<br>POST `/v1/ops/pages/{profileId}/images/{image}/remove`<br>GET `/v1/ops/pages/{profileId}/studio-images/{imageId}`<br>POST `/v1/ops/pages/{profileId}/studio-images/{imageId}/remove`<br>POST `/v1/ops/pages/{profileId}/suspend`<br>POST `/v1/ops/pages/{profileId}/unsuspend` |
 | `payments.recheck` | POST `/v1/ops/recheck` |
-| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund`<br>GET `/v1/ops/tips/{tipId}/refund`<br>POST `/v1/ops/tips/{tipId}/refund`<br>POST `/v1/ops/tips/{tipId}/refund/absorb-gap` |
+| `payments.repair` | POST `/v1/ops/bachs/account-recovery`<br>POST `/v1/ops/bachs/checkout-recovery`<br>POST `/v1/ops/bachs/fee-bearer-confirmation`<br>POST `/v1/ops/issues/{id}/reverse-tip`<br>GET `/v1/ops/pro/pages/{profileId}/payments`<br>POST `/v1/ops/pro/purchases/{purchaseId}/refund`<br>GET `/v1/ops/tips/{tipId}/refund`<br>POST `/v1/ops/tips/{tipId}/refund`<br>POST `/v1/ops/tips/{tipId}/refund/absorb-gap`<br>POST `/v1/ops/tips/{tipId}/refund/return` |
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup`<br>POST `/v1/ops/users/{id}/reveal` |
 | `pro.price` | GET `/v1/ops/business-pro-price`<br>POST `/v1/ops/business-pro-price`<br>GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
@@ -448,6 +448,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/tips/{tipId}/refund` | `payments.repair` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/tips/{tipId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | POST | `/v1/ops/tips/{tipId}/refund/absorb-gap` | `payments.repair` | yes | `ops_request` | – |
+| POST | `/v1/ops/tips/{tipId}/refund/return` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/usernames` | `usernames.manage` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/usernames` | `usernames.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/usernames/{name}/assign` | `usernames.manage` | yes | `ops_request` | – |

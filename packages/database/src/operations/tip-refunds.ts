@@ -153,6 +153,11 @@ export interface TipRefundFacts {
   collect: { plan: CollectRefundPlanKind; gapMinor: bigint } | null;
   /** Why the latest refund of this tip failed, when it did and none is open now. */
   lastFailure: string | null;
+  /**
+   * You collect (RI1): what this tip's refunds already took back from the recipient, held by TipMe
+   * for its refund (a new ask uses it; staff may return it instead). Zero for a direct tip.
+   */
+  heldMinor: bigint;
 }
 
 /**
@@ -268,11 +273,27 @@ export async function tipRefundFacts(
     collect: collect
       ? { plan: collect.plan, gapMinor: collect.gapMinor }
       : null,
+    heldMinor: collect?.heldForTipMinor ?? 0n,
     lastFailure:
       !open && latest?.status === 'FAILED'
         ? (FAILURE_WORDS[latest.failure ?? ''] ?? FAILURE_WORDS['refused']!)
         : null,
   };
+}
+
+/** Whether the tip's money already went back (a refund or dispute booked as a reversal). */
+async function tipReversed(db: Database | Tx, tipId: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: ledgerTransactions.id })
+    .from(ledgerTransactions)
+    .where(
+      and(
+        eq(ledgerTransactions.tipId, tipId),
+        eq(ledgerTransactions.operationType, 'reversal'),
+      ),
+    )
+    .limit(1);
+  return Boolean(row);
 }
 
 /** The mode the tip was quoted under (never the page's mode now: a tip keeps its quote's). */
@@ -301,6 +322,8 @@ interface CollectRead {
   /** What the refund holds of their balance: their part, less what a closed dispute holds of it. */
   holdMinor: bigint;
   chargeReference: string | null;
+  /** What this tip's refunds already took back from the recipient and TipMe holds (RI1). */
+  heldForTipMinor: bigint;
 }
 
 const minOf = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -314,21 +337,37 @@ type SweepRow = typeof shareTransfers.$inferSelect;
  * takes it again. Only one refund of a tip is ever open, and a paid one ends the tip's refunds
  * (`already`), so every paid transfer back and finished pull-back on the tip is unspent until then.
  */
-async function recoveredOnTip(
+export async function recoveredOnTip(
   db: Database | Tx,
   tipId: string,
-): Promise<{ personMinor: bigint; pullBack: SweepRow | null }> {
-  const backs = await db
-    .select({ amountMinor: collectTransfers.amountMinor })
+): Promise<{
+  personMinor: bigint;
+  pullBack: SweepRow | null;
+  /** A return of it to the recipient is under way (RI1): nothing else may use it meanwhile. */
+  returning: boolean;
+}> {
+  const moves = await db
+    .select({
+      kind: collectTransfers.kind,
+      status: collectTransfers.status,
+      amountMinor: collectTransfers.amountMinor,
+    })
     .from(collectTransfers)
     .where(
       and(
         eq(collectTransfers.tipId, tipId),
-        eq(collectTransfers.kind, 'back'),
+        inArray(collectTransfers.kind, ['back', 'return']),
         isNotNull(collectTransfers.refundId),
-        eq(collectTransfers.status, 'paid'),
       ),
     );
+  const backs = moves.filter((m) => m.kind === 'back' && m.status === 'paid');
+  const returned = moves
+    .filter((m) => m.kind === 'return' && m.status === 'paid')
+    .reduce((sum, m) => sum + m.amountMinor, 0n);
+  const returning = moves.some(
+    (m) =>
+      m.kind === 'return' && m.status !== 'paid' && m.status !== 'cancelled',
+  );
   const [pullBack] = await db
     .select()
     .from(shareTransfers)
@@ -341,13 +380,18 @@ async function recoveredOnTip(
     )
     .orderBy(desc(shareTransfers.createdAt))
     .limit(1);
+  const taken = backs.reduce((sum, b) => sum + b.amountMinor, 0n);
   return {
-    personMinor: backs.reduce((sum, b) => sum + b.amountMinor, 0n),
+    personMinor: taken > returned ? taken - returned : 0n,
     pullBack: pullBack ?? null,
+    returning,
   };
 }
 
-/** A dispute TipMe hasn't settled on the tip: a refund now would return the money twice. */
+/**
+ * A dispute on the tip that wasn't won or closed: open, responded, or lost (settled or not). A
+ * refund now would return the money twice (RC1).
+ */
 async function unsettledDispute(
   db: Database | Tx,
   tipId: string,
@@ -358,10 +402,7 @@ async function unsettledDispute(
     .where(
       and(
         eq(disputes.tipId, tipId),
-        or(
-          inArray(disputes.status, ['open', 'responded']),
-          and(eq(disputes.status, 'lost'), isNull(disputes.settledAt)),
-        ),
+        inArray(disputes.status, ['open', 'responded', 'lost']),
       ),
     )
     .limit(1);
@@ -390,12 +431,14 @@ async function readCollect(
     .from(disputes)
     .where(eq(disputes.tipId, tipId));
   const share = await sharePosition(db, tipId);
+  const recovered = await recoveredOnTip(db, tipId);
   const base = {
     gapMinor: 0n,
     share,
     backMinor: 0n,
     holdMinor: 0n,
     chargeReference: share.row?.chargeReference ?? null,
+    heldForTipMinor: recovered.personMinor,
   };
   if (
     onTip.some(
@@ -415,7 +458,7 @@ async function readCollect(
   let backMinor = 0n;
   let holdMinor = 0n;
   const person = parts.personMinor;
-  const recovered = await recoveredOnTip(db, tipId);
+  if (recovered.returning) wait = true;
   if (person > 0n) {
     if (share.state === 'in_flight') wait = true;
     else if (share.state === 'gone')
@@ -659,6 +702,123 @@ async function askCollectRefund(
     });
   }
   return { refundId: id, amountMinor: String(facts.refundMinor) };
+}
+
+/**
+ * RI1: the serious action `tip_refund.return`. What this tip's failed refunds took back from the
+ * recipient goes back to the account it came from (a `return` row the collect machine sends, key
+ * `tipme-collect-return-<refundId>`). Its paid posting (`provider_clearing` <- held) and the end of
+ * the hold are one transaction (`finishPaid`), once. Only with no refund open, no dispute that
+ * wasn't won or closed, and nothing already being returned.
+ */
+export async function returnHeldRefundMoney(
+  tx: Tx,
+  input: { tipId: string; now: Date },
+): Promise<{ returnId: string; amountMinor: string }> {
+  const [tip] = await tx
+    .select({ id: tips.id })
+    .from(tips)
+    .where(eq(tips.id, input.tipId))
+    .for('update');
+  if (!tip) throw new OperationError('TIP_REFUND_REFUSED', 'not_paid');
+  const refunds = await tx
+    .select()
+    .from(tipRefunds)
+    .where(eq(tipRefunds.tipId, input.tipId))
+    .orderBy(desc(tipRefunds.createdAt))
+    .for('update');
+  if (refunds.some((r) => r.status !== 'FAILED'))
+    throw new OperationError('TIP_REFUND_REFUSED', 'already');
+  if (await unsettledDispute(tx, input.tipId))
+    throw new OperationError('TIP_REFUND_REFUSED', 'disputed');
+  const recovered = await recoveredOnTip(tx, input.tipId);
+  if (recovered.returning)
+    throw new OperationError('TIP_REFUND_REFUSED', 'in_flight');
+  if (recovered.personMinor <= 0n)
+    throw new OperationError('TIP_REFUND_REFUSED', 'nothing_held');
+  const [from] = await tx
+    .select()
+    .from(collectTransfers)
+    .where(
+      and(
+        eq(collectTransfers.tipId, input.tipId),
+        eq(collectTransfers.kind, 'back'),
+        isNotNull(collectTransfers.refundId),
+        eq(collectTransfers.status, 'paid'),
+      ),
+    )
+    .orderBy(desc(collectTransfers.createdAt))
+    .limit(1);
+  const refund = refunds[0];
+  if (!from?.accountReference || !refund)
+    throw new OperationError('TIP_REFUND_REFUSED', 'nothing_held');
+  const id = newId();
+  await tx.insert(collectTransfers).values({
+    id,
+    kind: 'return',
+    tipId: input.tipId,
+    profileId: from.profileId,
+    refundId: refund.id,
+    accountReference: from.accountReference,
+    provider: from.provider,
+    environment: from.environment,
+    amountMinor: recovered.personMinor,
+    currency: from.currency,
+    status: 'ready',
+    idempotencyKey: `tipme-collect-return-${refund.id}`,
+    nextTryAt: input.now,
+    createdAt: input.now,
+    updatedAt: input.now,
+  });
+  return { returnId: id, amountMinor: String(recovered.personMinor) };
+}
+
+/**
+ * RC1, for a lost dispute's booking (`settleLost`, its transaction): the tip's refunds give way. A
+ * refund that may be at the partner (sent, unanswered, or its transfer back or pull-back still
+ * moving) makes the dispute wait (`busy`). Otherwise an unsent one fails `disputed`, and what the
+ * refunds took back is handed to the dispute (`heldMinor`, to count first: nothing more is taken
+ * from the recipient for it); their holds end with the dispute's posting.
+ */
+export async function yieldRefundsToLostDispute(
+  tx: Tx,
+  input: { tipId: string; now: Date },
+): Promise<
+  | { busy: true }
+  | { busy: false; heldMinor: bigint; release: () => Promise<void> }
+> {
+  const rows = await tx
+    .select()
+    .from(tipRefunds)
+    .where(eq(tipRefunds.tipId, input.tipId))
+    .for('update');
+  for (const row of rows) {
+    if (!row.collectPlan) continue;
+    if (row.status === 'PROCESSING' || row.status === 'UNKNOWN')
+      return { busy: true };
+    if (row.status !== 'REQUESTED') continue;
+    if (row.sentAt) return { busy: true };
+    const { back, pullBack } = await recoveryRows(tx, row);
+    if (back && ['ready', 'sent', 'unknown'].includes(back.status))
+      return { busy: true };
+    if (pullBack && !['done', 'gap', 'review'].includes(pullBack.status))
+      return { busy: true };
+  }
+  const { personMinor, returning } = await recoveredOnTip(tx, input.tipId);
+  if (returning) return { busy: true };
+  return {
+    busy: false,
+    heldMinor: personMinor,
+    release: async () => {
+      for (const row of rows)
+        if (row.collectPlan && row.status === 'REQUESTED')
+          await failCollectRefund(tx, row, 'disputed', input.now, 'system');
+      await tx
+        .update(tipRefunds)
+        .set({ heldMinor: 0n, updatedAt: input.now })
+        .where(eq(tipRefunds.tipId, input.tipId));
+    },
+  };
 }
 
 type RefundRow = typeof tipRefunds.$inferSelect;
@@ -1155,15 +1315,19 @@ async function recoverCollectRefund(
   });
 }
 
+/** Sends that never left this many times in a row tell staff (RM1). */
+const NOT_SENT_ALERT_AFTER = 5;
 /** A collect refund waiting this long for money to come back is raised to staff (once). */
 const RECOVERY_ALERT_MS = 24 * 3_600_000;
 /** The partner's 400 codes that mean TipMe's own balance can't fund the refund. */
 const BALANCE_CODES = new Set(['INSUFFICIENT_BALANCE', 'INSUFFICIENT_FUNDS']);
 
 /**
- * I1: a dispute TipMe hasn't settled on the tip stops its refund (it would return the money twice).
- * Nothing taken back yet: the refund fails and the share held for it goes to the dispute. Money
- * already coming back or back: the refund waits, unsent, and staff are told (once).
+ * I1, RC1: a dispute on the tip that wasn't won or closed stops its refund for good (it would return
+ * the money twice): the refund fails `disputed` and is never sent by the worker again. The share
+ * held for it goes to the dispute; money already taken back stays held for the tip, and a lost
+ * dispute uses it first (`settleLost`). A won dispute leaves it held: a new staff ask reuses it, or
+ * staff return it (`tip_refund.return`).
  */
 async function disputeStops(
   tx: Tx,
@@ -1173,21 +1337,15 @@ async function disputeStops(
   now: Date,
 ): Promise<'failed' | 'waiting' | null> {
   if (!(await unsettledDispute(tx, row.tipId))) return null;
-  const { personMinor } = await recoveredOnTip(tx, row.tipId);
-  const moving =
-    (back !== null && back.status !== 'waiting') || pullBack !== null;
-  if (personMinor === 0n && !moving) {
-    await failCollectRefund(tx, row, 'disputed', now, 'system');
-    return 'failed';
-  }
-  await openIssue(tx, {
-    dedupeKey: `tip_refund_disputed.${row.id}`,
-    kind: 'collect_transfer_review',
-    subject: { tipId: row.tipId },
-    note: `A dispute opened on this collect tip after its refund was asked for. The refund is not sent while the dispute is open; what came back for it stays held by TipMe. Settle the dispute, then decide the refund.`,
-    now,
-  });
-  return 'waiting';
+  // RC1: stopped for good, never sent by the worker. Only a transfer back or pull-back still in
+  // flight is waited for (its money must land before the refund lets go of its hold).
+  const backMoving =
+    back !== null && ['ready', 'sent', 'unknown'].includes(back.status);
+  const pullMoving =
+    pullBack !== null && !['done', 'gap', 'review'].includes(pullBack.status);
+  if (backMoving || pullMoving) return 'waiting';
+  await failCollectRefund(tx, row, 'disputed', now, 'system');
+  return 'failed';
 }
 
 /**
@@ -1214,6 +1372,8 @@ async function sendCollectRefunds(
         and(
           eq(tipRefunds.provider, input.providerName),
           isNotNull(tipRefunds.collectPlan),
+          // RM1: a send that never left waits out its backoff.
+          or(isNull(tipRefunds.retryAfter), lte(tipRefunds.retryAfter, now)),
           or(
             and(eq(tipRefunds.status, 'REQUESTED'), isNull(tipRefunds.sentAt)),
             and(
@@ -1322,7 +1482,10 @@ async function sendCollectRefunds(
             eq(tipRefunds.id, row.id),
             isNotNull(tipRefunds.recoveredAt),
             sql`NOT EXISTS (SELECT 1 FROM disputes x WHERE x.tip_id = ${tipRefunds.tipId}
-                  AND (x.status IN ('open', 'responded') OR (x.status = 'lost' AND x.settled_at IS NULL)))`,
+                  AND x.status IN ('open', 'responded', 'lost'))`,
+            // RC1: never a refund of a tip whose money already went back (a lost dispute's booking).
+            sql`NOT EXISTS (SELECT 1 FROM ledger_transactions l WHERE l.tip_id = ${tipRefunds.tipId}
+                  AND l.operation_type = 'reversal')`,
             row.sentAt
               ? eq(tipRefunds.sentAt, row.sentAt)
               : isNull(tipRefunds.sentAt),
@@ -1377,19 +1540,28 @@ async function sendCollectRefunds(
         if (locked.status !== 'REQUESTED' && locked.status !== 'UNKNOWN')
           return;
         if (outcome.kind === 'not_sent') {
-          // C1: nothing reached the partner, and the money is back: tried again next run (the
-          // claim undone, the key's window unopened), never failed. Staff hear of it once.
+          // C1: nothing reached the partner, and the money is back: tried again (the claim undone,
+          // the key's window unopened), never failed. RM1: after a backoff (5 minutes, doubling,
+          // at most 6 hours, as collect transfers), and staff are told once it keeps happening.
+          const count = locked.notSentCount + 1;
+          const wait = Math.min(5 * 2 ** (count - 1), 360) * 60_000;
           await tx
             .update(tipRefunds)
-            .set({ sentAt: row.sentAt, firstSentAt: row.firstSentAt })
+            .set({
+              sentAt: row.sentAt,
+              firstSentAt: row.firstSentAt,
+              notSentCount: count,
+              retryAfter: new Date(now.getTime() + wait),
+            })
             .where(eq(tipRefunds.id, locked.id));
-          await openIssue(tx, {
-            dedupeKey: `tip_refund_not_sent.${locked.id}`,
-            kind: 'collect_transfer_stuck',
-            subject: { tipId: locked.tipId },
-            note: `A collect tip's refund (${tipRefundKey(locked.id)}) couldn't be sent to our payment partner (the request never left). It is tried again every run.`,
-            now,
-          });
+          if (count >= NOT_SENT_ALERT_AFTER)
+            await openIssue(tx, {
+              dedupeKey: `tip_refund_not_sent.${locked.id}`,
+              kind: 'collect_transfer_stuck',
+              subject: { tipId: locked.tipId },
+              note: `A collect tip's refund (${tipRefundKey(locked.id)}) couldn't be sent to our payment partner ${count} times (the request never left: check the charge reference and the partner settings). It is still tried again, at most every 6 hours.`,
+              now,
+            });
           return;
         }
         if (outcome.kind === 'refused') {
@@ -1600,6 +1772,25 @@ export async function applyTipRefundEvent(
       const partnerRef = input.partnerReversalId?.startsWith('refund.')
         ? input.partnerReversalId.slice('refund.'.length)
         : null;
+      // RC1 (defence in depth): a collect refund paid that TipMe didn't expect to be sent (it was
+      // stopped or failed), or whose tip's money already went back another way (a lost dispute),
+      // is never booked twice and never dropped: a money issue names it, and what it held stays
+      // reserved for a person to settle.
+      if (
+        row.collectPlan &&
+        input.refundState === 'paid' &&
+        row.status !== 'PAID' &&
+        (row.status === 'FAILED' || (await tipReversed(tx, row.tipId)))
+      ) {
+        await openIssue(tx, {
+          dedupeKey: `tip_refund_unexpected.${row.id}`,
+          kind: 'collect_recon_mismatch',
+          subject: { tipId: row.tipId },
+          note: `Our payment partner (Bachs) reports refund ${tipRefundKey(row.id)} of ${naira(input.refundedMinor ?? row.amountMinor)} paid, but TipMe had stopped it, or the tip's money had already gone back (a lost dispute). Nothing was booked: settle it by hand. ${naira(row.heldMinor)} is still held from the recipient for it.`,
+          now,
+        });
+        return 'noted';
+      }
       if (row.status === 'PAID' || row.status === 'FAILED') return 'already';
       if (input.refundState === 'pending') {
         if (row.status !== 'PROCESSING')

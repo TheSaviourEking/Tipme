@@ -48,6 +48,7 @@ import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { scheduleCollectRecover } from './share-transfers.js';
+import { yieldRefundsToLostDispute } from './tip-refunds.js';
 
 /*
  * You collect (plan Task 9, spec §6.2, R4, R6, P13, P14, P20, P27). A dispute on a tip TipMe
@@ -591,6 +592,14 @@ async function settleLost(
       now,
       "the share's transfer is still being read back",
     );
+  // Task 10 (RC1): a refund of the tip gives way. One that may be at the partner makes the loss wait;
+  // what refunds already took back from the recipient is counted first, never taken again.
+  const refunds = await yieldRefundsToLostDispute(tx, {
+    tipId: row.tipId,
+    now,
+  });
+  if (refunds.busy)
+    return waiting(tx, row, now, 'a refund of the tip is still in flight');
   const sweeps = (await tx
     .select()
     .from(shareTransfers)
@@ -662,6 +671,12 @@ async function settleLost(
     takeHeld = position.row;
   } else if (position.state === 'moved') {
     const moved = position.row;
+    // What a refund of this tip already took back is TipMe's to use first (RC1).
+    const fromRefund = min(
+      refunds.heldMinor,
+      min(row.amountMinor, moved.amountMinor),
+    );
+    personMinor = fromRefund;
     const [back] = await tx
       .select()
       .from(collectTransfers)
@@ -674,16 +689,16 @@ async function settleLost(
     if (back) {
       if (back.status !== 'paid')
         return waiting(tx, row, now, 'the transfer back is not paid yet');
-      personMinor = back.amountMinor;
-    } else {
+      personMinor = fromRefund + back.amountMinor;
+    } else if (fromRefund < min(row.amountMinor, moved.amountMinor)) {
       // The same cap as on open: this tip's share, at most what is still in the balance.
       const inBalance =
         row.shareStep === 'balance'
           ? row.heldMinor
           : await fromMovedShare(tx, row, moved);
       const recovery = disputeRecovery({
-        disputedMinor: row.amountMinor,
-        netMinor: moved.amountMinor,
+        disputedMinor: row.amountMinor - fromRefund,
+        netMinor: moved.amountMinor - fromRefund,
         share: { state: 'moved', inBalanceMinor: inBalance },
       });
       if ('wait' in recovery) return 'waiting_back';
@@ -842,6 +857,8 @@ async function settleLost(
         .from(tips)
         .where(eq(tips.id, row.tipId))
     )[0]?.profileId;
+  // The refunds' holds end with this posting, and an unsent refund is stopped (RC1).
+  await refunds.release();
   const parts: RecoveredPart[] = [];
   if (personMinor > 0n && profileId)
     parts.push({ amountMinor: personMinor, profileId });

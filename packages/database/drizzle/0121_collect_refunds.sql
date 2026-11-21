@@ -1,3 +1,6 @@
+ALTER TABLE "collect_transfers" DROP CONSTRAINT "collect_transfers_kind";--> statement-breakpoint
+ALTER TABLE "collect_transfers" DROP CONSTRAINT "collect_transfers_back_source";--> statement-breakpoint
+ALTER TABLE "collect_transfers" DROP CONSTRAINT "collect_transfers_key";--> statement-breakpoint
 ALTER TABLE "share_transfers" DROP CONSTRAINT "share_transfers_links";--> statement-breakpoint
 ALTER TABLE "tip_refunds" DROP CONSTRAINT "tip_refunds_failure";--> statement-breakpoint
 ALTER TABLE "share_transfers" ADD COLUMN "tip_refund_id" uuid;--> statement-breakpoint
@@ -6,8 +9,17 @@ ALTER TABLE "tip_refunds" ADD COLUMN "gap_minor" bigint;--> statement-breakpoint
 ALTER TABLE "tip_refunds" ADD COLUMN "held_minor" bigint DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "tip_refunds" ADD COLUMN "recovered_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "tip_refunds" ADD COLUMN "first_sent_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "tip_refunds" ADD COLUMN "retry_after" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "tip_refunds" ADD COLUMN "not_sent_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "share_transfers" ADD CONSTRAINT "share_transfers_tip_refund_id_tip_refunds_id_fk" FOREIGN KEY ("tip_refund_id") REFERENCES "public"."tip_refunds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "share_transfers_one_refund_recover" ON "share_transfers" USING btree ("tip_refund_id") WHERE kind = 'collect_recover';--> statement-breakpoint
+ALTER TABLE "collect_transfers" ADD CONSTRAINT "collect_transfers_kind" CHECK (kind IN ('share', 'back', 'return'));--> statement-breakpoint
+ALTER TABLE "collect_transfers" ADD CONSTRAINT "collect_transfers_back_source" CHECK ((kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)
+        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))
+        OR (kind = 'return' AND refund_id IS NOT NULL AND dispute_id IS NULL));--> statement-breakpoint
+ALTER TABLE "collect_transfers" ADD CONSTRAINT "collect_transfers_key" CHECK ((kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)
+        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)
+        OR (kind = 'return' AND idempotency_key = 'tipme-collect-return-' || refund_id::text));--> statement-breakpoint
 ALTER TABLE "share_transfers" ADD CONSTRAINT "share_transfers_links" CHECK ((kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
         AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)

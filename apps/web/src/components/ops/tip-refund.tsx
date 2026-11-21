@@ -59,7 +59,9 @@ export function TipRefund({ tipId }: { tipId: string }) {
         : {
             kind: 'done',
             actedAlone: answer.actedAlone,
-            text: `Refund of ${naira(answer.data.amountMinor)} asked. It goes to our payment partner next, and is recorded when they confirm it.`,
+            text: to.endsWith('/return')
+              ? `Return of ${naira(answer.data.amountMinor)} asked. It goes back to their account with our payment partner next.`
+              : `Refund of ${naira(answer.data.amountMinor)} asked. It goes to our payment partner next, and is recorded when they confirm it.`,
           },
     );
     return null;
@@ -113,6 +115,25 @@ export function TipRefund({ tipId }: { tipId: string }) {
         <Slip dense tone="neutral" title="The last refund didn’t go through">
           {facts.lastFailure}
         </Slip>
+      )}
+      {facts.heldMinor && facts.heldMinor !== '0' && (
+        <Slip dense tone="unsure" title="Money held for this tip">
+          <strong>
+            <Money code minor={facts.heldMinor} />
+          </strong>{' '}
+          was taken back from {page} for a refund and is held by TipMe. A new
+          refund uses it, or it can be returned to their account with our
+          payment partner.
+        </Slip>
+      )}
+      {facts.heldMinor && facts.heldMinor !== '0' && !facts.refund && (
+        <ReasonAction
+          open="Return to recipient"
+          field="Why is this money going back to the recipient?"
+          submit="Ask a second person"
+          hint="Recorded in the audit log with your name and the time. A second person decides before anything is sent back."
+          onSubmit={(reason) => ask(reason, `${path}/return`)}
+        />
       )}
       {facts.refundable && collect?.plan === 'staff_decides' ? (
         <ReasonAction

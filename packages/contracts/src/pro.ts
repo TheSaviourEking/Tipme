@@ -212,6 +212,11 @@ export interface OpsTipRefund {
    * A collect tip: why its latest refund failed, in plain words, when it did and none is open.
    */
   lastFailure?: string | null;
+  /**
+   * A collect tip (fix round 2, RI1): what its refunds already took back from the recipient and
+   * TipMe holds for the tip's refund. Staff may return it (`POST …/refund/return`).
+   */
+  heldMinor?: string;
 }
 
 /** `POST /v1/ops/tips/:tipId/refund`: why, in staff's words (a second person approves). */

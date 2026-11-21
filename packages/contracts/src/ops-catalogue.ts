@@ -419,6 +419,8 @@ export const SERIOUS_ACTIONS = [
   'plan_fees.change',
   // You collect (plan Task 10, §6.1 case 3): refund a collect tip TipMe can't fully recover first.
   'tip_refund.absorb_gap',
+  // Task 10 fix round 2 (RI1): send back what a failed collect refund took from the recipient.
+  'tip_refund.return',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -448,6 +450,8 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'plan_fees.change': 'Change TipMe’s fee per plan',
   'tip_refund.absorb_gap':
     'Refund a tip when TipMe has to absorb what can’t be taken back',
+  'tip_refund.return':
+    'Return money a failed refund took back to the recipient',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -476,4 +480,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'tip.refund': 'payments.repair',
     'plan_fees.change': 'fees.manage',
     'tip_refund.absorb_gap': 'payments.repair',
+    'tip_refund.return': 'payments.repair',
   };

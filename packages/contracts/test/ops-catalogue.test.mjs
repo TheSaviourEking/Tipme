@@ -59,8 +59,13 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-three', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 23);
+test('the serious actions are the agreed twenty-four', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 24);
+  // Task 10 fix round 2 (RI1): money a failed collect refund took back goes back, with a second person.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['tip_refund.return'],
+    'payments.repair',
+  );
   // You collect (plan Task 10, §6.1 case 3): TipMe absorbing what a refund can't take back.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['tip_refund.absorb_gap'],

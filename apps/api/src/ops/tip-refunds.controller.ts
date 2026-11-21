@@ -140,6 +140,7 @@ export class OpsTipRefundsController {
                 gapMinor: String(facts.collect.gapMinor),
               },
               lastFailure: facts.lastFailure,
+              heldMinor: String(facts.heldMinor),
             }
           : {}),
       },
@@ -202,8 +203,36 @@ export class OpsTipRefundsController {
     return this.request('tip_refund.absorb_gap', ops, tipId, body, response);
   }
 
+  /**
+   * You collect (fix round 2, RI1): what a failed refund took back from the recipient goes back to
+   * their account (`tip_refund.return`, a second person). Refused while a refund is open or a dispute
+   * isn't won or closed, or with nothing held.
+   */
+  @Post(':tipId/refund/return')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('payments.repair')
+  async returnHeld(
+    @CurrentOps() ops: OpsContext,
+    @Param('tipId') tipId: string,
+    @Body(new ZodValidationPipe(opsTipRefundSchema)) body: OpsTipRefundRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<
+      | ({ refundId: string; amountMinor: string } & OpsActedAlone)
+      | OpsSeriousPending
+    >
+  > {
+    await this.on(tipId);
+    const facts = await this.facts(tipId);
+    if (!facts.collect || facts.heldMinor <= 0n || facts.refund)
+      throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');
+    return this.request('tip_refund.return', ops, tipId, body, response);
+  }
+
   private async request(
-    name: 'tip.refund' | 'tip_refund.absorb_gap',
+    name: 'tip.refund' | 'tip_refund.absorb_gap' | 'tip_refund.return',
     ops: OpsContext,
     tipId: string,
     body: OpsTipRefundRequest,
@@ -214,7 +243,11 @@ export class OpsTipRefundsController {
       | OpsSeriousPending
     >
   > {
-    const answer = pendingOr<{ refundId: string; amountMinor: string }>(
+    const answer = pendingOr<{
+      refundId?: string;
+      returnId?: string;
+      amountMinor: string;
+    }>(
       await requestSeriousAction(this.database.db, {
         name,
         payload: { tipId },
@@ -228,7 +261,8 @@ export class OpsTipRefundsController {
     if ('pending' in answer) return { data: answer.pending };
     return {
       data: {
-        refundId: answer.result.refundId,
+        // A return (RI1) answers with the return transfer's id in the same place.
+        refundId: answer.result.refundId ?? answer.result.returnId ?? '',
         amountMinor: answer.result.amountMinor,
         ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
       },
