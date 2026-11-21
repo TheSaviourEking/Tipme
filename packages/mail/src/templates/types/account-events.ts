@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { defineMailType, mailLink } from '../define.js';
 import { letter } from '../layout.js';
-import { ngn } from '../money.js';
+import { naira, ngn } from '../money.js';
 
 const minor = z.string().regex(/^\d+$/);
 
@@ -352,6 +352,44 @@ export const tipReversed = defineMailType({
         ],
         reason:
           'You get this email when a tip you received is refunded or disputed.',
+      },
+      ctx,
+    ),
+});
+
+/**
+ * You collect (plan Task 9, spec §6.2 and §10): a dispute holds part of a recipient's balance. The
+ * spec's words, the amount held, and nothing about the supporter or the partner's process.
+ */
+export const disputeHold = defineMailType({
+  id: 'dispute_hold',
+  category: 'transactional',
+  sender: 'payments',
+  preference: null,
+  schema: z
+    .object({ heldMinor: z.string().regex(/^[1-9][0-9]{0,14}$/) })
+    .strict(),
+  sample: { heldMinor: '950000' },
+  render: (data, ctx) =>
+    letter(
+      {
+        subject: 'A payment to you on TipMe is being questioned',
+        heading: 'A payment is being questioned',
+        // The amount stays out of the preview line.
+        preheader: "We've held part of your balance until it's settled.",
+        blocks: [
+          {
+            kind: 'text',
+            text: `A payment to you is being questioned. We've held ${naira(data.heldMinor)} until it's settled.`,
+          },
+          {
+            kind: 'button',
+            label: 'Go to your dashboard',
+            href: mailLink(ctx, '/dashboard', 'dashboard'),
+          },
+        ],
+        reason:
+          'You get this email when a payment to you is questioned and part of your balance is held.',
       },
       ctx,
     ),

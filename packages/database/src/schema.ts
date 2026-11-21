@@ -3971,6 +3971,11 @@ export const shareTransfers = pgTable(
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Task 9: a collect sweep held in review after its leg in was definitely refused again and
+    // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
+    // Task 9 (P29): the lost dispute a `collect_recover` pull-back answers (one each).
+    disputeId: uuid('dispute_id').references((): AnyPgColumn => disputes.id),
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -3983,7 +3988,7 @@ export const shareTransfers = pgTable(
     // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')`,
     ),
     check(
       'share_transfers_status',
@@ -3997,13 +4002,14 @@ export const shareTransfers = pgTable(
     // Without an `out` leg there is nothing to wait for or claim on the way out.
     check(
       'share_transfers_one_leg',
-      sql`kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
+      sql`kind IN ('sweep', 'recover', 'collect_recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
     ),
     check(
       'share_transfers_links',
       sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
-        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)`,
+        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)
+        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL)`,
     ),
     check(
       'share_transfers_business',
@@ -4020,6 +4026,14 @@ export const shareTransfers = pgTable(
     uniqueIndex('share_transfers_fee_once')
       .on(table.partnerReversalId)
       .where(sql`kind = 'fee_return'`),
+    check(
+      'share_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
+    ),
+    // Task 9 (P29): each lost dispute pulls its part of a swept business share back once.
+    uniqueIndex('share_transfers_one_collect_recover')
+      .on(table.disputeId)
+      .where(sql`kind = 'collect_recover'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),
@@ -4107,6 +4121,18 @@ export const disputes = pgTable(
     heldMinor: minor('held_minor')
       .notNull()
       .default(sql`0`),
+    // What TipMe did with the tip's share when the dispute opened (Task 9): `held` (the share, never
+    // sent, held in review), `balance` (it had moved: `held_minor` of the balance is held), `none`
+    // (no share to hold). Null while the share's transfer may be in flight: decided after its
+    // read-back (Review Focus 3).
+    shareStep: text('share_step'),
+    // When TipMe finished acting on the outcome: the hold released (won, or closed with no refund),
+    // or the loss booked (lost). Null while anything is left to do, and nothing moves meanwhile.
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    // When TipMe first saw it reach a final status (won, lost or closed): a closed dispute's hold is
+    // released 14 days on when no refund booked it, and a lost one waiting on a transfer in flight
+    // for a day is raised to staff.
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
     lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -4134,6 +4160,22 @@ export const disputes = pgTable(
       sql`set_aside_minor IS NULL OR set_aside_minor >= 0`,
     ),
     check('disputes_held', sql`held_minor >= 0 AND held_minor <= amount_minor`),
+    check(
+      'disputes_share_step',
+      sql`share_step IS NULL OR share_step IN ('held', 'balance', 'none')`,
+    ),
+    // Only a final dispute is settled.
+    check(
+      'disputes_settled',
+      sql`settled_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    check(
+      'disputes_decided',
+      sql`decided_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    index('disputes_unsettled')
+      .on(table.createdAt)
+      .where(sql`settled_at IS NULL`),
     index('disputes_tip').on(table.tipId),
     index('disputes_status').on(table.status, table.respondBy),
   ],
@@ -4187,6 +4229,9 @@ export const collectTransfers = pgTable(
       .notNull()
       .defaultNow(),
     sentAt: timestamp('sent_at', { withTimezone: true }),
+    // Task 9: the last send under the key was definitely refused by the partner (nothing moved), so
+    // the row, held in review, is proven unmoved. Cleared by any later claim.
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
     paidAt: timestamp('paid_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -4232,6 +4277,18 @@ export const collectTransfers = pgTable(
     check(
       'collect_transfers_paid',
       sql`status <> 'paid' OR paid_at IS NOT NULL`,
+    ),
+    // P27: a share whose money may have moved (it was sent under its key) is never cancelled. Only a
+    // read-back on its account that found nothing clears `sent_at`. The guard all dispute and refund
+    // hooks use is `takeUnsentShare`; this makes it hold whatever the code does.
+    // The one exception: a row whose last send the partner definitely refused (`refused_at`).
+    check(
+      'collect_transfers_never_cancel_sent',
+      sql`status <> 'cancelled' OR sent_at IS NULL OR refused_at IS NOT NULL`,
+    ),
+    check(
+      'collect_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
     ),
     uniqueIndex('collect_transfers_one_share')
       .on(table.tipId)

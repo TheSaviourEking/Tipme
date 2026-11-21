@@ -82,6 +82,7 @@ import {
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
 import {
   collectTransferProviders,
+  handleDisputeSteps,
   handleCollectTransfers,
 } from './handlers/collect-transfers.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
@@ -870,12 +871,23 @@ export async function startJobWorker(
                 key: `${config.QUEUE_PREFIX}:lock:${COLLECT_TRANSFERS_JOB}`,
                 ttlMs: COLLECT_TRANSFERS_LOCK_TTL_MS,
               },
-              () =>
-                handleCollectTransfers({
+              async () => {
+                const transfers = await handleCollectTransfers({
                   db: database.db,
                   providers: collectProviders,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
-                }),
+                });
+                // Task 9: disputes whose share was settled by this run move on (Review Focus 3).
+                const disputes = await handleDisputeSteps({
+                  db: database.db,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                return {
+                  ...transfers,
+                  disputesAdvanced: disputes.advanced,
+                  disputeReminders: disputes.reminded,
+                };
+              },
             );
             if (!result.ran) {
               logger.info({
