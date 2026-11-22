@@ -243,36 +243,44 @@ export function flagSharedBank(
   db: Database,
   input: { profileId: string; accountHash: string; now: Date },
 ): Promise<boolean> {
-  return guarded(() =>
-    db.transaction(async (tx) => {
-      const others = await tx.execute<{ profile_id: string }>(sql`
-        SELECT DISTINCT d.profile_id FROM payout_destinations d
-         WHERE d.account_hash = ${input.accountHash}
-           AND d.profile_id IS NOT NULL AND d.profile_id <> ${input.profileId}
-         ORDER BY d.profile_id`);
-      if (others.rows.length === 0) return false;
-      const dedupeKey = `${SAME_BANK_PREFIX}${input.profileId}.${input.accountHash.slice(0, 24)}`;
-      const ids = others.rows.map((row) => row.profile_id);
-      const issue = await openIssue(tx, {
-        dedupeKey,
-        kind: 'collect_same_bank',
-        subject: { profileId: input.profileId },
-        note: `The bank account it added is also on ${ids.length === 1 ? 'page' : 'pages'} ${ids.join(', ')}. Its You collect transfers wait until staff clear this.`,
-        now: input.now,
-      });
-      const [state] = await tx
-        .select({ status: issues.status })
-        .from(issues)
-        .where(eq(issues.id, issue.id));
-      if (state?.status !== 'open') return true;
-      await tx.execute(sql`
-        UPDATE collect_transfers
-           SET status = 'review', review_reason = 'same_bank', updated_at = ${input.now.toISOString()}::timestamptz
-         WHERE profile_id = ${input.profileId} AND kind = 'share' AND sent_at IS NULL
-           AND status IN ('waiting', 'ready')`);
-      return true;
-    }),
-  );
+  return guarded(() => db.transaction((tx) => flagSharedBankIn(tx, input)));
+}
+
+/**
+ * `flagSharedBank` in the caller's transaction. Final review M5: `setPayoutDestination` runs it in
+ * the transaction that saves a collect recipient's bank, so the bank is never usable while their
+ * waiting shares can still be released to it.
+ */
+export async function flagSharedBankIn(
+  tx: Tx,
+  input: { profileId: string; accountHash: string; now: Date },
+): Promise<boolean> {
+  const others = await tx.execute<{ profile_id: string }>(sql`
+    SELECT DISTINCT d.profile_id FROM payout_destinations d
+     WHERE d.account_hash = ${input.accountHash}
+       AND d.profile_id IS NOT NULL AND d.profile_id <> ${input.profileId}
+     ORDER BY d.profile_id`);
+  if (others.rows.length === 0) return false;
+  const dedupeKey = `${SAME_BANK_PREFIX}${input.profileId}.${input.accountHash.slice(0, 24)}`;
+  const ids = others.rows.map((row) => row.profile_id);
+  const issue = await openIssue(tx, {
+    dedupeKey,
+    kind: 'collect_same_bank',
+    subject: { profileId: input.profileId },
+    note: `The bank account it added is also on ${ids.length === 1 ? 'page' : 'pages'} ${ids.join(', ')}. Its You collect transfers wait until staff clear this.`,
+    now: input.now,
+  });
+  const [state] = await tx
+    .select({ status: issues.status })
+    .from(issues)
+    .where(eq(issues.id, issue.id));
+  if (state?.status !== 'open') return true;
+  await tx.execute(sql`
+    UPDATE collect_transfers
+       SET status = 'review', review_reason = 'same_bank', updated_at = ${input.now.toISOString()}::timestamptz
+     WHERE profile_id = ${input.profileId} AND kind = 'share' AND sent_at IS NULL
+       AND status IN ('waiting', 'ready')`);
+  return true;
 }
 
 /**

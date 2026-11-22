@@ -36,7 +36,6 @@ import {
   collectDisputeHeldMinor,
   collectStatus,
   ensurePayoutSetup,
-  flagSharedBank,
   getPaymentAccountRecipient,
   legalNameDigest,
   markPaymentAccountCreationFailed,
@@ -240,7 +239,7 @@ export class CollectBankController {
 
     const digest = legalNameDigest(body.legalName);
     let reference: string | null = null;
-    let accountHash: string;
+    let sharedBank = false;
     const now = new Date();
     try {
       reference = await this.personAccount(collector, body.legalName, facts);
@@ -283,12 +282,14 @@ export class CollectBankController {
         this.logger.warn({ event: 'collect_bank.replayed_for_another_name' });
         throw new CodedHttpException(409, 'BANK_RECHECK_LATER');
       }
-      accountHash = bankAccountHash(
+      const accountHash = bankAccountHash(
         this.sealing,
         body.bankCode,
         body.accountNumber,
       );
-      await setPayoutDestination(db, {
+      // Final review M5: a shared account holds the second recipient's waiting shares in the same
+      // transaction that saves the bank, before verification can release anything.
+      ({ sharedBank } = await setPayoutDestination(db, {
         sealing: this.sealing,
         profileId,
         provider: recordedProviderName(this.provider.name),
@@ -300,7 +301,7 @@ export class CollectBankController {
         accountHash,
         nameDigest: digest,
         now,
-      });
+      }));
       // The name TipMe holds is the one its current bank was checked against: only now (C1).
       await recordCollectLegalName(db, {
         profileId,
@@ -312,9 +313,7 @@ export class CollectBankController {
       await this.restorePartnerName(profileId, facts);
       throw error;
     }
-    // Before verification can release anything: a shared account holds the second recipient.
-    if (await flagSharedBank(db, { profileId, accountHash, now }))
-      this.logger.warn({ event: 'collect_bank.same_bank' });
+    if (sharedBank) this.logger.warn({ event: 'collect_bank.same_bank' });
     await this.partnerCache.invalidate({
       provider: this.provider.name,
       profileId,

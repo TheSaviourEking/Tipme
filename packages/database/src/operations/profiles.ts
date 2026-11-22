@@ -74,7 +74,7 @@ import {
 } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
-import { balanceIn } from './balance.js';
+import { balanceIn, collectMoneyHeld } from './balance.js';
 import { endBusinessRolesForDeletion } from './business-members.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import {
@@ -1135,7 +1135,9 @@ export function deleteAccount(
             // You collect: money TipMe still holds for them is theirs too.
             balance.keptMinor > 0n ||
             balance.onItsWayMinor > 0n ||
-            balance.refundHeldMinor > 0n)
+            balance.refundHeldMinor > 0n ||
+            // Final review M1: or held for a dispute on their tips (a win gives it back to them).
+            (await collectMoneyHeld(tx, row.id)))
         )
           throw new OperationError('HAS_BALANCE');
         await tx

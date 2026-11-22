@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import { DISPUTE_HOLD_EVENT } from '@tipme/contracts';
 import {
   buildDisputeFeePosting,
   buildDisputeLossPosting,
@@ -25,7 +24,6 @@ import {
   shareTransfers,
   ledgerTransactions,
   tipRefunds,
-  notifications,
   paymentAttempts,
   profiles,
   providerEvents,
@@ -42,11 +40,11 @@ import {
 } from './collect-transfers.js';
 
 type CollectTransferRow = typeof collectTransfers.$inferSelect;
+import { tellDisputeHold } from './dispute-hold.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
-import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { scheduleCollectRecover } from './share-transfers.js';
 import {
@@ -149,9 +147,7 @@ export async function collectDisputeHeldMinor(
   return BigInt(result.rows[0]?.held ?? '0');
 }
 
-/** The spec's words (§10), with the amount held. */
-export const disputeHoldCopy = (heldMinor: bigint) =>
-  `A payment to you is being questioned. We’ve held ${naira(heldMinor)} until it’s settled.`;
+export { disputeHoldCopy } from './dispute-hold.js';
 
 const FINAL: ReadonlySet<DisputeStatus> = new Set(['won', 'lost', 'closed']);
 
@@ -426,41 +422,27 @@ async function holdShare(
     .update(disputes)
     .set({ heldMinor: held, updatedAt: now })
     .where(eq(disputes.id, row.id));
-  if (held > 0n && reason === 'dispute')
-    await tellRecipient(tx, row, share.profileId, held, now);
+  // The notice's ruling (final review): a refund's reservation this dispute now stops is held
+  // because of it, so it is told too, up to what is disputed.
+  const reserved =
+    held > 0n || reason !== 'dispute'
+      ? 0n
+      : (
+          await tx
+            .select({ heldMinor: tipRefunds.heldMinor })
+            .from(tipRefunds)
+            .where(eq(tipRefunds.tipId, row.tipId))
+        ).reduce((sum, r) => sum + r.heldMinor, 0n);
+  const told = held > 0n ? held : min(reserved, row.amountMinor);
+  if (told > 0n && reason === 'dispute')
+    await tellDisputeHold(tx, {
+      disputeId: row.id,
+      tipId: row.tipId,
+      profileId: share.profileId,
+      heldMinor: told,
+      now,
+    });
   return 'balance';
-}
-
-/** The dispute-hold notice (§10): in the app at once, and by email through the outbox. */
-async function tellRecipient(
-  tx: Tx,
-  row: DisputeRow,
-  profileId: string,
-  heldMinor: bigint,
-  now: Date,
-): Promise<void> {
-  const [owner] = await tx
-    .select({ userId: profiles.userId })
-    .from(profiles)
-    .where(eq(profiles.id, profileId));
-  if (owner?.userId)
-    await tx
-      .insert(notifications)
-      .values({
-        id: newId(),
-        userId: owner.userId,
-        kind: 'dispute_hold',
-        tipId: row.tipId,
-        title: 'A payment is being questioned',
-        body: disputeHoldCopy(heldMinor),
-        createdAt: now,
-      })
-      .onConflictDoNothing();
-  await enqueueOutbox(tx, {
-    eventType: DISPUTE_HOLD_EVENT,
-    aggregateId: row.id,
-    payload: { disputeId: row.id, profileId, heldMinor: heldMinor.toString() },
-  });
 }
 
 /**
@@ -644,6 +626,19 @@ async function settleLost(
   });
   if (refunds.busy)
     return waiting(tx, row, now, 'a refund of the tip is still in flight');
+  // Final review I1: a refund still reserving the recipient's balance (its transfer back not sent)
+  // gives way now, before the recovery is worked out. Stopping it hands its reservation to this
+  // dispute (creditDisputeHolds), so the hold read below names that money and the transfer
+  // back takes it, never TipMe. It would be stopped anyway: nothing sends a refund on a lost
+  // dispute's tip. Its second call, with the booking, finds nothing left to stop.
+  if (refunds.reservedMinor > 0n) {
+    await refunds.release();
+    const [fresh] = await tx
+      .select({ heldMinor: disputes.heldMinor })
+      .from(disputes)
+      .where(eq(disputes.id, row.id));
+    if (fresh) row.heldMinor = fresh.heldMinor;
+  }
   const sweeps = (await tx
     .select()
     .from(shareTransfers)
@@ -977,6 +972,8 @@ export function settleLostDispute(
 ): Promise<'posted' | 'waiting_back' | 'done'> {
   return guarded(() =>
     db.transaction(async (tx) => {
+      // The tip first, then the dispute, as every dispute step (a refund it stops locks the tip).
+      await lockDisputeTip(tx, i.disputeId);
       const row = await lockDispute(tx, i.disputeId);
       if (row.settledAt) return 'done' as const;
       if (row.status !== 'lost') throw new OperationError('INVALID_INPUT');

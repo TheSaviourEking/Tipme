@@ -4,7 +4,14 @@ import { after, before, beforeEach, describe, test } from 'node:test';
 import * as ops from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { newUser, signUpRoute } from './collect-checkout-support.mjs';
-import { DIRECT_CASES, owner } from './collect-direct-cases.mjs';
+import { DIRECT_CASES, owner, seriousRefund } from './collect-direct-cases.mjs';
+import { setSwitch } from './helpers.mjs';
+import {
+  seedAgreement,
+  seedBusiness,
+  seedMember,
+} from '../../packages/database/test/integration/business-fixtures.mjs';
+import { shareTransferKinds } from '../../apps/worker/dist/share-transfer-kinds.js';
 
 /*
  * You collect with the switch off (plan Task 16, spec §12.4 and §12.5, Review Focus 4). Staff turn
@@ -370,4 +377,368 @@ test('switching off keeps existing collect recipients tipping and transferring',
     ).mismatches >= 1,
   );
   assert.equal(await statusOf(tipAgain.shareId), 'waiting');
+});
+
+/*
+ * Final review I2: the `business` and `business_shares` switches stop new business shares, never
+ * You collect's money already held or owed. With either one off, the worker still runs the collect
+ * kinds (`collect_sweep`, `collect_recover`, `collect_return`, as `fee_return`): a lost dispute and a
+ * take-back refund on a business-shared collect tip still pull the business's part back and book.
+ */
+const [, TOBI] = ops.DEMO_PROFILES;
+const HOUR = 60 * MIN;
+
+/** Tobi on You collect, verified, with a 20% business share agreed (R3). */
+async function sharedCollectPage() {
+  await database.reset();
+  await ops.seedDemoProfiles(database.db);
+  await ops.ensureOwnerRole(database.db);
+  await setSwitch(database.pool, 'you_collect', true);
+  await setSwitch(database.pool, 'business', true);
+  await setSwitch(database.pool, 'business_shares', true);
+  await q(
+    `UPDATE profiles SET collection_mode = 'collect', collect_verified_at = $2, created_at = $3
+      WHERE id = $1`,
+    [TOBI.id, new Date(Date.now() - 2 * DAY), new Date(Date.now() - 30 * DAY)],
+  );
+  await q(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, provider_account_reference, status)
+     VALUES ($1, $2, 'bachs', 'sandbox', 'acct_tobi_person', 'ONBOARDING')`,
+    [randomUUID(), TOBI.id],
+  );
+  await q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code, bank_name, account_last4, status)
+     VALUES ($1, $2, 'bachs', 'dest_tobi', '058', 'Pretend Guaranty Bank', '1234', 'usable')`,
+    [randomUUID(), TOBI.id],
+  );
+  const { businessId, locations } = await seedBusiness(database);
+  const { memberId } = await seedMember(database, {
+    locationId: locations[0].id,
+    profileId: TOBI.id,
+  });
+  await seedAgreement(database, { memberId, businessBps: 2000 });
+  return { businessId, memberId };
+}
+
+/** A paid collect tip to Tobi with the business's share, both parts moved while the switches are on. */
+async function movedSharedTip(memberId, partners) {
+  const { db } = database;
+  const paidAt = new Date(Date.now() - DAY);
+  const sharing = { businessMemberId: memberId, sharesOn: true };
+  const quote = await ops.createQuote(db, {
+    handle: TOBI.handle,
+    tipMinor: GROSS,
+    currency: 'NGN',
+    now: new Date(paidAt.getTime() - 2 * MIN),
+    ...sharing,
+  });
+  assert.equal(quote.collectionMode, 'collect');
+  const intent = await ops.createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+    now: new Date(paidAt.getTime() - 2 * MIN),
+    ...sharing,
+  });
+  await ops.markAttemptInitiated(db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+  });
+  await q(`UPDATE payment_attempts SET created_at = $2 WHERE id = $1`, [
+    intent.attemptId,
+    new Date(paidAt.getTime() - MIN),
+  ]);
+  const chargeReference = `ch_${randomUUID().slice(0, 8)}`;
+  const result = await ops.reconcileAttempts({
+    db,
+    provider: {
+      environment: 'sandbox',
+      async verifyTransaction() {
+        return {
+          status: 'succeeded',
+          amountMinor: GROSS,
+          currency: 'NGN',
+          feeMinor: 20_000n,
+          feePaidBy: 'platform',
+          method: 'NGN_CARD',
+          chargeReference,
+        };
+      },
+    },
+    now: paidAt,
+    minAgeMs: 0,
+    attemptId: intent.attemptId,
+  });
+  assert.equal(result.applied, 1);
+  const [{ share }] = await q(
+    `SELECT share_minor::text AS share FROM tip_business_shares WHERE tip_id = $1`,
+    [intent.tipId],
+  );
+  // Switches on: the person's share and the business's both move.
+  await partners.step(true);
+  assert.deepEqual(
+    (
+      await q(
+        `SELECT kind, status FROM collect_transfers WHERE tip_id = $1 ORDER BY kind`,
+        [intent.tipId],
+      )
+    ).map((r) => [r.kind, r.status]),
+    [['share', 'paid']],
+  );
+  assert.equal(
+    (
+      await q(
+        `SELECT status FROM share_transfers WHERE tip_id = $1 AND kind = 'collect_sweep'`,
+        [intent.tipId],
+      )
+    )[0].status,
+    'done',
+  );
+  return {
+    tipId: intent.tipId,
+    chargeReference,
+    share: BigInt(share),
+    disputeRef: `dp_${randomUUID().slice(0, 10)}`,
+  };
+}
+
+/** The partner's side: the person's transfers, and the business's account (option B legs). */
+function collectPartners() {
+  const listed = [];
+  const backs = [];
+  const sentToBusiness = [];
+  const pulledFromBusiness = [];
+  const refunds = [];
+  const movedTo = (input) => {
+    let transfer = listed.find((t) => t.group === input.idempotencyKey);
+    if (!transfer) {
+      transfer = {
+        transferRef: `tr_${listed.length + 1}`,
+        status: 'paid',
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        group: input.idempotencyKey,
+        accountRef: input.accountRef,
+      };
+      listed.push(transfer);
+    }
+    return transfer;
+  };
+  const transfers = {
+    name: 'bachs-sandbox',
+    async sendCollectTransfer(input) {
+      return { transferRef: movedTo(input).transferRef, status: 'paid' };
+    },
+    async collectBack(input) {
+      backs.push(input.amountMinor);
+      return { transferRef: movedTo(input).transferRef, status: 'paid' };
+    },
+    async listAccountTransfers(accountRef) {
+      return listed
+        .filter((t) => t.accountRef === accountRef)
+        .map(({ transferRef, status, amountMinor, currency, group }) => ({
+          transferRef,
+          status,
+          amountMinor,
+          currency,
+          group,
+        }));
+    },
+    async payoutCapability() {
+      return { status: 'active', requirementsDue: [] };
+    },
+  };
+  const business = {
+    name: 'bachs-sandbox',
+    capabilities: { connectedAccounts: false },
+    async collectToPlatform(input) {
+      pulledFromBusiness.push(input.amountMinor);
+      return {
+        transferRef: `tr_p${pulledFromBusiness.length}`,
+        status: 'paid',
+      };
+    },
+    async payoutBalance() {
+      return { availableMinor: 100_000_000n };
+    },
+    async transferToAccount(input) {
+      sentToBusiness.push(input.amountMinor);
+      return { transferRef: `tr_b${sentToBusiness.length}`, status: 'paid' };
+    },
+    async findPlatformCollection() {
+      return null;
+    },
+  };
+  const refunder = {
+    async refundAccountCharge() {
+      throw new Error('a collect tip is never refunded as the recipient');
+    },
+    async refundPlatformCharge(input) {
+      refunds.push(input.amountMinor);
+      return { refundReference: `rf_${refunds.length}`, status: 'processing' };
+    },
+    async verifyTransaction() {
+      return {
+        status: 'succeeded',
+        amountMinor: GROSS,
+        currency: 'NGN',
+        feeMinor: 20_000n,
+        feePaidBy: 'platform',
+        method: 'NGN_CARD',
+      };
+    },
+  };
+  let clock = Date.now();
+  /** One worker pass, choosing the share kinds as the worker does from the switches. */
+  async function step(sharesOn) {
+    clock += 2 * HOUR;
+    const now = new Date(clock);
+    await ops.releaseWaitingTransfers(database.db, { now });
+    await ops.runCollectTransfers(database.db, { provider: transfers, now });
+    const kinds = shareTransferKinds({ sharesOn });
+    await ops.runShareTransfers(database.db, {
+      provider: business,
+      now,
+      settleWaitMs: HOUR,
+      ...(kinds ? { kinds } : {}),
+    });
+    await ops.runDisputeSteps(database.db, { now });
+    await ops.sendTipRefunds(database.db, {
+      provider: refunder,
+      providerName: 'bachs',
+      now,
+    });
+  }
+  return {
+    step,
+    backs,
+    sentToBusiness,
+    pulledFromBusiness,
+    refunds,
+  };
+}
+
+const lossLines = (operationKey) =>
+  q(
+    `SELECT a.code, CASE WHEN a.profile_id IS NOT NULL THEN 'person'
+                         WHEN a.business_id IS NOT NULL THEN 'business' ELSE 'tipme' END AS owner,
+            e.side::text AS side, e.amount_minor::text AS amount
+       FROM ledger_entries e
+       JOIN ledger_transactions t ON t.id = e.transaction_id
+       JOIN ledger_accounts a ON a.id = e.account_id
+      WHERE t.operation_key = $1 ORDER BY a.code, owner, e.side`,
+    [operationKey],
+  );
+const tipNet = async (tipId) =>
+  (
+    await q(
+      `SELECT COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+         FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+        WHERE t.tip_id = $1`,
+      [tipId],
+    )
+  )[0].net;
+const recovered = (share) => [
+  {
+    code: 'business_payable',
+    owner: 'business',
+    side: 'debit',
+    amount: String(share),
+  },
+  {
+    code: 'held_for_recipients',
+    owner: 'business',
+    side: 'credit',
+    amount: String(share),
+  },
+  {
+    code: 'held_for_recipients',
+    owner: 'person',
+    side: 'credit',
+    amount: String(NET - share),
+  },
+  {
+    code: 'recipient_payable',
+    owner: 'person',
+    side: 'debit',
+    amount: String(NET - share),
+  },
+];
+
+describe('business switches off never stop You collect money (final review I2)', () => {
+  for (const off of ['business', 'business_shares']) {
+    test(`with ${off} off, a lost dispute still pulls the business's part back and books`, async () => {
+      const { memberId } = await sharedCollectPage();
+      const partners = collectPartners();
+      const tip = await movedSharedTip(memberId, partners);
+      await setSwitch(database.pool, off, false);
+      const event = (status) => ({
+        kind: 'dispute',
+        eventId: `evt_${randomUUID()}`,
+        eventType: status === 'open' ? 'dispute.created' : 'dispute.updated',
+        scope: 'platform',
+        partnerDisputeId: tip.disputeRef,
+        chargeReference: tip.chargeReference,
+        providerReference: null,
+        operationReference: null,
+        status,
+        amountMinor: NET,
+        currency: 'NGN',
+        reason: 'fraudulent',
+        respondBy: new Date(Date.now() + 7 * DAY),
+        feeMinor: null,
+        feeCurrency: null,
+        occurredAt: new Date(),
+      });
+      for (const status of ['open', 'lost'])
+        await ops.applyDisputeEvent(database.db, {
+          event: event(status),
+          provider: 'bachs',
+          now: new Date(),
+        });
+      for (let n = 0; n < 4; n += 1) await partners.step(false);
+      const [dispute] = await q(
+        `SELECT id, settled_at FROM disputes WHERE partner_dispute_id = $1`,
+        [tip.disputeRef],
+      );
+      assert.ok(dispute.settled_at, 'the loss is booked');
+      assert.deepEqual(partners.pulledFromBusiness, [tip.share]);
+      assert.deepEqual(partners.backs, [NET - tip.share]);
+      assert.deepEqual(
+        await lossLines(`dispute_loss.${dispute.id}`),
+        recovered(tip.share),
+      );
+      assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+      assert.equal(await tipNet(tip.tipId), '0');
+    });
+
+    test(`with ${off} off, a take-back refund still pulls the business's part back and is booked`, async () => {
+      const { memberId } = await sharedCollectPage();
+      const partners = collectPartners();
+      const tip = await movedSharedTip(memberId, partners);
+      await setSwitch(database.pool, off, false);
+      const refundId = await seriousRefund(database, tip.tipId);
+      for (let n = 0; n < 4; n += 1) await partners.step(false);
+      assert.deepEqual(partners.pulledFromBusiness, [tip.share]);
+      assert.deepEqual(partners.backs, [NET - tip.share]);
+      assert.deepEqual(partners.refunds, [NET]);
+      assert.equal(
+        await ops.applyTipRefundEvent(database.db, {
+          tipRefundId: refundId,
+          refundState: 'paid',
+          partnerReversalId: 'refund.rf_1',
+          refundedMinor: NET,
+          refundFeeMinor: 0n,
+          now: new Date(),
+        }),
+        'refunded',
+      );
+      assert.deepEqual(
+        await lossLines(`collect_refund.${refundId}`),
+        recovered(tip.share),
+      );
+      assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+      assert.equal(await tipNet(tip.tipId), '0');
+    });
+  }
 });

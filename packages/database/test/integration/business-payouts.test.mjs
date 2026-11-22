@@ -849,8 +849,15 @@ test('a business balance and its withdrawals', async (t) => {
           sealing,
         });
       assert.equal(await codeOf(set('1111', TOBI.userId)), 'NOT_A_MANAGER');
-      assert.deepEqual(await set('1111'), { replaced: false });
-      assert.deepEqual(await set('2222'), { replaced: true });
+      // A business's bank is never a recipient's shared You collect bank (final review M5).
+      assert.deepEqual(await set('1111'), {
+        replaced: false,
+        sharedBank: false,
+      });
+      assert.deepEqual(await set('2222'), {
+        replaced: true,
+        sharedBank: false,
+      });
       const quote = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
         provider: provider(),

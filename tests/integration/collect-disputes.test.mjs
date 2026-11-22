@@ -1663,3 +1663,185 @@ for (const directCase of casesOf(9))
       setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
     }),
   );
+
+/*
+ * Final review M1: an account can't be deleted while You collect money is held for a dispute on
+ * their tips. Neither part is "kept" or "on its way", but a win releases it to them, and a deleted
+ * account's money nobody can withdraw.
+ */
+async function tobiUser() {
+  const [{ user_id: existing }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [TOBI.id],
+  );
+  if (existing) return existing;
+  const [{ id }] = await q(
+    `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+    [`collectdispute.${randomUUID().slice(0, 8)}@example.com`],
+  );
+  await q(`UPDATE profiles SET user_id = $2 WHERE id = $1`, [TOBI.id, id]);
+  return id;
+}
+
+test('M1: an account whose only money is a share held for a dispute cannot be deleted', async () => {
+  const tip = await paidTip(TOBI);
+  await apply(disputeEvent(tip));
+  assert.equal((await shareOf(tip.rowId)).review_reason, 'dispute');
+  const balance = await ops.balanceOf(database.db, TOBI.id);
+  assert.equal(balance.availableMinor, 0n);
+  assert.equal(balance.keptMinor + balance.onItsWayMinor, 0n);
+  await assert.rejects(
+    ops.deleteAccount(database.db, { userId: await tobiUser(), sealing }),
+    { code: 'HAS_BALANCE' },
+  );
+});
+
+test('M1: an account whose only money is held from their balance by an open dispute cannot be deleted', async () => {
+  await verified(TOBI);
+  const { provider } = partner();
+  const tip = await movedTip(TOBI, provider);
+  await apply(disputeEvent(tip));
+  assert.equal((await disputeOf(tip.disputeRef)).share_step, 'balance');
+  assert.equal(await available(TOBI), 0n);
+  await assert.rejects(
+    ops.deleteAccount(database.db, { userId: await tobiUser(), sealing }),
+    { code: 'HAS_BALANCE' },
+  );
+});
+
+/*
+ * Final review I1, same root cause: a withdrawal that was on its way when a dispute opened reserved
+ * the money, so the dispute held only what was left. When the withdrawal fails, the money that comes
+ * back is held for the dispute (up to what it still needs), once, and a loss takes it back.
+ */
+async function disputeWhileWithdrawing() {
+  await verified(TOBI);
+  const { provider, state } = partner();
+  const tip = await movedTip(TOBI, provider);
+  const payoutId = randomUUID();
+  await q(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+     VALUES ($1, $2, 'NGN', $3, 'REQUESTED', $4, 'test')`,
+    [payoutId, TOBI.id, NET, randomUUID()],
+  );
+  assert.equal(await available(TOBI), 0n);
+  await apply(disputeEvent(tip));
+  const opened = await disputeOf(tip.disputeRef);
+  assert.equal(opened.share_step, 'balance');
+  assert.equal(opened.held, '0');
+  const failed = await ops.recordPayoutOutcome(database.db, {
+    payoutId,
+    provider: 'bachs',
+    providerEventId: `evt_${randomUUID()}`,
+    providerReference: null,
+    outcome: 'failed',
+    signatureVerified: true,
+    payload: {},
+    now: at(2 * HOUR),
+  });
+  assert.equal(failed.outcome, 'applied');
+  // The money back from the bank is held for the dispute: nothing to withdraw, and they are told.
+  const held = await disputeOf(tip.disputeRef);
+  assert.equal(held.held, String(NET));
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await ops.collectDisputeHeldMinor(database.db, TOBI.id), NET);
+  assert.deepEqual(
+    await q(
+      `SELECT n.body FROM notifications n JOIN profiles p ON p.user_id = n.user_id
+        WHERE p.id = $1 AND n.kind = 'dispute_hold'`,
+      [TOBI.id],
+    ),
+    [
+      {
+        body: 'A payment to you is being questioned. We’ve held ₦9,500 until it’s settled.',
+      },
+    ],
+  );
+  return { tip, provider, state, held };
+}
+const won = (tip) =>
+  disputeEvent(tip, {
+    eventType: 'dispute.updated',
+    status: 'won',
+    occurredAt: at(3 * HOUR),
+  });
+const heldNet = async () =>
+  (
+    await q(
+      `SELECT COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+         FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+        WHERE a.code = 'held_for_recipients'`,
+    )
+  )[0].net;
+const tipNet = async (tipId) =>
+  (
+    await q(
+      `SELECT COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS net
+         FROM ledger_entries e JOIN ledger_transactions t ON t.id = e.transaction_id
+        WHERE t.tip_id = $1`,
+      [tipId],
+    )
+  )[0].net;
+
+test('I1: a withdrawal failing during an open dispute comes back held for it, and a loss takes it back', async () => {
+  const { tip, provider, state, held } = await disputeWhileWithdrawing();
+  await apply(lost(tip, { occurredAt: at(3 * HOUR) }), at(3 * HOUR));
+  await run(provider, at(4 * HOUR));
+  await steps(at(5 * HOUR));
+  const settled = await disputeOf(tip.disputeRef);
+  assert.ok(settled.settled_at, 'the loss is booked');
+  assert.equal(state.backs.length, 1);
+  assert.equal(state.backs[0].amountMinor, NET);
+  // The recipient's part comes back: TipMe absorbs only the fee it kept.
+  assert.deepEqual(
+    await linesOf(`dispute_loss.${held.id}`),
+    lossLines(NET, GROSS - NET),
+  );
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await heldNet(), '0');
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await tipNet(tip.tipId), '0');
+});
+
+test('I1: a withdrawal failing during an open dispute that is then won is theirs again', async () => {
+  const { tip, state } = await disputeWhileWithdrawing();
+  await apply(won(tip), at(3 * HOUR));
+  const settled = await disputeOf(tip.disputeRef);
+  assert.ok(settled.settled_at);
+  assert.equal(settled.held, '0');
+  assert.equal(await available(TOBI), NET);
+  assert.equal(await ops.collectDisputeHeldMinor(database.db, TOBI.id), 0n);
+  assert.equal(state.backs.length, 0);
+  assert.equal(await heldNet(), '0');
+  assert.equal(await tipNet(tip.tipId), '0');
+});
+
+test('I1: a failed withdrawal is held only up to what the dispute still needs', async () => {
+  await verified(TOBI);
+  const { provider } = partner();
+  const tip = await movedTip(TOBI, provider);
+  await movedTip(TOBI, provider);
+  // ₦6,500 of the disputed tip's share is on its way out; ₦3,000 of it is still in the balance.
+  const payoutId = randomUUID();
+  await q(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+     VALUES ($1, $2, 'NGN', $3, 'REQUESTED', $4, 'test')`,
+    [payoutId, TOBI.id, 2n * NET - 300_000n, randomUUID()],
+  );
+  await apply(disputeEvent(tip));
+  assert.equal((await disputeOf(tip.disputeRef)).held, '300000');
+  await ops.recordPayoutOutcome(database.db, {
+    payoutId,
+    provider: 'bachs',
+    providerEventId: `evt_${randomUUID()}`,
+    providerReference: null,
+    outcome: 'failed',
+    signatureVerified: true,
+    payload: {},
+    now: at(2 * HOUR),
+  });
+  // The dispute holds this tip's share, never the other tip's money.
+  assert.equal((await disputeOf(tip.disputeRef)).held, String(NET));
+  assert.equal(await available(TOBI), NET);
+  assert.equal(await ops.collectDisputeHeldMinor(database.db, TOBI.id), NET);
+});

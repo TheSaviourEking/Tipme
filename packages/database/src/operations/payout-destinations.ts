@@ -12,6 +12,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { mailOwner } from './account-mail.js';
+import { flagSharedBankIn } from './collect-verification.js';
 import {
   checkEmailCode,
   issueEmailCode,
@@ -173,7 +174,11 @@ export function setPayoutDestination(
   db: Database,
   input: DestinationInput &
     ({ profileId: string } | { businessId: string; userId: string }),
-): Promise<{ replaced: boolean }> {
+): Promise<{
+  replaced: boolean;
+  /** You collect (P13): the account is another recipient's too, and this one's shares now wait. */
+  sharedBank: boolean;
+}> {
   const now = input.now ?? new Date();
   if (
     input.destinationRef.trim() === '' ||
@@ -262,6 +267,17 @@ export function setPayoutDestination(
           ),
         )
         .for('update');
+      // Final review M5: a collect recipient's bank shared with another recipient holds their
+      // waiting shares in this transaction, before the bank is saved as usable, so no release
+      // between the two can send them first. Undone with everything else if the save is refused.
+      const sharedBank =
+        'profileId' in owner && input.accountHash !== undefined
+          ? await flagSharedBankIn(tx, {
+              profileId: owner.profileId,
+              accountHash: input.accountHash,
+              now,
+            })
+          : false;
       // The same account sent again: the provider's newest word on it, and nothing has changed.
       // Rejected is permanent (provider docs), so nothing raises a rejected row.
       if (current?.destinationReference === input.destinationRef) {
@@ -273,7 +289,7 @@ export function setPayoutDestination(
               ...(input.accountHash ? { accountHash: input.accountHash } : {}),
             })
             .where(eq(payoutDestinations.id, current.id));
-        return { replaced: false };
+        return { replaced: false, sharedBank };
       }
       // A refused number must not strand an account that works.
       if (input.status === 'rejected' && current?.status === 'usable')
@@ -338,7 +354,7 @@ export function setPayoutDestination(
             now,
           });
       }
-      return { replaced: Boolean(current) };
+      return { replaced: Boolean(current), sharedBank };
     }),
   );
 }

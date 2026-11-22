@@ -1639,3 +1639,41 @@ for (const directCase of casesOf(13))
       setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
     }),
   );
+
+// Final review M5: a shared bank account is flagged in the same transaction that saves the second
+// recipient's bank as usable, so no release in between can move their waiting shares first.
+test('M5: saving a bank already used by another recipient holds their waiting shares in the same step', async () => {
+  await collect(TOBI);
+  const { provider } = partner();
+  await addBank(controllerFor(provider), TOBI);
+  const [tobiBank] = await destinations(TOBI);
+  await collect(ADA);
+  const waiting = await paidTip(ADA, ago(HOUR));
+  // The bank row as the route saves it once our payment partner said the name matches.
+  const saved = await ops.setPayoutDestination(database.db, {
+    sealing,
+    profileId: ADA.id,
+    provider: 'bachs',
+    destinationRef: 'dest_ada_shared',
+    bankCode: '058',
+    bankName: 'Pretend Guaranty Bank',
+    last4: tobiBank.account_last4 ?? '0001',
+    status: 'usable',
+    accountHash: tobiBank.account_hash,
+    nameDigest: ops.legalNameDigest(ADA_NAME),
+  });
+  assert.equal(saved.sharedBank, true);
+  const share = (await shares(ADA)).find((s) => s.id === waiting.rowId);
+  assert.equal(share.status, 'review');
+  assert.equal(share.review_reason, 'same_bank');
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM issues WHERE kind = 'collect_same_bank' AND status = 'open'
+            AND subject->>'profileId' = $1`,
+        [ADA.id],
+      )
+    ).length,
+    1,
+  );
+});

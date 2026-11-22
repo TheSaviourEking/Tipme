@@ -30,7 +30,10 @@ import {
   paymentIntents,
   profiles,
   tipQuotes,
+  tips,
 } from '../schema.js';
+import { creditDisputeHolds } from './dispute-hold.js';
+import { unsettledDisputeSql } from './dispute-state.js';
 import { collectSettingsInForce } from './collect-settings.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
@@ -479,6 +482,15 @@ async function frozenByDebt(db: Database): Promise<boolean> {
   return Boolean(open);
 }
 
+/** The tip's row lock (every dispute step takes it before the dispute's). */
+async function lockTipOf(tx: Tx, tipId: string): Promise<void> {
+  await tx
+    .select({ id: tips.id })
+    .from(tips)
+    .where(eq(tips.id, tipId))
+    .for('update');
+}
+
 /** The partner moved it: paid, and the held money booked as moved, in one transaction. */
 async function finishPaid(
   db: Database,
@@ -487,9 +499,11 @@ async function finishPaid(
   transferRef: string,
   now: Date,
 ): Promise<Outcome> {
-  return db.transaction(async (tx) =>
-    (await bookPaid(tx, row, from, transferRef, now)) ? 'paid' : 'none',
-  );
+  return db.transaction(async (tx) => {
+    // The tip first (tip → dispute → transfer): a paid return can raise a dispute's hold.
+    await lockTipOf(tx, row.tipId);
+    return (await bookPaid(tx, row, from, transferRef, now)) ? 'paid' : 'none';
+  });
 }
 
 /**
@@ -517,15 +531,25 @@ async function bookPaid(
       .update(tipRefunds)
       .set({ heldMinor: 0n, updatedAt: now })
       .where(eq(tipRefunds.id, row.refundId));
-  if (row.kind === 'return')
+  let returnedCover = 0n;
+  if (row.kind === 'return') {
     // Task 10 (RI1): what a failed refund took back is theirs again, in their account; the hold
     // that kept it from their balance ends with the posting, once.
+    const ended = await tx
+      .select({ heldMinor: tipRefunds.heldMinor })
+      .from(tipRefunds)
+      .where(
+        and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'FAILED')),
+      );
+    returnedCover =
+      row.amountMinor + ended.reduce((sum, r) => sum + r.heldMinor, 0n);
     await tx
       .update(tipRefunds)
       .set({ heldMinor: 0n, updatedAt: now })
       .where(
         and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'FAILED')),
       );
+  }
   await postLedgerTransaction(tx, {
     operationType: 'collect_transfer',
     operationKey: `collect_transfer.${row.id}`,
@@ -538,6 +562,14 @@ async function bookPaid(
         ? buildCollectReturnPosting(owner)
         : buildCollectTransferPosting(owner),
   });
+  // Final review I1: a return sent before a dispute opened, paid during it, puts that money back in
+  // their balance; the dispute holds it, in this transaction (the one move to paid, so once).
+  if (returnedCover > 0n)
+    await creditDisputeHolds(tx, {
+      tipId: row.tipId,
+      coverReleasedMinor: returnedCover,
+      now,
+    });
   return true;
 }
 
@@ -559,6 +591,12 @@ export async function recordReviewTransferPaid(
     reason: string;
   },
 ): Promise<{ transferId: string; amountMinor: string }> {
+  const [found] = await tx
+    .select({ tipId: collectTransfers.tipId })
+    .from(collectTransfers)
+    .where(eq(collectTransfers.id, i.transferId));
+  // The tip first (tip → dispute → transfer), as finishPaid.
+  if (found) await lockTipOf(tx, found.tipId);
   const [row] = await tx
     .select()
     .from(collectTransfers)
@@ -650,7 +688,13 @@ const stillReceivable = sql`${collectTransfers.accountReference} = ${currentAcco
  * the recipient has done since: nothing about them gates it.
  */
 const claimWhere = (row: Row): SQL =>
-  row.kind === 'share' ? stillReceivable : sql`TRUE`;
+  row.kind === 'share'
+    ? stillReceivable
+    : row.kind === 'return' && row.sentAt === null
+      ? // Final review I1: a return never sent waits while a dispute on its tip is unsettled (the
+        // dispute cancels it and uses its money); one sent before is never held back (P26).
+        sql`NOT ${unsettledDisputeSql(sql`${collectTransfers.tipId}`, { closed: 'ignored' })}`
+      : sql`TRUE`;
 
 /** Whether the row can be sent now (see claimWhere). */
 async function receivableNow(db: Database, row: Row): Promise<boolean> {
