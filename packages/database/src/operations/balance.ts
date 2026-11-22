@@ -82,13 +82,15 @@ export function heldParts(
  *
  * Exported (Task 14 R5-I1) so the recipient's dispute notice reads the very same sum
  * (collectDisputeHeldMinor). `openOnly` leaves out settled disputes: a closed dispute's hold kept for
- * a refund (P28) is never told to the recipient. The balance passes nothing, so its sum is unchanged.
+ * a refund (P28) is never told to the recipient, and a refund's reservation an open dispute stopped
+ * is told (noticeHeldSql). The balance passes nothing, so its sum is unchanged.
  */
 export function disputeHeldSql(
   profileId: string,
   { openOnly = false }: { openOnly?: boolean } = {},
 ): SQL {
-  const open = openOnly ? sql` AND x.settled_at IS NULL` : sql``;
+  // The notice's sum: settled disputes left out, and a reservation the dispute stopped told.
+  if (openOnly) return noticeHeldSql(profileId);
   return sql`((SELECT COALESCE(SUM(GREATEST(h.held - h.covered, 0)), 0) FROM (
           SELECT x.tip_id, SUM(x.held_minor) AS held,
                  GREATEST((SELECT COALESCE(SUM(CASE c.kind WHEN 'back' THEN c.amount_minor
@@ -100,7 +102,7 @@ export function disputeHeldSql(
                  + (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
                      WHERE r.tip_id = x.tip_id) AS covered
             FROM disputes x JOIN tips dt ON dt.id = x.tip_id
-           WHERE dt.profile_id = ${profileId} AND x.held_minor > 0${open}
+           WHERE dt.profile_id = ${profileId} AND x.held_minor > 0
              AND NOT EXISTS (SELECT 1 FROM collect_transfers b
                               WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
                                 AND b.kind = 'back')
@@ -110,7 +112,55 @@ export function disputeHeldSql(
                      WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
                        AND b.kind = 'back' AND b.status = 'paid'), 0)), 0)
            FROM disputes x JOIN tips dt ON dt.id = x.tip_id
-          WHERE dt.profile_id = ${profileId}${open}
+          WHERE dt.profile_id = ${profileId}
+            AND EXISTS (SELECT 1 FROM collect_transfers b
+                         WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                           AND b.kind = 'back')))`;
+}
+
+/**
+ * The notice's sum (`disputeHeldSql` with `openOnly`; final review, the owner's ruling on probe A):
+ * what is held because of a dispute not yet settled. The same two parts as the balance's, with one
+ * difference: on a tip whose dispute is open, answered or lost and not booked, a collect refund's
+ * reservation (`tip_refunds.held_minor`, its transfer back not paid) is held because of the dispute
+ * too (the dispute stopped that refund, or waits on its transfer back), so it is told, up to the
+ * disputed amount. Per tip: `max(held − taken back, min(reserved, disputed))`, which is the balance's
+ * `held − covered` plus the reservation. Only the notice reads it: the balance counts the reservation
+ * once, as the refund's, so nothing is taken from what they can withdraw twice. With no reservation
+ * it is the balance's sum exactly.
+ */
+function noticeHeldSql(profileId: string): SQL {
+  const told = sql`x.status IN ('open', 'responded', 'lost')`;
+  return sql`((SELECT COALESCE(SUM(GREATEST(h.held - h.paid - h.reserved + h.told,
+                                             LEAST(h.told, h.disputed), 0)), 0) FROM (
+          SELECT x.tip_id, SUM(x.held_minor) AS held, SUM(x.amount_minor) AS disputed,
+                 GREATEST((SELECT COALESCE(SUM(CASE c.kind WHEN 'back' THEN c.amount_minor
+                                                           ELSE -c.amount_minor END), 0)
+                             FROM collect_transfers c
+                            WHERE c.profile_id = ${profileId} AND c.tip_id = x.tip_id
+                              AND c.refund_id IS NOT NULL
+                              AND c.kind IN ('back', 'return') AND c.status = 'paid'), 0) AS paid,
+                 (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
+                   WHERE r.tip_id = x.tip_id) AS reserved,
+                 CASE WHEN bool_or(${told})
+                      THEN (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
+                             WHERE r.tip_id = x.tip_id)
+                      ELSE 0 END AS told
+            FROM disputes x JOIN tips dt ON dt.id = x.tip_id
+           WHERE dt.profile_id = ${profileId} AND x.settled_at IS NULL
+             AND (x.held_minor > 0
+                  OR (${told} AND EXISTS (SELECT 1 FROM tip_refunds r
+                                           WHERE r.tip_id = x.tip_id AND r.held_minor > 0)))
+             AND NOT EXISTS (SELECT 1 FROM collect_transfers b
+                              WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                                AND b.kind = 'back')
+           GROUP BY x.tip_id) h)
+      + (SELECT COALESCE(SUM(GREATEST(x.held_minor
+                 - (SELECT COALESCE(SUM(b.amount_minor), 0) FROM collect_transfers b
+                     WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                       AND b.kind = 'back' AND b.status = 'paid'), 0)), 0)
+           FROM disputes x JOIN tips dt ON dt.id = x.tip_id
+          WHERE dt.profile_id = ${profileId} AND x.settled_at IS NULL
             AND EXISTS (SELECT 1 FROM collect_transfers b
                          WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
                            AND b.kind = 'back')))`;

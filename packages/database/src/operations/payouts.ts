@@ -53,6 +53,7 @@ import {
   withdrawalHolds,
   type IssueSubject,
 } from '../schema.js';
+import { creditDisputeHolds } from './dispute-hold.js';
 import { balanceWithModeIn, businessBalanceIn } from './balance.js';
 import {
   collectWithdrawalRoom,
@@ -809,6 +810,24 @@ async function releaseFailedPayout(
     aggregateId: payout.id,
     payload: { payoutId: payout.id, ...ownerOf(payout) },
   });
+  // Final review I1: what it reserved is back in the person's balance. A dispute on their tips that
+  // opened meanwhile held only what was left then, so this money is held for it, up to what it
+  // still needs, in this transaction (the one move to FAILED, so once).
+  if (payout.profileId) {
+    const [reserved] = await tx
+      .select({
+        amountMinor: payouts.amountMinor,
+        userFeeMinor: payouts.userFeeMinor,
+      })
+      .from(payouts)
+      .where(eq(payouts.id, payout.id));
+    if (reserved)
+      await creditDisputeHolds(tx, {
+        profileId: payout.profileId,
+        returningMinor: reserved.amountMinor + reserved.userFeeMinor,
+        now: new Date(),
+      });
+  }
 }
 
 /**

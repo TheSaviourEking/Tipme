@@ -42,7 +42,7 @@ import {
   takeUnsentShare,
   type SharePosition,
 } from './collect-transfers.js';
-import { handRefundHoldToDispute } from './dispute-hold.js';
+import { creditDisputeHolds } from './dispute-hold.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { ownMoneyAllows } from './collect-reserve.js';
@@ -1015,6 +1015,32 @@ async function returnPullBackToBusiness(
 }
 
 /**
+ * Final review I1, as the Task 11 I1 ruling for a business's return: a return to the recipient of
+ * what a failed refund took back that never left TipMe's balance is not sent while a dispute on its
+ * tip is unsettled (the collect machine's claim), and a loss cancels it here (only if never sent, so
+ * one that may have moved is never touched, P27). Its money stays held for the tip and the loss uses
+ * it first (`recoveredOnTip`). A win lets it go out as approved. The caller holds the tip's lock.
+ */
+async function cancelUnsentReturns(
+  tx: Tx,
+  input: { tipId: string; now: Date },
+): Promise<number> {
+  const cancelled = await tx
+    .update(collectTransfers)
+    .set({ status: 'cancelled', updatedAt: input.now })
+    .where(
+      and(
+        eq(collectTransfers.tipId, input.tipId),
+        eq(collectTransfers.kind, 'return'),
+        inArray(collectTransfers.status, ['ready', 'waiting']),
+        isNull(collectTransfers.sentAt),
+      ),
+    )
+    .returning({ id: collectTransfers.id });
+  return cancelled.length;
+}
+
+/**
  * RC1, for a lost dispute's booking (`settleLost`, its transaction): the tip's refunds give way. A
  * refund that may be at the partner (sent, unanswered, or its transfer back or pull-back still
  * moving) makes the dispute wait (`busy`). Otherwise an unsent one fails `disputed`, and what the
@@ -1061,6 +1087,8 @@ export async function yieldRefundsToLostDispute(
         ),
       ),
     );
+  // Final review I1: so does a return to the recipient never sent.
+  await cancelUnsentReturns(tx, input);
   for (const row of rows) {
     if (!row.collectPlan) continue;
     if (row.status === 'PROCESSING' || row.status === 'UNKNOWN')
@@ -1359,7 +1387,7 @@ function backMayMove(back: BackRow | null): boolean {
 /**
  * The tip's row lock, taken before the refund's (askTipRefund's order, and every dispute step's:
  * tip → dispute → refund). A refund that fails can hand its reservation to a dispute on the tip
- * (handRefundHoldToDispute), so it must never hold the refund and wait for the dispute.
+ * (creditDisputeHolds), so it must never hold the refund and wait for the dispute.
  */
 async function lockTip(tx: Tx, tipId: string): Promise<void> {
   await tx
@@ -1465,17 +1493,17 @@ async function failCollectRefund(
   // The hold reserves only money still in their account and about to come back. Money already back
   // is in held_for_recipients (never withdrawable, Task 12); a transfer back that may move keeps it.
   if (!backMayMove(back)) {
-    // Final review I1: a dispute on the tip that isn't settled takes over what this refund held of
-    // the balance, in this transaction, before it is zeroed (so once).
-    await handRefundHoldToDispute(tx, {
-      tipId: row.tipId,
-      releasedMinor: row.heldMinor,
-      now,
-    });
     await tx
       .update(tipRefunds)
       .set({ heldMinor: 0n, updatedAt: now })
       .where(eq(tipRefunds.id, row.id));
+    // Final review I1: a dispute on the tip that isn't settled takes over what this refund held of
+    // the balance, in the transaction that zeroed it (so once).
+    await creditDisputeHolds(tx, {
+      tipId: row.tipId,
+      coverReleasedMinor: row.heldMinor,
+      now,
+    });
   }
   await failRefund(
     tx,

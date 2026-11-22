@@ -422,12 +422,24 @@ async function holdShare(
     .update(disputes)
     .set({ heldMinor: held, updatedAt: now })
     .where(eq(disputes.id, row.id));
-  if (held > 0n && reason === 'dispute')
+  // The notice's ruling (final review): a refund's reservation this dispute now stops is held
+  // because of it, so it is told too, up to what is disputed.
+  const reserved =
+    held > 0n || reason !== 'dispute'
+      ? 0n
+      : (
+          await tx
+            .select({ heldMinor: tipRefunds.heldMinor })
+            .from(tipRefunds)
+            .where(eq(tipRefunds.tipId, row.tipId))
+        ).reduce((sum, r) => sum + r.heldMinor, 0n);
+  const told = held > 0n ? held : min(reserved, row.amountMinor);
+  if (told > 0n && reason === 'dispute')
     await tellDisputeHold(tx, {
       disputeId: row.id,
       tipId: row.tipId,
       profileId: share.profileId,
-      heldMinor: held,
+      heldMinor: told,
       now,
     });
   return 'balance';
@@ -616,7 +628,7 @@ async function settleLost(
     return waiting(tx, row, now, 'a refund of the tip is still in flight');
   // Final review I1: a refund still reserving the recipient's balance (its transfer back not sent)
   // gives way now, before the recovery is worked out. Stopping it hands its reservation to this
-  // dispute (handRefundHoldToDispute), so the hold read below names that money and the transfer
+  // dispute (creditDisputeHolds), so the hold read below names that money and the transfer
   // back takes it, never TipMe. It would be stopped anyway: nothing sends a refund on a lost
   // dispute's tip. Its second call, with the booking, finds nothing left to stop.
   if (refunds.reservedMinor > 0n) {
