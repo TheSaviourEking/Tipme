@@ -302,9 +302,8 @@ const messages: Record<ApiErrorCode, string> = {
     'New accounts have a limit on what they can withdraw each day.',
   // You collect (Task 13, spec §10).
   BANK_NAME_UNKNOWN:
-    'We couldn’t find the name on this account. Check the bank and account number.',
-  NAME_MISMATCH:
-    "This account isn't in your name. Use a bank account in your own name.",
+    'We couldn’t find this account. Check the bank and account number.',
+  NAME_MISMATCH: 'This account isn’t in your name. Use one that is.',
   NAME_LOCKED:
     'Your verified name can only be changed by support. Contact support@usetipme.xyz.',
   NAME_NOT_LOCKED: 'This person has no verified name to change.',

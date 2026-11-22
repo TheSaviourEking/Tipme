@@ -29,7 +29,8 @@ const COPY = {
   checking: "We're checking your details. This usually takes a few minutes.",
   manual: "We're checking this by hand. We'll tell you when it's done.",
   mismatch:
-    "This account isn't in your name. Use a bank account in your own name.",
+    // Owner changed copy 22 Nov (spec §10 keeps the longer line).
+    'This account isn’t in your name. Use one that is.',
   verified: "You're all set. Your tips are on their way to you.",
   paused:
     'Your page has paused tips. Add your bank details to start taking tips again.',
@@ -256,11 +257,19 @@ for (const [label, viewport] of VIEWPORTS) {
       await page.goto('/dashboard/withdraw');
       const form = bankForm(page);
       await expect(form.getByText(COPY.ownName)).toBeVisible();
-      // The owner's words (fix round 3): the name fields' hint is just this.
+      // The owner's words (22 Nov): said once, plainly.
       await expect(
-        form.getByText('Your full name.', { exact: true }),
+        form.getByText('Use the name on your bank account.', { exact: true }),
       ).toBeVisible();
       await expect(form).not.toContainText('as your bank has it');
+      // Each field's error is as plain.
+      await form.getByRole('button', { name: 'Continue' }).click();
+      await expect(form.getByLabel('First name')).toHaveAccessibleDescription(
+        'Enter your first name.',
+      );
+      await expect(form.getByLabel('Last name')).toHaveAccessibleDescription(
+        'Enter your last name.',
+      );
 
       await enterDetails(page, form);
       await confirmAndEnterCode(page, form, email);
@@ -298,7 +307,29 @@ for (const [label, viewport] of VIEWPORTS) {
       const { email, profileId } = await collectRecipient(page, testInfo);
       await page.goto('/dashboard/withdraw');
       const form = bankForm(page);
-      await enterDetails(page, form);
+      // An account the bank has no name for (the pretend partner: one ending 0000), in the owner's
+      // words (22 Nov), at the field.
+      await enterDetails(page, form, '0123450000');
+      await expect(
+        form.getByLabel('Account number'),
+      ).toHaveAccessibleDescription(
+        'We couldn’t find this account. Check the bank and account number.',
+      );
+      // The lookup, held so its busy line can be read.
+      let release = () => {};
+      const held = new Promise<void>((resolve) => (release = resolve));
+      await page.route('**/v1/me/collect/bank/lookup', async (route) => {
+        await held;
+        await route.continue();
+      });
+      await form.getByLabel('Account number').fill('0123456789');
+      await form.getByRole('button', { name: 'Continue' }).click();
+      await expect(form.getByText('Finding your account…')).toBeVisible();
+      release();
+      await expect(
+        form.getByText('Is this you? PRETEND ACCOUNT HOLDER'),
+      ).toBeVisible();
+      await page.unroute('**/v1/me/collect/bank/lookup');
       await confirmAndEnterCode(page, form, email);
       await partnerAnswers(profileId, 'destination-rejected');
       await form.getByRole('button', { name: 'Add bank details' }).click();

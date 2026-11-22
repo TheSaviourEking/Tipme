@@ -205,7 +205,8 @@ export const COLLECT_COPY = {
   checking: "We're checking your details. This usually takes a few minutes.",
   manualCheck: "We're checking this by hand. We'll tell you when it's done.",
   nameMismatch:
-    "This account isn't in your name. Use a bank account in your own name.",
+    // Owner changed copy 22 Nov: shorter than spec §10's row, which is left as written.
+    'This account isn’t in your name. Use one that is.',
   verified: "You're all set. Your tips are on their way to you.",
   onItsWay: 'On its way to you',
   reminder: (amount: string) =>

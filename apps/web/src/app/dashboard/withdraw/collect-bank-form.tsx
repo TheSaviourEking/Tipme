@@ -196,10 +196,8 @@ export function CollectBankForm({
   const lookUp = once(async (event: FormEvent) => {
     event.preventDefault();
     const errors: typeof fieldErrors = {};
-    if (!validPart(first))
-      errors.first = 'Enter your first name as your bank has it.';
-    if (!validPart(last))
-      errors.last = 'Enter your last name as your bank has it.';
+    if (!validPart(first)) errors.first = 'Enter your first name.';
+    if (!validPart(last)) errors.last = 'Enter your last name.';
     if (!bankCode) errors.bank = 'Choose your bank.';
     if (!/^\d{10}$/.test(accountNumber))
       errors.number = 'Enter your 10-digit account number.';
@@ -230,7 +228,7 @@ export function CollectBankForm({
       setFieldErrors({
         number:
           result.message ??
-          'We couldn’t find the name on this account. Check the bank and account number.',
+          'We couldn’t find this account. Check the bank and account number.',
       });
       setRefused((n) => n + 1);
     } else if (result.code === 'RATE_LIMITED')
@@ -334,7 +332,7 @@ export function CollectBankForm({
       <Surface material="paper" className="collect-bank__panel">
         {(step.kind === 'details' || step.kind === 'looking') && (
           <form className="settings-form" onSubmit={lookUp} noValidate>
-            <p className="tm-hint">Your full name.</p>
+            <p className="tm-hint">Use the name on your bank account.</p>
             <InputField
               id={`${id}-first`}
               label="First name"
@@ -393,7 +391,7 @@ export function CollectBankForm({
             {step.kind === 'looking' && (
               <p role="status" className="bank-check">
                 <span className="bank-check__spin" aria-hidden="true" />
-                Finding the name on this account…
+                Finding your account…
               </p>
             )}
             <Button

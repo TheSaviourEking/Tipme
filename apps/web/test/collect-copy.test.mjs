@@ -36,6 +36,13 @@ function everyString() {
 
 test('collect copy is the spec’s, and never names the partner or says wallet, protected or insured', () => {
   const table = specTable();
+  // Owner changed copy 22 Nov: the mismatch line is shorter than the spec's §10 row (the spec is
+  // left as written). Everything else is the spec's word for word.
+  const NAME_MISMATCH = 'This account isn’t in your name. Use one that is.';
+  assert.deepEqual(table['Name mismatch'], [
+    "This account isn't in your name. Use a bank account in your own name.",
+  ]);
+  table['Name mismatch'] = [NAME_MISMATCH];
   const expected = {
     'Dashboard, no bank yet': [COLLECT_COPY.dashboardNoBank],
     'Balance note': [COLLECT_COPY.balanceNote],
@@ -78,11 +85,13 @@ test('collect copy is the spec’s, and never names the partner or says wallet, 
 
 test('the API’s mismatch words are the same as the form’s', () => {
   const filter = read('apps/api/src/http/api-exception.filter.ts');
-  assert.ok(
-    filter.includes(
-      `NAME_MISMATCH:\n    ${JSON.stringify(COLLECT_COPY.nameMismatch)},`,
-    ),
-    'NAME_MISMATCH in api-exception.filter.ts',
+  const words = (code) =>
+    new RegExp(`\\b${code}:\\s*(['"])(.*?)\\1,`).exec(filter)?.[2];
+  assert.equal(words('NAME_MISMATCH'), COLLECT_COPY.nameMismatch);
+  // Owner, 22 Nov: plain, short words for the bank form.
+  assert.equal(
+    words('BANK_NAME_UNKNOWN'),
+    'We couldn’t find this account. Check the bank and account number.',
   );
 });
 
