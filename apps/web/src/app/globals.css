@@ -3950,7 +3950,7 @@ body:has(
    <main> to the page itself (no-repeat: past the page, overscroll shows the plain purple), so the
    header, the receipt and the footer share one ground. The header is clear over it, with white words
    and keys; the footer is a translucent "glass" card (the owner's exception to the constitution's
-   no-glass rule, this page only; DECISION-LOG 2026-11-22). The open phone menu and the "Who it's
+   no-glass rule, this page only; the owner, 22 Nov 2026, PR #317). The open phone menu and the "Who it's
    for" card keep their own look over it. Contrast on this ground: white is 5.75:1 on the purple and
    4.88:1 under the top light or on the footer's 10% fill; the purple on white is 5.75:1. */
 html:has(
@@ -3978,7 +3978,7 @@ html:has(
   }
 
   .nav-shell > .menu-toggle {
-    /* 70% white is 3.03:1 on the purple: a visible key edge. */
+    /* 70% white is 3.56:1 on the purple (3.18:1 under the top light): a visible key edge. */
     border-color: rgb(255 255 255 / 70%);
     background: transparent;
     color: var(--surface-base);

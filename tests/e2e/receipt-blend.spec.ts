@@ -157,7 +157,8 @@ async function expectWhiteHeaderAndFooter(page: Page, wide: boolean) {
   expect(card.image).toBe('none');
 }
 
-async function expectContrast(page: Page) {
+/** axe as a supplement only: it can't judge text over the page's gradient (it reports it incomplete). */
+async function expectNoAxeViolations(page: Page) {
   const { violations } = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
     .analyze();
@@ -169,6 +170,133 @@ async function expectContrast(page: Page) {
   ).toEqual([]);
 }
 
+type Rgba = [number, number, number, number];
+
+function parseColour(value: string): Rgba {
+  const parts = value.match(/[\d.]+/g)?.map(Number) ?? [];
+  if (!/^rgba?\(/.test(value) || parts.length < 3)
+    throw new Error(`not an rgb colour: ${value}`);
+  return [parts[0]!, parts[1]!, parts[2]!, parts[3] ?? 1];
+}
+
+/** `top` painted over an opaque `under`, in sRGB as the browser composites it. */
+function over([r, g, b, a]: Rgba, under: Rgba): Rgba {
+  return [
+    r * a + under[0] * (1 - a),
+    g * a + under[1] * (1 - a),
+    b * a + under[2] * (1 - a),
+    1,
+  ];
+}
+
+function luminance([r, g, b]: Rgba) {
+  const lin = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrast(a: Rgba, b: Rgba) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+// The page's known ground: the purple, and its lightest point, the top of the 10% white light
+// (the header sits there). Worst case for white words.
+const GROUND = parseColour(PURPLE);
+const TOP_LIGHT = over([255, 255, 255, 0.1], GROUND);
+
+/** Each element's computed text colour, its size class, and its own background colour. */
+const styles = (page: Page, selector: string) =>
+  page.locator(selector).evaluateAll((nodes) =>
+    nodes
+      .filter((n) => n.getClientRects().length > 0)
+      .map((n) => {
+        const style = getComputedStyle(n);
+        const size = parseFloat(style.fontSize);
+        const weight = Number(style.fontWeight);
+        return {
+          name: `${n.tagName.toLowerCase()} "${n.textContent?.trim().slice(0, 30)}"`,
+          colour: style.color,
+          fill: style.backgroundColor,
+          // WCAG large text: 24px, or 18.66px bold.
+          large: size >= 24 || (size >= 18.66 && weight >= 700),
+        };
+      }),
+  );
+
+/**
+ * WCAG contrast computed from the browser's own colours against the known ground: 4.5:1 for
+ * normal text, 3:1 for large. axe can't do this here (the ground is a gradient).
+ */
+async function expectContrastOnPurple(
+  page: Page,
+  { wide, heading }: { wide: boolean; heading: boolean },
+) {
+  const failures: string[] = [];
+  const check = (what: string, colour: string, ground: Rgba, min: number) => {
+    const ratio = contrast(over(parseColour(colour), ground), ground);
+    if (ratio < min) failures.push(`${what}: ${ratio.toFixed(2)} < ${min}`);
+    return ratio;
+  };
+  const checked = { header: 0, footer: 0 };
+
+  // Header: on the lightest point of the top light.
+  const header = await styles(
+    page,
+    wide
+      ? '.site-nav > a:not(.tm-button), .site-nav .who__button, .site-nav > .tm-button--secondary'
+      : '.nav-shell > .menu-toggle',
+  );
+  for (const item of header) {
+    // The phone menu key is an icon: 3:1 (non-text contrast).
+    check(
+      `header ${item.name}`,
+      item.colour,
+      TOP_LIGHT,
+      wide ? (item.large ? 3 : 4.5) : 3,
+    );
+    checked.header += 1;
+  }
+  if (wide) {
+    const [key] = await styles(page, '.site-nav > .tm-button--primary');
+    expect(key, 'Get tipped').toBeDefined();
+    const fill = over(parseColour(key!.fill), TOP_LIGHT);
+    check(`Get tipped words on its fill`, key!.colour, fill, 4.5);
+    // The key's fill against the page: the control's edge (non-text, 3:1).
+    const edge = contrast(fill, TOP_LIGHT);
+    if (edge < 3)
+      failures.push(`Get tipped fill on the page: ${edge.toFixed(2)} < 3`);
+    checked.header += 1;
+  }
+
+  // The paid heading sits on the purple, under the light's fade: judged on the lightest point.
+  if (heading) {
+    for (const h1 of await styles(page, 'main .tip-thanks .tip-status-live h1'))
+      check(`receipt ${h1.name}`, h1.colour, TOP_LIGHT, h1.large ? 3 : 4.5);
+  }
+
+  // Footer: the glass card's own computed fill over the plain purple, then the © line beside it.
+  const card = await background(page, '.footer-card');
+  const glass = over(parseColour(card.color), GROUND);
+  for (const item of await styles(
+    page,
+    '.footer-card :is(p, h2, a:not(.brand))',
+  )) {
+    check(`footer ${item.name}`, item.colour, glass, item.large ? 3 : 4.5);
+    checked.footer += 1;
+  }
+  for (const item of await styles(page, '.footer-bottom > span')) {
+    check(`footer ${item.name}`, item.colour, GROUND, item.large ? 3 : 4.5);
+    checked.footer += 1;
+  }
+
+  expect(checked.header).toBeGreaterThan(wide ? 4 : 0);
+  expect(checked.footer).toBeGreaterThan(8);
+  expect(failures).toEqual([]);
+}
+
 for (const [label, width, height] of [
   ['phone', 390, 844],
   ['desktop', 1440, 900],
@@ -177,7 +305,7 @@ for (const [label, width, height] of [
   test.describe(`the receipt, ${label} (${width})`, () => {
     test.use({ viewport: { width, height } });
 
-    test('paid: purple from header to footer, white words, and it passes axe', async ({
+    test('paid: purple from header to footer, white words, AA contrast', async ({
       page,
     }) => {
       await answerStatus(page, 'paid');
@@ -189,12 +317,11 @@ for (const [label, width, height] of [
       await expect(page.locator('.tip-status-pretend')).toBeVisible();
       await expectOnePurple(page);
       await expectWhiteHeaderAndFooter(page, wide);
-      await expectContrast(page);
+      await expectContrastOnPurple(page, { wide, heading: true });
+      await expectNoAxeViolations(page);
     });
 
-    test('pending: the same purple ground, and it passes axe', async ({
-      page,
-    }) => {
+    test('pending: the same purple ground, AA contrast', async ({ page }) => {
       await answerStatus(page, 'waiting');
       await page.goto(RECEIPT);
       await expect(
@@ -202,7 +329,8 @@ for (const [label, width, height] of [
       ).toBeVisible();
       await expectOnePurple(page);
       await expectWhiteHeaderAndFooter(page, wide);
-      await expectContrast(page);
+      await expectContrastOnPurple(page, { wide, heading: false });
+      await expectNoAxeViolations(page);
     });
 
     test('focus on the purple is a white ring', async ({ page }) => {
