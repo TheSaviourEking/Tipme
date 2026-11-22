@@ -617,7 +617,8 @@ export async function startJobWorker(
             const pro = await reconcileProEverywhere(now);
             // Option B: business shares between partner accounts, each leg once and read back.
             // Shares move with the `business` and `business_shares` switches (admin); a chargeback's
-            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee).
+            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee), and so does
+            // You collect's business money (final review I2: shareTransferKinds).
             const shares = { checked: 0, failed: 0 };
             const [businessOn, sharesSwitchOn] = await Promise.all([
               featureOn(database.db, 'business'),
