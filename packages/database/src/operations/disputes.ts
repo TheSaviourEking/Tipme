@@ -144,7 +144,7 @@ export async function collectDisputeHeldMinor(
 
 /** The spec's words (§10), with the amount held. */
 export const disputeHoldCopy = (heldMinor: bigint) =>
-  `A payment to you is being questioned. We've held ${naira(heldMinor)} until it's settled.`;
+  `A payment to you is being questioned. We’ve held ${naira(heldMinor)} until it’s settled.`;
 
 const FINAL: ReadonlySet<DisputeStatus> = new Set(['won', 'lost', 'closed']);
 

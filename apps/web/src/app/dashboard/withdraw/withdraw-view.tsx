@@ -259,7 +259,7 @@ export default function WithdrawPage({
       current = false;
     };
   }, [collecting]);
-  // Verified while this page was open: "You're all set" stays for this visit.
+  // Verified while this page was open: "You’re all set" stays for this visit.
   const [wasCollecting, setWasCollecting] = useState(false);
   if (collecting && !wasCollecting) setWasCollecting(true);
   const allSet = wasCollecting && collect?.verified === true;

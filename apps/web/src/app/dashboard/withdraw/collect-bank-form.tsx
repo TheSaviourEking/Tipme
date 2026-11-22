@@ -27,19 +27,28 @@ type Step =
 const SERVER_WORDS = new Set([
   'BANK_RECHECK_LATER',
   'NAME_LOCKED',
-  'PROVIDER_OUTCOME_UNKNOWN',
   'WITHDRAWALS_PAUSED',
 ]);
 
+/**
+ * The partner's answer never came (PROVIDER_OUTCOME_UNKNOWN): the details may have been added. Never
+ * the server's words, which are for engineers, never the partner's name, and never a call to try
+ * again (re-review 3 R3-M3). Proposed copy, awaiting the owner.
+ */
+const STILL_WAITING =
+  'We’re still waiting to hear back. Check again in a few minutes.';
+
 const words = (result: { code: string; message?: string }) =>
-  SERVER_WORDS.has(result.code) && result.message
-    ? result.message
-    : messageFor(result.code);
+  result.code === 'PROVIDER_OUTCOME_UNKNOWN'
+    ? STILL_WAITING
+    : SERVER_WORDS.has(result.code) && result.message
+      ? result.message
+      : messageFor(result.code);
 
 const validPart = (value: string) =>
   collectLegalNameSchema.shape.first.safeParse(value).success;
 
-/** "We're checking your details": the same line while the partner checks and after, until it ends. */
+/** "We’re checking your details": the same line while the partner checks and after, until it ends. */
 function Checking() {
   return (
     <p role="status" className="bank-check collect-bank__checking">
@@ -196,8 +205,8 @@ export function CollectBankForm({
   const lookUp = once(async (event: FormEvent) => {
     event.preventDefault();
     const errors: typeof fieldErrors = {};
-    if (!validPart(first)) errors.first = 'Enter your first name.';
-    if (!validPart(last)) errors.last = 'Enter your last name.';
+    if (!validPart(first)) errors.first = COLLECT_COPY.firstNameMissing;
+    if (!validPart(last)) errors.last = COLLECT_COPY.lastNameMissing;
     if (!bankCode) errors.bank = 'Choose your bank.';
     if (!/^\d{10}$/.test(accountNumber))
       errors.number = 'Enter your 10-digit account number.';
@@ -226,9 +235,7 @@ export function CollectBankForm({
     setStep({ kind: 'details' });
     if (result.code === 'BANK_NAME_UNKNOWN') {
       setFieldErrors({
-        number:
-          result.message ??
-          'We couldn’t find this account. Check the bank and account number.',
+        number: result.message ?? COLLECT_COPY.accountNotFound,
       });
       setRefused((n) => n + 1);
     } else if (result.code === 'RATE_LIMITED')
@@ -299,19 +306,28 @@ export function CollectBankForm({
     }
     // No answer: whether it was added is unknown, so the page reads where it stands.
     if (result.status === 0 || result.status >= 500) onAdded(null);
-    // The code is spent once it is right, so another try needs a new one.
+    // The code is spent once it is right, so another try needs a new one. Not while the answer is
+    // still awaited: the details may already be added, so nothing invites another try.
     setError(
-      SERVER_WORDS.has(result.code)
+      SERVER_WORDS.has(result.code) ||
+        result.code === 'PROVIDER_OUTCOME_UNKNOWN'
         ? words(result)
         : `${words(result)} You’ll need a new code to try again.`,
     );
   });
 
-  const errorSlip = error && (
-    <Slip tone="error" title="Not added">
-      {error}
-    </Slip>
-  );
+  // Still waiting is no refusal: it may have been added, so the slip doesn't say "Not added".
+  const errorSlip =
+    error &&
+    (error === STILL_WAITING ? (
+      <Slip tone="unsure" title="Still waiting">
+        {error}
+      </Slip>
+    ) : (
+      <Slip tone="error" title="Not added">
+        {error}
+      </Slip>
+    ));
 
   if (step.kind === 'adding')
     return (
@@ -332,7 +348,7 @@ export function CollectBankForm({
       <Surface material="paper" className="collect-bank__panel">
         {(step.kind === 'details' || step.kind === 'looking') && (
           <form className="settings-form" onSubmit={lookUp} noValidate>
-            <p className="tm-hint">Use the name on your bank account.</p>
+            <p className="tm-hint">{COLLECT_COPY.nameHint}</p>
             <InputField
               id={`${id}-first`}
               label="First name"
@@ -391,7 +407,7 @@ export function CollectBankForm({
             {step.kind === 'looking' && (
               <p role="status" className="bank-check">
                 <span className="bank-check__spin" aria-hidden="true" />
-                Finding your account…
+                {COLLECT_COPY.findingAccount}
               </p>
             )}
             <Button

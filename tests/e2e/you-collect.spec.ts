@@ -26,12 +26,12 @@ const COPY = {
   kept: 'Kept for you until you add your bank details.',
   addBank: 'Add bank details to withdraw',
   ownName: 'Use a bank account in your own name.',
-  checking: "We're checking your details. This usually takes a few minutes.",
-  manual: "We're checking this by hand. We'll tell you when it's done.",
+  checking: 'We’re checking your details. This usually takes a few minutes.',
+  manual: 'We’re checking this by hand. We’ll tell you when it’s done.',
   mismatch:
-    // Owner changed copy 22 Nov (spec §10 keeps the longer line).
+    // The owner's wording (22 Nov), now spec §10's.
     'This account isn’t in your name. Use one that is.',
-  verified: "You're all set. Your tips are on their way to you.",
+  verified: 'You’re all set. Your tips are on their way to you.',
   paused:
     'Your page has paused tips. Add your bank details to start taking tips again.',
 } as const;
@@ -375,7 +375,7 @@ for (const [label, viewport] of VIEWPORTS) {
       browser,
     }, testInfo) => {
       const { handle } = await collectRecipient(page, testInfo);
-      const said = `${handle} can't take tips right now. Please try again later.`;
+      const said = `${handle} can’t take tips right now. Please try again later.`;
 
       // The recipient: the dashboard banner (the pause is the API's; held here, as reaching the
       // holding cap takes ₦50,000 or 30 days).
@@ -860,7 +860,7 @@ test('the add form: the server’s words for an account it can’t check again, 
 
   // The server's own words when it can't check this account again.
   const recheck =
-    "We can't check this account again right now. Use another account, or contact support@usetipme.xyz.";
+    'We can’t check this account again right now. Use another account, or contact support@usetipme.xyz.';
   await page.route('**/v1/me/collect/bank', (route) =>
     route.fulfill({
       status: 409,
@@ -872,6 +872,47 @@ test('the add form: the server’s words for an account it can’t check again, 
   await form.getByRole('button', { name: 'Add bank details' }).click();
   const slip = form.getByRole('alert').filter({ hasText: 'Not added' });
   await expect(slip).toHaveText(new RegExp(recheck.replace(/[.?]/g, '\\$&')));
+  await page.unroute('**/v1/me/collect/bank');
+
+  // The partner's answer never came (fix round 4, R3-M3): plain words, never the server's engineer
+  // wording, never the partner's name, and never a call to try again.
+  await form.getByRole('button', { name: 'Continue' }).click();
+  await form.getByRole('button', { name: 'Confirm' }).click();
+  await expect(code).toBeVisible();
+  used.push(await bankCode(page, email, used));
+  await code.fill(used.at(-1)!);
+  await page.route('**/v1/me/collect/bank', (route) =>
+    route.fulfill({
+      status: 503,
+      json: {
+        error: {
+          code: 'PROVIDER_OUTCOME_UNKNOWN',
+          message:
+            'The provider may have accepted the request. Do not retry; contact support.',
+        },
+      },
+    }),
+  );
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  const waiting = form.getByRole('alert').filter({ hasText: 'Still waiting' });
+  await expect(waiting).toContainText(
+    'We’re still waiting to hear back. Check again in a few minutes.',
+  );
+  await expect(form).not.toContainText('Not added');
+  await expect(form).not.toContainText(/provider|retry|try again|new code/i);
+  await expect(form).not.toContainText(/bachs/i);
+  // For the PR: the line as a recipient sees it, on a desktop and a phone.
+  const shown = page.viewportSize();
+  await testInfo.attach('pending-outcome-desktop', {
+    body: await form.screenshot(),
+    contentType: 'image/png',
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await testInfo.attach('pending-outcome-phone', {
+    body: await form.screenshot(),
+    contentType: 'image/png',
+  });
+  if (shown) await page.setViewportSize(shown);
   await page.unroute('**/v1/me/collect/bank');
 
   // A dropped connection on the add: the form stays usable and the page reads where it stands.
@@ -887,7 +928,7 @@ test('the add form: the server’s words for an account it can’t check again, 
   await form.getByRole('button', { name: 'Confirm' }).click();
   await expect(code).toBeVisible();
   used.push(await bankCode(page, email, used));
-  await code.fill(used[1]!);
+  await code.fill(used.at(-1)!);
   await page.route('**/v1/me/collect/bank', (route) =>
     route.abort('internetdisconnected'),
   );
@@ -979,7 +1020,7 @@ test('a payment being questioned: Home says how much is held while it is, and no
     );
     await expect(
       main.getByText(
-        `A payment to you is being questioned. We've held ₦${amount} until it's settled.`,
+        `A payment to you is being questioned. We’ve held ₦${amount} until it’s settled.`,
       ),
     ).toBeVisible();
     // A real state: nothing kept or on its way, and the balance is not below zero.

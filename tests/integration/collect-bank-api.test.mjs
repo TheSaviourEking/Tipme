@@ -459,8 +459,8 @@ test('names match: verified, held tips start moving oldest first, the page unpau
   // The notice says so, once (P12), in the spec's words.
   assert.deepEqual(await notices(TOBI), [
     {
-      title: "You're all set",
-      body: "You're all set. Your tips are on their way to you.",
+      title: 'You’re all set',
+      body: 'You’re all set. Your tips are on their way to you.',
     },
   ]);
   const mail = (await queuedMail(database.db, sealing, { limit: 50 })).filter(

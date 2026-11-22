@@ -152,8 +152,8 @@ export const collectBankAddSchema = collectBankLookupSchema
 export type CollectBankAddRequest = z.infer<typeof collectBankAddSchema>;
 
 /**
- * Where the check stands: `verified` (names match and the account can receive: "You're all set"),
- * `checking` (accepted, the account not ready yet: "We're checking your details") or
+ * Where the check stands: `verified` (names match and the account can receive: "You’re all set"),
+ * `checking` (accepted, the account not ready yet: "We’re checking your details") or
  * `manual_review` (some words match, the partner's team checks it by hand). No match is refused
  * (`422 NAME_MISMATCH`) and nothing is saved.
  */
@@ -175,7 +175,7 @@ export interface CollectStatusView extends CollectStatus {
   bank: CollectBankView | null;
   /**
    * What is held from their balance for disputes on their tips still open (spec §6.2), in minor
-   * units, never negative: "A payment to you is being questioned. We've held {amount} until it's
+   * units, never negative: "A payment to you is being questioned. We’ve held {amount} until it's
    * settled." "0" when nothing is held.
    */
   disputeHeldMinor: string;
@@ -201,13 +201,17 @@ export const COLLECT_COPY = {
   balanceNote: 'Kept for you until you add your bank details.',
   withdrawNoBank: 'Add bank details to withdraw',
   withdrawOwnName: 'Use a bank account in your own name.',
+  nameHint: 'Use the name on your bank account.',
+  firstNameMissing: 'Enter your first name.',
+  lastNameMissing: 'Enter your last name.',
+  findingAccount: 'Finding your account…',
+  accountNotFound:
+    'We couldn’t find this account. Check the bank and account number.',
   nameConfirm: (bankName: string) => `Is this you? ${bankName}`,
-  checking: "We're checking your details. This usually takes a few minutes.",
-  manualCheck: "We're checking this by hand. We'll tell you when it's done.",
-  nameMismatch:
-    // Owner changed copy 22 Nov: shorter than spec §10's row, which is left as written.
-    'This account isn’t in your name. Use one that is.',
-  verified: "You're all set. Your tips are on their way to you.",
+  checking: 'We’re checking your details. This usually takes a few minutes.',
+  manualCheck: 'We’re checking this by hand. We’ll tell you when it’s done.',
+  nameMismatch: 'This account isn’t in your name. Use one that is.',
+  verified: 'You’re all set. Your tips are on their way to you.',
   onItsWay: 'On its way to you',
   reminder: (amount: string) =>
     `You have ${amount} in tips waiting. Add your bank details to withdraw it.`,
@@ -216,10 +220,10 @@ export const COLLECT_COPY = {
   pausedRecipient:
     'Your page has paused tips. Add your bank details to start taking tips again.',
   pausedSupporter: (name: string) =>
-    `${name} can't take tips right now. Please try again later.`,
+    `${name} can’t take tips right now. Please try again later.`,
   receipt: (name: string) => `Paid to TipMe for ${name}`,
   firstWithdrawalCap: (amount: string) =>
     `New accounts can withdraw up to ${amount} the first time.`,
   disputeHold: (amount: string) =>
-    `A payment to you is being questioned. We've held ${amount} until it's settled.`,
+    `A payment to you is being questioned. We’ve held ${amount} until it’s settled.`,
 } as const;

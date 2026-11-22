@@ -486,7 +486,7 @@ test('created then lost: partial recovery by transfer back, TipMe absorbs the re
     [
       {
         kind: 'dispute_hold',
-        body: "A payment to you is being questioned. We've held ₦3,000 until it's settled.",
+        body: 'A payment to you is being questioned. We’ve held ₦3,000 until it’s settled.',
       },
     ],
   );

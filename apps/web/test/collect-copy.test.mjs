@@ -36,13 +36,6 @@ function everyString() {
 
 test('collect copy is the spec’s, and never names the partner or says wallet, protected or insured', () => {
   const table = specTable();
-  // Owner changed copy 22 Nov: the mismatch line is shorter than the spec's §10 row (the spec is
-  // left as written). Everything else is the spec's word for word.
-  const NAME_MISMATCH = 'This account isn’t in your name. Use one that is.';
-  assert.deepEqual(table['Name mismatch'], [
-    "This account isn't in your name. Use a bank account in your own name.",
-  ]);
-  table['Name mismatch'] = [NAME_MISMATCH];
   const expected = {
     'Dashboard, no bank yet': [COLLECT_COPY.dashboardNoBank],
     'Balance note': [COLLECT_COPY.balanceNote],
@@ -50,6 +43,13 @@ test('collect copy is the spec’s, and never names the partner or says wallet, 
       COLLECT_COPY.withdrawNoBank,
       COLLECT_COPY.withdrawOwnName,
     ],
+    'Name hint': [COLLECT_COPY.nameHint],
+    'Name missing': [
+      COLLECT_COPY.firstNameMissing,
+      COLLECT_COPY.lastNameMissing,
+    ],
+    'Finding the account': [COLLECT_COPY.findingAccount],
+    'Account not found': [COLLECT_COPY.accountNotFound],
     'Name confirm': [COLLECT_COPY.nameConfirm('{BANK NAME}')],
     Checking: [COLLECT_COPY.checking],
     'Manual check': [COLLECT_COPY.manualCheck],
@@ -88,11 +88,7 @@ test('the API’s mismatch words are the same as the form’s', () => {
   const words = (code) =>
     new RegExp(`\\b${code}:\\s*(['"])(.*?)\\1,`).exec(filter)?.[2];
   assert.equal(words('NAME_MISMATCH'), COLLECT_COPY.nameMismatch);
-  // Owner, 22 Nov: plain, short words for the bank form.
-  assert.equal(
-    words('BANK_NAME_UNKNOWN'),
-    'We couldn’t find this account. Check the bank and account number.',
-  );
+  assert.equal(words('BANK_NAME_UNKNOWN'), COLLECT_COPY.accountNotFound);
 });
 
 test('the strings that take a value put it where the spec does', () => {
@@ -102,7 +98,7 @@ test('the strings that take a value put it where the spec does', () => {
   );
   assert.equal(
     COLLECT_COPY.pausedSupporter('Ada'),
-    "Ada can't take tips right now. Please try again later.",
+    'Ada can’t take tips right now. Please try again later.',
   );
   assert.equal(COLLECT_COPY.receipt('Ada'), 'Paid to TipMe for Ada');
   assert.equal(
