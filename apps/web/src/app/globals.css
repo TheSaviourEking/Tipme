@@ -3880,9 +3880,10 @@ body:has(
   right: 10px;
   left: 10px;
   height: 10px;
+  /* The holes show the ground behind the card: the receipt's purple (set on the page, above). */
   background: radial-gradient(
       circle at 5px 5px,
-      var(--canvas) 3.2px,
+      var(--tip-status-ground, var(--canvas)) 3.2px,
       transparent 3.6px
     )
     0 0 / 12px 10px repeat-x;
@@ -3943,11 +3944,138 @@ body:has(
   }
 }
 
-/* Confirmed: the thank-you is a purple slab, and it becomes the receipt. */
-.tip-status-page:has(.tip-thanks) {
+/* The receipt is one purple from the top of the screen to the bottom of the page (owner, 22 Nov
+   2026), in every state and from the first paint: the marker is the server-rendered <main>, so
+   nothing waits for JavaScript. The purple and its soft top light are the paid slab's, moved from
+   <main> to the page itself (no-repeat: past the page, overscroll shows the plain purple), so the
+   header, the receipt and the footer share one ground. The header is clear over it, with white words
+   and keys; the footer is a translucent "glass" card (the owner's exception to the constitution's
+   no-glass rule, this page only; DECISION-LOG 2026-11-22). The open phone menu and the "Who it's
+   for" card keep their own look over it. Contrast on this ground: white is 5.75:1 on the purple and
+   4.88:1 under the top light or on the footer's 10% fill; the purple on white is 5.75:1. */
+html:has(
+  .tip-status-page:not(
+    [style*='display: none'],
+    [style*='display:none'],
+    [style*='display: none'] *,
+    [style*='display:none'] *
+  )
+) {
+  --tip-status-ground: var(--brand-primary);
+
   background:
-    linear-gradient(rgb(255 255 255 / 10%), transparent 30%),
+    linear-gradient(rgb(255 255 255 / 10%), transparent 30%) no-repeat,
     var(--brand-primary);
+
+  .site-header,
+  .site-footer {
+    background: transparent;
+  }
+
+  /* The header's own logo and menu key; the open menu draws its own, which keep their colours. */
+  .nav-shell > .brand .brand__mark path {
+    fill: var(--surface-base);
+  }
+
+  .nav-shell > .menu-toggle {
+    /* 70% white is 3.03:1 on the purple: a visible key edge. */
+    border-color: rgb(255 255 255 / 70%);
+    background: transparent;
+    color: var(--surface-base);
+    box-shadow: none;
+  }
+
+  /* On the purple a purple ring would vanish: white, wherever the ring falls on the purple. */
+  .nav-shell > :is(.brand, .menu-toggle):focus-visible,
+  .site-footer :focus-visible,
+  .tip-thanks__own:focus-visible {
+    outline-color: var(--surface-base);
+  }
+
+  .tip-status-noscript {
+    color: var(--surface-base);
+  }
+
+  /* Loading: the placeholder bars as light on the purple, not grey wells. */
+  .tip-status-page .tm-skeleton > span:not(.sr-only) {
+    background: rgb(255 255 255 / 16%);
+    box-shadow: none;
+  }
+
+  /* Wide screens: the menu's words in the header itself. On a phone they live in the open menu,
+     which is its own canvas page and is left alone. */
+  @media (min-width: 801px) {
+    .site-nav > a:not(.tm-button),
+    .who__button {
+      color: var(--surface-base);
+    }
+
+    /* Sign in (and Business, signed in): a white-outlined ghost key. */
+    .site-nav > .tm-button--secondary {
+      border-color: rgb(255 255 255 / 70%);
+      background: transparent;
+      color: var(--surface-base);
+      box-shadow: none;
+    }
+
+    /* Get tipped (and Go to my dashboard): a white key with purple words. */
+    .site-nav > .tm-button--primary {
+      border-color: var(--surface-base);
+      background: var(--surface-base);
+      color: var(--brand-primary);
+    }
+
+    .site-nav > a:focus-visible,
+    .who__button:focus-visible {
+      outline-color: var(--surface-base);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      .site-nav > .tm-button--secondary:hover {
+        border-color: var(--surface-base);
+      }
+
+      /* 4.90:1, the purple on the soft lilac. */
+      .site-nav > .tm-button--primary:hover {
+        background: var(--brand-soft);
+      }
+    }
+  }
+
+  /* The footer: a glass card on the purple, every word white (a lower white fails AA on the fill). */
+  .footer-card {
+    border-color: rgb(255 255 255 / 22%);
+    background: rgb(255 255 255 / 10%);
+    box-shadow: none;
+  }
+
+  .footer-brand .brand__mark path {
+    fill: var(--surface-base);
+  }
+
+  .footer-brand p,
+  .footer-heading,
+  .footer-nav a,
+  .footer-nav a:hover,
+  .footer-bottom {
+    color: var(--surface-base);
+  }
+
+  /* Forced colours: the white logo would vanish on a light system canvas; the system's ink. */
+  @media (forced-colors: active) {
+    .nav-shell > .brand .brand__mark path,
+    .footer-brand .brand__mark path {
+      fill: CanvasText;
+    }
+  }
+
+  /* Reduced transparency or more contrast asked for: a solid card, the deep brand purple. */
+  @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .footer-card {
+      border-color: rgb(255 255 255 / 70%);
+      background: var(--brand-ink);
+    }
+  }
 }
 
 .tip-thanks.tm-surface {
