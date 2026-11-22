@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { CollectStatusView, PayoutBank } from '@tipme/contracts';
+import { COLLECT_NAME_RECHECK_NOTICE } from '@tipme/contracts/copy';
 import { Button, Card } from '@tipme/ui';
 import { CollectBankForm } from '@/app/dashboard/withdraw/collect-bank-form';
 import { apiFetch } from '@/lib/session-client';
@@ -37,7 +38,11 @@ export function CollectBankCard({
   }, []);
 
   const { bank } = collect;
-  const settled = collect.verified && bank?.state === 'verified' ? bank : null;
+  // Task 15 fix round 2: after support changed their name, the bank is added again (readdBank).
+  const settled =
+    collect.verified && !collect.readdBank && bank?.state === 'verified'
+      ? bank
+      : null;
   return (
     <Card id="get-paid" className="settings-section">
       <h3>Get paid</h3>
@@ -70,9 +75,14 @@ export function CollectBankCard({
           </Button>
         </>
       )}
+      {!settled && collect.readdBank && (
+        <p className="collect-bank__recheck" data-testid="name-recheck-line">
+          {COLLECT_NAME_RECHECK_NOTICE.formLine}
+        </p>
+      )}
       {!settled && (
         <CollectBankForm
-          bank={bank}
+          bank={collect.readdBank ? null : bank}
           read={collect}
           banks={banks}
           onCheckAgain={reload}

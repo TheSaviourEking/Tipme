@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   collectTransferProviders,
   handleCollectTransfers,
+  handleDisputeEvidence,
   handleDisputeSteps,
 } from '../dist/handlers/collect-transfers.js';
 
@@ -216,5 +217,46 @@ test('the dispute steps run on the sweep, and a failure is logged by name and ne
   );
   assert.deepEqual(logged, [
     { event: 'collect_disputes.run_failed', error: 'OperationError' },
+  ]);
+});
+
+// Task 15: evidence staff approved is submitted by each provider that can, bound to its adapter; a
+// failure is counted and logged by name only, never thrown.
+test('dispute evidence is sent per provider that can submit it, and a failure is only counted', async () => {
+  const seen = [];
+  const partner = {
+    name: 'bachs',
+    async submitDisputeEvidence(input) {
+      assert.equal(this, partner);
+      seen.push(input.idempotencyKey);
+      return { state: 'submitted' };
+    },
+  };
+  const logs = [];
+  const outcome = await handleDisputeEvidence({
+    db,
+    now: NOW,
+    providers: [
+      { name: 'mock', provider: { name: 'mock' } },
+      { name: 'bachs', provider: partner },
+      { name: 'down', provider: { async submitDisputeEvidence() {} } },
+    ],
+    log: (entry) => logs.push(entry),
+    send: async (database, input) => {
+      assert.equal(database, db);
+      assert.equal(input.now, NOW);
+      if (input.providerName === 'down') throw new TypeError('secret detail');
+      await input.provider.submitDisputeEvidence({ idempotencyKey: 'k-1' });
+      return { submitted: 1, refused: 0, failed: 0 };
+    },
+  });
+  assert.deepEqual(outcome, { submitted: 1, refused: 0, failed: 1 });
+  assert.deepEqual(seen, ['k-1']);
+  assert.deepEqual(logs, [
+    {
+      event: 'collect_disputes.evidence_failed',
+      provider: 'down',
+      error: 'TypeError',
+    },
   ]);
 });

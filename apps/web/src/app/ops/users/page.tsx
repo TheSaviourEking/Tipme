@@ -127,6 +127,15 @@ function StatusMark({ status }: { status: PeoplePageStatus }) {
   );
 }
 
+/** You collect (Task 15, spec §9): who collects this page's tips, read-only. */
+const COLLECTION_WORDS = {
+  collect: 'You collect',
+  direct: 'Account collects',
+} as const;
+function collectionWords(person: OpsPerson): string {
+  return person.collectionMode ? COLLECTION_WORDS[person.collectionMode] : '—';
+}
+
 function BusinessMark() {
   return <Badge className="ops-people__business">Business</Badge>;
 }
@@ -224,7 +233,7 @@ function PeopleTable({
   sort: PeopleSort;
   reveal: Reveal;
 }) {
-  const columns = money ? 8 : 7;
+  const columns = money ? 9 : 8;
   return (
     <div className="ops-table-wrap">
       <table className="ops-table ops-people__table">
@@ -240,6 +249,7 @@ function PeopleTable({
             <th scope="col">Plan</th>
             <th scope="col">Page</th>
             <th scope="col">Payouts</th>
+            <th scope="col">Collection</th>
             <th
               scope="col"
               aria-sort={
@@ -326,6 +336,9 @@ function PersonRows({
         >
           {person.payoutsSetUp ? 'Set up' : 'Not set up'}
         </td>
+        <td data-testid="collection-mode" className="ops-people__collection">
+          {collectionWords(person)}
+        </td>
         <td>{joinedWords(person.joinedAt)}</td>
         <td>{activeWords(person.lastActiveAt, reveal.now)}</td>
         {money && (
@@ -391,6 +404,9 @@ function PeopleStack({
               <Badge>
                 {person.payoutsSetUp ? 'Payouts set up' : 'No payouts yet'}
               </Badge>
+              {person.collectionMode && (
+                <Badge>Collection: {collectionWords(person)}</Badge>
+              )}
             </span>
             <small>
               Joined {joinedWords(person.joinedAt)} · active{' '}

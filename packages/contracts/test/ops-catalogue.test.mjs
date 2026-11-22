@@ -59,8 +59,20 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-eight', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 28);
+test('the serious actions are the agreed thirty-four', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 34);
+  // You collect staff screens (plan Task 15): every money action there needs collect.manage.
+  for (const name of [
+    'collect_transfer.retry',
+    'collect_transfer.record_paid',
+    'collect_dispute.release_hold',
+    'collect_dispute.evidence',
+    'collect_same_bank.clear',
+    'tip_refund.record_paid',
+  ])
+    assert.equal(SERIOUS_ACTION_PERMISSIONS[name], 'collect.manage', name);
+  assert.equal(OPS_CATALOGUE['collect.manage'].sensitive, true);
+  assert.equal(OPS_CATALOGUE['collect.view'].sensitive, false);
   // Task 10 fix round 2 (RI1): money a failed collect refund took back goes back, with a second person.
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['tip_refund.return'],
@@ -156,8 +168,9 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  // 24 before; switches.manage (#216) and announcements.send (#213).
-  assert.equal(OPS_PERMISSIONS.length, 26);
+  // 24 before; switches.manage (#216) and announcements.send (#213); collect.view and
+  // collect.manage (You collect, Task 15).
+  assert.equal(OPS_PERMISSIONS.length, 28);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],

@@ -68,12 +68,30 @@ const SECRET_KEY = /(code|token|secret)$/i;
  * What real actions need from the running app. The API supplies it when asking and approving. The
  * worker only reads who may decide, so it never needs it. `sealing` queues mail in the transaction.
  */
+/** The read-back a staff "record as paid" needs (Task 4's adapter and the mock). */
+export interface CollectTransferReader {
+  listAccountTransfers(accountRef: string): Promise<
+    {
+      transferRef: string;
+      status: 'paid' | 'pending';
+      amountMinor: bigint;
+      currency: string;
+      group: string | null;
+    }[]
+  >;
+}
+
 export interface SeriousActionServices {
   sealing: MailSealing;
   authCodeSecret: string;
   /** Used only by `prepare`, outside the transaction. */
   payoutReader?: (name: string) => StaffPayoutReader;
   payoutLog?: PayoutStartLog;
+  /**
+   * You collect (Task 15): the partner's list of an account's transfers, to read a transfer back by
+   * its group before staff record it paid. Used only by `prepare`, outside the transaction.
+   */
+  collectReader?: (name: string) => CollectTransferReader;
   /**
    * Who sends announcements on this copy (announcementMailProvider): null when none is set up, so
    * nothing may be sent. Left out by callers that aren't the app, which then aren't checking.

@@ -61,6 +61,15 @@ export const seriousServicesProvider: Provider<SeriousActionServices> = {
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
       },
       payoutLog: (entry) => logger.warn({ ...entry }),
+      // You collect (Task 15): a transfer's read-back by its group, before staff record it paid.
+      collectReader: (name) => {
+        const provider =
+          name === 'mock' ? mock : name === 'bachs' ? bachs : null;
+        const list = provider?.listAccountTransfers;
+        if (!provider || !list)
+          throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+        return { listAccountTransfers: (ref) => list.call(provider, ref) };
+      },
       mail: {
         production:
           config.NODE_ENV === 'production' &&

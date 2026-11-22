@@ -30,6 +30,8 @@ export const OPS_PERMISSIONS = [
   'pro.price',
   'switches.manage',
   'announcements.send',
+  'collect.view',
+  'collect.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -67,6 +69,21 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     description:
       'Write announcements by email, and send one to users with a second person',
     group: 'content',
+    sensitive: true,
+  },
+  // You collect (plan Task 15, spec §9): the staff screens. Viewing shows handles, amounts, states
+  // and the last four digits of a bank account only, never a full account number or anything about
+  // a supporter. Acting moves or releases money, so each act is a serious action.
+  'collect.view': {
+    description:
+      'See You collect: money TipMe holds for recipients, its transfers, disputes and recipients past the holding cap',
+    group: 'money',
+    sensitive: false,
+  },
+  'collect.manage': {
+    description:
+      'Act on You collect money with a second person: retry, hold or record a transfer, release a hold, record a refund, submit dispute evidence',
+    group: 'money',
     sensitive: true,
   },
   'audit.view': {
@@ -433,6 +450,13 @@ export const SERIOUS_ACTIONS = [
   'tip_refund.absorb_gap',
   // Task 10 fix round 2 (RI1): send back what a failed collect refund took from the recipient.
   'tip_refund.return',
+  // You collect (plan Task 15, spec §9): the staff screens' money actions.
+  'collect_transfer.retry',
+  'collect_transfer.record_paid',
+  'collect_dispute.release_hold',
+  'collect_dispute.evidence',
+  'collect_same_bank.clear',
+  'tip_refund.record_paid',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -468,6 +492,14 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
     'Refund a tip when TipMe has to absorb what can’t be taken back',
   'tip_refund.return':
     'Return money a failed refund took back to the recipient',
+  'collect_transfer.retry': 'Retry a You collect transfer in review',
+  'collect_transfer.record_paid':
+    'Record a You collect transfer in review as paid, as the partner shows it',
+  'collect_dispute.release_hold': 'Release a closed dispute’s hold early',
+  'collect_dispute.evidence': 'Submit evidence for a dispute',
+  'collect_same_bank.clear': 'Clear a shared bank account hold',
+  'tip_refund.record_paid':
+    'Record a refund the payment partner paid that TipMe didn’t book',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -501,4 +533,10 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'collect_name.change': 'recoveries.manage',
     'tip_refund.absorb_gap': 'payments.repair',
     'tip_refund.return': 'payments.repair',
+    'collect_transfer.retry': 'collect.manage',
+    'collect_transfer.record_paid': 'collect.manage',
+    'collect_dispute.release_hold': 'collect.manage',
+    'collect_dispute.evidence': 'collect.manage',
+    'collect_same_bank.clear': 'collect.manage',
+    'tip_refund.record_paid': 'collect.manage',
   };

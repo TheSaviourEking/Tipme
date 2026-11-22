@@ -1296,3 +1296,120 @@ test('with the switch on, an undecided recipient whose first tip would go to Tip
   await expect(main.getByText(COPY.noBank)).toHaveCount(0);
   expect(await collectionModeOf(handle)).toBeNull();
 });
+
+// Task 15 fix round 2: support changed a verified recipient's name. Their tips wait, and Withdraw
+// and Get paid ask for their bank details again (the name lock and the partner's check still
+// apply); a passing check under the new name releases what waited, through the usual sweep.
+test('after a name change the recipient adds their bank again, and their held tip then moves', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const { email, handle, profileId } = await collectRecipient(page, testInfo);
+  const db = await database();
+  try {
+    // Long-standing, so no new-recipient delay (§8): only the name check holds the tip.
+    await db.pool.query(
+      `UPDATE profiles SET created_at = now() - interval '60 days' WHERE id = $1`,
+      [profileId],
+    );
+    await page.goto('/dashboard/withdraw');
+    const form = bankForm(page);
+    const own = `6${String(Date.now()).slice(-8)}${testInfo.workerIndex % 10}`;
+    await enterDetails(page, form, own);
+    await confirmAndEnterCode(page, form, email);
+    const firstCode = await form.getByLabel('6-digit code').inputValue();
+    await form.getByRole('button', { name: 'Add bank details' }).click();
+    await expect(page.getByRole('main').getByText(COPY.verified)).toBeVisible();
+
+    // Support changes the verified name (the serious action's work, run here directly).
+    const ops = (await import('../../packages/database/dist/index.js')) as {
+      changeCollectLegalName: (tx: unknown, input: unknown) => Promise<unknown>;
+    };
+    const { rows } = await db.pool.query<{ id: string }>(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    await (
+      db.db as {
+        transaction: (
+          work: (tx: unknown) => Promise<unknown>,
+        ) => Promise<unknown>;
+      }
+    ).transaction((tx) =>
+      ops.changeCollectLegalName(tx, {
+        profileId,
+        legalName: { first: 'Ada', last: 'Bello' },
+        staffUserId: rows[0]!.id,
+        reason: 'Married name, checked with her on a call',
+        now: new Date(),
+      }),
+    );
+    await tipAsVisitor(browser, handle);
+    const share = async () =>
+      (
+        await db.pool.query<{ status: string }>(
+          `SELECT t.status FROM collect_transfers t JOIN tips p ON p.id = t.tip_id
+            WHERE p.profile_id = $1 AND t.kind = 'share'`,
+          [profileId],
+        )
+      ).rows[0]?.status ?? 'none';
+    await expect.poll(share, { timeout: 20_000 }).not.toBe('none');
+    // Waiting: nothing moves to them before the new name is checked.
+    await sweepTransfers(db);
+    expect(await share()).toBe('waiting');
+
+    // Get paid in Settings asks for the bank again, with the plain line above the form.
+    await page.goto('/dashboard/settings#get-paid');
+    const card = page.locator('#get-paid');
+    await expect(card.getByTestId('name-recheck-line')).toHaveText(
+      'Your name was updated. Add your bank details again so we can check it.',
+    );
+    await expect(
+      card.getByRole('region', { name: COPY.addBank }).getByLabel('First name'),
+    ).toBeVisible();
+
+    // So does Withdraw.
+    await page.goto('/dashboard/withdraw');
+    const main = page.getByRole('main');
+    await expect(main.getByTestId('name-recheck-line')).toHaveText(
+      'Your name was updated. Add your bank details again so we can check it.',
+    );
+    await expect(main.getByText(COPY.checking)).toHaveCount(0);
+    await expect(form.getByLabel('First name')).toBeVisible();
+    await expectAccessible(page);
+    expect(await fitsViewport(page)).toBe(true);
+    for (const [label, viewport] of VIEWPORTS) {
+      await page.setViewportSize(viewport);
+      await page.screenshot({
+        path: testInfo.outputPath(`${label}-40-name-recheck.png`),
+        fullPage: true,
+      });
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    // Under the new name: the partner checks it, and the held tip moves on.
+    await form.getByLabel('First name').fill('Ada');
+    await form.getByLabel('Last name').fill('Bello');
+    await pickBank(page, form);
+    await form.getByLabel('Account number').fill(own);
+    await form.getByRole('button', { name: 'Continue' }).click();
+    await form.getByRole('button', { name: 'Confirm' }).click();
+    await form
+      .getByLabel('6-digit code')
+      .fill(await bankCode(page, email, [firstCode]));
+    await form.getByRole('button', { name: 'Add bank details' }).click();
+    await expect(main.getByText(COPY.verified)).toBeVisible();
+    await expect(main.getByTestId('name-recheck-line')).toHaveCount(0);
+    await expect
+      .poll(
+        async () => {
+          if ((await share()) !== 'paid') await sweepTransfers(db);
+          return share();
+        },
+        { timeout: 30_000 },
+      )
+      .toBe('paid');
+  } finally {
+    await db.close();
+  }
+});

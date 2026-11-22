@@ -3,8 +3,10 @@ import { useState } from 'react';
 import type { OpsTipRefund } from '@tipme/contracts';
 import { Button, Slip } from '@tipme/ui';
 import { nairaCode as naira } from '@/lib/money';
+import { can, useOpsAccess } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 import { ActionOutcome, type ActionOutcomeState } from './action-outcome';
+import { CollectAct } from './collect-act';
 import { ReasonAction } from './reason-action';
 import { Money } from '@/components/money';
 
@@ -19,6 +21,7 @@ export function TipRefund({ tipId }: { tipId: string }) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
   const path = `/v1/ops/tips/${tipId}/refund`;
+  const manage = can(useOpsAccess(), 'collect.manage');
 
   const open = async () => {
     setBusy(true);
@@ -125,6 +128,17 @@ export function TipRefund({ tipId }: { tipId: string }) {
           of this tip, but TipMe didn’t expect it and hasn’t recorded it. Settle
           the money issue first.
         </Slip>
+      )}
+      {/* You collect (Task 15, RI3): book it, from what TipMe holds for the tip; TipMe absorbs the rest. */}
+      {facts.unbookedMinor && facts.unbookedMinor !== '0' && manage && (
+        <CollectAct
+          path={`/v1/ops/collect/refunds/${tipId}/record-paid`}
+          open="Record this refund…"
+          field="What you checked in the partner dashboard"
+          submit="Ask to record it"
+          done="Recorded: the refund is booked from what TipMe held for this tip, and TipMe absorbed the rest."
+          meanwhile="Nothing is booked until then."
+        />
       )}
       {facts.heldMinor && facts.heldMinor !== '0' && (
         <Slip dense tone="unsure" title="Money held for this tip">

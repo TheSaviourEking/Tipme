@@ -73,6 +73,11 @@ export const apiErrorCodes = [
   'NAME_NOT_LOCKED',
   // Task 13 fix round 2: our payment partner answered for a bank checked under another name.
   'BANK_RECHECK_LATER',
+  // You collect staff screens (Task 15): the money moved on since the screen was read; evidence
+  // after the dispute's deadline; the partner's read-back doesn't show the transfer paid.
+  'COLLECT_ACTION_REFUSED',
+  'COLLECT_EVIDENCE_LATE',
+  'COLLECT_READ_BACK_UNCONFIRMED',
   'NO_CONFIRMED_TEST',
   'EMAIL_TAKEN',
   'EMAIL_INVALID',

@@ -982,6 +982,11 @@ export interface OpsPerson {
   plan: 'free' | 'pro';
   pageStatus: OpsPeoplePageStatus;
   payoutsSetUp: boolean;
+  /**
+   * You collect (Task 15, spec §9), read-only: `collect` while TipMe collects the page's tips ("You
+   * collect"), `direct` while their own payment account does ("Account collects"); null with no page.
+   */
+  collectionMode: 'collect' | 'direct' | null;
   /** Runs a business (an open manager on one). */
   business: boolean;
   joinedAt: string;
