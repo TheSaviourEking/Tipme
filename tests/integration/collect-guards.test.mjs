@@ -8,27 +8,12 @@ import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 import { lagosDayStart } from '../../packages/domain/dist/index.js';
 import { createRequire } from 'node:module';
 import { setSwitch } from './helpers.mjs';
+import { casesOf, directHelpers } from './collect-direct-cases.mjs';
 
 // The database package's own pg, so every statement it sends can be seen (M4).
 const { Client } = createRequire(
   new URL('../../packages/database/package.json', import.meta.url),
 )('pg');
-
-/** The SQL text of every statement sent while `work` runs. */
-async function statements(work) {
-  const seen = [];
-  const original = Client.prototype.query;
-  Client.prototype.query = function (config, ...rest) {
-    seen.push(typeof config === 'string' ? config : (config?.text ?? ''));
-    return original.call(this, config, ...rest);
-  };
-  try {
-    await work();
-  } finally {
-    Client.prototype.query = original;
-  }
-  return seen;
-}
 
 /*
  * You collect (plan Task 12, spec §2.1, §8, §9, §10): the guards around money TipMe holds for a
@@ -180,92 +165,16 @@ async function settleAt(intent, tipMinor, at) {
   assert.equal(result.applied, 1);
 }
 
-/** A paid direct tip on the recipient's own partner account (today's flow). */
-async function directTip(profile, tipMinor) {
-  const { db } = database;
-  const quote = await ops.createQuote(db, {
-    handle: profile.handle,
-    tipMinor,
-    currency: 'NGN',
-  });
-  assert.equal(quote.collectionMode, 'direct');
-  const intent = await ops.createPaymentIntent(db, {
-    quoteId: quote.quoteId,
-    idempotencyKey: randomUUID(),
-  });
-  const reference = `acct_${profile.handle}:chk_${randomUUID().slice(0, 8)}`;
-  await ops.markAttemptInitiated(db, {
-    attemptId: intent.attemptId,
-    provider: 'bachs',
-    providerReference: reference,
-  });
-  await ops.recordProviderEvent(db, {
-    provider: 'bachs',
-    providerEventId: `evt_${randomUUID()}`,
-    eventType: 'payment.succeeded',
-    attemptId: intent.attemptId,
-    providerReference: reference,
-    amountMinor: tipMinor,
-    currency: 'NGN',
-    providerFeeMinor: 3000n,
-    signatureVerified: true,
-    payload: {},
-  });
-}
-
-/** The recipient's own account with manual payouts and a usable bank: a withdrawal can go. */
-async function payoutRoute(profile) {
-  await q(
-    `INSERT INTO payment_accounts
-       (id, profile_id, provider, environment, provider_account_reference, status,
-        charges_enabled, payouts_enabled, fee_collector, manual_payouts_at)
-     VALUES ($1, $2, 'bachs', 'sandbox', $3, 'ACTIVE', true, true, 'platform', now())`,
-    [randomUUID(), profile.id, `acct_${profile.handle}`],
-  );
-  await q(
-    `INSERT INTO payout_destinations
-       (id, profile_id, provider, destination_reference, bank_code, bank_name, account_last4, status)
-     VALUES ($1, $2, 'bachs', $3, '058', 'Guaranty Trust Bank', '4321', 'usable')`,
-    [randomUUID(), profile.id, `ba_${profile.handle}`],
-  );
-}
-
-/** The partner's side of a withdrawal: plenty in the account, ₦50 fee. Never moves money here. */
-const partner = () => ({
-  name: 'bachs-sandbox',
-  capabilities: { connectedAccounts: true },
-  async payoutCapability() {
-    return { status: 'active', requirementsDue: [] };
-  },
-  async payoutBalance() {
-    return { availableMinor: 1_000_000_000n };
-  },
-  async quotePayoutFee() {
-    return { feeMinor: 5000n, exact: false };
-  },
-  async initiatePayout() {
-    throw new Error('a request never starts a payout');
-  },
-  async coverPayoutFee() {
-    throw new Error('a request never moves the fee');
-  },
-});
-
+// Today's direct tips and withdrawals: shared with the direct-path cases (collect-direct-cases.mjs).
+const {
+  directTip,
+  payoutRoute,
+  partner,
+  withdraw: withdrawAt,
+} = directHelpers(() => database);
 /** A withdrawal asked at `at`, recorded at that moment (a request stamps the real clock). */
-async function withdraw(profile, amountMinor, at = NOW) {
-  const result = await ops.requestWithdrawal(database.db, {
-    profileId: profile.id,
-    amountMinor,
-    idempotencyKey: randomUUID(),
-    provider: partner(),
-    now: at,
-  });
-  await q(`UPDATE payouts SET created_at = $2 WHERE id = $1`, [
-    result.payoutId,
-    at,
-  ]);
-  return result;
-}
+const withdraw = (profile, amountMinor, at = NOW) =>
+  withdrawAt(profile, amountMinor, at);
 
 const refusal = async (work) => {
   try {
@@ -552,28 +461,16 @@ test('no checkout opens for a collect intent whose quote has expired, so a late 
   );
 });
 
-test('a direct tip’s checkout still opens after its quote expires, as today', async () => {
-  const quote = await quoteAt(ADA, NOW);
-  assert.equal(quote.collectionMode, 'direct');
-  const intent = await intentFor(quote, NOW);
-  const claim = await ops.claimAttemptStart(database.db, {
-    attemptId: intent.attemptId,
-    provider: 'bachs',
-    now: new Date(NOW.getTime() + 20 * MIN),
-  });
-  assert.equal(claim.outcome, 'claimed');
-  const other = await intentFor(await quoteAt(ADA, NOW), NOW);
-  assert.equal(
-    await ops.markAttemptInitiated(database.db, {
-      attemptId: other.attemptId,
-      provider: 'mock',
-      providerReference: `mock_${randomUUID().slice(0, 8)}`,
-      opensCheckout: true,
-      now: new Date(NOW.getTime() + 20 * MIN),
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(12))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
     }),
-    'initiated',
   );
-});
 
 test('the address key is kept only on unfinished collect intents', async () => {
   // A direct intent never stores it.
@@ -1125,72 +1022,5 @@ test('money on its way is shown and never withdrawable', async () => {
   assert.deepEqual(
     [adaSummary.keptMinor, adaSummary.onItsWayMinor],
     [String(NET), '0'],
-  );
-});
-
-test('a direct recipient’s withdrawals and page are unchanged', async () => {
-  for (let i = 0; i < 4; i += 1) await directTip(TOBI, 10_000_000n);
-  await payoutRoute(TOBI);
-  const status = await ops.collectStatus(database.db, TOBI.id, NOW);
-  assert.deepEqual(
-    {
-      mode: status.mode,
-      paused: status.paused,
-      heldMinor: status.heldMinor,
-      onItsWayMinor: status.onItsWayMinor,
-      firstWithdrawalCapMinor: status.firstWithdrawalCapMinor,
-      dailyLimitMinor: status.dailyLimitMinor,
-    },
-    {
-      mode: 'direct',
-      paused: false,
-      heldMinor: 0n,
-      onItsWayMinor: 0n,
-      firstWithdrawalCapMinor: null,
-      dailyLimitMinor: null,
-    },
-  );
-  const quote = await ops.withdrawalQuote(database.db, {
-    profileId: TOBI.id,
-    provider: partner(),
-    now: NOW,
-  });
-  assert.equal(quote.withdrawableMinor, 38_000_000n);
-  // A first withdrawal above ₦50,000 and ₦300,000 in a day: as today, and (M4) without a single
-  // read of You collect's settings or transfers on the way.
-  const seen = await statements(async () => {
-    await ops.withdrawalQuote(database.db, {
-      profileId: TOBI.id,
-      provider: partner(),
-      now: NOW,
-    });
-    assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
-  });
-  assert.ok(seen.length > 0);
-  assert.deepEqual(
-    seen.filter((text) => /collect_settings|collect_transfers/.test(text)),
-    [],
-  );
-  assert.equal((await withdraw(TOBI, 15_000_000n)).status, 'REQUESTED');
-  const balance = await ops.balanceOf(database.db, TOBI.id);
-  assert.deepEqual(balance, {
-    availableMinor: 8_000_000n,
-    confirmingMinor: 0n,
-    keptMinor: 0n,
-    onItsWayMinor: 0n,
-    refundHeldMinor: 0n,
-  });
-  // The page takes tips however long ago and however much: nothing is held.
-  assert.equal(
-    (await quoteAt(TOBI, new Date(NOW.getTime() + 60 * DAY))).collectionMode,
-    'direct',
-  );
-  // The reminder sweep never writes to them.
-  assert.equal(
-    await ops.sendCollectReminders(database.db, {
-      now: new Date(NOW.getTime() + 7 * DAY),
-      sealing,
-    }),
-    0,
   );
 });

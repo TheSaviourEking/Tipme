@@ -12,6 +12,7 @@ import {
 import { newTotpSecret } from '../../packages/domain/dist/index.js';
 import { UncertainProviderOutcomeError } from '../../packages/payments/dist/index.js';
 import { OPS_TOTP_KEY, Redis, setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 13, spec §2.1 steps 4–5, §8, §10; rulings R7, R8, P12, P13, P22–P26, P32):
@@ -1627,3 +1628,14 @@ test('after a name change the status asks for the bank again; adding it under th
   assert.equal(after.bank.state, 'verified');
   assert.equal(await shareStatus(), 'ready');
 });
+
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(13))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
+  );

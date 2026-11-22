@@ -9,6 +9,7 @@ import {
   UncertainProviderOutcomeError,
 } from '../../packages/payments/dist/index.js';
 import { setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 8, spec §5, R9–R11, P8, P13, P20): each held share moves from TipMe's own
@@ -1356,3 +1357,14 @@ test('transfers with no group and other amounts still leave a share not found', 
   );
   assert.equal((await rowOf(tip.rowId)).status, 'paid');
 });
+
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(8))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
+  );

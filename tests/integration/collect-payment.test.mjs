@@ -14,14 +14,15 @@ import {
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
 import { setSwitch, startStack } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 7, R2, R3, P6): a collect tip is paid on TipMe's own account, so its events
  * are platform-scoped, like a Pro purchase's. They are matched to the tip first (a tip refund's own
  * reference before anything), and only an event that matches no tip goes to Pro billing. A verified
  * payment books the recipient's net as held money (`held_for_recipients`) and schedules exactly one
- * transfer of it, in the payment's own transaction. The switch is `notBuilt` in production; these
- * tests turn it on by writing its row (R12). A direct tip is booked exactly as before.
+ * transfer of it, in the payment's own transaction. The switch is off in production; these tests
+ * turn it on by writing its row (R12). A direct tip is booked exactly as before.
  */
 
 const [, TOBI] = ops.DEMO_PROFILES;
@@ -514,116 +515,16 @@ test('a tip refund on TipMe’s own account still reaches the tip refund, never 
   assert.equal((await transactionsOf(tip.tipId)).length, 1);
 });
 
-/** Today's ledger lines of a direct ₦2,000 tip to Ada, captured from dev before this task. */
-const DIRECT_GOLDEN = [
-  line('platform_fee_revenue', 'tipme', 'credit', 7000n),
-  line('provider_clearing', 'tipme', 'debit', 198500n),
-  line('provider_fee_expense', 'tipme', 'debit', 1500n),
-  line('provider_fee_recovered', 'tipme', 'credit', 3000n),
-  line('recipient_payable', 'person', 'credit', 190000n),
-];
-
-for (const switchOn of [false, true])
-  test(`a direct tip's payment is booked exactly as before (switch ${switchOn ? 'on' : 'off'})`, async () => {
-    await setSwitch(database.pool, 'you_collect', switchOn);
-    const { db } = database;
-    await ops.beginPaymentAccountCreation(db, {
-      profileId: ADA,
-      provider: 'bachs',
-      environment: 'sandbox',
-    });
-    await ops.updatePaymentAccountStatus(db, {
-      profileId: ADA,
-      provider: 'bachs',
-      environment: 'sandbox',
-      providerAccountReference: 'acct_ada123',
-      status: 'ACTIVE',
-      chargesEnabled: true,
-      payoutsEnabled: false,
-      feeCollector: 'platform',
-      requirementsDue: [],
-    });
-    const quote = await ops.createQuote(db, {
-      handle: 'ada',
-      tipMinor: 200000n,
-      currency: 'NGN',
-    });
-    assert.equal(quote.collectionMode, 'direct');
-    const { attemptId, tipId } = await ops.createPaymentIntent(db, {
-      quoteId: quote.quoteId,
-      idempotencyKey: randomUUID(),
-    });
-    const reference = 'acct_ada123:chk_paid';
-    await ops.markAttemptInitiated(db, {
-      attemptId,
-      provider: 'bachs',
-      providerReference: reference,
-    });
-    const expectations = [];
-    const outcome = await service().applyBachs(
-      {
-        kind: 'payment',
-        eventId: `evt_${randomUUID()}`,
-        eventType: 'collection.succeeded',
-        providerReference: reference,
-        operationReference: attemptId,
-        accountReference: 'acct_ada123',
-        status: 'pending',
-        amountMinor: 200000n,
-        currency: 'NGN',
-        feeMinor: 1500n,
-        feePaidBy: 'unknown',
-      },
-      {
-        environment: 'sandbox',
-        async verifyTransaction(_reference, expectation) {
-          expectations.push(expectation);
-          return {
-            status: 'succeeded',
-            amountMinor: 200000n,
-            currency: 'NGN',
-            feeMinor: 1500n,
-          };
-        },
-      },
-    );
-    assert.equal(outcome, 'confirmed');
-    // Still read back against TipMe's whole quoted share, as before.
-    assert.deepEqual(expectations, [{ platformFeeMinor: 10000n }]);
-    assert.deepEqual(await linesOf(tipId), DIRECT_GOLDEN);
-    assert.equal((await transfersOf(tipId)).length, 0);
-    assert.equal(
-      (await q(`SELECT 1 FROM share_transfers WHERE tip_id = $1`, [tipId]))
-        .length,
-      0,
-    );
-  });
-
-test('a misreported amount on a collect tip is never booked', async () => {
-  const tip = await collectTip();
-  const outcome = await service().applyBachs(
-    collection(tip),
-    reads(tip, { amountMinor: GROSS - 1n }),
-  );
-  assert.notEqual(outcome, 'confirmed');
-  const [attempt] = await q(
-    `SELECT status FROM payment_attempts WHERE id = $1`,
-    [tip.attemptId],
-  );
-  assert.equal(attempt.status, 'UNKNOWN');
-  assert.notEqual(await tipStatusOf(tip.tipId), 'SUCCEEDED');
-  assert.equal((await transactionsOf(tip.tipId)).length, 0);
-  assert.equal((await transfersOf(tip.tipId)).length, 0);
-  assert.equal(
-    (
-      await q(
-        `SELECT 1 FROM outbox_events WHERE event_type = 'payment.mismatch' AND aggregate_id = $1`,
-        [tip.attemptId],
-      )
-    ).length,
-    1,
-  );
-});
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(7))
+  for (const switchOn of [false, true])
+    test(`${directCase.name} (switch ${switchOn ? 'on' : 'off'})`, () =>
+      directCase.run({
+        database,
+        switchOn,
+        setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+      }));
 
 test('a collect tip with a business share holds the share for the business and schedules only the leg into the business', async () => {
   await setSwitch(database.pool, 'business', true);

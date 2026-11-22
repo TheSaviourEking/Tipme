@@ -15,6 +15,7 @@ import {
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
 import { setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 9, spec §6.2, R4, R6, P13, P14, P20, P27): a dispute on a tip TipMe
@@ -1651,3 +1652,14 @@ test('RM9: a lost dispute’s own transfer back, once paid, is counted once befo
   assert.ok((await disputeOf(tip.disputeRef)).settled_at);
   assert.equal(await available(TOBI), NET);
 });
+
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(9))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
+  );

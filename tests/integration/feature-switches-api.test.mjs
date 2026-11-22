@@ -103,7 +103,7 @@ test('an owner reads every switch with its state, default and history', async ()
   const response = await opsCall(session, 'GET', '/v1/ops/switches');
   assert.equal(response.status, 200);
   const { switches } = (await response.json()).data;
-  // 12 from #216, business_pro, business_signup, business_owners, campaign_pages (train 2), tip_refunds (#221), business_payout_fee_absorbed (18 Nov 2026), and you_collect (19 Nov 2026, not built).
+  // 12 from #216, business_pro, business_signup, business_owners, campaign_pages (train 2), tip_refunds (#221), business_payout_fee_absorbed (18 Nov 2026), and you_collect (19 Nov 2026; built 22 Nov 2026, off).
   assert.equal(switches.length, 19);
   const studio = switches.find((s) => s.key === 'page_studio');
   assert.equal(studio.on, false);
@@ -197,7 +197,8 @@ test('a non-money switch changes at once with a reason, is audited, and gates it
 });
 
 // 16 Nov 2026: team_tips (no routes) and business_owners (read by no screen) have nothing built
-// behind them. They stay registered, marked, and can't be turned on; off always works.
+// behind them. They stay registered, marked, and can't be turned on; off always works. You collect
+// was marked too until its last task (plan Task 16) built it.
 test('a switch with nothing built behind it is marked, and turning it on is refused before any approval', async () => {
   const session = await opsSignIn(stack.api, database.db, phone());
   const listed = (
@@ -208,13 +209,13 @@ test('a switch with nothing built behind it is marked, and turning it on is refu
       .filter((s) => s.notBuilt)
       .map((s) => s.key)
       .sort(),
-    ['business_owners', 'team_tips', 'you_collect'],
+    ['business_owners', 'team_tips'],
   );
   assert.ok(listed.every((s) => typeof s.notBuilt === 'boolean'));
   const before = await q(
     `SELECT count(*)::int AS n FROM approval_requests WHERE action = 'feature_switch.set'`,
   );
-  for (const key of ['team_tips', 'business_owners', 'you_collect']) {
+  for (const key of ['team_tips', 'business_owners']) {
     const refused = await opsCall(session, 'POST', `/v1/ops/switches/${key}`, {
       on: true,
       reason: REASON,
@@ -341,6 +342,85 @@ test('an unknown switch is 404', async () => {
     reason: REASON,
   });
   assert.equal(response.status, 404);
+});
+
+// You collect (plan Task 16, spec §12.2 and §12.4): built, so staff can turn it on, but only with a
+// second person (a money switch), and it starts off everywhere: production stays off until the owner
+// turns it on.
+test('staff can turn you_collect on with a second person, and it starts off', async () => {
+  const asker = await opsSignIn(stack.api, database.db, phone());
+  const approver = await opsSignIn(stack.api, database.db, phone());
+  const listed = async () =>
+    (
+      await (await opsCall(asker, 'GET', '/v1/ops/switches')).json()
+    ).data.switches.find((s) => s.key === 'you_collect');
+  const before = await listed();
+  assert.equal(before.on, false);
+  assert.equal(before.default, false);
+  assert.equal(before.money, true);
+  assert.equal(before.notBuilt, false);
+  assert.equal(before.source, 'default', 'seeded off at the first start');
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), false);
+
+  const asked = await opsCall(asker, 'POST', '/v1/ops/switches/you_collect', {
+    on: true,
+    reason: REASON,
+  });
+  assert.equal(asked.status, 202, await asked.clone().text());
+  const { requestId } = (await asked.json()).data;
+  assert.equal(
+    await ops.featureOn(database.db, 'you_collect'),
+    false,
+    'nothing changes while it waits',
+  );
+  assert.equal((await listed()).waitingRequestId, requestId);
+  const [request] = await q(
+    `SELECT permission, summary FROM approval_requests WHERE id = $1`,
+    [requestId],
+  );
+  assert.deepEqual(request, {
+    permission: 'switches.manage',
+    summary: 'Turn You collect for new recipients on',
+  });
+  // The one who asked can't approve their own request.
+  const own = await opsCall(
+    asker,
+    'POST',
+    `/v1/ops/approvals/${requestId}/approve`,
+    { code: await asker.nextCode() },
+  );
+  assert.notEqual(own.status, 200);
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), false);
+
+  const approved = await opsCall(
+    approver,
+    'POST',
+    `/v1/ops/approvals/${requestId}/approve`,
+    { code: await approver.nextCode() },
+  );
+  assert.equal(approved.status, 200, await approved.clone().text());
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), true);
+  const [change] = await q(
+    `SELECT changed_by, approved_by FROM feature_switch_changes
+      WHERE key = 'you_collect' AND source = 'staff' AND enabled`,
+  );
+  assert.ok(change.changed_by && change.approved_by);
+  assert.notEqual(change.changed_by, change.approved_by);
+
+  // Turning it off is a money change too: it waits for a second person, then is off.
+  const off = await opsCall(asker, 'POST', '/v1/ops/switches/you_collect', {
+    on: false,
+    reason: REASON,
+  });
+  assert.equal(off.status, 202);
+  const offApproved = await opsCall(
+    approver,
+    'POST',
+    `/v1/ops/approvals/${(await off.json()).data.requestId}/approve`,
+    { code: await approver.nextCode() },
+  );
+  assert.equal(offApproved.status, 200, await offApproved.clone().text());
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), false);
 });
 
 test('a money switch waits for a second person; approved, it changes and Pro billing opens', async () => {

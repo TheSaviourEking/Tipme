@@ -326,14 +326,10 @@ test('tip_refunds is a money switch, off by default, seeded from TIP_REFUNDS (on
 
 // 16 Nov 2026: a switch with nothing built behind it stays registered (stored rows and old variables
 // stay valid) but is marked, so admin can't offer turning it on and the API refuses it.
-test('team_tips, business_owners and you_collect are marked not built; every other switch is built', async () => {
+test('team_tips and business_owners are marked not built; every other switch is built', async () => {
   const { featureSwitchBuilt } = await import('../dist/index.js');
   const notBuilt = FEATURE_SWITCHES.filter((key) => !featureSwitchBuilt(key));
-  assert.deepEqual(notBuilt.sort(), [
-    'business_owners',
-    'team_tips',
-    'you_collect',
-  ]);
+  assert.deepEqual(notBuilt.sort(), ['business_owners', 'team_tips']);
   for (const key of notBuilt) {
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].notBuilt, true, key);
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
@@ -358,15 +354,16 @@ test('business_payout_fee_absorbed is a money switch, off by default (businesses
   assert.doesNotMatch(entry.description, /bachs/i);
 });
 
-// You collect (ADR-0016, proposed; plan Task 3, ruling R12): registered now so later PRs read it, but
-// nothing is built behind it, so staff can't turn it on until Task 16 removes the mark.
-test('you_collect is a money switch, off, and cannot be turned on yet', async () => {
+// You collect (ADR-0016, proposed; plan Tasks 3 and 16): registered by Task 3 with nothing behind it;
+// Task 16 removed the mark once the flow was built. It stays a money switch, off by default, so
+// production stays off until the owner turns it on (with a second person).
+test('you_collect is a money switch, off by default, and staff can turn it on', async () => {
   const { featureSwitchBuilt } = await import('../dist/index.js');
   const entry = FEATURE_SWITCH_CATALOGUE.you_collect;
   assert.equal(entry.money, true);
   assert.equal(entry.default, false);
-  assert.equal(entry.notBuilt, true);
-  assert.equal(featureSwitchBuilt('you_collect'), false);
+  assert.equal(entry.notBuilt, undefined);
+  assert.equal(featureSwitchBuilt('you_collect'), true);
   assert.equal(entry.label, 'You collect for new recipients');
   assert.equal(
     entry.description,
