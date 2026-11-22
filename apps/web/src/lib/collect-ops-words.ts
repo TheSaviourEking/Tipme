@@ -54,9 +54,9 @@ export const COLLECT_TABS: { href: string; label: string; needs: string }[] = [
   { href: '/ops/collect/held', label: 'Held money', needs: 'collect.view' },
   { href: '/ops/collect/transfers', label: 'Transfers', needs: 'collect.view' },
   { href: '/ops/collect/disputes', label: 'Disputes', needs: 'collect.view' },
+  // Task 15 follow-up: TipMe's own money against what it holds (Task 11's reserve readings).
+  { href: '/ops/collect/reserve', label: 'Reserve', needs: 'collect.view' },
   { href: '/ops/collect/unclaimed', label: 'Unclaimed', needs: 'collect.view' },
-  // TODO(Task 11 follow-up): the Reserve tab (/ops/collect/reserve) goes here once Task 11's
-  // reserve readings are merged; until then there is no page to link to.
   { href: '/ops/collect/settings', label: 'Settings', needs: 'fees.manage' },
 ];
 
@@ -72,3 +72,12 @@ export const fileWords = (contentType: string, bytes: number) =>
       ? `${Math.max(1, Math.round(bytes / 1024))} KB`
       : `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }`;
+
+/** The reserve's level per currency (Task 11), in staff words. */
+export const RESERVE_LEVEL_WORDS: Record<string, string> = {
+  ok: 'OK',
+  warning: 'Warning',
+  critical: 'Critical',
+  broken: 'Broken: held money isn’t covered',
+  unknown: 'Couldn’t be read',
+};

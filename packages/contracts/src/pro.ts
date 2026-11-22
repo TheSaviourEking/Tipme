@@ -218,6 +218,11 @@ export interface OpsTipRefund {
    * TipMe holds for the tip's refund. Staff may return it (`POST …/refund/return`).
    */
   heldMinor?: string;
+  /**
+   * Task 15 follow-up (Task 11): what a failed refund of a collect tip pulled back from the business,
+   * held by TipMe; `tip_refund.return` sends it back to the business with the person's part.
+   */
+  businessHeldMinor?: string;
   /** A collect tip (fix round 3, RI3): what the partner refunded that TipMe didn't book. */
   unbookedMinor?: string;
 }

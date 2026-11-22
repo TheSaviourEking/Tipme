@@ -768,6 +768,8 @@ test('a payout-fee cover or fee return that would break the rule is refused and 
     provider.calls.map((c) => c.call),
     ['fee', 'payout'],
   );
+  // The fee return's run reads own money at its own time (n2): a reading taken then lets it go.
+  await check(platform([['NGN', 2n * NET + 100_000n]]).provider, told(), later);
   await ops.runShareTransfers(database.db, {
     provider: mover,
     now: later,
@@ -1027,9 +1029,85 @@ test('N2 (probe C): fee returns waiting on own money keep one issue open, alert 
   await run(new Date(start.getTime() + 6 * HOUR + 16 * MIN));
   assert.equal((await alerts()).length, 2);
   assert.equal((await openIssues('collect_own_money_wait')).length, 1);
-  // Topped up: the fee goes back and the issue closes itself.
-  await check(platform([['NGN', 900_000_000n]]).provider, told(), new Date());
-  await run(new Date(start.getTime() + 6 * HOUR + 30 * MIN));
+  // Topped up: the fee goes back and the issue closes itself. The reading is taken at the run's own
+  // time, which the gate reads by (n2).
+  const toppedUp = new Date(start.getTime() + 6 * HOUR + 30 * MIN);
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), toppedUp);
+  await run(toppedUp);
+  assert.deepEqual(sent, [50_000n]);
+  assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
+
+/* Task 15 follow-up: re-review 2's minors n1 and n2. */
+
+/** A fee return of ₦500 to Ada, owed by TipMe from its own money. */
+async function feeReturn(reference) {
+  await paidTip(TOBI);
+  const tip = await paidTip(ADA);
+  await q(
+    `INSERT INTO share_transfers (id, tip_id, kind, profile_id, currency, amount_minor, deliver_minor,
+       status, provider, partner_reversal_id)
+     VALUES ($1, $2, 'fee_return', $3, 'NGN', 50000, 50000, 'out_paid', 'bachs', $4)`,
+    [randomUUID(), tip.tipId, ADA.id, reference],
+  );
+}
+
+const feeMover = (sent, { accounts = false } = {}) => ({
+  name: 'bachs-sandbox',
+  ...(accounts ? {} : { capabilities: { connectedAccounts: false } }),
+  async payoutBalance() {
+    return { availableMinor: 0n };
+  },
+  async transferToAccount(input) {
+    sent.push(input.amountMinor);
+    return { transferRef: `tr_${sent.length}`, status: 'paid' };
+  },
+  async findPlatformCollection() {
+    return null;
+  },
+});
+
+const runFees = async (provider, now) => {
+  await q(
+    `UPDATE share_transfers SET next_attempt_at = $1::timestamptz - interval '1 minute'`,
+    [now],
+  );
+  await ops.runShareTransfers(database.db, {
+    provider,
+    now,
+    settleWaitMs: HOUR,
+  });
+  await ops.autoResolveIssues(database.db, now);
+};
+
+test('n1: a fee return that stops waiting on own money for another reason (no account) lets its issue close', async () => {
+  await feeReturn('refund.rf_n1');
+  const sent = [];
+  const start = new Date(Date.now() + 2 * HOUR);
+  // No reading: own money can't be confirmed, so it waits and the issue opens.
+  await runFees(feeMover(sent), start);
+  assert.equal((await openIssues('collect_own_money_wait')).length, 1);
+  // Topped up, but now the recipient's account can't be found: postponed before the own-money gate.
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), start);
+  await runFees(
+    feeMover(sent, { accounts: true }),
+    new Date(start.getTime() + 20 * MIN),
+  );
+  assert.deepEqual(sent, []);
+  const [row] = await q(
+    `SELECT own_money_wait_since FROM share_transfers WHERE kind = 'fee_return'`,
+  );
+  assert.equal(row.own_money_wait_since, null);
+  assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
+
+test('n2: the fee-return gate reads own money at the run’s own time, not the wall clock', async () => {
+  await feeReturn('refund.rf_n2b');
+  const sent = [];
+  // A run two hours ahead of the wall clock, with a reading taken at that same time.
+  const when = new Date(Date.now() + 2 * HOUR);
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), when);
+  await runFees(feeMover(sent), when);
   assert.deepEqual(sent, [50_000n]);
   assert.deepEqual(await openIssues('collect_own_money_wait'), []);
 });

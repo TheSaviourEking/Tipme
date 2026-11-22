@@ -179,3 +179,103 @@ test('staff see the gap and the second-person step on a withdrawn collect tip', 
     contentType: 'image/png',
   });
 });
+
+// Task 15 follow-up (Task 11): a failed refund of a collect tip pulled money back from the business
+// as well as from the recipient. Staff see both beside each other, and the return sends both back
+// (`tip_refund.return`, a second person). The API's answers are held here; tip-refund-api.test.mjs
+// and collect-refunds.test.mjs cover the API.
+test('staff see money held back from the business beside the recipient’s, and return both', async ({
+  page,
+  browser,
+  request,
+}, testInfo) => {
+  const recipientPage = await (await browser.newContext()).newPage();
+  const who = await signUpRecipient(recipientPage, testInfo);
+  await recipientPage.close();
+  const { tipId } = await payAtBusiness(request, {
+    handle: who.handle,
+    amountMinor: '1000000',
+  });
+  const refundPath = `**/v1/ops/tips/${tipId}/refund`;
+  await page.route(refundPath, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    await route.fulfill({
+      json: {
+        data: {
+          tipId,
+          refundable: false,
+          refusal: 'already',
+          words:
+            'This tip already has a refund in progress or paid, or it was already taken back (a refund or chargeback).',
+          handle: who.handle,
+          businessName: 'Mama Put Kitchen',
+          currency: 'NGN',
+          grossMinor: '1000000',
+          feeMinor: '50000',
+          refundMinor: '950000',
+          personMinor: '665000',
+          businessMinor: '285000',
+          refund: null,
+          collect: { plan: 'take_back', gapMinor: '0' },
+          lastFailure: 'TipMe’s balance can’t cover this refund right now.',
+          heldMinor: '665000',
+          businessHeldMinor: '285000',
+          unbookedMinor: '0',
+        },
+      },
+    });
+  });
+  let asked: { reason?: string } | null = null;
+  await page.route(`${refundPath}/return`, async (route) => {
+    asked = route.request().postDataJSON() as { reason?: string };
+    await route.fulfill({
+      status: 202,
+      json: { data: { requestId: '00000000-0000-4000-8000-000000000002' } },
+    });
+  });
+  await enrolOwner(page, testInfo);
+  await page.goto('/ops/search');
+  await page.getByLabel('Search').fill(tipId);
+  await page.getByRole('button', { name: 'Search' }).click();
+  const tips = page.getByRole('heading', { name: 'Tips' }).locator('..');
+  const row = tips.getByRole('listitem').filter({ hasText: tipId });
+  await row.getByRole('button', { name: 'Refund tip…' }).click();
+  const panel = row.getByTestId('tip-refund');
+  const held = panel.getByTestId('refund-held');
+  await expect(held).toContainText('NGN 6,650.00');
+  await expect(held).toContainText(`@${who.handle}`);
+  await expect(held).toContainText('NGN 2,850.00');
+  await expect(held).toContainText('Mama Put Kitchen');
+  await expect(panel).not.toContainText(/bachs/i);
+  await expectAccessible(page);
+  expect(await fitsViewport(page)).toBe(true);
+  // The skip link shows only on keyboard focus; for the picture it stays out of the way.
+  await page.addStyleTag({
+    content: '.skip-link { visibility: hidden !important; }',
+  });
+  for (const [label, width] of [
+    ['phone', 390],
+    ['desktop', 1440],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await held.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(`${label}-business-held.png`),
+      fullPage: true,
+    });
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await panel
+    .getByRole('button', { name: 'Return to recipient and business' })
+    .click();
+  await panel
+    .getByLabel('Why is this money going back?')
+    .fill('The refund failed; the supporter will be refunded another way.');
+  await panel.getByRole('button', { name: 'Ask a second person' }).click();
+  await expect(
+    row.getByTestId('action-outcome').getByText(/Waiting for a second person/),
+  ).toBeVisible();
+  expect(asked).toEqual({
+    reason: 'The refund failed; the supporter will be refunded another way.',
+  });
+});

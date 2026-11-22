@@ -26,6 +26,7 @@ import {
   type OpsCollectDisputeDetail,
   type OpsCollectEvidenceRequest,
   type OpsCollectHeld,
+  type OpsCollectReserve,
   type OpsCollectNameRequest,
   type OpsCollectSameBank,
   type OpsCollectTransfer,
@@ -39,6 +40,7 @@ import {
   collectDisputeForStaff,
   collectDisputesForStaff,
   collectHeldMoney,
+  collectReserveForStaff,
   collectSameBankHolds,
   collectTransfersForStaff,
   collectUnclaimed,
@@ -458,6 +460,14 @@ export class OpsCollectController {
       body.reason,
       response,
     );
+  }
+
+  /** Task 15 follow-up: TipMe's own money against what it holds, per currency (Task 11's readings). */
+  @Get('reserve')
+  @RateLimit('ops_read')
+  @OpsPermission('collect.view')
+  async reserve(): Promise<ApiDataResponse<OpsCollectReserve>> {
+    return { data: await collectReserveForStaff(this.database.db) };
   }
 
   @Get('unclaimed')

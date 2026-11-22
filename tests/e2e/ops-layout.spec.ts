@@ -68,6 +68,7 @@ test('admin pages fit 320, 390 and 1440 with one page root, and tables stack on 
     '/ops/collect/held',
     '/ops/collect/transfers',
     '/ops/collect/disputes',
+    '/ops/collect/reserve',
     '/ops/collect/unclaimed',
     '/ops/collect/settings',
   ]) {

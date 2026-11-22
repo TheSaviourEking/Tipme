@@ -165,6 +165,47 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
       });
     if (path.endsWith('/collect/unclaimed'))
       return route.fulfill({ json: { data: [] } });
+    if (path.endsWith('/collect/reserve'))
+      return route.fulfill({
+        json: {
+          data: {
+            currencies: [
+              {
+                provider: 'bachs',
+                currency: 'NGN',
+                availableMinor: '130000000',
+                heldMinor: '100000000',
+                ownMinor: '30000000',
+                level: 'warning',
+                warningMinor: '50000000',
+                criticalMinor: '25000000',
+                readAt: now,
+              },
+              {
+                provider: 'bachs',
+                currency: 'USD',
+                availableMinor: null,
+                heldMinor: '0',
+                ownMinor: null,
+                level: 'unknown',
+                warningMinor: '0',
+                criticalMinor: '0',
+                readAt: now,
+              },
+            ],
+            autoPayouts: [{ provider: 'bachs', on: true, readAt: now }],
+            issues: [
+              {
+                id: randomUUID(),
+                kind: 'collect_auto_payout_on',
+                openedAt: now,
+                summary:
+                  'Automatic payouts are on for TipMe’s own partner balance. Turn them off in the partner dashboard: held money could leave with TipMe’s earnings.',
+              },
+            ],
+          },
+        },
+      });
     return route.fallback();
   });
 
@@ -184,6 +225,7 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
     'Held money',
     'Transfers',
     'Disputes',
+    'Reserve',
     'Unclaimed',
     'Settings',
   ]);
@@ -282,6 +324,24 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
   ).toBeVisible();
   expect(asked).toContain(`/v1/ops/collect/disputes/${disputeId}/evidence`);
 
+  // The reserve (Task 11's readings): TipMe's own money per currency, its level, auto payouts.
+  await page.goto('/ops/collect/reserve');
+  const ngn = main.getByTestId('reserve-NGN');
+  await expect(ngn).toContainText('₦300,000');
+  await expect(ngn).toContainText('Warning');
+  await expect(ngn).toContainText('₦1,300,000');
+  await expect(main.getByTestId('reserve-USD')).toContainText(
+    'Couldn’t be read',
+  );
+  await expect(main.getByTestId('auto-payouts')).toContainText(
+    'Automatic payouts are on',
+  );
+  await expect(
+    main.getByRole('list', { name: 'Open reserve issues' }),
+  ).toContainText('Automatic payouts are on for TipMe’s own partner balance');
+  await expectAccessible(page);
+  await shot(page, 'collect-reserve');
+
   await page.goto('/ops/collect/unclaimed');
   await expect(
     main.getByRole('heading', { name: 'Nobody past the cap' }),
@@ -303,6 +363,7 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
     '/ops/collect',
     '/ops/collect/held',
     '/ops/collect/transfers',
+    '/ops/collect/reserve',
   ])
     await page.goto(path).then(async () => {
       await expect(main.getByRole('heading', { level: 1 })).toBeVisible();

@@ -64,7 +64,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `changelog.publish` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/approve`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `collect.manage` | POST `/v1/ops/collect/disputes/{id}/evidence`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files/{index}/remove`<br>POST `/v1/ops/collect/disputes/{id}/release-hold`<br>POST `/v1/ops/collect/refunds/{tipId}/record-paid`<br>POST `/v1/ops/collect/same-bank/{profileId}/clear`<br>POST `/v1/ops/collect/transfers/{id}/record-paid`<br>POST `/v1/ops/collect/transfers/{id}/retry`<br>POST `/v1/ops/collect/transfers/{id}/review` |
-| `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
+| `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/reserve`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
@@ -391,6 +391,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/collect/held` | `collect.view` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/collect/name` | `recoveries.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/collect/refunds/{tipId}/record-paid` | `collect.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/reserve` | `collect.view` | n/a (read) | `ops_read` | – |
 | GET | `/v1/ops/collect/same-bank` | `collect.view` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/collect/same-bank/{profileId}/clear` | `collect.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/collect/transfers` | `collect.view` | n/a (read) | `ops_read` | – |

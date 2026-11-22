@@ -465,7 +465,10 @@ test('N4: after a partial lost dispute, staff can return the person’s remainde
   // Staff read the remainder, and can return it.
   const read = await call(stack.api, 'GET', `/v1/ops/tips/${tipId}/refund`);
   assert.equal(read.status, 200);
-  assert.equal((await read.json()).data.heldMinor, '475000');
+  const readBody = (await read.json()).data;
+  assert.equal(readBody.heldMinor, '475000');
+  // Task 15 follow-up: what was pulled back from a business is reported beside it (none here).
+  assert.equal(readBody.businessHeldMinor, '0');
   const back = await call(
     stack.api,
     'POST',
