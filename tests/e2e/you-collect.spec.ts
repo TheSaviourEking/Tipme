@@ -874,13 +874,51 @@ test('the add form: the server’s words for an account it can’t check again, 
   await expect(slip).toHaveText(new RegExp(recheck.replace(/[.?]/g, '\\$&')));
   await page.unroute('**/v1/me/collect/bank');
 
-  // The partner's answer never came (fix round 4, R3-M3): plain words, never the server's engineer
-  // wording, never the partner's name, and never a call to try again.
+  // A dropped connection on the add: the form stays usable and the page reads where it stands.
+  let reads = 0;
+  page.on('request', (request) => {
+    if (
+      request.method() === 'GET' &&
+      new URL(request.url()).pathname === '/v1/me/collect'
+    )
+      reads += 1;
+  });
   await form.getByRole('button', { name: 'Continue' }).click();
   await form.getByRole('button', { name: 'Confirm' }).click();
   await expect(code).toBeVisible();
   used.push(await bankCode(page, email, used));
-  await code.fill(used.at(-1)!);
+  await code.fill(used[1]!);
+  await page.route('**/v1/me/collect/bank', (route) =>
+    route.abort('internetdisconnected'),
+  );
+  await form.getByRole('button', { name: 'Add bank details' }).click();
+  await expect(
+    form.getByRole('alert').filter({ hasText: 'Not added' }),
+  ).toBeVisible();
+  await expect(form.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await expect.poll(() => reads).toBeGreaterThan(0);
+  await page.unroute('**/v1/me/collect/bank');
+
+  // And the real add, double tapped: one request, all set.
+  await form.getByRole('button', { name: 'Continue' }).click();
+  await form.getByRole('button', { name: 'Confirm' }).click();
+  await expect(code).toBeVisible();
+  await code.fill(await bankCode(page, email, used));
+  const before = count('/v1/me/collect/bank');
+  await form.getByRole('button', { name: 'Add bank details' }).dblclick();
+  await expect(page.getByRole('main').getByText(COPY.verified)).toBeVisible();
+  expect(count('/v1/me/collect/bank') - before).toBe(1);
+});
+
+test('the add form never shows the server’s engineer words when the partner’s answer is still awaited', async ({
+  page,
+}, testInfo) => {
+  // Fix round 4 (R3-M3): plain words, never the partner's name, never a call to try again.
+  const { email } = await collectRecipient(page, testInfo);
+  await page.goto('/dashboard/withdraw');
+  const form = bankForm(page);
+  await enterDetails(page, form);
+  await confirmAndEnterCode(page, form, email);
   await page.route('**/v1/me/collect/bank', (route) =>
     route.fulfill({
       status: 503,
@@ -902,53 +940,19 @@ test('the add form: the server’s words for an account it can’t check again, 
   await expect(form).not.toContainText(/provider|retry|try again|new code/i);
   await expect(form).not.toContainText(/bachs/i);
   // For the PR: the line as a recipient sees it, on a desktop and a phone.
-  const shown = page.viewportSize();
-  await testInfo.attach('pending-outcome-desktop', {
-    body: await form.screenshot(),
-    contentType: 'image/png',
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await testInfo.attach('pending-outcome-phone', {
-    body: await form.screenshot(),
-    contentType: 'image/png',
-  });
-  if (shown) await page.setViewportSize(shown);
-  await page.unroute('**/v1/me/collect/bank');
-
-  // A dropped connection on the add: the form stays usable and the page reads where it stands.
-  let reads = 0;
-  page.on('request', (request) => {
-    if (
-      request.method() === 'GET' &&
-      new URL(request.url()).pathname === '/v1/me/collect'
-    )
-      reads += 1;
-  });
-  await form.getByRole('button', { name: 'Continue' }).click();
-  await form.getByRole('button', { name: 'Confirm' }).click();
-  await expect(code).toBeVisible();
-  used.push(await bankCode(page, email, used));
-  await code.fill(used.at(-1)!);
-  await page.route('**/v1/me/collect/bank', (route) =>
-    route.abort('internetdisconnected'),
-  );
-  await form.getByRole('button', { name: 'Add bank details' }).click();
-  await expect(
-    form.getByRole('alert').filter({ hasText: 'Not added' }),
-  ).toBeVisible();
-  await expect(form.getByRole('button', { name: 'Continue' })).toBeEnabled();
-  await expect.poll(() => reads).toBeGreaterThan(0);
-  await page.unroute('**/v1/me/collect/bank');
-
-  // And the real add, double tapped: one request, all set.
-  await form.getByRole('button', { name: 'Continue' }).click();
-  await form.getByRole('button', { name: 'Confirm' }).click();
-  await expect(code).toBeVisible();
-  await code.fill(await bankCode(page, email, used));
-  const before = count('/v1/me/collect/bank');
-  await form.getByRole('button', { name: 'Add bank details' }).dblclick();
-  await expect(page.getByRole('main').getByText(COPY.verified)).toBeVisible();
-  expect(count('/v1/me/collect/bank') - before).toBe(1);
+  for (const [name, size] of [
+    ['desktop', { width: 1440, height: 900 }],
+    ['phone', { width: 390, height: 844 }],
+  ] as const) {
+    await page.setViewportSize(size);
+    await waiting.scrollIntoViewIfNeeded();
+    await testInfo.attach(`${name}-29-form-still-waiting`, {
+      body: await page.screenshot({
+        path: testInfo.outputPath(`${name}-29-form-still-waiting.png`),
+      }),
+      contentType: 'image/png',
+    });
+  }
 });
 
 test('a payment being questioned: Home says how much is held while it is, and nothing once settled', async ({
