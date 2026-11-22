@@ -196,3 +196,14 @@ test('the first-day checklist and the activity list use plain words', () => {
   assert.doesNotMatch(activity, /payment provider/);
   assert.match(activity, /our payment partner/);
 });
+
+test('the descriptions say what TipMe does', () => {
+  assert.equal(
+    HOME_DESCRIPTION,
+    'Get tipped with a link or QR code. TipMe lets people and teams receive tips from the people who appreciate them.',
+  );
+  assert.equal(
+    SITE_DESCRIPTION,
+    'The simple way to receive tips with a link or QR code, for individuals and teams.',
+  );
+});

@@ -59,11 +59,11 @@ const EXAMPLE_BODY =
 
 /** Page descriptions prerendered for every mode, so they hold in all three. */
 export const SITE_DESCRIPTION =
-  'An appreciation-first way to recognize the people who make a difference.';
+  'The simple way to receive tips with a link or QR code, for individuals and teams.';
 /** The share card is prerendered once and shown on every page of every copy. */
 export const SHARE_CARD_ALT = 'TipMe. A little tip goes a long way.';
 export const HOME_DESCRIPTION =
-  'For the people who make your day, your work, your world a little better.';
+  'Get tipped with a link or QR code. TipMe lets people and teams receive tips from the people who appreciate them.';
 
 const TEST: PaymentModeCopy = {
   payable: true,
