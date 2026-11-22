@@ -2499,6 +2499,13 @@ body > .coming-soon-page {
   white-space: nowrap;
 }
 
+/* You collect (Task 15): "Account collects" may wrap onto two lines, so the extra column still fits
+   a 1440px screen's column. */
+.ops-people__table td.ops-people__collection {
+  min-width: 5.5rem;
+  white-space: normal;
+}
+
 /* The name and email may wrap, so the table fits a 1440px screen's column (UI audit F3). */
 .ops-people__table td:first-child,
 .ops-people__table td:has(.ops-people__email-cell) {

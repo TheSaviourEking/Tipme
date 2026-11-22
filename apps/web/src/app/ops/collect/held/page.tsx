@@ -69,7 +69,7 @@ export default function CollectHeldPage() {
             ) : (
               <div className="ops-table-wrap">
                 <table
-                  className="ops-table"
+                  className="ops-table ops-table--stack"
                   aria-label="Money held per recipient"
                 >
                   <thead>
@@ -85,7 +85,7 @@ export default function CollectHeldPage() {
                   <tbody>
                     {state.recipients.map((row) => (
                       <tr key={row.profileId}>
-                        <td>
+                        <td data-label="Recipient">
                           {row.handle ? `@${row.handle}` : 'No page'}
                           {row.verified && (
                             <>
@@ -102,17 +102,19 @@ export default function CollectHeldPage() {
                             </>
                           )}
                         </td>
-                        <td>
+                        <td data-label="Held">
                           <Money minor={row.heldMinor} />
                         </td>
-                        <td>{row.oldestTipAt ? when(row.oldestTipAt) : '—'}</td>
-                        <td>
+                        <td data-label="Oldest tip">
+                          {row.oldestTipAt ? when(row.oldestTipAt) : '—'}
+                        </td>
+                        <td data-label="Days left">
                           {row.daysLeft === null
                             ? '—'
                             : daysWords(row.daysLeft)}
                         </td>
-                        <td>{row.remindersSent}</td>
-                        <td>
+                        <td data-label="Reminders">{row.remindersSent}</td>
+                        <td data-label="Page">
                           {row.pausedReason
                             ? PAUSED_WORDS[row.pausedReason]
                             : 'Taking tips'}

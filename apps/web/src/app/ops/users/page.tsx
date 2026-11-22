@@ -336,7 +336,9 @@ function PersonRows({
         >
           {person.payoutsSetUp ? 'Set up' : 'Not set up'}
         </td>
-        <td data-testid="collection-mode">{collectionWords(person)}</td>
+        <td data-testid="collection-mode" className="ops-people__collection">
+          {collectionWords(person)}
+        </td>
         <td>{joinedWords(person.joinedAt)}</td>
         <td>{activeWords(person.lastActiveAt, reveal.now)}</td>
         {money && (

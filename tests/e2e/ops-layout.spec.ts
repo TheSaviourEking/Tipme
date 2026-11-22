@@ -63,6 +63,13 @@ test('admin pages fit 320, 390 and 1440 with one page root, and tables stack on 
     '/ops/email',
     '/ops/providers',
     '/ops/providers/confirm',
+    // You collect (Task 15): its staff screens.
+    '/ops/collect',
+    '/ops/collect/held',
+    '/ops/collect/transfers',
+    '/ops/collect/disputes',
+    '/ops/collect/unclaimed',
+    '/ops/collect/settings',
   ]) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(path);
