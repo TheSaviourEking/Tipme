@@ -31,7 +31,7 @@ import {
   providerEvents,
   tips,
 } from '../schema.js';
-import { balanceIn } from './balance.js';
+import { balanceIn, disputeHeldSql, disputeReviewSql } from './balance.js';
 import {
   matchCollectAttempt,
   reduceUnsentShare,
@@ -129,9 +129,28 @@ function naira(minor: bigint): string {
   return `₦${whole}${kobo === 0n ? '' : `.${String(kobo).padStart(2, '0')}`}`;
 }
 
+/**
+ * What is held for disputes on a recipient's tips still open (spec §6.2, §10; Task 14's "A payment
+ * to you is being questioned"). Never negative. Two parts that never name the same money:
+ * - held from their balance: the balance's own dispute sum (disputeHeldSql, one builder, so the two
+ *   never drift; R5-I1), over disputes not yet settled (a closed dispute's hold kept for a refund is
+ *   never told, P28);
+ * - shares never moved, held in review for a dispute (RM11): in `held_for_recipients`, and so not
+ *   counted as kept or on its way (heldParts).
+ */
+export async function collectDisputeHeldMinor(
+  db: Database | Tx,
+  profileId: string,
+): Promise<bigint> {
+  const result = await db.execute<{ held: string }>(sql`
+    SELECT (${disputeHeldSql(profileId, { openOnly: true })}
+            + ${disputeReviewSql(sql`${profileId}`)})::text AS held`);
+  return BigInt(result.rows[0]?.held ?? '0');
+}
+
 /** The spec's words (§10), with the amount held. */
 export const disputeHoldCopy = (heldMinor: bigint) =>
-  `A payment to you is being questioned. We've held ${naira(heldMinor)} until it's settled.`;
+  `A payment to you is being questioned. We’ve held ${naira(heldMinor)} until it’s settled.`;
 
 const FINAL: ReadonlySet<DisputeStatus> = new Set(['won', 'lost', 'closed']);
 

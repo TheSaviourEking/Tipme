@@ -63,7 +63,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `businesses.manage` | POST `/v1/ops/businesses/{id}/owners/{managerId}/remove`<br>POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
 | `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `changelog.publish` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/approve`<br>POST `/v1/ops/changelog/{number}/withdraw` |
-| `collect.manage` | POST `/v1/ops/collect/disputes/{id}/evidence`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files`<br>POST `/v1/ops/collect/disputes/{id}/release-hold`<br>POST `/v1/ops/collect/refunds/{tipId}/record-paid`<br>POST `/v1/ops/collect/same-bank/{profileId}/clear`<br>POST `/v1/ops/collect/transfers/{id}/record-paid`<br>POST `/v1/ops/collect/transfers/{id}/retry`<br>POST `/v1/ops/collect/transfers/{id}/review` |
+| `collect.manage` | POST `/v1/ops/collect/disputes/{id}/evidence`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files/{index}/remove`<br>POST `/v1/ops/collect/disputes/{id}/release-hold`<br>POST `/v1/ops/collect/refunds/{tipId}/record-paid`<br>POST `/v1/ops/collect/same-bank/{profileId}/clear`<br>POST `/v1/ops/collect/transfers/{id}/record-paid`<br>POST `/v1/ops/collect/transfers/{id}/retry`<br>POST `/v1/ops/collect/transfers/{id}/review` |
 | `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
@@ -386,6 +386,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/collect/disputes/{id}` | `collect.view` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/collect/disputes/{id}/evidence` | `collect.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/collect/disputes/{id}/evidence/files` | `collect.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/disputes/{id}/evidence/files/{index}/remove` | `collect.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/collect/disputes/{id}/release-hold` | `collect.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/collect/held` | `collect.view` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/collect/name` | `recoveries.manage` | yes | `ops_request` | – |

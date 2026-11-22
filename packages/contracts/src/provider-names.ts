@@ -13,3 +13,12 @@ export function bachsEnvironment(name: string): 'sandbox' | 'live' | null {
 export function recordedProviderName(name: string): string {
   return bachsEnvironment(name) ? 'bachs' : name;
 }
+
+/**
+ * You collect (Task 15 fix round 1, C1): the most dispute evidence files a provider takes. Bachs's
+ * evidence has one general attachment slot (Task 5's adapter), so one; five elsewhere
+ * (OPS_COLLECT_EVIDENCE_MAX_FILES).
+ */
+export function opsCollectEvidenceMaxFiles(provider: string): number {
+  return recordedProviderName(provider) === 'bachs' ? 1 : 5;
+}

@@ -376,11 +376,11 @@ export const disputeHold = defineMailType({
         subject: 'A payment to you on TipMe is being questioned',
         heading: 'A payment is being questioned',
         // The amount stays out of the preview line.
-        preheader: "We've held part of your balance until it's settled.",
+        preheader: 'We’ve held part of your balance until it’s settled.',
         blocks: [
           {
             kind: 'text',
-            text: `A payment to you is being questioned. We've held ${naira(data.heldMinor)} until it's settled.`,
+            text: `A payment to you is being questioned. We’ve held ${naira(data.heldMinor)} until it’s settled.`,
           },
           {
             kind: 'button',

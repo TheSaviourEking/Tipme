@@ -1,5 +1,6 @@
 import { createHash, createHmac, hkdfSync } from 'node:crypto';
 import {
+  COLLECT_NAME_RECHECK_NOTICE,
   collectLegalNameSchema,
   recordedProviderName,
   type CollectBankState,
@@ -470,8 +471,8 @@ export async function tellVerified(
       id: idFromKey(dedupeKey),
       userId: row.userId,
       kind: 'collect_verified',
-      title: "You're all set",
-      body: "You're all set. Your tips are on their way to you.",
+      title: 'You’re all set',
+      body: 'You’re all set. Your tips are on their way to you.',
       createdAt: input.now,
     })
     .onConflictDoNothing();
@@ -629,12 +630,6 @@ async function finishNameRecheck(
     }),
   );
 }
-
-/** The notice a name change sends (fix round 1, I3): user copy, so the partner is never named. */
-export const COLLECT_NAME_RECHECK_NOTICE = {
-  title: 'Add your bank details again',
-  body: 'Your verified name was changed. Add your bank details again so our payment partner can check the new name and send your tips.',
-} as const;
 
 /**
  * Fix round 1 (I3): after support changes their name, the recipient's tips wait for a new check, so

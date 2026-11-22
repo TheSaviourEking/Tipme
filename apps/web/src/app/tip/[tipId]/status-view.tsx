@@ -9,6 +9,7 @@ import {
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { firstNameOf, type TipStatusView } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { ActionLink, Button, Card, Skeleton, Slip, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
@@ -390,6 +391,11 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
               </>
             )}
           </dl>
+          {/* You collect (spec §2.2, ruling P16): TipMe took this payment, so the card statement
+              says TipMe. Only when the API says so; older APIs send nothing. */}
+          {tip.collectedByTipMe && (
+            <p className="tip-thanks__paid-to">{COLLECT_COPY.receipt(name)}</p>
+          )}
           {tip.refund && (
             <p className="tip-thanks__refund" data-testid="receipt-refund">
               Refunded <Money minor={Number(tip.refund.refundedMinor)} />{' '}

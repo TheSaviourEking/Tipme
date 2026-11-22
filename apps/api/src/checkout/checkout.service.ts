@@ -43,6 +43,7 @@ import {
   type CheckoutPaymentProvider,
 } from './payment-provider.provider.js';
 import { intentAddressKey } from './address-key.js';
+import { quoteRouting } from './collection-mode.js';
 import { createStatusToken } from './status-token.js';
 
 /** Guest checkout through the PR-005 operations; prices and fees only ever come from the server. */
@@ -157,11 +158,14 @@ export class CheckoutService {
       ...(sharesOn && request.businessMemberId
         ? { businessMemberId: request.businessMemberId, sharesOn: true }
         : {}),
+      // The same inputs every screen's preview uses (collection-mode.ts), so they never disagree.
       ...(youCollectOn
         ? {
             youCollectOn: true,
-            provider: recordedProviderName(this.defaultProvider.name),
-            environment: this.bachsProvider?.environment ?? 'sandbox',
+            ...quoteRouting(
+              this.defaultProvider.name,
+              this.bachsProvider?.environment,
+            ),
           }
         : { youCollectOn: false }),
     });

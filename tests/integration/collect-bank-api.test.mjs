@@ -459,8 +459,8 @@ test('names match: verified, held tips start moving oldest first, the page unpau
   // The notice says so, once (P12), in the spec's words.
   assert.deepEqual(await notices(TOBI), [
     {
-      title: "You're all set",
-      body: "You're all set. Your tips are on their way to you.",
+      title: 'You’re all set',
+      body: 'You’re all set. Your tips are on their way to you.',
     },
   ]);
   const mail = (await queuedMail(database.db, sealing, { limit: 50 })).filter(
@@ -870,9 +870,32 @@ test('another person’s profile, a direct recipient, or the switch off with mod
     bankCode: '058',
     accountNumber: accountNumber(1),
   };
-  // Ada is undecided (null) and the switch is on: not on You collect, so none of this is hers.
+  // Ada is undecided (null) and the switch is on, but her next quote would keep her direct (an
+  // active account of her own): not on You collect, so none of this is hers. (Undecided with no
+  // account is previewed onto You collect: see the R2-I1 tests below.)
   for (const [who, setUp] of [
-    ['undecided, switch on', async () => {}],
+    [
+      'undecided, switch on, an active account',
+      async () => {
+        await ops.beginPaymentAccountCreation(database.db, {
+          profileId: ADA.id,
+          provider: 'bachs',
+          environment: 'sandbox',
+        });
+        await ops.updatePaymentAccountStatus(database.db, {
+          sealing,
+          profileId: ADA.id,
+          provider: 'bachs',
+          environment: 'sandbox',
+          providerAccountReference: 'acct_ada_active',
+          status: 'ACTIVE',
+          chargesEnabled: true,
+          payoutsEnabled: true,
+          feeCollector: 'platform',
+          requirementsDue: [],
+        });
+      },
+    ],
     [
       'direct',
       () =>
@@ -1357,4 +1380,188 @@ test('a current bank under the held name is not verified while an older row with
   });
   assert.equal(state, 'checking');
   assert.equal((await profileRow(TOBI)).collect_verified_at, null);
+});
+
+test('the status says what is held for disputes still open on their tips, and nothing once settled (Task 14)', async () => {
+  const first = await paidTip(TOBI, ago(DAY));
+  const second = await paidTip(TOBI, ago(DAY));
+  const theirs = await paidTip(ADA, ago(DAY));
+  const controller = controllerFor(partner().provider);
+  const held = async (profile) =>
+    (await controller.status({ userId: profile.userId })).data.disputeHeldMinor;
+  assert.equal(await held(TOBI), '0');
+
+  const dispute = (tipId, status, heldMinor, settled) =>
+    q(
+      `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+         status, held_minor, settled_at, decided_at, last_event_at)
+       VALUES ($1, 'bachs', $2, $3, $4, 'NGN', $5, $6, $7, $7, now())`,
+      [
+        randomUUID(),
+        `dp_${randomUUID().slice(0, 8)}`,
+        tipId,
+        GROSS,
+        status,
+        heldMinor,
+        settled ? NOW : null,
+      ],
+    );
+  await dispute(first.tipId, 'open', 300_000n, false);
+  await dispute(second.tipId, 'responded', 250_000n, false);
+  // Settled: its hold is released (held_minor 0 and settled), so it counts for nothing.
+  await dispute(second.tipId, 'won', 0n, true);
+  // Settled is what counts: a settled row's held_minor is never counted, even if not zeroed (N3).
+  await dispute(first.tipId, 'closed', 50_000n, true);
+  // Another recipient's dispute is never theirs.
+  await dispute(theirs.tipId, 'open', 400_000n, false);
+
+  assert.equal(await held(TOBI), '550000');
+  assert.equal(await held(ADA), '400000');
+
+  await q(
+    `UPDATE disputes SET status = 'won', held_minor = 0, settled_at = now(), decided_at = now()
+      WHERE tip_id = ANY($1)`,
+    [[first.tipId, second.tipId]],
+  );
+  assert.equal(await held(TOBI), '0');
+});
+
+test('a refund hold and a dispute hold at once: each part is counted once, and a dispute is never kept or on its way (RM11)', async () => {
+  // Three paid collect tips, each with its share held (₦9,500 each).
+  const kept = await paidTip(TOBI, ago(DAY));
+  const refunded = await paidTip(TOBI, ago(DAY));
+  const disputed = await paidTip(TOBI, ago(DAY));
+  const share = (tipId, reason) =>
+    q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = $2
+        WHERE tip_id = $1 AND kind = 'share'`,
+      [tipId, reason],
+    );
+  // One held for its refund (RM7), one held for a dispute before it moved (RM11).
+  await share(refunded.tipId, 'refund');
+  await share(disputed.tipId, 'dispute');
+  await q(
+    `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+       status, held_minor, last_event_at)
+     VALUES ($1, 'bachs', $2, $3, $4, 'NGN', 'open', 0, now())`,
+    [randomUUID(), `dp_${randomUUID().slice(0, 8)}`, disputed.tipId, GROSS],
+  );
+  const view = (
+    await controllerFor(partner().provider).status({ userId: TOBI.userId })
+  ).data;
+  const net = 950_000n;
+  assert.equal(view.heldMinor, String(3n * net));
+  assert.deepEqual(
+    [view.keptMinor, view.onItsWayMinor, view.refundHeldMinor],
+    [String(net), '0', String(net)],
+  );
+  assert.equal(view.disputeHeldMinor, String(net));
+  // Every naira held is in exactly one of the four.
+  assert.equal(
+    BigInt(view.keptMinor) +
+      BigInt(view.onItsWayMinor) +
+      BigInt(view.refundHeldMinor) +
+      BigInt(view.disputeHeldMinor),
+    BigInt(view.heldMinor),
+  );
+  // Home and Earnings read the same split.
+  const summary = await ops.dashboardSummary(database.db, TOBI.id, new Date());
+  assert.deepEqual(
+    [summary.keptMinor, summary.onItsWayMinor, summary.refundHeldMinor],
+    [String(net), '0', String(net)],
+  );
+  // Verified: the kept part moves to on its way; the held parts don't.
+  await q(`UPDATE profiles SET collect_verified_at = now() WHERE id = $1`, [
+    TOBI.id,
+  ]);
+  const after = (
+    await controllerFor(partner().provider).status({ userId: TOBI.userId })
+  ).data;
+  assert.deepEqual(
+    [after.keptMinor, after.onItsWayMinor, after.refundHeldMinor],
+    ['0', String(net), String(net)],
+  );
+  assert.equal(after.disputeHeldMinor, String(net));
+  void kept;
+});
+
+test('with the switch on, an undecided recipient whose first quote would go to collect has a collect status, and adding a bank fixes the mode as a quote would (Task 14 R2-I1)', async () => {
+  const controller = controllerFor(partner().provider);
+  const stored = async () =>
+    (
+      await q(`SELECT collection_mode FROM profiles WHERE id = $1`, [TOBI.id])
+    )[0].collection_mode;
+  // Undecided (the beforeEach leaves the demo profiles so), never verified, no account.
+  assert.equal(await stored(), null);
+
+  // The switch on (beforeEach): their next quote would decide collect, so the status says so, and
+  // reading it writes nothing.
+  const view = await controller.status({ userId: TOBI.userId });
+  assert.equal(view.data.mode, 'collect');
+  assert.equal(view.data.verified, false);
+  assert.equal(view.data.bank, null);
+  assert.equal(await stored(), null);
+  assert.deepEqual(
+    await controller.lookup(
+      { userId: TOBI.userId },
+      {
+        legalName: TOBI_NAME,
+        bankCode: '058',
+        accountNumber: accountNumber(1),
+      },
+    ),
+    { data: { bankName: 'TOBI ADEYEMI' } },
+  );
+  assert.equal(await stored(), null);
+
+  // Switch off: undecided is direct, and there is nothing here (404), as today.
+  await setSwitch(database.pool, 'you_collect', false);
+  assert.deepEqual(
+    await refused(() => controller.status({ userId: TOBI.userId })),
+    { status: 404, code: 'NOT_FOUND' },
+  );
+  assert.equal(await stored(), null);
+  await setSwitch(database.pool, 'you_collect', true);
+
+  // Adding a bank fixes the mode through the quote's own decision, then goes on as for any
+  // collect recipient.
+  assert.deepEqual(await addBank(controller, TOBI), {
+    data: { state: 'verified' },
+  });
+  assert.equal(await stored(), 'collect');
+});
+
+test('with the switch on, an undecided recipient whose first quote would stay direct is unchanged (Task 14 R2-I1)', async () => {
+  const controller = controllerFor(partner().provider);
+  await ops.beginPaymentAccountCreation(database.db, {
+    profileId: TOBI.id,
+    provider: 'bachs',
+    environment: 'sandbox',
+  });
+  await ops.updatePaymentAccountStatus(database.db, {
+    sealing,
+    profileId: TOBI.id,
+    provider: 'bachs',
+    environment: 'sandbox',
+    providerAccountReference: 'acct_tobi_active',
+    status: 'ACTIVE',
+    chargesEnabled: true,
+    payoutsEnabled: true,
+    feeCollector: 'platform',
+    requirementsDue: [],
+  });
+  assert.deepEqual(
+    await refused(() => controller.status({ userId: TOBI.userId })),
+    { status: 404, code: 'NOT_FOUND' },
+  );
+  assert.deepEqual(await refused(() => addBank(controller, TOBI)), {
+    status: 404,
+    code: 'NOT_FOUND',
+  });
+  assert.equal(
+    (
+      await q(`SELECT collection_mode FROM profiles WHERE id = $1`, [TOBI.id])
+    )[0].collection_mode,
+    null,
+  );
 });

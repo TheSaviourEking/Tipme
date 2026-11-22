@@ -13,16 +13,6 @@ import {
  */
 
 /**
- * The recipient's words for what TipMe holds for them (spec §10; RM7 adds `refundHeld`). User
- * copy: never names the payment partner.
- */
-export const COLLECT_HELD_WORDS = {
-  kept: 'Kept for you until you add your bank details',
-  onItsWay: 'On its way to you',
-  refundHeld: 'Held while a refund is settled',
-} as const;
-
-/**
  * A recipient's You collect state (plan Task 12; read by `GET /v1/me/collect`, Task 13). `heldMinor`
  * is what TipMe holds for them now: `keptMinor` while they have no verified bank details ("Kept for
  * you until you add your bank details"), `onItsWayMinor` once verified ("On its way to you"), and
@@ -164,8 +154,8 @@ export const collectBankAddSchema = collectBankLookupSchema
 export type CollectBankAddRequest = z.infer<typeof collectBankAddSchema>;
 
 /**
- * Where the check stands: `verified` (names match and the account can receive: "You're all set"),
- * `checking` (accepted, the account not ready yet: "We're checking your details") or
+ * Where the check stands: `verified` (names match and the account can receive: "You’re all set"),
+ * `checking` (accepted, the account not ready yet: "We’re checking your details") or
  * `manual_review` (some words match, the partner's team checks it by hand). No match is refused
  * (`422 NAME_MISMATCH`) and nothing is saved.
  */
@@ -185,6 +175,12 @@ export interface CollectBankView {
 /** `GET /v1/me/collect`: their You collect state, and their bank once added. */
 export interface CollectStatusView extends CollectStatus {
   bank: CollectBankView | null;
+  /**
+   * What is held from their balance for disputes on their tips still open (spec §6.2), in minor
+   * units, never negative: "A payment to you is being questioned. We’ve held {amount} until it's
+   * settled." "0" when nothing is held.
+   */
+  disputeHeldMinor: string;
 }
 
 /**
@@ -351,12 +347,7 @@ export const OPS_COLLECT_EVIDENCE_TYPES = [
 ] as const;
 export const OPS_COLLECT_EVIDENCE_MAX_BYTES = 5 * 1024 * 1024;
 export const OPS_COLLECT_EVIDENCE_MAX_FILES = 5;
-/**
- * The most evidence files a dispute at this provider takes. Bachs's evidence has one general
- * attachment slot (Task 5's adapter), so one; the brief's five elsewhere.
- */
-export const opsCollectEvidenceMaxFiles = (provider: string): number =>
-  provider === 'bachs' ? 1 : OPS_COLLECT_EVIDENCE_MAX_FILES;
+// The per-provider limit (one file at Bachs) is opsCollectEvidenceMaxFiles, in provider-names.ts.
 
 /** `POST /v1/ops/collect/name`: a locked name changed by support, on the page with this handle. */
 export const opsCollectNameRequestSchema = opsCollectNameChangeSchema
@@ -368,3 +359,11 @@ export type OpsCollectNameRequest = z.infer<typeof opsCollectNameRequestSchema>;
 export interface OpsCollectActed {
   done: true;
 }
+
+// COLLECT_COPY lives in copy.ts (no zod), so public pages can import it on its own.
+export {
+  COLLECT_COPY,
+  COLLECT_HELD_NOTE,
+  COLLECT_HELD_WORDS,
+  COLLECT_NAME_RECHECK_NOTICE,
+} from './copy.js';

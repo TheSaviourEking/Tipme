@@ -25,6 +25,10 @@ async function shot(page: Page, name: string) {
   ] as const) {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     await page.waitForTimeout(150);
+    // The skip link shows only on keyboard focus; for the picture it stays out of the way.
+    await page.addStyleTag({
+      content: '.skip-link { visibility: hidden !important; }',
+    });
     await page.screenshot({
       path: `${dir}/${name}-${label}.png`,
       fullPage: true,
@@ -106,6 +110,8 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
                 remindersSent: 1,
                 paused: false,
                 pausedReason: null,
+                // Support changed their verified name: transfers wait for a new check (I3).
+                nameRecheckSince: now,
               },
             ],
             businesses: [],
@@ -142,12 +148,13 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
             feeMinor: null,
             feeCurrency: null,
             evidence: {
-              state: 'none',
-              files: [],
+              state: 'draft',
+              files: [{ contentType: 'application/pdf', bytes: 20_480 }],
               askedAt: null,
               submittedAt: null,
               canSubmit: true,
               late: false,
+              maxFiles: 1,
             },
             holdRelease: {
               possible: false,
@@ -194,6 +201,9 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
   await expect(row).toContainText('₦19,000');
   await expect(row).toContainText('23 days');
   await expect(row).toContainText('Taking tips');
+  await expect(row.getByTestId('name-recheck')).toHaveText(
+    'Name being checked',
+  );
   await expectAccessible(page);
   await shot(page, 'collect-held');
 
@@ -243,7 +253,17 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
   const facts = main.getByTestId('dispute-facts');
   await expect(facts).toContainText('Open');
   await expect(facts).toContainText('Answer by');
-  await expect(main.getByTestId('evidence-state')).toHaveText('Not started');
+  await expect(main.getByTestId('evidence-state')).toHaveText(
+    'Files added, not sent',
+  );
+  // Bachs takes one evidence file (C1): the screen says so.
+  await expect(main).toContainText('Up to 1 file (PDF, PNG or JPEG, 5 MB)');
+  // Full at one file: no more can be added, and a wrong one can come off first.
+  await expect(main.getByTestId('evidence-file')).toContainText('PDF, 20 KB');
+  await expect(main.getByLabel('Add a file')).toHaveCount(0);
+  await expect(
+    main.getByRole('button', { name: 'Remove file…' }),
+  ).toBeVisible();
   await main
     .getByLabel('Evidence for the payment partner')
     .fill(

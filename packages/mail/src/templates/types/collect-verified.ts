@@ -23,7 +23,7 @@ export const collectVerified = defineMailType({
         blocks: [
           {
             kind: 'text',
-            text: "You're all set. Your tips are on their way to you.",
+            text: 'You’re all set. Your tips are on their way to you.',
           },
           {
             kind: 'button',

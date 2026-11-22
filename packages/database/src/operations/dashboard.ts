@@ -36,6 +36,7 @@ export function dashboardSummary(
       reserved: string;
       held: string;
       refund_held: string;
+      dispute_review: string;
       verified: boolean | null;
       confirming: string;
       date: string;
@@ -84,7 +85,8 @@ export function dashboardSummary(
       ),
       balance AS (${balanceQuery(profileId)})
       SELECT totals.today, totals.yesterday, totals.this_week, totals.last_week,
-             balance.payable, balance.reserved, balance.held, balance.refund_held, balance.verified,
+             balance.payable, balance.reserved, balance.held, balance.refund_held, balance.dispute_review,
+             balance.verified,
              balance.confirming,
              days.date, days.net
         FROM totals CROSS JOIN balance CROSS JOIN days
@@ -95,6 +97,7 @@ export function dashboardSummary(
       BigInt(row?.held ?? '0'),
       BigInt(row?.refund_held ?? '0'),
       row?.verified === true,
+      BigInt(row?.dispute_review ?? '0'),
     );
     return {
       currency: 'NGN',
