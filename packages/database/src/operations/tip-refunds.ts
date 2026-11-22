@@ -521,7 +521,7 @@ async function unsettledDispute(
  * for them is theirs to return: never more than the transfers back less the returns.
  */
 async function personReturnable(
-  tx: Tx,
+  tx: Database | Tx,
   tipId: string,
   personMinor: bigint,
 ): Promise<bigint> {
@@ -574,10 +574,10 @@ async function readCollect(
     backMinor: 0n,
     holdMinor: 0n,
     chargeReference: share.row?.chargeReference ?? null,
-    // RM3: once the tip's money went back (a lost dispute used it), nothing is held any more.
-    heldForTipMinor: (await tipReversed(db, tipId))
-      ? 0n
-      : recovered.personMinor,
+    // RM3, N4 (re-review 2): once the tip's money went back (a lost dispute used it), only what the
+    // tip's own ledger lines still hold for the person is held: the return pays exactly this, so the
+    // dialog and the staff API offer what can be returned (0 when the loss used all of it).
+    heldForTipMinor: await personReturnable(db, tipId, recovered.personMinor),
   };
   if (
     onTip.some(
