@@ -200,3 +200,21 @@ test('a tip Bachs settled in USD can be confirmed from its settlement issue', as
   assert.equal(result.data.outcome, 'confirmed');
   assert.equal(await tipStatus(), 'SUCCEEDED');
 });
+
+test('a You collect payment is not confirmed with this tool (Task 7 → Task 11)', async (t) => {
+  const { db, q, issueId, tipStatus } = await collectedTip(t);
+  // Its fee is TipMe's own account's, never a recipient's to have borne: the tool doesn't apply.
+  await q(
+    `UPDATE tip_quotes SET collection_mode = 'collect'
+      WHERE id = (SELECT i.quote_id FROM payment_intents i JOIN tips t ON t.intent_id = i.id
+                   JOIN issues s ON s.subject->>'tipId' = t.id::text WHERE s.id = $1)`,
+    [issueId],
+  );
+  const provider = bachs();
+  await assert.rejects(confirm(db, provider, issueId), (error) => {
+    assert.equal(error.getStatus?.(), 404);
+    return true;
+  });
+  assert.equal(provider.asked, 0);
+  assert.notEqual(await tipStatus(), 'SUCCEEDED');
+});
