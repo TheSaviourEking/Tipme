@@ -1134,7 +1134,8 @@ export function deleteAccount(
             balance.confirmingMinor > 0n ||
             // You collect: money TipMe still holds for them is theirs too.
             balance.keptMinor > 0n ||
-            balance.onItsWayMinor > 0n)
+            balance.onItsWayMinor > 0n ||
+            balance.refundHeldMinor > 0n)
         )
           throw new OperationError('HAS_BALANCE');
         await tx

@@ -34,14 +34,19 @@ export function TipRefund({ tipId }: { tipId: string }) {
       );
   };
 
-  const ask = async (reason: string): Promise<string | null> => {
-    const answer = await opsAct<{ refundId: string; amountMinor: string }>(
-      path,
-      { method: 'POST', body: { reason } },
-    );
+  const ask = async (
+    reason: string,
+    to: string = path,
+  ): Promise<string | null> => {
+    const answer = await opsAct<{ refundId: string; amountMinor: string }>(to, {
+      method: 'POST',
+      body: { reason },
+    });
     if (answer.kind === 'refused')
-      return answer.code === 'TIP_REFUND_REFUSED'
-        ? 'This tip can’t be refunded now. Open it again to see why.'
+      return answer.code === 'TIP_REFUND_REFUSED' ||
+        answer.code === 'TIP_REFUND_NEEDS_DECISION' ||
+        answer.code === 'TIP_REFUND_NO_GAP'
+        ? 'This tip can’t be refunded this way now. Open it again to see why.'
         : 'Not asked. Please try again.';
     setFacts(null);
     setOutcome(
@@ -54,7 +59,9 @@ export function TipRefund({ tipId }: { tipId: string }) {
         : {
             kind: 'done',
             actedAlone: answer.actedAlone,
-            text: `Refund of ${naira(answer.data.amountMinor)} asked. It goes to our payment partner next, and is recorded when they confirm it.`,
+            text: to.endsWith('/return')
+              ? `Return of ${naira(answer.data.amountMinor)} asked. It goes back to their account with our payment partner next.`
+              : `Refund of ${naira(answer.data.amountMinor)} asked. It goes to our payment partner next, and is recorded when they confirm it.`,
           },
     );
     return null;
@@ -80,6 +87,7 @@ export function TipRefund({ tipId }: { tipId: string }) {
       </span>
     );
   const page = facts.handle ? `@${facts.handle}` : 'The page';
+  const collect = facts.refundable ? facts.collect : undefined;
   return (
     <div className="tip-refund" data-testid="tip-refund">
       <p>
@@ -102,7 +110,50 @@ export function TipRefund({ tipId }: { tipId: string }) {
           ': what they received.'
         )}
       </p>
-      {facts.refundable ? (
+      {collect && <CollectPlan plan={collect} page={page} />}
+      {facts.lastFailure && (
+        <Slip dense tone="neutral" title="The last refund didn’t go through">
+          {facts.lastFailure}
+        </Slip>
+      )}
+      {facts.unbookedMinor && facts.unbookedMinor !== '0' && (
+        <Slip dense tone="error" title="A refund TipMe didn’t record">
+          Our payment partner refunded{' '}
+          <strong>
+            <Money code minor={facts.unbookedMinor} />
+          </strong>{' '}
+          of this tip, but TipMe didn’t expect it and hasn’t recorded it. Settle
+          the money issue first.
+        </Slip>
+      )}
+      {facts.heldMinor && facts.heldMinor !== '0' && (
+        <Slip dense tone="unsure" title="Money held for this tip">
+          <strong>
+            <Money code minor={facts.heldMinor} />
+          </strong>{' '}
+          was taken back from {page} for a refund and is held by TipMe. A new
+          refund uses it, or it can be returned to their account with our
+          payment partner.
+        </Slip>
+      )}
+      {facts.heldMinor && facts.heldMinor !== '0' && !facts.refund && (
+        <ReasonAction
+          open="Return to recipient"
+          field="Why is this money going back to the recipient?"
+          submit="Ask a second person"
+          hint="Recorded in the audit log with your name and the time. A second person decides before anything is sent back."
+          onSubmit={(reason) => ask(reason, `${path}/return`)}
+        />
+      )}
+      {facts.refundable && collect?.plan === 'staff_decides' ? (
+        <ReasonAction
+          open="Refund and absorb the gap"
+          field="Why should TipMe refund this and absorb the gap?"
+          submit="Ask a second person"
+          hint="Recorded in the audit log with your name and the time. A second person decides before anything is taken back or refunded."
+          onSubmit={(reason) => ask(reason, `${path}/absorb-gap`)}
+        />
+      ) : facts.refundable ? (
         <ReasonAction
           open="Ask to refund"
           field="Why is this tip being refunded?"
@@ -119,5 +170,46 @@ export function TipRefund({ tipId }: { tipId: string }) {
         Close
       </Button>
     </div>
+  );
+}
+
+/**
+ * You collect (plan Task 10): the tip was charged to TipMe's own account, so the refund comes from
+ * TipMe's balance once the recipient's part is back. Says how it comes back, and when part of it
+ * can't, how much TipMe would absorb.
+ */
+function CollectPlan({
+  plan,
+  page,
+}: {
+  plan: NonNullable<OpsTipRefund['collect']>;
+  page: string;
+}) {
+  if (plan.plan === 'cancel_held')
+    return (
+      <p>
+        TipMe still holds {page}’s share, so the refund comes from TipMe’s
+        balance and the share is cancelled once the refund is confirmed.
+      </p>
+    );
+  if (plan.plan === 'take_back')
+    return (
+      <p>
+        {page}’s share has moved to their account. TipMe takes it back first,
+        then refunds from its own balance.
+      </p>
+    );
+  if (plan.plan !== 'staff_decides') return null;
+  return (
+    <Slip dense tone="unsure" title="Part of this tip can’t be taken back">
+      Up to{' '}
+      <strong>
+        <Money code minor={plan.gapMinor} />
+      </strong>{' '}
+      is no longer there to take back: the recipient (or the business) has
+      already withdrawn it. TipMe would pay that from its own balance as a loss.
+      Whatever is still there is taken back first. A second person decides
+      whether TipMe goes ahead.
+    </Slip>
   );
 }

@@ -777,12 +777,6 @@
   }
 }
 
-.tip-status-page:has(.tip-thanks) {
-  background:
-    linear-gradient(rgb(255 255 255 / 10%), transparent 30%),
-    var(--brand-primary);
-}
-
 .tip-thanks.tm-surface {
   border: 0;
   background: none;

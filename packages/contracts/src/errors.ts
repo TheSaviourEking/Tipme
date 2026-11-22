@@ -114,6 +114,9 @@ export const apiErrorCodes = [
   'PRO_BALANCE_REFUSED',
   'PRO_REFUND_REFUSED',
   'TIP_REFUND_REFUSED',
+  // You collect (plan Task 10): part of a collect tip can't be taken back; staff decide first.
+  'TIP_REFUND_NEEDS_DECISION',
+  'TIP_REFUND_NO_GAP',
   'PRO_REFUNDS_OFF',
   // A feature switch with nothing built behind it can't be turned on (16 Nov 2026).
   'SWITCH_NOT_BUILT',

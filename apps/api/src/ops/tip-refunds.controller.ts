@@ -45,7 +45,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
  * off by default). Staff with
  * `payments.repair` see what the supporter gets back (the tip minus TipMe's fee) and who gives back
  * what, and ask with a written reason and a fresh code; a second person decides (`tip.refund`). A
- * tip our payment partner says was paid by bank transfer is refused before anyone asks.
+ * tip our payment partner says was paid by bank transfer is refused before anyone asks. A collect
+ * tip (Task 10) is refunded from TipMe's balance once the recipient's part is back; when part of it
+ * can't be, going ahead is `tip_refund.absorb_gap`, decided by a second person.
  */
 @Controller('v1/ops/tips')
 export class OpsTipRefundsController {
@@ -73,6 +75,21 @@ export class OpsTipRefundsController {
         : facts.provider === 'bachs'
           ? this.bachs
           : null;
+    if (facts.collect) {
+      // You collect (Task 10): the payment is on TipMe's own account, read as TipMe.
+      if (!provider) return undefined;
+      try {
+        const read = await provider.verifyTransaction(facts.providerReference);
+        return read.method === 'NGN_BANK_TRANSFER'
+          ? 'bank_transfer'
+          : read.method === 'NGN_CARD'
+            ? 'card'
+            : undefined;
+      } catch {
+        // The worker reads it again before anything moves.
+        return undefined;
+      }
+    }
     if (!provider?.readAccountCharge) return undefined;
     try {
       return (await provider.readAccountCharge(facts.providerReference)).method;
@@ -115,6 +132,18 @@ export class OpsTipRefundsController {
         personMinor: String(facts.personMinor),
         businessMinor: String(facts.businessMinor),
         refund: facts.refund ? { status: facts.refund.status } : null,
+        // You collect (Task 10) only: a direct tip's answer is unchanged.
+        ...(facts.collect
+          ? {
+              collect: {
+                plan: facts.collect.plan,
+                gapMinor: String(facts.collect.gapMinor),
+              },
+              lastFailure: facts.lastFailure,
+              heldMinor: String(facts.heldMinor),
+              unbookedMinor: String(facts.unbookedMinor),
+            }
+          : {}),
       },
     };
   }
@@ -139,9 +168,89 @@ export class OpsTipRefundsController {
     const facts = await this.facts(tipId);
     if (!facts.refundable)
       throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');
-    const answer = pendingOr<{ refundId: string; amountMinor: string }>(
+    // You collect (Task 10): part of it can't be taken back; only `absorb-gap` goes ahead.
+    if (facts.collect?.plan === 'staff_decides')
+      throw new CodedHttpException(409, 'TIP_REFUND_NEEDS_DECISION');
+    return this.request('tip.refund', ops, tipId, body, response);
+  }
+
+  /**
+   * You collect (plan Task 10, spec §6.1 case 3): the recipient (or the business) no longer has all
+   * of their part to give back. Going ahead has TipMe absorb up to the gap from its own balance: a
+   * serious action of its own (`tip_refund.absorb_gap`), decided by a second person.
+   */
+  @Post(':tipId/refund/absorb-gap')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('payments.repair')
+  async absorbGap(
+    @CurrentOps() ops: OpsContext,
+    @Param('tipId') tipId: string,
+    @Body(new ZodValidationPipe(opsTipRefundSchema)) body: OpsTipRefundRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<
+      | ({ refundId: string; amountMinor: string } & OpsActedAlone)
+      | OpsSeriousPending
+    >
+  > {
+    await this.on(tipId);
+    const facts = await this.facts(tipId);
+    if (!facts.refundable)
+      throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');
+    if (facts.collect?.plan !== 'staff_decides')
+      throw new CodedHttpException(409, 'TIP_REFUND_NO_GAP');
+    return this.request('tip_refund.absorb_gap', ops, tipId, body, response);
+  }
+
+  /**
+   * You collect (fix round 2, RI1): what a failed refund took back from the recipient goes back to
+   * their account (`tip_refund.return`, a second person). Refused while a refund is open or a dispute
+   * isn't won or closed, or with nothing held.
+   */
+  @Post(':tipId/refund/return')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('payments.repair')
+  async returnHeld(
+    @CurrentOps() ops: OpsContext,
+    @Param('tipId') tipId: string,
+    @Body(new ZodValidationPipe(opsTipRefundSchema)) body: OpsTipRefundRequest,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<
+    ApiDataResponse<
+      | ({ refundId: string; amountMinor: string } & OpsActedAlone)
+      | OpsSeriousPending
+    >
+  > {
+    await this.on(tipId);
+    const facts = await this.facts(tipId);
+    if (!facts.collect || facts.heldMinor <= 0n || facts.refund)
+      throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');
+    return this.request('tip_refund.return', ops, tipId, body, response);
+  }
+
+  private async request(
+    name: 'tip.refund' | 'tip_refund.absorb_gap' | 'tip_refund.return',
+    ops: OpsContext,
+    tipId: string,
+    body: OpsTipRefundRequest,
+    response: Response,
+  ): Promise<
+    ApiDataResponse<
+      | ({ refundId: string; amountMinor: string } & OpsActedAlone)
+      | OpsSeriousPending
+    >
+  > {
+    const answer = pendingOr<{
+      refundId?: string;
+      returnId?: string;
+      amountMinor: string;
+    }>(
       await requestSeriousAction(this.database.db, {
-        name: 'tip.refund',
+        name,
         payload: { tipId },
         actorId: ops.userId,
         grantId: ops.grantId,
@@ -153,7 +262,8 @@ export class OpsTipRefundsController {
     if ('pending' in answer) return { data: answer.pending };
     return {
       data: {
-        refundId: answer.result.refundId,
+        // A return (RI1) answers with the return transfer's id in the same place.
+        refundId: answer.result.refundId ?? answer.result.returnId ?? '',
         amountMinor: answer.result.amountMinor,
         ...(answer.result.actedAlone ? { actedAlone: true as const } : {}),
       },
