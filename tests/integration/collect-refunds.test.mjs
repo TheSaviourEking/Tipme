@@ -2532,3 +2532,83 @@ test('m3: the absorb is checked against own money right before the refund is sen
   assert.equal(failed.status, 'FAILED');
   assert.equal(failed.failure, 'balance');
 });
+
+/* Fix round 2 (re-review 1, N1). */
+
+test('N1 (probe D): after a partial lost dispute, the business money it did not use is returned once', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  await returnApproved(tip.tipId);
+  // A dispute for less than the tip: the loss needs only half the business's share.
+  await ops.applyDisputeEvent(database.db, {
+    event: {
+      kind: 'dispute',
+      eventId: `evt_${randomUUID()}`,
+      eventType: 'dispute.created',
+      scope: 'platform',
+      partnerDisputeId: tip.disputeRef,
+      chargeReference: tip.chargeReference,
+      providerReference: null,
+      operationReference: null,
+      status: 'open',
+      amountMinor: NET - share / 2n,
+      currency: 'NGN',
+      reason: 'fraudulent',
+      respondBy: at(7 * DAY),
+      feeMinor: null,
+      feeCurrency: null,
+      occurredAt: new Date(),
+    },
+    provider: 'bachs',
+    now: new Date(),
+  });
+  await ops.applyDisputeEvent(database.db, {
+    event: {
+      kind: 'dispute',
+      eventId: `evt_${randomUUID()}`,
+      eventType: 'dispute.updated',
+      scope: 'platform',
+      partnerDisputeId: tip.disputeRef,
+      chargeReference: tip.chargeReference,
+      providerReference: null,
+      operationReference: null,
+      status: 'lost',
+      amountMinor: NET - share / 2n,
+      currency: 'NGN',
+      reason: 'fraudulent',
+      respondBy: at(7 * DAY),
+      feeMinor: null,
+      feeCurrency: null,
+      occurredAt: new Date(Date.now() + HOUR),
+    },
+    provider: 'bachs',
+    now: new Date(Date.now() + HOUR),
+  });
+  for (let n = 0; n < 3; n += 1) {
+    await ops.runDisputeSteps(database.db, {
+      now: new Date(Date.now() + (2 + n) * HOUR),
+    });
+    await sweep(business.provider);
+  }
+  const [dispute] = await q(
+    `SELECT settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at);
+  assert.equal((await returnOf(tip.tipId)).status, 'cancelled');
+  assert.equal((await facts(tip.tipId)).businessHeldMinor, share / 2n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), share / 2n);
+  // What the loss didn't use goes back to the business, once.
+  await returnApproved(tip.tipId);
+  await sweep(business.provider);
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share, share / 2n]);
+  assert.equal((await returnOf(tip.tipId)).status, 'done');
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal((await facts(tip.tipId)).businessHeldMinor, 0n);
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});

@@ -966,3 +966,70 @@ test('m9: old readings that said nothing was wrong are purged; a spell going on 
     ['critical'],
   );
 });
+
+/* Fix round 2 (re-review 1, N2). */
+
+test('N2 (probe C): fee returns waiting on own money keep one issue open, alert once (then every 6 hours), and it closes once the money is there', async () => {
+  await paidTip(TOBI);
+  const tip = await paidTip(ADA);
+  await q(
+    `INSERT INTO share_transfers (id, tip_id, kind, profile_id, currency, amount_minor, deliver_minor,
+       status, provider, partner_reversal_id)
+     VALUES ($1, $2, 'fee_return', $3, 'NGN', 50000, 50000, 'out_paid', 'bachs', 'refund.rf_n2')`,
+    [randomUUID(), tip.tipId, ADA.id],
+  );
+  const sent = [];
+  const mover = {
+    name: 'bachs-sandbox',
+    capabilities: { connectedAccounts: false },
+    async payoutBalance() {
+      return { availableMinor: 0n };
+    },
+    async transferToAccount(input) {
+      sent.push(input.amountMinor);
+      return { transferRef: `tr_${sent.length}`, status: 'paid' };
+    },
+    async findPlatformCollection() {
+      return null;
+    },
+  };
+  const alerts = () =>
+    q(
+      `SELECT 1 FROM outbox_events WHERE event_type = 'payouts.platform_refused'`,
+    );
+  const run = async (now) => {
+    await q(
+      `UPDATE share_transfers SET next_attempt_at = $1::timestamptz - interval '1 minute'`,
+      [now],
+    );
+    await ops.runShareTransfers(database.db, {
+      provider: mover,
+      now,
+      settleWaitMs: HOUR,
+    });
+    await ops.autoResolveIssues(database.db, now);
+  };
+  // No reading: own money can't be confirmed. Three waits, 15 minutes apart.
+  const start = new Date(Date.now() + 2 * HOUR);
+  for (let n = 0; n < 3; n += 1)
+    await run(new Date(start.getTime() + n * 15 * MIN));
+  assert.deepEqual(sent, []);
+  const open = await openIssues('collect_own_money_wait');
+  assert.equal(open.length, 1);
+  assert.equal(
+    (await q(`SELECT 1 FROM issues WHERE kind = 'collect_own_money_wait'`))
+      .length,
+    1,
+  );
+  assert.equal((await alerts()).length, 1);
+  // Still waiting six hours on: told again, once.
+  await run(new Date(start.getTime() + 6 * HOUR + MIN));
+  await run(new Date(start.getTime() + 6 * HOUR + 16 * MIN));
+  assert.equal((await alerts()).length, 2);
+  assert.equal((await openIssues('collect_own_money_wait')).length, 1);
+  // Topped up: the fee goes back and the issue closes itself.
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), new Date());
+  await run(new Date(start.getTime() + 6 * HOUR + 30 * MIN));
+  assert.deepEqual(sent, [50_000n]);
+  assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
