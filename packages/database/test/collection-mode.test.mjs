@@ -55,7 +55,11 @@ test('both paths that assign collect, the sign-up and the first quote, ask mayAs
     new URL('operations/collection-mode.ts', src),
     'utf8',
   );
-  assert.match(bodyOf(mode, 'decideCollectionMode'), /mayAssignCollect\(/);
+  // The quote's decision and the screens' read-only preview share one set of rules (Task 14,
+  // re-review 2 R2-I1), and those rules ask mayAssignCollect.
+  assert.match(bodyOf(mode, 'decideCollectionMode'), /nextCollectionMode\(/);
+  assert.match(bodyOf(mode, 'previewCollectionMode'), /nextCollectionMode\(/);
+  assert.match(bodyOf(mode, 'nextCollectionMode'), /mayAssignCollect\(/);
   assert.match(bodyOf(mode, 'signUpCollectionMode'), /mayAssignCollect\(/);
   const profiles = await readFile(
     new URL('operations/profiles.ts', src),
