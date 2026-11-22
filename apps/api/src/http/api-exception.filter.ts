@@ -313,6 +313,13 @@ const messages: Record<ApiErrorCode, string> = {
   NAME_NOT_LOCKED: 'This person has no verified name to change.',
   BANK_RECHECK_LATER:
     'We can’t check this account again right now. Use another account, or contact support@usetipme.xyz.',
+  // Staff only (Task 15).
+  COLLECT_ACTION_REFUSED:
+    'This can’t be done now: the money has moved on since this screen was read. Reload to see where it stands.',
+  COLLECT_EVIDENCE_LATE:
+    'The deadline to answer this dispute has passed, so evidence can’t be sent.',
+  COLLECT_READ_BACK_UNCONFIRMED:
+    'The payment partner doesn’t show this transfer paid for its amount, so it can’t be recorded as paid.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:
@@ -374,6 +381,12 @@ const operationErrors: Partial<
   NAME_LOCKED: { status: 409, code: 'NAME_LOCKED' },
   NAME_NOT_LOCKED: { status: 409, code: 'NAME_NOT_LOCKED' },
   BANK_RECHECK_LATER: { status: 409, code: 'BANK_RECHECK_LATER' },
+  COLLECT_ACTION_REFUSED: { status: 409, code: 'COLLECT_ACTION_REFUSED' },
+  COLLECT_EVIDENCE_LATE: { status: 409, code: 'COLLECT_EVIDENCE_LATE' },
+  COLLECT_READ_BACK_UNCONFIRMED: {
+    status: 409,
+    code: 'COLLECT_READ_BACK_UNCONFIRMED',
+  },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },

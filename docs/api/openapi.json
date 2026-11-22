@@ -13119,6 +13119,947 @@
         "x-tipme-permission": "payments.repair"
       }
     },
+    "/v1/ops/collect/disputes": {
+      "get": {
+        "operationId": "OpsCollect.disputes",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
+    "/v1/ops/collect/disputes/{id}": {
+      "get": {
+        "operationId": "OpsCollect.dispute",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
+    "/v1/ops/collect/disputes/{id}/evidence": {
+      "post": {
+        "operationId": "OpsCollect.evidence",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 20,
+                    "maxLength": 5000
+                  }
+                },
+                "required": [
+                  "reason",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/disputes/{id}/evidence/files": {
+      "post": {
+        "operationId": "OpsCollect.addFile",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/disputes/{id}/evidence/files/{index}/remove": {
+      "post": {
+        "operationId": "OpsCollect.removeFile",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "index",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/disputes/{id}/release-hold": {
+      "post": {
+        "operationId": "OpsCollect.releaseHold",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/held": {
+      "get": {
+        "operationId": "OpsCollect.held",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
+    "/v1/ops/collect/name": {
+      "post": {
+        "operationId": "OpsCollect.changeName",
+        "tags": [
+          "OpsCollect"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  },
+                  "first": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                  },
+                  "last": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "pattern": "^\\p{L}[\\p{L}\\p{M} '’.-]*$"
+                  },
+                  "handle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  }
+                },
+                "required": [
+                  "reason",
+                  "first",
+                  "last",
+                  "handle"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "recoveries.manage"
+      }
+    },
+    "/v1/ops/collect/refunds/{tipId}/record-paid": {
+      "post": {
+        "operationId": "OpsCollect.recordRefund",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "tipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/same-bank": {
+      "get": {
+        "operationId": "OpsCollect.sameBank",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
+    "/v1/ops/collect/same-bank/{profileId}/clear": {
+      "post": {
+        "operationId": "OpsCollect.clearSameBank",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "profileId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/transfers": {
+      "get": {
+        "operationId": "OpsCollect.transfers",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
+    "/v1/ops/collect/transfers/{id}/record-paid": {
+      "post": {
+        "operationId": "OpsCollect.recordPaid",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/transfers/{id}/retry": {
+      "post": {
+        "operationId": "OpsCollect.retry",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/transfers/{id}/review": {
+      "post": {
+        "operationId": "OpsCollect.review",
+        "tags": [
+          "OpsCollect"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 10,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.manage"
+      }
+    },
+    "/v1/ops/collect/unclaimed": {
+      "get": {
+        "operationId": "OpsCollect.unclaimed",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
     "/v1/ops/database-budget": {
       "get": {
         "operationId": "OpsDatabaseBudget.read",
@@ -17357,7 +18298,7 @@
                   },
                   "permissions": {
                     "default": [],
-                    "maxItems": 26,
+                    "maxItems": 28,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -17387,7 +18328,9 @@
                         "changelog.publish",
                         "pro.price",
                         "switches.manage",
-                        "announcements.send"
+                        "announcements.send",
+                        "collect.view",
+                        "collect.manage"
                       ]
                     }
                   }
@@ -17471,7 +18414,7 @@
                     "maxLength": 300
                   },
                   "permissions": {
-                    "maxItems": 26,
+                    "maxItems": 28,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -17501,7 +18444,9 @@
                         "changelog.publish",
                         "pro.price",
                         "switches.manage",
-                        "announcements.send"
+                        "announcements.send",
+                        "collect.view",
+                        "collect.manage"
                       ]
                     }
                   }
@@ -17640,7 +18585,7 @@
                 "type": "object",
                 "properties": {
                   "permissions": {
-                    "maxItems": 26,
+                    "maxItems": 28,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -17670,7 +18615,9 @@
                         "changelog.publish",
                         "pro.price",
                         "switches.manage",
-                        "announcements.send"
+                        "announcements.send",
+                        "collect.view",
+                        "collect.manage"
                       ]
                     }
                   }
@@ -17789,7 +18736,7 @@
                     "maxLength": 500
                   },
                   "additions": {
-                    "maxItems": 26,
+                    "maxItems": 28,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -17819,12 +18766,14 @@
                         "changelog.publish",
                         "pro.price",
                         "switches.manage",
-                        "announcements.send"
+                        "announcements.send",
+                        "collect.view",
+                        "collect.manage"
                       ]
                     }
                   },
                   "removals": {
-                    "maxItems": 26,
+                    "maxItems": 28,
                     "type": "array",
                     "items": {
                       "type": "string",
@@ -17854,7 +18803,9 @@
                         "changelog.publish",
                         "pro.price",
                         "switches.manage",
-                        "announcements.send"
+                        "announcements.send",
+                        "collect.view",
+                        "collect.manage"
                       ]
                     }
                   }
@@ -20789,6 +21740,9 @@
                   "NAME_LOCKED",
                   "NAME_NOT_LOCKED",
                   "BANK_RECHECK_LATER",
+                  "COLLECT_ACTION_REFUSED",
+                  "COLLECT_EVIDENCE_LATE",
+                  "COLLECT_READ_BACK_UNCONFIRMED",
                   "NO_CONFIRMED_TEST",
                   "EMAIL_TAKEN",
                   "EMAIL_INVALID",

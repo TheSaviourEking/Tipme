@@ -31,6 +31,7 @@ import {
   beginPaymentAccountCreation,
   collectAccountReference,
   collectBankFacts,
+  collectBankNeedsReadding,
   collectBankView,
   collectDisputeHeldMinor,
   collectStatus,
@@ -164,6 +165,11 @@ export class CollectBankController {
           status.firstWithdrawalCapMinor?.toString() ?? null,
         dailyLimitMinor: status.dailyLimitMinor?.toString() ?? null,
         bank: await collectBankView(this.database.db, {
+          profileId,
+          provider: this.provider.name,
+        }),
+        // Task 15 fix round 2: after a name change, the bank is added again under the new name.
+        readdBank: await collectBankNeedsReadding(this.database.db, {
           profileId,
           provider: this.provider.name,
         }),

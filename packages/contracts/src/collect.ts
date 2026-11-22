@@ -176,6 +176,12 @@ export interface CollectBankView {
 export interface CollectStatusView extends CollectStatus {
   bank: CollectBankView | null;
   /**
+   * Task 15 fix round 2: support changed their verified name, and their current bank was checked
+   * under the old one. They add their bank details again (the name lock and our payment partner's
+   * name check still apply); their tips wait until then.
+   */
+  readdBank: boolean;
+  /**
    * What is held from their balance for disputes on their tips still open (spec §6.2), in minor
    * units, never negative: "A payment to you is being questioned. We’ve held {amount} until it's
    * settled." "0" when nothing is held.
@@ -190,6 +196,180 @@ export interface CollectStatusView extends CollectStatus {
 export const opsCollectNameChangeSchema = opsReasonSchema
   .extend({ first: legalNamePartSchema, last: legalNamePartSchema })
   .strict();
+export type OpsCollectNameChangeRequest = z.infer<
+  typeof opsCollectNameChangeSchema
+>;
+
+/*
+ * You collect staff screens (plan Task 15, spec §9). Today's masking rules: a recipient is their
+ * handle, a bank account its last four digits, and nothing about a supporter appears. Amounts are
+ * decimal strings of minor units.
+ */
+
+/** One recipient TipMe holds money for (its `held_for_recipients` on the ledger). */
+export interface OpsCollectHeldRecipient {
+  profileId: string;
+  handle: string | null;
+  heldMinor: string;
+  currency: string;
+  verified: boolean;
+  /** When the oldest tip whose share TipMe still holds settled. */
+  oldestTipAt: string | null;
+  /** Whole days until the holding cap's days run out; null when it doesn't apply (verified). */
+  daysLeft: number | null;
+  remindersSent: number;
+  paused: boolean;
+  pausedReason: 'amount' | 'days' | null;
+  /**
+   * Fix round 1 (I3): support changed their verified name at this time, and nothing more moves to
+   * them until our payment partner checks it with their bank details again. Null otherwise.
+   */
+  nameRecheckSince: string | null;
+}
+
+/** A business's share TipMe holds (R3), by name only. */
+export interface OpsCollectHeldBusiness {
+  businessId: string;
+  name: string | null;
+  heldMinor: string;
+  currency: string;
+}
+
+/** `GET /v1/ops/collect/held`: per currency, the total is the ledger's own sum. */
+export interface OpsCollectHeld {
+  totals: { currency: string; heldMinor: string }[];
+  recipients: OpsCollectHeldRecipient[];
+  businesses: OpsCollectHeldBusiness[];
+}
+
+export const OPS_COLLECT_TRANSFER_STATUSES = [
+  'waiting',
+  'ready',
+  'sent',
+  'unknown',
+  'review',
+  'paid',
+  'cancelled',
+] as const;
+export type OpsCollectTransferStatus =
+  (typeof OPS_COLLECT_TRANSFER_STATUSES)[number];
+
+/** One collect transfer. Never the partner account, only the group staff look up at the partner. */
+export interface OpsCollectTransfer {
+  id: string;
+  kind: 'share' | 'back' | 'return';
+  status: OpsCollectTransferStatus;
+  reviewReason: string | null;
+  handle: string | null;
+  amountMinor: string;
+  currency: string;
+  /** The transfer's group at the partner (`tipme-collect-<tipId>` and kin). */
+  group: string;
+  /** The last four digits of the recipient's current bank, when known. */
+  bankLast4: string | null;
+  attempts: number;
+  /** The partner definitely refused its last send (nothing moved). */
+  refused: boolean;
+  sentAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A recipient whose transfers a shared bank account holds (`collect_same_bank`). */
+export interface OpsCollectSameBank {
+  profileId: string;
+  handle: string | null;
+  openIssues: number;
+  heldTransfers: number;
+  heldMinor: string;
+  since: string | null;
+}
+
+export type OpsCollectEvidenceState =
+  'none' | 'draft' | 'sending' | 'submitted' | 'refused';
+
+export interface OpsCollectDispute {
+  id: string;
+  handle: string | null;
+  amountMinor: string;
+  currency: string;
+  status: 'open' | 'responded' | 'won' | 'lost' | 'closed';
+  /** The partner's reason code. */
+  reason: string | null;
+  respondBy: string | null;
+  /** From TipMe's own records, never guessed from the status. */
+  evidenceState: OpsCollectEvidenceState;
+  heldMinor: string;
+  settledAt: string | null;
+  createdAt: string;
+}
+
+export interface OpsCollectDisputeDetail extends OpsCollectDispute {
+  partnerDisputeId: string;
+  shareStep: 'held' | 'balance' | 'none' | null;
+  decidedAt: string | null;
+  feeMinor: string | null;
+  feeCurrency: string | null;
+  evidence: {
+    state: OpsCollectEvidenceState;
+    files: { contentType: string; bytes: number }[];
+    askedAt: string | null;
+    submittedAt: string | null;
+    /** Evidence can be added and sent now (open, before the deadline, not sent yet). */
+    canSubmit: boolean;
+    /** The most files this dispute's provider takes (1 at Bachs, 5 elsewhere). */
+    maxFiles: number;
+    /** The deadline has passed. */
+    late: boolean;
+  };
+  /** A closed dispute's hold kept for a refund, releasable early (P28) when nothing uses it. */
+  holdRelease: { possible: boolean; why: string | null };
+}
+
+/** A recipient past the holding cap (spec §15): for staff follow-up, nothing automatic. */
+export interface OpsCollectUnclaimed {
+  profileId: string;
+  handle: string | null;
+  heldMinor: string;
+  currency: string;
+  oldestTipAt: string | null;
+  pausedReason: 'amount' | 'days';
+  remindersSent: number;
+}
+
+/** `POST /v1/ops/collect/disputes/:id/evidence`: staff's words for the partner, and a reason. */
+export const opsCollectEvidenceSchema = opsReasonSchema
+  .extend({ text: z.string().trim().min(20).max(5000) })
+  .strict();
+export type OpsCollectEvidenceRequest = z.infer<
+  typeof opsCollectEvidenceSchema
+>;
+
+/** The evidence files staff may add: PDF, PNG or JPEG, up to 5 MB each, five at most. */
+export const OPS_COLLECT_EVIDENCE_TYPES = [
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+] as const;
+export const OPS_COLLECT_EVIDENCE_MAX_BYTES = 5 * 1024 * 1024;
+export const OPS_COLLECT_EVIDENCE_MAX_FILES = 5;
+// The per-provider limit (one file at Bachs) is opsCollectEvidenceMaxFiles, in provider-names.ts.
+
+/** `POST /v1/ops/collect/name`: a locked name changed by support, on the page with this handle. */
+export const opsCollectNameRequestSchema = opsCollectNameChangeSchema
+  .extend({ handle: z.string().trim().min(1).max(40) })
+  .strict();
+export type OpsCollectNameRequest = z.infer<typeof opsCollectNameRequestSchema>;
+
+/** What a You collect staff action came to (a pending request answers 202 instead). */
+export interface OpsCollectActed {
+  done: true;
+}
 
 // COLLECT_COPY lives in copy.ts (no zod), so public pages can import it on its own.
-export { COLLECT_COPY, COLLECT_HELD_NOTE, COLLECT_HELD_WORDS } from './copy.js';
+export {
+  COLLECT_COPY,
+  COLLECT_HELD_NOTE,
+  COLLECT_HELD_WORDS,
+  COLLECT_NAME_RECHECK_NOTICE,
+} from './copy.js';

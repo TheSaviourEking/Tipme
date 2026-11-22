@@ -32,9 +32,9 @@ import {
   tipQuotes,
 } from '../schema.js';
 import { collectSettingsInForce } from './collect-settings.js';
-import { guarded } from './errors.js';
+import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { openIssue } from './issues.js';
+import { markResolved, openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { reportProviderKeyRefused } from './payout-start.js';
@@ -400,9 +400,11 @@ function currentAccount(alias: string): SQL {
  */
 function canReceive(alias: string): SQL {
   const c = sql.raw(alias);
+  // Task 15: a legal name support changed is checked by our payment partner again first.
   return sql`EXISTS (
       SELECT 1 FROM profiles p
-       WHERE p.id = ${c}.profile_id AND p.collect_verified_at IS NOT NULL)
+       WHERE p.id = ${c}.profile_id AND p.collect_verified_at IS NOT NULL
+         AND p.collect_name_recheck_at IS NULL)
     AND EXISTS (
       SELECT 1 FROM payout_destinations d
        WHERE d.profile_id = ${c}.profile_id AND d.provider = ${c}.provider
@@ -485,43 +487,120 @@ async function finishPaid(
   transferRef: string,
   now: Date,
 ): Promise<Outcome> {
-  return db.transaction(async (tx) => {
-    const paid = await move(tx, row, from, 'paid', now, {
-      transferReference: transferRef,
-      paidAt: now,
-    });
-    if (!paid) return 'none';
-    const owner = { amountMinor: row.amountMinor, profileId: row.profileId };
-    if (row.kind === 'back' && row.refundId)
-      // Task 10: the refund's money is back in TipMe's balance (held for them, never withdrawable),
-      // so its reservation of their account ends with this posting.
-      await tx
-        .update(tipRefunds)
-        .set({ heldMinor: 0n, updatedAt: now })
-        .where(eq(tipRefunds.id, row.refundId));
-    if (row.kind === 'return')
-      // Task 10 (RI1): what a failed refund took back is theirs again, in their account; the hold
-      // that kept it from their balance ends with the posting, once.
-      await tx
-        .update(tipRefunds)
-        .set({ heldMinor: 0n, updatedAt: now })
-        .where(
-          and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'FAILED')),
-        );
-    await postLedgerTransaction(tx, {
-      operationType: 'collect_transfer',
-      operationKey: `collect_transfer.${row.id}`,
-      currency: row.currency,
-      tipId: row.tipId,
-      traceId: null,
-      // A share moves held money to the recipient's account; a transfer back returns it (Task 9).
-      lines:
-        row.kind === 'back'
-          ? buildCollectReturnPosting(owner)
-          : buildCollectTransferPosting(owner),
-    });
-    return 'paid';
+  return db.transaction(async (tx) =>
+    (await bookPaid(tx, row, from, transferRef, now)) ? 'paid' : 'none',
+  );
+}
+
+/**
+ * Moves the row to `paid` (conditional on the state and attempts it was read with) and books the
+ * money as moved, in the caller's transaction: the one booking path every paid transfer takes, the
+ * machine's and staff's (Task 15). The posting's key `collect_transfer.<id>` books it once.
+ */
+async function bookPaid(
+  tx: Tx,
+  row: Row,
+  from: 'sent' | 'unknown' | 'review',
+  transferRef: string,
+  now: Date,
+): Promise<boolean> {
+  const paid = await move(tx, row, from, 'paid', now, {
+    transferReference: transferRef,
+    paidAt: now,
   });
+  if (!paid) return false;
+  const owner = { amountMinor: row.amountMinor, profileId: row.profileId };
+  if (row.kind === 'back' && row.refundId)
+    // Task 10: the refund's money is back in TipMe's balance (held for them, never withdrawable),
+    // so its reservation of their account ends with this posting.
+    await tx
+      .update(tipRefunds)
+      .set({ heldMinor: 0n, updatedAt: now })
+      .where(eq(tipRefunds.id, row.refundId));
+  if (row.kind === 'return')
+    // Task 10 (RI1): what a failed refund took back is theirs again, in their account; the hold
+    // that kept it from their balance ends with the posting, once.
+    await tx
+      .update(tipRefunds)
+      .set({ heldMinor: 0n, updatedAt: now })
+      .where(
+        and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'FAILED')),
+      );
+  await postLedgerTransaction(tx, {
+    operationType: 'collect_transfer',
+    operationKey: `collect_transfer.${row.id}`,
+    currency: row.currency,
+    tipId: row.tipId,
+    traceId: null,
+    // A share moves held money to the recipient's account; a transfer back returns it (Task 9).
+    lines:
+      row.kind === 'back'
+        ? buildCollectReturnPosting(owner)
+        : buildCollectTransferPosting(owner),
+  });
+  return true;
+}
+
+/**
+ * Task 15 (P24–P27): staff record a transfer in review as paid, because the partner shows it paid.
+ * Only a row the partner's answer put in review (`provider`): every other hold is on a row never
+ * sent, so nothing can have moved under it. `transferRef` is what a read-back by the row's group
+ * just found paid, for this row's amount and currency (the caller read it, outside the
+ * transaction). Books through the same path as any paid transfer, once.
+ */
+export async function recordReviewTransferPaid(
+  tx: Tx,
+  i: {
+    transferId: string;
+    transferRef: string;
+    now: Date;
+    /** Who asked, and why: the transfer's review issue is resolved in their name. */
+    staffUserId: string;
+    reason: string;
+  },
+): Promise<{ transferId: string; amountMinor: string }> {
+  const [row] = await tx
+    .select()
+    .from(collectTransfers)
+    .where(eq(collectTransfers.id, i.transferId))
+    .for('update');
+  if (!row || row.status !== 'review' || row.reviewReason !== 'provider')
+    throw new OperationError('COLLECT_ACTION_REFUSED', 'not_in_review');
+  if (!(await bookPaid(tx, row, 'review', i.transferRef, i.now)))
+    throw new OperationError('COLLECT_ACTION_REFUSED', 'moved');
+  // Fix round 1 (minor 1): the review it was in is settled, so its issue is too.
+  const [issue] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.dedupeKey, `collect_transfer_review.${row.id}`),
+        eq(issues.status, 'open'),
+      ),
+    );
+  if (issue)
+    await markResolved(tx, {
+      issueId: issue.id,
+      resolvedBy: i.staffUserId,
+      staffUserId: i.staffUserId,
+      reason: i.reason,
+      outcome: 'resolved_by_provider',
+      now: i.now,
+    });
+  return { transferId: row.id, amountMinor: String(row.amountMinor) };
+}
+
+/** A transfer staff may act on, with what its read-back needs (Task 15). Null when there is none. */
+export async function collectTransferForStaff(
+  db: Database | Tx,
+  transferId: string,
+): Promise<Row | null> {
+  if (!UUID.test(transferId)) return null;
+  const [row] = await db
+    .select()
+    .from(collectTransfers)
+    .where(eq(collectTransfers.id, transferId));
+  return row ?? null;
 }
 
 /** A person needs to look (P13 `provider`): TipMe may hold money it could not send. Nothing is sent. */

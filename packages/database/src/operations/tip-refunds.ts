@@ -25,6 +25,7 @@ import type { Database, Tx } from '../client.js';
 import {
   collectTransfers,
   disputes,
+  issues,
   ledgerTransactions,
   paymentIntents,
   profiles,
@@ -43,7 +44,7 @@ import {
 } from './collect-transfers.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
-import { openIssue } from './issues.js';
+import { markResolved, openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { reverseTip } from './reversals.js';
 import { scheduleCollectRecover } from './share-transfers.js';
@@ -213,14 +214,24 @@ export async function tipRefundFacts(
       status: tipRefunds.status,
       failure: tipRefunds.failure,
       refundedMinor: tipRefunds.refundedMinor,
+      // Task 15: staff booked it since (`tip_refund.record_paid`), under the refund's own key.
+      booked: sql<boolean>`EXISTS (SELECT 1 FROM ledger_transactions l
+        WHERE l.operation_key = 'collect_refund.' || tip_refunds.id::text)`,
     })
     .from(tipRefunds)
     .where(eq(tipRefunds.tipId, tipId))
     .orderBy(desc(tipRefunds.createdAt));
-  const open = rows.find((r) => r.status !== 'FAILED') ?? null;
+  const open =
+    rows.find(
+      (r) => r.status !== 'FAILED' && !(r.booked && r.status !== 'PAID'),
+    ) ?? null;
   // RI3: a refund the partner paid that TipMe didn't book (an unexpected refund.paid).
   const unbooked =
-    rows.find((r) => r.status !== 'PAID' && r.refundedMinor !== null) ?? null;
+    rows.find(
+      (r) => r.status !== 'PAID' && r.refundedMinor !== null && !r.booked,
+    ) ?? null;
+  // Task 15: once staff booked it, the tip's money has gone back: nothing more to refund.
+  const bookedByStaff = rows.some((r) => r.booked && r.status !== 'PAID');
   const bankTransfer =
     read.method === 'bank_transfer' ||
     rows.some((r) => r.failure === 'bank_transfer');
@@ -248,7 +259,10 @@ export async function tipRefundFacts(
         ? 'team'
         : unbooked
           ? 'paid_unbooked'
-          : open || row.reversed || collect?.refusal === 'already'
+          : open ||
+              bookedByStaff ||
+              row.reversed ||
+              collect?.refusal === 'already'
             ? 'already'
             : collect?.refusal === 'disputed'
               ? 'disputed'
@@ -1694,7 +1708,9 @@ async function bookCollectRefund(
   refundedMinor: bigint,
   feeMinor: bigint,
   now: Date,
-): Promise<void> {
+  /** Task 15: staff decided it (`tip_refund.record_paid`): what TipMe absorbs needs no new issue. */
+  staffDecided = false,
+): Promise<{ absorbedMinor: bigint }> {
   const facts = await tipRefundFacts(tx, row.tipId);
   const profileId = facts.profileId!;
   const parts: ({ amountMinor: bigint } & Owner)[] = [];
@@ -1769,6 +1785,7 @@ async function bookCollectRefund(
   const absorbed = left;
   if (
     absorbed > 0n &&
+    !staffDecided &&
     (row.collectPlan !== 'absorb' || absorbed > (row.gapMinor ?? 0n))
   )
     // Booked as it happened (the money is gone), and a person looks at why it wasn't recovered.
@@ -1842,6 +1859,120 @@ async function bookCollectRefund(
         isNull(disputes.settledAt),
       ),
     );
+  return { absorbedMinor: absorbed };
+}
+
+/**
+ * Task 15 (RI3): our payment partner paid a refund of a collect tip that TipMe didn't book (it had
+ * stopped or failed it, or the tip's money had gone back another way). Staff book it, with a second
+ * person (`tip_refund.record_paid`): from what TipMe still holds for the tip first (a share never
+ * sent, what refunds took back), and TipMe absorbs the rest, in one balanced reversal under the
+ * refund's own key `collect_refund.<id>`, so once. A tip already reversed (a lost dispute) had its
+ * held money used by that, so all of it is TipMe's to absorb. The tip's `paid_unbooked` block ends,
+ * and its money issue is resolved.
+ */
+export async function recordUnbookedRefund(
+  tx: Tx,
+  input: { tipId: string; staffUserId: string; reason: string; now: Date },
+): Promise<{ refundId: string; amountMinor: string; absorbedMinor: string }> {
+  const { now } = input;
+  const [tip] = await tx
+    .select({ id: tips.id })
+    .from(tips)
+    .where(eq(tips.id, input.tipId))
+    .for('update');
+  if (!tip) throw new OperationError('TIP_REFUND_REFUSED', 'not_paid');
+  const rows = await tx
+    .select()
+    .from(tipRefunds)
+    .where(eq(tipRefunds.tipId, input.tipId))
+    .orderBy(desc(tipRefunds.createdAt))
+    .for('update');
+  const row = rows.find(
+    (r) => r.status !== 'PAID' && r.refundedMinor !== null && r.collectPlan,
+  );
+  if (!row) throw new OperationError('COLLECT_ACTION_REFUSED', 'not_unbooked');
+  const [booked] = await tx
+    .select({ id: ledgerTransactions.id })
+    .from(ledgerTransactions)
+    .where(eq(ledgerTransactions.operationKey, `collect_refund.${row.id}`));
+  if (booked) throw new OperationError('COLLECT_ACTION_REFUSED', 'booked');
+  // Fix round 1 (I2): a return of the held money to the recipient is moving: booking from that money
+  // now would use it twice. Once it is paid it no longer counts as held, and TipMe absorbs the rest.
+  if ((await recoveredOnTip(tx, input.tipId)).returning)
+    throw new OperationError('COLLECT_ACTION_REFUSED', 'in_flight');
+  const refunded = row.refundedMinor!;
+  const fee = row.refundFeeMinor ?? 0n;
+  let absorbed: bigint;
+  if (await tipReversed(tx, input.tipId)) {
+    const [payment] = await tx
+      .select({ id: ledgerTransactions.id })
+      .from(ledgerTransactions)
+      .where(
+        and(
+          eq(ledgerTransactions.tipId, input.tipId),
+          eq(ledgerTransactions.operationType, 'payment'),
+        ),
+      );
+    if (!payment) throw new Error('a collect tip has its payment posting');
+    await postLedgerTransaction(tx, {
+      operationType: 'reversal',
+      operationKey: `collect_refund.${row.id}`,
+      currency: row.currency,
+      tipId: row.tipId,
+      reversesTransactionId: payment.id,
+      traceId: activeTraceId(),
+      lines: buildAbsorbedRefundPosting({
+        amountMinor: refunded,
+        refundFeeMinor: fee,
+      }),
+    });
+    absorbed = refunded;
+  } else {
+    ({ absorbedMinor: absorbed } = await bookCollectRefund(
+      tx,
+      row,
+      refunded,
+      fee,
+      now,
+      true,
+    ));
+  }
+  // What the refund held from the recipient is spent now.
+  if (row.status === 'FAILED')
+    await tx
+      .update(tipRefunds)
+      .set({ heldMinor: 0n, updatedAt: now })
+      .where(eq(tipRefunds.id, row.id));
+  else
+    await moveRefund(tx, row, 'PAID', {
+      now,
+      cause: 'system',
+      set: { heldMinor: 0n },
+    });
+  const [unexpected] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.dedupeKey, `tip_refund_unexpected.${row.id}`),
+        eq(issues.status, 'open'),
+      ),
+    );
+  if (unexpected)
+    await markResolved(tx, {
+      issueId: unexpected.id,
+      resolvedBy: input.staffUserId,
+      staffUserId: input.staffUserId,
+      reason: input.reason,
+      outcome: absorbed > 0n ? 'written_off' : 'resolved_by_provider',
+      now,
+    });
+  return {
+    refundId: row.id,
+    amountMinor: String(refunded),
+    absorbedMinor: String(absorbed),
+  };
 }
 
 /**

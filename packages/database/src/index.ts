@@ -110,6 +110,7 @@ export * from './operations/collection-mode.js';
 export * from './operations/collect-transfers.js';
 export * from './operations/collect-guards.js';
 export * from './operations/collect-verification.js';
+export * from './operations/collect-ops.js';
 export * from './operations/disputes.js';
 export * from './operations/feature-switches.js';
 export * from './operations/pro-periods.js';

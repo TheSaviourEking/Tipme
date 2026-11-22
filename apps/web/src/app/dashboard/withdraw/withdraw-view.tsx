@@ -8,7 +8,10 @@ import type {
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts/copy';
+import {
+  COLLECT_COPY,
+  COLLECT_NAME_RECHECK_NOTICE,
+} from '@tipme/contracts/copy';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
   Button,
@@ -246,7 +249,9 @@ export default function WithdrawPage({
     failed: collectFailed,
     reload: reloadCollect,
   } = useCollectStatus();
-  const collecting = collect !== null && !collect.verified;
+  // Task 15 fix round 2: after support changed their name, the bank is added again (readdBank).
+  const collecting =
+    collect !== null && (!collect.verified || collect.readdBank);
   // The partner's bank list, only for the add-bank-details form, read once it is needed.
   const [banks, setBanks] = useState<PayoutBank[] | null>(null);
   useEffect(() => {
@@ -334,8 +339,16 @@ export default function WithdrawPage({
                 />
               </p>
             )}
+            {collect.readdBank && (
+              <p
+                className="collect-bank__recheck"
+                data-testid="name-recheck-line"
+              >
+                {COLLECT_NAME_RECHECK_NOTICE.formLine}
+              </p>
+            )}
             <CollectBankForm
-              bank={collect.bank}
+              bank={collect.readdBank ? null : collect.bank}
               read={collect}
               banks={banks}
               onCheckAgain={reloadCollect}

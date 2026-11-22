@@ -62,3 +62,15 @@ export const COLLECT_HELD_NOTE = {
   refundHeld: (amount: string) =>
     `${amount} is held while a refund is settled.`,
 } as const;
+
+/**
+ * The in-app notice after support changes a recipient's verified name (Task 15 fix round 1, I3):
+ * their tips wait until our payment partner checks the new name with their bank details again.
+ */
+export const COLLECT_NAME_RECHECK_NOTICE = {
+  title: 'Add your bank details again',
+  body: 'Your verified name was changed. Add your bank details again so our payment partner can check the new name and send your tips.',
+  /** Above the bank form on Withdraw and Get paid while they add it again (fix round 2). */
+  formLine:
+    'Your name was updated. Add your bank details again so we can check it.',
+} as const;
