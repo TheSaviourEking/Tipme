@@ -200,8 +200,9 @@ Only once live payments are on (sections 1 to 5) and every line below is done:
       TipMe's tipping use case. The owner's statement alone is not enough (spec §16, risk 3).
 - [ ] **BLOCKING, own money above the warning level:** TipMe's own money (its partner balance less what it holds for
       recipients) is above the You collect warning level, ₦500,000 by default (Ops → You collect → Settings), and no
-      balance in any currency is below zero, with room in USD for dispute fees (P5). The latest reserve reading in
-      Ops → You collect says `ok`. See `payment-stuck-unknown.md`, "The reserve rule and TipMe's own money".
+      balance in any currency is below zero, with room in USD for dispute fees (P5). The latest reserve reading
+      (`collect_reserve_readings`; its Ops screen is a follow-up) says `ok` for every currency. See
+      `payment-stuck-unknown.md`, "The reserve rule and TipMe's own money".
 - [ ] **BLOCKING, automatic payouts off:** TipMe's own balance pays out by hand only (the partner dashboard's payout
       schedule is `manual` for NGN), and no `collect_auto_payout_on` issue is open.
 - [ ] **BLOCKING, the sandbox checks answered:** `scripts/you-collect-sandbox.mjs` (steps `start`, `transfer` and

@@ -108,8 +108,8 @@ there is one (`feature_switch.set`), like every money switch.
   applying while anything is held.
 - In an emergency, staff pause every collect transfer with the serious action `collect_transfers.pause` (Ops →
   You collect → Settings), and resume with `collect_transfers.resume`; that is separate from this switch.
-- Switching off does not refund or move anyone's held money, and nothing moves a `collect` recipient back to
-  `direct` (spec §14).
+- Switching off does not refund or move anyone's held money, and no code moves a `collect` recipient back to
+  `direct` (Ops → Users shows the mode, read-only).
 
 ### Release day and after
 
