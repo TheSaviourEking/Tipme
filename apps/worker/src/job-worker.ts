@@ -88,6 +88,12 @@ import {
   handleDisputeEvidence,
 } from './handlers/collect-transfers.js';
 import { handleCollectReminders } from './handlers/collect-reminders.js';
+import {
+  collectReconReader,
+  collectReserveReader,
+  handleCollectRecon,
+  handleCollectReserve,
+} from './handlers/collect-reserve.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
@@ -147,6 +153,11 @@ const PAYMENT_RESERVE_LOCK_TTL_MS = 5 * 60_000;
 // scheduled (with no rows it asks the partner nothing). A run still going when the next fires makes
 // it skip; the lock frees itself before the following one if the process dies mid-run. Overlap
 // would be safe anyway: every move is conditional, so only the partner calls are saved.
+// You collect (plan Task 11, spec §7): the daily reconciliation, 02:00 in Lagos. It reads every
+// recently active recipient's transfers, so it may take minutes; a run still going makes the next
+// skip, and the lock frees itself well before the following day if the process dies mid-run.
+const COLLECT_RECON_JOB = 'collect.recon';
+const COLLECT_RECON_LOCK_TTL_MS = 60 * 60_000;
 const COLLECT_TRANSFERS_JOB = 'collect.transfers';
 const COLLECT_TRANSFERS_INTERVAL_MS = 2 * 60_000;
 const COLLECT_TRANSFERS_LOCK_TTL_MS = 110_000;
@@ -506,6 +517,21 @@ export async function startJobWorker(
         logger,
       })
     : null;
+  // The same provider as the reserve check: TipMe's own account there is what is reconciled.
+  const collectReserve = payoutSetupProvider
+    ? collectReserveReader(payoutSetupProvider)
+    : null;
+  const collectRecon = payoutSetupProvider
+    ? collectReconReader(payoutSetupProvider)
+    : null;
+  const collectReconSchedule = collectRecon
+    ? ensureSchedule({
+        queue,
+        id: COLLECT_RECON_JOB,
+        repeat: { pattern: '0 2 * * *', tz: 'Africa/Lagos' },
+        logger,
+      })
+    : null;
   const collectTransfersSchedule = ensureSchedule({
     queue,
     id: COLLECT_TRANSFERS_JOB,
@@ -845,14 +871,25 @@ export async function startJobWorker(
                 key: `${config.QUEUE_PREFIX}:lock:${PAYMENT_RESERVE_JOB}`,
                 ttlMs: PAYMENT_RESERVE_LOCK_TTL_MS,
               },
-              () =>
-                handlePaymentReserve({
+              async () => {
+                const outcome = await handlePaymentReserve({
                   db: database.db,
                   provider: payoutSetupProvider,
                   thresholdMinor: config.BACHS_RESERVE_ALERT_MINOR,
                   alertWebhookUrl: config.ALERT_WEBHOOK_URL,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
-                }),
+                });
+                // You collect (Task 11): TipMe's own money against what it holds, per currency.
+                if (collectReserve)
+                  await handleCollectReserve({
+                    db: database.db,
+                    provider: collectReserve,
+                    alertWebhookUrl: config.ALERT_WEBHOOK_URL,
+                    sealing,
+                    log: (entry) => logger.warn({ ...entry, ...fields }),
+                  });
+                return outcome;
+              },
             );
             if (!result.ran) {
               logger.info({ event: 'reserve.skipped_running', ...fields });
@@ -865,6 +902,28 @@ export async function startJobWorker(
               ...fields,
             });
             processed.add(1, { outcome: `reserve_${result.value}` });
+            return result.value;
+          }
+          if (job.name === COLLECT_RECON_JOB) {
+            if (!collectRecon) return 'skipped';
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${COLLECT_RECON_JOB}`,
+                ttlMs: COLLECT_RECON_LOCK_TTL_MS,
+              },
+              () =>
+                handleCollectRecon({
+                  db: database.db,
+                  provider: collectRecon,
+                  log: (entry) => logger.info({ ...entry, ...fields }),
+                }),
+            );
+            if (!result.ran) {
+              processed.add(1, { outcome: 'collect_recon_skipped' });
+              return 'skipped';
+            }
+            processed.add(1, { outcome: `collect_recon_${result.value}` });
             return result.value;
           }
           if (job.name === COLLECT_TRANSFERS_JOB) {
@@ -1121,6 +1180,7 @@ export async function startJobWorker(
       await payoutSetupSchedule?.stop();
       await reserveSchedule?.stop();
       await collectTransfersSchedule.stop();
+      await collectReconSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();

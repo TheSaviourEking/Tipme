@@ -4020,6 +4020,11 @@ export const shareTransfers = pgTable(
       (): AnyPgColumn => shareHoldbacks.id,
     ),
     attempts: integer('attempts').notNull().default(0),
+    // Task 11 (N2): since when a fee return has waited on TipMe's own money (not a try). Its wait's
+    // issue stays open while any is set; cleared when the return goes ahead.
+    ownMoneyWaitSince: timestamp('own_money_wait_since', {
+      withTimezone: true,
+    }),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -4042,9 +4047,11 @@ export const shareTransfers = pgTable(
     currencyCheck('share_transfers'),
     // You collect (R3, P3): `collect_sweep` is a business's share of a collect tip, already in TipMe's
     // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
+    // Task 11 (RI2): `collect_return` sends back to a business what a failed refund pulled back from
+    // it (in leg only); `parent_id` is that `collect_recover` row.
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover', 'collect_return')`,
     ),
     check(
       'share_transfers_status',
@@ -4095,6 +4102,11 @@ export const shareTransfers = pgTable(
     uniqueIndex('share_transfers_one_refund_recover')
       .on(table.tipRefundId)
       .where(sql`kind = 'collect_recover'`),
+    // Task 11 (m4): one return per pull-back (`parent_id`), moving or done; a cancelled one (a lost
+    // dispute used the money) frees it for another. In the database, not only under the tip's lock.
+    uniqueIndex('share_transfers_one_collect_return')
+      .on(table.parentId)
+      .where(sql`kind = 'collect_return' AND status <> 'cancelled'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),
@@ -4471,6 +4483,9 @@ export const collectReserveReadings = pgTable(
     readAt: timestamp('read_at', { withTimezone: true }).notNull(),
     alertedAt: timestamp('alerted_at', { withTimezone: true }),
     alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    // Task 11 (I5): when the owners were emailed for this spell. Set once per spell, whatever the
+    // staff alert route did, so an unset or failing webhook never stops the owners hearing.
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
   },
   (table) => [
     currencyCheck('collect_reserve_readings'),
@@ -4478,9 +4493,11 @@ export const collectReserveReadings = pgTable(
       'collect_reserve_readings_provider',
       sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
     ),
+    // Task 11: a currency the alert levels don't apply to (any but NGN, or You collect not in use)
+    // is read with both levels at zero.
     check(
       'collect_reserve_readings_amounts',
-      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor < warning_minor`,
+      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor <= warning_minor`,
     ),
     check(
       'collect_reserve_readings_own',
@@ -4489,15 +4506,58 @@ export const collectReserveReadings = pgTable(
     ),
     check(
       'collect_reserve_readings_level',
+      // Task 11: the rule (available >= held) is broken only where money is held; a negative balance
+      // with nothing held in it is critical (it still blocks every transfer, §6.3).
       sql`own_minor IS NULL OR (level IS NOT NULL AND level = CASE
-          WHEN own_minor < 0 THEN 'breach'
-          WHEN own_minor < critical_minor THEN 'critical'
+          WHEN held_minor > 0 AND own_minor < 0 THEN 'breach'
+          WHEN available_minor < 0 OR own_minor < critical_minor THEN 'critical'
           WHEN own_minor < warning_minor THEN 'warning'
           ELSE 'ok' END)`,
     ),
     index('collect_reserve_readings_latest').on(
       table.provider,
       table.currency,
+      table.readAt.desc(),
+    ),
+  ],
+);
+
+/**
+ * You collect (plan Task 11, review I4/I5): the reserve check's conditions that are not one
+ * currency's level, one row per condition per check, so their alerts follow the same claim and
+ * 6-hour rule as the readings (`claimReserveAlert`): automatic payouts on TipMe's own balance, a
+ * balance read that failed while money is held, and a negative balance in a currency TipMe doesn't
+ * list (a crypto bucket), whose name is `detail`.
+ */
+export const collectReserveAlerts = pgTable(
+  'collect_reserve_alerts',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    condition: text('condition').notNull(),
+    active: boolean('active').notNull(),
+    detail: text('detail'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'collect_reserve_alerts_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    check(
+      'collect_reserve_alerts_condition',
+      sql`condition IN ('auto_payout', 'unreadable', 'unlisted_negative')`,
+    ),
+    check(
+      'collect_reserve_alerts_detail',
+      sql`detail IS NULL OR char_length(detail) <= 32`,
+    ),
+    index('collect_reserve_alerts_latest').on(
+      table.provider,
+      table.condition,
       table.readAt.desc(),
     ),
   ],

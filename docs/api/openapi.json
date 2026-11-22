@@ -14968,7 +14968,8 @@
                 "dispute_opened",
                 "dispute_deadline",
                 "dispute_fee_unposted",
-                "collect_refund_gap"
+                "collect_refund_gap",
+                "collect_own_money_wait"
               ]
             }
           },

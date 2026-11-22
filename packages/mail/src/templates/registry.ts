@@ -58,6 +58,7 @@ import {
 import { tipReceived } from './types/tip-received.js';
 import { collectReminder } from './types/collect-reminder.js';
 import { collectVerified } from './types/collect-verified.js';
+import { collectReserveAlert } from './types/collect-reserve.js';
 import { collectNameRecheck } from './types/collect-name-recheck.js';
 import {
   usernameTakeBackCancelled,
@@ -77,6 +78,7 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     tipReceived,
     collectReminder,
     collectVerified,
+    collectReserveAlert,
     collectNameRecheck,
     proRenewalReminder,
     proGraceStarted,

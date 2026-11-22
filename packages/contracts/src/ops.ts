@@ -284,6 +284,8 @@ export const ISSUE_KINDS = [
   'dispute_deadline',
   'dispute_fee_unposted',
   'collect_refund_gap',
+  // Task 11 (m5): a payout fee or fee return waits on TipMe's own money, with the real cause.
+  'collect_own_money_wait',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

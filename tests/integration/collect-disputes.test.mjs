@@ -1612,3 +1612,42 @@ test("TipMe's own key refused on a transfer back stops the run and keeps it for 
   assert.equal((await issuesOf('provider_key_refused')).length, 1);
   assert.deepEqual(await issuesOf('collect_transfer_review'), []);
 });
+
+test('RM9: a lost dispute’s own transfer back, once paid, is counted once before its loss is booked', async () => {
+  await verified(TOBI);
+  const { provider } = partner();
+  const tip = await movedTip(TOBI, provider);
+  // A second moved tip: what Tobi can withdraw throughout is this one's ₦9,500, never less.
+  await movedTip(TOBI, provider);
+  assert.equal(await available(TOBI), 2n * NET);
+  assert.equal((await apply(disputeEvent(tip))).outcome, 'opened');
+  assert.equal(await available(TOBI), NET);
+  await apply(
+    disputeEvent(tip, {
+      eventType: 'dispute.updated',
+      status: 'lost',
+      occurredAt: at(2 * HOUR),
+    }),
+    at(2 * HOUR),
+  );
+  const opened = await disputeOf(tip.disputeRef);
+  const [back] = await q(
+    `SELECT id, status FROM collect_transfers WHERE dispute_id = $1 AND kind = 'back'`,
+    [opened.id],
+  );
+  assert.equal(back.status, 'ready');
+  assert.equal(await available(TOBI), NET);
+  // The transfer back is paid: the money is held by TipMe now, and the dispute's hold still names
+  // it until settleLost books the loss. It must not count twice.
+  await run(provider, at(3 * HOUR));
+  const [paidBack] = await q(
+    `SELECT status FROM collect_transfers WHERE id = $1`,
+    [back.id],
+  );
+  assert.equal(paidBack.status, 'paid');
+  assert.equal((await disputeOf(tip.disputeRef)).settled_at, null);
+  assert.equal(await available(TOBI), NET);
+  await steps(at(4 * HOUR));
+  assert.ok((await disputeOf(tip.disputeRef)).settled_at);
+  assert.equal(await available(TOBI), NET);
+});

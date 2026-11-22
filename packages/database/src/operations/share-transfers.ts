@@ -21,7 +21,12 @@ import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
-import { reportProviderKeyRefused } from './payout-start.js';
+import {
+  reportOwnMoneyWait,
+  reportProviderKeyRefused,
+} from './payout-start.js';
+import { ownMoneyRefusal } from './collect-reserve.js';
+import { unsettledDisputeSql } from './dispute-state.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -50,7 +55,8 @@ export type ShareTransferKind =
   | 'fee_return'
   | 'holdback_repay'
   | 'collect_sweep'
-  | 'collect_recover';
+  | 'collect_recover'
+  | 'collect_return';
 export type ShareTransferStatus =
   | 'waiting'
   | 'out_sent'
@@ -132,6 +138,8 @@ const SOURCE: Record<ShareTransferKind, 'staff' | 'business' | null> = {
   collect_sweep: null,
   // Task 9 (P29): a lost dispute pulls a swept collect share back from the business, out leg only.
   collect_recover: 'business',
+  // Task 11 (RI2): what a failed refund pulled back goes back to the business, leg in only.
+  collect_return: null,
 };
 const DESTINATION: Record<ShareTransferKind, 'staff' | 'business'> = {
   sweep: 'business',
@@ -141,6 +149,7 @@ const DESTINATION: Record<ShareTransferKind, 'staff' | 'business'> = {
   collect_sweep: 'business',
   // Never used: a collect recovery ends in TipMe's own balance (confirmOut finishes it).
   collect_recover: 'business',
+  collect_return: 'business',
 };
 
 type Row = typeof shareTransfers.$inferSelect;
@@ -267,7 +276,8 @@ async function finishIn(
   row: Row,
   transferRef: string,
 ): Promise<void> {
-  if (row.kind !== 'collect_sweep') {
+  // Held money that left TipMe's balance for the business: a collect share, or a return (RI2).
+  if (row.kind !== 'collect_sweep' && row.kind !== 'collect_return') {
     await claim(db, row, 'in_sent', {
       status: 'done',
       inReference: transferRef,
@@ -521,11 +531,7 @@ async function lockRow(tx: Tx, id: string): Promise<Row> {
  * lost dispute takes it back from there before TipMe absorbs anything. Task 10: and while a refund of
  * the tip is open, which takes it from there when it is paid (or lets it go on when it fails).
  */
-const undisputed = sql`NOT EXISTS (
-  SELECT 1 FROM disputes x
-   WHERE x.tip_id = ${shareTransfers.tipId}
-     AND (x.status IN ('open', 'responded')
-          OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))
+const undisputed = sql`NOT ${unsettledDisputeSql(sql`${shareTransfers.tipId}`, { closed: 'unsettled' })}
   AND NOT EXISTS (
   SELECT 1 FROM tip_refunds r
    WHERE r.tip_id = ${shareTransfers.tipId} AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))`;
@@ -713,12 +719,20 @@ async function step(
     return readBack(db, row, kind, provider, now);
 }
 
-async function postpone(db: Database, row: Row, now: Date): Promise<void> {
+async function postpone(
+  db: Database,
+  row: Row,
+  now: Date,
+  { countAttempt = true }: { countAttempt?: boolean } = {},
+): Promise<void> {
   await db
     .update(shareTransfers)
     .set({
-      attempts: row.attempts + 1,
-      nextAttemptAt: backoff(row.attempts + 1, now),
+      ...(countAttempt ? { attempts: row.attempts + 1 } : {}),
+      // A wait that isn't a try still backs off (m6): on how long this row has waited, not tries.
+      nextAttemptAt: countAttempt
+        ? backoff(row.attempts + 1, now)
+        : new Date(now.getTime() + 15 * 60_000),
       updatedAt: now,
     })
     .where(
@@ -864,6 +878,35 @@ async function sendIn(
     provider,
   );
   if (!accountRef) return postpone(db, row, now);
+  // You collect (Task 11, R5, P10): a fee TipMe returns comes from its own money, never what it holds
+  // for recipients. Owed (non-voluntary); with nothing held it never refuses. It waits, nothing asked
+  // of the partner, staff are told why (m5), and the wait is not counted as a try (m6).
+  if (kind === 'fee_return') {
+    const ownMoney = await ownMoneyRefusal(db, {
+      amountMinor: row.deliverMinor,
+      currency: row.currency,
+      voluntary: false,
+    });
+    if (ownMoney) {
+      if (!row.ownMoneyWaitSince)
+        await db
+          .update(shareTransfers)
+          .set({ ownMoneyWaitSince: now })
+          .where(
+            and(
+              eq(shareTransfers.id, row.id),
+              eq(shareTransfers.status, 'out_paid'),
+            ),
+          );
+      await reportOwnMoneyWait(db, { refusal: ownMoney, now });
+      return postpone(db, row, now, { countAttempt: false });
+    }
+    if (row.ownMoneyWaitSince)
+      await db
+        .update(shareTransfers)
+        .set({ ownMoneyWaitSince: null })
+        .where(eq(shareTransfers.id, row.id));
+  }
   if (
     !(await claim(
       db,
@@ -875,7 +918,9 @@ async function sendIn(
         attempts: row.attempts + 1,
       },
       // Checked again at the claim: a dispute opened since the row was read holds it.
-      kind === 'collect_sweep' ? undisputed : undefined,
+      kind === 'collect_sweep' || kind === 'collect_return'
+        ? undisputed
+        : undefined,
     ))
   )
     return;
@@ -1036,8 +1081,15 @@ export async function runShareTransfers(
               // A collect share waits for the tip to settle in TipMe's own balance, as a sweep does
               // on the staff member's account.
               or(
-                sql`${shareTransfers.kind} <> 'collect_sweep'`,
-                and(lte(shareTransfers.createdAt, settledBefore), undisputed),
+                sql`${shareTransfers.kind} NOT IN ('collect_sweep', 'collect_return')`,
+                and(
+                  eq(shareTransfers.kind, 'collect_sweep'),
+                  lte(shareTransfers.createdAt, settledBefore),
+                  undisputed,
+                ),
+                // RI2: a return waits for no settlement (the money is in TipMe's balance), only
+                // for no refund or dispute on the tip to need it.
+                and(eq(shareTransfers.kind, 'collect_return'), undisputed),
               ),
             ),
             and(
@@ -1077,7 +1129,7 @@ export function businessShareMoney(
     const result = await db.execute<{ on_way: string; held: string }>(sql`
       SELECT
         (SELECT COALESCE(SUM(COALESCE(deliver_minor, amount_minor)), 0) FROM share_transfers
-          WHERE business_id = ${businessId} AND kind IN ('sweep', 'collect_sweep')
+          WHERE business_id = ${businessId} AND kind IN ('sweep', 'collect_sweep', 'collect_return')
             AND status IN ('waiting', 'out_sent', 'out_paid', 'in_sent'))::text AS on_way,
         (SELECT COALESCE(SUM(remaining_minor), 0) FROM share_holdbacks
           WHERE business_id = ${businessId} AND remaining_minor > 0)::text AS held`);

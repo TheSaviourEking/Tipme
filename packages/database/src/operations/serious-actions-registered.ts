@@ -937,12 +937,22 @@ const tipRefundReturn = acting<{ tipId: string }>({
       refund: facts.refund?.status ?? null,
       refusal: facts.refusal,
       held: String(facts.heldMinor),
+      businessHeld: String(facts.businessHeldMinor),
     };
   },
   describe: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
     const page = facts.handle ? `@${facts.handle}` : 'the page';
-    return `Return ${naira(facts.heldMinor)} that a failed refund of a tip to ${page} (tip ending ${tipId.slice(-6)}) took back: TipMe sends it from its own balance to their account with our payment partner (Bachs), and it is theirs to withdraw again. No refund is made.`;
+    const tip = `a tip to ${page} (tip ending ${tipId.slice(-6)})`;
+    const person =
+      facts.heldMinor > 0n
+        ? `Return ${naira(facts.heldMinor)} that a failed refund of ${tip} took back: TipMe sends it from its own balance to their account with our payment partner (Bachs), and it is theirs to withdraw again.`
+        : '';
+    const business =
+      facts.businessHeldMinor > 0n
+        ? `Return ${naira(facts.businessHeldMinor)} that a failed refund of ${tip} pulled back from ${facts.businessName ?? 'the business'}: TipMe sends it from its own balance to the business's account with our payment partner (Bachs).`
+        : '';
+    return `${[person, business].filter(Boolean).join(' ')} No refund is made.`;
   },
   act: async (tx, { tipId }, context) => {
     if (!(await readFeatureSwitch(tx, 'tip_refunds')))

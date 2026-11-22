@@ -81,3 +81,47 @@ Never:
 - Retry a `provider` review before checking Bachs for a transfer in its group. If one exists with the right amount, the share was paid. There is no staff tool yet to record a review as paid: it comes with the staff screens (plan Task 15). Until then, leave the row in review and take it to the owner. A retry is still safe, because the job reads the group back first once the key is no longer trusted, but don't rely on it as the check.
 - Move `sent` or `unknown` rows by hand, or clear the account of any row with a `sent_at`. Money may be on its way, and only a read-back on the account it was sent to decides. Staff holds refuse such rows for the same reason.
 - Withdraw TipMe's own money from the Bachs dashboard below what it holds for recipients.
+
+## The reserve rule and TipMe's own money (You collect)
+
+Under You collect, TipMe's own partner balance also holds every collect recipient's money until it is transferred (`held_for_recipients`). In every currency the rule is:
+
+```
+TipMe's available balance at Bachs  >=  Σ held_for_recipients
+```
+
+TipMe's own money is the difference. It pays refunds TipMe absorbs, dispute fees, lost disputes, payout fees and fee returns.
+
+**What the system does.** Every reserve check (every 15 minutes, after the NGN payout-fee check, which is unchanged) reads TipMe's balances and payout schedule at Bachs and records one row per currency in `collect_reserve_readings`:
+
+| Level             | When (NGN levels are You collect settings, ₦500,000 and ₦250,000 by default)       | What happens                                                                                                                                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `warning`         | own money below the warning level                                                  | a staff alert, then every 6 hours while it lasts                                                                                                                                                      |
+| `critical`        | own money below the critical level, or **any** balance below zero, in any currency | a paged alert (`CRITICAL:`), owners emailed, a `collect_reserve_low` issue naming the currency; voluntary moves of TipMe's own money (a refund gap TipMe absorbs) are refused                         |
+| `breach` (broken) | less in a currency than TipMe holds for recipients in it                           | as critical, plus a `collect_invariant_broken` issue. **New You collect sign-ups pause** (pages are written undecided, so direct) until staff resolve it. Recipients already on collect are untouched |
+
+Automatic payouts on TipMe's own balance (any interval but `manual`) open `collect_auto_payout_on` with one critical alert: turn them off in the Bachs dashboard at once.
+
+Moves of TipMe's own money ask the latest reading first (`ownMoneyAllows`). With nothing held, it never refuses, so a direct-only TipMe behaves as before. Otherwise it needs a reading under 45 minutes old:
+
+- A payout fee TipMe covers, and a fee TipMe returns after a chargeback, are owed (non-voluntary). They are refused only when they would spend recipients' money. Refused, the withdrawal waits exactly as on an empty reserve (`reserve_empty`, nothing asked of Bachs), and a fee return is tried again later.
+- A refund gap TipMe absorbs (`tip_refund.absorb_gap`) is voluntary. It is also refused when it would leave TipMe's own money below the critical level: when asked, and again before the refund is sent (then the refund fails as "TipMe's balance can't cover this refund right now").
+
+**What to do.**
+
+1. Read the alert or issue: it names the currency, what is available, what is held and TipMe's own figure.
+2. Top up TipMe's balance at Bachs in that currency (for a negative USD balance, usually a dispute fee: top up USD).
+3. Wait for the next reading (within 15 minutes): waiting withdrawals start again once the NGN reserve is funded.
+4. Resolve `collect_invariant_broken` only once a reading shows the rule holds again. That resumes You collect sign-ups.
+
+**Withdrawing TipMe's earnings from the Bachs dashboard.** Before any platform withdrawal, check the latest `collect_reserve_readings` row for the currency: withdraw at most its `own_minor` less the critical level. Never withdraw below what TipMe holds for recipients, and never while a level is `critical` or `breach`.
+
+## Daily reconciliation (You collect)
+
+At 02:00 Lagos the worker's `collect.recon` job compares Bachs's records with TipMe's and logs its totals (`collect_recon.completed`: checked, mismatches, unreadable). Each finding opens one `collect_recon_mismatch` issue that names the transfer group, dispute or tip and the amounts:
+
+- **Transfers**: for every recipient with You collect activity in the last 3 days, their transfers at Bachs (every page) against `collect_transfers` by `transfer_group`. _Missing_ (paid for TipMe, not at Bachs), _different amount_, and _extra_ (a `tipme-collect-` group TipMe has no row for, or holds as never moved). Rows `sent`, `unknown` or in review are left to the read-back and staff. An account whose list can't be read counts as `unreadable` and is read again the next day.
+- **Disputes**: the partner's disputes of the last 3 days against `disputes`. One on a You collect payment TipMe doesn't know means its events never arrived: nothing is held or booked for it. A different amount, or a final ruling TipMe doesn't have, is raised too.
+- **TipMe's own balance against the ledger**: a refund Bachs paid that the ledger never booked (an unexpected `refund.paid`, which leaves TipMe's own figure higher than Bachs holds), a dispute fee or lost dispute with no posting, and a paid transfer with no posting.
+
+Nothing is changed by the check. Compare with the Bachs dashboard, settle the money, then resolve the issue with how it was settled.

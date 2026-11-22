@@ -569,6 +569,9 @@ test("a withdrawn share stops for staff; going ahead needs a second person and b
     moves.backs.map((b) => b.amountMinor),
     [300_000n],
   );
+  // Task 11 (m3): the gap is checked against TipMe's own money right before the send, and the
+  // take-back is now held for Tobi: a fresh reading with enough of TipMe's own is needed.
+  await reading(100_000_000n);
   await send(provider);
   assert.equal(state.refunds.length, 1);
   assert.equal(state.refunds[0].amountMinor, NET);
@@ -983,6 +986,8 @@ test('a business share already swept is pulled back once before the refund; TipM
     plan: 'staff_decides',
     gapMinor: share - share / 2n,
   });
+  // Task 11 (M2): TipMe absorbing the gap needs a fresh reading with enough of its own money.
+  await reading(100_000_000n);
   const refund = await refundAsked(tip.tipId, 'tip_refund.absorb_gap');
   assert.equal(refund.collect_plan, 'absorb');
   await sweep(business.provider);
@@ -2161,4 +2166,531 @@ test('RM8: a re-ask after a closed dispute’s hold was taken back reads only wh
     plan: 'staff_decides',
     gapMinor: 650_000n,
   });
+});
+
+/* Task 11: own money (M2), a business's pulled-back money (RI2), and an unexpected refund.paid. */
+
+const CRITICAL = 25_000_000n; // ₦250,000
+/** A reserve reading of TipMe's balance: what ownMoneyAllows decides on. */
+const reading = (availableMinor) =>
+  ops.checkCollectReserve(database.db, {
+    provider: {
+      name: 'bachs-sandbox',
+      async platformBalances() {
+        return [{ currency: 'NGN', availableMinor, pendingMinor: 0n }];
+      },
+      async platformPayoutSchedule() {
+        return { NGN: 'manual' };
+      },
+    },
+    alert: async () => {},
+    emailOwners: async () => {},
+    now: new Date(),
+  });
+
+test('M2: TipMe absorbing a refund gap is voluntary: refused when it would leave its own money below critical', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await withdrawing(TOBI, 650_000n);
+  // Money TipMe holds for another recipient, which a gap must never be paid from.
+  await paidTip(ADA);
+  const held = await ops.heldTotal(database.db, 'NGN');
+  assert.equal(held, NET);
+  const gap = 650_000n;
+  // Absorbing the gap would leave TipMe's own money ₦1 under the critical line.
+  await reading(held + CRITICAL + gap - 1n);
+  const requester = await person();
+  await person();
+  // Refused when asked (the action's dry run), and so never put to the second person.
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.absorb_gap'), {
+    code: 'TIP_REFUND_REFUSED',
+    detail: 'own_money',
+  });
+  assert.deepEqual(
+    await q(`SELECT 1 FROM tip_refunds WHERE tip_id = $1`, [tip.tipId]),
+    [],
+  );
+  // Enough of its own: approved.
+  await reading(held + CRITICAL + gap);
+  const refund = await refundAsked(tip.tipId, 'tip_refund.absorb_gap');
+  assert.equal(refund.collect_plan, 'absorb');
+  // It drops before the worker sends: the refund fails on TipMe's balance, nothing taken back.
+  await reading(held + CRITICAL);
+  const { provider, state } = refunder();
+  state.balance = 100_000_000n;
+  await send(provider);
+  const failed = await refundRow(tip.tipId);
+  assert.equal(failed.status, 'FAILED');
+  assert.equal(failed.failure, 'balance');
+  assert.deepEqual(state.refunds, []);
+});
+
+test('M2: a refund with nothing to absorb is not held back by TipMe’s own money', async () => {
+  const tip = await paidTip(TOBI);
+  // Below the critical line: a refund of money TipMe holds for the recipient costs TipMe nothing.
+  await reading(NET + 1n);
+  const refund = await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  state.balance = NET + 1n;
+  await send(provider);
+  assert.equal(state.refunds.length, 1);
+  assert.equal(await paid(refund.id), 'refunded');
+});
+
+/** A shared collect tip whose business share was swept, then pulled back for a refund that failed. */
+async function pulledBackForFailedRefund() {
+  const { tip, businessId, share } = await sharedTip();
+  const business = businessPartner();
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share]);
+  const refund = await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await sweep(business.provider);
+  assert.equal(business.pulled.length, 1);
+  assert.equal(business.pulled[0][1], share);
+  state.refuse = 'INSUFFICIENT_BALANCE';
+  await send(provider);
+  const failed = await refundRow(tip.tipId);
+  assert.equal(failed.status, 'FAILED');
+  return { tip, businessId, share, business, refund, provider, state };
+}
+
+test('RI2: money pulled back from a business for a failed refund stays held, never TipMe’s own', async () => {
+  const { share } = await pulledBackForFailedRefund();
+  // Tobi's own part is held as before; the business's share is held again too.
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET);
+  const result = await reading(NET + 1_000n);
+  const naira = result.perCurrency.find((c) => c.currency === 'NGN');
+  assert.equal(naira.ownMinor, 1_000n);
+  assert.ok(share > 0n);
+});
+
+test('RI2: a lost dispute uses the business money a failed refund pulled back, before TipMe absorbs anything', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  await disputeSays(tip, 'open');
+  await disputeSays(tip, 'lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  const [dispute] = await q(
+    `SELECT id, settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at);
+  // Nothing pulled from the business a second time.
+  await sweep(business.provider);
+  assert.equal(business.pulled.length, 1);
+  assert.deepEqual(await linesOf(`dispute_loss.${dispute.id}`), [
+    line('business_payable', 'business', 'debit', share),
+    line('held_for_recipients', 'business', 'credit', share),
+    line('held_for_recipients', 'person', 'credit', NET - share),
+    line('recipient_payable', 'person', 'debit', NET - share),
+  ]);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('RI2: staff return a failed refund’s pull-back to the business with tip_refund.return, once', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  const requester = await person();
+  const approver = await person();
+  const asked = await ask(requester, tip.tipId, 'tip_refund.return');
+  assert.equal(asked.state, 'pending', JSON.stringify(asked));
+  assert.equal((await approve(asked.requestId, approver)).status, 'approved');
+  // Asked again while it moves: refused.
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share, share]);
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share, share]);
+  const [row] = await q(
+    `SELECT id, status FROM share_transfers WHERE tip_id = $1 AND kind = 'collect_return'`,
+    [tip.tipId],
+  );
+  assert.equal(row.status, 'done');
+  // Only Tobi's own part is held now; the business has its share again.
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET - share);
+  // Nothing left to return.
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+});
+
+test('RI2: a return to the business is refused while a refund is open or a dispute is unsettled', async () => {
+  const { tip } = await pulledBackForFailedRefund();
+  await disputeSays(tip, 'open');
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+});
+
+test('an unexpected refund.paid shows in the daily ledger check, naming the tip and amount', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  const { provider } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  await disputeSays(tip, 'open');
+  await send(provider);
+  await disputeSays(tip, 'won', 1);
+  assert.equal(await paid(refund.id), 'noted');
+  const recon = await ops.reconcileCollect(database.db, {
+    provider: {
+      name: 'bachs-sandbox',
+      async listAccountTransfers(accountRef) {
+        return transfers.listAccountTransfers(accountRef);
+      },
+      async listDisputes() {
+        return [];
+      },
+    },
+    day: new Date(),
+  });
+  assert.ok(recon.mismatches >= 1);
+  const [issue] = await q(
+    `SELECT summary, subject FROM issues WHERE dedupe_key = $1`,
+    [`collect_recon.refund_unbooked.${refund.id}`],
+  );
+  assert.ok(issue, 'the ledger check raised the unbooked refund');
+  assert.equal(issue.subject.tipId, tip.tipId);
+  assert.match(issue.summary, /₦9,500/);
+  assert.match(issue.summary, new RegExp(tip.tipId));
+});
+
+/* Fix round 1 (review I1, m3, m4). */
+
+/** Staff ask and approve `tip_refund.return` for a tip. */
+async function returnApproved(tipId) {
+  const requester = await person();
+  const approver = await person();
+  const asked = await ask(requester, tipId, 'tip_refund.return');
+  assert.equal(asked.state, 'pending', JSON.stringify(asked));
+  assert.equal((await approve(asked.requestId, approver)).status, 'approved');
+}
+const returnOf = async (tipId) =>
+  (
+    await q(
+      `SELECT id, status FROM share_transfers WHERE tip_id = $1 AND kind = 'collect_return'
+        ORDER BY created_at DESC LIMIT 1`,
+      [tipId],
+    )
+  )[0];
+
+test('I1: a dispute lost before an approved business return sends cancels the return and uses its money, once', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  await returnApproved(tip.tipId);
+  // Probe A: the dispute opens before the next share-transfer run, so the return never sends.
+  await disputeSays(tip, 'open');
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share]);
+  await disputeSays(tip, 'lost', 1);
+  for (let n = 0; n < 3; n += 1) {
+    await ops.runDisputeSteps(database.db, {
+      now: new Date(Date.now() + (2 + 20 * n) * HOUR),
+    });
+    await sweep(business.provider);
+  }
+  const [dispute] = await q(
+    `SELECT id, settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at, 'the loss is booked');
+  assert.equal((await returnOf(tip.tipId)).status, 'cancelled');
+  // Nothing sent to the business again, nothing pulled from it again.
+  assert.deepEqual(business.sent, [share]);
+  assert.equal(business.pulled.length, 1);
+  assert.deepEqual(await linesOf(`dispute_loss.${dispute.id}`), [
+    line('business_payable', 'business', 'debit', share),
+    line('held_for_recipients', 'business', 'credit', share),
+    line('held_for_recipients', 'person', 'credit', NET - share),
+    line('recipient_payable', 'person', 'debit', NET - share),
+  ]);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('I1: a business return already sent is never cancelled: the loss waits for it, then pulls back again', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  await returnApproved(tip.tipId);
+  // The return's answer is lost: it may have moved (P24–P27).
+  const moved = new Map();
+  const losing = {
+    ...business.provider,
+    async transferToAccount(input) {
+      business.sent.push(input.amountMinor);
+      moved.set(input.idempotencyKey, input.amountMinor);
+      throw new UncertainProviderOutcomeError(
+        input.idempotencyKey,
+        'no answer',
+        {
+          cause: 'no_response',
+        },
+      );
+    },
+    async findPlatformCollection(_account, key) {
+      const amountMinor = moved.get(key);
+      return amountMinor === undefined
+        ? null
+        : {
+            transferRef: 'tr_return',
+            status: 'paid',
+            amountMinor,
+            currency: 'NGN',
+          };
+    },
+  };
+  await sweep(losing);
+  // The sweep's share, then the return, asked for once.
+  assert.deepEqual(business.sent, [share, share]);
+  assert.equal((await returnOf(tip.tipId)).status, 'in_sent');
+  await disputeSays(tip, 'open');
+  await disputeSays(tip, 'lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  // Never cancelled while it may have moved; the loss waits.
+  assert.equal((await returnOf(tip.tipId)).status, 'in_sent');
+  const [waiting] = await q(
+    `SELECT settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.equal(waiting.settled_at, null);
+  // Read back: it did move, so the business has the money again and gives it back for the loss.
+  await ops.runShareTransfers(database.db, {
+    provider: losing,
+    now: new Date(Date.now() + 5 * HOUR),
+    settleWaitMs: HOUR,
+  });
+  assert.equal((await returnOf(tip.tipId)).status, 'done');
+  for (let n = 0; n < 3; n += 1) {
+    await ops.runDisputeSteps(database.db, {
+      now: new Date(Date.now() + (6 + n) * HOUR),
+    });
+    await ops.runShareTransfers(database.db, {
+      provider: losing,
+      now: new Date(Date.now() + (6 + n) * HOUR),
+      settleWaitMs: HOUR,
+    });
+  }
+  const [dispute] = await q(
+    `SELECT id, settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at);
+  assert.equal(business.pulled.length, 2);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('m4: the database keeps one business return per pull-back', async () => {
+  const { tip } = await pulledBackForFailedRefund();
+  await returnApproved(tip.tipId);
+  const row = await returnOf(tip.tipId);
+  await assert.rejects(
+    q(
+      `INSERT INTO share_transfers (id, tip_id, kind, business_id, profile_id, currency, amount_minor,
+         deliver_minor, status, provider, parent_id)
+       SELECT gen_random_uuid(), tip_id, kind, business_id, profile_id, currency, amount_minor,
+              deliver_minor, 'out_paid', provider, parent_id
+         FROM share_transfers WHERE id = $1`,
+      [row.id],
+    ),
+    /share_transfers_one_collect_return/,
+  );
+});
+
+test('m3: the absorb is checked against own money right before the refund is sent', async () => {
+  const { tip, share } = await sharedTip();
+  const business = businessPartner();
+  await sweep(business.provider);
+  const first = await refundAsked(tip.tipId);
+  assert.ok(first);
+  const { provider, state } = refunder();
+  await send(provider);
+  business.state.balance = share / 2n;
+  await sweep(business.provider);
+  await send(provider);
+  // The gap is known; TipMe absorbing it is approved with enough of its own money.
+  await reading(100_000_000n);
+  const refund = await refundAsked(tip.tipId, 'tip_refund.absorb_gap');
+  assert.equal(refund.collect_plan, 'absorb');
+  await sweep(business.provider);
+  // Recovery has started (the pull-back is done). Own money drops before the send.
+  const held = await ops.heldTotal(database.db, 'NGN');
+  await reading(held + CRITICAL);
+  await send(provider);
+  assert.deepEqual(state.refunds, []);
+  const failed = await refundRow(tip.tipId);
+  assert.equal(failed.status, 'FAILED');
+  assert.equal(failed.failure, 'balance');
+});
+
+/* Fix round 2 (re-review 1, N1). */
+
+test('N1 (probe D): after a partial lost dispute, the business money it did not use is returned once', async () => {
+  const { tip, share, business } = await pulledBackForFailedRefund();
+  await returnApproved(tip.tipId);
+  // A dispute for less than the tip: the loss needs only half the business's share.
+  await ops.applyDisputeEvent(database.db, {
+    event: {
+      kind: 'dispute',
+      eventId: `evt_${randomUUID()}`,
+      eventType: 'dispute.created',
+      scope: 'platform',
+      partnerDisputeId: tip.disputeRef,
+      chargeReference: tip.chargeReference,
+      providerReference: null,
+      operationReference: null,
+      status: 'open',
+      amountMinor: NET - share / 2n,
+      currency: 'NGN',
+      reason: 'fraudulent',
+      respondBy: at(7 * DAY),
+      feeMinor: null,
+      feeCurrency: null,
+      occurredAt: new Date(),
+    },
+    provider: 'bachs',
+    now: new Date(),
+  });
+  await ops.applyDisputeEvent(database.db, {
+    event: {
+      kind: 'dispute',
+      eventId: `evt_${randomUUID()}`,
+      eventType: 'dispute.updated',
+      scope: 'platform',
+      partnerDisputeId: tip.disputeRef,
+      chargeReference: tip.chargeReference,
+      providerReference: null,
+      operationReference: null,
+      status: 'lost',
+      amountMinor: NET - share / 2n,
+      currency: 'NGN',
+      reason: 'fraudulent',
+      respondBy: at(7 * DAY),
+      feeMinor: null,
+      feeCurrency: null,
+      occurredAt: new Date(Date.now() + HOUR),
+    },
+    provider: 'bachs',
+    now: new Date(Date.now() + HOUR),
+  });
+  for (let n = 0; n < 3; n += 1) {
+    await ops.runDisputeSteps(database.db, {
+      now: new Date(Date.now() + (2 + n) * HOUR),
+    });
+    await sweep(business.provider);
+  }
+  const [dispute] = await q(
+    `SELECT settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at);
+  assert.equal((await returnOf(tip.tipId)).status, 'cancelled');
+  assert.equal((await facts(tip.tipId)).businessHeldMinor, share / 2n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), share / 2n);
+  // What the loss didn't use goes back to the business, once.
+  await returnApproved(tip.tipId);
+  await sweep(business.provider);
+  await sweep(business.provider);
+  assert.deepEqual(business.sent, [share, share / 2n]);
+  assert.equal((await returnOf(tip.tipId)).status, 'done');
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal((await facts(tip.tipId)).businessHeldMinor, 0n);
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+/* Fix round 3 (re-review 2, N3, N4). */
+
+/** Probe E: Tobi's moved share taken back in full for a refund that failed, then a dispute for half, lost. */
+async function partialLossAfterTakeBack() {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  state.refuse = 'INSUFFICIENT_BALANCE';
+  await send(provider);
+  assert.equal((await refundRow(tip.tipId)).status, 'FAILED');
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET);
+  const half = NET / 2n;
+  const say = (status, hoursLater) =>
+    ops.applyDisputeEvent(database.db, {
+      event: {
+        kind: 'dispute',
+        eventId: `evt_${randomUUID()}`,
+        eventType: status === 'open' ? 'dispute.created' : 'dispute.updated',
+        scope: 'platform',
+        partnerDisputeId: tip.disputeRef,
+        chargeReference: tip.chargeReference,
+        providerReference: null,
+        operationReference: null,
+        status,
+        amountMinor: half,
+        currency: 'NGN',
+        reason: 'fraudulent',
+        respondBy: at(7 * DAY),
+        feeMinor: null,
+        feeCurrency: null,
+        occurredAt: new Date(Date.now() + hoursLater * HOUR),
+      },
+      provider: 'bachs',
+      now: new Date(Date.now() + hoursLater * HOUR),
+    });
+  await say('open', 0);
+  await say('lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  const [dispute] = await q(
+    `SELECT settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at, 'the loss is booked');
+  // The loss used half of what came back; the other half is still held for Tobi.
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET - half);
+  return { tip, transfers, rest: NET - half };
+}
+const returnsOf = (tipId) =>
+  q(
+    `SELECT status, amount_minor::text AS amount FROM collect_transfers
+      WHERE tip_id = $1 AND kind = 'return' ORDER BY created_at`,
+    [tipId],
+  );
+
+test('N3 (probe E): after a partial loss, a return pays only what is still held for the person, once', async () => {
+  const { tip, transfers, rest } = await partialLossAfterTakeBack();
+  // What the facts (and so the dialog and the staff API) offer to return: the remainder, not 0 or ₦9,500.
+  assert.equal((await facts(tip.tipId)).heldMinor, rest);
+  await returnApproved(tip.tipId);
+  assert.deepEqual(await returnsOf(tip.tipId), [
+    { status: 'ready', amount: String(rest) },
+  ]);
+  await run(transfers, new Date());
+  assert.deepEqual(await returnsOf(tip.tipId), [
+    { status: 'paid', amount: String(rest) },
+  ]);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal((await facts(tip.tipId)).heldMinor, 0n);
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  assert.equal(await lossBalanced(tip.tipId), '0');
 });

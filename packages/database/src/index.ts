@@ -61,7 +61,10 @@ export * from './operations/notifications.js';
 export * from './operations/email.js';
 export * from './operations/mail-queue.js';
 export * from './operations/mail-preferences.js';
-export { mailForDomainEvent } from './operations/account-mail.js';
+export {
+  mailForDomainEvent,
+  mailOwnersCollectReserve,
+} from './operations/account-mail.js';
 export * from './operations/mail-delivery.js';
 export * from './operations/mail-events.js';
 export * from './operations/email-sign-in.js';
@@ -107,6 +110,8 @@ export * from './operations/pro-price.js';
 export * from './operations/plan-fee-rates.js';
 export * from './operations/collect-settings.js';
 export * from './operations/collection-mode.js';
+export * from './operations/collect-reserve.js';
+export * from './operations/collect-recon.js';
 export * from './operations/collect-transfers.js';
 export * from './operations/collect-guards.js';
 export * from './operations/collect-verification.js';

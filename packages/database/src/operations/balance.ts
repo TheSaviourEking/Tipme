@@ -73,7 +73,8 @@ export function heldParts(
  * held_for_recipients already count what the tip's refunds reserve or took back (paid transfers
  * back, net of returns), so a dispute counts only the rest: per tip, GREATEST(held - covered, 0).
  * A lost dispute's own transfer back set its hold net of the refunds already (settleLost's
- * fromRefund), so that one counts as it is.
+ * fromRefund), so that one counts net only of its own back once paid (RM9, Task 11): from then the
+ * money is in held_for_recipients, and until settleLost books the loss it would count twice.
  *
  * RM10: every `collect_transfers` read here is scoped by `profile_id` (the tip's recipient, whose
  * account every share, transfer back and return of the tip uses), so it runs on the
@@ -104,7 +105,11 @@ export function disputeHeldSql(
                               WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
                                 AND b.kind = 'back')
            GROUP BY x.tip_id) h)
-      + (SELECT COALESCE(SUM(x.held_minor), 0) FROM disputes x JOIN tips dt ON dt.id = x.tip_id
+      + (SELECT COALESCE(SUM(GREATEST(x.held_minor
+                 - (SELECT COALESCE(SUM(b.amount_minor), 0) FROM collect_transfers b
+                     WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
+                       AND b.kind = 'back' AND b.status = 'paid'), 0)), 0)
+           FROM disputes x JOIN tips dt ON dt.id = x.tip_id
           WHERE dt.profile_id = ${profileId}${open}
             AND EXISTS (SELECT 1 FROM collect_transfers b
                          WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id

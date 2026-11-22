@@ -646,6 +646,11 @@ test('confirm and recovery links say how long they work, in a quiet line', () =>
  * before a deploy carries data like this and is rendered by the new templates.
  */
 const PREVIOUS_SAMPLES = {
+  // You collect (plan Task 11): new in this release, so its first sample.
+  collect_reserve_alert: {
+    alert:
+      "You collect reserve critical: TipMe's NGN balance at our payment partner: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
+  },
   // You collect (plan Task 13): new in this release, so its first sample.
   collect_verified: { firstName: 'Ada' },
   // You collect (Task 15 fix round 1, I3): new in this release, so its first sample.

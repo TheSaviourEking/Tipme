@@ -825,6 +825,9 @@ export function getBachsAttemptForFeeConfirmation(
           input.attemptId ? eq(paymentAttempts.id, input.attemptId) : undefined,
           input.tipId ? eq(tips.id, input.tipId) : undefined,
           eq(paymentAttempts.provider, 'bachs'),
+          // You collect (Task 7 → Task 11): a collect payment is charged to TipMe's own account;
+          // nobody else could have borne its fee, so this tool never applies to one.
+          eq(tipQuotes.collectionMode, 'direct'),
         ),
       );
     if (!row?.providerReference) return null;

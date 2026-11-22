@@ -46,8 +46,16 @@ function modeWrites(source) {
   return found;
 }
 
-test('mayAssignCollect allows a new collect assignment until Task 11 gates it', async () => {
-  assert.equal(await mayAssignCollect({}), true);
+test('mayAssignCollect refuses a new collect assignment while sign-ups are paused (Task 11)', async () => {
+  // The reserve check is injected; by default it reads the open collect_invariant_broken issue.
+  assert.equal(
+    await mayAssignCollect({}, { signupsPaused: async () => false }),
+    true,
+  );
+  assert.equal(
+    await mayAssignCollect({}, { signupsPaused: async () => true }),
+    false,
+  );
 });
 
 test('both paths that assign collect, the sign-up and the first quote, ask mayAssignCollect', async () => {

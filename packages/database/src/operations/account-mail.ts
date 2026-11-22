@@ -371,3 +371,30 @@ export function mailForDomainEvent(
     }
   });
 }
+
+/**
+ * You collect (plan Task 11, spec §6.3): every TipMe owner is emailed the reserve alert staff are
+ * paged with (critical, a negative balance, or the rule broken). `spell` keys it, so a repeat for the
+ * same spell queues nothing twice. Returns how many were queued.
+ */
+export function mailOwnersCollectReserve(
+  db: Database,
+  sealing: MailSealing,
+  input: { alert: string; spell: string },
+): Promise<number> {
+  return guarded(async () => {
+    let queued = 0;
+    for (const owner of await verifiedOwners(db))
+      if (owner.email) {
+        await enqueueMail(db, sealing, {
+          type: 'collect_reserve_alert',
+          to: owner.email,
+          userId: owner.userId,
+          data: { alert: input.alert.slice(0, 600) },
+          dedupeKey: `collect_reserve_alert.${input.spell}.${owner.userId}`,
+        });
+        queued += 1;
+      }
+    return queued;
+  });
+}
