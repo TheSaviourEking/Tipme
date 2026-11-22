@@ -44,6 +44,7 @@ import {
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { ownMoneyAllows } from './collect-reserve.js';
+import { unsettledDisputeSql } from './dispute-state.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { reverseTip } from './reversals.js';
@@ -498,24 +499,50 @@ export async function refundPullBackHeld(
 }
 
 /**
- * A dispute on the tip that wasn't won or closed: open, responded, or lost (settled or not). A
- * refund now would return the money twice (RC1).
+ * A dispute on the tip that isn't settled (`unsettledDisputeSql`, the one definition): open,
+ * responded, or lost with its loss not booked yet. A refund or a return now would move money the
+ * dispute may need (RC1). A lost dispute that settled is over (re-review 1, N1): what its loss
+ * didn't use can be returned. A closed dispute's kept hold (P28) never blocks these: a refund or a
+ * return is how it ends.
  */
 async function unsettledDispute(
   db: Database | Tx,
   tipId: string,
 ): Promise<boolean> {
-  const [row] = await db
-    .select({ id: disputes.id })
-    .from(disputes)
-    .where(
-      and(
-        eq(disputes.tipId, tipId),
-        inArray(disputes.status, ['open', 'responded', 'lost']),
-      ),
-    )
-    .limit(1);
-  return Boolean(row);
+  const result = await db.execute<{ unsettled: boolean }>(
+    sql`SELECT ${unsettledDisputeSql(sql`${tipId}::uuid`, { closed: 'ignored' })} AS unsettled`,
+  );
+  return result.rows[0]?.unsettled === true;
+}
+
+/**
+ * N1: once the tip's money went back (a lost dispute booked, a reversal), what its refunds took back
+ * from the person may have been used by that loss. Only what the tip's own ledger lines still hold
+ * for them is theirs to return: never more than the transfers back less the returns.
+ */
+async function personReturnable(
+  tx: Tx,
+  tipId: string,
+  personMinor: bigint,
+): Promise<bigint> {
+  if (personMinor <= 0n || !(await tipReversed(tx, tipId))) return personMinor;
+  const [row] = (
+    await tx.execute<{ held: string | null; share_paid: boolean }>(sql`
+      SELECT
+        (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
+           FROM ledger_entries e
+           JOIN ledger_accounts a ON a.id = e.account_id
+           JOIN ledger_transactions t ON t.id = e.transaction_id
+           JOIN tips tp ON tp.id = t.tip_id
+          WHERE t.tip_id = ${tipId} AND a.code = 'held_for_recipients'
+            AND a.profile_id = tp.profile_id)::text AS held,
+        EXISTS (SELECT 1 FROM collect_transfers s
+                 WHERE s.tip_id = ${tipId} AND s.kind = 'share' AND s.status = 'paid') AS share_paid`)
+  ).rows;
+  // A share never sent is held on its own account; nothing of it was taken back.
+  if (!row?.share_paid) return 0n;
+  const held = BigInt(row.held ?? '0');
+  return held <= 0n ? 0n : minOf(held, personMinor);
 }
 
 /**
@@ -870,6 +897,12 @@ export async function returnHeldRefundMoney(
     throw new OperationError('TIP_REFUND_REFUSED', 'in_flight');
   // Task 11 (RI2): what a failed refund pulled back from the business goes back to it too.
   const business = await refundPullBackHeld(tx, input.tipId);
+  // N1: after a settled loss, only what the loss didn't use.
+  recovered.personMinor = await personReturnable(
+    tx,
+    input.tipId,
+    recovered.personMinor,
+  );
   if (recovered.personMinor <= 0n && business.heldMinor <= 0n)
     throw new OperationError('TIP_REFUND_REFUSED', 'nothing_held');
   const businessReturn =

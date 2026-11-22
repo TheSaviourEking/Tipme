@@ -26,6 +26,7 @@ import {
   reportProviderKeyRefused,
 } from './payout-start.js';
 import { ownMoneyRefusal } from './collect-reserve.js';
+import { unsettledDisputeSql } from './dispute-state.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -530,11 +531,7 @@ async function lockRow(tx: Tx, id: string): Promise<Row> {
  * lost dispute takes it back from there before TipMe absorbs anything. Task 10: and while a refund of
  * the tip is open, which takes it from there when it is paid (or lets it go on when it fails).
  */
-const undisputed = sql`NOT EXISTS (
-  SELECT 1 FROM disputes x
-   WHERE x.tip_id = ${shareTransfers.tipId}
-     AND (x.status IN ('open', 'responded')
-          OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))
+const undisputed = sql`NOT ${unsettledDisputeSql(sql`${shareTransfers.tipId}`, { closed: 'unsettled' })}
   AND NOT EXISTS (
   SELECT 1 FROM tip_refunds r
    WHERE r.tip_id = ${shareTransfers.tipId} AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))`;
@@ -891,9 +888,24 @@ async function sendIn(
       voluntary: false,
     });
     if (ownMoney) {
+      if (!row.ownMoneyWaitSince)
+        await db
+          .update(shareTransfers)
+          .set({ ownMoneyWaitSince: now })
+          .where(
+            and(
+              eq(shareTransfers.id, row.id),
+              eq(shareTransfers.status, 'out_paid'),
+            ),
+          );
       await reportOwnMoneyWait(db, { refusal: ownMoney, now });
       return postpone(db, row, now, { countAttempt: false });
     }
+    if (row.ownMoneyWaitSince)
+      await db
+        .update(shareTransfers)
+        .set({ ownMoneyWaitSince: null })
+        .where(eq(shareTransfers.id, row.id));
   }
   if (
     !(await claim(

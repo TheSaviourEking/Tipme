@@ -16,6 +16,7 @@ import { guarded, safeError } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueOutbox } from './outbox.js';
 import { withdrawalsSwitchState } from './withdrawals-switch.js';
+import { RESERVE_REALERT_MS } from './payment-reserve.js';
 import {
   ownMoneyRefusal,
   ownMoneyRefusalWords,
@@ -234,6 +235,9 @@ function platformRefusal(error: unknown): PlatformRefusal | null {
 
 type PlatformRefusal = 'reserve_empty' | 'provider_key' | 'own_money';
 
+/** How often a wait on TipMe's own money is told again (the reserve alerts' rule). */
+const OWN_MONEY_REALERT_MS = RESERVE_REALERT_MS;
+
 const REFUSAL_KIND = {
   reserve_empty: 'reserve_empty',
   provider_key: 'provider_key_refused',
@@ -256,11 +260,32 @@ async function openPlatformRefusalIssue(
     sql`SELECT pg_advisory_xact_lock(hashtext(${`platform_refusal:${kind}`}::text))`,
   );
   const [open] = await tx
-    .select({ id: issues.id })
+    .select({
+      id: issues.id,
+      dedupeKey: issues.dedupeKey,
+      openedAt: issues.openedAt,
+    })
     .from(issues)
     .where(and(eq(issues.kind, kind), eq(issues.status, 'open')))
     .limit(1);
-  if (open) return;
+  if (open) {
+    // Task 11 (N2): a wait on own money that lasts is told again every 6 hours, as the reserve
+    // alerts are; once per 6-hour window of the spell, whatever runs into it meanwhile.
+    if (refusal === 'own_money') {
+      const window = Math.floor(
+        (now.getTime() - open.openedAt.getTime()) / OWN_MONEY_REALERT_MS,
+      );
+      const spell = open.dedupeKey.slice(kind.length + 1);
+      if (window >= 1 && /^[0-9a-f-]{36}$/.test(spell))
+        await enqueueOutbox(tx, {
+          eventType: PLATFORM_REFUSAL_EVENT,
+          aggregateId: spell,
+          dedupeSuffix: `again.${window}`,
+          payload: { cause: refusal },
+        });
+    }
+    return;
+  }
   const spell = newId();
   await openIssue(tx, {
     dedupeKey: `${kind}.${spell}`,

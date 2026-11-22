@@ -18,6 +18,7 @@ ALTER TABLE "collect_reserve_readings" DROP CONSTRAINT "collect_reserve_readings
 ALTER TABLE "issues" DROP CONSTRAINT "issues_kind";--> statement-breakpoint
 ALTER TABLE "share_transfers" DROP CONSTRAINT "share_transfers_kind";--> statement-breakpoint
 ALTER TABLE "collect_reserve_readings" ADD COLUMN "owners_emailed_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "share_transfers" ADD COLUMN "own_money_wait_since" timestamp with time zone;--> statement-breakpoint
 CREATE INDEX "collect_reserve_alerts_latest" ON "collect_reserve_alerts" USING btree ("provider","condition","read_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE UNIQUE INDEX "share_transfers_one_collect_return" ON "share_transfers" USING btree ("parent_id") WHERE kind = 'collect_return' AND status <> 'cancelled';--> statement-breakpoint
 ALTER TABLE "collect_reserve_readings" ADD CONSTRAINT "collect_reserve_readings_amounts" CHECK (held_minor >= 0 AND critical_minor >= 0 AND critical_minor <= warning_minor);--> statement-breakpoint

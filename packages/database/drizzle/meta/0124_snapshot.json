@@ -1,5 +1,5 @@
 {
-  "id": "606d725c-565c-4aa4-a965-37d39fd664a7",
+  "id": "a93af911-ac68-47a5-9c12-c5b3f42daff0",
   "prevId": "b9d4a020-2de9-48b1-895a-b8d9922f1f84",
   "version": "7",
   "dialect": "postgresql",
@@ -11849,6 +11849,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "own_money_wait_since": {
+          "name": "own_money_wait_since",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "next_attempt_at": {
           "name": "next_attempt_at",

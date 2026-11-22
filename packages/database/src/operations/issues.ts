@@ -817,6 +817,11 @@ export function autoResolveIssues(
       SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
         FROM issues i
        WHERE i.status = 'open' AND i.kind IN ('reserve_empty', 'collect_own_money_wait')
+         -- Task 11 (N2): a fee return waiting on TipMe's own money keeps its wait open too.
+         AND (i.kind <> 'collect_own_money_wait' OR NOT EXISTS (
+           SELECT 1 FROM share_transfers st
+            WHERE st.kind = 'fee_return' AND st.status = 'out_paid'
+              AND st.own_money_wait_since IS NOT NULL))
          AND NOT EXISTS (
            SELECT 1 FROM payouts p
             WHERE p.status = 'REQUESTED'

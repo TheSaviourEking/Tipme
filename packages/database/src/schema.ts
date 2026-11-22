@@ -4014,6 +4014,11 @@ export const shareTransfers = pgTable(
       (): AnyPgColumn => shareHoldbacks.id,
     ),
     attempts: integer('attempts').notNull().default(0),
+    // Task 11 (N2): since when a fee return has waited on TipMe's own money (not a try). Its wait's
+    // issue stays open while any is set; cleared when the return goes ahead.
+    ownMoneyWaitSince: timestamp('own_money_wait_since', {
+      withTimezone: true,
+    }),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
