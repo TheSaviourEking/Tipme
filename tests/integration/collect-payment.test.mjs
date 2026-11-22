@@ -526,6 +526,32 @@ for (const directCase of casesOf(7))
         setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
       }));
 
+test('a misreported amount on a collect tip is never booked', async () => {
+  const tip = await collectTip();
+  const outcome = await service().applyBachs(
+    collection(tip),
+    reads(tip, { amountMinor: GROSS - 1n }),
+  );
+  assert.notEqual(outcome, 'confirmed');
+  const [attempt] = await q(
+    `SELECT status FROM payment_attempts WHERE id = $1`,
+    [tip.attemptId],
+  );
+  assert.equal(attempt.status, 'UNKNOWN');
+  assert.notEqual(await tipStatusOf(tip.tipId), 'SUCCEEDED');
+  assert.equal((await transactionsOf(tip.tipId)).length, 0);
+  assert.equal((await transfersOf(tip.tipId)).length, 0);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM outbox_events WHERE event_type = 'payment.mismatch' AND aggregate_id = $1`,
+        [tip.attemptId],
+      )
+    ).length,
+    1,
+  );
+});
+
 test('a collect tip with a business share holds the share for the business and schedules only the leg into the business', async () => {
   await setSwitch(database.pool, 'business', true);
   await setSwitch(database.pool, 'business_shares', true);
