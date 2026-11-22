@@ -5,6 +5,7 @@ import {
   previewCollectionMode,
   type CollectionMode,
   type Database,
+  type TipReadiness,
 } from '@tipme/database';
 import type { PaymentProviderName } from '@tipme/payments';
 
@@ -63,4 +64,23 @@ export async function fixCollectionMode(
   };
   if ((await previewCollectionMode(db, inputs)) !== 'collect') return 'direct';
   return db.transaction((tx) => decideCollectionMode(tx, inputs));
+}
+
+/**
+ * What a public page passes to tell whether checkout can take a new tip (re-review 3 R3-C1): on
+ * Bachs, a direct tip needs the recipient's own ready account in this copy's environment, and a
+ * recipient effectiveCollectionMode puts on collect needs none, as checkout itself. The pretend
+ * provider needs neither (nothing is passed), as before.
+ */
+export function tipReadiness(
+  db: Database,
+  paymentProvider: PaymentProviderName,
+): TipReadiness {
+  const environment = bachsEnvironment(paymentProvider);
+  if (!environment) return {};
+  return {
+    requiredAccount: { provider: 'bachs', environment },
+    modeOf: (profileId) =>
+      effectiveCollectionMode(db, profileId, paymentProvider),
+  };
 }

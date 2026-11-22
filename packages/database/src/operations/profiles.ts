@@ -107,10 +107,7 @@ import {
   publicStudioFor,
   studioPageFacts,
 } from './studio.js';
-import {
-  getReadyPaymentAccount,
-  type PaymentAccountEnvironment,
-} from './payment-accounts.js';
+import { readyForNewTips, type TipReadiness } from './payment-accounts.js';
 import { signUpCollectionMode } from './collection-mode.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
@@ -987,10 +984,9 @@ export function publicProfile(
   raw: string,
   options: {
     /** Set when new tips need the owner's own account with this provider (the same rule checkout applies). */
-    requiredAccount?: {
-      provider: string;
-      environment: PaymentAccountEnvironment;
-    };
+    requiredAccount?: TipReadiness['requiredAccount'];
+    /** You collect: the mode a quote would fix now; a collect recipient needs no account of their own. */
+    modeOf?: TipReadiness['modeOf'];
     /** False while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly links don't show. */
     adultLinks?: boolean;
     /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
@@ -1024,12 +1020,7 @@ export function publicProfile(
       adult: options.adultLinks ?? true,
     });
     const celebration = await publicCelebration(db, profile.id);
-    const acceptingTips = options.requiredAccount
-      ? (await getReadyPaymentAccount(db, {
-          profileId: profile.id,
-          ...options.requiredAccount,
-        })) !== null
-      : true;
+    const acceptingTips = await readyForNewTips(db, profile.id, options);
     const studio = options.studio
       ? await publicStudioFor(db, studioPageFacts(profile))
       : undefined;

@@ -20,10 +20,7 @@ import {
 } from '../schema.js';
 import { shareInForce } from './share-at-tip.js';
 import { guarded } from './errors.js';
-import {
-  getReadyPaymentAccount,
-  type PaymentAccountEnvironment,
-} from './payment-accounts.js';
+import { readyForNewTips, type TipReadiness } from './payment-accounts.js';
 import { tipAmountsOf } from './profiles.js';
 
 // TipMe for businesses, PR B4: what a supporter sees after scanning a code. Only verified, not
@@ -31,12 +28,11 @@ import { tipAmountsOf } from './profiles.js';
 // now are listed (M3: page live and active, and accepting tips by checkout's own rule). A card has
 // the name the person chose to show and, if they allow it, their photo: nothing else of their page.
 
-export interface PublicReadOptions {
-  /** Set when new tips need the person's own account with this provider (as publicProfile). */
-  requiredAccount?: {
-    provider: string;
-    environment: PaymentAccountEnvironment;
-  };
+/**
+ * `requiredAccount` and `modeOf` as publicProfile's: a staff member on You collect takes tips with
+ * no account of their own (spec §11, option B's single leg).
+ */
+export interface PublicReadOptions extends TipReadiness {
   /** The `business_shares` switch: the staff page then tells the agreed split before any amount. */
   sharesOn?: boolean;
 }
@@ -104,19 +100,11 @@ function roster(db: Database, where: SQL | undefined): Promise<RosterRow[]> {
     );
 }
 
-async function acceptingTips(
+const acceptingTips = (
   db: Database,
   profileId: string,
   options: PublicReadOptions,
-): Promise<boolean> {
-  if (!options.requiredAccount) return true;
-  return (
-    (await getReadyPaymentAccount(db, {
-      profileId,
-      ...options.requiredAccount,
-    })) !== null
-  );
-}
+): Promise<boolean> => readyForNewTips(db, profileId, options);
 
 /** Only the people a tip can reach now, in the order given. */
 async function tippable(

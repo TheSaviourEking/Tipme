@@ -8,6 +8,7 @@ import { newId } from './ids.js';
 import { recordAudit } from './audit.js';
 import { OPAQUE_PROVIDER_ID } from './provider-ids.js';
 import { personOf } from './owner.js';
+import type { CollectionMode } from './collection-mode.js';
 
 export type PaymentAccountStatus =
   (typeof paymentAccounts.$inferSelect)['status'];
@@ -535,6 +536,43 @@ export function getReadyPaymentAccount(
       );
     return account?.feeCollector === 'platform' ? account.reference : null;
   });
+}
+
+/**
+ * What a public page asks to tell whether new tips can reach a recipient, by checkout's own rule.
+ * `requiredAccount` is set when the copy's provider needs the recipient's own account for a direct
+ * tip. `modeOf` is the API's read-only preview of the mode a quote would fix now
+ * (`effectiveCollectionMode`).
+ */
+export interface TipReadiness {
+  requiredAccount?: {
+    provider: string;
+    environment: PaymentAccountEnvironment;
+  };
+  modeOf?: (profileId: string) => Promise<CollectionMode>;
+}
+
+/**
+ * Whether checkout can take a new tip for this recipient now (Task 14, re-review 3 R3-C1). A tip
+ * quoted `collect` opens on TipMe's own account and needs no account of the recipient's own
+ * (checkout.service.ts), so a recipient the preview puts on collect is ready. Anyone else needs
+ * their own ready account, exactly as before. The holding-cap pause isn't read here: it is told at
+ * the quote (PAGE_PAUSED) on every provider, as it always has been.
+ */
+export async function readyForNewTips(
+  db: Database,
+  profileId: string,
+  readiness: TipReadiness,
+): Promise<boolean> {
+  if (!readiness.requiredAccount) return true;
+  if (readiness.modeOf && (await readiness.modeOf(profileId)) === 'collect')
+    return true;
+  return (
+    (await getReadyPaymentAccount(db, {
+      profileId,
+      ...readiness.requiredAccount,
+    })) !== null
+  );
 }
 
 /** Safe status lookup for an authenticated recipient; never returns the provider account ID. */
