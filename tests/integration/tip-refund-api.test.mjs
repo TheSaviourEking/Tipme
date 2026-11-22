@@ -298,3 +298,208 @@ test('a collect tip whose share was withdrawn shows the gap; only the second-per
   );
   assert.equal(none.status, 409);
 });
+
+/* Fix round 3 (re-review 2, N4): a person's remainder after a partial lost dispute, over HTTP. */
+
+test('N4: after a partial lost dispute, staff can return the person’s remainder over the API, once', async () => {
+  const { db } = database;
+  const [{ id: userId }] = await q(
+    `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+  );
+  const handle = `collectn4_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+  const [{ id: profileId }] = await q(
+    `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode,
+       collect_verified_at)
+     VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect', now()) RETURNING id`,
+    [userId, handle],
+  );
+  const quote = await ops.createQuote(db, {
+    handle,
+    tipMinor: 1_000_000n,
+    currency: 'NGN',
+  });
+  const intent = await ops.createPaymentIntent(db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await ops.markAttemptInitiated(db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+  });
+  await q(
+    `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+    [intent.attemptId],
+  );
+  const chargeReference = `ch_${randomUUID().slice(0, 8)}`;
+  const settled = await ops.reconcileAttempts({
+    db,
+    provider: {
+      environment: 'sandbox',
+      async verifyTransaction() {
+        return {
+          status: 'succeeded',
+          amountMinor: 1_000_000n,
+          currency: 'NGN',
+          feeMinor: 20_000n,
+          feePaidBy: 'platform',
+          method: 'NGN_CARD',
+          chargeReference,
+        };
+      },
+    },
+    now: new Date(),
+    minAgeMs: 0,
+    attemptId: intent.attemptId,
+  });
+  assert.equal(settled.applied, 1);
+  const tipId = intent.tipId;
+  // The share moved to their account, booked as the transfer machine books it.
+  const [share] = await q(
+    `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
+            account_reference = 'acct_collectn4' WHERE tip_id = $1 AND kind = 'share'
+      RETURNING id, amount_minor`,
+    [tipId],
+  );
+  await db.transaction((tx) =>
+    postLedgerTransaction(tx, {
+      operationType: 'collect_transfer',
+      operationKey: `collect_transfer.${share.id}`,
+      currency: 'NGN',
+      tipId,
+      traceId: null,
+      lines: buildCollectTransferPosting({
+        amountMinor: BigInt(share.amount_minor),
+        profileId,
+      }),
+    }),
+  );
+  // A refund asked (one owner: it runs alone), its take-back paid, then refused by the partner.
+  const asked = await call(stack.api, 'POST', `/v1/ops/tips/${tipId}/refund`, {
+    reason: REASON,
+  });
+  assert.equal(asked.status, 200, await asked.clone().text());
+  const listed = [];
+  const transfers = {
+    name: 'bachs-sandbox',
+    async collectBack(input) {
+      const t = {
+        transferRef: `tr_${listed.length + 1}`,
+        status: 'paid',
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        group: input.idempotencyKey,
+      };
+      listed.push(t);
+      return { transferRef: t.transferRef, status: 'paid' };
+    },
+    async sendCollectTransfer(input) {
+      return this.collectBack(input);
+    },
+    async listAccountTransfers() {
+      return listed;
+    },
+    async payoutCapability() {
+      return { status: 'active', requirementsDue: [] };
+    },
+  };
+  let refuse = false;
+  const refunder = {
+    async refundAccountCharge() {
+      throw new Error('never as the recipient');
+    },
+    async refundPlatformCharge() {
+      if (refuse) {
+        const error = new Error('Insufficient balance to refund');
+        error.name = 'ProRefundRefusedError';
+        error.providerCode = 'INSUFFICIENT_BALANCE';
+        throw error;
+      }
+      return { refundReference: 'rf_n4', status: 'processing' };
+    },
+    async verifyTransaction() {
+      return { method: 'NGN_CARD', chargeReference };
+    },
+  };
+  const sendRefunds = () =>
+    ops.sendTipRefunds(db, {
+      provider: refunder,
+      providerName: 'bachs',
+      now: new Date(),
+    });
+  await sendRefunds();
+  await ops.runCollectTransfers(db, { provider: transfers, now: new Date() });
+  refuse = true;
+  await sendRefunds();
+  const [failed] = await q(`SELECT status FROM tip_refunds WHERE tip_id = $1`, [
+    tipId,
+  ]);
+  assert.equal(failed.status, 'FAILED');
+  // A dispute for half the share, lost: the loss uses half of what came back.
+  const dispute = (status, at) =>
+    ops.applyDisputeEvent(db, {
+      event: {
+        kind: 'dispute',
+        eventId: `evt_${randomUUID()}`,
+        eventType: status === 'open' ? 'dispute.created' : 'dispute.updated',
+        scope: 'platform',
+        partnerDisputeId: `dp_${tipId.slice(0, 8)}`,
+        chargeReference,
+        providerReference: null,
+        operationReference: null,
+        status,
+        amountMinor: 475_000n,
+        currency: 'NGN',
+        reason: 'fraudulent',
+        respondBy: new Date(Date.now() + 7 * 86_400_000),
+        feeMinor: null,
+        feeCurrency: null,
+        occurredAt: at,
+      },
+      provider: 'bachs',
+      now: at,
+    });
+  await dispute('open', new Date());
+  await dispute('lost', new Date(Date.now() + 3_600_000));
+  await ops.runDisputeSteps(db, { now: new Date(Date.now() + 2 * 3_600_000) });
+  // Staff read the remainder, and can return it.
+  const read = await call(stack.api, 'GET', `/v1/ops/tips/${tipId}/refund`);
+  assert.equal(read.status, 200);
+  assert.equal((await read.json()).data.heldMinor, '475000');
+  const back = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/tips/${tipId}/refund/return`,
+    {
+      reason: 'The refund failed and the dispute was settled: return the rest.',
+    },
+  );
+  assert.equal(back.status, 200, await back.clone().text());
+  assert.equal((await back.json()).data.amountMinor, '475000');
+  assert.deepEqual(
+    await q(
+      `SELECT amount_minor::text AS amount FROM collect_transfers WHERE tip_id = $1 AND kind = 'return'`,
+      [tipId],
+    ),
+    [{ amount: '475000' }],
+  );
+  // Asked again while it is on its way: refused, nothing more made.
+  const twice = await call(
+    stack.api,
+    'POST',
+    `/v1/ops/tips/${tipId}/refund/return`,
+    {
+      reason: 'The refund failed and the dispute was settled: return the rest.',
+    },
+  );
+  assert.equal(twice.status, 409);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM collect_transfers WHERE tip_id = $1 AND kind = 'return'`,
+        [tipId],
+      )
+    ).length,
+    1,
+  );
+});

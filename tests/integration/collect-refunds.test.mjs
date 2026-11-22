@@ -2612,3 +2612,85 @@ test('N1 (probe D): after a partial lost dispute, the business money it did not 
   });
   assert.equal(await lossBalanced(tip.tipId), '0');
 });
+
+/* Fix round 3 (re-review 2, N3, N4). */
+
+/** Probe E: Tobi's moved share taken back in full for a refund that failed, then a dispute for half, lost. */
+async function partialLossAfterTakeBack() {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  state.refuse = 'INSUFFICIENT_BALANCE';
+  await send(provider);
+  assert.equal((await refundRow(tip.tipId)).status, 'FAILED');
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET);
+  const half = NET / 2n;
+  const say = (status, hoursLater) =>
+    ops.applyDisputeEvent(database.db, {
+      event: {
+        kind: 'dispute',
+        eventId: `evt_${randomUUID()}`,
+        eventType: status === 'open' ? 'dispute.created' : 'dispute.updated',
+        scope: 'platform',
+        partnerDisputeId: tip.disputeRef,
+        chargeReference: tip.chargeReference,
+        providerReference: null,
+        operationReference: null,
+        status,
+        amountMinor: half,
+        currency: 'NGN',
+        reason: 'fraudulent',
+        respondBy: at(7 * DAY),
+        feeMinor: null,
+        feeCurrency: null,
+        occurredAt: new Date(Date.now() + hoursLater * HOUR),
+      },
+      provider: 'bachs',
+      now: new Date(Date.now() + hoursLater * HOUR),
+    });
+  await say('open', 0);
+  await say('lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  const [dispute] = await q(
+    `SELECT settled_at FROM disputes WHERE partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  assert.ok(dispute.settled_at, 'the loss is booked');
+  // The loss used half of what came back; the other half is still held for Tobi.
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), NET - half);
+  return { tip, transfers, rest: NET - half };
+}
+const returnsOf = (tipId) =>
+  q(
+    `SELECT status, amount_minor::text AS amount FROM collect_transfers
+      WHERE tip_id = $1 AND kind = 'return' ORDER BY created_at`,
+    [tipId],
+  );
+
+test('N3 (probe E): after a partial loss, a return pays only what is still held for the person, once', async () => {
+  const { tip, transfers, rest } = await partialLossAfterTakeBack();
+  // What the facts (and so the dialog and the staff API) offer to return: the remainder, not 0 or ₦9,500.
+  assert.equal((await facts(tip.tipId)).heldMinor, rest);
+  await returnApproved(tip.tipId);
+  assert.deepEqual(await returnsOf(tip.tipId), [
+    { status: 'ready', amount: String(rest) },
+  ]);
+  await run(transfers, new Date());
+  assert.deepEqual(await returnsOf(tip.tipId), [
+    { status: 'paid', amount: String(rest) },
+  ]);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal((await facts(tip.tipId)).heldMinor, 0n);
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId, 'tip_refund.return'), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
