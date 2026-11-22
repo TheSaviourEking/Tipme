@@ -1,0 +1,2 @@
+ALTER TABLE "collect_reserve_alerts" DROP CONSTRAINT "collect_reserve_alerts_condition";--> statement-breakpoint
+ALTER TABLE "collect_reserve_alerts" ADD CONSTRAINT "collect_reserve_alerts_condition" CHECK (condition IN ('auto_payout', 'unreadable', 'unlisted_negative', 'schedule_unreadable'));

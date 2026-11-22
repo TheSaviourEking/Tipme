@@ -1111,3 +1111,58 @@ test('n2: the fee-return gate reads own money at the run’s own time, not the w
   assert.deepEqual(sent, [50_000n]);
   assert.deepEqual(await openIssues('collect_own_money_wait'), []);
 });
+
+/* Task 15b review I1: what the payout schedule read found, as the reserve page shows it. */
+
+const scheduleRead = async () =>
+  (await ops.collectReserveForStaff(database.db)).autoPayouts.map((a) => [
+    a.provider,
+    a.state,
+  ]);
+
+test('I1: a schedule read that fails while You collect is in use shows "unread" and raises one warning, again only after 6 hours', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform([['NGN', 900_000_000n]], new Error('down'));
+  const tell = told();
+  const start = new Date();
+  await check(provider, tell, start);
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'unread']]);
+  const warnings = () =>
+    tell.alerts.filter((a) => /payout schedule/.test(a.text));
+  assert.equal(warnings().length, 1);
+  assert.equal(warnings()[0].level, 'warning');
+  // Still failing 15 minutes on: no new alert. Six hours on: told again, once.
+  await check(provider, tell, new Date(start.getTime() + 15 * MIN));
+  assert.equal(warnings().length, 1);
+  await check(provider, tell, new Date(start.getTime() + 6 * HOUR + MIN));
+  assert.equal(warnings().length, 2);
+  // Nothing claims automatic payouts are on (nor off): no auto-payout issue.
+  assert.deepEqual(await openIssues('collect_auto_payout_on'), []);
+  // Read again: the spell ends.
+  const ok = platform([['NGN', 900_000_000n]]).provider;
+  await check(ok, tell, new Date(start.getTime() + 6 * HOUR + 20 * MIN));
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'manual']]);
+});
+
+test('I1: a manual schedule reads as off, an automatic one as on', async () => {
+  await paidTip(TOBI);
+  await check(platform([['NGN', 900_000_000n]]).provider, told());
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'manual']]);
+  await check(
+    platform([['NGN', 900_000_000n]], { NGN: 'daily' }).provider,
+    told(),
+    new Date(Date.now() + MIN),
+  );
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'auto']]);
+});
+
+test('I1: with You collect not in use, the schedule shows as not checked, never "off"', async () => {
+  await setSwitch(database.pool, 'you_collect', false);
+  const tell = told();
+  await check(platform([['NGN', 900_000_000n]]).provider, tell);
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'not_checked']]);
+  assert.equal(
+    tell.alerts.filter((a) => /payout schedule/.test(a.text)).length,
+    0,
+  );
+});

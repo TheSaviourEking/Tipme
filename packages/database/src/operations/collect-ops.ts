@@ -941,6 +941,12 @@ const RESERVE_LEVEL: Record<
   critical: 'critical',
   breach: 'broken',
 };
+const SCHEDULE_STATES: ReadonlySet<string> = new Set([
+  'manual',
+  'auto',
+  'unread',
+  'not_checked',
+]);
 const RESERVE_ISSUES = [
   'collect_invariant_broken',
   'collect_auto_payout_on',
@@ -976,9 +982,10 @@ export function collectReserveForStaff(
     const autoPayouts = await db.execute<{
       provider: string;
       active: boolean;
+      detail: string | null;
       read_at: Date;
     }>(sql`
-      SELECT DISTINCT ON (provider) provider, active, read_at
+      SELECT DISTINCT ON (provider) provider, active, detail, read_at
         FROM collect_reserve_alerts
        WHERE condition = 'auto_payout'
        ORDER BY provider, read_at DESC, id`);
@@ -1003,7 +1010,13 @@ export function collectReserveForStaff(
       })),
       autoPayouts: autoPayouts.rows.map((r) => ({
         provider: r.provider,
-        on: r.active,
+        // I1: what the read found. A row from before it was recorded says only whether it was on:
+        // on stays on, and anything else is not claimed to be off.
+        state: SCHEDULE_STATES.has(r.detail ?? '')
+          ? (r.detail as OpsCollectReserve['autoPayouts'][number]['state'])
+          : r.active
+            ? 'auto'
+            : 'unread',
         readAt: iso(r.read_at)!,
       })),
       issues: open.map((issue) => ({

@@ -4549,7 +4549,8 @@ export const collectReserveAlerts = pgTable(
     ),
     check(
       'collect_reserve_alerts_condition',
-      sql`condition IN ('auto_payout', 'unreadable', 'unlisted_negative')`,
+      // Task 15b (I1): a payout schedule that couldn't be read while You collect is in use.
+      sql`condition IN ('auto_payout', 'unreadable', 'unlisted_negative', 'schedule_unreadable')`,
     ),
     check(
       'collect_reserve_alerts_detail',

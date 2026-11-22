@@ -1514,9 +1514,10 @@ test('the reserve: the latest reading per currency with its level, automatic pay
   assert.equal(byCurrency.USD.level, 'broken');
   assert.equal(byCurrency.EUR.level, 'unknown');
   assert.equal(byCurrency.EUR.availableMinor, null);
+  // A row written before the read was recorded (no detail): on stays on, never a guessed "off".
   assert.deepEqual(
-    data.autoPayouts.map((a) => [a.provider, a.on]),
-    [['bachs', true]],
+    data.autoPayouts.map((a) => [a.provider, a.state]),
+    [['bachs', 'auto']],
   );
   assert.deepEqual(data.issues.map((i) => i.kind).sort(), [
     'collect_auto_payout_on',

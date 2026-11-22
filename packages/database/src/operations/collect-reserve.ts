@@ -144,7 +144,15 @@ async function openSpellIssue(
 }
 
 /** A condition of the check that isn't one currency's level (review I4, I5). */
-type Condition = 'auto_payout' | 'unreadable' | 'unlisted_negative';
+type Condition =
+  'auto_payout' | 'unreadable' | 'unlisted_negative' | 'schedule_unreadable';
+
+/**
+ * Task 15b (review I1): what the payout schedule read found, kept on the `auto_payout` row's
+ * `detail`, so "off" is never shown for a schedule nobody read. `not_checked`: You collect isn't in
+ * use, so it isn't asked for (m9); `unread`: the read failed.
+ */
+export type CollectScheduleState = 'manual' | 'auto' | 'unread' | 'not_checked';
 
 /** An alert this check may send: claimed under the lock, sent after it. */
 interface Pending {
@@ -235,6 +243,13 @@ export function checkCollectReserve(
     const autoPayoutOn = schedule
       ? Object.values(schedule).some((interval) => interval !== 'manual')
       : null;
+    const scheduleState: CollectScheduleState = !inUseBefore
+      ? 'not_checked'
+      : autoPayoutOn === null
+        ? 'unread'
+        : autoPayoutOn
+          ? 'auto'
+          : 'manual';
     const settings = await collectSettingsInForce(db, now);
 
     const { perCurrency, pending } = await db.transaction(async (tx) => {
@@ -387,9 +402,20 @@ export function checkCollectReserve(
           text: `TipMe's balances at ${provider} could not be read while it holds money for recipients. Payout fees and fee returns wait until a reading succeeds. Check the provider and the worker.`,
         },
         {
+          // Task 15b (I1): a schedule read that failed while money is held is not "off": staff are
+          // told (claimed, again every 6 hours while it lasts), and the page says it wasn't read.
+          condition: 'schedule_unreadable',
+          active: scheduleState === 'unread' && inUse,
+          detail: null,
+          level: 'warning',
+          email: false,
+          text: `TipMe's payout schedule at ${provider} could not be read while You collect is in use, so nobody can tell whether automatic payouts are on. Check the provider and the worker, and the payout setting in the partner dashboard.`,
+        },
+        {
           condition: 'auto_payout',
           active: autoPayoutOn === true && inUse,
-          detail: null,
+          // What the schedule read found (I1): the reserve page shows it, never a guessed "off".
+          detail: scheduleState,
           level: 'critical',
           email: true,
           text: `Automatic payouts are on for TipMe's own balance at ${provider}. Turn them off in the partner dashboard now: money held for recipients could be paid out with TipMe's earnings.`,

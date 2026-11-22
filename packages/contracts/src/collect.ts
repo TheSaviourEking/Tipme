@@ -394,8 +394,16 @@ export interface OpsCollectReserveCurrency {
 /** `GET /v1/ops/collect/reserve`. */
 export interface OpsCollectReserve {
   currencies: OpsCollectReserveCurrency[];
-  /** Whether automatic payouts were on at the latest check, per provider; null when unread. */
-  autoPayouts: { provider: string; on: boolean | null; readAt: string }[];
+  /**
+   * What the latest check found of the payout schedule, per provider (Task 15b, I1): `auto`
+   * (automatic payouts on), `manual` (off), `unread` (the read failed) or `not_checked` (You collect
+   * not in use, so it isn't asked for).
+   */
+  autoPayouts: {
+    provider: string;
+    state: 'manual' | 'auto' | 'unread' | 'not_checked';
+    readAt: string;
+  }[];
   /** Open `collect_invariant_broken`, `collect_auto_payout_on` and `collect_own_money_wait` issues. */
   issues: { id: string; kind: string; openedAt: string; summary: string }[];
 }

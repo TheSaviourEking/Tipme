@@ -193,7 +193,11 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
                 readAt: now,
               },
             ],
-            autoPayouts: [{ provider: 'bachs', on: true, readAt: now }],
+            autoPayouts: [
+              { provider: 'bachs', state: 'auto', readAt: now },
+              // A schedule read that failed is said plainly, never "off" (I1).
+              { provider: 'mock', state: 'unread', readAt: now },
+            ],
             issues: [
               {
                 id: randomUUID(),
@@ -335,6 +339,12 @@ test('staff see held money, a transfer in review, a dispute with its deadline, a
   );
   await expect(main.getByTestId('auto-payouts')).toContainText(
     'Automatic payouts are on',
+  );
+  await expect(main.getByTestId('schedule-unread')).toContainText(
+    'Automatic payouts: couldn’t be read',
+  );
+  await expect(main.getByTestId('auto-payouts')).not.toContainText(
+    'Automatic payouts are off',
   );
   await expect(
     main.getByRole('list', { name: 'Open reserve issues' }),

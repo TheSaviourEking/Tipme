@@ -11,6 +11,22 @@ import { opsFetch } from '@/lib/ops-staff-api';
 
 const PATH = '/v1/ops/collect/reserve';
 
+/** What the latest check found of the payout schedule (I1): never "off" for an unread one. */
+const SCHEDULE_WORDS: Record<
+  OpsCollectReserve['autoPayouts'][number]['state'],
+  string
+> = {
+  auto: 'Automatic payouts are on',
+  manual: 'Automatic payouts are off',
+  unread: 'Automatic payouts: couldn’t be read',
+  not_checked: 'Automatic payouts: not checked (You collect isn’t in use)',
+};
+const SCHEDULE_HINTS: Partial<Record<keyof typeof SCHEDULE_WORDS, string>> = {
+  auto: 'Turn them off in the partner dashboard: held money could leave with TipMe’s earnings.',
+  unread:
+    'Nobody can tell whether they are on. Check the payout setting in the partner dashboard.',
+};
+
 /** An amount in its currency: naira as everywhere, another currency in its minor units' value. */
 function Amount({ minor, currency }: { minor: string; currency: string }) {
   if (currency === 'NGN') return <Money minor={minor} />;
@@ -121,18 +137,11 @@ export default function CollectReservePage() {
               <p className="tm-hint">Not read yet.</p>
             ) : (
               state.autoPayouts.map((row) => (
-                <p key={row.provider}>
-                  <strong>
-                    {row.on === null
-                      ? 'Couldn’t be read'
-                      : row.on
-                        ? 'Automatic payouts are on'
-                        : 'Automatic payouts are off'}
-                  </strong>{' '}
-                  for TipMe’s own balance at {row.provider}, as of{' '}
-                  {when(row.readAt)}.
-                  {row.on
-                    ? ' Turn them off in the partner dashboard: held money could leave with TipMe’s earnings.'
+                <p key={row.provider} data-testid={`schedule-${row.state}`}>
+                  <strong>{SCHEDULE_WORDS[row.state]}</strong> for TipMe’s own
+                  balance at {row.provider}, as of {when(row.readAt)}.
+                  {SCHEDULE_HINTS[row.state]
+                    ? ` ${SCHEDULE_HINTS[row.state]}`
                     : ''}
                 </p>
               ))
