@@ -74,9 +74,8 @@ const LINKS: {
     needs: ['fees.manage'],
   },
   {
-    // You collect (plan Task 15, spec §9): held money, transfers, disputes, unclaimed and settings.
-    // TODO(Task 11 follow-up): the reserve screen (/ops/collect/reserve) joins its tabs once Task 11
-    // is merged; nothing links to it before then.
+    // You collect (plan Task 15, spec §9): held money, transfers, disputes, the reserve, unclaimed
+    // and settings, as tabs of one entry.
     href: '/ops/collect',
     label: 'You collect',
     group: 'Work',

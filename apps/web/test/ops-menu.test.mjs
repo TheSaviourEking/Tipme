@@ -272,7 +272,7 @@ test('Fees sits in Work after Prices, only with fees.manage', () => {
 });
 
 // You collect (plan Task 15, spec §9): one entry for its screens, for whoever reads them.
-test('You collect needs collect.view, and never links to the reserve screen before Task 11', async () => {
+test('You collect needs collect.view, and its tabs include the reserve screen (Task 11 merged)', async () => {
   assert.deepEqual(hrefs(['collect.view']), [
     '/ops',
     '/ops/approvals',
@@ -281,12 +281,15 @@ test('You collect needs collect.view, and never links to the reserve screen befo
   ]);
   assert.ok(!hrefs(['collect.manage']).includes('/ops/collect'));
   const { COLLECT_TABS } = await import('../src/lib/collect-ops-words.ts');
-  assert.ok(COLLECT_TABS.every((tab) => !tab.href.includes('reserve')));
   assert.deepEqual(
     COLLECT_TABS.filter((tab) => tab.needs === 'collect.view').map(
       (t) => t.label,
     ),
-    ['Overview', 'Held money', 'Transfers', 'Disputes', 'Unclaimed'],
+    ['Overview', 'Held money', 'Transfers', 'Disputes', 'Reserve', 'Unclaimed'],
+  );
+  assert.equal(
+    COLLECT_TABS.find((tab) => tab.label === 'Reserve')?.href,
+    '/ops/collect/reserve',
   );
   assert.equal(
     opsMenuCurrent(opsMenu(['collect.view']), '/ops/collect/disputes/x')?.href,

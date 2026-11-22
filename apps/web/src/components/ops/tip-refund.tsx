@@ -91,6 +91,11 @@ export function TipRefund({ tipId }: { tipId: string }) {
     );
   const page = facts.handle ? `@${facts.handle}` : 'The page';
   const collect = facts.refundable ? facts.collect : undefined;
+  // You collect (RI1, and Task 11's business pull-back): money a failed refund took back and TipMe holds.
+  const personHeld = Boolean(facts.heldMinor && facts.heldMinor !== '0');
+  const businessHeld = Boolean(
+    facts.businessHeldMinor && facts.businessHeldMinor !== '0',
+  );
   return (
     <div className="tip-refund" data-testid="tip-refund">
       <p>
@@ -140,20 +145,48 @@ export function TipRefund({ tipId }: { tipId: string }) {
           meanwhile="Nothing is booked until then."
         />
       )}
-      {facts.heldMinor && facts.heldMinor !== '0' && (
+      {(personHeld || businessHeld) && (
         <Slip dense tone="unsure" title="Money held for this tip">
-          <strong>
-            <Money code minor={facts.heldMinor} />
-          </strong>{' '}
-          was taken back from {page} for a refund and is held by TipMe. A new
-          refund uses it, or it can be returned to their account with our
-          payment partner.
+          <span data-testid="refund-held">
+            {personHeld && (
+              <>
+                <strong>
+                  <Money code minor={facts.heldMinor ?? '0'} />
+                </strong>{' '}
+                was taken back from {page} for a refund and is held by
+                TipMe.{' '}
+              </>
+            )}
+            {/* Task 15 follow-up (Task 11): what the failed refund pulled back from the business. */}
+            {businessHeld && (
+              <>
+                <strong>
+                  <Money code minor={facts.businessHeldMinor ?? '0'} />
+                </strong>{' '}
+                was pulled back from {facts.businessName ?? 'the business'} for
+                a refund and is held by TipMe.{' '}
+              </>
+            )}
+            {personHeld && !businessHeld
+              ? 'A new refund uses it, or it can be returned to their account with our payment partner.'
+              : 'A new refund uses it, or it can be returned to their accounts with our payment partner.'}
+          </span>
         </Slip>
       )}
-      {facts.heldMinor && facts.heldMinor !== '0' && !facts.refund && (
+      {(personHeld || businessHeld) && !facts.refund && (
         <ReasonAction
-          open="Return to recipient"
-          field="Why is this money going back to the recipient?"
+          open={
+            personHeld && businessHeld
+              ? 'Return to recipient and business'
+              : businessHeld
+                ? 'Return to business'
+                : 'Return to recipient'
+          }
+          field={
+            personHeld && !businessHeld
+              ? 'Why is this money going back to the recipient?'
+              : 'Why is this money going back?'
+          }
           submit="Ask a second person"
           hint="Recorded in the audit log with your name and the time. A second person decides before anything is sent back."
           onSubmit={(reason) => ask(reason, `${path}/return`)}

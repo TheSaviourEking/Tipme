@@ -141,6 +141,8 @@ export class OpsTipRefundsController {
               },
               lastFailure: facts.lastFailure,
               heldMinor: String(facts.heldMinor),
+              // Task 15 follow-up: pulled back from a business for a refund that then failed.
+              businessHeldMinor: String(facts.businessHeldMinor),
               unbookedMinor: String(facts.unbookedMinor),
             }
           : {}),

@@ -45,7 +45,11 @@ import {
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { ownMoneyAllows } from './collect-reserve.js';
-import { unsettledDisputeSql } from './dispute-state.js';
+import {
+  isUnsettledDispute,
+  refundSendBlockedSql,
+  unsettledDisputeSql,
+} from './dispute-state.js';
 import { markResolved, openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { reverseTip } from './reversals.js';
@@ -593,14 +597,7 @@ async function readCollect(
     // dialog and the staff API offer what can be returned (0 when the loss used all of it).
     heldForTipMinor: await personReturnable(db, tipId, recovered.personMinor),
   };
-  if (
-    onTip.some(
-      (d) =>
-        d.status === 'open' ||
-        d.status === 'responded' ||
-        (d.status === 'lost' && !d.settledAt),
-    )
-  )
+  if (onTip.some(isUnsettledDispute))
     return { ...base, plan: 'wait', refusal: 'disputed' };
   // RI4: of that hold, what an earlier refund of the tip already took back is held by TipMe now
   // (counted once, in held_for_recipients): only the rest is still in their account.
@@ -1662,10 +1659,7 @@ async function claimRow(
       and(
         eq(tipRefunds.id, row.id),
         isNotNull(tipRefunds.recoveredAt),
-        sql`NOT EXISTS (SELECT 1 FROM disputes x WHERE x.tip_id = ${tipRefunds.tipId}
-              AND x.status IN ('open', 'responded', 'lost'))`,
-        sql`NOT EXISTS (SELECT 1 FROM ledger_transactions l WHERE l.tip_id = ${tipRefunds.tipId}
-              AND l.operation_type = 'reversal')`,
+        sql`NOT ${refundSendBlockedSql(sql`${tipRefunds.tipId}`)}`,
         row.sentAt
           ? eq(tipRefunds.sentAt, row.sentAt)
           : isNull(tipRefunds.sentAt),

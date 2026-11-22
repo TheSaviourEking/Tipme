@@ -760,6 +760,8 @@ test('a payout-fee cover or fee return that would break the rule is refused and 
     provider.calls.map((c) => c.call),
     ['fee', 'payout'],
   );
+  // The fee return's run reads own money at its own time (n2): a reading taken then lets it go.
+  await check(platform([['NGN', 2n * NET + 100_000n]]).provider, told(), later);
   await ops.runShareTransfers(database.db, {
     provider: mover,
     now: later,
@@ -1019,9 +1021,140 @@ test('N2 (probe C): fee returns waiting on own money keep one issue open, alert 
   await run(new Date(start.getTime() + 6 * HOUR + 16 * MIN));
   assert.equal((await alerts()).length, 2);
   assert.equal((await openIssues('collect_own_money_wait')).length, 1);
-  // Topped up: the fee goes back and the issue closes itself.
-  await check(platform([['NGN', 900_000_000n]]).provider, told(), new Date());
-  await run(new Date(start.getTime() + 6 * HOUR + 30 * MIN));
+  // Topped up: the fee goes back and the issue closes itself. The reading is taken at the run's own
+  // time, which the gate reads by (n2).
+  const toppedUp = new Date(start.getTime() + 6 * HOUR + 30 * MIN);
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), toppedUp);
+  await run(toppedUp);
   assert.deepEqual(sent, [50_000n]);
   assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
+
+/* Task 15 follow-up: re-review 2's minors n1 and n2. */
+
+/** A fee return of ₦500 to Ada, owed by TipMe from its own money. */
+async function feeReturn(reference) {
+  await paidTip(TOBI);
+  const tip = await paidTip(ADA);
+  await q(
+    `INSERT INTO share_transfers (id, tip_id, kind, profile_id, currency, amount_minor, deliver_minor,
+       status, provider, partner_reversal_id)
+     VALUES ($1, $2, 'fee_return', $3, 'NGN', 50000, 50000, 'out_paid', 'bachs', $4)`,
+    [randomUUID(), tip.tipId, ADA.id, reference],
+  );
+}
+
+const feeMover = (sent, { accounts = false } = {}) => ({
+  name: 'bachs-sandbox',
+  ...(accounts ? {} : { capabilities: { connectedAccounts: false } }),
+  async payoutBalance() {
+    return { availableMinor: 0n };
+  },
+  async transferToAccount(input) {
+    sent.push(input.amountMinor);
+    return { transferRef: `tr_${sent.length}`, status: 'paid' };
+  },
+  async findPlatformCollection() {
+    return null;
+  },
+});
+
+const runFees = async (provider, now) => {
+  await q(
+    `UPDATE share_transfers SET next_attempt_at = $1::timestamptz - interval '1 minute'`,
+    [now],
+  );
+  await ops.runShareTransfers(database.db, {
+    provider,
+    now,
+    settleWaitMs: HOUR,
+  });
+  await ops.autoResolveIssues(database.db, now);
+};
+
+test('n1: a fee return that stops waiting on own money for another reason (no account) lets its issue close', async () => {
+  await feeReturn('refund.rf_n1');
+  const sent = [];
+  const start = new Date(Date.now() + 2 * HOUR);
+  // No reading: own money can't be confirmed, so it waits and the issue opens.
+  await runFees(feeMover(sent), start);
+  assert.equal((await openIssues('collect_own_money_wait')).length, 1);
+  // Topped up, but now the recipient's account can't be found: postponed before the own-money gate.
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), start);
+  await runFees(
+    feeMover(sent, { accounts: true }),
+    new Date(start.getTime() + 20 * MIN),
+  );
+  assert.deepEqual(sent, []);
+  const [row] = await q(
+    `SELECT own_money_wait_since FROM share_transfers WHERE kind = 'fee_return'`,
+  );
+  assert.equal(row.own_money_wait_since, null);
+  assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
+
+test('n2: the fee-return gate reads own money at the run’s own time, not the wall clock', async () => {
+  await feeReturn('refund.rf_n2b');
+  const sent = [];
+  // A run two hours ahead of the wall clock, with a reading taken at that same time.
+  const when = new Date(Date.now() + 2 * HOUR);
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), when);
+  await runFees(feeMover(sent), when);
+  assert.deepEqual(sent, [50_000n]);
+  assert.deepEqual(await openIssues('collect_own_money_wait'), []);
+});
+
+/* Task 15b review I1: what the payout schedule read found, as the reserve page shows it. */
+
+const scheduleRead = async () =>
+  (await ops.collectReserveForStaff(database.db)).autoPayouts.map((a) => [
+    a.provider,
+    a.state,
+  ]);
+
+test('I1: a schedule read that fails while You collect is in use shows "unread" and raises one warning, again only after 6 hours', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform([['NGN', 900_000_000n]], new Error('down'));
+  const tell = told();
+  const start = new Date();
+  await check(provider, tell, start);
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'unread']]);
+  const warnings = () =>
+    tell.alerts.filter((a) => /payout schedule/.test(a.text));
+  assert.equal(warnings().length, 1);
+  assert.equal(warnings()[0].level, 'warning');
+  // Still failing 15 minutes on: no new alert. Six hours on: told again, once.
+  await check(provider, tell, new Date(start.getTime() + 15 * MIN));
+  assert.equal(warnings().length, 1);
+  await check(provider, tell, new Date(start.getTime() + 6 * HOUR + MIN));
+  assert.equal(warnings().length, 2);
+  // Nothing claims automatic payouts are on (nor off): no auto-payout issue.
+  assert.deepEqual(await openIssues('collect_auto_payout_on'), []);
+  // Read again: the spell ends.
+  const ok = platform([['NGN', 900_000_000n]]).provider;
+  await check(ok, tell, new Date(start.getTime() + 6 * HOUR + 20 * MIN));
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'manual']]);
+});
+
+test('I1: a manual schedule reads as off, an automatic one as on', async () => {
+  await paidTip(TOBI);
+  await check(platform([['NGN', 900_000_000n]]).provider, told());
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'manual']]);
+  await check(
+    platform([['NGN', 900_000_000n]], { NGN: 'daily' }).provider,
+    told(),
+    new Date(Date.now() + MIN),
+  );
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'auto']]);
+});
+
+test('I1: with You collect not in use, the schedule shows as not checked, never "off"', async () => {
+  await setSwitch(database.pool, 'you_collect', false);
+  const tell = told();
+  await check(platform([['NGN', 900_000_000n]]).provider, tell);
+  assert.deepEqual(await scheduleRead(), [['bachs-sandbox', 'not_checked']]);
+  assert.equal(
+    tell.alerts.filter((a) => /payout schedule/.test(a.text)).length,
+    0,
+  );
 });

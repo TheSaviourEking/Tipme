@@ -373,3 +373,37 @@ export {
   COLLECT_HELD_WORDS,
   COLLECT_NAME_RECHECK_NOTICE,
 } from './copy.js';
+
+/**
+ * Task 15 follow-up: TipMe's own money against what it holds for recipients (Task 11's reserve
+ * check), per currency, from its latest reading. `level` is `unknown` when that reading could not
+ * read the balance (no available or own money then). Staff screens may name the partner.
+ */
+export interface OpsCollectReserveCurrency {
+  provider: string;
+  currency: string;
+  availableMinor: string | null;
+  heldMinor: string;
+  ownMinor: string | null;
+  level: 'ok' | 'warning' | 'critical' | 'broken' | 'unknown';
+  warningMinor: string;
+  criticalMinor: string;
+  readAt: string;
+}
+
+/** `GET /v1/ops/collect/reserve`. */
+export interface OpsCollectReserve {
+  currencies: OpsCollectReserveCurrency[];
+  /**
+   * What the latest check found of the payout schedule, per provider (Task 15b, I1): `auto`
+   * (automatic payouts on), `manual` (off), `unread` (the read failed) or `not_checked` (You collect
+   * not in use, so it isn't asked for).
+   */
+  autoPayouts: {
+    provider: string;
+    state: 'manual' | 'auto' | 'unread' | 'not_checked';
+    readAt: string;
+  }[];
+  /** Open `collect_invariant_broken`, `collect_auto_payout_on` and `collect_own_money_wait` issues. */
+  issues: { id: string; kind: string; openedAt: string; summary: string }[];
+}

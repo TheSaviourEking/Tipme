@@ -13666,6 +13666,44 @@
         "x-tipme-permission": "collect.manage"
       }
     },
+    "/v1/ops/collect/reserve": {
+      "get": {
+        "operationId": "OpsCollect.reserve",
+        "tags": [
+          "OpsCollect"
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-grant",
+        "x-tipme-rate-limit": "ops_read",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "x-tipme-permission": "collect.view"
+      }
+    },
     "/v1/ops/collect/same-bank": {
       "get": {
         "operationId": "OpsCollect.sameBank",

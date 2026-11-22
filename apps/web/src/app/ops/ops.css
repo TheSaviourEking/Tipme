@@ -3363,3 +3363,15 @@ a.ops-people__card:hover {
   color: var(--brand-primary);
   font-weight: 600;
 }
+
+/* You collect reserve (Task 15 follow-up): a level that needs a person reads as such, not purple. */
+.ops-reserve-level--critical,
+.ops-reserve-level--broken {
+  background: var(--state-danger-soft);
+  color: var(--state-danger);
+}
+
+.ops-reserve-level--warning {
+  background: var(--state-warning-soft);
+  color: var(--state-warning);
+}

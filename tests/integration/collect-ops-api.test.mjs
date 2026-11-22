@@ -1416,3 +1416,115 @@ test('minor 1: recording a transfer as paid resolves its review issue', async ()
   ]);
   assert.equal(issue.status, 'resolved');
 });
+
+/* Task 15 follow-up: the reserve page (Task 11's readings). */
+
+test('the reserve: the latest reading per currency with its level, automatic payouts, and the open reserve issues; collect.view only', async () => {
+  const at = (minutesAgo) => new Date(Date.now() - minutesAgo * 60_000);
+  const reading = (
+    currency,
+    available,
+    held,
+    level,
+    minutesAgo,
+    w = 50000000,
+    c = 25000000,
+  ) =>
+    q(
+      `INSERT INTO collect_reserve_readings (id, provider, currency, available_minor, held_minor, own_minor,
+              warning_minor, critical_minor, level, read_at)
+       VALUES (gen_random_uuid(), 'bachs', $1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        currency,
+        available,
+        held,
+        available === null ? null : String(BigInt(available) - BigInt(held)),
+        w,
+        c,
+        level,
+        at(minutesAgo),
+      ],
+    );
+  // NGN: an older reading said ok; the latest is below the warning level.
+  await reading('NGN', '200000000', '100000000', 'ok', 30);
+  await reading('NGN', '130000000', '100000000', 'warning', 5);
+  // USD: held money not covered: the rule broken (stored as `breach`).
+  await reading('USD', '1000', '5000', 'breach', 5, 0, 0);
+  // EUR: a read that failed: no available, own or level.
+  await reading('EUR', null, '0', null, 5, 0, 0);
+  await q(
+    `INSERT INTO collect_reserve_alerts (id, provider, condition, active, read_at)
+     VALUES (gen_random_uuid(), 'bachs', 'auto_payout', false, $1),
+            (gen_random_uuid(), 'bachs', 'auto_payout', true, $2)`,
+    [at(30), at(5)],
+  );
+  for (const kind of [
+    'collect_auto_payout_on',
+    'collect_invariant_broken',
+    'collect_own_money_wait',
+  ])
+    await ops.openIssue(database.db, {
+      dedupeKey: `${kind}.${randomUUID()}`,
+      kind,
+      subject: {},
+      note: 'For the reserve page.',
+      now: new Date(),
+    });
+  // Another kind is not the reserve's.
+  await ops.openIssue(database.db, {
+    dedupeKey: `collect_in_debt.${randomUUID()}`,
+    kind: 'collect_in_debt',
+    subject: {},
+    now: new Date(),
+  });
+
+  const outsider = await staffWith(['search.view']);
+  assert.equal(
+    (await call('GET', '/v1/ops/collect/reserve', outsider)).status,
+    403,
+  );
+  const viewer = await staffWith(['collect.view']);
+  const response = await call('GET', '/v1/ops/collect/reserve', viewer);
+  assert.equal(response.status, 200);
+  const { data } = await response.json();
+  const byCurrency = Object.fromEntries(
+    data.currencies.map((c) => [c.currency, c]),
+  );
+  assert.deepEqual(Object.keys(byCurrency).sort(), ['EUR', 'NGN', 'USD']);
+  assert.deepEqual(
+    {
+      available: byCurrency.NGN.availableMinor,
+      held: byCurrency.NGN.heldMinor,
+      own: byCurrency.NGN.ownMinor,
+      level: byCurrency.NGN.level,
+      warning: byCurrency.NGN.warningMinor,
+      critical: byCurrency.NGN.criticalMinor,
+    },
+    {
+      available: '130000000',
+      held: '100000000',
+      own: '30000000',
+      level: 'warning',
+      warning: '50000000',
+      critical: '25000000',
+    },
+  );
+  assert.equal(byCurrency.NGN.provider, 'bachs');
+  assert.ok(byCurrency.NGN.readAt);
+  assert.equal(byCurrency.USD.level, 'broken');
+  assert.equal(byCurrency.EUR.level, 'unknown');
+  assert.equal(byCurrency.EUR.availableMinor, null);
+  // A row written before the read was recorded (no detail): on stays on, never a guessed "off".
+  assert.deepEqual(
+    data.autoPayouts.map((a) => [a.provider, a.state]),
+    [['bachs', 'auto']],
+  );
+  assert.deepEqual(data.issues.map((i) => i.kind).sort(), [
+    'collect_auto_payout_on',
+    'collect_invariant_broken',
+    'collect_own_money_wait',
+  ]);
+  for (const issue of data.issues) {
+    assert.ok(issue.id && issue.openedAt && issue.summary);
+  }
+});

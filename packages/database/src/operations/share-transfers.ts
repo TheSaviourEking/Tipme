@@ -877,7 +877,16 @@ async function sendIn(
     sideOf(row, DESTINATION[kind]),
     provider,
   );
-  if (!accountRef) return postpone(db, row, now);
+  if (!accountRef) {
+    // Task 15 follow-up (re-review 2, n1): waiting for another reason than own money, so its mark
+    // goes, and the own-money issue can close (it re-alerted every 6 hours otherwise).
+    if (row.ownMoneyWaitSince)
+      await db
+        .update(shareTransfers)
+        .set({ ownMoneyWaitSince: null })
+        .where(eq(shareTransfers.id, row.id));
+    return postpone(db, row, now);
+  }
   // You collect (Task 11, R5, P10): a fee TipMe returns comes from its own money, never what it holds
   // for recipients. Owed (non-voluntary); with nothing held it never refuses. It waits, nothing asked
   // of the partner, staff are told why (m5), and the wait is not counted as a try (m6).
@@ -886,6 +895,8 @@ async function sendIn(
       amountMinor: row.deliverMinor,
       currency: row.currency,
       voluntary: false,
+      // n2: the run's own time, as every other read in this run.
+      now,
     });
     if (ownMoney) {
       if (!row.ownMoneyWaitSince)

@@ -4,6 +4,7 @@ import {
   type OpsCollectDisputeDetail,
   type OpsCollectEvidenceState,
   type OpsCollectHeld,
+  type OpsCollectReserve,
   type OpsCollectSameBank,
   type OpsCollectTransfer,
   type OpsCollectTransferStatus,
@@ -18,7 +19,7 @@ import { releaseHeldShare } from './collect-transfers.js';
 import { sameBankHoldOpen, tellVerified } from './collect-verification.js';
 import { lockDisputeTip, refundKeepsHold } from './disputes.js';
 import { guarded, OperationError } from './errors.js';
-import { markResolved } from './issues.js';
+import { listIssues, markResolved } from './issues.js';
 import type { MailSealing } from './mail-queue.js';
 
 /*
@@ -929,4 +930,101 @@ export async function profileIdByHandle(
       ),
   );
   return row?.id ?? null;
+}
+
+const RESERVE_LEVEL: Record<
+  string,
+  OpsCollectReserve['currencies'][number]['level']
+> = {
+  ok: 'ok',
+  warning: 'warning',
+  critical: 'critical',
+  breach: 'broken',
+};
+const SCHEDULE_STATES: ReadonlySet<string> = new Set([
+  'manual',
+  'auto',
+  'unread',
+  'not_checked',
+]);
+const RESERVE_ISSUES = [
+  'collect_invariant_broken',
+  'collect_auto_payout_on',
+  'collect_own_money_wait',
+] as const;
+
+/**
+ * Task 15 follow-up: the reserve page. Task 11's latest reading per provider and currency (what the
+ * partner's balance had available, what TipMe holds for recipients, TipMe's own money and its level),
+ * whether automatic payouts were on at the latest check, and the open reserve issues. Reads only.
+ */
+export function collectReserveForStaff(
+  db: Database,
+): Promise<OpsCollectReserve> {
+  return guarded(async () => {
+    const readings = await db.execute<{
+      provider: string;
+      currency: string;
+      available: string | null;
+      held: string;
+      own: string | null;
+      level: string | null;
+      warning: string;
+      critical: string;
+      read_at: Date;
+    }>(sql`
+      SELECT DISTINCT ON (provider, currency)
+             provider, currency, available_minor::text AS available, held_minor::text AS held,
+             own_minor::text AS own, level, warning_minor::text AS warning,
+             critical_minor::text AS critical, read_at
+        FROM collect_reserve_readings
+       ORDER BY provider, currency, read_at DESC, id`);
+    const autoPayouts = await db.execute<{
+      provider: string;
+      active: boolean;
+      detail: string | null;
+      read_at: Date;
+    }>(sql`
+      SELECT DISTINCT ON (provider) provider, active, detail, read_at
+        FROM collect_reserve_alerts
+       WHERE condition = 'auto_payout'
+       ORDER BY provider, read_at DESC, id`);
+    const open = (
+      await Promise.all(
+        RESERVE_ISSUES.map((kind) =>
+          listIssues(db, { status: 'open', kind, limit: 20 }),
+        ),
+      )
+    ).flat();
+    return {
+      currencies: readings.rows.map((r) => ({
+        provider: r.provider,
+        currency: r.currency,
+        availableMinor: r.available,
+        heldMinor: r.held,
+        ownMinor: r.own,
+        level: r.level ? (RESERVE_LEVEL[r.level] ?? 'unknown') : 'unknown',
+        warningMinor: r.warning,
+        criticalMinor: r.critical,
+        readAt: iso(r.read_at)!,
+      })),
+      autoPayouts: autoPayouts.rows.map((r) => ({
+        provider: r.provider,
+        // I1: what the read found. A row from before it was recorded says only whether it was on:
+        // on stays on, and anything else is not claimed to be off.
+        state: SCHEDULE_STATES.has(r.detail ?? '')
+          ? (r.detail as OpsCollectReserve['autoPayouts'][number]['state'])
+          : r.active
+            ? 'auto'
+            : 'unread',
+        readAt: iso(r.read_at)!,
+      })),
+      issues: open.map((issue) => ({
+        id: issue.id,
+        kind: issue.kind,
+        openedAt: iso(issue.openedAt)!,
+        summary: issue.summary,
+      })),
+    };
+  });
 }
