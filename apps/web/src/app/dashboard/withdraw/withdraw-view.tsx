@@ -326,7 +326,7 @@ export default function WithdrawPage({
         <h1>Withdraw</h1>
         <div className="withdraw__layout">
           <div className="withdraw__money">
-            {summary.keptMinor !== '0' && (
+            {(summary.keptMinor !== '0' || summary.refundHeldMinor !== '0') && (
               <p className="withdraw__held">
                 <CollectHeldNotes
                   summary={summary}
@@ -494,8 +494,10 @@ export default function WithdrawPage({
             {readyWithMoney && feeLine && (
               <p className="withdraw__fine">{feeLine}</p>
             )}
-            {/* You collect (spec §2.1 step 6, §8): what is still on its way, and the first cap. */}
-            {summary.onItsWayMinor !== '0' && (
+            {/* You collect (spec §2.1 step 6, §8): what is still on its way or held for a refund, and the
+                first cap. */}
+            {(summary.onItsWayMinor !== '0' ||
+              summary.refundHeldMinor !== '0') && (
               <p className="withdraw__fine">
                 <CollectHeldNotes
                   summary={summary}

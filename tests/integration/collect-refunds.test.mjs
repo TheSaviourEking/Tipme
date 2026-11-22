@@ -1368,6 +1368,53 @@ test('a dispute lost after the take-back takes the recipient’s part once, and 
   assert.equal(await lossBalanced(tip.tipId), '0');
 });
 
+test('a dispute lost after a partial take-back: the notice says exactly what the balance holds for it (Task 14 R5-I1)', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  // ₦6,500 of the tip is on its way to their bank, so only ₦3,000 is taken back for the refund.
+  const payout = randomUUID();
+  await q(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+     VALUES ($1, $2, 'NGN', 650000, 'REQUESTED', $3, 'test')`,
+    [payout, TOBI.id, randomUUID()],
+  );
+  const requester = await person();
+  const approver = await person();
+  const absorb = await ask(requester, tip.tipId, 'tip_refund.absorb_gap');
+  assert.equal((await approve(absorb.requestId, approver)).status, 'approved');
+  const { provider } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  // The withdrawal failed: the rest of the tip is back in their balance.
+  await q(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [payout]);
+  await disputeSays(tip, 'open');
+  await send(provider);
+  const notice = async () => ops.collectDisputeHeldMinor(database.db, TOBI.id);
+  const before = { notice: await notice(), available: await available(TOBI) };
+  await disputeSays(tip, 'lost', 1);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 2 * HOUR),
+  });
+  const [dispute] = await q(
+    `SELECT d.held_minor::text AS held, d.settled_at,
+            (SELECT status FROM collect_transfers b WHERE b.dispute_id = d.id AND b.kind = 'back') AS back
+       FROM disputes d WHERE d.partner_dispute_id = $1`,
+    [tip.disputeRef],
+  );
+  // Lost, its own transfer back still to be paid, and its hold already net of the take-back.
+  assert.equal(dispute.settled_at, null);
+  assert.equal(dispute.back, 'ready');
+  assert.ok(BigInt(dispute.held) > 0n, dispute.held);
+  const after = { notice: await notice(), available: await available(TOBI) };
+  // The notice is the hold, and moves exactly as the balance does.
+  assert.equal(after.notice, BigInt(dispute.held));
+  assert.equal(
+    after.notice - before.notice,
+    BigInt(before.available) - BigInt(after.available),
+  );
+});
+
 test('a dispute won after the take-back keeps the part held and sends nothing; a new ask reuses it', async () => {
   await verified(TOBI);
   const { provider: transfers, state: moves } = partner();

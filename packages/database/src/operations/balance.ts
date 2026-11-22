@@ -78,9 +78,17 @@ export function heldParts(
  * RM10: every `collect_transfers` read here is scoped by `profile_id` (the tip's recipient, whose
  * account every share, transfer back and return of the tip uses), so it runs on the
  * `(profile_id, status)` index, never a scan of every recipient's transfers.
+ *
+ * Exported (Task 14 R5-I1) so the recipient's dispute notice reads the very same sum
+ * (collectDisputeHeldMinor). `openOnly` leaves out settled disputes: a closed dispute's hold kept for
+ * a refund (P28) is never told to the recipient. The balance passes nothing, so its sum is unchanged.
  */
-function disputeTermOnce(profileId: string): SQL {
-  return sql`+ (SELECT COALESCE(SUM(GREATEST(h.held - h.covered, 0)), 0) FROM (
+export function disputeHeldSql(
+  profileId: string,
+  { openOnly = false }: { openOnly?: boolean } = {},
+): SQL {
+  const open = openOnly ? sql` AND x.settled_at IS NULL` : sql``;
+  return sql`((SELECT COALESCE(SUM(GREATEST(h.held - h.covered, 0)), 0) FROM (
           SELECT x.tip_id, SUM(x.held_minor) AS held,
                  GREATEST((SELECT COALESCE(SUM(CASE c.kind WHEN 'back' THEN c.amount_minor
                                                            ELSE -c.amount_minor END), 0)
@@ -91,16 +99,20 @@ function disputeTermOnce(profileId: string): SQL {
                  + (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
                      WHERE r.tip_id = x.tip_id) AS covered
             FROM disputes x JOIN tips dt ON dt.id = x.tip_id
-           WHERE dt.profile_id = ${profileId} AND x.held_minor > 0
+           WHERE dt.profile_id = ${profileId} AND x.held_minor > 0${open}
              AND NOT EXISTS (SELECT 1 FROM collect_transfers b
                               WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
                                 AND b.kind = 'back')
            GROUP BY x.tip_id) h)
       + (SELECT COALESCE(SUM(x.held_minor), 0) FROM disputes x JOIN tips dt ON dt.id = x.tip_id
-          WHERE dt.profile_id = ${profileId}
+          WHERE dt.profile_id = ${profileId}${open}
             AND EXISTS (SELECT 1 FROM collect_transfers b
                          WHERE b.profile_id = ${profileId} AND b.dispute_id = x.id
-                           AND b.kind = 'back'))`;
+                           AND b.kind = 'back')))`;
+}
+
+function disputeTermOnce(profileId: string): SQL {
+  return sql`+ ${disputeHeldSql(profileId)}`;
 }
 
 /** The same for someone with no dispute or collect refund at all (`collect_money` false): zero. */

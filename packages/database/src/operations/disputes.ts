@@ -31,7 +31,7 @@ import {
   providerEvents,
   tips,
 } from '../schema.js';
-import { balanceIn, disputeReviewSql } from './balance.js';
+import { balanceIn, disputeHeldSql, disputeReviewSql } from './balance.js';
 import {
   matchCollectAttempt,
   reduceUnsentShare,
@@ -132,9 +132,9 @@ function naira(minor: bigint): string {
 /**
  * What is held for disputes on a recipient's tips still open (spec §6.2, §10; Task 14's "A payment
  * to you is being questioned"). Never negative. Two parts that never name the same money:
- * - held from their balance: each tip's `held_minor` over its disputes not yet settled (a settled
- *   dispute's hold is released, so it counts for nothing), less what that tip's refunds already
- *   hold (RI4: shown as "Held while a refund is settled", or reserved), per tip, never below zero;
+ * - held from their balance: the balance's own dispute sum (disputeHeldSql, one builder, so the two
+ *   never drift; R5-I1), over disputes not yet settled (a closed dispute's hold kept for a refund is
+ *   never told, P28);
  * - shares never moved, held in review for a dispute (RM11): in `held_for_recipients`, and so not
  *   counted as kept or on its way (heldParts).
  */
@@ -143,20 +143,8 @@ export async function collectDisputeHeldMinor(
   profileId: string,
 ): Promise<bigint> {
   const result = await db.execute<{ held: string }>(sql`
-    SELECT ((SELECT COALESCE(SUM(GREATEST(h.held - h.covered, 0)), 0) FROM (
-              SELECT x.tip_id, SUM(x.held_minor) AS held,
-                     GREATEST((SELECT COALESCE(SUM(CASE c.kind WHEN 'back' THEN c.amount_minor
-                                                               ELSE -c.amount_minor END), 0)
-                                 FROM collect_transfers c
-                                WHERE c.profile_id = ${profileId} AND c.tip_id = x.tip_id
-                                  AND c.refund_id IS NOT NULL
-                                  AND c.kind IN ('back', 'return') AND c.status = 'paid'), 0)
-                     + (SELECT COALESCE(SUM(r.held_minor), 0) FROM tip_refunds r
-                         WHERE r.tip_id = x.tip_id) AS covered
-                FROM disputes x JOIN tips dt ON dt.id = x.tip_id
-               WHERE dt.profile_id = ${profileId} AND x.settled_at IS NULL AND x.held_minor > 0
-               GROUP BY x.tip_id) h)
-           + ${disputeReviewSql(sql`${profileId}`)})::text AS held`);
+    SELECT (${disputeHeldSql(profileId, { openOnly: true })}
+            + ${disputeReviewSql(sql`${profileId}`)})::text AS held`);
   return BigInt(result.rows[0]?.held ?? '0');
 }
 
