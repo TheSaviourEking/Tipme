@@ -93,6 +93,14 @@ export default function CollectHeldPage() {
                               <Badge>Verified</Badge>
                             </>
                           )}
+                          {row.nameRecheckSince && (
+                            <>
+                              {' '}
+                              <Badge data-testid="name-recheck">
+                                Name being checked
+                              </Badge>
+                            </>
+                          )}
                         </td>
                         <td>
                           <Money minor={row.heldMinor} />
@@ -108,6 +116,15 @@ export default function CollectHeldPage() {
                           {row.pausedReason
                             ? PAUSED_WORDS[row.pausedReason]
                             : 'Taking tips'}
+                          {row.nameRecheckSince && (
+                            <>
+                              <br />
+                              <span className="tm-hint">
+                                Transfers wait for their bank details again
+                                (name changed {when(row.nameRecheckSince)})
+                              </span>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}

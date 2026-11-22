@@ -648,6 +648,8 @@ test('confirm and recovery links say how long they work, in a quiet line', () =>
 const PREVIOUS_SAMPLES = {
   // You collect (plan Task 13): new in this release, so its first sample.
   collect_verified: { firstName: 'Ada' },
+  // You collect (Task 15 fix round 1, I3): new in this release, so its first sample.
+  collect_name_recheck: { firstName: 'Ada' },
   // You collect (plan Task 12): new in this release, so its first sample.
   collect_reminder: {
     firstName: 'Ada',

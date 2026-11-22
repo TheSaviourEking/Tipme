@@ -879,7 +879,7 @@ export const notifications = pgTable(
       'notifications_kind',
       // You collect (ADR-0016, proposed): a reminder to add bank details, the details verified, and
       // a dispute holding part of the balance.
-      sql`kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'dispute_hold', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
+      sql`kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'collect_name_recheck', 'dispute_hold', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
     ),
     // One notification per invitation, however often B3's write is retried.
     uniqueIndex('notifications_invitation_once')

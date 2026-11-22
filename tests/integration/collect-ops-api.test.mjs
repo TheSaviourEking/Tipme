@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
-import { openTestDatabase } from '../../packages/database/dist/test-support.js';
+import {
+  openTestDatabase,
+  queuedMail,
+} from '../../packages/database/dist/test-support.js';
 import * as ops from '../../packages/database/dist/index.js';
 import { newTotpSecret, totpAt } from '../../packages/domain/dist/index.js';
 import {
@@ -1105,4 +1108,311 @@ test('evidence the partner refused can be asked again with a new key; an unknown
   await send();
   assert.equal(keys.at(-1), `tipme-dispute-evidence-${disputeId}-2`);
   assert.equal(await state(), 'submitted');
+});
+
+/* Fix round 1 */
+
+test('C1: a Bachs dispute takes one evidence file; a second upload is refused, and a wrong file can be removed and replaced', async () => {
+  const { tipId } = await paidTip(ADA);
+  const disputeId = await dispute(tipId, { provider: 'bachs' });
+  const cookie = await staffWith(null);
+  const detail = async () =>
+    (
+      await (
+        await call('GET', `/v1/ops/collect/disputes/${disputeId}`, cookie)
+      ).json()
+    ).data;
+  assert.equal((await detail()).evidence.maxFiles, 1);
+  await ops.addDisputeEvidenceFile(database.db, {
+    disputeId,
+    fileRef: 'doc_wrong',
+    contentType: 'application/pdf',
+    bytes: 2048,
+    staffUserId: (await q(`SELECT user_id FROM staff LIMIT 1`))[0].user_id,
+    now: new Date(),
+  });
+  // The route refuses before anything reaches the partner.
+  const pdf = Buffer.concat([Buffer.from('%PDF-1.4\n'), randomBytes(32)]);
+  const second = await fetch(
+    `${stack.api}/v1/ops/collect/disputes/${disputeId}/evidence/files`,
+    {
+      method: 'POST',
+      headers: { ...browserHeaders(cookie), 'content-type': 'application/pdf' },
+      body: pdf,
+    },
+  );
+  assert.equal(second.status, 409);
+  // And again under the dispute's lock.
+  await assert.rejects(
+    ops.addDisputeEvidenceFile(database.db, {
+      disputeId,
+      fileRef: 'doc_second',
+      contentType: 'application/pdf',
+      bytes: 10,
+      staffUserId: (await q(`SELECT user_id FROM staff LIMIT 1`))[0].user_id,
+      now: new Date(),
+    }),
+    refusedWith('COLLECT_ACTION_REFUSED'),
+  );
+  // Remove the wrong file (one person, with a reason, audited), add the right one, then submit.
+  const removed = await call(
+    'POST',
+    `/v1/ops/collect/disputes/${disputeId}/evidence/files/0/remove`,
+    cookie,
+    { reason: 'Uploaded the wrong receipt by mistake' },
+  );
+  assert.equal(removed.status, 200);
+  assert.deepEqual((await detail()).evidence.files, []);
+  assert.equal(
+    (
+      await q(
+        `SELECT 1 FROM audit_events WHERE action = 'collect_dispute.file_removed' AND subject_id = $1`,
+        [disputeId],
+      )
+    ).length,
+    1,
+  );
+  await ops.addDisputeEvidenceFile(database.db, {
+    disputeId,
+    fileRef: 'doc_right',
+    contentType: 'application/pdf',
+    bytes: 4096,
+    staffUserId: (await q(`SELECT user_id FROM staff LIMIT 1`))[0].user_id,
+    now: new Date(),
+  });
+  const submitted = await call(
+    'POST',
+    `/v1/ops/collect/disputes/${disputeId}/evidence`,
+    cookie,
+    {
+      text: 'The supporter tipped in person at the event and was given a receipt.',
+      reason: REASON,
+    },
+  );
+  assert.equal(submitted.status, 200);
+  const [row] = await q(
+    `SELECT evidence_state, evidence_files FROM disputes WHERE id = $1`,
+    [disputeId],
+  );
+  assert.equal(row.evidence_state, 'sending');
+  assert.deepEqual(
+    row.evidence_files.map((f) => f.fileRef),
+    ['doc_right'],
+  );
+  // Nothing can be removed once it is being sent.
+  assert.equal(
+    (
+      await call(
+        'POST',
+        `/v1/ops/collect/disputes/${disputeId}/evidence/files/0/remove`,
+        cookie,
+        { reason: 'Trying to change it after approval' },
+      )
+    ).status,
+    409,
+  );
+});
+
+/** A closed dispute whose share had moved: its hold is on the recipient's balance (R4). */
+async function closedOnBalance() {
+  const { tipId, rowId } = await paidTip(ADA);
+  await q(
+    `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
+            account_reference = 'acct_ada' WHERE id = $1`,
+    [rowId],
+  );
+  const disputeId = await dispute(tipId, {
+    status: 'closed',
+    shareStep: 'balance',
+    decidedAt: new Date(Date.now() - 15 * DAY),
+  });
+  await q(`UPDATE disputes SET held_minor = $2 WHERE id = $1`, [
+    disputeId,
+    NET,
+  ]);
+  const [{ user_id: userId }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [ADA.id],
+  );
+  return { tipId, disputeId, userId };
+}
+
+/**
+ * A refund ask holding the tip row (as askTipRefund does first), committing its refund while the
+ * release waits: the release must then see it and refuse, never commit beside it.
+ */
+async function raceWithRefundAsk({ tipId, userId }, release) {
+  const client = await database.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SELECT id FROM tips WHERE id = $1 FOR UPDATE`, [tipId]);
+    const racing = release();
+    await new Promise((done) => setTimeout(done, 400));
+    await client.query(
+      `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider, provider_reference,
+              requested_by, reason, collect_plan)
+       VALUES (gen_random_uuid(), $1, 'REQUESTED', $2, 'NGN', 'bachs', 'platform:cs_race', $3,
+               'The supporter asked for a refund', 'take_back')`,
+      [tipId, NET, userId],
+    );
+    await client.query('COMMIT');
+    return await racing.then(
+      () => 'released',
+      (error) => error,
+    );
+  } finally {
+    client.release();
+  }
+}
+
+test('I1: releasing a hold waits for a refund ask holding the tip, then refuses', async () => {
+  const fixture = await closedOnBalance();
+  const lone = await person();
+  const outcome = await raceWithRefundAsk(fixture, () =>
+    ask(lone, 'collect_dispute.release_hold', { disputeId: fixture.disputeId }),
+  );
+  assert.ok(refusedWith('COLLECT_ACTION_REFUSED')(outcome), String(outcome));
+  const [row] = await q(
+    `SELECT settled_at, held_minor::text AS held FROM disputes WHERE id = $1`,
+    [fixture.disputeId],
+  );
+  assert.deepEqual(row, { settled_at: null, held: String(NET) });
+});
+
+test('I1: the 14-day automatic release waits for a refund ask holding the tip, then keeps the hold', async () => {
+  const fixture = await closedOnBalance();
+  const outcome = await raceWithRefundAsk(fixture, () =>
+    ops.advanceDispute(database.db, fixture.disputeId, new Date()),
+  );
+  assert.equal(outcome, 'released');
+  const [row] = await q(
+    `SELECT settled_at, held_minor::text AS held FROM disputes WHERE id = $1`,
+    [fixture.disputeId],
+  );
+  assert.deepEqual(row, { settled_at: null, held: String(NET) });
+});
+
+test('I2: an unexpected refund is not booked while a return to the recipient is in flight', async () => {
+  const { tipId, refundId } = await unbookedRefund();
+  await q(
+    `INSERT INTO collect_transfers (id, kind, tip_id, profile_id, refund_id, account_reference, provider,
+            environment, amount_minor, currency, status, idempotency_key, sent_at, paid_at)
+     VALUES (gen_random_uuid(), 'back', $1, $2, $3, 'acct_ada', 'bachs', 'sandbox', $4, 'NGN', 'paid',
+             $5, now(), now())`,
+    [tipId, ADA.id, refundId, NET, `tipme-collect-back-${refundId}`],
+  );
+  const [{ id: returnId }] = await q(
+    `INSERT INTO collect_transfers (id, kind, tip_id, profile_id, refund_id, account_reference, provider,
+            environment, amount_minor, currency, status, idempotency_key)
+     VALUES (gen_random_uuid(), 'return', $1, $2, $3, 'acct_ada', 'bachs', 'sandbox', $4, 'NGN', 'ready',
+             $5) RETURNING id`,
+    [tipId, ADA.id, refundId, NET, `tipme-collect-return-${refundId}`],
+  );
+  const lone = await person();
+  await assert.rejects(
+    ask(lone, 'tip_refund.record_paid', { tipId }),
+    refusedWith('COLLECT_ACTION_REFUSED'),
+  );
+  assert.equal(
+    (
+      await q(`SELECT 1 FROM ledger_transactions WHERE operation_key = $1`, [
+        `collect_refund.${refundId}`,
+      ])
+    ).length,
+    0,
+  );
+  // The return paid: the held money went back to the recipient, so TipMe absorbs the refund.
+  await q(
+    `UPDATE collect_transfers SET status = 'paid', sent_at = now(), paid_at = now() WHERE id = $1`,
+    [returnId],
+  );
+  assert.equal(
+    (await ask(lone, 'tip_refund.record_paid', { tipId })).state,
+    'ran',
+  );
+  const [loss] = await q(
+    `SELECT COALESCE(SUM(e.amount_minor), 0)::text AS loss FROM ledger_entries e
+       JOIN ledger_accounts a ON a.id = e.account_id JOIN ledger_transactions t ON t.id = e.transaction_id
+      WHERE t.operation_key = $1 AND a.code = 'refund_loss_expense'`,
+    [`collect_refund.${refundId}`],
+  );
+  assert.equal(loss.loss, String(NET));
+  assert.deepEqual(await unbalanced(), []);
+});
+
+test('I3: after a name change the recipient is told to add their bank details again, and staff see it on Held money', async () => {
+  await verified(ADA);
+  await paidTip(ADA);
+  await q(
+    `UPDATE users SET email = $1, email_verified_at = now()
+      WHERE id = (SELECT user_id FROM profiles WHERE id = $2)`,
+    [`ada.${randomUUID().slice(0, 6)}@example.com`, ADA.id],
+  );
+  const cookie = await staffWith(null);
+  const response = await call('POST', '/v1/ops/collect/name', cookie, {
+    handle: ADA.handle,
+    first: 'Ada',
+    last: 'Bello',
+    reason: 'Married name, checked with her ID on a call',
+  });
+  assert.equal(response.status, 200);
+  const notices = await q(
+    `SELECT n.title, n.body FROM notifications n JOIN profiles p ON p.user_id = n.user_id
+      WHERE p.id = $1 AND n.kind = 'collect_name_recheck'`,
+    [ADA.id],
+  );
+  assert.equal(notices.length, 1);
+  assert.match(notices[0].body, /Add your bank details again/);
+  assert.match(notices[0].body, /our payment partner/);
+  assert.doesNotMatch(notices[0].body, /bachs/i);
+  const mail = (await queuedMail(database.db, sealing, { limit: 50 })).filter(
+    (m) => m.type === 'collect_name_recheck',
+  );
+  assert.equal(mail.length, 1);
+  const held = (
+    await (await call('GET', '/v1/ops/collect/held', cookie)).json()
+  ).data;
+  const ada = held.recipients.find((r) => r.handle === ADA.handle);
+  assert.ok(ada.nameRecheckSince);
+  const tobi = await paidTip(TOBI).then(async () =>
+    (
+      await (await call('GET', '/v1/ops/collect/held', cookie)).json()
+    ).data.recipients.find((r) => r.handle === TOBI.handle),
+  );
+  assert.equal(tobi.nameRecheckSince, null);
+});
+
+test('minor 1: recording a transfer as paid resolves its review issue', async () => {
+  const { rowId, tipId, group } = await paidTip(ADA);
+  await q(
+    `UPDATE collect_transfers SET status = 'review', review_reason = 'provider', sent_at = now(),
+            account_reference = 'acct_ada', attempts = 1 WHERE id = $1`,
+    [rowId],
+  );
+  await ops.openIssue(database.db, {
+    dedupeKey: `collect_transfer_review.${rowId}`,
+    kind: 'collect_transfer_review',
+    subject: { tipId, profileId: ADA.id },
+    note: 'The partner shows another amount.',
+    now: new Date(),
+  });
+  listed.set('acct_ada', [
+    {
+      transferRef: 'tr_ok',
+      status: 'paid',
+      amountMinor: NET,
+      currency: 'NGN',
+      group,
+    },
+  ]);
+  const lone = await person();
+  assert.equal(
+    (await ask(lone, 'collect_transfer.record_paid', { transferId: rowId }))
+      .state,
+    'ran',
+  );
+  const [issue] = await q(`SELECT status FROM issues WHERE dedupe_key = $1`, [
+    `collect_transfer_review.${rowId}`,
+  ]);
+  assert.equal(issue.status, 'resolved');
 });

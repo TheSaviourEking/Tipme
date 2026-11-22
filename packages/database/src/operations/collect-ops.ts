@@ -1,12 +1,13 @@
-import type {
-  OpsCollectDispute,
-  OpsCollectDisputeDetail,
-  OpsCollectEvidenceState,
-  OpsCollectHeld,
-  OpsCollectSameBank,
-  OpsCollectTransfer,
-  OpsCollectTransferStatus,
-  OpsCollectUnclaimed,
+import {
+  opsCollectEvidenceMaxFiles,
+  type OpsCollectDispute,
+  type OpsCollectDisputeDetail,
+  type OpsCollectEvidenceState,
+  type OpsCollectHeld,
+  type OpsCollectSameBank,
+  type OpsCollectTransfer,
+  type OpsCollectTransferStatus,
+  type OpsCollectUnclaimed,
 } from '@tipme/contracts';
 import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
@@ -15,7 +16,7 @@ import { recordAudit } from './audit.js';
 import { collectStatus } from './collect-guards.js';
 import { releaseHeldShare } from './collect-transfers.js';
 import { sameBankHoldOpen, tellVerified } from './collect-verification.js';
-import { refundKeepsHold } from './disputes.js';
+import { lockDisputeTip, refundKeepsHold } from './disputes.js';
 import { guarded, OperationError } from './errors.js';
 import { markResolved } from './issues.js';
 import type { MailSealing } from './mail-queue.js';
@@ -60,8 +61,10 @@ export function collectHeldMoney(
       currency: string;
       held: string;
       reminders: number;
+      recheck_at: Date | null;
     }>(sql`
-      SELECT h.profile_id, p.handle, h.currency, h.held::text AS held, ${remindersSql} AS reminders
+      SELECT h.profile_id, p.handle, h.currency, h.held::text AS held, ${remindersSql} AS reminders,
+             p.collect_name_recheck_at AS recheck_at
         FROM (SELECT a.profile_id, a.currency,
                      SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END) AS held
                 FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
@@ -108,6 +111,7 @@ export function collectHeldMoney(
         remindersSent: row.reminders,
         paused: status.paused,
         pausedReason: status.pausedReason,
+        nameRecheckSince: iso(row.recheck_at),
       });
     }
     return {
@@ -326,6 +330,7 @@ export function collectDisputeForStaff(
         submittedAt: iso(row.evidenceSubmittedAt),
         canSubmit,
         late,
+        maxFiles: opsCollectEvidenceMaxFiles(row.provider),
       },
       holdRelease: { possible: refusal === null, why: refusal },
     };
@@ -382,6 +387,9 @@ export async function releaseDisputeHold(
 ): Promise<{ disputeId: string; releasedMinor: string }> {
   if (!UUID.test(input.disputeId))
     throw new OperationError('COLLECT_ACTION_REFUSED', 'no_dispute');
+  // Fix round 1 (I1): the tip first, as askTipRefund locks it, so a refund asked at the same time
+  // either commits before this reads it (and the release is refused) or waits for it.
+  await lockDisputeTip(tx, input.disputeId);
   const [row] = await tx
     .select()
     .from(disputes)
@@ -592,8 +600,11 @@ export function addDisputeEvidenceFile(
       const row = await lockedDispute(tx, input.disputeId);
       const { late, canSubmit } = evidenceOpen(row, input.now);
       if (late) throw new OperationError('COLLECT_EVIDENCE_LATE');
-      if (!canSubmit || row.evidenceFiles.length >= 5)
+      if (!canSubmit)
         throw new OperationError('COLLECT_ACTION_REFUSED', 'evidence_closed');
+      // Fix round 1 (C1): the provider's own limit, under the lock (one file at Bachs).
+      if (row.evidenceFiles.length >= opsCollectEvidenceMaxFiles(row.provider))
+        throw new OperationError('COLLECT_ACTION_REFUSED', 'evidence_full');
       const files = [
         ...row.evidenceFiles,
         {
@@ -616,6 +627,61 @@ export function addDisputeEvidenceFile(
         permission: 'collect.manage',
         subjectType: 'dispute',
         subjectId: row.id,
+        now: input.now,
+      });
+      return { files: files.length };
+    }),
+  );
+}
+
+/**
+ * Fix round 1 (C1): a file added by mistake comes off before the evidence is sent, so the right one
+ * can replace it (the partner keeps the unused document; nothing references it). One person, with a
+ * reason, audited; only while evidence is open.
+ */
+export function removeDisputeEvidenceFile(
+  db: Database,
+  input: {
+    disputeId: string;
+    index: number;
+    staffUserId: string;
+    reason: string;
+    now: Date;
+  },
+): Promise<{ files: number }> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const row = await lockedDispute(tx, input.disputeId);
+      const { late, canSubmit } = evidenceOpen(row, input.now);
+      if (late) throw new OperationError('COLLECT_EVIDENCE_LATE');
+      if (
+        !canSubmit ||
+        !Number.isInteger(input.index) ||
+        input.index < 0 ||
+        input.index >= row.evidenceFiles.length
+      )
+        throw new OperationError('COLLECT_ACTION_REFUSED', 'no_file');
+      const files = row.evidenceFiles.filter((_, i) => i !== input.index);
+      await tx
+        .update(disputes)
+        .set({
+          evidenceFiles: files,
+          evidenceState:
+            files.length > 0
+              ? 'draft'
+              : row.evidenceState === 'refused'
+                ? 'refused'
+                : 'none',
+          updatedAt: input.now,
+        })
+        .where(eq(disputes.id, row.id));
+      await recordAudit(tx, {
+        staffUserId: input.staffUserId,
+        action: 'collect_dispute.file_removed',
+        permission: 'collect.manage',
+        subjectType: 'dispute',
+        subjectId: row.id,
+        reason: input.reason,
         now: input.now,
       });
       return { files: files.length };

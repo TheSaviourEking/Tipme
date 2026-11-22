@@ -1,5 +1,5 @@
 {
-  "id": "9b1cba39-65dc-4389-b1b7-f4b68adefd48",
+  "id": "1f3fb9a5-c92a-418c-939d-cd1a51910492",
   "prevId": "b9d4a020-2de9-48b1-895a-b8d9922f1f84",
   "version": "7",
   "dialect": "postgresql",
@@ -6768,7 +6768,7 @@
       "checkConstraints": {
         "notifications_kind": {
           "name": "notifications_kind",
-          "value": "kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'dispute_hold', 'business_invitation', 'business_verified', 'business_share_held_back')"
+          "value": "kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'collect_name_recheck', 'dispute_hold', 'business_invitation', 'business_verified', 'business_share_held_back')"
         }
       },
       "isRLSEnabled": false

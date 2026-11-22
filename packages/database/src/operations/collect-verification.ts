@@ -630,6 +630,49 @@ async function finishNameRecheck(
   );
 }
 
+/** The notice a name change sends (fix round 1, I3): user copy, so the partner is never named. */
+export const COLLECT_NAME_RECHECK_NOTICE = {
+  title: 'Add your bank details again',
+  body: 'Your verified name was changed. Add your bank details again so our payment partner can check the new name and send your tips.',
+} as const;
+
+/**
+ * Fix round 1 (I3): after support changes their name, the recipient's tips wait for a new check, so
+ * they are told to add their bank details again: in the app and by email, once per change.
+ */
+async function tellNameRecheck(
+  tx: Tx,
+  input: { profileId: string; sealing?: MailSealing | undefined; now: Date },
+): Promise<void> {
+  const [row] = await tx
+    .select({ userId: profiles.userId, displayName: profiles.displayName })
+    .from(profiles)
+    .where(eq(profiles.id, input.profileId));
+  if (!row?.userId) return;
+  const dedupeKey = `collect_name_recheck.${input.profileId}.${input.now.getTime()}`;
+  await tx
+    .insert(notifications)
+    .values({
+      id: idFromKey(dedupeKey),
+      userId: row.userId,
+      kind: 'collect_name_recheck',
+      ...COLLECT_NAME_RECHECK_NOTICE,
+      createdAt: input.now,
+    })
+    .onConflictDoNothing();
+  if (input.sealing)
+    await mailOwner(tx, input.sealing, {
+      profileId: input.profileId,
+      type: 'collect_name_recheck',
+      data: {
+        firstName:
+          row.displayName.split(/\s+/)[0] || row.displayName || 'there',
+      },
+      dedupeKey,
+      now: input.now,
+    });
+}
+
 /** The `current` a pending name change is pinned on: changes if the name moved, never spells it. */
 export async function collectNameStamp(
   db: Database | Tx,
@@ -657,6 +700,8 @@ export async function changeCollectLegalName(
     staffUserId: string;
     reason: string;
     now: Date;
+    /** To email the recipient (fix round 1, I3); the in-app notice goes either way. */
+    sealing?: MailSealing | undefined;
   },
 ): Promise<{ changed: true }> {
   const parsed = collectLegalNameSchema.safeParse(input.legalName);
@@ -682,6 +727,7 @@ export async function changeCollectLegalName(
       collectNameRecheckAt: input.now,
     })
     .where(eq(profiles.id, input.profileId));
+  await tellNameRecheck(tx, input);
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
     action: 'collect_name.changed',

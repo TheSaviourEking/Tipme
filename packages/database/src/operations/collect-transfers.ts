@@ -34,7 +34,7 @@ import {
 import { collectSettingsInForce } from './collect-settings.js';
 import { guarded, OperationError } from './errors.js';
 import { newId } from './ids.js';
-import { openIssue } from './issues.js';
+import { markResolved, openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
 import { enqueueOutbox } from './outbox.js';
 import { reportProviderKeyRefused } from './payout-start.js';
@@ -550,7 +550,14 @@ async function bookPaid(
  */
 export async function recordReviewTransferPaid(
   tx: Tx,
-  i: { transferId: string; transferRef: string; now: Date },
+  i: {
+    transferId: string;
+    transferRef: string;
+    now: Date;
+    /** Who asked, and why: the transfer's review issue is resolved in their name. */
+    staffUserId: string;
+    reason: string;
+  },
 ): Promise<{ transferId: string; amountMinor: string }> {
   const [row] = await tx
     .select()
@@ -561,6 +568,25 @@ export async function recordReviewTransferPaid(
     throw new OperationError('COLLECT_ACTION_REFUSED', 'not_in_review');
   if (!(await bookPaid(tx, row, 'review', i.transferRef, i.now)))
     throw new OperationError('COLLECT_ACTION_REFUSED', 'moved');
+  // Fix round 1 (minor 1): the review it was in is settled, so its issue is too.
+  const [issue] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.dedupeKey, `collect_transfer_review.${row.id}`),
+        eq(issues.status, 'open'),
+      ),
+    );
+  if (issue)
+    await markResolved(tx, {
+      issueId: issue.id,
+      resolvedBy: i.staffUserId,
+      staffUserId: i.staffUserId,
+      reason: i.reason,
+      outcome: 'resolved_by_provider',
+      now: i.now,
+    });
   return { transferId: row.id, amountMinor: String(row.amountMinor) };
 }
 

@@ -13,9 +13,9 @@ import {
 import type { Request, Response } from 'express';
 import {
   OPS_COLLECT_EVIDENCE_MAX_BYTES,
-  OPS_COLLECT_EVIDENCE_MAX_FILES,
   OPS_COLLECT_EVIDENCE_TYPES,
   OPS_COLLECT_TRANSFER_STATUSES,
+  opsCollectEvidenceMaxFiles,
   opsCollectEvidenceSchema,
   opsCollectNameRequestSchema,
   opsReasonSchema,
@@ -45,6 +45,7 @@ import {
   disputeForEvidence,
   holdTransferForReview,
   profileIdByHandle,
+  removeDisputeEvidenceFile,
   requestSeriousAction,
   type SeriousActionServices,
 } from '@tipme/database';
@@ -316,7 +317,11 @@ export class OpsCollectController {
     if (!dispute) throw new CodedHttpException(404, 'NOT_FOUND');
     if (dispute.late)
       throw new CodedHttpException(409, 'COLLECT_EVIDENCE_LATE');
-    if (!dispute.canSubmit || dispute.files >= OPS_COLLECT_EVIDENCE_MAX_FILES)
+    // Fix round 1 (C1): the provider's own limit (one file at Bachs), before the partner sees it.
+    if (
+      !dispute.canSubmit ||
+      dispute.files >= opsCollectEvidenceMaxFiles(dispute.provider)
+    )
       throw new CodedHttpException(409, 'COLLECT_ACTION_REFUSED');
     const file = await readEvidence(request);
     const provider =
@@ -347,6 +352,33 @@ export class OpsCollectController {
         bytes: file.bytes.length,
         staffUserId: ops.userId,
         now,
+      }),
+    };
+  }
+
+  /**
+   * Fix round 1 (C1): take a file off before the evidence is sent, so a wrong one can be replaced.
+   * One person with a reason and a fresh code, audited: nothing is submitted by it.
+   */
+  @Post('disputes/:id/evidence/files/:index/remove')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('collect.manage')
+  async removeFile(
+    @CurrentOps() ops: OpsContext,
+    @Param('id') id: string,
+    @Param('index') index: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ files: number }>> {
+    if (!/^[0-4]$/.test(index)) throw new CodedHttpException(404, 'NOT_FOUND');
+    return {
+      data: await removeDisputeEvidenceFile(this.database.db, {
+        disputeId: this.id(id),
+        index: Number(index),
+        staffUserId: ops.userId,
+        reason: body.reason,
+        now: new Date(),
       }),
     };
   }

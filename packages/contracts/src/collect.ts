@@ -218,6 +218,11 @@ export interface OpsCollectHeldRecipient {
   remindersSent: number;
   paused: boolean;
   pausedReason: 'amount' | 'days' | null;
+  /**
+   * Fix round 1 (I3): support changed their verified name at this time, and nothing more moves to
+   * them until our payment partner checks it with their bank details again. Null otherwise.
+   */
+  nameRecheckSince: string | null;
 }
 
 /** A business's share TipMe holds (R3), by name only. */
@@ -310,6 +315,8 @@ export interface OpsCollectDisputeDetail extends OpsCollectDispute {
     submittedAt: string | null;
     /** Evidence can be added and sent now (open, before the deadline, not sent yet). */
     canSubmit: boolean;
+    /** The most files this dispute's provider takes (1 at Bachs, 5 elsewhere). */
+    maxFiles: number;
     /** The deadline has passed. */
     late: boolean;
   };
@@ -344,6 +351,12 @@ export const OPS_COLLECT_EVIDENCE_TYPES = [
 ] as const;
 export const OPS_COLLECT_EVIDENCE_MAX_BYTES = 5 * 1024 * 1024;
 export const OPS_COLLECT_EVIDENCE_MAX_FILES = 5;
+/**
+ * The most evidence files a dispute at this provider takes. Bachs's evidence has one general
+ * attachment slot (Task 5's adapter), so one; the brief's five elsewhere.
+ */
+export const opsCollectEvidenceMaxFiles = (provider: string): number =>
+  provider === 'bachs' ? 1 : OPS_COLLECT_EVIDENCE_MAX_FILES;
 
 /** `POST /v1/ops/collect/name`: a locked name changed by support, on the page with this handle. */
 export const opsCollectNameRequestSchema = opsCollectNameChangeSchema

@@ -61,6 +61,7 @@ import { askProRefund, proRefundFacts } from './pro-refunds.js';
 import {
   askTipRefund,
   recordUnbookedRefund,
+  recoveredOnTip,
   returnHeldRefundMoney,
   tipRefundFacts,
 } from './tip-refunds.js';
@@ -755,6 +756,7 @@ const collectNameChange = acting<{
       staffUserId: context.actorId,
       reason: context.reason,
       now: context.now,
+      sealing: context.services?.sealing,
     }),
 });
 
@@ -1057,6 +1059,8 @@ const collectTransferRecordPaid = acting<{ transferId: string }>({
       transferId,
       transferRef: facts.transferRef,
       now: context.now,
+      staffUserId: context.actorId,
+      reason: context.reason,
     });
   },
 });
@@ -1135,7 +1139,12 @@ const tipRefundRecordPaid = acting<{ tipId: string }>({
   target: ({ tipId }) => tipId,
   current: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
-    return { refusal: facts.refusal, unbooked: String(facts.unbookedMinor) };
+    return {
+      refusal: facts.refusal,
+      unbooked: String(facts.unbookedMinor),
+      // I2: a return to the recipient starting or finishing since asking makes it stale.
+      returning: (await recoveredOnTip(tx, tipId)).returning,
+    };
   },
   describe: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);

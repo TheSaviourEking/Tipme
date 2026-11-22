@@ -320,6 +320,24 @@ async function bookFee(
     });
 }
 
+/**
+ * Fix round 1 (I1): locks the dispute's tip row, before the dispute row. A refund ask (askTipRefund)
+ * locks the tip first too, so a hold released here and a refund counting on that hold are never both
+ * committed with the money reserved by nothing.
+ */
+export async function lockDisputeTip(tx: Tx, disputeId: string): Promise<void> {
+  const [found] = await tx
+    .select({ tipId: disputes.tipId })
+    .from(disputes)
+    .where(eq(disputes.id, disputeId));
+  if (!found) return;
+  await tx
+    .select({ id: tips.id })
+    .from(tips)
+    .where(eq(tips.id, found.tipId))
+    .for('update');
+}
+
 /** Locks the dispute row for one step. */
 async function lockDispute(tx: Tx, disputeId: string): Promise<DisputeRow> {
   const [row] = await tx
@@ -437,6 +455,8 @@ export function advanceDispute(
 ): Promise<void> {
   return guarded(() =>
     db.transaction(async (tx) => {
+      // The tip first, then the dispute (I1): the 14-day release can't race a refund ask.
+      await lockDisputeTip(tx, disputeId);
       const row = await lockDispute(tx, disputeId);
       if (row.settledAt) return;
       const position = await sharePosition(tx, row.tipId);

@@ -1897,6 +1897,10 @@ export async function recordUnbookedRefund(
     .from(ledgerTransactions)
     .where(eq(ledgerTransactions.operationKey, `collect_refund.${row.id}`));
   if (booked) throw new OperationError('COLLECT_ACTION_REFUSED', 'booked');
+  // Fix round 1 (I2): a return of the held money to the recipient is moving: booking from that money
+  // now would use it twice. Once it is paid it no longer counts as held, and TipMe absorbs the rest.
+  if ((await recoveredOnTip(tx, input.tipId)).returning)
+    throw new OperationError('COLLECT_ACTION_REFUSED', 'in_flight');
   const refunded = row.refundedMinor!;
   const fee = row.refundFeeMinor ?? 0n;
   let absorbed: bigint;

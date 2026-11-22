@@ -3,7 +3,6 @@ import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
 import {
   OPS_COLLECT_EVIDENCE_MAX_BYTES,
-  OPS_COLLECT_EVIDENCE_MAX_FILES,
   OPS_COLLECT_EVIDENCE_TYPES,
   type OpsCollectDisputeDetail,
 } from '@tipme/contracts';
@@ -174,8 +173,9 @@ function Evidence({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
-  const { files } = dispute.evidence;
-  const full = files.length >= OPS_COLLECT_EVIDENCE_MAX_FILES;
+  const { files, maxFiles } = dispute.evidence;
+  // Fix round 1 (C1): the provider's own limit (one file at Bachs, five elsewhere).
+  const full = files.length >= maxFiles;
 
   const upload = async (file: File | undefined) => {
     if (!file) return;
@@ -231,15 +231,27 @@ function Evidence({
     <Card className="settings-section">
       <h2>Evidence</h2>
       <p className="tm-hint">
-        Up to {OPS_COLLECT_EVIDENCE_MAX_FILES} files (PDF, PNG or JPEG, 5 MB
-        each) and your words for the payment partner. It is submitted once,
-        after a second person approves, and can’t be changed after.
+        {maxFiles === 1
+          ? 'Up to 1 file (PDF, PNG or JPEG, 5 MB)'
+          : `Up to ${maxFiles} files (PDF, PNG or JPEG, 5 MB each)`}{' '}
+        and your words for the payment partner. It is submitted once, after a
+        second person approves, and can’t be changed after. A wrong file can be
+        removed before then.
       </p>
       {files.length > 0 && (
         <ol className="ops-list" aria-label="Evidence files">
           {files.map((file, index) => (
-            <li key={index}>
+            <li key={`${index}-${file.bytes}`} data-testid="evidence-file">
               File {index + 1}: {fileWords(file.contentType, file.bytes)}
+              <CollectAct
+                path={`/v1/ops/collect/disputes/${dispute.id}/evidence/files/${index}/remove`}
+                open="Remove file…"
+                field="Why remove this file?"
+                submit="Remove it"
+                done="Removed. You can add the right file now."
+                variant="quiet"
+                onDone={onChange}
+              />
             </li>
           ))}
         </ol>
