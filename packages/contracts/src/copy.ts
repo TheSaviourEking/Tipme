@@ -42,3 +42,13 @@ export const COLLECT_COPY = {
   disputeHold: (amount: string) =>
     `A payment to you is being questioned. We’ve held ${amount} until it’s settled.`,
 } as const;
+
+/**
+ * The recipient's words for what TipMe holds for them (spec §10; RM7 adds `refundHeld`). User
+ * copy: never names the payment partner.
+ */
+export const COLLECT_HELD_WORDS = {
+  kept: 'Kept for you until you add your bank details',
+  onItsWay: 'On its way to you',
+  refundHeld: 'Held while a refund is settled',
+} as const;

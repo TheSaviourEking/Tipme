@@ -1426,6 +1426,65 @@ test('the status says what is held for disputes still open on their tips, and no
   assert.equal(await held(TOBI), '0');
 });
 
+test('a refund hold and a dispute hold at once: each part is counted once, and a dispute is never kept or on its way (RM11)', async () => {
+  // Three paid collect tips, each with its share held (₦9,500 each).
+  const kept = await paidTip(TOBI, ago(DAY));
+  const refunded = await paidTip(TOBI, ago(DAY));
+  const disputed = await paidTip(TOBI, ago(DAY));
+  const share = (tipId, reason) =>
+    q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = $2
+        WHERE tip_id = $1 AND kind = 'share'`,
+      [tipId, reason],
+    );
+  // One held for its refund (RM7), one held for a dispute before it moved (RM11).
+  await share(refunded.tipId, 'refund');
+  await share(disputed.tipId, 'dispute');
+  await q(
+    `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+       status, held_minor, last_event_at)
+     VALUES ($1, 'bachs', $2, $3, $4, 'NGN', 'open', 0, now())`,
+    [randomUUID(), `dp_${randomUUID().slice(0, 8)}`, disputed.tipId, GROSS],
+  );
+  const view = (
+    await controllerFor(partner().provider).status({ userId: TOBI.userId })
+  ).data;
+  const net = 950_000n;
+  assert.equal(view.heldMinor, String(3n * net));
+  assert.deepEqual(
+    [view.keptMinor, view.onItsWayMinor, view.refundHeldMinor],
+    [String(net), '0', String(net)],
+  );
+  assert.equal(view.disputeHeldMinor, String(net));
+  // Every naira held is in exactly one of the four.
+  assert.equal(
+    BigInt(view.keptMinor) +
+      BigInt(view.onItsWayMinor) +
+      BigInt(view.refundHeldMinor) +
+      BigInt(view.disputeHeldMinor),
+    BigInt(view.heldMinor),
+  );
+  // Home and Earnings read the same split.
+  const summary = await ops.dashboardSummary(database.db, TOBI.id, new Date());
+  assert.deepEqual(
+    [summary.keptMinor, summary.onItsWayMinor, summary.refundHeldMinor],
+    [String(net), '0', String(net)],
+  );
+  // Verified: the kept part moves to on its way; the held parts don't.
+  await q(`UPDATE profiles SET collect_verified_at = now() WHERE id = $1`, [
+    TOBI.id,
+  ]);
+  const after = (
+    await controllerFor(partner().provider).status({ userId: TOBI.userId })
+  ).data;
+  assert.deepEqual(
+    [after.keptMinor, after.onItsWayMinor, after.refundHeldMinor],
+    ['0', String(net), String(net)],
+  );
+  assert.equal(after.disputeHeldMinor, String(net));
+  void kept;
+});
+
 test('with the switch on, an undecided recipient whose first quote would go to collect has a collect status, and adding a bank fixes the mode as a quote would (Task 14 R2-I1)', async () => {
   const controller = controllerFor(partner().provider);
   const stored = async () =>

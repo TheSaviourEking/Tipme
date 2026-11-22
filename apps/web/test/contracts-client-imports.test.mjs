@@ -37,7 +37,7 @@ test('the public tip form imports no values from the contracts barrel', () => {
   }
 });
 
-test('COLLECT_COPY is imported from @tipme/contracts/copy everywhere in the web app', () => {
+test('COLLECT_COPY and COLLECT_HELD_WORDS are imported from @tipme/contracts/copy everywhere in the web app', () => {
   const offenders = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
@@ -61,6 +61,7 @@ test('@tipme/contracts/copy imports nothing, and the barrel re-exports the same 
   );
   assert.doesNotMatch(built, /^\s*(import|export\s.*\sfrom)\s/m);
   assert.equal(barrel.COLLECT_COPY, copy.COLLECT_COPY);
+  assert.equal(barrel.COLLECT_HELD_WORDS, copy.COLLECT_HELD_WORDS);
 });
 
 test('the guard sees value imports and lets type-only ones through', () => {

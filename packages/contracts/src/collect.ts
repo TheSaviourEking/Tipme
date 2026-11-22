@@ -13,16 +13,6 @@ import {
  */
 
 /**
- * The recipient's words for what TipMe holds for them (spec §10; RM7 adds `refundHeld`). User
- * copy: never names the payment partner.
- */
-export const COLLECT_HELD_WORDS = {
-  kept: 'Kept for you until you add your bank details',
-  onItsWay: 'On its way to you',
-  refundHeld: 'Held while a refund is settled',
-} as const;
-
-/**
  * A recipient's You collect state (plan Task 12; read by `GET /v1/me/collect`, Task 13). `heldMinor`
  * is what TipMe holds for them now: `keptMinor` while they have no verified bank details ("Kept for
  * you until you add your bank details"), `onItsWayMinor` once verified ("On its way to you"), and
@@ -202,4 +192,4 @@ export const opsCollectNameChangeSchema = opsReasonSchema
   .strict();
 
 // COLLECT_COPY lives in copy.ts (no zod), so public pages can import it on its own.
-export { COLLECT_COPY } from './copy.js';
+export { COLLECT_COPY, COLLECT_HELD_WORDS } from './copy.js';

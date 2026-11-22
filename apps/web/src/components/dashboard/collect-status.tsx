@@ -2,7 +2,7 @@
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { CollectStatusView, DashboardSummary } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts/copy';
+import { COLLECT_COPY, COLLECT_HELD_WORDS } from '@tipme/contracts/copy';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { Money } from '@/components/money';
 
@@ -65,14 +65,18 @@ export function withAmount(
 
 /**
  * What TipMe holds for a collect recipient beside their balance: kept until they add bank details,
- * or on its way once verified. Neither is withdrawable. Both are "0" for everyone else, so nothing
- * shows for them.
+ * or on its way once verified, and, on its own line, what is held while a refund of one of their
+ * tips is settled (RM7). None is withdrawable. Money held for a dispute is in none of these: Home's
+ * dispute notice says it (RM11). All are "0" for everyone else, so nothing shows for them.
  */
 export function CollectHeldNotes({
   summary,
   className,
 }: {
-  summary: Pick<DashboardSummary, 'keptMinor' | 'onItsWayMinor'>;
+  summary: Pick<
+    DashboardSummary,
+    'keptMinor' | 'onItsWayMinor' | 'refundHeldMinor'
+  >;
   className: string;
 }) {
   return (
@@ -85,6 +89,12 @@ export function CollectHeldNotes({
       {summary.onItsWayMinor !== '0' && (
         <span className={className} data-testid="on-its-way">
           {COLLECT_COPY.onItsWay} <Money minor={summary.onItsWayMinor} />
+        </span>
+      )}
+      {summary.refundHeldMinor !== '0' && (
+        <span className={className} data-testid="refund-held">
+          {COLLECT_HELD_WORDS.refundHeld}{' '}
+          <Money minor={summary.refundHeldMinor} />
         </span>
       )}
     </>

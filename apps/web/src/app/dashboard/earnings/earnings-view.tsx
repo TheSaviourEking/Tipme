@@ -472,11 +472,14 @@ export default function EarningsPage() {
         What you received from confirmed tips, after TipMe’s fee. Days and weeks
         are in Lagos time; weeks start on Monday.
       </p>
-      {held && (held.keptMinor !== '0' || held.onItsWayMinor !== '0') && (
-        <p className="earnings-held">
-          <CollectHeldNotes summary={held} className="earnings-held__note" />
-        </p>
-      )}
+      {held &&
+        (held.keptMinor !== '0' ||
+          held.onItsWayMinor !== '0' ||
+          held.refundHeldMinor !== '0') && (
+          <p className="earnings-held">
+            <CollectHeldNotes summary={held} className="earnings-held__note" />
+          </p>
+        )}
       {summary.data ? (
         <Summary summary={summary.data} pro={pro} />
       ) : (

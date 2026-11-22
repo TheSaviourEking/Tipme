@@ -26,27 +26,45 @@ export function refundHeldSql(profile: SQL): SQL {
 }
 
 /**
+ * RM11 (Task 14): the part of a person's `held_for_recipients` in shares held in review for a
+ * dispute on their tip (never moved, so no dispute hold on their balance names it). The recipient
+ * reads it in the dispute notice, never as kept or on its way. A share has one review reason, so
+ * this never overlaps the refund's part.
+ */
+export function disputeReviewSql(profile: SQL): SQL {
+  return sql`(SELECT COALESCE(SUM(s.amount_minor), 0) FROM collect_transfers s
+        WHERE s.profile_id = ${profile} AND s.kind = 'share' AND s.status = 'review'
+          AND s.review_reason = 'dispute')`;
+}
+
+/** At least nothing, and at most what is left. */
+const within = (part: bigint, left: bigint) =>
+  part <= 0n || left <= 0n ? 0n : part > left ? left : part;
+
+/**
  * Splits what TipMe holds for a person (`held_for_recipients`) into the words they see (spec §10):
- * held for a refund (RM7), and the rest kept for them (not verified) or on its way (verified).
+ * held for a refund (RM7), held in review for a dispute (RM11), and the rest kept for them (not
+ * verified) or on its way (verified). The parts never add up to more than is held.
  */
 export function heldParts(
   held: bigint,
   refundHeld: bigint,
   verified: boolean,
-): { keptMinor: bigint; onItsWayMinor: bigint; refundHeldMinor: bigint } {
-  const refundHeldMinor =
-    refundHeld <= 0n
-      ? 0n
-      : refundHeld > held
-        ? held > 0n
-          ? held
-          : 0n
-        : refundHeld;
-  const rest = held - refundHeldMinor;
+  disputeReview = 0n,
+): {
+  keptMinor: bigint;
+  onItsWayMinor: bigint;
+  refundHeldMinor: bigint;
+  disputeReviewMinor: bigint;
+} {
+  const refundHeldMinor = within(refundHeld, held);
+  const disputeReviewMinor = within(disputeReview, held - refundHeldMinor);
+  const rest = held - refundHeldMinor - disputeReviewMinor;
   return {
     keptMinor: verified ? 0n : rest,
     onItsWayMinor: verified ? rest : 0n,
     refundHeldMinor,
+    disputeReviewMinor,
   };
 }
 
@@ -126,6 +144,7 @@ export function balanceQuery(
          FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
         WHERE a.code = 'held_for_recipients' AND a.profile_id = ${profileId}) AS held,
       ${collect ? refundHeldSql(sql`${profileId}`) : sql`0`} AS refund_held,
+      ${collect ? disputeReviewSql(sql`${profileId}`) : sql`0`} AS dispute_review,
       (SELECT ${profiles.collectionMode} = 'collect' FROM profiles WHERE profiles.id = ${profileId})
         OR EXISTS (SELECT 1 FROM disputes x JOIN tips dt ON dt.id = x.tip_id
                     WHERE dt.profile_id = ${profileId})
@@ -185,6 +204,7 @@ export async function balanceWithModeIn(
     reserved: string | null;
     held: string | null;
     refund_held: string | null;
+    dispute_review: string | null;
     collect_money: boolean | null;
     verified: boolean | null;
     collecting: boolean | null;
@@ -199,11 +219,20 @@ export async function balanceWithModeIn(
     result = await tx.execute<BalanceRow>(balanceQuery(profileId));
   const row = result.rows[0];
   const held = BigInt(row?.held ?? '0');
+  // RM11: a share in review for a dispute is neither kept nor on its way; the dispute notice says it.
+  const { keptMinor, onItsWayMinor, refundHeldMinor } = heldParts(
+    held,
+    BigInt(row?.refund_held ?? '0'),
+    row?.verified === true,
+    BigInt(row?.dispute_review ?? '0'),
+  );
   return {
     availableMinor:
       BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0') - held,
     confirmingMinor: BigInt(row?.confirming ?? '0'),
-    ...heldParts(held, BigInt(row?.refund_held ?? '0'), row?.verified === true),
+    keptMinor,
+    onItsWayMinor,
+    refundHeldMinor,
     collecting: row?.collecting === true,
   };
 }
