@@ -254,6 +254,26 @@ export async function balanceWithModeIn(
   };
 }
 
+/**
+ * Final review M1: whether TipMe still holds any You collect money for this person or for a dispute
+ * on their tips: any part of `held_for_recipients` (kept, on its way, held for a refund, or a share
+ * in review for a dispute, RM11), or an unsettled dispute's hold on their balance. A dispute won
+ * gives that money back to them, so an account with any of it can't be deleted.
+ */
+export async function collectMoneyHeld(
+  tx: Database | Tx,
+  profileId: string,
+): Promise<boolean> {
+  const result = await tx.execute<{ held: boolean }>(sql`
+    SELECT (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
+              FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+             WHERE a.code = 'held_for_recipients' AND a.profile_id = ${profileId}) > 0
+        OR EXISTS (SELECT 1 FROM disputes x JOIN tips t ON t.id = x.tip_id
+                    WHERE t.profile_id = ${profileId} AND x.settled_at IS NULL
+                      AND x.held_minor > 0) AS held`);
+  return result.rows[0]?.held === true;
+}
+
 export async function balanceIn(
   tx: Database | Tx,
   profileId: string,

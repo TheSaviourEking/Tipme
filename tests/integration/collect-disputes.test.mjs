@@ -1663,3 +1663,48 @@ for (const directCase of casesOf(9))
       setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
     }),
   );
+
+/*
+ * Final review M1: an account can't be deleted while You collect money is held for a dispute on
+ * their tips. Neither part is "kept" or "on its way", but a win releases it to them, and a deleted
+ * account's money nobody can withdraw.
+ */
+async function tobiUser() {
+  const [{ user_id: existing }] = await q(
+    `SELECT user_id FROM profiles WHERE id = $1`,
+    [TOBI.id],
+  );
+  if (existing) return existing;
+  const [{ id }] = await q(
+    `INSERT INTO users (id, email, email_verified_at) VALUES (gen_random_uuid(), $1, now()) RETURNING id`,
+    [`collectdispute.${randomUUID().slice(0, 8)}@example.com`],
+  );
+  await q(`UPDATE profiles SET user_id = $2 WHERE id = $1`, [TOBI.id, id]);
+  return id;
+}
+
+test('M1: an account whose only money is a share held for a dispute cannot be deleted', async () => {
+  const tip = await paidTip(TOBI);
+  await apply(disputeEvent(tip));
+  assert.equal((await shareOf(tip.rowId)).review_reason, 'dispute');
+  const balance = await ops.balanceOf(database.db, TOBI.id);
+  assert.equal(balance.availableMinor, 0n);
+  assert.equal(balance.keptMinor + balance.onItsWayMinor, 0n);
+  await assert.rejects(
+    ops.deleteAccount(database.db, { userId: await tobiUser(), sealing }),
+    { code: 'HAS_BALANCE' },
+  );
+});
+
+test('M1: an account whose only money is held from their balance by an open dispute cannot be deleted', async () => {
+  await verified(TOBI);
+  const { provider } = partner();
+  const tip = await movedTip(TOBI, provider);
+  await apply(disputeEvent(tip));
+  assert.equal((await disputeOf(tip.disputeRef)).share_step, 'balance');
+  assert.equal(await available(TOBI), 0n);
+  await assert.rejects(
+    ops.deleteAccount(database.db, { userId: await tobiUser(), sealing }),
+    { code: 'HAS_BALANCE' },
+  );
+});
