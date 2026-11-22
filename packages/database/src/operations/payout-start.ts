@@ -16,6 +16,7 @@ import { guarded, safeError } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueOutbox } from './outbox.js';
 import { withdrawalsSwitchState } from './withdrawals-switch.js';
+import { ownMoneyAllows } from './collect-reserve.js';
 import { openIssue } from './issues.js';
 import {
   holdsOf,
@@ -206,8 +207,14 @@ function refusal(error: unknown): { failureReason: PayoutFailure } | null {
     : null;
 }
 
+/** Task 11: TipMe's own money can't cover the fee without spending what it holds for recipients. */
+class OwnMoneyShortError extends Error {
+  override readonly name = 'OwnMoneyShortError';
+}
+
 // PlatformRefusalError lives there too. Only that error says so: a timeout is never one.
 function platformRefusal(error: unknown): PlatformRefusal | null {
+  if (error instanceof OwnMoneyShortError) return 'reserve_empty';
   return error instanceof Error &&
     error.name === 'PlatformRefusalError' &&
     'refusal' in error
@@ -775,6 +782,17 @@ async function coverFee(
   const feeMinor = payout.feeMinor ?? 0n;
   if (payout.feeTransferReference || feeMinor <= 0n) return;
   if (await claimFeeCredit(db, payout, accountRef, feeMinor)) return;
+  // You collect (Task 11, R5, P10): the fee comes from TipMe's own money, never what it holds for
+  // recipients. An owed move (non-voluntary); with nothing held it never refuses. Refused, nothing is
+  // asked of the partner and the withdrawal waits exactly as on an empty reserve.
+  if (
+    !(await ownMoneyAllows(db, {
+      amountMinor: feeMinor,
+      currency: 'NGN',
+      voluntary: false,
+    }))
+  )
+    throw new OwnMoneyShortError();
   await noteStep(db, payout.id, 'fee');
   const { transferRef } = await starter.coverPayoutFee({
     accountRef,

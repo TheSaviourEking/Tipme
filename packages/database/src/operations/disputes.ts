@@ -50,6 +50,7 @@ import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { scheduleCollectRecover } from './share-transfers.js';
 import {
+  refundPullBackHeld,
   tellRefundAndDispute,
   yieldRefundsToLostDispute,
 } from './tip-refunds.js';
@@ -610,7 +611,11 @@ async function settleLost(
     .where(
       and(
         eq(shareTransfers.tipId, row.tipId),
-        inArray(shareTransfers.kind, ['collect_sweep', 'collect_recover']),
+        inArray(shareTransfers.kind, [
+          'collect_sweep',
+          'collect_recover',
+          'collect_return',
+        ]),
       ),
     )
     .for('update')) as ShareSweepRow[];
@@ -619,9 +624,15 @@ async function settleLost(
   const pullBack = sweeps.find(
     (t) => t.kind === 'collect_recover' && t.disputeId === row.id,
   );
-  const pulledByOthers = sweeps
-    .filter((t) => t.kind === 'collect_recover' && t.disputeId !== row.id)
-    .reduce((sum, t) => sum + t.amountMinor, 0n);
+  // RI2: a refund's pull-back given back to the business (`collect_return`, paid) is the business's
+  // again, so it no longer counts as taken from it.
+  const pulledByOthers =
+    sweeps
+      .filter((t) => t.kind === 'collect_recover' && t.disputeId !== row.id)
+      .reduce((sum, t) => sum + t.amountMinor, 0n) -
+    sweeps
+      .filter((t) => t.kind === 'collect_return' && t.status === 'done')
+      .reduce((sum, t) => sum + t.amountMinor, 0n);
   if (businessSweep?.status === 'in_sent')
     return waiting(tx, row, now, "the business share's transfer is in flight");
   // A sweep in review that wasn't refused may have moved (the partner listed other money): a person
@@ -754,9 +765,18 @@ async function settleLost(
       businessMinor = min(owed, left);
       takeSweep = businessSweep;
     } else if (businessSweep.status === 'done') {
+      // RI2 (Task 11): what a failed refund of the tip already pulled back from the business is
+      // still held by TipMe for it (held_for_recipients(business)): this loss uses it first, so the
+      // business never gives it twice and TipMe absorbs none of it.
+      const fromRefundPull = min(
+        (await refundPullBackHeld(tx, row.tipId)).heldMinor,
+        min(owed, left),
+      );
+      businessMinor = fromRefundPull;
       // P29: already in the business's account. Pulled back from there first, as option B does;
-      // only what isn't there any more is TipMe's to absorb. Never what another dispute took.
-      const target = min(owed - pulledByOthers, left);
+      // only what isn't there any more is TipMe's to absorb. Never what another dispute (or a
+      // refund) took.
+      const target = min(owed - pulledByOthers, left - fromRefundPull);
       if (target > 0n) {
         if (!pullBack) {
           await scheduleCollectRecover(tx, {
@@ -772,8 +792,9 @@ async function settleLost(
           return 'waiting_back';
         }
         if (pullBack.status === 'done') {
-          businessMinor = min(pullBack.amountMinor, target);
-          if (target > businessMinor) absorbedBusiness = target - businessMinor;
+          const pulled = min(pullBack.amountMinor, target);
+          businessMinor = fromRefundPull + pulled;
+          if (target > pulled) absorbedBusiness = target - pulled;
         } else if (pullBack.status === 'gap') absorbedBusiness = target;
         else
           return waiting(

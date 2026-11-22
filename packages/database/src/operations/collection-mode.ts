@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { paymentAccounts, profiles } from '../schema.js';
+import { collectSignupsPaused } from './collect-reserve.js';
 
 /*
  * You collect (ADR-0016, PROPOSED; ruling R7): who collects a recipient's tips. `direct` is today's
@@ -13,15 +14,17 @@ export type CollectionMode = 'direct' | 'collect';
 
 /**
  * Whether a recipient may be put on `collect` now (ruling P11). Every new `collect` assignment, at
- * sign-up and at a first quote, asks this one helper. For now it always allows. Plan Task 11 makes it
- * refuse while TipMe's own money is below the critical line, so new sign-ups pause there (spec §6.3).
- * A refusal leaves the recipient undecided (null, so `direct`): it never moves anyone already on
- * `collect`.
+ * sign-up and at a first quote (and Task 14's read-only preview, which shares the quote's rules),
+ * asks this one helper. Task 11: it refuses while TipMe's reserve rule is broken (an open
+ * `collect_invariant_broken` issue, spec §6.3), so new sign-ups pause until staff clear it. A refusal
+ * leaves the recipient undecided (null, so `direct`): it never moves anyone already on `collect`.
+ * The check is injected so it can be tested at run time; by default it reads the issue.
  */
-export async function mayAssignCollect(tx: Database | Tx): Promise<boolean> {
-  // Task 11 reads TipMe's own money in this transaction; nothing to read yet.
-  void tx;
-  return true;
+export async function mayAssignCollect(
+  tx: Database | Tx,
+  deps: { signupsPaused?: (db: Database | Tx) => Promise<boolean> } = {},
+): Promise<boolean> {
+  return !(await (deps.signupsPaused ?? collectSignupsPaused)(tx));
 }
 
 /**
@@ -100,7 +103,7 @@ export async function decideCollectionMode(
     status === null || status === 'CREATING' || status === 'ONBOARDING'
       ? 'collect'
       : 'direct';
-  // Refused (Task 11): left undecided, so the next quote asks again.
+  // Refused (Task 11, sign-ups paused): left undecided, so the next quote asks again.
   if (decided === 'collect' && !(await mayAssignCollect(tx))) return 'direct';
   const [written] = await tx
     .update(profiles)

@@ -1,5 +1,5 @@
-import { eq, lt, sql } from 'drizzle-orm';
-import type { Database } from '../client.js';
+import { eq, lt, sql, type SQL } from 'drizzle-orm';
+import type { Database, Tx } from '../client.js';
 import { paymentReserveReadings } from '../schema.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
@@ -65,6 +65,46 @@ export function nairaText(minor: bigint): string {
 }
 
 /**
+ * The claim section both reserve checks share (Task 11): under the caller's advisory lock, whether
+ * to send this kind of alert now. Not when one is being sent (a claim younger than
+ * RESERVE_CLAIM_MS with no `alerted_at`), nor when one was sent in the current spell (since the last
+ * reading matching `fine`) less than RESERVE_REALERT_MS ago. Null for no; 'first' for the spell's
+ * first alert, 'again' for a repeat. The caller then inserts its reading with `alert_claimed_at`.
+ */
+export async function claimReserveAlert(
+  tx: Tx,
+  i: {
+    table: 'payment_reserve_readings' | 'collect_reserve_readings';
+    provider: string;
+    currency: string;
+    kind: SQL;
+    fine: SQL;
+    now: Date;
+  },
+): Promise<'first' | 'again' | null> {
+  const table = sql.identifier(i.table);
+  const [state] = (
+    await tx.execute(sql`
+      SELECT max(alerted_at) AS last_alert,
+             coalesce(bool_or(alerted_at IS NULL
+               AND alert_claimed_at > ${new Date(i.now.getTime() - RESERVE_CLAIM_MS).toISOString()}::timestamptz), false) AS in_flight
+        FROM ${table}
+       WHERE provider = ${i.provider} AND currency = ${i.currency}
+         AND ${i.kind}
+         AND read_at > coalesce(
+           (SELECT max(read_at) FROM ${table}
+             WHERE provider = ${i.provider} AND currency = ${i.currency} AND ${i.fine}),
+           '-infinity'::timestamptz)`)
+  ).rows as { last_alert: string | Date | null; in_flight: boolean }[];
+  if (state?.in_flight) return null;
+  const lastAlert = state?.last_alert ? new Date(state.last_alert) : null;
+  if (!lastAlert) return 'first';
+  return i.now.getTime() - lastAlert.getTime() >= RESERVE_REALERT_MS
+    ? 'again'
+    : null;
+}
+
+/**
  * Reads the platform reserve, records the reading, and tells staff through `alert`: at the first
  * low reading after a normal one, and again every 6 hours while it stays low. A balance that
  * cannot be read is recorded as unknown and alerts the same way, as "unreadable", with its own
@@ -107,29 +147,17 @@ export function checkReserve(
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtext(${`payment_reserve:${provider}`}::text))`,
       );
-      let claim = false;
-      if (low !== false) {
-        // When this kind of alert (low, or unreadable) was last sent, and whether one is being
-        // sent now, in the current spell: since the last reading that was fine.
-        const [state] = (
-          await tx.execute(sql`
-            SELECT max(alerted_at) AS last_alert,
-                   coalesce(bool_or(alerted_at IS NULL
-                     AND alert_claimed_at > ${new Date(now.getTime() - RESERVE_CLAIM_MS).toISOString()}::timestamptz), false) AS in_flight
-              FROM payment_reserve_readings
-             WHERE provider = ${provider} AND currency = ${CURRENCY}
-               AND ${low === null ? sql`low IS NULL` : sql`low = true`}
-               AND read_at > coalesce(
-                 (SELECT max(read_at) FROM payment_reserve_readings
-                   WHERE provider = ${provider} AND currency = ${CURRENCY} AND low = false),
-                 '-infinity'::timestamptz)`)
-        ).rows as { last_alert: string | Date | null; in_flight: boolean }[];
-        const lastAlert = state?.last_alert ? new Date(state.last_alert) : null;
-        claim =
-          !state?.in_flight &&
-          (!lastAlert ||
-            now.getTime() - lastAlert.getTime() >= RESERVE_REALERT_MS);
-      }
+      const claim =
+        low !== false &&
+        (await claimReserveAlert(tx, {
+          table: 'payment_reserve_readings',
+          provider,
+          currency: CURRENCY,
+          // This kind of alert (low, or unreadable), in the current spell: since the last fine one.
+          kind: low === null ? sql`low IS NULL` : sql`low = true`,
+          fine: sql`low = false`,
+          now,
+        })) !== null;
       await tx.insert(paymentReserveReadings).values({
         id,
         provider,

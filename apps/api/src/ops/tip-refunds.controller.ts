@@ -227,7 +227,11 @@ export class OpsTipRefundsController {
   > {
     await this.on(tipId);
     const facts = await this.facts(tipId);
-    if (!facts.collect || facts.heldMinor <= 0n || facts.refund)
+    if (
+      !facts.collect ||
+      (facts.heldMinor <= 0n && facts.businessHeldMinor <= 0n) ||
+      facts.refund
+    )
       throw new CodedHttpException(409, 'TIP_REFUND_REFUSED');
     return this.request('tip_refund.return', ops, tipId, body, response);
   }

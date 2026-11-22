@@ -4036,9 +4036,11 @@ export const shareTransfers = pgTable(
     currencyCheck('share_transfers'),
     // You collect (R3, P3): `collect_sweep` is a business's share of a collect tip, already in TipMe's
     // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
+    // Task 11 (RI2): `collect_return` sends back to a business what a failed refund pulled back from
+    // it (in leg only); `parent_id` is that `collect_recover` row.
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover', 'collect_return')`,
     ),
     check(
       'share_transfers_status',
@@ -4449,9 +4451,11 @@ export const collectReserveReadings = pgTable(
       'collect_reserve_readings_provider',
       sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
     ),
+    // Task 11: a currency the alert levels don't apply to (any but NGN, or You collect not in use)
+    // is read with both levels at zero.
     check(
       'collect_reserve_readings_amounts',
-      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor < warning_minor`,
+      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor <= warning_minor`,
     ),
     check(
       'collect_reserve_readings_own',
@@ -4460,9 +4464,11 @@ export const collectReserveReadings = pgTable(
     ),
     check(
       'collect_reserve_readings_level',
+      // Task 11: the rule (available >= held) is broken only where money is held; a negative balance
+      // with nothing held in it is critical (it still blocks every transfer, §6.3).
       sql`own_minor IS NULL OR (level IS NOT NULL AND level = CASE
-          WHEN own_minor < 0 THEN 'breach'
-          WHEN own_minor < critical_minor THEN 'critical'
+          WHEN held_minor > 0 AND own_minor < 0 THEN 'breach'
+          WHEN available_minor < 0 OR own_minor < critical_minor THEN 'critical'
           WHEN own_minor < warning_minor THEN 'warning'
           ELSE 'ok' END)`,
     ),
