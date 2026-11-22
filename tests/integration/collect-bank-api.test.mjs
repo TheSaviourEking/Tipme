@@ -1565,3 +1565,65 @@ test('with the switch on, an undecided recipient whose first quote would stay di
     null,
   );
 });
+
+// Task 15 fix round 2: after support changes a verified name (`collect_name.change`), the recipient
+// is asked for their bank details again (`readdBank`) instead of a "checking" that never ends. The
+// name lock and the partner's name check still apply; a passing check clears the recheck and the
+// held tips move on through the usual release.
+test('after a name change the status asks for the bank again; adding it under the new name verifies and releases the held tips', async () => {
+  const { provider } = partner();
+  const controller = controllerFor(provider);
+  assert.deepEqual(await addBank(controller, TOBI), {
+    data: { state: 'verified' },
+  });
+  assert.equal(
+    (await controller.status({ userId: TOBI.userId })).data.readdBank,
+    false,
+  );
+  const NEW_NAME = { first: 'Tobi', last: 'Bello' };
+  const [{ id: staffId }] = await q(
+    `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+  );
+  await database.db.transaction((tx) =>
+    ops.changeCollectLegalName(tx, {
+      profileId: TOBI.id,
+      legalName: NEW_NAME,
+      staffUserId: staffId,
+      reason: 'Married name, checked on a call',
+      now: new Date(),
+    }),
+  );
+  const tip = await paidTip(TOBI, ago(2 * DAY));
+  const status = async () =>
+    (await controller.status({ userId: TOBI.userId })).data;
+  const asked = await status();
+  assert.equal(asked.readdBank, true);
+  assert.equal(asked.verified, true);
+  const shareStatus = async () =>
+    (
+      await q(
+        `SELECT status FROM collect_transfers WHERE tip_id = $1 AND kind = 'share'`,
+        [tip.tipId],
+      )
+    )[0].status;
+  assert.equal(await shareStatus(), 'waiting');
+  // The lock still holds: the old name (or any other) is refused.
+  assert.deepEqual(
+    await refused(() =>
+      addBank(controller, TOBI, { accountNumber: accountNumber(2) }),
+    ),
+    { status: 409, code: 'NAME_LOCKED' },
+  );
+  // Under the new name: the partner checks it, the recheck clears, the held tip is released.
+  assert.deepEqual(
+    await addBank(controller, TOBI, {
+      legalName: NEW_NAME,
+      accountNumber: accountNumber(2),
+    }),
+    { data: { state: 'verified' } },
+  );
+  const after = await status();
+  assert.equal(after.readdBank, false);
+  assert.equal(after.bank.state, 'verified');
+  assert.equal(await shareStatus(), 'ready');
+});

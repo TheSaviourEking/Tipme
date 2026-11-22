@@ -176,6 +176,12 @@ export interface CollectBankView {
 export interface CollectStatusView extends CollectStatus {
   bank: CollectBankView | null;
   /**
+   * Task 15 fix round 2: support changed their verified name, and their current bank was checked
+   * under the old one. They add their bank details again (the name lock and our payment partner's
+   * name check still apply); their tips wait until then.
+   */
+  readdBank: boolean;
+  /**
    * What is held from their balance for disputes on their tips still open (spec §6.2), in minor
    * units, never negative: "A payment to you is being questioned. We’ve held {amount} until it's
    * settled." "0" when nothing is held.

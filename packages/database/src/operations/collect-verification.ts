@@ -572,6 +572,35 @@ export async function settleCollectVerification(
 }
 
 /**
+ * Task 15 fix round 2: whether the recipient must add their bank details again. Support changed
+ * their verified name, and no current bank has been checked by our payment partner under it (the
+ * bank's `name_digest` is the old name's). Once one has, the check under way decides (checking,
+ * manual review or verified), not this.
+ */
+export async function collectBankNeedsReadding(
+  db: Database,
+  input: { profileId: string; provider: string },
+): Promise<boolean> {
+  const facts = await collectBankFacts(db, input.profileId);
+  if (facts.mode !== 'collect' || !facts.nameRecheckAt || !facts.legalName)
+    return false;
+  const current = await guarded(() =>
+    db
+      .select({ nameDigest: payoutDestinations.nameDigest })
+      .from(payoutDestinations)
+      .where(
+        and(
+          eq(payoutDestinations.profileId, input.profileId),
+          eq(payoutDestinations.provider, recordedProviderName(input.provider)),
+          sql`${payoutDestinations.replacedAt} IS NULL`,
+        ),
+      ),
+  );
+  const digest = legalNameDigest(facts.legalName);
+  return !current.some((row) => row.nameDigest === digest);
+}
+
+/**
  * Task 15: after support changed a locked name, the recipient's current bank must have been checked
  * by our payment partner against that very name (the bank's `name_digest`, never first checked
  * under another name) before anything more is transferred. Clears the recheck once that holds, in
@@ -651,7 +680,8 @@ async function tellNameRecheck(
       id: idFromKey(dedupeKey),
       userId: row.userId,
       kind: 'collect_name_recheck',
-      ...COLLECT_NAME_RECHECK_NOTICE,
+      title: COLLECT_NAME_RECHECK_NOTICE.title,
+      body: COLLECT_NAME_RECHECK_NOTICE.body,
       createdAt: input.now,
     })
     .onConflictDoNothing();

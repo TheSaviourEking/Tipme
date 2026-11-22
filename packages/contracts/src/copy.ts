@@ -70,4 +70,7 @@ export const COLLECT_HELD_NOTE = {
 export const COLLECT_NAME_RECHECK_NOTICE = {
   title: 'Add your bank details again',
   body: 'Your verified name was changed. Add your bank details again so our payment partner can check the new name and send your tips.',
+  /** Above the bank form on Withdraw and Get paid while they add it again (fix round 2). */
+  formLine:
+    'Your name was updated. Add your bank details again so we can check it.',
 } as const;

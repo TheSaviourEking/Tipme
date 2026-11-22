@@ -9976,3 +9976,9 @@ body:has(
 .collect-dispute {
   margin-bottom: var(--space-4);
 }
+
+/* Task 15 fix round 2: the plain line above the bank form after support changed their name. */
+.collect-bank__recheck {
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
+}

@@ -612,7 +612,9 @@ const wired = {
         ).last === last,
     };
   },
-  // R11: staff's pause of every collect transfer, and its resume from a pause set here.
+  // R11: staff's pause of every collect transfer, and its resume from a pause set here. The set-up
+  // row takes the app's clock, as the action's own row does (milliseconds): a row at the database's
+  // now() (microseconds) could land later in the same millisecond and stay in force after it.
   'collect_transfers.pause': async () => {
     const paused = async () =>
       (await ops.collectSettingsInForce(database.db)).paused;
@@ -622,7 +624,8 @@ const wired = {
            first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
            reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
          VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
-           50000000, 25000000, false, now(), 'Running for the test')`,
+           50000000, 25000000, false, $1, 'Running for the test')`,
+        [new Date()],
       );
     return { payload: {}, happened: paused };
   },
@@ -635,7 +638,8 @@ const wired = {
            first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
            reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
          VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
-           50000000, 25000000, true, now(), 'Paused for the test')`,
+           50000000, 25000000, true, $1, 'Paused for the test')`,
+        [new Date()],
       );
     return { payload: {}, happened: async () => !(await paused()) };
   },
