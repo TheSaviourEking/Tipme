@@ -37,7 +37,7 @@ test('the public tip form imports no values from the contracts barrel', () => {
   }
 });
 
-test('COLLECT_COPY and COLLECT_HELD_WORDS are imported from @tipme/contracts/copy everywhere in the web app', () => {
+test('the You collect copy constants are imported from @tipme/contracts/copy everywhere in the web app', () => {
   const offenders = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
@@ -45,7 +45,15 @@ test('COLLECT_COPY and COLLECT_HELD_WORDS are imported from @tipme/contracts/cop
       if (statSync(path).isDirectory()) walk(path);
       else if (/\.(ts|tsx)$/.test(name)) {
         const values = barrelValues(readFileSync(path, 'utf8'));
-        if (values.includes('COLLECT_COPY'))
+        if (
+          values.some((v) =>
+            [
+              'COLLECT_COPY',
+              'COLLECT_HELD_WORDS',
+              'COLLECT_HELD_NOTE',
+            ].includes(v),
+          )
+        )
           offenders.push(relative(webRoot, path));
       }
     }
@@ -62,6 +70,11 @@ test('@tipme/contracts/copy imports nothing, and the barrel re-exports the same 
   assert.doesNotMatch(built, /^\s*(import|export\s.*\sfrom)\s/m);
   assert.equal(barrel.COLLECT_COPY, copy.COLLECT_COPY);
   assert.equal(barrel.COLLECT_HELD_WORDS, copy.COLLECT_HELD_WORDS);
+  assert.equal(barrel.COLLECT_HELD_NOTE, copy.COLLECT_HELD_NOTE);
+  assert.equal(
+    copy.COLLECT_HELD_NOTE.refundHeld('₦3,000'),
+    '₦3,000 is held while a refund is settled.',
+  );
 });
 
 test('the guard sees value imports and lets type-only ones through', () => {

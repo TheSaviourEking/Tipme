@@ -250,6 +250,47 @@ for (const [label, viewport] of VIEWPORTS) {
       expect(await fitsViewport(page)).toBe(true);
     });
 
+    test('money held for a refund is said below the balance, never among its notes (R5-M2)', async ({
+      page,
+      browser,
+    }, testInfo) => {
+      const { handle } = await collectRecipient(page, testInfo);
+      await tipAsVisitor(browser, handle);
+      // ₦3,000 of what TipMe holds for them is held for a refund of one of their tips.
+      await page.route('**/v1/me/dashboard', async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const body = await response.json();
+        await route.fulfill({
+          response,
+          json: { data: { ...body.data, refundHeldMinor: '300000' } },
+        });
+      });
+      await page.goto('/dashboard');
+      const main = page.getByRole('main');
+      const balance = main.getByRole('region', { name: 'Your balance' });
+      await expect(balance.getByTestId('kept')).toContainText(COPY.kept);
+      const note = main.getByTestId('refund-held-note');
+      await expect(note).toHaveText(
+        '₦3,000 is held while a refund is settled.',
+      );
+      // Below the balance, not inside its group, and not as a held note there either.
+      await expect(balance.getByTestId('refund-held-note')).toHaveCount(0);
+      await expect(balance.getByTestId('refund-held')).toHaveCount(0);
+      await expect(balance).not.toContainText('held while a refund');
+      const card = await balance.boundingBox();
+      const below = await note.boundingBox();
+      expect(below!.y).toBeGreaterThanOrEqual(card!.y + card!.height);
+      expect(await fitsViewport(page)).toBe(true);
+      // For the PR. A phone's full-page picture puts the fixed tab bar over the note, so the phone
+      // shows the screen with the note in view.
+      await note.scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: testInfo.outputPath(`${label}-30-home-refund-held.png`),
+        fullPage: label === 'desktop',
+      });
+    });
+
     test('adding bank details: confirm the name, see checking, then all set', async ({
       page,
     }, testInfo) => {

@@ -52,3 +52,13 @@ export const COLLECT_HELD_WORDS = {
   onItsWay: 'On its way to you',
   refundHeld: 'Held while a refund is settled',
 } as const;
+
+/**
+ * Home's note under the balance (owner, 22 Nov 2026, R5-M2): refund-held money is not in "Your
+ * balance", so it is said on its own, below it, only while there is some. The amount is put in
+ * already formatted (₦3,000).
+ */
+export const COLLECT_HELD_NOTE = {
+  refundHeld: (amount: string) =>
+    `${amount} is held while a refund is settled.`,
+} as const;

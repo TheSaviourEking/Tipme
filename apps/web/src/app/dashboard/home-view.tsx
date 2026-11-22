@@ -7,7 +7,7 @@ import type {
   DashboardSummary,
   WeeklyReportData,
 } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts/copy';
+import { COLLECT_COPY, COLLECT_HELD_NOTE } from '@tipme/contracts/copy';
 import { Button, Skeleton, Slip, StandingWarning } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';
@@ -331,6 +331,7 @@ export default function DashboardHome() {
                 <CollectHeldNotes
                   summary={summary}
                   className="balance-card__note"
+                  refundHeld={false}
                 />
                 {withdrawable > BigInt(0) && (
                   <span className="balance-card__note" data-testid="ready">
@@ -364,6 +365,15 @@ export default function DashboardHome() {
               </nav>
               {shareStatus}
             </section>
+            {/* Not part of "Your balance", so said below it, never in its notes (R5-M2). */}
+            {summary.refundHeldMinor !== '0' && (
+              <p className="balance-held-note" data-testid="refund-held-note">
+                {withAmount(
+                  COLLECT_HELD_NOTE.refundHeld,
+                  summary.refundHeldMinor,
+                )}
+              </p>
+            )}
             <section
               aria-labelledby="performance-title"
               className="performance"

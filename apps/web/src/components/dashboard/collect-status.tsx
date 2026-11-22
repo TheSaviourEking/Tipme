@@ -72,12 +72,15 @@ export function withAmount(
 export function CollectHeldNotes({
   summary,
   className,
+  refundHeld = true,
 }: {
   summary: Pick<
     DashboardSummary,
     'keptMinor' | 'onItsWayMinor' | 'refundHeldMinor'
   >;
   className: string;
+  /** False where the refund-held part is said on its own (Home, under the balance: R5-M2). */
+  refundHeld?: boolean;
 }) {
   return (
     <>
@@ -91,7 +94,7 @@ export function CollectHeldNotes({
           {COLLECT_COPY.onItsWay} <Money minor={summary.onItsWayMinor} />
         </span>
       )}
-      {summary.refundHeldMinor !== '0' && (
+      {refundHeld && summary.refundHeldMinor !== '0' && (
         <span className={className} data-testid="refund-held">
           {COLLECT_HELD_WORDS.refundHeld}{' '}
           <Money minor={summary.refundHeldMinor} />

@@ -192,4 +192,4 @@ export const opsCollectNameChangeSchema = opsReasonSchema
   .strict();
 
 // COLLECT_COPY lives in copy.ts (no zod), so public pages can import it on its own.
-export { COLLECT_COPY, COLLECT_HELD_WORDS } from './copy.js';
+export { COLLECT_COPY, COLLECT_HELD_NOTE, COLLECT_HELD_WORDS } from './copy.js';
