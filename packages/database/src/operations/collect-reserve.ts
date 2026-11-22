@@ -1,6 +1,11 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql, type SQL } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { collectReserveReadings, issues, type IssueKind } from '../schema.js';
+import {
+  collectReserveAlerts,
+  collectReserveReadings,
+  issues,
+  type IssueKind,
+} from '../schema.js';
 import { collectSettingsInForce } from './collect-settings.js';
 import { guarded } from './errors.js';
 import { readFeatureSwitch } from './feature-switches.js';
@@ -82,6 +87,8 @@ export interface CollectReserveResult {
   autoPayoutOn: boolean | null;
   /** The balances could not be read: every currency holding money is recorded as unknown. */
   unreadable?: true;
+  /** A negative balance in a currency TipMe doesn't list blocked the read (review I4). */
+  unlistedNegative?: string;
 }
 
 const STORED_LEVEL: Record<CollectReserveLevel, string> = {
@@ -136,17 +143,60 @@ async function openSpellIssue(
   return opened;
 }
 
-interface Claimed {
-  readingId: string;
-  level: CollectReserveLevel;
-  first: boolean;
+/** A condition of the check that isn't one currency's level (review I4, I5). */
+type Condition = 'auto_payout' | 'unreadable' | 'unlisted_negative';
+
+/** An alert this check may send: claimed under the lock, sent after it. */
+interface Pending {
+  table: 'collect_reserve_readings' | 'collect_reserve_alerts';
+  rowId: string;
+  level: 'warning' | 'critical';
   text: string;
+  /** The staff alert was claimed (not one in flight, nor sent in this spell within 6 hours). */
+  claimed: boolean;
+  /** Owners are emailed for this kind (critical, broken, a negative unlisted bucket, auto payouts). */
+  emailOwners: boolean;
+}
+
+const UNLISTED = /^[A-Z0-9_]{1,32}$/;
+
+/**
+ * Whether owners were emailed in this kind's current spell (review I5, m1): once per spell, apart
+ * from the staff alert, so an unset or failing alert route never stops them hearing, and a 6-hourly
+ * repeat never emails them again.
+ */
+async function ownersEmailedInSpell(
+  tx: Tx,
+  i: {
+    table: 'collect_reserve_readings' | 'collect_reserve_alerts';
+    provider: string;
+    scope: string;
+    kind: SQL;
+    fine: SQL;
+  },
+): Promise<boolean> {
+  const table = sql.identifier(i.table);
+  const column = sql.identifier(
+    i.table === 'collect_reserve_alerts' ? 'condition' : 'currency',
+  );
+  const [row] = (
+    await tx.execute(sql`
+      SELECT coalesce(bool_or(owners_emailed_at IS NOT NULL), false) AS emailed
+        FROM ${table}
+       WHERE provider = ${i.provider} AND ${column} = ${i.scope} AND ${i.kind}
+         AND read_at > coalesce(
+           (SELECT max(read_at) FROM ${table}
+             WHERE provider = ${i.provider} AND ${column} = ${i.scope} AND ${i.fine}),
+           '-infinity'::timestamptz)`)
+  ).rows as { emailed: boolean }[];
+  return row?.emailed === true;
 }
 
 /**
  * One reserve check of TipMe's own money (see the header). The partner reads and the alert and email
- * calls are never made under the lock. A send that fails gives its claim back, so the next check
- * sends it; owners are emailed with a spell's first critical or broken alert.
+ * calls are never made under the lock. A staff alert that fails gives its claim back, so the next
+ * check sends it. Owners are emailed once per spell of a critical, broken or platform-wide condition,
+ * whatever the staff alert route did (review I5).
  */
 export function checkCollectReserve(
   db: Database,
@@ -160,174 +210,287 @@ export function checkCollectReserve(
   const { now } = i;
   const provider = i.provider.name;
   return guarded(async () => {
+    // Before any partner call (m9): with You collect not in use, the schedule isn't asked for.
+    const inUseBefore = await collectInUse(db, await heldTotals(db));
     // A failed read is a normal answer ("unknown"); its error is never kept: it may carry details.
-    const balances = await i.provider.platformBalances().catch(() => null);
-    const schedule = await i.provider
-      .platformPayoutSchedule()
-      .catch(() => null);
+    // A negative balance in a currency TipMe doesn't list (a crypto bucket) is not "unknown": the
+    // adapter refuses the whole read for it, and it blocks every transfer (review I4).
+    let unlisted: string | null = null;
+    const balances = await i.provider.platformBalances().catch((error) => {
+      if (
+        error instanceof Error &&
+        error.name === 'UnlistedNegativeBalanceError'
+      ) {
+        const bucket = (error as Error & { currency?: unknown }).currency;
+        unlisted =
+          typeof bucket === 'string' && UNLISTED.test(bucket)
+            ? bucket
+            : 'UNKNOWN';
+      }
+      return null;
+    });
+    const schedule = inUseBefore
+      ? await i.provider.platformPayoutSchedule().catch(() => null)
+      : null;
     const autoPayoutOn = schedule
       ? Object.values(schedule).some((interval) => interval !== 'manual')
       : null;
     const settings = await collectSettingsInForce(db, now);
 
-    const { perCurrency, claimed, autoAlert } = await db.transaction(
-      async (tx) => {
-        await tx.execute(sql`SET LOCAL lock_timeout = '10s'`);
-        await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtext(${`${IN_FLIGHT_LOCK}:${provider}`}::text))`,
-        );
-        // Read under the lock, so a reading's held total is the one its level was decided on.
-        const held = await heldTotals(tx);
-        const inUse = await collectInUse(tx, held);
-        const currencies = new Set<string>(
-          [...held.entries()].filter(([, v]) => v > 0n).map(([c]) => c),
-        );
-        for (const b of balances ?? []) currencies.add(b.currency);
-        const rows: CollectReserveResult['perCurrency'] = [];
-        const claims: Claimed[] = [];
-        for (const currency of [...currencies].sort()) {
-          const heldMinor =
-            (held.get(currency) ?? 0n) > 0n ? held.get(currency)! : 0n;
-          const listed = balances?.find((b) => b.currency === currency);
-          // A currency the partner doesn't list while TipMe holds money in it reads as zero.
-          const availableMinor =
-            balances === null ? null : (listed?.availableMinor ?? 0n);
-          const levels =
-            inUse && currency === 'NGN'
-              ? {
-                  warning: settings.reserveWarningMinor,
-                  critical: settings.reserveCriticalMinor,
-                }
-              : { warning: 0n, critical: 0n };
-          if (availableMinor === null) {
-            await tx.insert(collectReserveReadings).values({
-              id: newId(),
-              provider,
-              currency,
-              availableMinor: null,
-              heldMinor,
-              ownMinor: null,
-              warningMinor: levels.warning,
-              criticalMinor: levels.critical,
-              level: null,
-              readAt: now,
-            });
-            continue;
-          }
-          const ownMinor = availableMinor - heldMinor;
-          const level: CollectReserveLevel =
-            heldMinor > 0n && ownMinor < 0n
-              ? 'broken'
-              : availableMinor < 0n || ownMinor < levels.critical
-                ? 'critical'
-                : ownMinor < levels.warning
-                  ? 'warning'
-                  : 'ok';
-          rows.push({ currency, availableMinor, heldMinor, ownMinor, level });
-          const claim =
-            level === 'ok'
-              ? null
-              : await claimReserveAlert(tx, {
-                  table: 'collect_reserve_readings',
-                  provider,
-                  currency,
-                  kind: sql`level = ${STORED_LEVEL[level]}`,
-                  fine: sql`level = 'ok'`,
-                  now,
-                });
-          const readingId = newId();
+    const { perCurrency, pending } = await db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL lock_timeout = '10s'`);
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtext(${`${IN_FLIGHT_LOCK}:${provider}`}::text))`,
+      );
+      // Read under the lock, so a reading's held total is the one its level was decided on.
+      const held = await heldTotals(tx);
+      const inUse = await collectInUse(tx, held);
+      const anyHeld = [...held.values()].some((v) => v > 0n);
+      const currencies = new Set<string>(
+        [...held.entries()].filter(([, v]) => v > 0n).map(([c]) => c),
+      );
+      for (const b of balances ?? []) currencies.add(b.currency);
+      const rows: CollectReserveResult['perCurrency'] = [];
+      const pending: Pending[] = [];
+      for (const currency of [...currencies].sort()) {
+        const heldMinor =
+          (held.get(currency) ?? 0n) > 0n ? held.get(currency)! : 0n;
+        const listed = balances?.find((b) => b.currency === currency);
+        // A currency the partner doesn't list while TipMe holds money in it reads as zero.
+        const availableMinor =
+          balances === null ? null : (listed?.availableMinor ?? 0n);
+        const levels =
+          inUse && currency === 'NGN'
+            ? {
+                warning: settings.reserveWarningMinor,
+                critical: settings.reserveCriticalMinor,
+              }
+            : { warning: 0n, critical: 0n };
+        if (availableMinor === null) {
           await tx.insert(collectReserveReadings).values({
-            id: readingId,
+            id: newId(),
             provider,
             currency,
-            availableMinor,
+            availableMinor: null,
             heldMinor,
-            ownMinor,
+            ownMinor: null,
             warningMinor: levels.warning,
             criticalMinor: levels.critical,
-            level: STORED_LEVEL[level],
+            level: null,
             readAt: now,
-            alertClaimedAt: claim ? now : null,
           });
-          const text = alertText({
-            provider,
-            currency,
-            level,
-            availableMinor,
-            heldMinor,
-            ownMinor,
-            levels,
-          });
-          if (level === 'broken')
-            await openSpellIssue(tx, {
-              kind: 'collect_invariant_broken',
-              scope: currency,
-              note: `${currency}: ${moneyText(availableMinor, currency)} available, ${moneyText(heldMinor, currency)} held for recipients (short by ${moneyText(-ownMinor, currency)}). New You collect sign-ups are paused until this is resolved.`,
-              now,
-            });
-          if (level === 'critical')
-            await openSpellIssue(tx, {
-              kind: 'collect_reserve_low',
-              scope: currency,
-              note:
-                availableMinor < 0n
-                  ? `TipMe's ${currency} balance is negative (${moneyText(availableMinor, currency)}): every transfer and withdrawal is blocked until it is topped up.`
-                  : `${currency}: TipMe's own money is ${moneyText(ownMinor, currency)}, below the ${moneyText(levels.critical, currency)} critical level.`,
-              now,
-            });
-          if (claim)
-            claims.push({ readingId, level, first: claim === 'first', text });
+          continue;
         }
-        const autoAlert =
-          autoPayoutOn === true && inUse
-            ? await openSpellIssue(tx, {
-                kind: 'collect_auto_payout_on',
-                scope: 'all',
-                note: `Schedule: ${Object.entries(schedule ?? {})
-                  .map(
-                    ([currency, interval]) =>
-                      `${currency.slice(0, 8)} ${String(interval).slice(0, 20)}`,
-                  )
-                  .join(', ')}.`,
+        const ownMinor = availableMinor - heldMinor;
+        const level: CollectReserveLevel =
+          heldMinor > 0n && ownMinor < 0n
+            ? 'broken'
+            : availableMinor < 0n || ownMinor < levels.critical
+              ? 'critical'
+              : ownMinor < levels.warning
+                ? 'warning'
+                : 'ok';
+        rows.push({ currency, availableMinor, heldMinor, ownMinor, level });
+        const spell = {
+          table: 'collect_reserve_readings' as const,
+          provider,
+          scope: currency,
+          kind: sql`level = ${STORED_LEVEL[level]}`,
+          fine: sql`level = 'ok'`,
+        };
+        const claim =
+          level === 'ok'
+            ? null
+            : await claimReserveAlert(tx, {
+                ...spell,
+                currency,
                 now,
-              })
-            : false;
-        return { perCurrency: rows, claimed: claims, autoAlert };
-      },
-    );
+              });
+        const emailOwners =
+          (level === 'critical' || level === 'broken') &&
+          claim !== null &&
+          !(await ownersEmailedInSpell(tx, spell));
+        const readingId = newId();
+        await tx.insert(collectReserveReadings).values({
+          id: readingId,
+          provider,
+          currency,
+          availableMinor,
+          heldMinor,
+          ownMinor,
+          warningMinor: levels.warning,
+          criticalMinor: levels.critical,
+          level: STORED_LEVEL[level],
+          readAt: now,
+          alertClaimedAt: claim ? now : null,
+        });
+        if (level === 'broken')
+          await openSpellIssue(tx, {
+            kind: 'collect_invariant_broken',
+            scope: currency,
+            note: `${currency}: ${moneyText(availableMinor, currency)} available, ${moneyText(heldMinor, currency)} held for recipients (short by ${moneyText(-ownMinor, currency)}). New You collect sign-ups are paused until this is resolved.`,
+            now,
+          });
+        if (level === 'critical')
+          await openSpellIssue(tx, {
+            kind: 'collect_reserve_low',
+            scope: currency,
+            note:
+              availableMinor < 0n
+                ? `TipMe's ${currency} balance is negative (${moneyText(availableMinor, currency)}): every transfer and withdrawal is blocked until it is topped up.`
+                : `${currency}: TipMe's own money is ${moneyText(ownMinor, currency)}, below the ${moneyText(levels.critical, currency)} critical level.`,
+            now,
+          });
+        if (claim)
+          pending.push({
+            table: 'collect_reserve_readings',
+            rowId: readingId,
+            level: level === 'warning' ? 'warning' : 'critical',
+            text: alertText({
+              provider,
+              currency,
+              level,
+              availableMinor,
+              heldMinor,
+              ownMinor,
+              levels,
+            }),
+            claimed: true,
+            emailOwners,
+          });
+      }
 
-    for (const claim of claimed) {
+      // The platform-wide conditions, one row each per check, so a spell starts and ends as a
+      // currency's does: claimed alerts with the 6-hour repeat, owners emailed once per spell.
+      const conditions: {
+        condition: Condition;
+        active: boolean;
+        detail: string | null;
+        level: 'warning' | 'critical';
+        email: boolean;
+        text: string;
+      }[] = [
+        {
+          condition: 'unlisted_negative',
+          active: unlisted !== null,
+          detail: unlisted,
+          level: 'critical',
+          email: true,
+          text: `TipMe's ${unlisted ?? ''} balance at ${provider} is negative. Every transfer and withdrawal is blocked until it is topped up, and TipMe's balances can't be read until then, so payout fees and fee returns wait.`,
+        },
+        {
+          condition: 'unreadable',
+          active: balances === null && unlisted === null && anyHeld,
+          detail: null,
+          level: 'warning',
+          email: false,
+          text: `TipMe's balances at ${provider} could not be read while it holds money for recipients. Payout fees and fee returns wait until a reading succeeds. Check the provider and the worker.`,
+        },
+        {
+          condition: 'auto_payout',
+          active: autoPayoutOn === true && inUse,
+          detail: null,
+          level: 'critical',
+          email: true,
+          text: `Automatic payouts are on for TipMe's own balance at ${provider}. Turn them off in the partner dashboard now: money held for recipients could be paid out with TipMe's earnings.`,
+        },
+      ];
+      for (const c of conditions) {
+        const spell = {
+          table: 'collect_reserve_alerts' as const,
+          provider,
+          scope: c.condition,
+          kind: sql`active = true`,
+          fine: sql`active = false`,
+        };
+        const claim = c.active
+          ? await claimReserveAlert(tx, {
+              ...spell,
+              currency: c.condition,
+              now,
+            })
+          : null;
+        const emailOwners =
+          c.email && claim !== null && !(await ownersEmailedInSpell(tx, spell));
+        const rowId = newId();
+        await tx.insert(collectReserveAlerts).values({
+          id: rowId,
+          provider,
+          condition: c.condition,
+          active: c.active,
+          detail: c.detail,
+          readAt: now,
+          alertClaimedAt: claim ? now : null,
+        });
+        if (c.active && c.condition === 'unlisted_negative')
+          await openSpellIssue(tx, {
+            kind: 'collect_reserve_low',
+            scope: 'unlisted',
+            note: `TipMe's ${c.detail} balance is negative: every transfer and withdrawal is blocked until it is topped up.`,
+            now,
+          });
+        if (c.active && c.condition === 'auto_payout')
+          await openSpellIssue(tx, {
+            kind: 'collect_auto_payout_on',
+            scope: 'all',
+            note: `Schedule: ${Object.entries(schedule ?? {})
+              .map(
+                ([currency, interval]) =>
+                  `${currency.slice(0, 8)} ${String(interval).slice(0, 20)}`,
+              )
+              .join(', ')}.`,
+            now,
+          });
+        if (claim)
+          pending.push({
+            table: 'collect_reserve_alerts',
+            rowId,
+            level: c.level,
+            text: c.text,
+            claimed: true,
+            emailOwners,
+          });
+      }
+      return { perCurrency: rows, pending };
+    });
+
+    for (const p of pending) {
+      const table =
+        p.table === 'collect_reserve_readings'
+          ? collectReserveReadings
+          : collectReserveAlerts;
+      // The owners first and apart: their email never waits on, or depends on, the staff route.
+      if (p.emailOwners) {
+        const emailed = await i
+          .emailOwners(p.text)
+          .then(() => true)
+          .catch(() => false);
+        if (emailed)
+          await db
+            .update(table)
+            .set({ ownersEmailedAt: now })
+            .where(eq(table.id, p.rowId));
+      }
       try {
-        await i.alert(
-          claim.text,
-          claim.level === 'warning' ? 'warning' : 'critical',
-        );
+        await i.alert(p.text, p.level);
       } catch {
         // Reason dropped on purpose (a webhook error can quote its address); the next check resends.
         await db
-          .update(collectReserveReadings)
+          .update(table)
           .set({ alertClaimedAt: null })
-          .where(eq(collectReserveReadings.id, claim.readingId));
+          .where(eq(table.id, p.rowId));
         continue;
       }
       await db
-        .update(collectReserveReadings)
+        .update(table)
         .set({ alertedAt: now })
-        .where(eq(collectReserveReadings.id, claim.readingId));
-      if (claim.level !== 'warning' && claim.first)
-        await i.emailOwners(claim.text).catch(() => undefined);
+        .where(eq(table.id, p.rowId));
     }
-    if (autoAlert)
-      await i
-        .alert(
-          `Automatic payouts are on for TipMe's own balance at ${provider}. Turn them off in the partner dashboard now: money held for recipients could be paid out with TipMe's earnings.`,
-          'critical',
-        )
-        .catch(() => undefined);
     return {
       perCurrency,
       autoPayoutOn,
       ...(balances === null ? { unreadable: true as const } : {}),
+      ...(unlisted !== null ? { unlistedNegative: unlisted as string } : {}),
     };
   });
 }
@@ -346,7 +509,7 @@ function alertText(i: {
   const figures = `${m(i.availableMinor)} available, ${m(i.heldMinor)} held for recipients, ${m(i.ownMinor)} TipMe's own`;
   switch (i.level) {
     case 'broken':
-      return `You collect rule broken: ${where} is below what TipMe holds for recipients (${figures}; short by ${m(-i.ownMinor)}). New You collect sign-ups are paused and TipMe's own moves are refused. Top it up now.`;
+      return `You collect rule broken: ${where} is below what TipMe holds for recipients (${figures}; short by ${m(-i.ownMinor)}).${i.availableMinor < 0n ? ' The balance is negative, so every transfer and withdrawal is blocked.' : ''} New You collect sign-ups are paused and TipMe's own moves are refused. Top it up now.`;
     case 'critical':
       return i.availableMinor < 0n
         ? `${where} is negative (${m(i.availableMinor)}). Every transfer and withdrawal is blocked until it is topped up.`
@@ -358,15 +521,24 @@ function alertText(i: {
   }
 }
 
+/** Why a move of TipMe's own money must wait (m5): never "the reserve is empty" when it isn't. */
+export type OwnMoneyRefusal =
+  | { reason: 'short' }
+  | { reason: 'unknown' }
+  | { reason: 'unlisted_negative'; bucket: string };
+
+/** A reading dated further ahead than this is a clock fault, never trusted (m7). */
+const FUTURE_SKEW_MS = 5 * 60_000;
+
 /**
- * Whether TipMe may move `amountMinor` of its own money now (P10, R5), from the latest reading in
- * that currency and what is held now. With nothing held it never refuses: nothing it moves can be a
- * recipient's, so behaviour with You collect off is unchanged. Otherwise it needs a fresh, known
- * reading, and refuses when own − amount would go below zero, or (a voluntary move: a refund TipMe
- * absorbs, its own withdrawal) below the critical level. An owed move (a payout fee TipMe pays, a fee
- * it returns) is non-voluntary.
+ * Whether TipMe may move `amountMinor` of its own money now (P10, R5), and if not, why. From the
+ * latest reading in that currency and what is held now. With nothing held it never refuses: nothing
+ * it moves can be a recipient's, so behaviour with You collect off is unchanged. Otherwise it needs
+ * a known reading at most RESERVE_STALE_AFTER_MS old (and not dated ahead), and refuses when
+ * own − amount would go below zero, or (a voluntary move: a refund TipMe absorbs) below the critical
+ * level. An owed move (a payout fee TipMe pays, a fee it returns) is non-voluntary.
  */
-export function ownMoneyAllows(
+export function ownMoneyRefusal(
   db: Database | Tx,
   i: {
     amountMinor: bigint;
@@ -374,10 +546,10 @@ export function ownMoneyAllows(
     voluntary: boolean;
     now?: Date;
   },
-): Promise<boolean> {
+): Promise<OwnMoneyRefusal | null> {
   return guarded(async () => {
     const held = await heldTotal(db, i.currency);
-    if (held <= 0n) return true;
+    if (held <= 0n) return null;
     const now = i.now ?? new Date();
     const [reading] = await db
       .select({
@@ -388,18 +560,62 @@ export function ownMoneyAllows(
       .where(eq(collectReserveReadings.currency, i.currency))
       .orderBy(desc(collectReserveReadings.readAt))
       .limit(1);
-    if (!reading || reading.availableMinor === null) return false;
-    if (now.getTime() - reading.readAt.getTime() > RESERVE_STALE_AFTER_MS)
-      return false;
-    const after = reading.availableMinor - held - i.amountMinor;
-    if (after < 0n) return false;
-    if (!i.voluntary) return true;
+    const usable =
+      reading &&
+      reading.availableMinor !== null &&
+      now.getTime() - reading.readAt.getTime() <= RESERVE_STALE_AFTER_MS &&
+      reading.readAt.getTime() - now.getTime() <= FUTURE_SKEW_MS;
+    if (!usable) {
+      // A negative balance in an unlisted currency refuses the whole read: name it (I4).
+      const [unlisted] = await db
+        .select({
+          detail: collectReserveAlerts.detail,
+          readAt: collectReserveAlerts.readAt,
+        })
+        .from(collectReserveAlerts)
+        .where(eq(collectReserveAlerts.condition, 'unlisted_negative'))
+        .orderBy(desc(collectReserveAlerts.readAt))
+        .limit(1);
+      return unlisted?.detail &&
+        Math.abs(now.getTime() - unlisted.readAt.getTime()) <=
+          RESERVE_STALE_AFTER_MS
+        ? { reason: 'unlisted_negative', bucket: unlisted.detail }
+        : { reason: 'unknown' };
+    }
+    const after = reading.availableMinor! - held - i.amountMinor;
+    if (after < 0n) return { reason: 'short' };
+    if (!i.voluntary) return null;
     const critical =
       i.currency === 'NGN'
         ? (await collectSettingsInForce(db, now)).reserveCriticalMinor
         : 0n;
-    return after >= critical;
+    return after >= critical ? null : { reason: 'short' };
   });
+}
+
+/** ownMoneyRefusal as a yes or no. */
+export async function ownMoneyAllows(
+  db: Database | Tx,
+  i: {
+    amountMinor: bigint;
+    currency: string;
+    voluntary: boolean;
+    now?: Date;
+  },
+): Promise<boolean> {
+  return (await ownMoneyRefusal(db, i)) === null;
+}
+
+/** A refusal in staff words, for the wait's issue. */
+export function ownMoneyRefusalWords(refusal: OwnMoneyRefusal): string {
+  switch (refusal.reason) {
+    case 'short':
+      return "Why: TipMe's own money at the partner, above what it holds for recipients, can't cover it. Top up TipMe's balance.";
+    case 'unknown':
+      return "Why: no recent reading of TipMe's balance at the partner, so its own money can't be confirmed. Check that the reserve check is running and that the balance can be read.";
+    case 'unlisted_negative':
+      return `Why: TipMe's ${refusal.bucket} balance at the partner is negative, which blocks reading every balance. Top up ${refusal.bucket}.`;
+  }
 }
 
 /** You collect sign-ups pause while the rule is broken: an open `collect_invariant_broken` issue. */
@@ -417,4 +633,24 @@ export async function collectSignupsPaused(
     )
     .limit(1);
   return Boolean(open);
+}
+
+/**
+ * Review m9: readings that said nothing was wrong, and conditions that weren't active, are kept as
+ * long as today's reserve readings (RESERVE_KEEP_MS), then purged. Rows of a spell that is still
+ * going are never `ok` or inactive, so the 6-hour rule and the owners' email mark are kept.
+ */
+export function purgeCollectReserveRows(
+  db: Database,
+  input: { before: Date },
+): Promise<number> {
+  return guarded(async () => {
+    const readings = await db.execute(sql`
+      DELETE FROM collect_reserve_readings
+       WHERE level = 'ok' AND read_at < ${input.before.toISOString()}::timestamptz`);
+    const alerts = await db.execute(sql`
+      DELETE FROM collect_reserve_alerts
+       WHERE active = false AND read_at < ${input.before.toISOString()}::timestamptz`);
+    return (readings.rowCount ?? 0) + (alerts.rowCount ?? 0);
+  });
 }

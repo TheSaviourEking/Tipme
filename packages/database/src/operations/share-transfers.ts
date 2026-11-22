@@ -21,8 +21,11 @@ import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
 import { postLedgerTransaction } from './ledger.js';
-import { reportProviderKeyRefused } from './payout-start.js';
-import { ownMoneyAllows } from './collect-reserve.js';
+import {
+  reportOwnMoneyWait,
+  reportProviderKeyRefused,
+} from './payout-start.js';
+import { ownMoneyRefusal } from './collect-reserve.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -719,12 +722,20 @@ async function step(
     return readBack(db, row, kind, provider, now);
 }
 
-async function postpone(db: Database, row: Row, now: Date): Promise<void> {
+async function postpone(
+  db: Database,
+  row: Row,
+  now: Date,
+  { countAttempt = true }: { countAttempt?: boolean } = {},
+): Promise<void> {
   await db
     .update(shareTransfers)
     .set({
-      attempts: row.attempts + 1,
-      nextAttemptAt: backoff(row.attempts + 1, now),
+      ...(countAttempt ? { attempts: row.attempts + 1 } : {}),
+      // A wait that isn't a try still backs off (m6): on how long this row has waited, not tries.
+      nextAttemptAt: countAttempt
+        ? backoff(row.attempts + 1, now)
+        : new Date(now.getTime() + 15 * 60_000),
       updatedAt: now,
     })
     .where(
@@ -871,17 +882,19 @@ async function sendIn(
   );
   if (!accountRef) return postpone(db, row, now);
   // You collect (Task 11, R5, P10): a fee TipMe returns comes from its own money, never what it holds
-  // for recipients. Owed (non-voluntary); with nothing held it never refuses. It waits and is tried
-  // again, nothing asked of the partner.
-  if (
-    kind === 'fee_return' &&
-    !(await ownMoneyAllows(db, {
+  // for recipients. Owed (non-voluntary); with nothing held it never refuses. It waits, nothing asked
+  // of the partner, staff are told why (m5), and the wait is not counted as a try (m6).
+  if (kind === 'fee_return') {
+    const ownMoney = await ownMoneyRefusal(db, {
       amountMinor: row.deliverMinor,
       currency: row.currency,
       voluntary: false,
-    }))
-  )
-    return postpone(db, row, now);
+    });
+    if (ownMoney) {
+      await reportOwnMoneyWait(db, { refusal: ownMoney, now });
+      return postpone(db, row, now, { countAttempt: false });
+    }
+  }
   if (
     !(await claim(
       db,

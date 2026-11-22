@@ -17,9 +17,11 @@ export async function handlePlatformRefusal(
   const text =
     cause === 'provider_key'
       ? 'The payment provider refused TipMe’s API key. Withdrawals are waiting and nothing was sent. Check the key and its permissions; see the issues inbox.'
-      : cause === 'collect_in_debt'
-        ? 'The payment provider reports TipMe’s own account in debt. Every You collect transfer has stopped and nothing moved. Top up TipMe’s balance in every currency, then resolve the collect_in_debt issue.'
-        : 'The payment reserve could not cover a payout fee. Withdrawals are waiting and nothing failed. Top up the reserve; they start again once a reading is at the alert level.';
+      : cause === 'own_money'
+        ? "A payout fee or fee return TipMe pays is waiting on TipMe's own money: paying it now would use money held for recipients, or TipMe's balance couldn't be confirmed. Nothing failed. The collect_own_money_wait issue says why."
+        : cause === 'collect_in_debt'
+          ? 'The payment provider reports TipMe’s own account in debt. Every You collect transfer has stopped and nothing moved. Top up TipMe’s balance in every currency, then resolve the collect_in_debt issue.'
+          : 'The payment reserve could not cover a payout fee. Withdrawals are waiting and nothing failed. Top up the reserve; they start again once a reading is at the alert level.';
   if (!deps.url) {
     deps.log?.({ event: 'payouts.platform_refusal_unrouted', text });
     return 'unrouted';

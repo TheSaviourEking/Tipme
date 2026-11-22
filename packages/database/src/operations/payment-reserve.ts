@@ -74,8 +74,12 @@ export function nairaText(minor: bigint): string {
 export async function claimReserveAlert(
   tx: Tx,
   i: {
-    table: 'payment_reserve_readings' | 'collect_reserve_readings';
+    table:
+      | 'payment_reserve_readings'
+      | 'collect_reserve_readings'
+      | 'collect_reserve_alerts';
     provider: string;
+    /** The row's currency, or (collect_reserve_alerts) its condition. */
     currency: string;
     kind: SQL;
     fine: SQL;
@@ -83,17 +87,20 @@ export async function claimReserveAlert(
   },
 ): Promise<'first' | 'again' | null> {
   const table = sql.identifier(i.table);
+  const scope = sql.identifier(
+    i.table === 'collect_reserve_alerts' ? 'condition' : 'currency',
+  );
   const [state] = (
     await tx.execute(sql`
       SELECT max(alerted_at) AS last_alert,
              coalesce(bool_or(alerted_at IS NULL
                AND alert_claimed_at > ${new Date(i.now.getTime() - RESERVE_CLAIM_MS).toISOString()}::timestamptz), false) AS in_flight
         FROM ${table}
-       WHERE provider = ${i.provider} AND currency = ${i.currency}
+       WHERE provider = ${i.provider} AND ${scope} = ${i.currency}
          AND ${i.kind}
          AND read_at > coalesce(
            (SELECT max(read_at) FROM ${table}
-             WHERE provider = ${i.provider} AND currency = ${i.currency} AND ${i.fine}),
+             WHERE provider = ${i.provider} AND ${scope} = ${i.currency} AND ${i.fine}),
            '-infinity'::timestamptz)`)
   ).rows as { last_alert: string | Date | null; in_flight: boolean }[];
   if (state?.in_flight) return null;

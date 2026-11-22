@@ -988,6 +988,28 @@ export async function yieldRefundsToLostDispute(
     .from(tipRefunds)
     .where(eq(tipRefunds.tipId, input.tipId))
     .for('update');
+  // Review I1: a return of a failed refund's business pull-back that never left TipMe's balance
+  // (approved, not yet sent; or refused again and again) gives way to the lost dispute: cancelled
+  // here, once (only from those statuses, so a run that has just claimed it to send wins), and its
+  // money is the dispute's to use (refundPullBackHeld). One that was sent, or may have been, is
+  // never cancelled: the loss waits for its read-back (P24-P27). What the loss doesn't use stays held
+  // and can be returned again.
+  await tx
+    .update(shareTransfers)
+    .set({ status: 'cancelled', updatedAt: input.now })
+    .where(
+      and(
+        eq(shareTransfers.tipId, input.tipId),
+        eq(shareTransfers.kind, 'collect_return'),
+        or(
+          eq(shareTransfers.status, 'out_paid'),
+          and(
+            eq(shareTransfers.status, 'review'),
+            isNotNull(shareTransfers.refusedAt),
+          ),
+        ),
+      ),
+    );
   for (const row of rows) {
     if (!row.collectPlan) continue;
     if (row.status === 'PROCESSING' || row.status === 'UNKNOWN')
@@ -1729,6 +1751,37 @@ async function sendCollectRefunds(
     );
     if (stopped === 'failed') failed += 1;
     if (stopped) continue;
+    // Review m3: the gap TipMe absorbs is checked against its own money right before the first send,
+    // however long recovery took. Never for a resend under the same key (it may be at the partner).
+    if (
+      row.collectPlan === 'absorb' &&
+      !row.firstSentAt &&
+      !row.sentAt &&
+      (row.gapMinor ?? 0n) > 0n &&
+      !(await guarded(() =>
+        ownMoneyAllows(db, {
+          amountMinor: row.gapMinor ?? 0n,
+          currency: row.currency,
+          voluntary: true,
+        }),
+      ))
+    ) {
+      const refused = await guarded(() =>
+        db.transaction(async (tx) => {
+          const [locked] = await tx
+            .select()
+            .from(tipRefunds)
+            .where(eq(tipRefunds.id, row.id))
+            .for('update');
+          if (!locked || locked.status !== 'REQUESTED' || locked.sentAt)
+            return false;
+          await failCollectRefund(tx, locked, 'balance', now, 'system');
+          return true;
+        }),
+      );
+      if (refused) failed += 1;
+      continue;
+    }
     // The charge on TipMe's own account: the one the payment confirmed, stored on its share.
     const [share] = await guarded(() =>
       db

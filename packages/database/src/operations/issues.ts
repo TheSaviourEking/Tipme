@@ -131,6 +131,7 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   dispute_deadline: 'money',
   dispute_fee_unposted: 'money',
   collect_refund_gap: 'money',
+  collect_own_money_wait: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -245,6 +246,8 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `The partner charged a dispute fee on a tip to ${page} without saying in which currency, so nothing was booked. Check the fee in the partner dashboard.`;
     case 'collect_refund_gap':
       return `A refund on a tip to ${page} that TipMe collected couldn't take back everything it should have. Check what TipMe absorbed against the partner's record.`;
+    case 'collect_own_money_wait':
+      return 'A payout fee or fee return TipMe pays is waiting: paying it now would use money TipMe holds for recipients, or TipMe’s own money couldn’t be confirmed. Nothing failed and nobody was told. The note says why; they start again once a reserve reading allows it, and this closes itself.';
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }
@@ -813,7 +816,7 @@ export function autoResolveIssues(
       -- A payout with its own open issue is a person's now, and no longer the reserve's to answer for.
       SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
         FROM issues i
-       WHERE i.status = 'open' AND i.kind = 'reserve_empty'
+       WHERE i.status = 'open' AND i.kind IN ('reserve_empty', 'collect_own_money_wait')
          AND NOT EXISTS (
            SELECT 1 FROM payouts p
             WHERE p.status = 'REQUESTED'

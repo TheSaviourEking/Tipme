@@ -130,25 +130,44 @@ export function reconcileCollect(
                  c.amount_minor::text AS amount_minor, c.currency, c.idempotency_key
             FROM collect_transfers c WHERE c.account_reference = ${account}`)
       ).rows;
-      const byGroup = new Map(listed.map((t) => [t.group, t]));
+      // Review I2: a group is a list. More than one transfer in a group is a share paid twice.
+      const byGroup = new Map<string, typeof listed>();
+      for (const t of listed)
+        if (t.group) byGroup.set(t.group, [...(byGroup.get(t.group) ?? []), t]);
       for (const row of ours) {
         if (row.status !== 'paid') continue;
         checked += 1;
-        const theirs = byGroup.get(row.idempotency_key);
-        if (!theirs)
+        const theirs = byGroup.get(row.idempotency_key) ?? [];
+        const subject = { tipId: row.tip_id, profileId: row.profile_id };
+        if (theirs.length === 0) {
           await raise(
             `transfer.${row.idempotency_key}.missing`,
-            { tipId: row.tip_id, profileId: row.profile_id },
+            subject,
             `Transfer ${row.id} (group ${row.idempotency_key}, ${money(row.amount_minor, row.currency)}) is paid in TipMe's records but not listed on account ${account} at the partner.`,
           );
+          continue;
+        }
+        if (theirs.length > 1)
+          await raise(
+            `transfer.${row.idempotency_key}.duplicate`,
+            subject,
+            `The partner lists ${theirs.length} transfers in group ${row.idempotency_key} on account ${account} (${theirs
+              .map(
+                (t) =>
+                  `${t.transferRef} ${money(t.amountMinor, t.currency)} ${t.status}`,
+              )
+              .join(
+                '; ',
+              )}); TipMe made one, transfer ${row.id} for ${money(row.amount_minor, row.currency)}. It may have been paid more than once: check before anything else moves.`,
+          );
         else if (
-          theirs.amountMinor !== BigInt(row.amount_minor) ||
-          theirs.currency !== row.currency
+          theirs[0]!.amountMinor !== BigInt(row.amount_minor) ||
+          theirs[0]!.currency !== row.currency
         )
           await raise(
             `transfer.${row.idempotency_key}.amount`,
-            { tipId: row.tip_id, profileId: row.profile_id },
-            `Transfer ${row.id} (group ${row.idempotency_key}) is ${money(row.amount_minor, row.currency)} in TipMe's records; the partner lists ${theirs.transferRef} for ${money(theirs.amountMinor, theirs.currency)}.`,
+            subject,
+            `Transfer ${row.id} (group ${row.idempotency_key}) is ${money(row.amount_minor, row.currency)} in TipMe's records; the partner lists ${theirs[0]!.transferRef} for ${money(theirs[0]!.amountMinor, theirs[0]!.currency)}.`,
           );
       }
       const ourKeys = new Map(ours.map((r) => [r.idempotency_key, r]));
@@ -189,8 +208,24 @@ export function reconcileCollect(
       }
     }
 
-    // 2. Disputes.
-    const theirDisputes = await i.provider.listDisputes(since);
+    // 2. Disputes. Review I3: from the oldest dispute TipMe hasn't settled (a ruling comes weeks
+    // after the opening), or the last 3 days, whichever is earlier. A list that can't be read is
+    // counted, and the ledger check below still runs (m8).
+    const [oldest] = (
+      await db.execute<{ created_at: string | Date | null }>(sql`
+        SELECT min(created_at) AS created_at FROM disputes
+         WHERE settled_at IS NULL AND provider = ${provider}`)
+    ).rows;
+    const disputesSince =
+      oldest?.created_at && new Date(oldest.created_at) < since
+        ? new Date(new Date(oldest.created_at).getTime() - 3_600_000)
+        : since;
+    const theirDisputes = await i.provider
+      .listDisputes(disputesSince)
+      .catch(() => {
+        unreadable += 1;
+        return [];
+      });
     for (const theirs of theirDisputes) {
       const [ours] = (
         await db.execute<{
@@ -232,7 +267,8 @@ export function reconcileCollect(
           { tipId: ours.tip_id },
           `Dispute ${theirs.partnerDisputeId} is ${money(ours.amount_minor, ours.currency)} in TipMe's records; the partner has ${money(theirs.amountMinor, theirs.currency)}.`,
         );
-      else if (final && ours.status !== theirs.status)
+      // m2: raised apart from an amount difference, never hidden by it.
+      if (final && ours.status !== theirs.status)
         await raise(
           `dispute.${theirs.partnerDisputeId}.status.${theirs.status}`,
           { tipId: ours.tip_id },

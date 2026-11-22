@@ -1,5 +1,5 @@
 {
-  "id": "7dfd3d58-9c1a-4c90-a305-cd4cbb20a885",
+  "id": "606d725c-565c-4aa4-a965-37d39fd664a7",
   "prevId": "b9d4a020-2de9-48b1-895a-b8d9922f1f84",
   "version": "7",
   "dialect": "postgresql",
@@ -2661,6 +2661,114 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.collect_reserve_alerts": {
+      "name": "collect_reserve_alerts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "condition": {
+          "name": "condition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "detail": {
+          "name": "detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "read_at": {
+          "name": "read_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "alerted_at": {
+          "name": "alerted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "alert_claimed_at": {
+          "name": "alert_claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owners_emailed_at": {
+          "name": "owners_emailed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "collect_reserve_alerts_latest": {
+          "name": "collect_reserve_alerts_latest",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "condition",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "read_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "collect_reserve_alerts_provider": {
+          "name": "collect_reserve_alerts_provider",
+          "value": "provider ~ '^[a-z][a-z0-9_-]*$'"
+        },
+        "collect_reserve_alerts_condition": {
+          "name": "collect_reserve_alerts_condition",
+          "value": "condition IN ('auto_payout', 'unreadable', 'unlisted_negative')"
+        },
+        "collect_reserve_alerts_detail": {
+          "name": "collect_reserve_alerts_detail",
+          "value": "detail IS NULL OR char_length(detail) <= 32"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.collect_reserve_readings": {
       "name": "collect_reserve_readings",
       "schema": "",
@@ -2733,6 +2841,12 @@
         },
         "alert_claimed_at": {
           "name": "alert_claimed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owners_emailed_at": {
+          "name": "owners_emailed_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
@@ -5102,7 +5216,7 @@
       "checkConstraints": {
         "issues_kind": {
           "name": "issues_kind",
-          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_fee_adjusted', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed', 'username_take_back_unnoticed', 'username_take_back_overdue', 'business_waiting', 'business_note_reported', 'share_report', 'balance_below_zero', 'pro_amount_mismatch', 'pro_late_payment', 'pro_conflict', 'pro_reversed', 'support_request', 'pro_collect_unknown', 'pro_refund_failed', 'share_transfer_stuck', 'tip_refund_failed', 'collect_transfer_stuck', 'collect_transfer_review', 'collect_in_debt', 'collect_invariant_broken', 'collect_reserve_low', 'collect_auto_payout_on', 'collect_recon_mismatch', 'collect_same_bank', 'dispute_opened', 'dispute_deadline', 'dispute_fee_unposted', 'collect_refund_gap')"
+          "value": "kind IN ('payment_mismatch', 'payment_conflict', 'payment_unresolved', 'payment_attempt_unresolved', 'payment_account_unresolved', 'payment_account_setup_failed', 'payment_reversed', 'payment_settlement_currency', 'payout_failed', 'payout_conflict', 'payout_unexpected', 'payout_unresolved', 'payout_fee_short', 'payout_fee_adjusted', 'payout_held', 'provider_in_debt', 'provider_event_conflict', 'stuck_tip', 'unmatched_event', 'pending_recovery', 'message_reported', 'profile_reported', 'account_takeover_reported', 'reserve_empty', 'provider_key_refused', 'staff_acted_alone', 'staff_approval_pending', 'staff_last_approver_removed', 'username_take_back_unnoticed', 'username_take_back_overdue', 'business_waiting', 'business_note_reported', 'share_report', 'balance_below_zero', 'pro_amount_mismatch', 'pro_late_payment', 'pro_conflict', 'pro_reversed', 'support_request', 'pro_collect_unknown', 'pro_refund_failed', 'share_transfer_stuck', 'tip_refund_failed', 'collect_transfer_stuck', 'collect_transfer_review', 'collect_in_debt', 'collect_invariant_broken', 'collect_reserve_low', 'collect_auto_payout_on', 'collect_recon_mismatch', 'collect_same_bank', 'dispute_opened', 'dispute_deadline', 'dispute_fee_unposted', 'collect_refund_gap', 'collect_own_money_wait')"
         },
         "issues_severity": {
           "name": "issues_severity",
@@ -11859,6 +11973,22 @@
           ],
           "isUnique": true,
           "where": "kind = 'collect_recover'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "share_transfers_one_collect_return": {
+          "name": "share_transfers_one_collect_return",
+          "columns": [
+            {
+              "expression": "parent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "kind = 'collect_return' AND status <> 'cancelled'",
           "concurrently": false,
           "method": "btree",
           "with": {}

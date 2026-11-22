@@ -8,7 +8,9 @@ import type {
 import {
   checkCollectReserve,
   mailOwnersCollectReserve,
+  purgeCollectReserveRows,
   reconcileCollect,
+  RESERVE_KEEP_MS,
 } from '@tipme/database';
 import { webhookAlert } from './payment-reserve.js';
 
@@ -55,6 +57,7 @@ export async function handleCollectReserve(deps: {
   /** Replaced in tests. */
   check?: typeof checkCollectReserve;
   mailOwners?: typeof mailOwnersCollectReserve;
+  purge?: typeof purgeCollectReserveRows;
 }): Promise<'checked' | 'failed'> {
   const now = deps.now ?? new Date();
   const post = webhookAlert({
@@ -93,6 +96,10 @@ export async function handleCollectReserve(deps: {
         .join(','),
       ...(result.unreadable ? { error: 'unreadable' } : {}),
     });
+    // Housekeeping after the check, never in its way (m9).
+    await (deps.purge ?? purgeCollectReserveRows)(deps.db, {
+      before: new Date(now.getTime() - RESERVE_KEEP_MS),
+    }).catch(() => deps.log({ event: 'collect_reserve.purge_failed' }));
     return 'checked';
   } catch (error) {
     deps.log({

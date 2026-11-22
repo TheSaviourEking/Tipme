@@ -4091,6 +4091,11 @@ export const shareTransfers = pgTable(
     uniqueIndex('share_transfers_one_refund_recover')
       .on(table.tipRefundId)
       .where(sql`kind = 'collect_recover'`),
+    // Task 11 (m4): one return per pull-back (`parent_id`), moving or done; a cancelled one (a lost
+    // dispute used the money) frees it for another. In the database, not only under the tip's lock.
+    uniqueIndex('share_transfers_one_collect_return')
+      .on(table.parentId)
+      .where(sql`kind = 'collect_return' AND status <> 'cancelled'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),
@@ -4444,6 +4449,9 @@ export const collectReserveReadings = pgTable(
     readAt: timestamp('read_at', { withTimezone: true }).notNull(),
     alertedAt: timestamp('alerted_at', { withTimezone: true }),
     alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    // Task 11 (I5): when the owners were emailed for this spell. Set once per spell, whatever the
+    // staff alert route did, so an unset or failing webhook never stops the owners hearing.
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
   },
   (table) => [
     currencyCheck('collect_reserve_readings'),
@@ -4475,6 +4483,47 @@ export const collectReserveReadings = pgTable(
     index('collect_reserve_readings_latest').on(
       table.provider,
       table.currency,
+      table.readAt.desc(),
+    ),
+  ],
+);
+
+/**
+ * You collect (plan Task 11, review I4/I5): the reserve check's conditions that are not one
+ * currency's level, one row per condition per check, so their alerts follow the same claim and
+ * 6-hour rule as the readings (`claimReserveAlert`): automatic payouts on TipMe's own balance, a
+ * balance read that failed while money is held, and a negative balance in a currency TipMe doesn't
+ * list (a crypto bucket), whose name is `detail`.
+ */
+export const collectReserveAlerts = pgTable(
+  'collect_reserve_alerts',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    condition: text('condition').notNull(),
+    active: boolean('active').notNull(),
+    detail: text('detail'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'collect_reserve_alerts_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    check(
+      'collect_reserve_alerts_condition',
+      sql`condition IN ('auto_payout', 'unreadable', 'unlisted_negative')`,
+    ),
+    check(
+      'collect_reserve_alerts_detail',
+      sql`detail IS NULL OR char_length(detail) <= 32`,
+    ),
+    index('collect_reserve_alerts_latest').on(
+      table.provider,
+      table.condition,
       table.readAt.desc(),
     ),
   ],
