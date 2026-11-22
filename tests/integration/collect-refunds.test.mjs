@@ -2949,3 +2949,65 @@ test('I1 (probe A): a dispute won while a take-back may have moved never release
   assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
   assert.equal(await lossBalanced(tip.tipId), '0');
 });
+
+// Final review M4 (P24–P27): a refund whose answer was lost may already be made. A refusal on its
+// same-key resend proves nothing (it relies on the partner replaying the first answer), so it is
+// kept unknown and staff are told, never failed: failing it would let what it holds go, and let it be
+// asked for again.
+test('M4: a refusal on the same-key resend of a refund whose answer was lost keeps it unknown', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  state.lost = true;
+  await send(provider);
+  state.lost = false;
+  assert.equal((await refundRow(tip.tipId)).status, 'UNKNOWN');
+  state.refuse = 'CHARGE_ALREADY_REFUNDED';
+  await send(provider, new Date(Date.now() + 5 * MIN));
+  state.refuse = null;
+  assert.equal(state.refunds.length, 2);
+  assert.equal(
+    state.refunds[1].idempotencyKey,
+    `tipme-tip-refund-${refund.id}`,
+  );
+  const kept = await refundRow(tip.tipId);
+  assert.equal(kept.status, 'UNKNOWN');
+  assert.equal(kept.failure, null);
+  assert.deepEqual(
+    await q(`SELECT kind FROM issues WHERE dedupe_key = $1`, [
+      `tip_refund_resend_refused.${refund.id}`,
+    ]),
+    [{ kind: 'tip_refund_failed' }],
+  );
+  // What came back for it stays held for it, and it can't be asked for again.
+  assert.equal((await facts(tip.tipId)).heldMinor, NET);
+  const requester = await person();
+  await person();
+  await assert.rejects(ask(requester, tip.tipId), {
+    code: 'TIP_REFUND_REFUSED',
+  });
+  // The partner's event settles it, once.
+  assert.equal(await paid(refund.id), 'refunded');
+  assert.equal((await reversalsOf(tip.tipId)).length, 1);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+// A first send refused (no answer was ever lost) still fails at once, as before.
+test('M4: a refusal on a first send still fails the refund', async () => {
+  await verified(TOBI);
+  const { provider: transfers } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  await refundAsked(tip.tipId);
+  const { provider, state } = refunder();
+  await send(provider);
+  await run(transfers, new Date());
+  state.refuse = 'CHARGE_ALREADY_REFUNDED';
+  await send(provider);
+  const failed = await refundRow(tip.tipId);
+  assert.equal(failed.status, 'FAILED');
+  assert.equal(failed.failure, 'refused');
+});

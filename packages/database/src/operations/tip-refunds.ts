@@ -1953,6 +1953,22 @@ async function sendCollectRefunds(
             });
           return;
         }
+        if (outcome.kind === 'refused' && row.firstSentAt) {
+          // Final review M4 (P24–P27): an earlier send under this key may have made the refund (its
+          // answer was lost, or the worker stopped before it). A refusal now proves nothing: it is
+          // kept unknown, never failed (that would let go what it holds, and let it be asked for
+          // again), and only the partner's event or a person settles it.
+          if (locked.status === 'REQUESTED')
+            await moveRefund(tx, locked, 'UNKNOWN', { now, cause: 'system' });
+          await openIssue(tx, {
+            dedupeKey: `tip_refund_resend_refused.${locked.id}`,
+            kind: 'tip_refund_failed',
+            subject: { tipId: locked.tipId },
+            note: `Our payment partner refused a resend of this collect tip's refund (${tipRefundKey(locked.id)}) after an earlier send under the same key got no answer. That earlier send may have made the refund, so it is not failed: check the partner's refunds for that reference. Nothing held for it has been let go.`,
+            now,
+          });
+          return;
+        }
         if (outcome.kind === 'refused') {
           await failCollectRefund(tx, locked, outcome.failure, now, 'system');
           failed += 1;
