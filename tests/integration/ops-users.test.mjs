@@ -278,6 +278,9 @@ test('each filter: plan, page status (live, offline, suspended, no page yet), pa
   assert.equal(d.pageStatus, 'none');
   assert.equal(d.handle, null);
   assert.equal(d.payoutsSetUp, false);
+  // You collect (Task 15, spec §9): who collects the page's tips, read-only; none without a page.
+  assert.equal(a.collectionMode, 'direct');
+  assert.equal(d.collectionMode, null);
   for (const bad of [
     'plan=gold',
     'pageStatus=deleted',

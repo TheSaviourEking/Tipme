@@ -85,6 +85,7 @@ import {
   collectTransferProviders,
   handleDisputeSteps,
   handleCollectTransfers,
+  handleDisputeEvidence,
 } from './handlers/collect-transfers.js';
 import { handleCollectReminders } from './handlers/collect-reminders.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
@@ -890,8 +891,18 @@ export async function startJobWorker(
                   db: database.db,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
+                // Task 15: evidence staff approved is submitted, once per attempt.
+                const evidence = await handleDisputeEvidence({
+                  db: database.db,
+                  providers: [
+                    { name: 'mock', provider: mockProvider },
+                    { name: 'bachs', provider: bachsProvider },
+                  ],
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
                 return {
                   ...transfers,
+                  evidenceSubmitted: evidence.submitted,
                   reminded: reminders.reminded,
                   disputesAdvanced: disputes.advanced,
                   disputeReminders: disputes.reminded,

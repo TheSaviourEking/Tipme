@@ -481,7 +481,7 @@ export function advanceDispute(
  * or a refund the partner made that TipMe didn't ask for (stored unmatched: nothing books it, and
  * releasing the share would pay it twice) keeps it, and staff were told by the closed issue.
  */
-async function refundKeepsHold(tx: Tx, tipId: string): Promise<boolean> {
+export async function refundKeepsHold(tx: Tx, tipId: string): Promise<boolean> {
   const result = await tx.execute<{ keeps: boolean }>(sql`
     SELECT EXISTS (SELECT 1 FROM tip_refunds r WHERE r.tip_id = ${tipId}
                       AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))

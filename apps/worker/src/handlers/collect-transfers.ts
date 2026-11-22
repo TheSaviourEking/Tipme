@@ -7,6 +7,8 @@ import {
   releaseWaitingTransfers,
   runCollectTransfers,
   runDisputeSteps,
+  sendDisputeEvidence,
+  type DisputeEvidenceProvider,
 } from '@tipme/database';
 
 /*
@@ -175,4 +177,47 @@ export async function handleDisputeSteps(deps: {
     });
     return { reminded: 0, advanced: 0, failed: 1 };
   }
+}
+
+/**
+ * Task 15: dispute evidence staff had approved is submitted to the partner, once per attempt's key
+ * (a lost answer is asked again with the same key next sweep). Logged by error name only.
+ */
+export async function handleDisputeEvidence(deps: {
+  db: Database;
+  providers: readonly {
+    name: string;
+    provider: Partial<DisputeEvidenceProvider> | null | undefined;
+  }[];
+  log: CollectTransfersLog;
+  now?: Date;
+  /** Replaced in tests. */
+  send?: typeof sendDisputeEvidence;
+}): Promise<{ submitted: number; refused: number; failed: number }> {
+  const send = deps.send ?? sendDisputeEvidence;
+  const totals = { submitted: 0, refused: 0, failed: 0 };
+  for (const { name, provider } of deps.providers) {
+    const submit = provider?.submitDisputeEvidence;
+    if (!provider || !submit) continue;
+    try {
+      const result = await send(deps.db, {
+        provider: {
+          submitDisputeEvidence: (input) => submit.call(provider, input),
+        },
+        providerName: name,
+        now: deps.now ?? new Date(),
+      });
+      totals.submitted += result.submitted;
+      totals.refused += result.refused;
+      totals.failed += result.failed;
+    } catch (error) {
+      totals.failed += 1;
+      deps.log({
+        event: 'collect_disputes.evidence_failed',
+        provider: name,
+        error: error instanceof Error ? error.name : 'unknown',
+      });
+    }
+  }
+  return totals;
 }

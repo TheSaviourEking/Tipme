@@ -6,46 +6,49 @@ Nothing in this runbook, and nothing these screens do, approves a regulatory, pa
 
 ## The screens
 
-| Screen              | Who sees it    | For                                                                                                                           |
-| ------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `/ops` Overview     | All staff      | Pending approvals. The withdrawals switch (`payouts.resolve`). Staff activity (`audit.view`). The numbers (`analytics.view`). |
-| `/ops/approvals`    | All staff      | Requests you may see, with exactly what would change, and a history.                                                          |
-| `/ops/staff/people` | `staff.manage` | Add, change role, adjust access, reset authenticator, remove.                                                                 |
-| `/ops/staff/roles`  | `staff.manage` | Create, edit, delete roles.                                                                                                   |
-| `/ops/staff`        | All staff      | Your own access.                                                                                                              |
+| Screen              | Who sees it    | For                                                                                                                                                                                    |
+| ------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/ops` Overview     | All staff      | Pending approvals. The withdrawals switch (`payouts.resolve`). Staff activity (`audit.view`). The numbers (`analytics.view`).                                                          |
+| `/ops/approvals`    | All staff      | Requests you may see, with exactly what would change, and a history.                                                                                                                   |
+| `/ops/staff/people` | `staff.manage` | Add, change role, adjust access, reset authenticator, remove.                                                                                                                          |
+| `/ops/staff/roles`  | `staff.manage` | Create, edit, delete roles.                                                                                                                                                            |
+| `/ops/staff`        | All staff      | Your own access.                                                                                                                                                                       |
+| `/ops/collect`      | `collect.view` | You collect: held money, transfers, disputes, recipients past the holding cap. Acting needs `collect.manage`; the settings tab needs `fees.manage`; a name change `recoveries.manage`. |
 
 The menu only offers what someone can use. The server checks every call whatever the menu shows. `/ops/pages` is offered to anyone holding `pages.plan`, `pages.suspend`, `fees.manage`, `payouts.resolve` or `recoveries.manage`; each card there still needs its own permission. `/ops/providers` is offered to `issues.view` or `providers.manage`, and `/ops/email` to `issues.view`, `email.read` or `email.export`: the list there holds no email contents and no full address, and opening an email or downloading the log still needs its own permission.
 
 ## Every permission, in plain words
 
-| Permission           | Group    | Sensitive | What it allows                                                                                                              |
-| -------------------- | -------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `fees.manage`        | money    | yes       | Set a page’s fee and grant fee-free tips, with a reason                                                                     |
-| `pages.plan`         | money    | yes       | Move a page between Free and Pro, with a reason                                                                             |
-| `payments.recheck`   | money    | no        | Ask the provider about a payment or withdrawal                                                                              |
-| `payments.repair`    | money    | yes       | Repair a payment record from the provider dashboard: link a checkout, confirm who bears the fee, recover an account         |
-| `payouts.resolve`    | money    | yes       | Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have |
-| `pages.suspend`      | people   | no        | Pause and restore recipient pages, and review or remove their images                                                        |
-| `private.view`       | people   | yes       | Reveal private details, with a reason                                                                                       |
-| `recoveries.cancel`  | people   | no        | Cancel a pending phone recovery                                                                                             |
-| `recoveries.manage`  | people   | yes       | Start and manage account recoveries for a person                                                                            |
-| `usernames.manage`   | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                         |
-| `businesses.manage`  | people   | yes       | Verify, suspend and restore businesses, with a reason (TipMe for businesses, behind `BUSINESS_ENABLED`)                     |
-| `changelog.edit`     | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                 |
-| `changelog.publish`  | content  | yes       | Approve what users read in What’s new                                                                                       |
-| `pro.price`          | money    | yes       | Change the Pro price for new months, with a reason                                                                          |
-| `announcements.send` | content  | yes       | Write announcements by email, and send one to users with a second person                                                    |
-| `email.export`       | content  | yes       | Download the email log as a spreadsheet                                                                                     |
-| `email.read`         | content  | yes       | Open a sent email: its delivery timeline and its content                                                                    |
-| `issues.resolve`     | content  | no        | Resolve issues                                                                                                              |
-| `issues.view`        | content  | no        | See issues and their evidence, add notes                                                                                    |
-| `search.view`        | content  | no        | Search pages, tips, withdrawals and ledger entries                                                                          |
-| `analytics.view`     | numbers  | no        | See health, visibility and market numbers                                                                                   |
-| `audit.view`         | numbers  | yes       | Read the audit log                                                                                                          |
-| `market.edit`        | numbers  | no        | Add and change market observations                                                                                          |
-| `providers.manage`   | settings | yes       | Change payment and email provider settings                                                                                  |
-| `staff.manage`       | settings | yes       | Add staff, change their access and roles                                                                                    |
-| `switches.manage`    | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                |
+| Permission           | Group    | Sensitive | What it allows                                                                                                                            |
+| -------------------- | -------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `fees.manage`        | money    | yes       | Set a page’s fee and grant fee-free tips, with a reason                                                                                   |
+| `pages.plan`         | money    | yes       | Move a page between Free and Pro, with a reason                                                                                           |
+| `payments.recheck`   | money    | no        | Ask the provider about a payment or withdrawal                                                                                            |
+| `payments.repair`    | money    | yes       | Repair a payment record from the provider dashboard: link a checkout, confirm who bears the fee, recover an account                       |
+| `payouts.resolve`    | money    | yes       | Act on a stuck withdrawal after asking the provider: record its answer, resume a held start, or release one it doesn’t have               |
+| `pages.suspend`      | people   | no        | Pause and restore recipient pages, and review or remove their images                                                                      |
+| `private.view`       | people   | yes       | Reveal private details, with a reason                                                                                                     |
+| `recoveries.cancel`  | people   | no        | Cancel a pending phone recovery                                                                                                           |
+| `recoveries.manage`  | people   | yes       | Start and manage account recoveries for a person                                                                                          |
+| `usernames.manage`   | people   | yes       | Reserve and release usernames, and ask to take one back from a page                                                                       |
+| `businesses.manage`  | people   | yes       | Verify, suspend and restore businesses, with a reason (TipMe for businesses, behind `BUSINESS_ENABLED`)                                   |
+| `changelog.edit`     | content  | no        | Edit changelog entries and ask for one to be shown to users                                                                               |
+| `changelog.publish`  | content  | yes       | Approve what users read in What’s new                                                                                                     |
+| `pro.price`          | money    | yes       | Change the Pro price for new months, with a reason                                                                                        |
+| `announcements.send` | content  | yes       | Write announcements by email, and send one to users with a second person                                                                  |
+| `email.export`       | content  | yes       | Download the email log as a spreadsheet                                                                                                   |
+| `email.read`         | content  | yes       | Open a sent email: its delivery timeline and its content                                                                                  |
+| `issues.resolve`     | content  | no        | Resolve issues                                                                                                                            |
+| `issues.view`        | content  | no        | See issues and their evidence, add notes                                                                                                  |
+| `search.view`        | content  | no        | Search pages, tips, withdrawals and ledger entries                                                                                        |
+| `analytics.view`     | numbers  | no        | See health, visibility and market numbers                                                                                                 |
+| `audit.view`         | numbers  | yes       | Read the audit log                                                                                                                        |
+| `market.edit`        | numbers  | no        | Add and change market observations                                                                                                        |
+| `providers.manage`   | settings | yes       | Change payment and email provider settings                                                                                                |
+| `staff.manage`       | settings | yes       | Add staff, change their access and roles                                                                                                  |
+| `switches.manage`    | settings | yes       | Turn feature switches on and off, with a reason (`settings-and-switches.md`)                                                              |
+| `collect.view`       | money    | no        | See You collect: money TipMe holds for recipients, its transfers, disputes and recipients past the holding cap (`/ops/collect`)           |
+| `collect.manage`     | money    | yes       | Act on You collect money with a second person: retry, hold or record a transfer, release a hold, record a refund, submit dispute evidence |
 
 **Sensitive** means moving or settling money, reading logs or private details, or changing accounts and settings. The screens warn when one is ticked.
 
@@ -55,36 +58,42 @@ Every role except `release_check` holds `changelog.edit` (the owner's default, 6
 
 These wait for a second person when one is available:
 
-| Action                      | In plain words                                                 | Needs                                                                                                                                |
-| --------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `email_recovery.start`      | Move an account to a new email address                         | `recoveries.manage`                                                                                                                  |
-| `payout.settle`             | Settle a stuck withdrawal                                      | `payouts.resolve`                                                                                                                    |
-| `money_issue.close`         | Close a money issue                                            | `payouts.resolve`, and `issues.resolve` to decide or run it                                                                          |
-| `fee.change`                | Change a page’s fee                                            | `fees.manage`                                                                                                                        |
-| `fee.free`                  | Give a page fee-free tips                                      | `fees.manage`                                                                                                                        |
-| `staff.grant_owner`         | Make someone an owner                                          | `staff.manage`; only an owner decides                                                                                                |
-| `staff.grant_sensitive`     | Give someone sensitive access                                  | `staff.manage`                                                                                                                       |
-| `role.add_sensitive`        | Add sensitive access to a role                                 | `staff.manage`                                                                                                                       |
-| `staff.reset_authenticator` | Reset someone’s authenticator                                  | An owner, asking and deciding                                                                                                        |
-| `mail_provider.switch`      | Switch the active email provider                               | `providers.manage`                                                                                                                   |
-| `username.take_back`        | Take a username back from a page                               | `usernames.manage`; the page’s owner can’t decide it                                                                                 |
-| `business.verify`           | Verify a business                                              | `businesses.manage` (not one of the business’s own managers)                                                                         |
-| `business.owner_remove`     | Remove a business owner                                        | `businesses.manage` (not one of the business’s own managers)                                                                         |
-| `tip.reverse`               | Reverse a refunded or charged-back tip                         | `payments.repair` (any tip, whatever the business switches)                                                                          |
-| `changelog.publish`         | Show users a What’s new entry                                  | Asked with `changelog.edit`, decided with `changelog.publish`                                                                        |
-| `pro_price.change`          | Change the Pro price                                           | `pro.price`                                                                                                                          |
-| `business_pro_price.change` | Change the Business Pro price                                  | `pro.price`                                                                                                                          |
-| `pro.refund`                | Refund a Pro card payment                                      | `payments.repair`                                                                                                                    |
-| `feature_switch.set`        | Turn a money switch on or off                                  | `switches.manage` (other switches need a reason and a code)                                                                          |
-| `announcement.send`         | Send an announcement by email                                  | `announcements.send`                                                                                                                 |
-| `tip.refund`                | Refund a tip (TipMe keeps its fee)                             | `payments.repair` (behind the `tip_refunds` switch)                                                                                  |
-| `plan_fees.change`          | Change TipMe’s fee per plan                                    | `fees.manage` (Free and Pro rates, for new quotes only, `/ops/plan-fees`)                                                            |
-| `tip_refund.absorb_gap`     | Refund a tip when TipMe has to absorb what can’t be taken back | `payments.repair` (a You collect tip whose recipient already withdrew part of it; behind the `tip_refunds` switch)                   |
-| `tip_refund.return`         | Return money a failed refund took back to the recipient        | `payments.repair` (a You collect tip whose refund failed after the recipient's part came back; no refund open, no unsettled dispute) |
-| `collect_settings.change`   | Change the You collect limits                                  | `fees.manage` (holding cap, reminders, delay, withdrawal limits, reserve levels; `/v1/ops/collect-settings`)                         |
-| `collect_transfers.pause`   | Pause every You collect transfer                               | `payments.repair` (emergency stop, R11; held tips stay with TipMe)                                                                   |
-| `collect_transfers.resume`  | Resume You collect transfers                                   | `payments.repair`                                                                                                                    |
-| `collect_name.change`       | Change a recipient’s verified name                             | `recoveries.manage`                                                                                                                  |
+| Action                         | In plain words                                                  | Needs                                                                                                                                |
+| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `email_recovery.start`         | Move an account to a new email address                          | `recoveries.manage`                                                                                                                  |
+| `payout.settle`                | Settle a stuck withdrawal                                       | `payouts.resolve`                                                                                                                    |
+| `money_issue.close`            | Close a money issue                                             | `payouts.resolve`, and `issues.resolve` to decide or run it                                                                          |
+| `fee.change`                   | Change a page’s fee                                             | `fees.manage`                                                                                                                        |
+| `fee.free`                     | Give a page fee-free tips                                       | `fees.manage`                                                                                                                        |
+| `staff.grant_owner`            | Make someone an owner                                           | `staff.manage`; only an owner decides                                                                                                |
+| `staff.grant_sensitive`        | Give someone sensitive access                                   | `staff.manage`                                                                                                                       |
+| `role.add_sensitive`           | Add sensitive access to a role                                  | `staff.manage`                                                                                                                       |
+| `staff.reset_authenticator`    | Reset someone’s authenticator                                   | An owner, asking and deciding                                                                                                        |
+| `mail_provider.switch`         | Switch the active email provider                                | `providers.manage`                                                                                                                   |
+| `username.take_back`           | Take a username back from a page                                | `usernames.manage`; the page’s owner can’t decide it                                                                                 |
+| `business.verify`              | Verify a business                                               | `businesses.manage` (not one of the business’s own managers)                                                                         |
+| `business.owner_remove`        | Remove a business owner                                         | `businesses.manage` (not one of the business’s own managers)                                                                         |
+| `tip.reverse`                  | Reverse a refunded or charged-back tip                          | `payments.repair` (any tip, whatever the business switches)                                                                          |
+| `changelog.publish`            | Show users a What’s new entry                                   | Asked with `changelog.edit`, decided with `changelog.publish`                                                                        |
+| `pro_price.change`             | Change the Pro price                                            | `pro.price`                                                                                                                          |
+| `business_pro_price.change`    | Change the Business Pro price                                   | `pro.price`                                                                                                                          |
+| `pro.refund`                   | Refund a Pro card payment                                       | `payments.repair`                                                                                                                    |
+| `feature_switch.set`           | Turn a money switch on or off                                   | `switches.manage` (other switches need a reason and a code)                                                                          |
+| `announcement.send`            | Send an announcement by email                                   | `announcements.send`                                                                                                                 |
+| `tip.refund`                   | Refund a tip (TipMe keeps its fee)                              | `payments.repair` (behind the `tip_refunds` switch)                                                                                  |
+| `plan_fees.change`             | Change TipMe’s fee per plan                                     | `fees.manage` (Free and Pro rates, for new quotes only, `/ops/plan-fees`)                                                            |
+| `tip_refund.absorb_gap`        | Refund a tip when TipMe has to absorb what can’t be taken back  | `payments.repair` (a You collect tip whose recipient already withdrew part of it; behind the `tip_refunds` switch)                   |
+| `tip_refund.return`            | Return money a failed refund took back to the recipient         | `payments.repair` (a You collect tip whose refund failed after the recipient's part came back; no refund open, no unsettled dispute) |
+| `collect_settings.change`      | Change the You collect limits                                   | `fees.manage` (holding cap, reminders, delay, withdrawal limits, reserve levels; `/v1/ops/collect-settings`)                         |
+| `collect_transfers.pause`      | Pause every You collect transfer                                | `payments.repair` (emergency stop, R11; held tips stay with TipMe)                                                                   |
+| `collect_transfers.resume`     | Resume You collect transfers                                    | `payments.repair`                                                                                                                    |
+| `collect_name.change`          | Change a recipient’s verified name                              | `recoveries.manage` (`/ops/collect`; the partner checks the new name with their next bank details before anything more is sent)      |
+| `collect_transfer.retry`       | Retry a You collect transfer in review                          | `collect.manage` (only from review held by staff or by the partner's answer; same key)                                               |
+| `collect_transfer.record_paid` | Record a You collect transfer in review as paid                 | `collect.manage` (only when the partner's read-back by its group shows it paid for its amount)                                       |
+| `collect_dispute.release_hold` | Release a closed dispute’s hold early                           | `collect.manage` (refused while a refund of the tip is in flight or has used the hold)                                               |
+| `collect_dispute.evidence`     | Submit evidence for a dispute                                   | `collect.manage` (before the deadline, once; the worker submits it to the partner)                                                   |
+| `collect_same_bank.clear`      | Clear a shared bank account hold                                | `collect.manage` (resolves the `collect_same_bank` issues and puts the held transfers back in the queue)                             |
+| `tip_refund.record_paid`       | Record a refund the payment partner paid that TipMe didn’t book | `collect.manage` (books it from what TipMe holds for the tip; TipMe absorbs the rest)                                                |
 
 Removing a business owner (`business.owner_remove`, interim lock of 14 Nov 2026) is the only way an owner leaves except by stepping down themselves: owners can't remove each other. Use it from the business's page under Businesses, on a support request, after checking it with both owners. Write what you checked as the reason. It never removes the last owner (the founding owner can be removed only this way, while another owner stays), waits for a second person, and emails every owner, the removed one included. The full procedure with notice and objection is plan #204 Phase E.
 
@@ -96,10 +105,12 @@ Giving someone a role or permission counts as serious only if it contains someth
 
 **One person, with audit, not a second person.** These act on money or a provider account and don't wait for anyone, by the current ruling. Each takes a fresh code and a written reason, and is audited. Owner: this list is here so you can see it and change it.
 
-| Route                                   | In plain words                                                                             | Needs             | What it rests on                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------ | ----------------- | ---------------------------------------------------------------------------------------------------- |
-| `POST /v1/ops/issues/:id/payout-resume` | Queue a held withdrawal to start again, after asking the provider                          | `payouts.resolve` | The provider read, and the withdrawal job's own checks                                               |
-| `POST /v1/ops/bachs/account-recovery`   | Link a provider account, typed by staff, to a page whose account creation was left unknown | `payments.repair` | The read proves the account exists, not whose it is. Identity rests on that person's dashboard check |
+| Route                                              | In plain words                                                                               | Needs             | What it rests on                                                                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------- |
+| `POST /v1/ops/issues/:id/payout-resume`            | Queue a held withdrawal to start again, after asking the provider                            | `payouts.resolve` | The provider read, and the withdrawal job's own checks                                               |
+| `POST /v1/ops/bachs/account-recovery`              | Link a provider account, typed by staff, to a page whose account creation was left unknown   | `payments.repair` | The read proves the account exists, not whose it is. Identity rests on that person's dashboard check |
+| `POST /v1/ops/collect/transfers/:id/review`        | Hold a You collect transfer never sent, for a manual check ("Send to review")                | `collect.manage`  | It only stops money; letting it go again is the serious `collect_transfer.retry`                     |
+| `POST /v1/ops/collect/disputes/:id/evidence/files` | Upload one evidence file for a dispute to the partner (PDF, PNG or JPEG, 5 MB, five at most) | `collect.manage`  | A document, not money; nothing is submitted until `collect_dispute.evidence` is approved             |
 
 Releasing a freeze is also one person: see below.
 

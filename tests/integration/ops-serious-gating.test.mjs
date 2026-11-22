@@ -58,10 +58,18 @@ const reader = () => ({
   fetchPayoutStatus: async () => ({ status: 'not_found' }),
 });
 
+/** What the partner lists per account, for a transfer's read-back (Task 15). */
+const partnerLists = new Map();
 const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
+  collectReader: () => ({
+    listAccountTransfers: async (ref) => {
+      reads.lockHeldDuringRead.push(await lockHeld());
+      return partnerLists.get(ref) ?? [];
+    },
+  }),
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -290,7 +298,195 @@ async function priceFixture(plan) {
   };
 }
 
+/** A page of its own on You collect with one paid tip: its share waits (Task 7). */
+async function collectTip(prefix) {
+  const [{ id: userId }] = await q(
+    `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+  );
+  const handle = `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+  const [{ id: profileId }] = await q(
+    `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode, created_at)
+     VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect', now() - interval '60 days') RETURNING id`,
+    [userId, handle],
+  );
+  const quote = await ops.createQuote(database.db, {
+    handle,
+    tipMinor: 1_000_000n,
+    currency: 'NGN',
+  });
+  const intent = await ops.createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await ops.markAttemptInitiated(database.db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+  });
+  await q(
+    `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+    [intent.attemptId],
+  );
+  const settled = await ops.reconcileAttempts({
+    db: database.db,
+    provider: {
+      environment: 'sandbox',
+      async verifyTransaction() {
+        return {
+          status: 'succeeded',
+          amountMinor: 1_000_000n,
+          currency: 'NGN',
+          feeMinor: 20_000n,
+          feePaidBy: 'platform',
+          method: 'NGN_CARD',
+          chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+        };
+      },
+    },
+    now: new Date(),
+    minAgeMs: 0,
+    attemptId: intent.attemptId,
+  });
+  assert.equal(settled.applied, 1);
+  const [row] = await q(
+    `SELECT id, idempotency_key FROM collect_transfers WHERE tip_id = $1 AND kind = 'share'`,
+    [intent.tipId],
+  );
+  return {
+    tipId: intent.tipId,
+    rowId: row.id,
+    group: row.idempotency_key,
+    profileId,
+    userId,
+  };
+}
+const shareStatus = async (rowId) =>
+  (await q(`SELECT status FROM collect_transfers WHERE id = $1`, [rowId]))[0]
+    .status;
+const newDispute = async (tipId, status, extra = '') => {
+  const id = randomUUID();
+  await q(
+    `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency, status, respond_by,
+                           share_step, decided_at, last_event_at)
+     VALUES ($1, 'mock', $2, $3, 950000, 'NGN', $4, now() + interval '5 days', $5,
+             CASE WHEN $4 = 'open' THEN NULL ELSE now() END, now())`,
+    [
+      id,
+      `dsp_${id.slice(0, 8)}${extra}`,
+      tipId,
+      status,
+      status === 'open' ? null : 'held',
+    ],
+  );
+  return id;
+};
+
 const wired = {
+  // You collect staff screens (plan Task 15): a transfer the partner's answer put in review.
+  'collect_transfer.retry': async () => {
+    const { rowId } = await collectTip('retry');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'provider' WHERE id = $1`,
+      [rowId],
+    );
+    return {
+      payload: { transferId: rowId },
+      happened: async () => (await shareStatus(rowId)) !== 'review',
+    };
+  },
+  // The partner's read-back by group shows it paid, for its amount: booked as moved.
+  'collect_transfer.record_paid': async () => {
+    const { rowId, group } = await collectTip('rpaid');
+    const account = `acct_${rowId.slice(0, 8)}`;
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'provider', sent_at = now(),
+              account_reference = $2, attempts = 1 WHERE id = $1`,
+      [rowId, account],
+    );
+    partnerLists.set(account, [
+      {
+        transferRef: 'tr_gate',
+        status: 'paid',
+        amountMinor: 950000n,
+        currency: 'NGN',
+        group,
+      },
+    ]);
+    return {
+      payload: { transferId: rowId },
+      happened: async () => (await shareStatus(rowId)) === 'paid',
+    };
+  },
+  // A dispute closed without a ruling, its share held for a refund that never came (P28).
+  'collect_dispute.release_hold': async () => {
+    const { tipId, rowId } = await collectTip('hold');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'refund' WHERE id = $1`,
+      [rowId],
+    );
+    const disputeId = await newDispute(tipId, 'closed');
+    return {
+      payload: { disputeId },
+      happened: async () =>
+        (
+          await q(`SELECT settled_at FROM disputes WHERE id = $1`, [disputeId])
+        )[0].settled_at !== null,
+    };
+  },
+  'collect_dispute.evidence': async () => {
+    const { tipId } = await collectTip('evid');
+    const disputeId = await newDispute(tipId, 'open');
+    return {
+      payload: {
+        disputeId,
+        text: 'The supporter tipped in person at the event and was given a receipt.',
+      },
+      happened: async () =>
+        (
+          await q(`SELECT evidence_state FROM disputes WHERE id = $1`, [
+            disputeId,
+          ])
+        )[0].evidence_state === 'sending',
+    };
+  },
+  'collect_same_bank.clear': async () => {
+    const { rowId, profileId } = await collectTip('same');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'same_bank' WHERE id = $1`,
+      [rowId],
+    );
+    await ops.openIssue(database.db, {
+      dedupeKey: `collect_same_bank.${profileId}.${randomUUID()}`,
+      kind: 'collect_same_bank',
+      subject: { profileId },
+      now: new Date(),
+    });
+    return {
+      payload: { profileId },
+      happened: async () => (await shareStatus(rowId)) === 'waiting',
+    };
+  },
+  // Task 10 RI3: the partner paid a refund TipMe had failed; nothing was booked.
+  'tip_refund.record_paid': async () => {
+    const { tipId, userId } = await collectTip('unbk');
+    const [{ id: refundId }] = await q(
+      `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider, provider_reference,
+              failure, requested_by, reason, collect_plan, held_minor, refunded_minor)
+       VALUES (gen_random_uuid(), $1, 'FAILED', 950000, 'NGN', 'bachs', 'platform:cs_gate', 'balance', $2,
+               'A refund the partner refused', 'cancel_held', 0, 950000) RETURNING id`,
+      [tipId, userId],
+    );
+    return {
+      payload: { tipId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM ledger_transactions WHERE operation_key = $1`,
+            [`collect_refund.${refundId}`],
+          )
+        ).length === 1,
+    };
+  },
   'email_recovery.start': async () => {
     const userId = await ownerOf();
     await q(

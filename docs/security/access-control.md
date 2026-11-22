@@ -63,6 +63,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `businesses.manage` | POST `/v1/ops/businesses/{id}/owners/{managerId}/remove`<br>POST `/v1/ops/businesses/{id}/restore`<br>POST `/v1/ops/businesses/{id}/suspend`<br>POST `/v1/ops/businesses/{id}/verify` |
 | `changelog.edit` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/ask`<br>POST `/v1/ops/changelog/{number}/withdraw` |
 | `changelog.publish` | GET `/v1/ops/changelog`<br>GET `/v1/ops/changelog/{number}`<br>PUT `/v1/ops/changelog/{number}`<br>POST `/v1/ops/changelog/{number}/approve`<br>POST `/v1/ops/changelog/{number}/withdraw` |
+| `collect.manage` | POST `/v1/ops/collect/disputes/{id}/evidence`<br>POST `/v1/ops/collect/disputes/{id}/evidence/files`<br>POST `/v1/ops/collect/disputes/{id}/release-hold`<br>POST `/v1/ops/collect/refunds/{tipId}/record-paid`<br>POST `/v1/ops/collect/same-bank/{profileId}/clear`<br>POST `/v1/ops/collect/transfers/{id}/record-paid`<br>POST `/v1/ops/collect/transfers/{id}/retry`<br>POST `/v1/ops/collect/transfers/{id}/review` |
+| `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `fees.manage` | GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
@@ -78,7 +80,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `pro.price` | GET `/v1/ops/business-pro-price`<br>POST `/v1/ops/business-pro-price`<br>GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
 | `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
-| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions` |
+| `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions`<br>POST `/v1/ops/collect/name` |
 | `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search`<br>GET `/v1/ops/users` |
 | `staff.manage` | GET `/v1/ops/staff`<br>POST `/v1/ops/staff`<br>GET `/v1/ops/staff/{userId}/access`<br>PUT `/v1/ops/staff/{userId}/access`<br>POST `/v1/ops/staff/{userId}/remove`<br>POST `/v1/ops/staff/{userId}/resend-invitation`<br>POST `/v1/ops/staff/{userId}/reset-authenticator`<br>PUT `/v1/ops/staff/{userId}/role`<br>GET `/v1/ops/staff/roles`<br>POST `/v1/ops/staff/roles`<br>PATCH `/v1/ops/staff/roles/{roleId}`<br>POST `/v1/ops/staff/roles/{roleId}/delete`<br>POST `/v1/ops/staff/roles/{roleId}/impact` |
 | `switches.manage` | GET `/v1/ops/switches`<br>POST `/v1/ops/switches/{key}`<br>POST `/v1/ops/switches/display/{key}` |
@@ -380,6 +382,21 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/collect-settings` | `fees.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/collect-transfers/pause` | `payments.repair` | yes | `ops_request` | – |
 | POST | `/v1/ops/collect-transfers/resume` | `payments.repair` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/disputes` | `collect.view` | n/a (read) | `ops_read` | – |
+| GET | `/v1/ops/collect/disputes/{id}` | `collect.view` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/collect/disputes/{id}/evidence` | `collect.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/disputes/{id}/evidence/files` | `collect.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/disputes/{id}/release-hold` | `collect.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/held` | `collect.view` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/collect/name` | `recoveries.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/refunds/{tipId}/record-paid` | `collect.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/same-bank` | `collect.view` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/collect/same-bank/{profileId}/clear` | `collect.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/transfers` | `collect.view` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/collect/transfers/{id}/record-paid` | `collect.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/transfers/{id}/retry` | `collect.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/collect/transfers/{id}/review` | `collect.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/collect/unclaimed` | `collect.view` | n/a (read) | `ops_read` | – |
 | GET | `/v1/ops/database-budget` | `issues.view` | n/a (read) | – | – |
 | GET | `/v1/ops/email/export.csv` | `email.export` | n/a (read) | – | – |
 | GET | `/v1/ops/email/messages` | `issues.view,email.read,email.export` | n/a (read) | – | – |

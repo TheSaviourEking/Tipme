@@ -12,6 +12,7 @@ import type { Database, Tx } from '../client.js';
 import {
   businesses,
   businessManagers,
+  disputes,
   issues,
   payouts,
   profiles,
@@ -59,6 +60,7 @@ import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
 import {
   askTipRefund,
+  recordUnbookedRefund,
   returnHeldRefundMoney,
   tipRefundFacts,
 } from './tip-refunds.js';
@@ -91,6 +93,19 @@ import {
   changeCollectLegalName,
   collectNameStamp,
 } from './collect-verification.js';
+import {
+  askDisputeEvidence,
+  clearSameBankHold,
+  collectTransferStamp,
+  disputeEvidenceStamp,
+  releaseDisputeHold,
+  retryTransferInReview,
+  sameBankStamp,
+} from './collect-ops.js';
+import {
+  collectTransferForStaff,
+  recordReviewTransferPaid,
+} from './collect-transfers.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -934,6 +949,208 @@ const tipRefundReturn = acting<{ tipId: string }>({
   },
 });
 
+/*
+ * You collect staff screens (plan Task 15, spec §9): each money action waits for a second person
+ * holding `collect.manage`, pinned on the row as it stood when asked, and refused at the run if the
+ * money has moved on since (COLLECT_ACTION_REFUSED). The recipient can't decide one about their own
+ * page.
+ */
+
+const transferOwner = async (db: Database | Tx, transferId: string) => {
+  const row = await collectTransferForStaff(db, transferId);
+  return row ? pageOwner(db, row.profileId) : [];
+};
+
+const transferWords = async (db: Database | Tx, transferId: string) => {
+  const row = await collectTransferForStaff(db, transferId);
+  if (!row) return 'a transfer that no longer exists';
+  return `the ${naira(row.amountMinor)} ${row.kind === 'share' ? 'transfer' : row.kind === 'back' ? 'transfer back' : 'return'} to @${await handleOf(db, row.profileId)} (group ${row.idempotencyKey})`;
+};
+
+const disputeOwner = async (db: Database | Tx, disputeId: string) => {
+  const [row] = await db
+    .select({ profileId: tips.profileId })
+    .from(disputes)
+    .innerJoin(tips, eq(tips.id, disputes.tipId))
+    .where(eq(disputes.id, disputeId));
+  return row?.profileId ? pageOwner(db, row.profileId) : [];
+};
+
+const disputeWords = async (db: Database | Tx, disputeId: string) => {
+  const [row] = await db
+    .select({
+      amountMinor: disputes.amountMinor,
+      partnerDisputeId: disputes.partnerDisputeId,
+      respondBy: disputes.respondBy,
+      profileId: tips.profileId,
+    })
+    .from(disputes)
+    .innerJoin(tips, eq(tips.id, disputes.tipId))
+    .where(eq(disputes.id, disputeId));
+  if (!row) return { what: 'a dispute that no longer exists', respondBy: null };
+  return {
+    what: `the ${naira(row.amountMinor)} dispute ${row.partnerDisputeId} on a tip to @${row.profileId ? await handleOf(db, row.profileId) : 'a page'}`,
+    respondBy: row.respondBy,
+  };
+};
+
+const collectTransferRetry = acting<{ transferId: string }>({
+  name: 'collect_transfer.retry',
+  permission: 'collect.manage',
+  subjects: ({ transferId }, db) => transferOwner(db, transferId),
+  target: ({ transferId }) => transferId,
+  current: (tx, { transferId }) => collectTransferStamp(tx, transferId),
+  describe: async (tx, { transferId }) =>
+    `Retry ${await transferWords(tx, transferId)}: it leaves review and is sent again with the same key, after the partner dashboard was checked for its group`,
+  act: (tx, { transferId }, context) =>
+    retryTransferInReview(tx, { transferId, now: context.now }),
+});
+
+/** What `prepare` found at the partner for a record-as-paid: the transfer that paid. */
+type ReadBack = { transferRef: string };
+
+const collectTransferRecordPaid = acting<{ transferId: string }>({
+  name: 'collect_transfer.record_paid',
+  permission: 'collect.manage',
+  subjects: ({ transferId }, db) => transferOwner(db, transferId),
+  target: ({ transferId }) => transferId,
+  current: (tx, { transferId }) => collectTransferStamp(tx, transferId),
+  // P24–P27: only the partner's read-back by the transfer's group proves it moved. Read before the
+  // transaction, each time (asking and approving alike): one transfer in the group, paid, for this
+  // amount and currency, or nothing is recorded.
+  prepare: async (db, { transferId }, input): Promise<ReadBack> => {
+    const row = await collectTransferForStaff(db, transferId);
+    if (
+      !row ||
+      row.status !== 'review' ||
+      row.reviewReason !== 'provider' ||
+      !row.accountReference
+    )
+      throw new OperationError('COLLECT_ACTION_REFUSED', 'not_in_review');
+    const reader = servicesOf(input).collectReader?.(row.provider);
+    if (!reader) throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    let listed: Awaited<ReturnType<typeof reader.listAccountTransfers>>;
+    try {
+      listed = await reader.listAccountTransfers(row.accountReference);
+    } catch {
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    }
+    const ours = listed.filter((t) => t.group === row.idempotencyKey);
+    const [found] = ours;
+    if (
+      ours.length !== 1 ||
+      !found ||
+      found.status !== 'paid' ||
+      found.amountMinor !== row.amountMinor ||
+      found.currency !== row.currency
+    )
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    return { transferRef: found.transferRef };
+  },
+  describe: async (tx, { transferId }) =>
+    `Record ${await transferWords(tx, transferId)} as paid: the partner shows it paid in its group for this amount, so it is booked as moved, once`,
+  act: (tx, { transferId }, context) => {
+    const facts = context.facts as ReadBack | undefined;
+    if (!facts?.transferRef)
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    return recordReviewTransferPaid(tx, {
+      transferId,
+      transferRef: facts.transferRef,
+      now: context.now,
+    });
+  },
+});
+
+const collectDisputeReleaseHold = acting<{ disputeId: string }>({
+  name: 'collect_dispute.release_hold',
+  permission: 'collect.manage',
+  subjects: ({ disputeId }, db) => disputeOwner(db, disputeId),
+  target: ({ disputeId }) => disputeId,
+  current: async (tx, { disputeId }) => {
+    const [row] = await tx
+      .select({
+        status: disputes.status,
+        settledAt: disputes.settledAt,
+        heldMinor: disputes.heldMinor,
+        shareStep: disputes.shareStep,
+      })
+      .from(disputes)
+      .where(eq(disputes.id, disputeId));
+    return row
+      ? {
+          status: row.status,
+          settled: row.settledAt !== null,
+          held: String(row.heldMinor),
+          shareStep: row.shareStep,
+        }
+      : null;
+  },
+  describe: async (tx, { disputeId }) =>
+    `Release the hold on ${(await disputeWords(tx, disputeId)).what}, closed without a ruling, before its 14 days end: no refund of the tip is in progress or used it, and the money goes on to the recipient`,
+  act: (tx, { disputeId }, context) =>
+    releaseDisputeHold(tx, { disputeId, now: context.now }),
+});
+
+const collectDisputeEvidence = acting<{ disputeId: string; text?: string }>({
+  name: 'collect_dispute.evidence',
+  permission: 'collect.manage',
+  subjects: ({ disputeId }, db) => disputeOwner(db, disputeId),
+  target: ({ disputeId }) => disputeId,
+  current: (tx, { disputeId }) => disputeEvidenceStamp(tx, disputeId),
+  describe: async (tx, { disputeId }) => {
+    const { what, respondBy } = await disputeWords(tx, disputeId);
+    const stamp = await disputeEvidenceStamp(tx, disputeId);
+    return `Submit evidence for ${what} to our payment partner (Bachs), with ${stamp?.files ?? 0} file(s)${respondBy ? `, before ${respondBy.toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}. It is submitted once and can't be changed after.`;
+  },
+  afterClose: ({ disputeId }) => ({ disputeId }),
+  act: (tx, { disputeId, text }, context) =>
+    askDisputeEvidence(tx, { disputeId, text: text ?? '', now: context.now }),
+});
+
+const collectSameBankClear = acting<{ profileId: string }>({
+  name: 'collect_same_bank.clear',
+  permission: 'collect.manage',
+  subjects: ({ profileId }, db) => pageOwner(db, profileId),
+  target: ({ profileId }) => profileId,
+  current: (tx, { profileId }) => sameBankStamp(tx, profileId),
+  describe: async (tx, { profileId }) =>
+    `Clear the shared bank account hold on @${await handleOf(tx, profileId)}: staff checked the account, its issues are resolved and its held transfers go back to the queue`,
+  act: (tx, { profileId }, context) =>
+    clearSameBankHold(tx, {
+      profileId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      sealing: context.services?.sealing,
+      now: context.now,
+    }),
+});
+
+const tipRefundRecordPaid = acting<{ tipId: string }>({
+  name: 'tip_refund.record_paid',
+  permission: 'collect.manage',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return { refusal: facts.refusal, unbooked: String(facts.unbookedMinor) };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'a page';
+    return `Book the ${naira(facts.unbookedMinor)} refund our payment partner (Bachs) paid on a tip to ${page} (tip ending ${tipId.slice(-6)}) that TipMe didn't book: from what TipMe still holds for the tip, and TipMe absorbs the rest. Booked once.`;
+  },
+  act: (tx, { tipId }, context) =>
+    recordUnbookedRefund(tx, {
+      tipId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+    }),
+});
+
 /* TipMe for businesses */
 
 /**
@@ -1499,6 +1716,12 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(collectTransfersPaused(true));
   registerSeriousAction(collectTransfersPaused(false));
   registerSeriousAction(collectNameChange);
+  registerSeriousAction(collectTransferRetry);
+  registerSeriousAction(collectTransferRecordPaid);
+  registerSeriousAction(collectDisputeReleaseHold);
+  registerSeriousAction(collectDisputeEvidence);
+  registerSeriousAction(collectSameBankClear);
+  registerSeriousAction(tipRefundRecordPaid);
 }
 
 /* Routes whose seriousness depends on what is being done */

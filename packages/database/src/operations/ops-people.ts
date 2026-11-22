@@ -6,6 +6,7 @@ import type {
 } from '@tipme/contracts';
 import { sql, type SQL } from 'drizzle-orm';
 import type { Database } from '../client.js';
+import { profiles } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { maskEmail } from './email-address.js';
 import { guarded, OperationError } from './errors.js';
@@ -117,6 +118,7 @@ type Row = {
   plan: string | null;
   page_status: OpsPerson['pageStatus'];
   payouts: boolean;
+  mode: string | null;
   last_active: Date | string | null;
   tips_total?: string;
 };
@@ -151,6 +153,7 @@ export function listOpsPeople(
                CASE WHEN p.status = 'active' AND p.page_state = 'live' THEN p.avatar_path END AS avatar_path,
                p.cover_colour, p.plan, ${PAGE_STATUS} AS page_status,
                ${PAYOUTS_SET_UP} AS payouts,
+               (SELECT ${profiles.collectionMode} FROM profiles WHERE profiles.id = p.id) AS mode,
                (SELECT max(s.last_seen_at) FROM sessions s WHERE s.user_id = u.id) AS last_active
                ${withTotals ? sql`, ${TIPS_TOTAL} AS tips_total` : sql``}
           ${FROM}
@@ -167,6 +170,13 @@ export function listOpsPeople(
           plan: row.plan === 'pro' ? 'pro' : 'free',
           pageStatus: row.page_status,
           payoutsSetUp: row.payouts,
+          // You collect (Task 15, spec §9): read-only, the mode the page is on now.
+          collectionMode:
+            row.handle === null
+              ? null
+              : row.mode === 'collect'
+                ? 'collect'
+                : 'direct',
           business: row.business_name !== null,
           joinedAt: iso(row.created_at),
           lastActiveAt: row.last_active ? iso(row.last_active) : null,

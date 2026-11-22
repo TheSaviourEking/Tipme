@@ -703,6 +703,12 @@ export const profiles = pgTable(
     // You collect (Task 13 fix C1/I1): the digest of the legal name our payment partner last confirmed
     // holding for this person, so a name is sent only when it changed, and a refused one is put back.
     collectPartnerNameDigest: text('collect_partner_name_digest'),
+    // You collect (Task 15): support changed the locked legal name (`collect_name.change`). Until our
+    // payment partner has checked the current bank against the new name (the recipient adds their
+    // bank details again), nothing more is transferred to them. Cleared by that check.
+    collectNameRecheckAt: timestamp('collect_name_recheck_at', {
+      withTimezone: true,
+    }),
     createdAt: createdAt(),
   },
   (table) => [
@@ -4168,7 +4174,22 @@ export const disputes = pgTable(
     reason: text('reason'),
     status: text('status').notNull(),
     respondBy: timestamp('respond_by', { withTimezone: true }),
+    // Task 15: staff's evidence (`collect_dispute.evidence`, a second person). `draft` while files are
+    // uploaded, `sending` once approved (the worker submits it to the partner once, under
+    // `tipme-dispute-evidence-<id>-<attempt>`), then `submitted`, or `refused` (a definite refusal:
+    // nothing was submitted, and staff may ask again before the deadline with the next attempt).
     evidenceState: text('evidence_state').notNull().default('none'),
+    // Staff's own words for the partner (never the supporter's), and the partner's file ids.
+    evidenceText: text('evidence_text'),
+    evidenceFiles: jsonb('evidence_files')
+      .$type<{ fileRef: string; contentType: string; bytes: number }[]>()
+      .notNull()
+      .default([]),
+    evidenceAttempt: integer('evidence_attempt').notNull().default(0),
+    evidenceAskedAt: timestamp('evidence_asked_at', { withTimezone: true }),
+    evidenceSubmittedAt: timestamp('evidence_submitted_at', {
+      withTimezone: true,
+    }),
     feeMinor: minor('fee_minor'),
     feeCurrency: char('fee_currency', { length: 3 }),
     // What the partner set aside from TipMe's available balance while it is open.
@@ -4204,7 +4225,15 @@ export const disputes = pgTable(
     ),
     check(
       'disputes_evidence_state',
-      sql`evidence_state IN ('none', 'draft', 'submitted')`,
+      sql`evidence_state IN ('none', 'draft', 'sending', 'submitted', 'refused')`,
+    ),
+    // Task 15: at most five files, and a submitted dispute keeps when it was submitted.
+    check(
+      'disputes_evidence',
+      sql`jsonb_typeof(evidence_files) = 'array' AND jsonb_array_length(evidence_files) <= 5
+        AND evidence_attempt >= 0
+        AND (evidence_state <> 'submitted' OR evidence_submitted_at IS NOT NULL)
+        AND (evidence_state NOT IN ('sending', 'submitted') OR (evidence_text IS NOT NULL AND evidence_asked_at IS NOT NULL))`,
     ),
     check(
       'disputes_fee',

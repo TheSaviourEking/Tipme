@@ -49,6 +49,11 @@ export interface CollectBankFacts {
   legalName: CollectLegalName | null;
   /** The digest of the name our payment partner last confirmed holding, or null. */
   partnerNameDigest: string | null;
+  /**
+   * Task 15: support changed the locked name, and our payment partner hasn't checked the current
+   * bank against it yet. Nothing more is transferred meanwhile.
+   */
+  nameRecheckAt: Date | null;
 }
 
 /** The stored name (JSON `{ first, last }`), or null when absent or unreadable. */
@@ -92,6 +97,7 @@ export function collectBankFacts(
         verifiedAt: profiles.collectVerifiedAt,
         legalName: profiles.collectLegalName,
         partnerNameDigest: profiles.collectPartnerNameDigest,
+        nameRecheckAt: profiles.collectNameRecheckAt,
       })
       .from(profiles)
       .where(eq(profiles.id, profileId));
@@ -101,6 +107,7 @@ export function collectBankFacts(
       verifiedAt: row.verifiedAt,
       legalName: parseLegalName(row.legalName),
       partnerNameDigest: row.partnerNameDigest,
+      nameRecheckAt: row.nameRecheckAt,
     };
   });
 }
@@ -329,7 +336,12 @@ export async function collectBankView(
     provider: recordedProviderName(input.provider),
   });
   if (!current) return null;
-  const state = stateOf(current.status, facts.verifiedAt !== null);
+  // Task 15: a name support changed is checked again with the bank details, so until then the bank
+  // is being checked, not verified.
+  const state = stateOf(
+    current.status,
+    facts.verifiedAt !== null && facts.nameRecheckAt === null,
+  );
   return state
     ? { state, last4: current.last4, bankName: current.bankName }
     : null;
@@ -406,35 +418,74 @@ async function markVerified(
         .update(profiles)
         .set({ collectVerifiedAt: input.now })
         .where(eq(profiles.id, input.profileId));
-      const dedupeKey = `collect_verified.${input.profileId}`;
-      if (row.userId) {
-        // Spec §10, "Verified".
-        await tx
-          .insert(notifications)
-          .values({
-            id: idFromKey(dedupeKey),
-            userId: row.userId,
-            kind: 'collect_verified',
-            title: "You're all set",
-            body: "You're all set. Your tips are on their way to you.",
-            createdAt: input.now,
-          })
-          .onConflictDoNothing();
-        if (input.sealing)
-          await mailOwner(tx, input.sealing, {
-            profileId: input.profileId,
-            type: 'collect_verified',
-            data: {
-              firstName:
-                row.displayName.split(/\s+/)[0] || row.displayName || 'there',
-            },
-            dedupeKey,
-            now: input.now,
-          });
-      }
+      // Task 13 M3 (fixed in Task 15): while a shared bank account holds their transfers, "on their
+      // way" isn't true yet. The notice goes when staff clear the hold (clearSameBankHold).
+      if (!(await sameBankHoldOpen(tx, input.profileId)))
+        await tellVerified(tx, {
+          profileId: input.profileId,
+          sealing: input.sealing,
+          now: input.now,
+        });
       return true;
     }),
   );
+}
+
+/** Whether an open `collect_same_bank` issue holds this recipient's transfers (`canReceive`). */
+export async function sameBankHoldOpen(
+  tx: Database | Tx,
+  profileId: string,
+): Promise<boolean> {
+  const [open] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.kind, 'collect_same_bank'),
+        eq(issues.status, 'open'),
+        sql`${issues.subject}->>'profileId' = ${profileId}`,
+      ),
+    )
+    .limit(1);
+  return Boolean(open);
+}
+
+/**
+ * The "Verified" notice (spec §10): in the app, and by email when the sealing key is at hand. Once
+ * per recipient (its dedupe key), however often it is called.
+ */
+export async function tellVerified(
+  tx: Tx,
+  input: { profileId: string; sealing?: MailSealing | undefined; now: Date },
+): Promise<void> {
+  const [row] = await tx
+    .select({ userId: profiles.userId, displayName: profiles.displayName })
+    .from(profiles)
+    .where(eq(profiles.id, input.profileId));
+  if (!row?.userId) return;
+  const dedupeKey = `collect_verified.${input.profileId}`;
+  await tx
+    .insert(notifications)
+    .values({
+      id: idFromKey(dedupeKey),
+      userId: row.userId,
+      kind: 'collect_verified',
+      title: "You're all set",
+      body: "You're all set. Your tips are on their way to you.",
+      createdAt: input.now,
+    })
+    .onConflictDoNothing();
+  if (input.sealing)
+    await mailOwner(tx, input.sealing, {
+      profileId: input.profileId,
+      type: 'collect_verified',
+      data: {
+        firstName:
+          row.displayName.split(/\s+/)[0] || row.displayName || 'there',
+      },
+      dedupeKey,
+      now: input.now,
+    });
 }
 
 /**
@@ -476,8 +527,9 @@ export async function settleCollectVerification(
     });
     if (!current) return null;
   }
+  const rechecking = facts.nameRecheckAt !== null;
   if (current.status !== 'usable')
-    return stateOf(current.status, facts.verifiedAt !== null);
+    return stateOf(current.status, facts.verifiedAt !== null && !rechecking);
   const verified = facts.verifiedAt !== null;
   if (!verified && !facts.legalName) return 'checking';
   // Read now, and that answer decides: shares are only released to an account that can take them.
@@ -493,7 +545,13 @@ export async function settleCollectVerification(
       error: error instanceof Error ? error.name : typeof error,
     });
   }
-  if (capability !== 'active') return verified ? 'verified' : 'checking';
+  if (capability !== 'active')
+    return verified && !rechecking ? 'verified' : 'checking';
+  if (
+    rechecking &&
+    !(await finishNameRecheck(db, input.profileId, input.provider.name))
+  )
+    return 'checking';
   if (!verified) {
     await markVerified(db, {
       profileId: input.profileId,
@@ -510,6 +568,66 @@ export async function settleCollectVerification(
     now: input.now,
   });
   return 'verified';
+}
+
+/**
+ * Task 15: after support changed a locked name, the recipient's current bank must have been checked
+ * by our payment partner against that very name (the bank's `name_digest`, never first checked
+ * under another name) before anything more is transferred. Clears the recheck once that holds, in
+ * one conditional update; returns whether it is clear now.
+ */
+async function finishNameRecheck(
+  db: Database,
+  profileId: string,
+  provider: string,
+): Promise<boolean> {
+  return guarded(() =>
+    db.transaction(async (tx) => {
+      const [row] = await tx
+        .select({
+          legalName: profiles.collectLegalName,
+          recheckAt: profiles.collectNameRecheckAt,
+        })
+        .from(profiles)
+        .where(eq(profiles.id, profileId))
+        .for('update');
+      if (!row) return false;
+      if (row.recheckAt === null) return true;
+      const legalName = parseLegalName(row.legalName);
+      if (!legalName) return false;
+      const [bank] = await tx
+        .select({
+          status: payoutDestinations.status,
+          nameDigest: payoutDestinations.nameDigest,
+          destinationRef: payoutDestinations.destinationReference,
+        })
+        .from(payoutDestinations)
+        .where(
+          and(
+            eq(payoutDestinations.profileId, profileId),
+            eq(payoutDestinations.provider, recordedProviderName(provider)),
+            sql`${payoutDestinations.replacedAt} IS NULL`,
+          ),
+        );
+      const digest = legalNameDigest(legalName);
+      if (
+        bank?.status !== 'usable' ||
+        bank.nameDigest !== digest ||
+        (await bankCheckedForAnotherName(tx, {
+          profileId,
+          provider,
+          destinationRef: bank.destinationRef,
+          nameDigest: digest,
+        }))
+      )
+        return false;
+      await tx
+        .update(profiles)
+        .set({ collectNameRecheckAt: null })
+        .where(eq(profiles.id, profileId));
+      return true;
+    }),
+  );
 }
 
 /** The `current` a pending name change is pinned on: changes if the name moved, never spells it. */
@@ -555,9 +673,14 @@ export async function changeCollectLegalName(
   if (!row) throw new OperationError('PROFILE_NOT_FOUND');
   if (row.mode !== 'collect' || !row.verifiedAt || !row.legalName)
     throw new OperationError('NAME_NOT_LOCKED');
+  // The name lock stays (verified, so only support changes it again), and our payment partner checks
+  // the new name with the recipient's next bank details before anything more is transferred.
   await tx
     .update(profiles)
-    .set({ collectLegalName: storedName(parsed.data) })
+    .set({
+      collectLegalName: storedName(parsed.data),
+      collectNameRecheckAt: input.now,
+    })
     .where(eq(profiles.id, input.profileId));
   await recordAudit(tx, {
     staffUserId: input.staffUserId,
