@@ -152,7 +152,9 @@ function partner() {
     },
     async listDisputes(since) {
       assert.ok(since instanceof Date);
-      return state.disputes;
+      state.since = since;
+      // As the partner's `from_date`: only disputes created since then (review I3).
+      return state.disputes.filter((d) => !d.createdAt || d.createdAt >= since);
     },
     async payoutCapability() {
       return { status: 'active', requirementsDue: [] };
@@ -408,4 +410,64 @@ test('a tip is fully reconciled once its payment is verified, its share paid wit
   const disputed = await ops.collectTipReconciliation(database.db, tip.tipId);
   assert.equal(disputed.reconciled, false);
   assert.deepEqual(disputed.waiting, ['dispute']);
+});
+
+/* Fix round 1 (review I2, I3, m2). */
+
+test('I2: a share the partner sent twice under one group is a mismatch', async () => {
+  await verified(TOBI);
+  const { provider, state } = partner();
+  const tip = await paidTip(TOBI);
+  await ops.releaseWaitingTransfers(database.db, { now: T0 });
+  await ops.runCollectTransfers(database.db, { provider, now: T0 });
+  assert.equal((await recon(provider)).mismatches, 0);
+  // Probe B: the same group listed twice, two transfer ids.
+  const first = state.listed.find((t) => t.group === tip.key);
+  state.listed.push({ ...first, transferRef: 'tr_again' });
+  const result = await recon(provider);
+  assert.equal(result.mismatches, 1);
+  const [raised] = await mismatches();
+  assert.match(raised.dedupe_key, /duplicate/);
+  assert.match(raised.summary, /tr_again/);
+  assert.match(raised.summary, new RegExp(tip.key));
+  assert.equal(raised.subject.tipId, tip.tipId);
+});
+
+test('I3, m2: a dispute opened weeks ago is still compared, and a ruling TipMe missed is raised', async () => {
+  const { provider, state } = partner();
+  await q(`UPDATE profiles SET collection_mode = 'collect' WHERE id = $1`, [
+    TOBI.id,
+  ]);
+  const tip = await paidTip(TOBI);
+  const partnerDisputeId = `dp_${randomUUID().slice(0, 10)}`;
+  await ops.applyDisputeEvent(database.db, {
+    event: disputeEvent(tip, partnerDisputeId),
+    provider: 'bachs',
+    now: new Date(),
+  });
+  // Opened 30 days ago; its lost webhook never arrived.
+  const opened = new Date(Date.now() - 30 * DAY);
+  await q(`UPDATE disputes SET created_at = $2 WHERE partner_dispute_id = $1`, [
+    partnerDisputeId,
+    opened,
+  ]);
+  state.disputes = [
+    {
+      partnerDisputeId,
+      status: 'lost',
+      amountMinor: GROSS,
+      currency: 'NGN',
+      chargeReference: tip.chargeReference,
+      createdAt: opened,
+    },
+  ];
+  const result = await recon(provider);
+  assert.ok(state.since <= opened);
+  assert.equal(result.mismatches, 1);
+  const [raised] = await mismatches();
+  assert.match(raised.summary, /lost at the partner and open/);
+  // m2: another amount as well is a second finding, not hidden by the first.
+  state.disputes[0].amountMinor = GROSS - 100n;
+  assert.equal((await recon(provider)).mismatches, 2);
+  assert.equal((await mismatches()).length, 2);
 });

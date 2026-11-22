@@ -17,6 +17,7 @@ const reader = { name: 'bachs-sandbox' };
 test('a critical reserve alert is posted as paging, a warning as it is, and owners are mailed once a day per alert', async () => {
   const posts = [];
   const mailed = [];
+  const purged = [];
   const fetchImpl = async (_url, init) => {
     posts.push(JSON.parse(init.body).text);
     return new Response('ok', { status: 200 });
@@ -32,6 +33,10 @@ test('a critical reserve alert is posted as paging, a warning as it is, and owne
       sealing,
       log: (entry) => logs.push(entry),
       now: new Date('2026-11-22T10:00:00Z'),
+      purge: async (_db, input) => {
+        purged.push(input.before);
+        return 0;
+      },
       mailOwners: async (_db, _sealing, input) => {
         mailed.push(input);
         return 1;
@@ -60,6 +65,9 @@ test('a critical reserve alert is posted as paging, a warning as it is, and owne
     // The same text the same Lagos day keys the same emails: queued once by their dedupe key.
     assert.equal(mailed.length, 2);
     assert.equal(mailed[0].spell, mailed[1].spell);
+    // Old readings that said nothing was wrong are purged after the check (m9).
+    assert.equal(purged.length, 1);
+    assert.ok(purged[0] < new Date('2026-11-22T10:00:00Z'));
     assert.equal(logs.at(-1).event, 'collect_reserve.checked');
     assert.equal(logs.at(-1).levels, 'NGN:broken');
   } finally {

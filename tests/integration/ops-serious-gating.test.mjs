@@ -592,7 +592,7 @@ const wired = {
       `INSERT INTO collect_reserve_readings (id, provider, currency, available_minor, held_minor,
          own_minor, warning_minor, critical_minor, level, read_at)
        VALUES (gen_random_uuid(), 'bachs-sandbox', 'NGN', 100000000000, 0, 100000000000,
-               50000000, 25000000, 'ok', now() + interval '1 hour')`,
+               50000000, 25000000, 'ok', now())`,
     );
     return {
       payload: { tipId: intent.tipId },

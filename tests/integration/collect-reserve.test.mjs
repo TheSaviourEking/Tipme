@@ -3,7 +3,10 @@ import { randomUUID } from 'node:crypto';
 import { after, before, beforeEach, test } from 'node:test';
 import * as ops from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
-import { PlatformRefusalError } from '../../packages/payments/dist/index.js';
+import {
+  PlatformRefusalError,
+  UnlistedNegativeBalanceError,
+} from '../../packages/payments/dist/index.js';
 import { setSwitch } from './helpers.mjs';
 
 /*
@@ -100,7 +103,7 @@ async function paidTip(profile, settledAt = T0) {
 
 /** TipMe's own account at the partner: its balances and its payout schedule, as scripted. */
 function platform(balances, schedule = { NGN: 'manual' }) {
-  const state = { balances, schedule, reads: 0 };
+  const state = { balances, schedule, reads: 0, scheduleReads: 0 };
   return {
     state,
     provider: {
@@ -115,6 +118,7 @@ function platform(balances, schedule = { NGN: 'manual' }) {
         }));
       },
       async platformPayoutSchedule() {
+        state.scheduleReads += 1;
         if (state.schedule instanceof Error) throw state.schedule;
         return state.schedule;
       },
@@ -707,7 +711,10 @@ test('a payout-fee cover or fee return that would break the rule is refused and 
   assert.equal(payout.start_step, null);
   assert.equal(payout.start_uncertain_at, null);
   assert.ok(payout.platform_wait_since);
-  assert.equal((await openIssues('reserve_empty')).length, 1);
+  // m5: the wait names the real cause, never an empty payout reserve.
+  assert.deepEqual(await openIssues('reserve_empty'), []);
+  const [wait] = await openIssues('collect_own_money_wait');
+  assert.match(wait.summary, /can't cover it/);
 
   // A fee return (a chargeback's: TipMe owes it) waits the same way: no transfer is asked for.
   const tip = await paidTip(ADA);
@@ -781,4 +788,181 @@ test('P10: with nothing held, a payout-fee cover goes ahead with no reading at a
     ['fee', 'payout'],
   );
   assert.ok(PlatformRefusalError);
+});
+
+/* Fix round 1 (review I4, I5, m1, m6, m7, m9). */
+
+test('I4: a negative unlisted (crypto) balance is critical, names the bucket, and the wait names it too', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform(new UnlistedNegativeBalanceError('USDT_TRC20'));
+  const tell = told();
+  const result = await check(provider, tell);
+  assert.equal(result.unlistedNegative, 'USDT_TRC20');
+  assert.equal(tell.alerts.length, 1);
+  assert.equal(tell.alerts[0].level, 'critical');
+  assert.match(tell.alerts[0].text, /USDT_TRC20/);
+  assert.match(tell.alerts[0].text, /negative/);
+  assert.equal(tell.emails.length, 1);
+  const [issue] = await openIssues('collect_reserve_low');
+  assert.match(issue.summary, /USDT_TRC20/);
+  // A payout fee TipMe covers waits, and says why.
+  const payoutId = await directWithdrawal();
+  assert.equal(
+    await ops.startPayout(database.db, { payoutId, provider: payer() }),
+    'waiting_on_platform',
+  );
+  assert.deepEqual(await openIssues('reserve_empty'), []);
+  const [wait] = await openIssues('collect_own_money_wait');
+  assert.match(wait.summary, /USDT_TRC20/);
+});
+
+test('I4: an unreadable balance while money is held tells staff, once per 6 hours', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform(new Error('unreadable'));
+  const tell = told();
+  await check(provider, tell, at(0));
+  await check(provider, tell, at(15 * MIN));
+  assert.equal(tell.alerts.length, 1);
+  assert.equal(tell.alerts[0].level, 'warning');
+  assert.match(tell.alerts[0].text, /could not be read/);
+  assert.deepEqual(tell.emails, []);
+  await check(provider, tell, at(6 * HOUR + MIN));
+  assert.equal(tell.alerts.length, 2);
+});
+
+test('I5: owners are emailed even when the staff alert route fails, once per spell', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform([['NGN', NET + CRITICAL - 1n]]);
+  const emails = [];
+  const tell = {
+    alert: async () => {
+      throw new Error('alert_route_missing');
+    },
+    emailOwners: async (text) => {
+      emails.push(text);
+    },
+  };
+  await check(provider, tell, at(0));
+  assert.equal(emails.length, 1);
+  // The route keeps failing; the alert is tried again each check, the owners are not emailed again.
+  await check(provider, tell, at(15 * MIN));
+  await check(provider, tell, at(30 * MIN));
+  assert.equal(emails.length, 1);
+});
+
+test('m1: a critical spell lasting past 6 hours alerts staff again but emails owners once', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform([['NGN', NET + CRITICAL - 1n]]);
+  const tell = told();
+  await check(provider, tell, at(0));
+  await check(provider, tell, at(6 * HOUR + MIN));
+  assert.equal(tell.alerts.length, 2);
+  assert.equal(tell.emails.length, 1);
+});
+
+test('I5: automatic payouts on email the owners, and a failed alert is sent again', async () => {
+  await paidTip(TOBI);
+  const { provider } = platform([['NGN', 900_000_000n]], { NGN: 'daily' });
+  let fail = true;
+  const sent = [];
+  const emails = [];
+  const tell = {
+    alert: async (text, level) => {
+      if (fail) throw new Error('alert_route_unreachable');
+      sent.push({ text, level });
+    },
+    emailOwners: async (text) => {
+      emails.push(text);
+    },
+  };
+  await check(provider, tell, at(0));
+  assert.deepEqual(sent, []);
+  assert.equal(emails.length, 1);
+  assert.match(emails[0], /[Aa]utomatic payouts/);
+  fail = false;
+  await check(provider, tell, at(15 * MIN));
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].level, 'critical');
+  assert.equal(emails.length, 1);
+  // Within 6 hours: nothing more.
+  await check(provider, tell, at(30 * MIN));
+  assert.equal(sent.length, 1);
+});
+
+test('m7: a reading dated in the future is not trusted', async () => {
+  await paidTip(TOBI);
+  await check(platform([['NGN', 900_000_000n]]).provider, told(), at(HOUR));
+  assert.equal(
+    await ops.ownMoneyAllows(database.db, {
+      amountMinor: 1n,
+      currency: 'NGN',
+      voluntary: false,
+      now: at(0),
+    }),
+    false,
+  );
+});
+
+test('m9: with You collect not in use, the payout schedule is not asked for', async () => {
+  await setSwitch(database.pool, 'you_collect', false);
+  const { provider, state } = platform([['NGN', 900_000_000n]]);
+  await check(provider, told());
+  assert.equal(state.scheduleReads, 0);
+});
+
+test('m6: a fee return waiting on own money is not counted as a tried attempt', async () => {
+  await paidTip(TOBI);
+  const tip = await paidTip(ADA);
+  await q(
+    `INSERT INTO share_transfers (id, tip_id, kind, profile_id, currency, amount_minor, deliver_minor,
+       status, provider, partner_reversal_id)
+     VALUES ($1, $2, 'fee_return', $3, 'NGN', 50000, 50000, 'out_paid', 'bachs', 'refund.rf_m6')`,
+    [randomUUID(), tip.tipId, ADA.id],
+  );
+  const mover = {
+    name: 'bachs-sandbox',
+    capabilities: { connectedAccounts: false },
+    async payoutBalance() {
+      return { availableMinor: 0n };
+    },
+    async transferToAccount() {
+      throw new Error('never asked');
+    },
+    async findPlatformCollection() {
+      return null;
+    },
+  };
+  // No reading at all: own money can't be confirmed.
+  for (let n = 0; n < 3; n += 1) {
+    await q(
+      `UPDATE share_transfers SET next_attempt_at = now() - interval '1 minute'`,
+    );
+    await ops.runShareTransfers(database.db, {
+      provider: mover,
+      now: new Date(Date.now() + 2 * HOUR),
+      settleWaitMs: HOUR,
+    });
+  }
+  const [row] = await q(
+    `SELECT status, attempts FROM share_transfers WHERE kind = 'fee_return'`,
+  );
+  assert.deepEqual(row, { status: 'out_paid', attempts: 0 });
+  assert.equal((await openIssues('collect_own_money_wait')).length, 1);
+});
+
+test('m9: old readings that said nothing was wrong are purged; a spell going on is kept', async () => {
+  await paidTip(TOBI);
+  const { provider, state } = platform([['NGN', 900_000_000n]]);
+  await check(provider, told(), at(-100 * DAY));
+  state.balances = [['NGN', NET + CRITICAL - 1n]];
+  await check(provider, told(), at(-99 * DAY));
+  const purged = await ops.purgeCollectReserveRows(database.db, {
+    before: at(-90 * DAY),
+  });
+  assert.ok(purged >= 1);
+  const left = await q(`SELECT level FROM collect_reserve_readings`);
+  assert.deepEqual(
+    left.map((r) => r.level),
+    ['critical'],
+  );
 });
