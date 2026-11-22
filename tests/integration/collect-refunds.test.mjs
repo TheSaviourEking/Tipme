@@ -2653,3 +2653,299 @@ test('N3 (probe E): after a partial loss, a return pays only what is still held 
   });
   assert.equal(await lossBalanced(tip.tipId), '0');
 });
+
+/*
+ * Final review I1: a dispute that opens while a take-back refund still reserves the recipient's
+ * money. The dispute's own hold is taken net of that reservation, so when the dispute stops the
+ * refund, the reservation is handed to the dispute (the same transaction, once): the money stays
+ * held, the recipient is told, and a loss takes it back instead of TipMe absorbing it. A transfer
+ * back that may have moved (in review, never refused) keeps the refund's reservation until a
+ * person settles it (P27).
+ */
+
+const disputeHeld = async (tip) =>
+  (
+    await q(
+      `SELECT id, status, held_minor::text AS held, share_step, settled_at
+         FROM disputes WHERE partner_dispute_id = $1`,
+      [tip.disputeRef],
+    )
+  )[0];
+const notice = () => ops.collectDisputeHeldMinor(database.db, TOBI.id);
+const holdNotices = () =>
+  q(
+    `SELECT n.body FROM notifications n JOIN profiles p ON p.user_id = n.user_id
+      WHERE p.id = $1 AND n.kind = 'dispute_hold'`,
+    [TOBI.id],
+  );
+const heldForTobi = async () =>
+  BigInt(
+    (
+      await q(
+        `SELECT COALESCE(SUM(CASE e.side WHEN 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)::text AS held
+           FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
+          WHERE a.code = 'held_for_recipients' AND a.profile_id = $1`,
+        [TOBI.id],
+      )
+    )[0].held,
+  );
+const fullRecovery = [
+  line('held_for_recipients', 'person', 'credit', NET),
+  line('recipient_payable', 'person', 'debit', NET),
+];
+
+/** Probe C: the take-back is approved (its transfer back waiting), then a dispute opens. */
+async function disputeBeforeTakeBack() {
+  await verified(TOBI);
+  const { provider: transfers, state: moves } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  assert.equal(refund.collect_plan, 'take_back');
+  assert.deepEqual(
+    (await backsOf(refund.id)).map((b) => b.status),
+    ['waiting'],
+  );
+  assert.equal(refund.held, String(NET));
+  assert.equal(await available(TOBI), 0n);
+  await disputeSays(tip, 'open');
+  // Held once, by the refund: the dispute adds nothing on top of it yet.
+  assert.equal(await available(TOBI), 0n);
+  return { tip, refund, transfers, moves };
+}
+
+/** …and the sender runs: the dispute stops the refund, which hands its hold to the dispute. */
+async function refundStoppedByDispute() {
+  const setup = await disputeBeforeTakeBack();
+  const { tip, refund } = setup;
+  const { provider: refunds, state } = refunder();
+  await send(refunds);
+  const stopped = await refundRow(tip.tipId);
+  assert.equal(stopped.status, 'FAILED');
+  assert.equal(stopped.failure, 'disputed');
+  assert.equal(stopped.held, '0');
+  assert.deepEqual(
+    (await backsOf(refund.id)).map((b) => b.status),
+    ['cancelled'],
+  );
+  const dispute = await disputeHeld(tip);
+  assert.equal(dispute.held, String(NET), 'the dispute holds the share now');
+  assert.equal(dispute.share_step, 'balance');
+  // While the dispute is open: nothing to withdraw, and the notice says what is held, once.
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await notice(), NET);
+  assert.deepEqual(await holdNotices(), [
+    {
+      body: 'A payment to you is being questioned. We’ve held ₦9,500 until it’s settled.',
+    },
+  ]);
+  // Sent again, nothing changes twice.
+  await send(refunds, new Date(Date.now() + 10 * MIN));
+  assert.equal((await disputeHeld(tip)).held, String(NET));
+  assert.equal(await available(TOBI), 0n);
+  assert.deepEqual(state.refunds, []);
+  return { ...setup, refunds, state };
+}
+
+test('I1 (probe C): a dispute stopping a take-back refund holds what the refund held, and a loss takes it back', async () => {
+  const { tip, transfers, moves, refunds, state } =
+    await refundStoppedByDispute();
+  await disputeSays(tip, 'lost', 1);
+  const lost = await disputeHeld(tip);
+  assert.equal(lost.settled_at, null);
+  assert.deepEqual(await allBacks(tip.tipId), [
+    { amount: String(NET), status: 'cancelled' },
+    { amount: String(NET), status: 'ready' },
+  ]);
+  assert.equal(await available(TOBI), 0n);
+  await run(transfers, new Date(Date.now() + 2 * HOUR));
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 3 * HOUR),
+  });
+  const settled = await disputeHeld(tip);
+  assert.ok(settled.settled_at, 'the loss is booked');
+  assert.equal(settled.held, '0');
+  // The recipient's part came back once (the dispute's own transfer back); TipMe absorbs nothing.
+  assert.equal(moves.backs.length, 1);
+  assert.deepEqual(await linesOf(`dispute_loss.${settled.id}`), fullRecovery);
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await heldForTobi(), 0n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+  await send(refunds, new Date(Date.now() + 4 * HOUR));
+  assert.deepEqual(state.refunds, []);
+});
+
+test('I1 (probe C): a dispute lost before the sender runs takes the reserved money back, never absorbing it', async () => {
+  const { tip, refund, transfers, moves } = await disputeBeforeTakeBack();
+  await disputeSays(tip, 'lost', 1);
+  // The loss stops the refund and takes over what it held: its own transfer back, once.
+  const stopped = await refundRow(tip.tipId);
+  assert.equal(stopped.status, 'FAILED');
+  assert.equal(stopped.held, '0');
+  assert.deepEqual(
+    (await backsOf(refund.id)).map((b) => b.status),
+    ['cancelled'],
+  );
+  const lost = await disputeHeld(tip);
+  assert.equal(lost.settled_at, null);
+  assert.equal(lost.held, String(NET));
+  assert.equal(await available(TOBI), 0n);
+  await run(transfers, new Date(Date.now() + 2 * HOUR));
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(Date.now() + 3 * HOUR),
+  });
+  const settled = await disputeHeld(tip);
+  assert.ok(settled.settled_at);
+  assert.equal(moves.backs.length, 1);
+  assert.deepEqual(await linesOf(`dispute_loss.${settled.id}`), fullRecovery);
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('I1 (probe C): a dispute won after stopping a take-back refund lets the money go, once', async () => {
+  const { tip, moves, refunds, state } = await refundStoppedByDispute();
+  await disputeSays(tip, 'won', 1);
+  const won = await disputeHeld(tip);
+  assert.ok(won.settled_at);
+  assert.equal(won.held, '0');
+  assert.equal(await available(TOBI), NET);
+  assert.equal(await notice(), 0n);
+  assert.equal(moves.backs.length, 0, 'nothing was taken back');
+  assert.deepEqual(await reversalsOf(tip.tipId), []);
+  assert.equal(await heldForTobi(), 0n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+  await send(refunds, new Date(Date.now() + 2 * HOUR));
+  assert.deepEqual(state.refunds, []);
+  assert.equal(await available(TOBI), NET);
+});
+
+/**
+ * Probe A: the take-back's transfer back leaves, its answer is lost, and the read-back finds two
+ * transfers in its group: review (`provider`), never refused, so it may have moved. Then a dispute
+ * opens.
+ */
+async function disputeOnTakeBackInReview() {
+  await verified(TOBI);
+  const { provider: transfers, state: moves } = partner();
+  const tip = await movedTip(TOBI, transfers);
+  const refund = await refundAsked(tip.tipId);
+  assert.equal(refund.collect_plan, 'take_back');
+  const { provider: refunds, state } = refunder();
+  const now = new Date();
+  await send(refunds, now);
+  transfers.collectBack = async (input) => {
+    moves.backs.push({ ...input });
+    for (let i = 0; i < 2; i += 1)
+      moves.listed.push({
+        transferRef: `tr_b${i}`,
+        status: 'paid',
+        amountMinor: input.amountMinor,
+        currency: 'NGN',
+        group: input.idempotencyKey,
+        accountRef: input.accountRef,
+      });
+    throw new UncertainProviderOutcomeError(input.idempotencyKey, 'no answer', {
+      cause: 'no_response',
+    });
+  };
+  await run(transfers, now);
+  await run(transfers, new Date(now.getTime() + 25 * HOUR));
+  const [back] = await q(
+    `SELECT id, status, review_reason, refused_at FROM collect_transfers
+      WHERE kind = 'back' AND refund_id = $1`,
+    [refund.id],
+  );
+  assert.equal(back.status, 'review');
+  assert.equal(back.review_reason, 'provider');
+  assert.equal(back.refused_at, null);
+  assert.equal(await available(TOBI), 0n);
+  await disputeSays(tip, 'open', 25);
+  await send(refunds, new Date(now.getTime() + 25 * HOUR));
+  // The refund is not failed under a transfer back that may have moved: its hold stays.
+  const kept = await refundRow(tip.tipId);
+  assert.equal(kept.status, 'REQUESTED');
+  assert.equal(kept.held, String(NET));
+  assert.equal(
+    (
+      await q(`SELECT status FROM collect_transfers WHERE id = $1`, [back.id])
+    )[0].status,
+    'review',
+  );
+  // While the dispute is open: held once (by the refund), nothing to withdraw, nothing told twice.
+  assert.equal(await available(TOBI), 0n);
+  assert.equal((await disputeHeld(tip)).held, '0');
+  assert.equal(await notice(), 0n);
+  return { tip, refund, back, transfers, moves, refunds, state, now };
+}
+
+/** Staff record the transfer back paid: the partner shows it (Task 15). */
+const recordBackPaid = async (backId, transferRef, now) => {
+  const staffUserId = await person();
+  return database.db.transaction((tx) =>
+    ops.recordReviewTransferPaid(tx, {
+      transferId: backId,
+      transferRef,
+      now,
+      staffUserId,
+      reason: 'The partner shows this transfer back paid.',
+    }),
+  );
+};
+
+test('I1 (probe A): a dispute lost while a take-back may have moved waits, then uses that money once', async () => {
+  const { tip, back, moves, refunds, state, now } =
+    await disputeOnTakeBackInReview();
+  await disputeSays(tip, 'lost', 26);
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(now.getTime() + 27 * HOUR),
+  });
+  // Waiting: the money may already be back with TipMe, so nothing is booked or taken again.
+  const waiting = await disputeHeld(tip);
+  assert.equal(waiting.settled_at, null);
+  assert.deepEqual(await reversalsOf(tip.tipId), []);
+  assert.deepEqual(
+    (await allBacks(tip.tipId)).map((b) => b.status),
+    ['review'],
+  );
+  assert.equal(await available(TOBI), 0n);
+  // A person settles it: the partner shows it paid.
+  await recordBackPaid(back.id, 'tr_b0', new Date(now.getTime() + 28 * HOUR));
+  await ops.runDisputeSteps(database.db, {
+    now: new Date(now.getTime() + 29 * HOUR),
+  });
+  const settled = await disputeHeld(tip);
+  assert.ok(settled.settled_at, 'the loss is booked');
+  assert.deepEqual(await linesOf(`dispute_loss.${settled.id}`), fullRecovery);
+  // One transfer back in all; the refund is never sent.
+  assert.equal(moves.backs.length, 1);
+  await send(refunds, new Date(now.getTime() + 30 * HOUR));
+  assert.deepEqual(state.refunds, []);
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await heldForTobi(), 0n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});
+
+test('I1 (probe A): a dispute won while a take-back may have moved never releases its hold', async () => {
+  const { tip, back, moves, refunds, state, now } =
+    await disputeOnTakeBackInReview();
+  await disputeSays(tip, 'won', 26);
+  const won = await disputeHeld(tip);
+  assert.ok(won.settled_at);
+  // The refund still holds it: the money may be back with TipMe.
+  assert.equal((await refundRow(tip.tipId)).held, String(NET));
+  assert.equal(await available(TOBI), 0n);
+  // A person settles it paid; the refund then goes out once.
+  await recordBackPaid(back.id, 'tr_b0', new Date(now.getTime() + 27 * HOUR));
+  await send(refunds, new Date(now.getTime() + 28 * HOUR));
+  assert.equal(state.refunds.length, 1);
+  const refund = await refundRow(tip.tipId);
+  assert.equal(await paid(refund.id), 'refunded');
+  assert.equal(moves.backs.length, 1);
+  assert.equal(await available(TOBI), 0n);
+  assert.equal(await heldForTobi(), 0n);
+  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
+  assert.equal(await lossBalanced(tip.tipId), '0');
+});

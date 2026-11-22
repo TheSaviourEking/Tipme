@@ -42,6 +42,7 @@ import {
   takeUnsentShare,
   type SharePosition,
 } from './collect-transfers.js';
+import { handRefundHoldToDispute } from './dispute-hold.js';
 import { guarded, OperationError } from './errors.js';
 import { activeTraceId, newId } from './ids.js';
 import { ownMoneyAllows } from './collect-reserve.js';
@@ -1025,7 +1026,13 @@ export async function yieldRefundsToLostDispute(
   input: { tipId: string; now: Date },
 ): Promise<
   | { busy: true }
-  | { busy: false; heldMinor: bigint; release: () => Promise<void> }
+  | {
+      busy: false;
+      heldMinor: bigint;
+      /** What the tip's refunds still reserve of the balance: `release` hands it to the dispute. */
+      reservedMinor: bigint;
+      release: () => Promise<void>;
+    }
 > {
   const rows = await tx
     .select()
@@ -1061,8 +1068,7 @@ export async function yieldRefundsToLostDispute(
     if (row.status !== 'REQUESTED') continue;
     if (row.sentAt) return { busy: true };
     const { back, pullBack } = await recoveryRows(tx, row);
-    if (back && ['ready', 'sent', 'unknown'].includes(back.status))
-      return { busy: true };
+    if (backMayMove(back)) return { busy: true };
     if (pullBack && !['done', 'gap', 'review'].includes(pullBack.status))
       return { busy: true };
   }
@@ -1071,6 +1077,7 @@ export async function yieldRefundsToLostDispute(
   return {
     busy: false,
     heldMinor: personMinor,
+    reservedMinor: rows.reduce((sum, row) => sum + row.heldMinor, 0n),
     release: async () => {
       for (const row of rows)
         if (row.collectPlan && row.status === 'REQUESTED')
@@ -1336,6 +1343,33 @@ export async function sendTipRefunds(
 type BackRow = typeof collectTransfers.$inferSelect;
 
 /**
+ * Whether a refund's transfer back may still move money (or may have, P27): ready, sent, its answer
+ * lost, or (final review I1) in review without a definite refusal (the partner listed something
+ * else for it). Its reservation of the balance stays until it is paid or refused: never released
+ * as though it didn't move.
+ */
+function backMayMove(back: BackRow | null): boolean {
+  return (
+    back !== null &&
+    (['ready', 'sent', 'unknown'].includes(back.status) ||
+      (back.status === 'review' && back.refusedAt === null))
+  );
+}
+
+/**
+ * The tip's row lock, taken before the refund's (askTipRefund's order, and every dispute step's:
+ * tip → dispute → refund). A refund that fails can hand its reservation to a dispute on the tip
+ * (handRefundHoldToDispute), so it must never hold the refund and wait for the dispute.
+ */
+async function lockTip(tx: Tx, tipId: string): Promise<void> {
+  await tx
+    .select({ id: tips.id })
+    .from(tips)
+    .where(eq(tips.id, tipId))
+    .for('update');
+}
+
+/**
  * A collect refund's own transfer back (the person's part), and the tip's business pull-back (one
  * per tip's refunds in practice: a later refund of the tip reuses an earlier one's, C1).
  */
@@ -1360,8 +1394,10 @@ async function recoveryRows(
  * A collect refund that won't go ahead (P7). The share held for it is let go: back to the dispute
  * that now holds it when one is unsettled (I1), kept for a closed dispute's refund (P28), else
  * released. A transfer back that never started is cancelled. What it held of the balance is
- * released, unless money already came back for the tip's refund: then TipMe keeps holding it for the
- * tip's next refund, which uses it and takes nothing again (ruling C1), and the issue says so.
+ * released (to a dispute on the tip that isn't settled, when there is one: final review I1), unless
+ * its transfer back may still move or may have moved. Money already back for the tip's refund stays
+ * held by TipMe for the tip's next refund, which uses it and takes nothing again (ruling C1), and the
+ * issue says so.
  */
 async function failCollectRefund(
   tx: Tx,
@@ -1427,14 +1463,20 @@ async function failCollectRefund(
     recovered.personMinor +
     (pullBack?.status === 'done' ? pullBack.amountMinor : 0n);
   // The hold reserves only money still in their account and about to come back. Money already back
-  // is in held_for_recipients (never withdrawable, Task 12); a transfer back still moving keeps it.
-  const backMoving =
-    back !== null && ['ready', 'sent', 'unknown'].includes(back.status);
-  if (!backMoving)
+  // is in held_for_recipients (never withdrawable, Task 12); a transfer back that may move keeps it.
+  if (!backMayMove(back)) {
+    // Final review I1: a dispute on the tip that isn't settled takes over what this refund held of
+    // the balance, in this transaction, before it is zeroed (so once).
+    await handRefundHoldToDispute(tx, {
+      tipId: row.tipId,
+      releasedMinor: row.heldMinor,
+      now,
+    });
     await tx
       .update(tipRefunds)
       .set({ heldMinor: 0n, updatedAt: now })
       .where(eq(tipRefunds.id, row.id));
+  }
   await failRefund(
     tx,
     row,
@@ -1507,6 +1549,7 @@ async function recoverCollectRefund(
     }
   }
   return db.transaction(async (tx) => {
+    await lockTip(tx, given.tipId);
     const [row] = await tx
       .select()
       .from(tipRefunds)
@@ -1630,8 +1673,7 @@ async function disputeStops(
   }
   // RC1: stopped for good, never sent by the worker. Only a transfer back or pull-back still in
   // flight is waited for (its money must land before the refund lets go of its hold).
-  const backMoving =
-    back !== null && ['ready', 'sent', 'unknown'].includes(back.status);
+  const backMoving = backMayMove(back);
   const pullMoving =
     pullBack !== null && !['done', 'gap', 'review'].includes(pullBack.status);
   if (backMoving || pullMoving) return 'waiting';
@@ -1776,6 +1818,7 @@ async function sendCollectRefunds(
     // I1: a dispute that opened while the money came back stops it here too.
     const stopped = await guarded(() =>
       db.transaction(async (tx) => {
+        await lockTip(tx, row.tipId);
         const [locked] = await tx
           .select()
           .from(tipRefunds)
@@ -1809,6 +1852,7 @@ async function sendCollectRefunds(
     ) {
       const refused = await guarded(() =>
         db.transaction(async (tx) => {
+          await lockTip(tx, row.tipId);
           const [locked] = await tx
             .select()
             .from(tipRefunds)
@@ -1875,6 +1919,7 @@ async function sendCollectRefunds(
       }
     await guarded(() =>
       db.transaction(async (tx) => {
+        await lockTip(tx, row.tipId);
         const [locked] = await tx
           .select()
           .from(tipRefunds)
@@ -2236,6 +2281,12 @@ export async function applyTipRefundEvent(
   const { now } = input;
   return guarded(() =>
     db.transaction(async (tx) => {
+      const [found] = await tx
+        .select({ tipId: tipRefunds.tipId })
+        .from(tipRefunds)
+        .where(eq(tipRefunds.id, input.tipRefundId));
+      if (!found) throw new OperationError('INVALID_INPUT');
+      await lockTip(tx, found.tipId);
       const [row] = await tx
         .select()
         .from(tipRefunds)
