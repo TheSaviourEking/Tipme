@@ -649,7 +649,7 @@ const PREVIOUS_SAMPLES = {
   // You collect (plan Task 11): new in this release, so its first sample.
   collect_reserve_alert: {
     alert:
-      "You collect reserve critical: TipMe's NGN balance at bachs-live: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
+      "You collect reserve critical: TipMe's NGN balance at our payment partner: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
   },
   // You collect (plan Task 13): new in this release, so its first sample.
   collect_verified: { firstName: 'Ada' },

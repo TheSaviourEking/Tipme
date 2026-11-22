@@ -16,7 +16,7 @@ export const collectReserveAlert = defineMailType({
   schema: z.object({ alert: z.string().min(1).max(600) }).strict(),
   sample: {
     alert:
-      "You collect reserve critical: TipMe's NGN balance at bachs-live: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
+      "You collect reserve critical: TipMe's NGN balance at our payment partner: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
   },
   render: (data, ctx) =>
     letter(
