@@ -25,6 +25,7 @@ import type { Database, Tx } from '../client.js';
 import {
   collectTransfers,
   issues,
+  tipRefunds,
   paymentAttempts,
   paymentIntents,
   profiles,
@@ -491,6 +492,22 @@ async function finishPaid(
     });
     if (!paid) return 'none';
     const owner = { amountMinor: row.amountMinor, profileId: row.profileId };
+    if (row.kind === 'back' && row.refundId)
+      // Task 10: the refund's money is back in TipMe's balance (held for them, never withdrawable),
+      // so its reservation of their account ends with this posting.
+      await tx
+        .update(tipRefunds)
+        .set({ heldMinor: 0n, updatedAt: now })
+        .where(eq(tipRefunds.id, row.refundId));
+    if (row.kind === 'return')
+      // Task 10 (RI1): what a failed refund took back is theirs again, in their account; the hold
+      // that kept it from their balance ends with the posting, once.
+      await tx
+        .update(tipRefunds)
+        .set({ heldMinor: 0n, updatedAt: now })
+        .where(
+          and(eq(tipRefunds.tipId, row.tipId), eq(tipRefunds.status, 'FAILED')),
+        );
     await postLedgerTransaction(tx, {
       operationType: 'collect_transfer',
       operationKey: `collect_transfer.${row.id}`,
@@ -554,11 +571,13 @@ const stillReceivable = sql`${collectTransfers.accountReference} = ${currentAcco
  * the recipient has done since: nothing about them gates it.
  */
 const claimWhere = (row: Row): SQL =>
-  row.kind === 'back' ? sql`TRUE` : stillReceivable;
+  row.kind === 'share' ? stillReceivable : sql`TRUE`;
 
 /** Whether the row can be sent now (see claimWhere). */
 async function receivableNow(db: Database, row: Row): Promise<boolean> {
-  if (row.kind === 'back') return true;
+  // A transfer back, and a return of what one took (Task 10), go to the account the money came
+  // from: nothing about the recipient now gates them.
+  if (row.kind !== 'share') return true;
   const [receivable] = await db
     .select({ id: collectTransfers.id })
     .from(collectTransfers)
@@ -662,7 +681,7 @@ async function send(
         : await provider.sendCollectTransfer(input);
   } catch (error) {
     return claimed.kind === 'back'
-      ? refusedBack(db, claimed, now, error)
+      ? refusedBack(db, claimed, now, error, freshWindow)
       : refused(db, claimed, provider, accountRef, now, error, freshWindow);
   }
   if (answer.status === 'paid')
@@ -713,6 +732,22 @@ async function refused(
   freshWindow: boolean,
 ): Promise<Outcome> {
   const reason = refusalOf(error);
+  // Task 10: a return goes to one account, the one the money came from; any refusal of it but
+  // TipMe's own balance or debt needs a person (it never waits on the recipient's capability).
+  if (
+    row.kind === 'return' &&
+    reason !== null &&
+    reason !== 'insufficient' &&
+    reason !== 'in_debt'
+  )
+    return toReview(
+      db,
+      row,
+      'sent',
+      now,
+      'The partner refused returning money a refund took back to the recipient. Nothing moved.',
+      freshWindow,
+    );
   if (reason === null) {
     // It may have moved: the same key later (inside the window), or a read-back after it.
     await move(db, row, 'sent', 'unknown', now, {
@@ -807,7 +842,7 @@ async function refused(
 }
 
 /**
- * A failed transfer back (Task 9). It runs as the recipient's account, so its refusals are theirs:
+ * A failed transfer back (Task 9, and Task 10's refunds). It runs as the recipient's account, so its refusals are theirs:
  * ORGANIZATION_IN_DEBT there is the RECIPIENT in debt (P14), never TipMe's, so it freezes nothing
  * else. Every definite refusal goes to review with a money issue (the dispute waits for staff);
  * TipMe's own key refused stops the run as for a share; anything else may have moved.
@@ -817,6 +852,11 @@ async function refusedBack(
   row: Row,
   now: Date,
   error: unknown,
+  /**
+   * As for a share (P30): only a refusal of the send that opened the key's window proves nothing
+   * ever moved under it, so only then is the row marked refused (a refund then fails cleanly).
+   */
+  freshWindow: boolean,
 ): Promise<Outcome> {
   const name = error instanceof Error ? error.name : null;
   // PayoutRejectedError says why as `failureReason`; PlatformRefusalError as `refusal`.
@@ -839,8 +879,9 @@ async function refusedBack(
       'sent',
       now,
       reason === 'in_debt'
-        ? "The partner answered ORGANIZATION_IN_DEBT to this transfer back: the recipient's account is in debt (not TipMe's). Nothing moved; the lost dispute waits for it."
-        : 'The partner refused this transfer back. Nothing moved; the lost dispute waits for it.',
+        ? `The partner answered ORGANIZATION_IN_DEBT to this transfer back: the recipient's account is in debt (not TipMe's). Nothing moved; the ${row.refundId ? 'refund' : 'lost dispute'} waits for it.`
+        : `The partner refused this transfer back. Nothing moved; the ${row.refundId ? 'refund' : 'lost dispute'} waits for it.`,
+      freshWindow,
     );
   await move(db, row, 'sent', 'unknown', now, {
     nextTryAt: unknownWait(row.attempts, now),
@@ -1040,7 +1081,8 @@ export async function runCollectTransfers(
     eq(collectTransfers.provider, scope.name),
     eq(collectTransfers.environment, scope.environment),
     // Shares, and transfers back for lost disputes (Task 9): the same machine.
-    inArray(collectTransfers.kind, ['share', 'back']),
+    // Task 10: and returns of what a failed refund took back.
+    inArray(collectTransfers.kind, ['share', 'back', 'return']),
   );
   const inFlight = await guarded(() =>
     db
@@ -1071,7 +1113,7 @@ export async function runCollectTransfers(
                row_number() OVER (PARTITION BY c.profile_id ORDER BY t.created_at, c.id) AS n
           FROM collect_transfers c JOIN tips t ON t.id = c.tip_id
          WHERE c.provider = ${scope.name} AND c.environment = ${scope.environment}
-           AND c.kind IN ('share', 'back') AND c.status = 'ready'
+           AND c.kind IN ('share', 'back', 'return') AND c.status = 'ready'
            AND c.next_try_at <= ${now.toISOString()}::timestamptz
       ) r
        WHERE n <= ${perRecipient}

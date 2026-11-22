@@ -12,7 +12,7 @@ import type {
 } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { balanceQuery } from './balance.js';
+import { balanceQuery, heldParts } from './balance.js';
 import { guarded } from './errors.js';
 import { tipProof } from './proof.js';
 
@@ -35,6 +35,7 @@ export function dashboardSummary(
       payable: string;
       reserved: string;
       held: string;
+      refund_held: string;
       verified: boolean | null;
       confirming: string;
       date: string;
@@ -83,12 +84,18 @@ export function dashboardSummary(
       ),
       balance AS (${balanceQuery(profileId)})
       SELECT totals.today, totals.yesterday, totals.this_week, totals.last_week,
-             balance.payable, balance.reserved, balance.held, balance.verified, balance.confirming,
+             balance.payable, balance.reserved, balance.held, balance.refund_held, balance.verified,
+             balance.confirming,
              days.date, days.net
         FROM totals CROSS JOIN balance CROSS JOIN days
        ORDER BY days.day
     `);
     const row = rows.rows[0];
+    const parts = heldParts(
+      BigInt(row?.held ?? '0'),
+      BigInt(row?.refund_held ?? '0'),
+      row?.verified === true,
+    );
     return {
       currency: 'NGN',
       // You collect: what TipMe still holds for them is shown apart, never as available (Task 12).
@@ -98,9 +105,11 @@ export function dashboardSummary(
         BigInt(row?.held ?? '0')
       ).toString(),
       confirmingMinor: BigInt(row?.confirming ?? '0').toString(),
-      // Kept for them until they are verified, then on its way (spec §10).
-      keptMinor: row?.verified ? '0' : BigInt(row?.held ?? '0').toString(),
-      onItsWayMinor: row?.verified ? BigInt(row?.held ?? '0').toString() : '0',
+      // Kept for them until they are verified, then on its way (spec §10); held while a refund of
+      // one of their tips is settled shown apart (RM7).
+      keptMinor: parts.keptMinor.toString(),
+      onItsWayMinor: parts.onItsWayMinor.toString(),
+      refundHeldMinor: parts.refundHeldMinor.toString(),
       today: row?.today ?? '0',
       yesterday: row?.yesterday ?? '0',
       thisWeek: row?.this_week ?? '0',

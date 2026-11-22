@@ -429,6 +429,10 @@ export const SERIOUS_ACTIONS = [
   'collect_transfers.resume',
   // You collect (plan Task 13): a recipient's verified legal name, changed only through support.
   'collect_name.change',
+  // You collect (plan Task 10, §6.1 case 3): refund a collect tip TipMe can't fully recover first.
+  'tip_refund.absorb_gap',
+  // Task 10 fix round 2 (RI1): send back what a failed collect refund took from the recipient.
+  'tip_refund.return',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -460,6 +464,10 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'collect_transfers.pause': 'Pause every You collect transfer',
   'collect_transfers.resume': 'Resume You collect transfers',
   'collect_name.change': 'Change a recipient’s verified name',
+  'tip_refund.absorb_gap':
+    'Refund a tip when TipMe has to absorb what can’t be taken back',
+  'tip_refund.return':
+    'Return money a failed refund took back to the recipient',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -491,4 +499,6 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'collect_transfers.pause': 'payments.repair',
     'collect_transfers.resume': 'payments.repair',
     'collect_name.change': 'recoveries.manage',
+    'tip_refund.absorb_gap': 'payments.repair',
+    'tip_refund.return': 'payments.repair',
   };

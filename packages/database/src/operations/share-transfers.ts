@@ -223,27 +223,29 @@ export async function scheduleCollectSweep(
  * business again (`buildCollectReturnPosting`) and the dispute's loss takes it from there. Refused
  * (the business has withdrawn it), it ends in `gap` and TipMe absorbs it. Once per dispute. If the
  * business has withdrawn part of it, what is left is pulled back and TipMe absorbs only the rest:
- * option B's hold-back can't be reused, because it repays the staff member, not TipMe.
+ * option B's hold-back can't be reused, because it repays the staff member, not TipMe. Task 10: a
+ * refund of a collect tip pulls it back the same way (once per refund), before TipMe refunds.
  */
 export async function scheduleCollectRecover(
   tx: Tx,
   input: {
     tipId: string;
-    disputeId: string;
     businessId: string;
     profileId: string;
     amountMinor: bigint;
     currency: string;
     provider: string;
     now: Date;
-  },
+  } & ({ disputeId: string } | { tipRefundId: string }),
 ): Promise<void> {
   await tx
     .insert(shareTransfers)
     .values({
       id: newId(),
       tipId: input.tipId,
-      disputeId: input.disputeId,
+      ...('disputeId' in input
+        ? { disputeId: input.disputeId }
+        : { tipRefundId: input.tipRefundId }),
       kind: 'collect_recover',
       businessId: input.businessId,
       profileId: input.profileId,
@@ -516,13 +518,17 @@ async function lockRow(tx: Tx, id: string): Promise<Row> {
 /**
  * You collect (Task 9, §6.2): a business's share of a collect tip is held in TipMe's balance while a
  * dispute on the tip is open (or lost and still being recovered, or closed with its hold kept): a
- * lost dispute takes it back from there before TipMe absorbs anything.
+ * lost dispute takes it back from there before TipMe absorbs anything. Task 10: and while a refund of
+ * the tip is open, which takes it from there when it is paid (or lets it go on when it fails).
  */
 const undisputed = sql`NOT EXISTS (
   SELECT 1 FROM disputes x
    WHERE x.tip_id = ${shareTransfers.tipId}
      AND (x.status IN ('open', 'responded')
-          OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))`;
+          OR (x.status IN ('lost', 'closed') AND x.settled_at IS NULL)))
+  AND NOT EXISTS (
+  SELECT 1 FROM tip_refunds r
+   WHERE r.tip_id = ${shareTransfers.tipId} AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))`;
 
 /** A person needs to look: TipMe may hold money it could not send on. Nothing is sent again. */
 async function toReview(
@@ -798,7 +804,12 @@ async function sendOut(
       amountMinor: row.amountMinor,
       currency: 'NGN',
       idempotencyKey: shareOutKey(row.id),
-      description: kind === 'collect_recover' ? 'TipMe dispute' : DESCRIPTION,
+      description:
+        kind === 'collect_recover'
+          ? row.tipRefundId
+            ? 'TipMe refund'
+            : 'TipMe dispute'
+          : DESCRIPTION,
     });
   } catch (error) {
     if (!definitelyNotMoved(error)) return; // It may have moved: read back, never re-sent now.

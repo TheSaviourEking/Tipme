@@ -149,6 +149,7 @@ export class CollectBankController {
         heldMinor: status.heldMinor.toString(),
         keptMinor: status.keptMinor.toString(),
         onItsWayMinor: status.onItsWayMinor.toString(),
+        refundHeldMinor: status.refundHeldMinor.toString(),
         firstWaitingAt: status.firstWaitingAt?.toISOString() ?? null,
         paused: status.paused,
         pausedReason: status.pausedReason,

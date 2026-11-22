@@ -1178,6 +1178,7 @@ test('a direct recipient’s withdrawals and page are unchanged', async () => {
     confirmingMinor: 0n,
     keptMinor: 0n,
     onItsWayMinor: 0n,
+    refundHeldMinor: 0n,
   });
   // The page takes tips however long ago and however much: nothing is held.
   assert.equal(
