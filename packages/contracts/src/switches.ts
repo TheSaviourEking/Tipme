@@ -33,7 +33,8 @@ export const FEATURE_SWITCHES = [
   // business's payout fee. Off keeps today's rule (the business pays it from the amount).
   'business_payout_fee_absorbed',
   // You collect (ADR-0016, PROPOSED; owner's design, 19 Nov 2026): TipMe takes a new recipient's tips
-  // on its own account and transfers them on. Registered not built until the owner accepts the ADR.
+  // on its own account and transfers them on. Built (plan Task 16) and off everywhere: production
+  // stays off until the owner turns it on.
   'you_collect',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
@@ -216,9 +217,10 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: onOff('YOU_COLLECT'),
-    // Plan Task 3 (ruling R12): the schema only. Task 16 removes this once the flow is built and
-    // ADR-0016 is accepted; D-04 and D-06 stay open until then.
-    notBuilt: true,
+    // Plan Task 16 removed `notBuilt` (Task 3's mark, ruling R12): the flow is built, so staff can turn
+    // it on with a second person. It stays off by default, and turning it on is the owner's decision
+    // once ADR-0016 is accepted and the payment partner has confirmed P1 in writing; D-04, D-06 and
+    // D-07 stay open (docs/runbooks/live-activation.md).
   },
 };
 

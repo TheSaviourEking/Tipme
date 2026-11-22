@@ -19,7 +19,7 @@ import { seedBusiness } from '../../packages/database/test/integration/business-
 // You collect, plan Task 3 (ADR-0016, PROPOSED): the schema, the inert switch and the settings
 // reader. The database itself refuses what the model forbids, so no later task can write a collect
 // transfer, a dispute, a setting or a held amount wrongly. Nothing here moves money: postings go
-// straight through postLedgerTransaction, and the switch stays off (it can't be turned on yet).
+// straight through postLedgerTransaction, and the switch is off (it starts off everywhere).
 
 const REASON = 'Agreed with the owner on the call today';
 const ADA = ops.DEMO_PROFILES[0];
@@ -171,20 +171,33 @@ const refundRow = (tipId) =>
     ],
   ).then(([row]) => row.id);
 
-test('you_collect is a money switch, off, and cannot be turned on yet', async () => {
-  await assert.rejects(
-    database.db.transaction((tx) =>
+// Task 16 built it: staff can turn it on (a money switch, so the API asks a second person first;
+// feature-switches-api.test.mjs), it starts off, and off is always allowed.
+test('you_collect is a money switch, off until staff turn it on, and back off', async () => {
+  const [asker, approver] = ops.DEMO_PROFILES;
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), false);
+  const set = async (on) => {
+    const changed = await database.db.transaction((tx) =>
       ops.setFeatureSwitch(tx, {
         key: 'you_collect',
-        on: true,
-        staffUserId: randomUUID(),
-        approvedBy: randomUUID(),
+        on,
+        staffUserId: asker.userId,
+        approvedBy: approver.userId,
         reason: REASON,
         now: new Date(),
       }),
-    ),
-    (error) => error.code === 'SWITCH_NOT_BUILT',
-  );
+    );
+    // As the API does after a change (switches.changed()): this process forgets its cached value.
+    ops.invalidateFeatureSwitches();
+    return changed;
+  };
+  assert.deepEqual(await set(true), {
+    key: 'you_collect',
+    on: true,
+    previous: false,
+  });
+  assert.equal(await ops.featureOn(database.db, 'you_collect'), true);
+  await set(false);
   assert.equal(await ops.featureOn(database.db, 'you_collect'), false);
 });
 

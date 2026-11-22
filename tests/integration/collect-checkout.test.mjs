@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import { after, before, beforeEach, test } from 'node:test';
 import {
   createPaymentIntent,
@@ -14,13 +13,13 @@ import {
   seedPages,
   services,
   signUpRoute,
-  switchOffTranscript,
   WEB_ORIGIN,
 } from './collect-checkout-support.mjs';
 import { setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 // You collect (plan Task 6, ruling R7): each recipient's collection mode, fixed on every quote, and
-// the checkout branch that takes a collect tip on TipMe's own account. The switch is `notBuilt` in
+// the checkout branch that takes a collect tip on TipMe's own account. The switch is off in
 // production; these tests turn it on by writing its row, as the tip_refunds tests do (R12).
 
 let database;
@@ -62,15 +61,16 @@ const attemptOf = async (tipId) =>
   ).rows[0];
 const namesOf = (calls) => calls.map(([name]) => name);
 
-test("switch off: every quote and checkout is today's, byte for byte", async () => {
-  const expected = JSON.parse(
-    await readFile(
-      new URL('./collect-checkout-switch-off.fixture.json', import.meta.url),
-      'utf8',
-    ),
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(6))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
   );
-  assert.deepEqual(await switchOffTranscript(database), expected);
-});
 
 test('switch on: a new sign-up is collect and can be tipped with no payment account', async () => {
   await setSwitch(database.pool, 'you_collect', true);
@@ -273,21 +273,6 @@ test('a collect checkout never opens once its quote has expired, on the partner 
   }
   // No checkout was asked for on either path.
   assert.deepEqual(providers.calls, []);
-});
-
-test('a direct checkout still opens after its quote expires, as today', async () => {
-  await setSwitch(database.pool, 'you_collect', true);
-  const providers = recordingProviders();
-  const checkout = services(database.db, providers);
-  const key = randomUUID();
-  const quote = await staleCreatedIntent(checkout.bachs, 'ada', key);
-  assert.equal(await quoteModeOf(quote.quoteId), 'direct');
-  const created = await checkout.bachs.createIntent(
-    { quoteId: quote.quoteId },
-    key,
-  );
-  assert.ok(created.checkoutUrl);
-  assert.deepEqual(namesOf(providers.calls), ['bachs.initializePayment']);
 });
 
 test('the tip status says a collect tip is collected by TipMe, and says nothing for a direct one', async () => {

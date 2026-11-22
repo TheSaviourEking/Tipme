@@ -8,6 +8,7 @@ import {
   UnlistedNegativeBalanceError,
 } from '../../packages/payments/dist/index.js';
 import { setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 11, spec §4 and §6.3, rulings P9, P10, P11): TipMe's own money in its
@@ -573,25 +574,16 @@ test('a reading too old to trust refuses a move of own money while money is held
   );
 });
 
-test('P10: with nothing held, ownMoneyAllows changes nothing and the levels are not applied', async () => {
-  // No reading at all, nothing held: every move goes ahead exactly as before You collect.
-  assert.equal(await ops.heldTotal(database.db, 'NGN'), 0n);
-  for (const voluntary of [true, false])
-    assert.equal(
-      await ops.ownMoneyAllows(database.db, {
-        amountMinor: 10_000_000_000n,
-        currency: 'NGN',
-        voluntary,
-      }),
-      true,
-    );
-  // With the switch off and nothing held, a small balance is not a You collect warning.
-  await setSwitch(database.pool, 'you_collect', false);
-  const tell = told();
-  const result = await check(platform([['NGN', 1_000n]]).provider, tell);
-  assert.equal(ngn(result).level, 'ok');
-  assert.deepEqual(tell.alerts, []);
-});
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(11))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
+  );
 
 /* Moves of TipMe's own money: the payout fee it covers, and the fee it returns (non-voluntary, P10). */
 

@@ -53,7 +53,7 @@ Registered for open pull requests, so they can read the switch instead of adding
 | `REFUND_FEE_RETURN`            | `refund_fee_return`            | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff; that is all it does. A chargeback always returns TipMe's fee, with no switch (owner, 14 Nov 2026). No deploy file names the variable                                                                                                                                                                                                                                                                                             |
 | `TIP_REFUNDS`                  | `tip_refunds`                  | yes   | off     | #221 `feat/tip-refund`: staff "Refund tip" (`tip.refund`, a second person); the supporter gets back the tip minus TipMe's fee. An approval after it is turned off records nothing; a refund already approved is still sent. No deploy file names the variable                                                                                                                                                                                                                                                                                            |
 | `BUSINESS_PAYOUT_FEE_ABSORBED` | `business_payout_fee_absorbed` | yes   | off     | `feat/plan-fees-setting` (owner, 18 Nov 2026: "the admin should be able to set business fees too"): on, TipMe pays a business's payout fee from the payment reserve and the business receives the whole amount; off keeps today's rule (the business pays it from the amount). A withdrawal keeps the rule it was asked under. No deploy file names the variable                                                                                                                                                                                         |
-| `YOU_COLLECT`                  | `you_collect`                  | yes   | off     | You collect plan, Task 3 (`feat/you-collect-3-schema`; ADR-0016, **PROPOSED**): new sign-ups would take tips through TipMe's own partner account and add bank details at their first withdrawal. **Not built yet**: can't be turned on (see below) until Task 16, after the owner accepts ADR-0016; D-04 and D-06 stay open. No deploy file names the variable                                                                                                                                                                                           |
+| `YOU_COLLECT`                  | `you_collect`                  | yes   | off     | You collect plan, Tasks 3–16 (ADR-0016, **PROPOSED**): on, new sign-ups take tips through TipMe's own partner account and add bank details at their first withdrawal. Built (Task 16), **off in every environment**: production stays off until the owner turns it on, after the preconditions in `live-activation.md` (ADR-0016 accepted, P1 in writing). D-04, D-06 and D-07 stay open. What on and off do: [below](#you-collect-turning-it-on-and-off). No deploy file names the variable                                                             |
 
 Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of
 these variables was ever in a deploy file, so nothing needs deleting from the servers; each still seeds its
@@ -70,11 +70,46 @@ Pro (Phase B) is not here.
 ### Switches with nothing built behind them (16 Nov 2026)
 
 `team_tips` (its controller has no routes) and `business_owners` (only reported on `/health/release`; no screen or
-route reads it) gate nothing yet, and nor does `you_collect` (19 Nov 2026: only its schema exists). They stay in `FEATURE_SWITCHES`, so stored rows and old variables stay valid, but
+route reads it) gate nothing yet. (`you_collect` was marked too, from its schema on 19 Nov 2026 until its last task
+built it on 22 Nov 2026.) They stay in `FEATURE_SWITCHES`, so stored rows and old variables stay valid, but
 the catalogue marks them `notBuilt`: `/ops/switches` lists them with a "Not built yet" tag and no "Turn on", and the
 API refuses turning one on with `409 SWITCH_NOT_BUILT`, before any approval is asked and again inside the change
 itself (an approval asked earlier can't turn it on either). Turning one off always works. The PR that builds the
 feature removes its `notBuilt` mark.
+
+### You collect: turning it on and off
+
+`you_collect` is a money switch (spec §12, ADR-0016 **PROPOSED**). It is off by default and off in every environment
+when its last PR merges. **Production stays off until the owner turns it on**, and only after the preconditions in
+[`live-activation.md`](live-activation.md#you-collect-before-the-switch-is-turned-on) are met. Nothing here is a
+regulatory approval: D-04, D-06 and D-07 stay open. Who decides: the owner. A change waits for a second person when
+there is one (`feature_switch.set`), like every money switch.
+
+**Turning it on** (spec §12.4) changes who new money is collected for, not anyone already set up:
+
+- A new sign-up is written `collect` at once: their page takes tips with no payment account, TipMe holds their share
+  (`held_for_recipients`), and they add their name and bank at their first withdrawal. Sign-ups are written undecided
+  instead (so direct) while a `collect_invariant_broken` issue is open.
+- A recipient who never finished payment setup (no account, or onboarding not finished) is decided at their next
+  quote: `collect`. One with an ACTIVE account stays `direct`, and a RESTRICTED or FAILED one stays `direct` and
+  blocked, as today (ruling P22). An account whose creation outcome is unknown is left undecided (P23).
+- Every quote keeps the mode it was quoted under; the switch never moves a tip already quoted.
+- The recommended start: on for new sign-ups, with staff watching Ops → You collect (held money, reserve, transfers
+  waiting, disputes) every day for the first two weeks, and TipMe's own balance topped up above the warning level
+  first.
+
+**Turning it off** (spec §12.5) only stops new recipients being put on it:
+
+- New sign-ups are written undecided again, which is direct, exactly as before You collect.
+- **Recipients already on `collect` keep it.** Their pages keep taking tips (held for them, as before), their held
+  money still moves once they add bank details, and their refunds, disputes, holds and returns keep running: that
+  money is owed. The Withdraw and Get paid screens keep showing them the You collect form.
+- The `collect.transfers`, reserve and reconciliation jobs keep running with it off, and the reserve levels keep
+  applying while anything is held.
+- In an emergency, staff pause every collect transfer with the serious action `collect_transfers.pause` (Ops →
+  You collect → Settings), and resume with `collect_transfers.resume`; that is separate from this switch.
+- Switching off does not refund or move anyone's held money, and no code moves a `collect` recipient back to
+  `direct` (Ops → Users shows the mode, read-only).
 
 ### Release day and after
 

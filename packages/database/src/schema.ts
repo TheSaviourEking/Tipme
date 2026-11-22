@@ -4162,8 +4162,9 @@ export const shareHoldbacks = pgTable(
 
 // ---- You collect (ADR-0016, PROPOSED; plan Task 3) ----
 // TipMe takes a `collect` recipient's tips on its own partner account, holds each share
-// (`held_for_recipients`) and transfers it on. Nothing writes these tables while the `you_collect`
-// switch is not built; D-04 (custody) and D-06 (verification) stay open.
+// (`held_for_recipients`) and transfers it on. Only `collect` recipients' tips write these tables, and
+// the `you_collect` switch that puts new sign-ups on it is off everywhere until the owner turns it on
+// (plan Task 16); D-04 (custody), D-06 (verification) and D-07 stay open.
 
 /**
  * A partner dispute on a tip TipMe collected (spec §6.2). The partner's ids and codes only: never the

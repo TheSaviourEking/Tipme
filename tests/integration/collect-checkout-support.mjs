@@ -153,9 +153,11 @@ const QUOTE = (handle) => ({ handle, amountMinor: '200000', currency: 'NGN' });
 /**
  * Today's quotes, checkouts and sign-ups with the switch off: every answer, every provider call
  * and the collection modes stored. Ids and times are replaced by placeholders (normalise).
+ * `afterSeed` runs once the pages are seeded (the switch-off rerun turns the switch off there).
  */
-export async function switchOffTranscript(database) {
+export async function switchOffTranscript(database, { afterSeed } = {}) {
   await seedPages(database);
+  await afterSeed?.();
   const providers = recordingProviders();
   const checkout = services(database.db, providers);
   const steps = [];

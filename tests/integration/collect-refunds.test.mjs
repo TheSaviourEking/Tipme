@@ -16,6 +16,7 @@ import {
 } from '../../packages/database/test/integration/business-fixtures.mjs';
 import * as contracts from '../../packages/contracts/dist/index.js';
 import { MAIL_SEAL_KEY, OPS_TOTP_KEY, setSwitch } from './helpers.mjs';
+import { casesOf } from './collect-direct-cases.mjs';
 
 /*
  * You collect (plan Task 10, spec §6.1, P7, P26–P30, P28, R6): a collect tip was charged to TipMe's
@@ -706,58 +707,16 @@ test('a refund during an in-flight transfer waits for the read-back and recovers
   assert.equal((await reversalsOf(tip.tipId)).length, 1);
 });
 
-test("a direct tip's refund is unchanged", async () => {
-  // The direct path is unchanged (tip-refund.test.mjs): no collect plan, refundAccountCharge.
-  await q(`UPDATE profiles SET collection_mode = 'direct' WHERE id = $1`, [
-    TOBI.id,
-  ]);
-  const quote = await ops.createQuote(database.db, {
-    handle: 'tobi',
-    tipMinor: GROSS,
-    currency: 'NGN',
-  });
-  const intent = await ops.createPaymentIntent(database.db, {
-    quoteId: quote.quoteId,
-    idempotencyKey: randomUUID(),
-  });
-  const reference = `mock_pay_${randomUUID()}`;
-  await ops.markAttemptInitiated(database.db, {
-    attemptId: intent.attemptId,
-    provider: 'mock',
-    providerReference: reference,
-  });
-  await ops.recordProviderEvent(database.db, {
-    provider: 'mock',
-    providerEventId: `evt_${randomUUID()}`,
-    eventType: 'payment.succeeded',
-    attemptId: intent.attemptId,
-    providerReference: reference,
-    amountMinor: GROSS,
-    currency: 'NGN',
-    providerFeeMinor: 20000n,
-    signatureVerified: true,
-    payload: {},
-  });
-  assert.equal((await facts(intent.tipId)).collect, null);
-  const refund = await refundAsked(intent.tipId);
-  assert.equal(refund.collect_plan, null);
-  const calls = [];
-  await ops.sendTipRefunds(database.db, {
-    provider: {
-      async refundAccountCharge(input) {
-        calls.push(['account', input.providerReference]);
-        return { refundReference: 'rf_d', status: 'processing' };
-      },
-      async refundPlatformCharge() {
-        calls.push(['platform']);
-        throw new Error('never');
-      },
-    },
-    providerName: 'mock',
-    now: new Date(),
-  });
-  assert.deepEqual(calls, [['account', reference]]);
-});
+// The direct path (plan Task 16): these cases live in collect-direct-cases.mjs, so the switch-off
+// rerun (you-collect-switch-off.test.mjs) imports the very same ones.
+for (const directCase of casesOf(10))
+  test(directCase.name, () =>
+    directCase.run({
+      database,
+      switchOn: true,
+      setYouCollect: (on) => setSwitch(database.pool, 'you_collect', on),
+    }),
+  );
 
 test('a closed dispute’s hold is consumed by the refund: released once, never recovered twice (P28)', async () => {
   const tip = await paidTip(TOBI);
