@@ -19,7 +19,8 @@ const STATUS_WORDS: Record<PayoutDestinationView['status'], string> = {
   rejected: 'Rejected',
 };
 
-function messageFor(code: string): string {
+/** A bank form's refusal in words; the You collect form (withdraw/collect-bank-form.tsx) shares them. */
+export function messageFor(code: string): string {
   switch (code) {
     case 'CODE_INVALID':
       return 'That code isn’t right or has expired. Please check it, or ask for a new one.';

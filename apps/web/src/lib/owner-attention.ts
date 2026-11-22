@@ -62,6 +62,7 @@ export function ownerAttention({
   payments,
   needsRecoveryEmail = false,
   visitsToday,
+  collect = false,
 }: {
   profile: Pick<MyProfile, 'emailVerified' | 'pageState' | 'suspended'>;
   payments: Pick<
@@ -71,6 +72,12 @@ export function ownerAttention({
   needsRecoveryEmail?: boolean;
   /** Sessions that opened the page today; null while analytics are off. */
   visitsToday?: number | null;
+  /**
+   * You collect (spec §2.1): true for a recipient on it, whose tips TipMe takes, so there is no
+   * payment account to set up; null while that is not known yet (or its read failed), so a collect
+   * recipient is never told to set one up meanwhile. False (or left out) for everyone else.
+   */
+  collect?: boolean | null;
 }): AttentionItem[] {
   const items: AttentionItem[] = [];
   // A real number makes it concrete: people came, and couldn't tip. Otherwise the usual words
@@ -81,7 +88,7 @@ export function ownerAttention({
       : usual;
   // Without a payment provider that needs setup (test payments), or when the account could
   // not be read, there is nothing true to say about payments.
-  if (payments?.enabled) {
+  if (payments?.enabled && collect === false) {
     const { status } = payments;
     if (status === 'CREATING' || status === 'UNKNOWN')
       items.push({

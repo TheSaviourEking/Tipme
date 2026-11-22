@@ -272,7 +272,16 @@ export function DashboardShell({
   }, []);
   const attention =
     profile && payments !== undefined
-      ? ownerAttention({ profile, payments, needsRecoveryEmail, visitsToday })
+      ? ownerAttention({
+          profile,
+          payments,
+          needsRecoveryEmail,
+          visitsToday,
+          // You collect: carried on the same read, so it is as fresh as the account itself. A read
+          // that failed says nothing (null), and nothing is said about payments then.
+          // An API from before `collecting` sends none: null too, never read as direct (R2-M3).
+          collect: payments ? (payments.collecting ?? null) : null,
+        })
       : null;
   // The nav dots keep the full list; the reminders shown are this page's own.
   const needsFix = new Set(attention?.map((item) => item.navHref));

@@ -1422,7 +1422,7 @@ test('the dispute hold email says the spec’s words with the amount, and nothin
   const out = renderMail('dispute_hold', { heldMinor: '950000' }, ctx);
   assert.ok(
     out.text.includes(
-      "A payment to you is being questioned. We've held ₦9,500 until it's settled.",
+      'A payment to you is being questioned. We’ve held ₦9,500 until it’s settled.',
     ),
   );
   assert.doesNotMatch(out.subject, /₦|9,500/);
