@@ -181,6 +181,58 @@ Each step is the owner's decision, made after the one before has gone well. Each
 1. **Named, trusted recipients:** `LIVE_CHECKOUT_HANDLES=<owner>,<handle>,<handle>`. Each has finished payment setup. Watch their first tip and withdrawal.
 2. **Everyone:** `LIVE_CHECKOUT_HANDLES=*`, as a separate decision, written in the acceptance (Q7), with the `production.md` section 9 steps. It is not a default and nothing sets it for you.
 
+## You collect: before the switch is turned on
+
+You collect (ADR-0016, **PROPOSED**; spec `docs/superpowers/specs/2026-11-19-you-collect-design.md` §12) has TipMe
+take a new recipient's tips on its own partner account, hold their share and transfer it once they add bank details.
+It sits behind the money switch `you_collect`, which is **off in every environment**. **Production stays off until
+the owner turns it on** in Ops → Switches (a second person approves it, when there is one). Nothing on this page, and
+nothing in the code, approves it: D-04, D-06 and D-07 in `docs/00-DECISIONS.md` stay open, and turning it on is the
+owner's decision, not a regulatory approval. What on and off do:
+[`settings-and-switches.md`](settings-and-switches.md#you-collect-turning-it-on-and-off).
+
+Only once live payments are on (sections 1 to 5) and every line below is done:
+
+- [ ] **BLOCKING, ADR-0016 accepted:** the owner changes its status from PROPOSED to accepted, dated, in
+      `docs/adr/ADR-0016-you-collect-for-new-recipients.md`. No agent writes it.
+- [ ] **BLOCKING, P1 in writing:** the payment partner confirms in writing (an email kept on record) that You collect,
+      with TipMe as merchant of record holding recipients' shares before transfer, is covered by its licence for
+      TipMe's tipping use case. The owner's statement alone is not enough (spec §16, risk 3).
+- [ ] **BLOCKING, own money above the warning level:** TipMe's own money (its partner balance less what it holds for
+      recipients) is above the You collect warning level, ₦500,000 by default (Ops → You collect → Settings), and no
+      balance in any currency is below zero, with room in USD for dispute fees (P5). The latest reserve reading in
+      Ops → You collect says `ok`. See `payment-stuck-unknown.md`, "The reserve rule and TipMe's own money".
+- [ ] **BLOCKING, automatic payouts off:** TipMe's own balance pays out by hand only (the partner dashboard's payout
+      schedule is `manual` for NGN), and no `collect_auto_payout_on` issue is open.
+- [ ] **BLOCKING, the sandbox checks answered:** `scripts/you-collect-sandbox.mjs` (steps `start`, `transfer` and
+      `evidence`, run by a person with a sandbox key, test money only) and each line's answer recorded below:
+  - **a.** the partner's transfer list returns `transfer_group` on each item (the read-back depends on it);
+  - **b.** writing a person's name replaces the person rather than adding a second one;
+  - **c.** the same account number added twice under one account, with different name keys, makes a second
+    destination (a FAIL, dedupe by number, means a re-add under a corrected name always answers
+    `BANK_RECHECK_LATER`, so that path must change first);
+  - **d.** dispute evidence with one file is accepted;
+  - **e.** a collect checkout with `customer: { email, name }`: whether the page shows the name and email prefilled,
+    and whether the payer can edit them (answered by the person who opened it). Nothing is sent today; the owner's
+    rule if it prefills is in the PR for Task 16.
+- [ ] **BLOCKING, the known gap accepted:** the daily reconciliation compares what the partner reported and TipMe
+      stored (refunds paid, dispute fees and losses, transfers), not a partner balance-activity feed (ruling P18; a
+      follow-up). A move on TipMe's own balance that TipMe never heard about shows only as a reserve reading below
+      the line, not as a named mismatch. The owner accepts this in writing, or it is built first.
+- [ ] **BLOCKING, the open product questions:** the owner answers, or accepts today's behaviour for, (i) whether the
+      paused-page message shows when the page opens, instead of after tapping Tip (today: after tapping Tip); and
+      (ii) whether, after "Still waiting", a "Check again" button replaces the filled-in bank form (today: the form
+      stays filled in).
+
+**What the sandbox cannot prove** (spec §12.3), so the partner's written answers and the first live days must:
+verification timing (the sandbox grants capabilities at once), the bank-name check and its manual review (P6), when
+live naira card money can be transferred (P7), and which balance a dispute fee is taken from (P5).
+
+**Turning it on:** Ops → Switches → You collect for new recipients → Turn on, with a written reason; a second owner
+approves. Then, for the first two weeks, staff check Ops → You collect (held money, the reserve, transfers waiting
+and disputes) every day. **Turning it off** stops new sign-ups being put on it; recipients already on it keep it, and
+their transfers keep running ([`settings-and-switches.md`](settings-and-switches.md#you-collect-turning-it-on-and-off)).
+
 ## Switching off
 
 Stops new tips. **It doesn't stop withdrawals;** for that see the next section. People keep their balances either way.
@@ -262,3 +314,7 @@ A withdrawal keeps the bank recorded when it was requested, even if the recipien
 | Real webhook delivery seen                          |       |      |     |
 | Smoke tip, payout and transfer references           |       |      |     |
 | `LIVE_CHECKOUT_HANDLES` changes, each with its date |       |      |     |
+| ADR-0016 accepted                                   |       |      |     |
+| P1 written answer (where it is kept)                |       |      |     |
+| You collect sandbox checks a to e, with the run     |       |      |     |
+| You collect switched on (and by whom, approved by)  |       |      |     |
