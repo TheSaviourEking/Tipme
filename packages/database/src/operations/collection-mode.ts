@@ -63,26 +63,61 @@ export async function collectionModeOf(
  */
 export async function decideCollectionMode(
   tx: Tx,
-  i: {
-    profileId: string;
-    switchOn: boolean;
-    provider: string;
-    environment: string;
-  },
+  i: CollectionModeInputs,
 ): Promise<CollectionMode> {
-  const [row] = await tx
+  const rule = await nextCollectionMode(tx, i);
+  if (!rule.write) return rule.mode;
+  const [written] = await tx
+    .update(profiles)
+    .set({ collectionMode: rule.mode })
+    .where(and(eq(profiles.id, i.profileId), isNull(profiles.collectionMode)))
+    .returning({ mode: profiles.collectionMode });
+  return written ? rule.mode : await collectionModeOf(tx, i.profileId);
+}
+
+/** What decides a recipient's mode: the switch, and the provider and environment a quote uses. */
+export interface CollectionModeInputs {
+  profileId: string;
+  switchOn: boolean;
+  provider: string;
+  environment: string;
+}
+
+/**
+ * The mode a recipient is on, or (undecided) the one their next quote would fix now, by
+ * decideCollectionMode's own rules, without writing anything (Task 14, re-review 2 R2-I1). An
+ * undecided recipient the next quote would put on collect is shown You collect from now, so the
+ * screens agree with where a supporter's tip would go. Reads only.
+ */
+export async function previewCollectionMode(
+  db: Database | Tx,
+  i: CollectionModeInputs,
+): Promise<CollectionMode> {
+  return (await nextCollectionMode(db, i)).mode;
+}
+
+/**
+ * decideCollectionMode's rules, read-only: the mode, and whether a quote would write it (an
+ * undecided recipient it decides). Shared, so the preview and the write can never disagree.
+ */
+async function nextCollectionMode(
+  db: Database | Tx,
+  i: CollectionModeInputs,
+): Promise<{ mode: CollectionMode; write: boolean }> {
+  const [row] = await db
     .select({ mode: profiles.collectionMode })
     .from(profiles)
     .where(eq(profiles.id, i.profileId));
-  if (row?.mode === 'direct' || row?.mode === 'collect') return row.mode;
-  if (!i.switchOn || !row) return 'direct';
+  if (row?.mode === 'direct' || row?.mode === 'collect')
+    return { mode: row.mode, write: false };
+  if (!i.switchOn || !row) return { mode: 'direct', write: false };
   const environment =
     i.environment === 'live' || i.environment === 'sandbox'
       ? i.environment
       : null;
   // One row per profile, provider and environment (the table's unique key).
   const [account] = environment
-    ? await tx
+    ? await db
         .select({ status: paymentAccounts.status })
         .from(paymentAccounts)
         .where(
@@ -95,18 +130,13 @@ export async function decideCollectionMode(
     : [];
   const status = account?.status ?? null;
   // P23: never collect while an account may exist at the partner; ask again next quote.
-  if (status === 'UNKNOWN') return 'direct';
-  let decided: CollectionMode =
+  if (status === 'UNKNOWN') return { mode: 'direct', write: false };
+  const decided: CollectionMode =
     status === null || status === 'CREATING' || status === 'ONBOARDING'
       ? 'collect'
       : 'direct';
   // Refused (Task 11): left undecided, so the next quote asks again.
-  if (decided === 'collect' && !(await mayAssignCollect(tx))) return 'direct';
-  const [written] = await tx
-    .update(profiles)
-    .set({ collectionMode: decided })
-    .where(and(eq(profiles.id, i.profileId), isNull(profiles.collectionMode)))
-    .returning({ mode: profiles.collectionMode });
-  if (!written) decided = await collectionModeOf(tx, i.profileId);
-  return decided;
+  if (decided === 'collect' && !(await mayAssignCollect(db)))
+    return { mode: 'direct', write: false };
+  return { mode: decided, write: true };
 }

@@ -31,6 +31,11 @@ export type BachsPaymentAccountStatus = {
   feeCollector: 'platform' | 'connected_account' | 'unknown' | null;
   requirementsDue: string[];
   lastSyncedAt: string | null;
+  /**
+   * You collect (plan Task 14): TipMe takes this recipient's tips on its own account, so there is
+   * no payment account of their own to set up. False for everyone else (undecided reads as direct).
+   */
+  collecting: boolean;
 };
 
 export type BachsOnboardingResponse =

@@ -28,7 +28,8 @@ import {
   reportProfile,
   featureOn,
 } from '@tipme/database';
-import { bachsEnvironment, liveCheckoutOpenFor } from '@tipme/payments';
+import { liveCheckoutOpenFor } from '@tipme/payments';
+import { tipReadiness } from '../checkout/collection-mode.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
@@ -53,16 +54,13 @@ export class PublicProfileController {
     @Param('handle') handle: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<ApiDataResponse<PublicProfile | { movedTo: string }>> {
-    // New tips through Bachs need the owner's own ready account in this copy's environment;
-    // checkout refuses them otherwise.
-    const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
+    // New direct tips through Bachs need the owner's own ready account in this copy's environment;
+    // checkout refuses them otherwise. A tip TipMe collects needs none (R3-C1), by the quote's mode.
     const page = await publicProfile(this.database.db, handle, {
       adultLinks: await featureOn(this.database.db, 'adult_platform_links'),
       recognition: await featureOn(this.database.db, 'supporter_recognition'),
       studio: await featureOn(this.database.db, 'page_studio'),
-      ...(environment
-        ? { requiredAccount: { provider: 'bachs', environment } }
-        : {}),
+      ...tipReadiness(this.database.db, this.config.PAYMENT_PROVIDER),
     });
     if (page)
       return {

@@ -8,6 +8,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./copy": {
+      "types": "./dist/copy.d.ts",
+      "import": "./dist/copy.js",
+      "default": "./dist/copy.js"
     }
   },
   "scripts": {

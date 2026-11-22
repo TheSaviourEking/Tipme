@@ -415,8 +415,8 @@ async function markVerified(
             id: idFromKey(dedupeKey),
             userId: row.userId,
             kind: 'collect_verified',
-            title: "You're all set",
-            body: "You're all set. Your tips are on their way to you.",
+            title: 'You’re all set',
+            body: 'You’re all set. Your tips are on their way to you.',
             createdAt: input.now,
           })
           .onConflictDoNothing();

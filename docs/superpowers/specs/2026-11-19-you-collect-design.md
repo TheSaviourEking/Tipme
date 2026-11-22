@@ -44,15 +44,15 @@ Today every recipient must finish full verification before anyone can tip them: 
 2. **First tip.** They get today's notification. Their balance shows the amount, with the note "Kept for you until you add your bank details."
 3. **Reminders** (recommended, owner may change). If they have money waiting and no bank details: an in-app notice and an email at **7, 21 and 28 days** after their first waiting tip. Day 28 says the page will pause in 2 days.
 4. **"Add bank details to withdraw."** Tapping Withdraw with no bank details opens one short form:
-   - their full name, as their bank has it;
+   - their first and last name ("Use the name on your bank account.");
    - bank (list) and account number.
 
-   TipMe looks up the name on the account (today's bank lookup) and shows it: "Is this you? ADA OKAFOR". They confirm. TipMe sends it to our payment partner, who compares the bank's name with theirs.
+   TipMe looks up the name on the account (today's bank lookup; "Finding your account…") and shows it: "Is this you? ADA OKAFOR". They confirm. TipMe sends it to our payment partner, who compares the bank's name with theirs. If the bank has no name for the account: "We couldn’t find this account. Check the bank and account number."
 
-5. **Checking.** "We're checking your details. This usually takes a few minutes." Three outcomes:
-   - **Names match:** "You're all set." Their waiting tips start moving to them (section 5). Withdraw works as today.
-   - **Some words match:** the partner's team checks it. "We're checking this by hand. We'll tell you when it's done."
-   - **No match:** "This account isn't in your name. Use a bank account in your own name." Nothing is saved.
+5. **Checking.** "We’re checking your details. This usually takes a few minutes." Three outcomes:
+   - **Names match:** "You’re all set." Their waiting tips start moving to them (section 5). Withdraw works as today.
+   - **Some words match:** the partner's team checks it. "We’re checking this by hand. We’ll tell you when it’s done."
+   - **No match:** "This account isn’t in your name. Use one that is." Nothing is saved.
 6. **Withdraw.** Today's withdrawal screen and rules (two free withdrawals per Lagos day, then the partner's ₦50). Money still on its way to them shows as "On its way" and is not withdrawable yet. For a new recipient the first withdrawal is capped (section 8).
 7. **The holding cap is reached** (recommended, owner may change): once **₦50,000** is waiting, or **30 days** have passed since the first waiting tip, whichever comes first, their page stops taking new tips. Dashboard banner: "Your page has paused tips. Add your bank details to start taking tips again." Adding bank details unpauses it at once.
 
@@ -63,7 +63,7 @@ Today every recipient must finish full verification before anyone can tip them: 
 Nothing changes in the tip form, amounts, fees shown or receipt layout. Two differences:
 
 - **The card statement shows TipMe**, because TipMe is the merchant of record. The receipt says "Paid to TipMe for Ada" (copy in section 10).
-- **A paused page** (holding cap reached) shows: "Ada can't take tips right now. Please try again later." No reason is given, to protect the recipient's privacy.
+- **A paused page** (holding cap reached) shows: "Ada can’t take tips right now. Please try again later." No reason is given, to protect the recipient's privacy.
 
 ### 2.3 Existing recipients
 
@@ -177,7 +177,7 @@ A refund the platform balance cannot fund is refused by the partner (`Insufficie
 
 - Handle `dispute.created` and `dispute.updated` (authenticated, stored, deduplicated, out-of-order safe, as every webhook).
 - A `disputes` table: partner dispute id, tip, amount, currency, reason, status, response deadline, evidence state, the fee, and the amount set aside.
-- **On open:** post the fee (`dispute_fee_expense` against `platform_clearing`). Stop the tip's collect transfer if it has not moved. If it has moved and is still in the recipient's balance, place a withdrawal hold of that amount (existing `withdrawal_holds`), and tell the recipient: "A payment to you is being questioned. We've held ₦9,500 until it's settled." (recommended, owner may change)
+- **On open:** post the fee (`dispute_fee_expense` against `platform_clearing`). Stop the tip's collect transfer if it has not moved. If it has moved and is still in the recipient's balance, place a withdrawal hold of that amount (existing `withdrawal_holds`), and tell the recipient: "A payment to you is being questioned. We’ve held ₦9,500 until it’s settled." (recommended, owner may change)
 - **Staff respond** from a new dispute screen (evidence upload and submit through the partner's dispute API) before the deadline.
 - **Won:** release the hold or the held share; the fee stays an expense.
 - **Lost** (owner's delegated default): recover from **that recipient's unpaid TipMe balance first**: the held share, then a transfer back of what is still in their partner balance. **TipMe absorbs the rest** (`dispute_loss_expense`). Their future tips are not touched (recommended, owner may change). The 14 Nov chargeback rule carries over: the recipient never loses more than they received for that tip.
@@ -242,24 +242,30 @@ Today's withdrawal holds, staff serious actions and the issues inbox are reused.
 
 Never name the partner. Never say "wallet", "account with TipMe", "protected", "insured" or anything implying a licence or a bank.
 
+The bank form's lines (name hint, name missing, finding the account, account not found and name mismatch) are the owner's wording of 22 Nov 2026.
+
 | Where                  | Text                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------- |
 | Dashboard, no bank yet | "You can take tips now. Add your bank details when you want to withdraw."       |
 | Balance note           | "Kept for you until you add your bank details."                                 |
 | Withdraw, no bank      | "Add bank details to withdraw" · "Use a bank account in your own name."         |
+| Name hint              | "Use the name on your bank account."                                            |
+| Name missing           | "Enter your first name." · "Enter your last name."                              |
+| Finding the account    | "Finding your account…"                                                         |
+| Account not found      | "We couldn’t find this account. Check the bank and account number."             |
 | Name confirm           | "Is this you? {BANK NAME}"                                                      |
-| Checking               | "We're checking your details. This usually takes a few minutes."                |
-| Manual check           | "We're checking this by hand. We'll tell you when it's done."                   |
-| Name mismatch          | "This account isn't in your name. Use a bank account in your own name."         |
-| Verified               | "You're all set. Your tips are on their way to you."                            |
+| Checking               | "We’re checking your details. This usually takes a few minutes."                |
+| Manual check           | "We’re checking this by hand. We’ll tell you when it’s done."                   |
+| Name mismatch          | "This account isn’t in your name. Use one that is."                             |
+| Verified               | "You’re all set. Your tips are on their way to you."                            |
 | On its way             | "On its way to you"                                                             |
 | Reminder, day 7 / 21   | "You have {amount} in tips waiting. Add your bank details to withdraw it."      |
 | Reminder, day 28       | "Add your bank details by {date}, or your page will pause new tips."            |
 | Paused (recipient)     | "Your page has paused tips. Add your bank details to start taking tips again."  |
-| Paused (supporter)     | "{Name} can't take tips right now. Please try again later."                     |
+| Paused (supporter)     | "{Name} can’t take tips right now. Please try again later."                     |
 | Receipt                | "Paid to TipMe for {Name}"                                                      |
 | First withdrawal cap   | "New accounts can withdraw up to {amount} the first time."                      |
-| Dispute hold           | "A payment to you is being questioned. We've held {amount} until it's settled." |
+| Dispute hold           | "A payment to you is being questioned. We’ve held {amount} until it’s settled." |
 
 The Terms and the supporter-facing fee and refund wording need updating for TipMe as the merchant of record. That wording needs legal review; this document does not write it.
 
