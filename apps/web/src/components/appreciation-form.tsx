@@ -8,7 +8,7 @@ import type {
   TipPurpose,
   TipQuote,
 } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import {
   AmountChoice,
   Badge,

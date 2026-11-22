@@ -8,7 +8,8 @@ import type {
   CollectBankView,
   PayoutBank,
 } from '@tipme/contracts';
-import { COLLECT_COPY, collectLegalNameSchema } from '@tipme/contracts';
+import { collectLegalNameSchema } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { Button, InputField, Slip, Surface } from '@tipme/ui';
 import { BankPicker } from '@/components/account/bank-picker';
 import { CodeField } from '@/components/account/code-field';

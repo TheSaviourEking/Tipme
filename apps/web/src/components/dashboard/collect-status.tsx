@@ -2,7 +2,7 @@
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { CollectStatusView, DashboardSummary } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { usePanel } from '@/components/dashboard/use-panel';
 import { Money } from '@/components/money';
 

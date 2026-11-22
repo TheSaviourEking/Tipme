@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { COLLECT_COPY } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 
 // You collect (spec §10, plan Task 14): every recipient and supporter string comes from one
 // constant, word for word as the spec writes it. The spec's table is read here, so a change to

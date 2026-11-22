@@ -8,7 +8,7 @@ import type {
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
   Button,

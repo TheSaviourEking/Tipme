@@ -7,7 +7,7 @@ import type {
   DashboardSummary,
   WeeklyReportData,
 } from '@tipme/contracts';
-import { COLLECT_COPY } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { Button, Skeleton, Slip, StandingWarning } from '@tipme/ui';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { UsernameTakeBackBanner } from '@/components/dashboard/username-take-back-banner';

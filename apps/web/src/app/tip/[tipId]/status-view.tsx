@@ -8,11 +8,8 @@ import {
 } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  COLLECT_COPY,
-  firstNameOf,
-  type TipStatusView,
-} from '@tipme/contracts';
+import { firstNameOf, type TipStatusView } from '@tipme/contracts';
+import { COLLECT_COPY } from '@tipme/contracts/copy';
 import { ActionLink, Button, Card, Skeleton, Slip, Surface } from '@tipme/ui';
 import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
