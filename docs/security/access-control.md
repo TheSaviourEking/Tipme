@@ -78,7 +78,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `payouts.resolve` | POST `/v1/ops/issues/{id}/payout-apply`<br>POST `/v1/ops/issues/{id}/payout-mark-failed`<br>POST `/v1/ops/issues/{id}/payout-read`<br>POST `/v1/ops/issues/{id}/payout-resume`<br>GET `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>POST `/v1/ops/pages/{profileId}/withdrawal-freeze`<br>GET `/v1/ops/withdrawals-switch`<br>POST `/v1/ops/withdrawals-switch` |
 | `private.view` | POST `/v1/ops/business-notes/{tipId}/reveal`<br>POST `/v1/ops/businesses/{id}/reveal`<br>POST `/v1/ops/email/messages/{id}/reveal-recipient`<br>POST `/v1/ops/issues/{id}/reveal`<br>POST `/v1/ops/providers/suppressions/lookup`<br>POST `/v1/ops/users/{id}/reveal` |
 | `pro.price` | GET `/v1/ops/business-pro-price`<br>POST `/v1/ops/business-pro-price`<br>GET `/v1/ops/pro-price`<br>POST `/v1/ops/pro-price` |
-| `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
+| `providers.manage` | GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/mail/{provider}/health/clear`<br>POST `/v1/ops/providers/mail/{provider}/test`<br>POST `/v1/ops/providers/mail/active`<br>POST `/v1/ops/providers/mail/failover`<br>POST `/v1/ops/providers/overrides`<br>POST `/v1/ops/providers/overrides/remove`<br>POST `/v1/ops/providers/suppressions/remove`<br>POST `/v1/ops/providers/tests/confirm` |
 | `recoveries.cancel` | POST `/v1/ops/users/{userId}/cancel-recovery` |
 | `recoveries.manage` | POST `/v1/ops/accounts/{userId}/email-recovery`<br>POST `/v1/ops/accounts/{userId}/end-sessions`<br>POST `/v1/ops/collect/name` |
 | `search.view` | GET `/v1/ops/businesses`<br>GET `/v1/ops/businesses/{id}`<br>GET `/v1/ops/businesses/{id}/logo`<br>GET `/v1/ops/search`<br>GET `/v1/ops/users` |
@@ -445,8 +445,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/pro/pages/{profileId}/payments` | `payments.repair` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/pro/purchases/{purchaseId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/providers/mail` | `issues.view,providers.manage` | n/a (read) | – | – |
+| POST | `/v1/ops/providers/mail/{provider}/health/clear` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | `ops_request` | – |
+| POST | `/v1/ops/providers/mail/failover` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/overrides` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/overrides/remove` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/suppressions/lookup` | `private.view` | yes | – | – |

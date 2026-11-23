@@ -543,3 +543,51 @@ test('announcement email: secrets and the sender are deploy settings, tunables a
       assert.match(text, new RegExp(`\\b${setting}\\b`), `${path}: ${setting}`);
   }
 });
+
+// Automatic email failover (owner, 23 Nov 2026): the fallback list is a deploy setting (empty by
+// default, like the default provider); the breaker and code-signal numbers are code defaults.
+test('mail failover: the fallback list is a deploy setting, its tunables are not', () => {
+  for (const path of [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+    'deploy/production.env.example',
+    'deploy/staging.env.example',
+  ]) {
+    const text = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+    assert.match(
+      text,
+      /\bMAIL_FALLBACK_PROVIDERS\b/,
+      `${path}: MAIL_FALLBACK_PROVIDERS`,
+    );
+    for (const tunable of [
+      'MAIL_BREAKER_FAILURES',
+      'MAIL_BREAKER_WINDOW_MS',
+      'MAIL_BREAKER_REST_MS',
+      'MAIL_CODE_UNUSED_AFTER_MS',
+      'MAIL_CODE_WINDOW_MS',
+      'MAIL_CODE_MIN_SAMPLES',
+      'MAIL_CODE_UNUSED_RATIO',
+      'MAIL_CODE_TRIAL_CODES',
+      'MAIL_RESEND_WINDOW_MS',
+    ])
+      assert.doesNotMatch(
+        text,
+        new RegExp(`\\b${tunable}\\b`),
+        `${path}: ${tunable}`,
+      );
+  }
+  // Empty by default in compose, so nothing changes until it is set.
+  for (const path of [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+  ]) {
+    const text = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+    const lines = text.match(/MAIL_FALLBACK_PROVIDERS: .*/g) ?? [];
+    assert.equal(lines.length, 2, `${path}: the API and the worker`);
+    for (const line of lines)
+      assert.equal(
+        line,
+        'MAIL_FALLBACK_PROVIDERS: ${MAIL_FALLBACK_PROVIDERS:-}',
+      );
+  }
+});
