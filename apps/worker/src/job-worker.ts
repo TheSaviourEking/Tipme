@@ -19,6 +19,11 @@ import {
 import {
   announcementMailProvider,
   configuredMailProviders,
+  createMailHealth,
+  isProductionMail,
+  mailFailoverGroup,
+  mailHealthSettings,
+  redisMailHealthStore,
   type MailProviderName,
 } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
@@ -33,6 +38,9 @@ import {
   expireStaleTips,
   previousIsoWeek,
   activeMailProvider,
+  checkCodeDelivery,
+  mailFailoverFixed,
+  MAIL_PROVIDER_LABELS,
   mailOverrideFor,
   mailSealing,
   pretendMailSink,
@@ -98,6 +106,7 @@ import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
+import { mailHealthAlerter } from './handlers/mail-failover.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
@@ -1140,8 +1149,78 @@ export async function startJobWorker(
     activeCache = { provider, at: Date.now() };
     return provider;
   };
+  // Automatic failover (owner, 23 Nov 2026): only with MAIL_FALLBACK_PROVIDERS set. The breaker
+  // lives in Redis on the fail-fast client: while Redis is down every provider reads healthy.
+  const production = isProductionMail(config);
+  const failoverGroup = mailFailoverGroup(
+    config.MAIL_DEFAULT_PROVIDER,
+    config.MAIL_FALLBACK_PROVIDERS,
+    new Set(mailProviders.keys()),
+    production,
+  );
+  // Two providers or more: a list naming only the default (refused at start anyway) or an
+  // unconfigured one never turns half of it on.
+  const failoverOn = failoverGroup.length > 1;
+  const healthSettings = mailHealthSettings(config);
+  const mailHealth = createMailHealth({
+    store: redisMailHealthStore(markers, {
+      ...healthSettings,
+      prefix: config.QUEUE_PREFIX,
+    }),
+    settings: healthSettings,
+    onChange: mailHealthAlerter({
+      url: config.ALERT_WEBHOOK_URL,
+      labels: MAIL_PROVIDER_LABELS,
+      group: failoverGroup,
+      log: (entry) => logger.warn(entry),
+    }),
+    log: (entry) => logger.warn(entry),
+  });
+  // Whether staff fixed the provider in ops, read at most every 5 seconds like the active one.
+  let fixedCache: { fixed: boolean; at: number } | null = null;
+  const failoverFixed = async (): Promise<boolean> => {
+    if (fixedCache && Date.now() - fixedCache.at < 5000)
+      return fixedCache.fixed;
+    const fixed = await mailFailoverFixed(database.db);
+    fixedCache = { fixed, at: Date.now() };
+    return fixed;
+  };
   const mailDelivery = startMailDelivery({
+    ...(failoverOn
+      ? {
+          checkCodes: async (now: Date) => {
+            if (await failoverFixed()) return;
+            const checks = await checkCodeDelivery(database.db, {
+              health: mailHealth,
+              providers: failoverGroup,
+              now,
+              settings: {
+                unusedAfterMs: config.MAIL_CODE_UNUSED_AFTER_MS,
+                windowMs: config.MAIL_CODE_WINDOW_MS,
+                minSamples: config.MAIL_CODE_MIN_SAMPLES,
+                unusedRatio: config.MAIL_CODE_UNUSED_RATIO,
+                trialCodes: config.MAIL_CODE_TRIAL_CODES,
+              },
+            });
+            for (const check of checks)
+              if (check.outcome !== 'ok' && check.outcome !== 'skipped')
+                logger.warn({ event: 'mail.code_check', ...check });
+          },
+        }
+      : {}),
     deps: {
+      ...(failoverOn
+        ? {
+            failover: {
+              health: mailHealth,
+              fallbacks: config.MAIL_FALLBACK_PROVIDERS,
+              defaultProvider: config.MAIL_DEFAULT_PROVIDER,
+              production,
+              fixed: failoverFixed,
+              resendWindowMs: config.MAIL_RESEND_WINDOW_MS,
+            },
+          }
+        : {}),
       db: database.db,
       sealing,
       providers: mailProviders,

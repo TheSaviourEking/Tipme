@@ -98,6 +98,7 @@ services:
       ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
       # Codes and receipts through Brevo too, when staff switch to it (owner, 23 Nov 2026).
       BREVO_TRANSACTIONAL: ${BREVO_TRANSACTIONAL:-off}
+      MAIL_FALLBACK_PROVIDERS: ${MAIL_FALLBACK_PROVIDERS:-}
       SES_REGION: ${SES_REGION:-eu-north-1}
       SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
       SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}
@@ -181,6 +182,7 @@ services:
       ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
       # Codes and receipts through Brevo too, when staff switch to it (owner, 23 Nov 2026).
       BREVO_TRANSACTIONAL: ${BREVO_TRANSACTIONAL:-off}
+      MAIL_FALLBACK_PROVIDERS: ${MAIL_FALLBACK_PROVIDERS:-}
       SES_REGION: ${SES_REGION:-eu-north-1}
       SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
       SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}

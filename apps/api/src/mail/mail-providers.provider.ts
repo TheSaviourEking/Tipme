@@ -3,10 +3,16 @@ import { mailSealing, type MailSealing } from '@tipme/database';
 import {
   announcementMailProvider,
   configuredMailProviders,
+  createMailHealth,
+  mailHealthSettings,
+  redisMailHealthStore,
+  type MailHealth,
   type MailProvider,
   type MailProviderName,
 } from '@tipme/mail';
+import type { Redis } from 'ioredis';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import { REDIS } from '../infra/infra.module.js';
 
 /** Every configured mail provider (keys present), active or not: webhooks need them all. */
 export const MAIL_PROVIDERS = Symbol('MAIL_PROVIDERS');
@@ -53,4 +59,25 @@ export const announcementProviderProvider: Provider<MailProvider | null> = {
   // The API never sends; it needs the name (is sending set up?) and Brevo's webhooks.
   useFactory: (config: ApiConfig): MailProvider | null =>
     announcementMailProvider(config, async () => {}),
+};
+
+/**
+ * Automatic failover's breaker (owner, 23 Nov 2026), read from the same Redis keys the workers
+ * write, so Ops → Providers shows what delivery does; staff clear a trip through it.
+ */
+export const MAIL_HEALTH = Symbol('MAIL_HEALTH');
+
+export const mailHealthProvider: Provider<MailHealth> = {
+  provide: MAIL_HEALTH,
+  inject: [API_CONFIG, REDIS],
+  useFactory: (config: ApiConfig, redis: Redis): MailHealth => {
+    const settings = mailHealthSettings(config);
+    return createMailHealth({
+      store: redisMailHealthStore(redis, {
+        ...settings,
+        prefix: config.QUEUE_PREFIX,
+      }),
+      settings,
+    });
+  },
 };

@@ -372,6 +372,8 @@ function testStatus(
 
 export interface MailProviderOverview {
   active: MailProviderName;
+  /** Staff fixed the active provider: no automatic failover. */
+  fixed: boolean;
   changedAt: string | null;
   reason: string | null;
   providers: Array<{
@@ -498,6 +500,8 @@ export async function mailProviderOverview(
     .orderBy(desc(providerOverrides.createdAt));
   return {
     active,
+    fixed:
+      (settings?.detail as { fixed?: unknown } | undefined)?.fixed === true,
     changedAt: settings?.changedAt.toISOString() ?? null,
     reason: settings?.reason ?? null,
     providers,

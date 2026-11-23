@@ -61,8 +61,9 @@ export function createZeptoMailProvider(config: ZeptoMailConfig): MailProvider {
         body && typeof body === 'object'
           ? (body as { request_id?: unknown }).request_id
           : undefined;
+      // Accepted, perhaps: another provider could deliver it twice.
       if (typeof id !== 'string' || !id)
-        throw new MailTemporaryError('no_request_id');
+        throw new MailTemporaryError('no_request_id', { ambiguous: true });
       return { providerMessageId: id };
     },
     verifyWebhook: (rawBody, headers, now) =>

@@ -59,6 +59,13 @@ const CREDIT_WORDS = [
   'not enough credits',
 ];
 
+/** Brevo error codes about the account, not the mail (documented error codes). */
+const BREVO_ACCOUNT_CODES = new Set([
+  'unauthorized',
+  'permission_denied',
+  'account_under_validation',
+]);
+
 function outOfCredits(
   status: number,
   body: { code?: unknown; message?: unknown } | null,
@@ -189,14 +196,21 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
           throw new MailQuotaError('not_enough_credits');
         if (response.status === 429 || response.status >= 500)
           throw new MailTemporaryError(`http_${response.status}`);
-        throw new MailRejectedError(
+        const code =
           typeof body?.code === 'string'
             ? body.code.slice(0, 60)
-            : `http_${response.status}`,
-        );
+            : `http_${response.status}`;
+        // The key, its permissions or the account were refused: about Brevo, not this mail.
+        throw new MailRejectedError(code, {
+          providerFault:
+            response.status === 401 ||
+            response.status === 403 ||
+            BREVO_ACCOUNT_CODES.has(code),
+        });
       }
+      // Accepted, perhaps: another provider could deliver it twice.
       if (typeof body?.messageId !== 'string')
-        throw new MailTemporaryError('no_message_id');
+        throw new MailTemporaryError('no_message_id', { ambiguous: true });
       return { providerMessageId: body.messageId };
     },
     verifyWebhook(rawBody, headers): MailWebhookResult {

@@ -18,6 +18,144 @@ import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { lagosTime, liveNowNote, trialNote } from '@/lib/ops-failover';
+
+/** Automatic failover's view of one provider (owner, 23 Nov 2026). */
+function HealthLine({
+  card,
+  canManage,
+  onChange,
+}: {
+  card: OpsMailProviderCard;
+  canManage: boolean;
+  onChange: () => void;
+}) {
+  const health = card.health;
+  if (!health) return null;
+  if (health.state === 'healthy')
+    return (
+      <p data-testid={`health-${card.name}`}>
+        Failover: healthy.
+        {health.trippedAt && health.reason
+          ? ` Last tripped ${when(health.trippedAt)}: ${health.reason}.`
+          : ''}
+      </p>
+    );
+  return (
+    <Slip
+      dense
+      className="ops-health-slip"
+      tone={health.state === 'resting' ? 'error' : 'waiting'}
+      title={
+        health.state === 'resting' && health.until
+          ? `Resting until ${lagosTime(health.until)}`
+          : 'On trial'
+      }
+      actions={
+        canManage && (
+          <ReasonAction
+            open="Clear"
+            field="Why clear this provider by hand?"
+            submit="Mark it healthy"
+            onSubmit={async (reason) => {
+              const result = await opsFetch<{ cleared: boolean }>(
+                `/v1/ops/providers/mail/${card.name}/health/clear`,
+                { method: 'POST', body: { reason } },
+              );
+              if (result.ok) {
+                onChange();
+                return null;
+              }
+              return result.code === 'DEPENDENCY_UNAVAILABLE'
+                ? 'The failover state can’t be reached right now. Try again in a minute.'
+                : 'That didn’t go through. Please try again.';
+            }}
+          />
+        )
+      }
+    >
+      <p data-testid={`health-${card.name}`}>
+        {health.reason ?? 'Tripped'}.{' '}
+        {health.state === 'resting'
+          ? 'New mail goes through the backup meanwhile.'
+          : `Now ${trialNote(health.kind)}.`}
+      </p>
+    </Slip>
+  );
+}
+
+/** Which provider is live, the backup, and the "fixed" choice. */
+function Failover({
+  data,
+  canManage,
+  onChange,
+}: {
+  data: OpsMailProviders;
+  canManage: boolean;
+  onChange: () => void;
+}) {
+  const label = (name: string | null) =>
+    data.providers.find((p) => p.name === name)?.label ?? name ?? '';
+  const { failover } = data;
+  if (!failover.configured)
+    return (
+      <Card className="settings-section" data-testid="failover">
+        <h2>Automatic failover</h2>
+        <p>
+          Off on this copy: all email goes through the active provider, and
+          nothing switches by itself.
+        </p>
+      </Card>
+    );
+  const active = data.providers.find((p) => p.active)?.name ?? null;
+  return (
+    <Card className="settings-section" data-testid="failover">
+      <h2>Automatic failover</h2>
+      <p>
+        <strong>{liveNowNote(data)}</strong>
+      </p>
+      {failover.fixed ? (
+        <p>
+          Fixed: everything goes through {label(active)}, and nothing switches
+          by itself until staff let it.
+        </p>
+      ) : (
+        <p>
+          When {label(active)} keeps failing to send, or too many codes it sends
+          go unused, it rests for a while and new email moves to{' '}
+          {label(failover.backup)}; it comes back once {label(active)} works
+          again. Staff are alerted each time.
+        </p>
+      )}
+      {canManage && (
+        <ReasonAction
+          open={
+            failover.fixed
+              ? 'Let it switch automatically'
+              : 'Fix the active provider'
+          }
+          field={
+            failover.fixed
+              ? 'Why let it switch again?'
+              : 'Why fix the provider (e.g. an investigation)?'
+          }
+          submit={failover.fixed ? 'Switch automatically' : 'Fix provider'}
+          onSubmit={async (reason) => {
+            const result = await opsFetch('/v1/ops/providers/mail/failover', {
+              method: 'POST',
+              body: { fixed: !failover.fixed, reason },
+            });
+            if (result.ok) {
+              onChange();
+              return null;
+            }
+            return 'That didn’t go through. Please try again.';
+          }}
+        />
+      )}
+    </Card>
+  );
+}
 
 const TEST_STATUS: Record<string, string> = {
   pending: 'Waiting for the link in the email to be opened',
@@ -82,6 +220,7 @@ function ProviderCard({
             : 'Status: unknown until a test is confirmed.'}
         </p>
       )}
+      <HealthLine card={card} canManage={canManage} onChange={onChange} />
       <p>
         Last 24 hours: {card.last24h.sent} sent, {card.last24h.failed} failed
         attempts, {card.last24h.bounced} bounced, {card.last24h.complained}{' '}
@@ -393,8 +532,13 @@ export default function ProvidersPage() {
     });
   }, [version]);
   const refresh = () => setVersion((v) => v + 1);
-  // A test moves on its own (sent, retried, failed): follow it while one is waiting.
-  const waiting = data?.providers.some((p) => p.lastTest?.status === 'pending');
+  // A test moves on its own (sent, retried, failed), and so does a resting provider (trial,
+  // recovered): follow them while one is waiting.
+  const waiting = data?.providers.some(
+    (p) =>
+      p.lastTest?.status === 'pending' ||
+      (p.health !== null && p.health.state !== 'healthy'),
+  );
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => setVersion((v) => v + 1), 5000);
@@ -422,6 +566,7 @@ export default function ProvidersPage() {
               Last switched {when(data.changedAt)}: {data.reason}
             </p>
           )}
+          <Failover data={data} canManage={canManage} onChange={refresh} />
           {data.providers.map((card) => (
             <ProviderCard
               key={card.name}

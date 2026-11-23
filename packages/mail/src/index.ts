@@ -25,7 +25,28 @@ export {
   senderAddress,
   type MailSender,
 } from './templates/define.js';
-export { isPretendRecipient, resolveMailProvider } from './routing.js';
+export {
+  isPretendRecipient,
+  mailFailoverGroup,
+  mailProviderChain,
+  resolveMailProvider,
+} from './routing.js';
+export {
+  createMailHealth,
+  liveMailProvider,
+  mailHealthView,
+  memoryMailHealthStore,
+  redisMailHealthStore,
+  type MailHealth,
+  type MailHealthChange,
+  type MailHealthChangeEvent,
+  type MailHealthRecord,
+  type MailHealthRedis,
+  type MailHealthSettings,
+  type MailHealthStore,
+  type MailHealthView,
+  type MailTripKind,
+} from './health.js';
 export { createBrevoProvider, type BrevoConfig } from './brevo/provider.js';
 export {
   createZeptoMailProvider,
@@ -37,6 +58,8 @@ export {
   checkMailSettings,
   configuredMailProviderNames,
   configuredMailProviders,
+  isProductionMail,
+  mailHealthSettings,
   mailSettingsShape,
   type MailSettings,
 } from './settings.js';
