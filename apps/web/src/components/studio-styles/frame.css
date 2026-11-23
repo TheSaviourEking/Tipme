@@ -20,9 +20,31 @@
    below it. Now the page fills what the header and the site's footer leave (globals.css, `body >
    main`) and its foot rests at the bottom of that: on a short page that is the bottom of the
    screen, on a tall page the foot simply follows the content. */
-.studio-main {
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .studio-main {
   display: flex;
   flex-direction: column;
+}
+
+/* The editor's preview frame is its own little document, not the site's page: its page fills it. */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .studio-preview-doc
+  .studio-main {
+  min-height: 100vh;
 }
 
 .studio[data-style] {
@@ -34,11 +56,6 @@
 .studio[data-style] > .studio-page {
   flex: 1 0 auto;
   width: 100%;
-}
-
-/* The editor's preview frame is its own little document, not the site's page: its page fills it. */
-.studio-preview-doc .studio-main {
-  min-height: 100vh;
 }
 
 /* Where the page is a single column (a phone, and Clear at every width) it is a flex column, so
@@ -53,13 +70,8 @@
   }
 }
 
-.studio[data-style='clear'] .studio-page {
-  display: flex;
-  flex-direction: column;
-}
-
 @media (max-width: 1023px) {
-  :where(.studio[data-style] .studio-page > *) {
+  .studio[data-style] :where(.studio-page > *) {
     width: 100%;
     width: -webkit-fill-available;
     width: -moz-available;
@@ -69,17 +81,6 @@
   .studio[data-style] .studio-page > .studio-grid {
     margin-bottom: auto;
   }
-}
-
-:where(.studio[data-style='clear'] .studio-page > *) {
-  width: 100%;
-  width: -webkit-fill-available;
-  width: -moz-available;
-  width: stretch;
-}
-
-.studio[data-style='clear'] .studio-page > .studio-grid {
-  margin-bottom: auto;
 }
 
 .studio[data-style][data-mode='dark'] {
