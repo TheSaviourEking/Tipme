@@ -1677,3 +1677,21 @@ test('M5: saving a bank already used by another recipient holds their waiting sh
     1,
   );
 });
+
+test('the status says the new-account delay while it applies, from the settings in force (owner, 23 Nov 2026)', async () => {
+  await collect(TOBI);
+  const controller = controllerFor(partner().provider);
+  const delay = async () =>
+    (await controller.status({ userId: TOBI.userId })).data.newAccountDelay;
+  // Signed up 60 days ago (beforeEach): past the window.
+  assert.equal(await delay(), null);
+  const created = ago(2 * DAY);
+  await q(`UPDATE profiles SET created_at = $1 WHERE id = $2`, [
+    created,
+    TOBI.id,
+  ]);
+  assert.deepEqual(await delay(), {
+    hours: 24,
+    until: new Date(created.getTime() + 7 * DAY).toISOString(),
+  });
+});

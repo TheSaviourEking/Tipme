@@ -1024,3 +1024,60 @@ test('money on its way is shown and never withdrawable', async () => {
     [String(NET), '0'],
   );
 });
+
+test('the new-account delay is said from the settings in force, only while it applies', async () => {
+  // Signed up 2 days ago: inside the 7-day window at the defaults (24 hours each).
+  const created = new Date(NOW.getTime() - 2 * DAY);
+  await q(`UPDATE profiles SET created_at = $1`, [created]);
+  await collect(TOBI);
+  let status = await ops.collectStatus(database.db, TOBI.id, NOW);
+  assert.deepEqual(status.newAccountDelay, {
+    hours: 24,
+    until: new Date(created.getTime() + 7 * DAY),
+  });
+  // A stored setting wins: 12 hours, for 3 days.
+  await q(
+    `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+       first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+       reserve_warning_minor, reserve_critical_minor, effective_from, reason)
+     VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 12, 3, 5000000, 20000000, 30,
+       50000000, 25000000, $1, 'Set in a test')`,
+    [new Date(NOW.getTime() - DAY)],
+  );
+  status = await ops.collectStatus(database.db, TOBI.id, NOW);
+  assert.deepEqual(status.newAccountDelay, {
+    hours: 12,
+    until: new Date(created.getTime() + 3 * DAY),
+  });
+  // Past the window: no delay.
+  status = await ops.collectStatus(
+    database.db,
+    TOBI.id,
+    new Date(created.getTime() + 3 * DAY),
+  );
+  assert.equal(status.newAccountDelay, null);
+  // A direct recipient never has one.
+  assert.equal(
+    (await ops.collectStatus(database.db, ADA.id, NOW)).newAccountDelay,
+    null,
+  );
+});
+
+test('no new-account delay when the setting is zero hours', async () => {
+  await q(`UPDATE profiles SET created_at = $1`, [
+    new Date(NOW.getTime() - DAY),
+  ]);
+  await collect(TOBI);
+  await q(
+    `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+       first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+       reserve_warning_minor, reserve_critical_minor, effective_from, reason)
+     VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 0, 7, 5000000, 20000000, 30,
+       50000000, 25000000, $1, 'Set in a test')`,
+    [new Date(NOW.getTime() - HOUR)],
+  );
+  assert.equal(
+    (await ops.collectStatus(database.db, TOBI.id, NOW)).newAccountDelay,
+    null,
+  );
+});
