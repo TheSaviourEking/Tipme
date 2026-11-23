@@ -186,7 +186,7 @@ Rules:
 - Gifts carry `branch_id` when given at a branch link or chosen in the picker. Otherwise they are HQ or unbranched.
 - HQ sees everything combined and per branch. A branch admin sees only their own branch.
 - **Settlement in version 1 is one organisation account.** Separate branch payout accounts come later, each verified on its own.
-- **Downgrading from Pro** keeps branch data and links working. Branch management becomes read-only, and new branches can't be added. This is the builder's call on exact behaviour, and must never break a printed QR code.
+- **Downgrading from Pro:** see §7.1. Pro features stop after the grace period, and printed QR codes never break.
 
 ### 6.5 Organisation dashboard
 
@@ -246,7 +246,23 @@ The layout follows the owner's reference images (KPI cards, then trend, then bre
 | Later: campaigns, automated reports                                                       | —               | Pro                                        |
 | Later: Enterprise (integrations, dedicated support, custom reports)                       | —               | its own plan                               |
 
-Billing reuses the existing Pro and Business Pro billing: pay from balance or card, auto-renew, bank transfer, and an admin-set price. Giving Pro can't be bought until its price is set.
+Billing reuses the existing Pro and Business Pro billing: card, bank transfer and auto-renew, with an admin-set price (never paid from gifts; §9a). Giving Pro can't be bought until its price is set.
+
+### 7.1 When Pro ends (owner, 23 Nov 2026: no free use of Pro after a downgrade)
+
+When Pro lapses or is cancelled, the organisation has a **14-day grace period** (an admin setting) in which everything keeps working and renewing restores it at once. Reminders go out 7 days and 1 day before Pro ends, and again when the grace period starts, the same as tips Pro. After the grace period:
+
+| Pro feature                                                                | After the grace period                                                                                                                                        |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Branch QR codes and links                                                  | Still resolve, never a dead link. They open the **organisation's main giving page with no branch picker**, and gifts carry no branch.                         |
+| Branch admins, branch dashboards, per-branch breakdowns and branch reports | Branch admins lose access. HQ loses the per-branch views. Branch-only categories are archived.                                                                |
+| Categories above the Free limit (6)                                        | The owner chooses which 6 stay active, before or during the grace period. The rest are archived, and their links open the main page with the category picker. |
+| Extra admins, Finance and Viewer roles                                     | The owner chooses 1 admin to keep. The rest lose access.                                                                                                      |
+| Page Studio styles                                                         | The giving page goes back to the default look.                                                                                                                |
+| PDF and Excel reports, longer-range analytics                              | CSV export and the basic dashboard only.                                                                                                                      |
+| Lower per-gift fee (if O2 gives Pro one)                                   | The standard Free fee applies to new gifts.                                                                                                                   |
+
+**Kept:** all data, including the branch and category on past gifts, branch records and archived categories. Renewing Pro restores everything exactly as it was. **Givers can always give**: no link or QR code ever becomes a dead end.
 
 ## 8. Constraints
 
@@ -306,7 +322,7 @@ Billing reuses the existing Pro and Business Pro billing: pay from balance or ca
 - **Paying for Giving Pro: card or bank transfer only, never from gifts.** Giving Pro is never paid from an organisation's gifts. Under option B those gifts are donor money that TipMe holds. Paying from the owner's personal TipMe balance is allowed only if it reuses `pro-balance` unchanged; otherwise it's card or bank transfer.
 - **Receipts: email only in version 1.** Phone/SMS/WhatsApp receipts wait for D-11 (messaging providers). The giver form offers email only.
 - **Sunday rate limits.** Many givers share one church Wi-Fi address, so per-IP-address limits on giving pages and gift checkouts must not stop a congregation. Limit per device or session, plus per organisation. The existing per-address cap on intents must not apply unchanged to Giving. This is part of the load-test target.
-- **Downgrading from Pro.** More than 6 categories, extra admins and branches keep working, and links and QR codes never break. New ones are blocked until the organisation upgrades again.
+- **Downgrading from Pro:** replaced by §7.1, at the owner's request (23 Nov 2026). Keeping Pro features working after a downgrade was a loophole, because organisations would keep using Pro without paying.
 - **What a branch admin sees under Settlement.** The branch's given totals and fees attributed to it. Payouts are organisation-wide, so they show only to HQ, Finance and the owner.
 - **Keeping data (provisional defaults until D-07 and a legal check; owner to confirm):**
   - **Verification documents** are kept while the organisation is active, plus 6 years after it closes (record-keeping). Staff can view them in ops; downloading one is a serious action and is audited. They're stored privately, never in a public bucket.
@@ -320,6 +336,6 @@ Billing reuses the existing Pro and Business Pro billing: pay from balance or ca
 - Exact category icons; quick-pick defaults per organisation type.
 - Cache strategy for giving pages, within the Sunday-rush requirement.
 - Chart components (reuse existing ones).
-- Exact downgrade behaviour for branches (must not break printed QR codes).
+- How the owner chooses which categories and admin to keep when Pro ends (§7.1). The default, if they don't choose, is the 6 categories with the most gifts in the last 90 days and the longest-serving admin.
 - Report layouts.
 - How the "Other" purpose note is stored and shown.
