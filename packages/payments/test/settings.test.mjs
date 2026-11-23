@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   bachsEnvironment,
   checkPaymentSettings,
+  configuredPaymentProviders,
   isLiveProvider,
   paymentSettingsShape,
   paymentWebhookSettingsShape,
@@ -329,4 +330,156 @@ test('LIVE_CHECKOUT_HANDLES: blank means nobody, a star means everyone, names ar
   );
   assert.equal(open({ PAYMENT_PROVIDER: 'mock' }, 'ada'), true);
   assert.equal(open({ PAYMENT_PROVIDER: 'bachs-sandbox' }, 'ada'), true);
+});
+
+// Withdraw-only providers: they pay out money already there, and take no new tips.
+const LIST = 'PAYMENT_WITHDRAW_ONLY_PROVIDERS';
+const messages = (env, webhooks) =>
+  issues(env, webhooks)
+    .filter((issue) => issue.path.join('.') === LIST)
+    .map((issue) => issue.message);
+const testBase = { NODE_ENV: 'test', DEPLOYMENT_MODE: 'preview' };
+
+test('the withdraw-only list parses in list order, and empty is []', () => {
+  const parse = (value) =>
+    schema(true).parse({
+      ...testBase,
+      PAYMENT_PROVIDER: 'bachs-sandbox',
+      ...sandboxCredentials,
+      ...(value === undefined ? {} : { [LIST]: value }),
+    })[LIST];
+  assert.deepEqual(parse(undefined), []);
+  assert.deepEqual(parse(''), []);
+  assert.deepEqual(parse('mock_alt,mock'), ['mock_alt', 'mock']);
+  assert.deepEqual(parse(' mock , mock_alt '), ['mock', 'mock_alt']);
+  assert.deepEqual(paths({ ...testBase, [LIST]: 'nope' }), [LIST]);
+});
+
+test('withdraw-only: mock_alt is accepted only under NODE_ENV=test', () => {
+  assert.deepEqual(messages({ ...testBase, [LIST]: 'mock_alt' }), []);
+  assert.deepEqual(
+    messages({ ...testBase, NODE_ENV: 'development', [LIST]: 'mock_alt' }),
+    ['mock_alt is allowed only under NODE_ENV=test'],
+  );
+});
+
+test('withdraw-only: mock and mock_alt are refused on a production copy', () => {
+  const prod = { ...production, ...liveCredentials };
+  assert.ok(
+    messages({ ...prod, [LIST]: 'mock' }).includes(
+      'mock not allowed in production',
+    ),
+  );
+  assert.ok(
+    messages({ ...prod, [LIST]: 'mock_alt' }).includes(
+      'mock_alt not allowed in production',
+    ),
+  );
+  assert.deepEqual(messages({ ...prod, [LIST]: '' }), []);
+});
+
+test('withdraw-only: a duplicate, or the active provider itself, is refused', () => {
+  assert.deepEqual(messages({ ...testBase, [LIST]: 'mock_alt,mock_alt' }), [
+    'mock_alt is listed twice',
+  ]);
+  assert.deepEqual(messages({ ...testBase, [LIST]: 'mock' }), [
+    'mock is the active provider',
+  ]);
+});
+
+test('withdraw-only: Bachs sandbox and live never sit together', () => {
+  const sandboxActive = {
+    NODE_ENV: 'test',
+    DEPLOYMENT_MODE: 'preview',
+    PAYMENT_PROVIDER: 'bachs-sandbox',
+    ...sandboxCredentials,
+  };
+  const found = messages({
+    ...sandboxActive,
+    ...liveCredentials,
+    [LIST]: 'bachs-live',
+  });
+  assert.ok(
+    found.includes(
+      'bachs-live is the same partner as the active provider in another environment',
+    ),
+    JSON.stringify(found),
+  );
+  const liveActive = { ...production, ...liveCredentials };
+  const reverse = messages({
+    ...liveActive,
+    ...sandboxCredentials,
+    [LIST]: 'bachs-sandbox',
+  });
+  assert.ok(
+    reverse.includes(
+      'bachs-sandbox is the same partner as the active provider in another environment',
+    ),
+    JSON.stringify(reverse),
+  );
+});
+
+test('withdraw-only: bachs-sandbox is refused on production and bachs-live off it', () => {
+  assert.ok(
+    messages({
+      ...production,
+      ...liveCredentials,
+      ...sandboxCredentials,
+      [LIST]: 'bachs-sandbox',
+    }).includes(
+      'bachs-sandbox is allowed only in test or password-protected preview',
+    ),
+  );
+  assert.ok(
+    messages({
+      ...testBase,
+      ...liveCredentials,
+      [LIST]: 'bachs-live',
+    }).includes('bachs-live is allowed only in production'),
+  );
+});
+
+test('withdraw-only: a Bachs name needs its key, and its webhook secret in the API', () => {
+  const base = { ...testBase, PAYMENT_PROVIDER: 'mock' };
+  assert.ok(
+    messages({ ...base, [LIST]: 'bachs-sandbox' }).includes(
+      'bachs-sandbox needs BACHS_SANDBOX_API_KEY',
+    ),
+  );
+  assert.deepEqual(
+    messages(
+      {
+        ...base,
+        BACHS_SANDBOX_API_KEY: 'sk_sandbox_dummy',
+        [LIST]: 'bachs-sandbox',
+      },
+      false,
+    ),
+    [],
+  );
+  assert.ok(
+    messages({
+      ...base,
+      BACHS_SANDBOX_API_KEY: 'sk_sandbox_dummy',
+      [LIST]: 'bachs-sandbox',
+    }).includes('bachs-sandbox needs BACHS_WEBHOOK_SECRET'),
+  );
+  const live = { ...production, PAYMENT_PROVIDER: 'bachs-live' };
+  assert.ok(
+    messages({
+      ...live,
+      BACHS_LIVE_API_KEY: LIVE_KEY,
+      [LIST]: 'bachs-live',
+    }).includes('bachs-live is the active provider'),
+  );
+});
+
+test('configuredPaymentProviders names the roles in one place', () => {
+  assert.deepEqual(
+    configuredPaymentProviders({
+      PAYMENT_PROVIDER: 'mock',
+      PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt'],
+    }),
+    { active: 'mock', withdrawOnly: ['mock_alt'] },
+  );
 });

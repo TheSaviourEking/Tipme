@@ -21,9 +21,39 @@ export const PAYMENT_PROVIDER_NAMES = [
 ] as const;
 export type PaymentProviderName = (typeof PAYMENT_PROVIDER_NAMES)[number];
 
+/** Providers that may be withdraw-only: pay out money already held, take no new tips. */
+export const WITHDRAW_ONLY_PROVIDER_NAMES = [
+  'mock',
+  'mock_alt',
+  'bachs-sandbox',
+  'bachs-live',
+] as const;
+export type WithdrawOnlyProviderName =
+  (typeof WITHDRAW_ONLY_PROVIDER_NAMES)[number];
+
 export const paymentSettingsShape = {
   // mock and bachs-sandbox: test and password-protected preview only. bachs-live: production only.
   PAYMENT_PROVIDER: z.enum(PAYMENT_PROVIDER_NAMES).default('mock'),
+  // Comma list of providers that only pay out (see docs/runbooks/settings-and-switches.md). Never
+  // set on production while only bachs-live exists.
+  PAYMENT_WITHDRAW_ONLY_PROVIDERS: z
+    .string()
+    .default('')
+    .transform((raw, context): WithdrawOnlyProviderName[] => {
+      const items = raw
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
+      const known: readonly string[] = WITHDRAW_ONLY_PROVIDER_NAMES;
+      if (items.some((item) => !known.includes(item))) {
+        context.addIssue({
+          code: 'custom',
+          message: `must be provider names (${WITHDRAW_ONLY_PROVIDER_NAMES.join(', ')}) separated by commas`,
+        });
+        return [];
+      }
+      return items as WithdrawOnlyProviderName[];
+    }),
   // Whether checkout takes real money. Only meaningful (and only allowed) with bachs-live.
   PAYMENTS_LIVE_ENABLED: flag,
   BACHS_SANDBOX_API_KEY: z
@@ -101,6 +131,8 @@ export interface PaymentSettings {
   DEPLOYMENT_MODE?: string | undefined;
   PAYMENT_PROVIDER: PaymentProviderName;
   PAYMENTS_LIVE_ENABLED: boolean;
+  PAYMENT_WITHDRAW_ONLY_PROVIDERS?:
+    readonly WithdrawOnlyProviderName[] | undefined;
   BACHS_SANDBOX_API_KEY?: string | undefined;
   BACHS_LIVE_API_KEY?: string | undefined;
   BACHS_WEBHOOK_SECRET?: string | undefined;
@@ -111,6 +143,68 @@ export interface PaymentSettings {
 
 export function isLiveProvider(name: string): name is 'bachs-live' {
   return name === 'bachs-live';
+}
+
+function checkWithdrawOnlyProviders(
+  s: PaymentSettings,
+  issue: (path: string, message: string) => void,
+  production: boolean,
+  options: { webhooks: boolean },
+): void {
+  const path = 'PAYMENT_WITHDRAW_ONLY_PROVIDERS';
+  const seen = new Set<string>();
+  for (const name of s.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? []) {
+    if (seen.has(name)) {
+      issue(path, `${name} is listed twice`);
+      continue;
+    }
+    seen.add(name);
+    if (name === s.PAYMENT_PROVIDER) {
+      issue(path, `${name} is the active provider`);
+      continue;
+    }
+    if ((name === 'mock' || name === 'mock_alt') && production)
+      issue(path, `${name} not allowed in production`);
+    if (name === 'mock_alt' && s.NODE_ENV !== 'test')
+      issue(path, 'mock_alt is allowed only under NODE_ENV=test');
+    if (
+      bachsEnvironment(name) &&
+      recordedProviderName(name) === recordedProviderName(s.PAYMENT_PROVIDER)
+    )
+      issue(
+        path,
+        `${name} is the same partner as the active provider in another environment`,
+      );
+    if (name === 'bachs-sandbox') {
+      if (production)
+        issue(
+          path,
+          'bachs-sandbox is allowed only in test or password-protected preview',
+        );
+      if (!s.BACHS_SANDBOX_API_KEY)
+        issue(path, 'bachs-sandbox needs BACHS_SANDBOX_API_KEY');
+      if (options.webhooks && !s.BACHS_WEBHOOK_SECRET)
+        issue(path, 'bachs-sandbox needs BACHS_WEBHOOK_SECRET');
+    }
+    if (name === 'bachs-live') {
+      if (!production) issue(path, 'bachs-live is allowed only in production');
+      if (!s.BACHS_LIVE_API_KEY)
+        issue(path, 'bachs-live needs BACHS_LIVE_API_KEY');
+      if (options.webhooks && !s.BACHS_LIVE_WEBHOOK_SECRET)
+        issue(path, 'bachs-live needs BACHS_LIVE_WEBHOOK_SECRET');
+    }
+  }
+}
+
+/** The one place both apps read provider roles: the active provider and the withdraw-only ones. */
+export function configuredPaymentProviders(config: {
+  PAYMENT_PROVIDER: PaymentProviderName;
+  PAYMENT_WITHDRAW_ONLY_PROVIDERS: readonly WithdrawOnlyProviderName[];
+}): { active: PaymentProviderName; withdrawOnly: WithdrawOnlyProviderName[] } {
+  return {
+    active: config.PAYMENT_PROVIDER,
+    withdrawOnly: [...config.PAYMENT_WITHDRAW_ONLY_PROVIDERS],
+  };
 }
 
 /**
@@ -146,6 +240,7 @@ export function checkPaymentSettings(
     if (options.webhooks && !s.BACHS_LIVE_WEBHOOK_SECRET)
       issue('BACHS_LIVE_WEBHOOK_SECRET', 'required for Bachs live');
   }
+  checkWithdrawOnlyProviders(s, issue, production, options);
   if (s.PAYMENTS_LIVE_ENABLED && !isLiveProvider(provider))
     issue('PAYMENTS_LIVE_ENABLED', 'requires the bachs-live provider');
   if (

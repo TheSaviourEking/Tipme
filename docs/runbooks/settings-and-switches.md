@@ -133,6 +133,7 @@ read, and before any read the code default, which is off for every money switch.
 | --------------------------------------------- | ---------------------------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PAYMENTS_LIVE_ENABLED`                       | Whether checkout takes real money (bachs-live only)                          | A W P S   | The deploy script checks it together with `ALERT_WEBHOOK_URL` and compares it with what it was told to expect before any colour starts; the worker refuses to start live without the alert address. Moving it would take real money out of that check.                                      |
 | `PAYMENT_PROVIDER`                            | mock, bachs-sandbox or bachs-live                                            | A W P S   | Chooses which credentials and adapter a process builds at start; production refuses mock and sandbox at start.                                                                                                                                                                              |
+| `PAYMENT_WITHDRAW_ONLY_PROVIDERS`             | Providers that only pay out money already held (comma list, default empty)   | A W P S   | Which adapters a process builds beyond the active one; production refuses mock and mock_alt at start. Never set on production while only `bachs-live` exists.                                                                                                                               |
 | `LIVE_CHECKOUT_HANDLES`                       | Who may take real tips while live payments are on                            | A P       | Part of the live-money gate with `PAYMENTS_LIVE_ENABLED` (live-activation runbook). A tunable, but moving it needs the owner's word (owner, 14 Nov 2026: stays).                                                                                                                            |
 | `REWARD_CASH_BUDGET_MINOR_PER_MONTH`          | Monthly cash rewards budget                                                  | W P S     | Must be 0 in production until D-05; the worker refuses any other value at start.                                                                                                                                                                                                            |
 | `DEPLOYMENT_MODE`, `RELEASE_KIND`, `NODE_ENV` | What this copy is (production, preview, test)                                | A W Web S | Decide what is allowed at all (mock providers, diagnostics, rehearsal settings) before anything else is read.                                                                                                                                                                               |
@@ -144,6 +145,21 @@ read, and before any read the code default, which is off for every money switch.
 | `SITE_INDEXING`                               | Search engines may index this copy (Vercel)                                  | Web       | A staging copy must never be indexed; it is read while rendering metadata, before any API answer.                                                                                                                                                                                           |
 | `NEXT_PUBLIC_PRETEND_DELIVERY`                | The pretend inbox and crash pages in a production build                      | Web       | Built into the web bundle; test copies only.                                                                                                                                                                                                                                                |
 | `NEXT_PUBLIC_PREVIEW_GATE`                    | Sends credentials to the password-gated preview                              | Web       | Built into the bundle; describes the preview gateway.                                                                                                                                                                                                                                       |
+
+### Withdraw-only providers: `PAYMENT_WITHDRAW_ONLY_PROVIDERS`
+
+`PAYMENT_PROVIDER` stays the one active provider: new tips, withdrawals, refunds, disputes and webhooks. This setting
+(a comma list, default empty, same names as `PAYMENT_PROVIDER` plus `mock_alt`) names providers that take **no new
+tips** but still pay out money already held there, and still serve refunds, disputes, reconciliation and webhooks.
+
+- **Never set on production while only `bachs-live` exists.** Production has no second provider to list; the key stays empty there.
+- Startup refuses: `mock` or `mock_alt` on production; `mock_alt` outside `NODE_ENV=test` (a test-only second adapter);
+  a duplicate or the active provider itself; `bachs-sandbox` and `bachs-live` together (both record as `bachs`, and the
+  money tables carry no environment); `bachs-sandbox` on production or `bachs-live` off it; a Bachs name without its API
+  key, or (API only) its webhook secret.
+- **Retiring a withdraw-only provider** (design §4): remove it from the list only once the ops screen shows no owner with
+  money there and nothing open (payouts, refunds, disputes) through it for 30 days. Removing it early brings back the
+  block for anyone with money there. Change the setting on the API, worker and preview together, then restart.
 
 ## Product switch that stays in the environment
 
