@@ -615,3 +615,22 @@ test('(b) trial codes nobody uses rest ZeptoMail again', async (t) => {
   assert.equal(view.state, 'resting');
   assert.equal(view.reason, '3 of 3 trial codes unused');
 });
+
+test('(c) a code asked for again is not rescued onto a provider on trial', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db);
+  // Brevo tripped 15 minutes ago: its rest is over and it is on trial now.
+  await s.view('brevo', at(-900_000));
+  await s.health.tripCodes('brevo', 'test');
+  await signIn(db, 'ada@gmail.com', T0);
+  await s.deliver(T0);
+  await signIn(db, 'ada@gmail.com', at(60_000));
+  await s.deliver(at(60_000));
+  const codes = await rows(
+    "SELECT provider FROM mail_messages WHERE type = 'sign_in_code' ORDER BY created_at",
+  );
+  assert.deepEqual(
+    codes.map((c) => c.provider),
+    ['zeptomail', 'zeptomail'],
+  );
+});

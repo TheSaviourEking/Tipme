@@ -662,25 +662,30 @@ export async function deliverDueMail(
     // resting. A provider whose rest is over takes trial traffic: one probe, or the next codes.
     // Without failover the chain is the one provider routing picks, exactly as before.
     const isCode = ONE_TIME_CODE_MAIL_TYPES.has(mail.type);
-    const chain =
+    const chainInput =
       failover && !bulk
-        ? mailProviderChain({
+        ? {
             ...routing,
             defaultProvider: failover.defaultProvider,
             fallbacks: failover.fallbacks,
             production: failover.production,
-            after: isCode
-              ? await previousCodeProvider(
-                  deps.db,
-                  mail,
-                  failover.resendWindowMs,
-                )
-              : null,
-          })
-        : [routed];
+          }
+        : null;
+    let chain = chainInput ? mailProviderChain(chainInput) : [routed];
     const health = failover && !bulk ? failover.health : null;
     const views =
       health && chain.length > 1 ? await health.snapshot(chain) : null;
+    // (c) A code asked for again soon after the last goes through the provider after the one
+    // that sent it, but only when that provider is healthy (not resting, not on trial).
+    if (chainInput && views && isCode) {
+      const after = await previousCodeProvider(
+        deps.db,
+        mail,
+        failover!.resendWindowMs,
+      );
+      const rescue = mailProviderChain({ ...chainInput, after });
+      if (views.get(rescue[0]!)?.state === 'healthy') chain = rescue;
+    }
     const failures: Array<{ name: MailProviderName; error: unknown }> = [];
     let sent: { name: MailProviderName; providerMessageId: string } | null =
       null;
