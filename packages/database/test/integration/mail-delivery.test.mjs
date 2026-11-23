@@ -772,3 +772,146 @@ test('with Brevo active, receipts go through its transactional instance from the
     provider_message_id: '<b1@smtp-relay.mailin.fr>',
   });
 });
+
+// Fix round 1 (review I2): Brevo running out of credits. Announcements pause an hour at a time, as
+// before. A security email (a sign-in code, a recovery or verification link) through the codes
+// instance fails at once instead, so it shows as failed on the Email console and the Brevo card
+// and staff can switch back by hand: a code held for an hour has expired anyway. Other mail keeps
+// the hourly pause. A credit error in one instance never pauses the other.
+function brevoAnswering(fromAddress, answers) {
+  const bodies = [];
+  let calls = 0;
+  const provider = createBrevoProvider({
+    apiKey: 'brevo-placeholder-test',
+    apiBase: 'https://api.brevo.example',
+    ...(fromAddress ? { fromAddress } : {}),
+    webhookToken: 'brevo-webhook-token-0123456789',
+    sandbox: false,
+    fetchImpl: async (_url, init) => {
+      calls += 1;
+      if (answers.shift() === 'credits')
+        return Response.json(
+          { code: 'not_enough_credits', message: 'Insufficient credits' },
+          { status: 400 },
+        );
+      bodies.push(JSON.parse(init.body));
+      return Response.json(
+        { messageId: `<c${calls}@smtp-relay.mailin.fr>` },
+        { status: 201 },
+      );
+    },
+  });
+  return { provider, bodies, calls: () => calls };
+}
+
+const securityCode = (key, now) => ({
+  type: 'email_verification_link',
+  to: `code.${key}@example.com`,
+  data: verify,
+  dedupeKey: `email_verification_link.credits.${key}`,
+  expiresAt: new Date(now.getTime() + 10 * 60_000),
+  now,
+});
+
+test('a security email Brevo has no credits for fails at once, visibly; announcements still go', async (t) => {
+  const { db, rows } = await fresh(t);
+  // Delivered a second after queueing, so everything queued is due.
+  const now = new Date(Date.now() + 1000);
+  const { id } = await enqueueMail(db, sealing, securityCode('a', now));
+  await enqueueMail(db, sealing, notice('beside_code'));
+  const codes = brevoAnswering(undefined, ['credits']);
+  const announcements = brevoAnswering('news@usetipme.xyz', []);
+  const warnings = [];
+  const result = await deliverDueMail(
+    {
+      ...deps(db, codes.provider),
+      announcementProvider: announcements.provider,
+      warn: (entry) => warnings.push(entry),
+    },
+    { now, limit: 20 },
+  );
+  assert.equal(result.failed, 1);
+  assert.equal(result.sent, 1);
+  const [row] = await rows(
+    'SELECT status, provider, last_error FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, {
+    status: 'failed',
+    provider: 'brevo',
+    last_error: 'not_enough_credits',
+  });
+  const failed = await rows(
+    `SELECT provider FROM mail_message_events WHERE message_id = $1 AND kind = 'send_failed'`,
+    [id],
+  );
+  // The Brevo card's failed count and the Email console read this event.
+  assert.deepEqual(failed, [{ provider: 'brevo' }]);
+  assert.deepEqual(warnings, [
+    {
+      event: 'mail.provider_out_of_credits',
+      message_id: id,
+      type: 'email_verification_link',
+      provider: 'brevo',
+      code: 'not_enough_credits',
+    },
+  ]);
+  assert.equal(announcements.bodies.length, 1);
+});
+
+test('other mail through the codes instance waits for credits, without pausing announcements', async (t) => {
+  const { db, rows } = await fresh(t);
+  // Delivered a second after queueing, so everything queued is due.
+  const now = new Date(Date.now() + 1000);
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.credits',
+  });
+  for (const key of ['x', 'y']) await enqueueMail(db, sealing, notice(key));
+  const codes = brevoAnswering(undefined, ['credits']);
+  const announcements = brevoAnswering('news@usetipme.xyz', []);
+  const result = await deliverDueMail(
+    {
+      ...deps(db, codes.provider),
+      announcementProvider: announcements.provider,
+    },
+    { now, limit: 20 },
+  );
+  assert.equal(result.failed, 0);
+  const [row] = await rows(
+    'SELECT status, attempts, next_attempt_at FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.equal(row.status, 'queued');
+  assert.equal(row.attempts, 0);
+  assert.equal(
+    row.next_attempt_at.getTime(),
+    now.getTime() + MAIL_QUOTA_RETRY_MS,
+  );
+  assert.equal(announcements.bodies.length, 2);
+});
+
+test('announcements out of credits never hold back a code through the codes instance', async (t) => {
+  const { db, rows } = await fresh(t);
+  // Delivered a second after queueing, so everything queued is due.
+  const now = new Date(Date.now() + 1000);
+  for (const key of ['p', 'q']) await enqueueMail(db, sealing, notice(key));
+  const { id } = await enqueueMail(db, sealing, securityCode('b', now));
+  const codes = brevoAnswering(undefined, []);
+  const announcements = brevoAnswering('news@usetipme.xyz', ['credits']);
+  await deliverDueMail(
+    {
+      ...deps(db, codes.provider),
+      announcementProvider: announcements.provider,
+    },
+    { now, limit: 20 },
+  );
+  assert.equal(announcements.calls(), 1);
+  const [row] = await rows('SELECT status FROM mail_messages WHERE id = $1', [
+    id,
+  ]);
+  assert.equal(row.status, 'sent');
+  assert.equal(codes.bodies.length, 1);
+});

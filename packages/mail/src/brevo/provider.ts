@@ -35,6 +35,12 @@ export interface BrevoConfig {
   webhookToken?: string | undefined;
   /** Brevo checks each request and sends nothing (staging and tests). */
   sandbox: boolean;
+  /**
+   * The codes instance: its status warns staff that Brevo may still rewrite links. Brevo has no
+   * per-email switch for click tracking (its send reference, read 23 Nov 2026), only an account
+   * setting, so security mail is safe only once that is off for the account.
+   */
+  linkTrackingWarning?: boolean;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -141,7 +147,18 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
               email: config.fromAddress ?? mail.from.address,
               name: mail.from.name,
             },
-            to: [{ email: mail.to }],
+            // Untracked mail (security mail: never a pixel next to a code): no open pixel and no
+            // per-contact tracking. Brevo honours these only on plans that support them, and
+            // neither stops link rewriting (linkTrackingWarning).
+            to: [
+              mail.tracking
+                ? { email: mail.to }
+                : {
+                    email: mail.to,
+                    removeTrackingPixel: true,
+                    contactPixelTrackingConsent: false,
+                  },
+            ],
             ...(mail.replyTo ? { replyTo: { email: mail.replyTo } } : {}),
             subject: mail.subject,
             htmlContent: mail.html,
@@ -206,7 +223,11 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
     async status() {
       return {
         sandbox: config.sandbox,
-        detail: config.sandbox ? 'Sandbox: Brevo checks and drops' : null,
+        detail: config.sandbox
+          ? 'Sandbox: Brevo checks and drops'
+          : config.linkTrackingWarning
+            ? 'Brevo may still rewrite links in security emails unless click tracking is off for this Brevo account'
+            : null,
       };
     },
   };

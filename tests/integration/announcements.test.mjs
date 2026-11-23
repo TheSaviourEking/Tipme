@@ -865,3 +865,49 @@ test('two announcements sending at once share one daily limit', async () => {
   );
   assert.equal(count, 5);
 });
+
+// Fix round 1 (review I2): with BREVO_TRANSACTIONAL on, codes and receipts sent through Brevo use
+// the same account's credits, so they count toward the announcement daily limit too, and one
+// announcement can't use up what codes need. Mail sent through any other provider doesn't count.
+test('codes and receipts sent through Brevo count toward the daily limit; other providers’ don’t', async () => {
+  await dailyLimit('10');
+  const now = new Date();
+  const sent = async (provider, key, at = now) => {
+    const { id } = await ops.enqueueMail(database.db, sealing, {
+      type: 'tip_received',
+      to: `${key}@example.com`,
+      data: {
+        firstName: 'Tobi',
+        netMinor: '180000',
+        supporterLabel: 'Ada',
+        pretendPayment: false,
+      },
+      dedupeKey: `tip_received.daily.${key}`,
+    });
+    await q(
+      `UPDATE mail_messages SET status = 'sent', provider = $2, sent_at = $3, final_at = $3 WHERE id = $1`,
+      [id, provider, at],
+    );
+  };
+  await sent('brevo', 'a');
+  await sent('brevo', 'b');
+  await sent('zeptomail', 'c');
+  await sent('ses', 'd');
+  // Sent through Brevo more than 24 hours ago: its credit is back.
+  await sent('brevo', 'e', new Date(now.getTime() - 25 * HOUR));
+  // Queued for the codes instance but not sent yet: no provider chosen, so not counted.
+  await ops.enqueueMail(database.db, sealing, {
+    type: 'tip_received',
+    to: 'f@example.com',
+    data: {
+      firstName: 'Tobi',
+      netMinor: '180000',
+      supporterLabel: 'Ada',
+      pretendPayment: false,
+    },
+    dedupeKey: 'tip_received.daily.f',
+  });
+  const use = await ops.announcementDailyUse(database.db, now);
+  assert.equal(use.used, 2);
+  assert.equal(use.remaining, 8);
+});

@@ -405,3 +405,35 @@ test('with both set up, one Brevo webhook feeds codes and announcements alike', 
     401,
   );
 });
+
+test('with both set up, an announcement’s bounce through the codes instance still lands and suppresses', async (t) => {
+  const db = await database(t);
+  const brevo = new MailWebhookController(
+    new Map([['brevo', brevoTransactional()]]),
+    { db: db.db },
+    sealing,
+    logger,
+    async () => {},
+    brevoController(db).announcements,
+  );
+  const { id } = await enqueueMail(db.db, sealing, {
+    type: 'service_notice',
+    to: 'tobi@example.com',
+    data: { subject: 'Fees', preheader: '', text: 'Fees change' },
+    dedupeKey: `notice.webhook.${Math.random()}`,
+  });
+  await db.pool.query(
+    `UPDATE mail_messages SET status = 'sent', provider = 'brevo', provider_message_id = $2 WHERE id = $1`,
+    [id, `<${id}@smtp-relay.mailin.fr>`],
+  );
+  await brevo.receive('brevo', brevoMessageEvent('hard_bounce', id));
+  const [row] = (
+    await db.pool.query(`SELECT status FROM mail_messages WHERE id = $1`, [id])
+  ).rows;
+  assert.equal(row.status, 'bounced');
+  const suppressed = await db.pool.query(
+    `SELECT reason FROM mail_suppressions WHERE address_hmac = $1`,
+    [addressHmac(sealing, 'tobi@example.com')],
+  );
+  assert.equal(suppressed.rows[0]?.reason, 'hard_bounce');
+});

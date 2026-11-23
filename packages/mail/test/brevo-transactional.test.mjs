@@ -210,3 +210,106 @@ test('the transactional instance accepts Brevo’s webhooks with the shared toke
   assert.equal(result.events[0].kind, 'delivered');
   assert.equal(result.events[0].reference, code.reference);
 });
+
+// Fix round 1 (review I1): Brevo can't turn link rewriting off per email. Where mail must not be
+// tracked (security mail), the adapter asks for no open pixel and no per-contact tracking, which
+// Brevo honours on plans that support it, and the codes instance warns staff on its card.
+test('untracked mail asks Brevo for no pixel and no contact tracking; tracked mail does not', async () => {
+  const { requests, fetchImpl } = recorder();
+  const config = parse({ ...TRANSACTIONAL }).data;
+  const brevo = configuredMailProviders(config, async () => {}, {
+    fetchImpl,
+  }).get('brevo');
+  await brevo.send(code);
+  assert.deepEqual(requests[0].body.to, [
+    {
+      email: 'ada@example.com',
+      removeTrackingPixel: true,
+      contactPixelTrackingConsent: false,
+    },
+  ]);
+  await brevo.send({ ...code, tracking: true });
+  assert.deepEqual(requests[1].body.to, [{ email: 'ada@example.com' }]);
+});
+
+test('the codes instance warns on its card that Brevo may still rewrite links', async () => {
+  const sink = async () => {};
+  const config = parse({ ...ANNOUNCEMENTS, ...TRANSACTIONAL }).data;
+  const status = await configuredMailProviders(config, sink)
+    .get('brevo')
+    .status();
+  assert.equal(status.sandbox, false);
+  assert.match(status.detail, /click tracking/i);
+  assert.match(status.detail, /Brevo account/);
+  // The announcement instance's status is unchanged.
+  assert.deepEqual(await announcementMailProvider(config, sink).status(), {
+    sandbox: false,
+    detail: null,
+  });
+  const dropped = parse({
+    ...TRANSACTIONAL,
+    BREVO_TRANSACTIONAL_SANDBOX: 'on',
+  }).data;
+  const sandboxed = await configuredMailProviders(dropped, sink)
+    .get('brevo')
+    .status();
+  assert.equal(sandboxed.sandbox, true);
+  assert.match(sandboxed.detail, /Sandbox/);
+});
+
+test('the codes instance keeps the reply-to and one-click unsubscribe headers', async () => {
+  const { requests, fetchImpl } = recorder();
+  const config = parse({ ...TRANSACTIONAL }).data;
+  const brevo = configuredMailProviders(config, async () => {}, {
+    fetchImpl,
+  }).get('brevo');
+  await brevo.send({
+    ...code,
+    replyTo: 'support@usetipme.xyz',
+    headers: {
+      'List-Unsubscribe': '<https://api.usetipme.xyz/v1/mail/unsubscribe?t=a>',
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    },
+  });
+  assert.deepEqual(requests[0].body.replyTo, { email: 'support@usetipme.xyz' });
+  assert.deepEqual(requests[0].body.headers, {
+    'List-Unsubscribe': '<https://api.usetipme.xyz/v1/mail/unsubscribe?t=a>',
+    'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    'X-Mailin-custom': `tipme_ref:${code.reference}`,
+  });
+});
+
+// Review M1: in production, codes sent with Brevo's sandbox on would be marked sent and dropped.
+test('production refuses BREVO_TRANSACTIONAL_SANDBOX=on', () => {
+  const production = z
+    .object({
+      NODE_ENV: z.string(),
+      DEPLOYMENT_MODE: z.string(),
+      ...mailSettingsShape,
+    })
+    .superRefine((config, context) => checkMailSettings(config, context));
+  const issues = (env) => {
+    const result = production.safeParse(env);
+    return result.success
+      ? []
+      : result.error.issues.map((issue) => issue.path.join('.'));
+  };
+  const live = {
+    ...TRANSACTIONAL,
+    ...PRODUCTION,
+    MAIL_DEFAULT_PROVIDER: 'brevo',
+  };
+  assert.deepEqual(issues(live), []);
+  assert.deepEqual(issues({ ...live, BREVO_TRANSACTIONAL_SANDBOX: 'on' }), [
+    'BREVO_TRANSACTIONAL_SANDBOX',
+  ]);
+  // A preview copy is not production.
+  assert.deepEqual(
+    issues({
+      ...live,
+      DEPLOYMENT_MODE: 'preview',
+      BREVO_TRANSACTIONAL_SANDBOX: 'on',
+    }),
+    [],
+  );
+});

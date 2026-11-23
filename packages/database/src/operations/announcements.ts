@@ -616,6 +616,9 @@ export async function announcementDailyLimit(
  * Brevo's free plan allows 300 a day and we don't know the hour its day starts, so the window rolls:
  * an email counts while it waits in the queue (its credit is still to be used, however old it is)
  * and for 24 hours after it was sent. One never sent (skipped, suppressed, failed) used no credit.
+ * Codes and receipts sent through Brevo (BREVO_TRANSACTIONAL=on) use the same account's credits, so
+ * they count once sent, and one announcement can't use up what codes need (review, 23 Nov 2026).
+ * They are never held back by the limit: only announcement batches are.
  */
 export async function announcementDailyUse(
   db: Database | Tx,
@@ -636,10 +639,10 @@ export async function announcementDailyUse(
       (SELECT count(*)::int FROM mail_messages
         WHERE type IN (${types}) AND status IN ('queued', 'sending')) AS waiting,
       (SELECT count(*)::int FROM mail_messages
-        WHERE type IN (${types}) AND sent_at > ${since}::timestamptz
+        WHERE (type IN (${types}) OR provider = 'brevo') AND sent_at > ${since}::timestamptz
           AND status NOT IN ('queued', 'sending')) AS sent,
       (SELECT min(sent_at) FROM mail_messages
-        WHERE type IN (${types}) AND sent_at > ${since}::timestamptz
+        WHERE (type IN (${types}) OR provider = 'brevo') AND sent_at > ${since}::timestamptz
           AND status NOT IN ('queued', 'sending')) AS oldest`,
   );
   const row = result.rows[0];

@@ -168,6 +168,9 @@ export function checkMailSettings(
         : 'SES_SECRET_ACCESS_KEY',
       'set both SES access keys, or neither',
     );
+  // Codes would be marked sent and dropped by Brevo (review, 23 Nov 2026).
+  if (s.BREVO_TRANSACTIONAL_SANDBOX === true && isProduction(s))
+    issue('BREVO_TRANSACTIONAL_SANDBOX', 'not allowed in production');
   if (s.MAIL_DEFAULT_PROVIDER === 'mock' && isProduction(s))
     issue('MAIL_DEFAULT_PROVIDER', 'mock not allowed in production');
   else if (!configuredMailProviderNames(s).has(s.MAIL_DEFAULT_PROVIDER))
@@ -225,6 +228,7 @@ export function configuredMailProviders(
         apiBase: s.BREVO_API_BASE ?? 'https://api.brevo.com',
         webhookToken: s.BREVO_WEBHOOK_TOKEN,
         sandbox: s.BREVO_TRANSACTIONAL_SANDBOX ?? false,
+        linkTrackingWarning: true,
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
       }),
     );
