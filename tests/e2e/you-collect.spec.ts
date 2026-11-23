@@ -1336,12 +1336,15 @@ test('with the switch on, an undecided recipient whose first tip would go to Tip
        ON CONFLICT (key) DO UPDATE SET enabled = true, source = 'staff'`,
     );
     // Their next quote would put them on You collect (no account of their own), so the screens say
-    // so now: no set-up notice, and "You can take tips now".
+    // so now: no set-up notice, and "You can take tips now". The two come from separate reads
+    // (the shell's payment account, Home's You collect status), each asking the API's 15-second
+    // switch cache on its own, so one page load can straddle the switch reaching it: both are
+    // checked on the same load, and a load that caught only one is read again.
     await expect(async () => {
       await page.goto('/dashboard');
       await expect(main.getByText(COPY.noBank)).toBeVisible({ timeout: 2000 });
+      await expect(notice).toHaveCount(0, { timeout: 2000 });
     }).toPass({ timeout: 40_000, intervals: [2000] });
-    await expect(notice).toHaveCount(0);
     // Read-only: still undecided. The first quote (or adding bank details) fixes it.
     expect(await collectionModeOf(handle)).toBeNull();
   } finally {
@@ -1350,13 +1353,24 @@ test('with the switch on, an undecided recipient whose first tip would go to Tip
       `DELETE FROM feature_switches WHERE key = 'you_collect'`,
     );
     await db.close();
+    // Whatever happened above, wait until the API reads the switch as off (an undecided recipient
+    // is direct again: no You collect status), so a failure here never leaks into the next test.
+    await expect
+      .poll(
+        async () =>
+          (await page.request.get(`${API_ORIGIN}/v1/me/collect`)).status(),
+        { timeout: 40_000, intervals: [2000] },
+      )
+      .toBe(404);
   }
-  // Off again: undecided reads as direct, as before.
+  // Off again: undecided reads as direct, as before (both reads, on the same load).
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(notice).toBeVisible({ timeout: 2000 });
+    await expect(main.getByText(COPY.noBank)).toHaveCount(0, {
+      timeout: 2000,
+    });
   }).toPass({ timeout: 40_000, intervals: [2000] });
-  await expect(main.getByText(COPY.noBank)).toHaveCount(0);
   expect(await collectionModeOf(handle)).toBeNull();
 });
 
