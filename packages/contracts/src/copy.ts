@@ -64,6 +64,22 @@ export const COLLECT_HELD_NOTE = {
 } as const;
 
 /**
+ * Withdraw for a verified You collect recipient with nothing to withdraw (owner, 23 Nov 2026): what
+ * is on its way, where they can withdraw it, and the new-account delay while it applies. Each tip's
+ * share moves to their own account and can be withdrawn once it arrives. The amounts and hours are
+ * put in already formatted (₦5,709,500; 24 hours). Never the partner's name.
+ */
+export const COLLECT_WITHDRAW_WORDS = {
+  onItsWay: (amount: string) => `${amount} is on its way to you`,
+  thenWithdraw: (bank: string | null) =>
+    bank
+      ? `You can withdraw it to ${bank} once it arrives.`
+      : 'You can withdraw it once it arrives.',
+  newAccountDelay: (hours: string) =>
+    `New accounts’ tips arrive ${hours} after they’re received.`,
+} as const;
+
+/**
  * The in-app notice after support changes a recipient's verified name (Task 15 fix round 1, I3):
  * their tips wait until our payment partner checks the new name with their bank details again.
  */

@@ -44,6 +44,7 @@ import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
   belowMinimum,
+  collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
   withdrawDayNote,
@@ -329,6 +330,13 @@ export default function WithdrawPage({
     return (
       <div className="dashboard-section withdraw">
         <h1>Withdraw</h1>
+        {/* The holding cap was reached: the same words as Home's banner (spec §10). */}
+        {collect.paused && (
+          <StandingWarning
+            title={COLLECT_COPY.pausedRecipient}
+            className="withdraw__warning"
+          />
+        )}
         <div className="withdraw__layout">
           <div className="withdraw__money">
             {(summary.keptMinor !== '0' || summary.refundHeldMinor !== '0') && (
@@ -357,6 +365,74 @@ export default function WithdrawPage({
                 if (state === 'verified') reloadAll();
               }}
             />
+          </div>
+          {history}
+        </div>
+      </div>
+    );
+  // You collect, verified, with nothing to withdraw (owner, 23 Nov 2026): what is on its way and
+  // where it can go, never ₦0 and a Withdraw key. TipMe's own figures say it, so the partner's quote
+  // isn't waited for. A balance from before You collect keeps today's screen below.
+  const onItsWay = collectWithdrawView({
+    collect,
+    availableMinor: summary.availableMinor,
+  });
+  if (collect && onItsWay)
+    return (
+      <div className="dashboard-section withdraw">
+        <h1>Withdraw</h1>
+        {allSet && (
+          <Slip
+            tone="done"
+            title={COLLECT_COPY.verified}
+            className="withdraw__done"
+          />
+        )}
+        <div className="withdraw__layout">
+          <div className="withdraw__money">
+            <section
+              className="withdraw__meter"
+              aria-labelledby={`${id}-coming`}
+            >
+              {collect.onItsWayMinor !== '0' ? (
+                <>
+                  <h2 id={`${id}-coming`} className="withdraw__cap">
+                    On its way
+                  </h2>
+                  <p
+                    className="withdraw__figure"
+                    data-testid="withdraw-on-its-way"
+                  >
+                    <Money minor={collect.onItsWayMinor} />
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 id={`${id}-coming`} className="withdraw__cap">
+                    Available
+                  </h2>
+                  <p className="withdraw__figure">
+                    <Money minor={summary.availableMinor} />
+                  </p>
+                </>
+              )}
+              <p className="withdraw__lamp">
+                <Lamp tone={onItsWay.lamp.tone} />
+                {onItsWay.lamp.text}
+              </p>
+              {onItsWay.lines.map((line) => (
+                <p key={line} className="withdraw__fine">
+                  {line}
+                </p>
+              ))}
+              {collect.bank && (
+                <p className="withdraw__chip">
+                  <span>{bankLine(collect.bank)}</span>
+                  <Link href="/dashboard/settings#get-paid">Change</Link>
+                </p>
+              )}
+              {pilotNotice}
+            </section>
           </div>
           {history}
         </div>

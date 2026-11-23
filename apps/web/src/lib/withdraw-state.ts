@@ -1,4 +1,12 @@
-import type { WithdrawalQuoteResponse } from '@tipme/contracts';
+import type {
+  CollectStatusView,
+  WithdrawalQuoteResponse,
+} from '@tipme/contracts';
+import {
+  COLLECT_COPY,
+  COLLECT_HELD_NOTE,
+  COLLECT_WITHDRAW_WORDS,
+} from '@tipme/contracts/copy';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import type { LampTone } from '@tipme/ui';
 import { formatNaira } from './demo-amount.ts';
@@ -30,6 +38,7 @@ export interface WithdrawState {
 }
 
 const NOTHING_NOW = 'Nothing to withdraw right now';
+const NOTHING_YET = 'You have nothing to withdraw yet.';
 
 const unavailable = {
   title: 'We can’t check your balance',
@@ -192,6 +201,72 @@ export function withdrawState(input: {
       };
     }
   }
+}
+
+/** What Withdraw shows a verified You collect recipient with nothing to withdraw. */
+export interface CollectWithdrawView {
+  lamp: { tone: LampTone; text: string };
+  /** Plain sentences under the lamp, in order. */
+  lines: string[];
+}
+
+const hoursWord = (hours: number) =>
+  hours === 1 ? '1 hour' : `${hours} hours`;
+
+/**
+ * You collect (owner, 23 Nov 2026): a verified collect recipient's tips wait with TipMe, then move to
+ * their own account, and only then can be withdrawn. With nothing to withdraw now, Withdraw offers
+ * no amount or Withdraw key: it says what is on its way, where they can withdraw it once it arrives,
+ * the new-account delay while it applies (from the settings, never a fixed 24), and what is held for
+ * a refund or a dispute. Null means today's screen: not on You collect, the add-bank-details form
+ * (not verified, or adding the bank again), or a balance that can be withdrawn (money from before).
+ */
+export function collectWithdrawView(input: {
+  collect: Pick<
+    CollectStatusView,
+    | 'verified'
+    | 'readdBank'
+    | 'bank'
+    | 'onItsWayMinor'
+    | 'refundHeldMinor'
+    | 'disputeHeldMinor'
+    | 'newAccountDelay'
+  > | null;
+  availableMinor: string;
+}): CollectWithdrawView | null {
+  const { collect } = input;
+  if (!collect || !collect.verified || collect.readdBank) return null;
+  if (BigInt(input.availableMinor) > BigInt(0)) return null;
+  const coming = collect.onItsWayMinor !== '0';
+  const bank = collect.bank
+    ? `${collect.bank.bankName} ••${collect.bank.last4}`
+    : null;
+  const lines = [
+    coming ? COLLECT_WITHDRAW_WORDS.thenWithdraw(bank) : NOTHING_YET,
+  ];
+  if (collect.newAccountDelay)
+    lines.push(
+      COLLECT_WITHDRAW_WORDS.newAccountDelay(
+        hoursWord(collect.newAccountDelay.hours),
+      ),
+    );
+  if (collect.refundHeldMinor !== '0')
+    lines.push(
+      COLLECT_HELD_NOTE.refundHeld(formatNaira(collect.refundHeldMinor)),
+    );
+  if (collect.disputeHeldMinor !== '0')
+    lines.push(COLLECT_COPY.disputeHold(formatNaira(collect.disputeHeldMinor)));
+  return {
+    lamp: coming
+      ? {
+          tone: 'amber',
+          text: COLLECT_WITHDRAW_WORDS.onItsWay(
+            formatNaira(collect.onItsWayMinor),
+          ),
+        }
+      : { tone: 'off', text: NOTHING_NOW },
+    lines,
+  };
 }
 
 /**

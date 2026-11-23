@@ -170,7 +170,12 @@ export async function collectStatus(
         ? settings.firstWithdrawalCapMinor
         : null,
     dailyLimitMinor: collecting && young ? settings.newDailyLimitMinor : null,
-    newAccountDelay: newAccountDelay(collecting, facts.createdAt, settings, now),
+    newAccountDelay: newAccountDelay(
+      collecting,
+      facts.createdAt,
+      settings,
+      now,
+    ),
   };
 }
 
