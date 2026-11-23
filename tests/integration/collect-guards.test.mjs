@@ -1028,7 +1028,10 @@ test('money on its way is shown and never withdrawable', async () => {
 test('the new-account delay is said from the settings in force, only while it applies', async () => {
   // Signed up 2 days ago: inside the 7-day window at the defaults (24 hours each).
   const created = new Date(NOW.getTime() - 2 * DAY);
-  await q(`UPDATE profiles SET created_at = $1`, [created]);
+  await q(`UPDATE profiles SET created_at = $1 WHERE id = $2`, [
+    created,
+    TOBI.id,
+  ]);
   await collect(TOBI);
   let status = await ops.collectStatus(database.db, TOBI.id, NOW);
   assert.deepEqual(status.newAccountDelay, {
@@ -1064,8 +1067,9 @@ test('the new-account delay is said from the settings in force, only while it ap
 });
 
 test('no new-account delay when the setting is zero hours', async () => {
-  await q(`UPDATE profiles SET created_at = $1`, [
+  await q(`UPDATE profiles SET created_at = $1 WHERE id = $2`, [
     new Date(NOW.getTime() - DAY),
+    TOBI.id,
   ]);
   await collect(TOBI);
   await q(

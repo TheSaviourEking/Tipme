@@ -44,6 +44,7 @@ import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
   belowMinimum,
+  collectDelayLine,
   collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
@@ -370,17 +371,29 @@ export default function WithdrawPage({
         </div>
       </div>
     );
-  // You collect, verified, with nothing to withdraw (owner, 23 Nov 2026): what is on its way and
-  // where it can go, never ₦0 and a Withdraw key. TipMe's own figures say it, so the partner's quote
-  // isn't waited for. A balance from before You collect keeps today's screen below.
+  // You collect, verified, with nothing to withdraw (owner, 23 Nov 2026; ADR-0016): what is on its
+  // way and where withdrawals go, never ₦0 and a Withdraw key. TipMe's own figures say it, so the
+  // partner's quote isn't waited for (a hold it reports is said once it is read). A balance keeps
+  // today's screen below, and so does a withdrawal just asked for: withdrawing the whole balance
+  // reloads it as ₦0, and its slip (or a "not confirmed" one) must stay.
   const onItsWay = collectWithdrawView({
     collect,
     availableMinor: summary.availableMinor,
+    quote: latest.error ? null : latest.data,
+    outcomeShown: done !== null || unsure !== null || error !== '',
   });
   if (collect && onItsWay)
     return (
       <div className="dashboard-section withdraw">
         <h1>Withdraw</h1>
+        {onItsWay.warning && (
+          <StandingWarning
+            title={onItsWay.warning.title}
+            className="withdraw__warning"
+          >
+            {onItsWay.warning.body}
+          </StandingWarning>
+        )}
         {allSet && (
           <Slip
             tone="done"
@@ -394,28 +407,15 @@ export default function WithdrawPage({
               className="withdraw__meter"
               aria-labelledby={`${id}-coming`}
             >
-              {collect.onItsWayMinor !== '0' ? (
-                <>
-                  <h2 id={`${id}-coming`} className="withdraw__cap">
-                    On its way
-                  </h2>
-                  <p
-                    className="withdraw__figure"
-                    data-testid="withdraw-on-its-way"
-                  >
-                    <Money minor={collect.onItsWayMinor} />
-                  </p>
-                </>
-              ) : (
-                <>
-                  <h2 id={`${id}-coming`} className="withdraw__cap">
-                    Available
-                  </h2>
-                  <p className="withdraw__figure">
-                    <Money minor={summary.availableMinor} />
-                  </p>
-                </>
-              )}
+              <h2 id={`${id}-coming`} className="withdraw__cap">
+                {onItsWay.figure.caption}
+              </h2>
+              <p
+                className="withdraw__figure"
+                data-testid="withdraw-collect-figure"
+              >
+                <Money minor={onItsWay.figure.minor} />
+              </p>
               <p className="withdraw__lamp">
                 <Lamp tone={onItsWay.lamp.tone} />
                 {onItsWay.lamp.text}
@@ -425,9 +425,9 @@ export default function WithdrawPage({
                   {line}
                 </p>
               ))}
-              {collect.bank && (
+              {onItsWay.bank && (
                 <p className="withdraw__chip">
-                  <span>{bankLine(collect.bank)}</span>
+                  <span>{onItsWay.bank}</span>
                   <Link href="/dashboard/settings#get-paid">Change</Link>
                 </p>
               )}
@@ -592,6 +592,11 @@ export default function WithdrawPage({
                   summary={summary}
                   className="withdraw__held-note"
                 />
+              </p>
+            )}
+            {collectDelayLine(collect) && (
+              <p className="withdraw__fine" data-testid="collect-delay">
+                {collectDelayLine(collect)}
               </p>
             )}
             {collect?.firstWithdrawalCapMinor && (

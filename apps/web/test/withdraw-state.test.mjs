@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   TOO_SMALL,
   belowMinimum,
+  collectDelayLine,
   collectWithdrawView,
   withdrawableNow,
   withdrawDayNote,
@@ -513,8 +514,9 @@ test('the 3rd withdrawal of the day says plainly that the transfer fee comes off
   assert.equal(withdrawDayNote({ state: 'no_destination' }), null);
 });
 
-// You collect (owner, 23 Nov 2026): a verified collect recipient with nothing to withdraw is told
-// what is on its way and where it can go, never shown ₦0 and a Withdraw key.
+// You collect (owner, 23 Nov 2026; ADR-0016): each tip's share moves to the recipient's own account
+// and is withdrawn from there. A verified collect recipient with nothing to withdraw is told what is
+// on its way and where withdrawals go, never shown ₦0 and a Withdraw key.
 const collect = (over = {}) => ({
   verified: true,
   readdBank: false,
@@ -525,37 +527,44 @@ const collect = (over = {}) => ({
   newAccountDelay: { hours: 24, until: '2026-11-30T10:00:00.000Z' },
   ...over,
 });
-const collectView = (over = {}, availableMinor = '0') =>
-  collectWithdrawView({ collect: collect(over), availableMinor });
+const collectView = (over = {}, availableMinor = '0', extra = {}) =>
+  collectWithdrawView({ collect: collect(over), availableMinor, ...extra });
 
-test('collect, money on its way: says how much, where it can go, and the new-account delay', () => {
+test('collect, money on its way: the amount once, a lamp that says when it can go, the bank on the chip', () => {
   assert.deepEqual(collectView(), {
-    lamp: { tone: 'amber', text: '₦5,709,500 is on its way to you' },
-    lines: [
-      'You can withdraw it to Opay ••5629 once it arrives.',
-      'New accounts’ tips arrive 24 hours after they’re received.',
-    ],
+    figure: { caption: 'On its way to you', minor: '570950000' },
+    lamp: { tone: 'amber', text: 'You can withdraw it once it arrives.' },
+    lines: ['New accounts’ tips arrive 24 hours after they’re received.'],
+    bank: 'Withdrawals go to Opay ••5629',
+    warning: null,
   });
 });
 
-test('collect: the delay line is built from the settings, and left out when none applies', () => {
-  assert.equal(
-    collectView({ newAccountDelay: { hours: 1, until: 'x' } }).lines[1],
-    'New accounts’ tips arrive 1 hour after they’re received.',
-  );
-  assert.equal(
-    collectView({ newAccountDelay: { hours: 48, until: 'x' } }).lines[1],
-    'New accounts’ tips arrive 48 hours after they’re received.',
-  );
-  assert.deepEqual(collectView({ newAccountDelay: null }).lines, [
-    'You can withdraw it to Opay ••5629 once it arrives.',
-  ]);
+test('collect words never say the money goes straight to the bank', () => {
+  const view = collectView();
+  for (const text of [view.lamp.text, ...view.lines, view.bank])
+    assert.doesNotMatch(text, /on its way to (Opay|your bank)|^To /);
 });
 
-test('collect, nothing on its way: nothing to withdraw, with no amount invented', () => {
-  assert.deepEqual(collectView({ onItsWayMinor: '0', newAccountDelay: null }), {
+test('collect: the delay line is built from the settings, and left out when none applies', () => {
+  assert.deepEqual(
+    collectView({ newAccountDelay: { hours: 1, until: 'x' } }).lines,
+    ['New accounts’ tips arrive 1 hour after they’re received.'],
+  );
+  assert.deepEqual(
+    collectView({ newAccountDelay: { hours: 48, until: 'x' } }).lines,
+    ['New accounts’ tips arrive 48 hours after they’re received.'],
+  );
+  assert.deepEqual(collectView({ newAccountDelay: null }).lines, []);
+});
+
+test('collect, nothing on its way: nothing to withdraw, and no delay line about money that isn’t there', () => {
+  assert.deepEqual(collectView({ onItsWayMinor: '0' }), {
+    figure: { caption: 'Available', minor: '0' },
     lamp: { tone: 'off', text: 'Nothing to withdraw right now' },
     lines: ['You have nothing to withdraw yet.'],
+    bank: 'Withdrawals go to Opay ••5629',
+    warning: null,
   });
 });
 
@@ -567,22 +576,33 @@ test('collect: money held for a refund or a dispute is said on its own line', ()
       newAccountDelay: null,
     }).lines,
     [
-      'You can withdraw it to Opay ••5629 once it arrives.',
       '₦3,000 is held while a refund is settled.',
       'A payment to you is being questioned. We’ve held ₦2,500 until it’s settled.',
     ],
   );
 });
 
-test('collect without a bank on record still says nothing untrue', () => {
+test('collect without a bank on record has no chip', () => {
+  assert.equal(collectView({ bank: null }).bank, null);
+});
+
+test('collect: a withdrawal hold the quote reports is said, with today’s words', () => {
+  assert.deepEqual(
+    collectView({}, '0', { quote: { state: 'paused', reason: 'reversal' } })
+      .warning,
+    {
+      title: 'Withdrawals are paused',
+      body: 'Withdrawals are paused while support checks your account. Questions: support@usetipme.xyz',
+    },
+  );
   assert.equal(
-    collectView({ bank: null, newAccountDelay: null }).lines[0],
-    'You can withdraw it once it arrives.',
+    collectView({}, '0', { quote: ready({ withdrawableMinor: '0' }) }).warning,
+    null,
   );
 });
 
-test('collect: today’s Withdraw screen stays for a balance from before, the bank form, and everyone else', () => {
-  // An old TipMe balance can still be withdrawn.
+test('collect: today’s Withdraw screen stays for a balance, the bank form, and everyone else', () => {
+  // A balance (arrived, or from before You collect) can be withdrawn.
   assert.equal(collectView({}, '180000'), null);
   // Not verified yet, or adding the bank again: the add-bank-details form says what to do.
   assert.equal(collectView({ verified: false }), null);
@@ -594,11 +614,26 @@ test('collect: today’s Withdraw screen stays for a balance from before, the ba
   );
 });
 
+test('collect: a withdrawal just requested (or one we couldn’t confirm) keeps today’s screen, so its slip stays', () => {
+  // The whole balance was withdrawn: the reload reads ₦0, but the outcome must still be said.
+  assert.equal(collectView({}, '0', { outcomeShown: true }), null);
+});
+
+test('the delay line on today’s screen: only with money on its way while the delay applies', () => {
+  assert.equal(
+    collectDelayLine(collect()),
+    'New accounts’ tips arrive 24 hours after they’re received.',
+  );
+  assert.equal(collectDelayLine(collect({ onItsWayMinor: '0' })), null);
+  assert.equal(collectDelayLine(collect({ newAccountDelay: null })), null);
+  assert.equal(collectDelayLine(null), null);
+});
+
 test('collect words never name the payment partner', () => {
   const view = collectView({
     refundHeldMinor: '300000',
     disputeHeldMinor: '250000',
   });
-  for (const text of [view.lamp.text, ...view.lines])
+  for (const text of [view.lamp.text, ...view.lines, view.bank])
     assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
 });

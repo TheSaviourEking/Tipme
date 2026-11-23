@@ -205,21 +205,43 @@ export function withdrawState(input: {
 
 /** What Withdraw shows a verified You collect recipient with nothing to withdraw. */
 export interface CollectWithdrawView {
+  /** The instrument's figure: what is on its way, or the (empty) balance. */
+  figure: { caption: string; minor: string };
   lamp: { tone: LampTone; text: string };
   /** Plain sentences under the lamp, in order. */
   lines: string[];
+  /** The bank chip's words ("Withdrawals go to Opay ••5629"); null without a bank on record. */
+  bank: string | null;
+  /** A withdrawal hold the quote reports (today's words), when there is one. */
+  warning: { title: string; body: string } | null;
 }
 
 const hoursWord = (hours: number) =>
   hours === 1 ? '1 hour' : `${hours} hours`;
 
 /**
- * You collect (owner, 23 Nov 2026): a verified collect recipient's tips wait with TipMe, then move to
- * their own account, and only then can be withdrawn. With nothing to withdraw now, Withdraw offers
- * no amount or Withdraw key: it says what is on its way, where they can withdraw it once it arrives,
- * the new-account delay while it applies (from the settings, never a fixed 24), and what is held for
- * a refund or a dispute. Null means today's screen: not on You collect, the add-bank-details form
- * (not verified, or adding the bank again), or a balance that can be withdrawn (money from before).
+ * The new-account delay line (owner, 23 Nov 2026), from the settings in force: only while some money
+ * is on its way and the delay applies. Today's screen says it too when part has already arrived.
+ */
+export function collectDelayLine(
+  collect: Pick<CollectStatusView, 'onItsWayMinor' | 'newAccountDelay'> | null,
+): string | null {
+  if (!collect?.newAccountDelay || collect.onItsWayMinor === '0') return null;
+  return COLLECT_WITHDRAW_WORDS.newAccountDelay(
+    hoursWord(collect.newAccountDelay.hours),
+  );
+}
+
+/**
+ * You collect (owner, 23 Nov 2026; ADR-0016): a verified collect recipient's tips wait with TipMe,
+ * then move to their own account, and only then can be withdrawn. With nothing to withdraw now,
+ * Withdraw offers no amount or Withdraw key: it says what is on its way and that it can be withdrawn
+ * once it arrives, the new-account delay while it applies (from the settings, never a fixed 24),
+ * what is held for a refund or a dispute, a withdrawal hold the quote reports, and where withdrawals
+ * go. Null means today's screen: not on You collect, the add-bank-details form (not verified, or
+ * adding the bank again), a balance that can be withdrawn, or the outcome of a withdrawal just asked
+ * for still being said (`outcomeShown`: withdrawing the whole balance reloads it as ₦0, and money
+ * that moved is always said).
  */
 export function collectWithdrawView(input: {
   collect: Pick<
@@ -233,39 +255,43 @@ export function collectWithdrawView(input: {
     | 'newAccountDelay'
   > | null;
   availableMinor: string;
+  /** The quote, when it has been read: only a hold is taken from it. */
+  quote?: WithdrawalQuoteResponse | null;
+  outcomeShown?: boolean;
 }): CollectWithdrawView | null {
   const { collect } = input;
   if (!collect || !collect.verified || collect.readdBank) return null;
+  if (input.outcomeShown) return null;
   if (BigInt(input.availableMinor) > BigInt(0)) return null;
   const coming = collect.onItsWayMinor !== '0';
-  const bank = collect.bank
-    ? `${collect.bank.bankName} ••${collect.bank.last4}`
-    : null;
-  const lines = [
-    coming ? COLLECT_WITHDRAW_WORDS.thenWithdraw(bank) : NOTHING_YET,
-  ];
-  if (collect.newAccountDelay)
-    lines.push(
-      COLLECT_WITHDRAW_WORDS.newAccountDelay(
-        hoursWord(collect.newAccountDelay.hours),
-      ),
-    );
+  const lines: string[] = [];
+  if (!coming) lines.push(NOTHING_YET);
+  const delay = collectDelayLine(collect);
+  if (delay) lines.push(delay);
   if (collect.refundHeldMinor !== '0')
     lines.push(
       COLLECT_HELD_NOTE.refundHeld(formatNaira(collect.refundHeldMinor)),
     );
   if (collect.disputeHeldMinor !== '0')
     lines.push(COLLECT_COPY.disputeHold(formatNaira(collect.disputeHeldMinor)));
+  const hold =
+    input.quote?.state === 'paused'
+      ? withdrawState({ withdrawalsAvailable: true, quote: input.quote }).notice
+      : null;
   return {
+    figure: coming
+      ? { caption: COLLECT_COPY.onItsWay, minor: collect.onItsWayMinor }
+      : { caption: 'Available', minor: input.availableMinor },
     lamp: coming
-      ? {
-          tone: 'amber',
-          text: COLLECT_WITHDRAW_WORDS.onItsWay(
-            formatNaira(collect.onItsWayMinor),
-          ),
-        }
+      ? { tone: 'amber', text: COLLECT_WITHDRAW_WORDS.thenWithdraw }
       : { tone: 'off', text: NOTHING_NOW },
     lines,
+    bank: collect.bank
+      ? COLLECT_WITHDRAW_WORDS.bank(
+          `${collect.bank.bankName} ••${collect.bank.last4}`,
+        )
+      : null,
+    warning: hold ? { title: hold.title, body: hold.body } : null,
   };
 }
 

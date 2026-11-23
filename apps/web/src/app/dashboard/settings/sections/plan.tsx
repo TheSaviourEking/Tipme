@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type {
+  CollectStatusView,
   DashboardSummary,
   MyProfile,
   MyPro,
@@ -8,8 +9,6 @@ import type {
 } from '@tipme/contracts';
 import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { useCollectStatus } from '@/components/dashboard/collect-status';
-import { usePanel } from '@/components/dashboard/use-panel';
 import { usePlanFees } from '@/lib/use-plan-fees';
 import { dateOf } from '@/lib/lagos-time';
 import {
@@ -201,6 +200,51 @@ function FollowedSlip({
   }
 }
 
+/**
+ * Whether the TipMe balance can pay for a month (proPayOptions): read once, and only while paying
+ * from the balance is offered at all, so a direct recipient's plan never waits on You collect and
+ * Settings adds no re-reads against the shared bank-read limit. A 404 means not on You collect; any
+ * other failure leaves it unknown, which offers the balance as before (the server refuses what it
+ * can't take).
+ */
+function useBalanceFacts(enabled: boolean): {
+  mode: 'direct' | 'collect' | null;
+  availableMinor: string | null;
+} {
+  const [facts, setFacts] = useState<{
+    mode: 'direct' | 'collect' | null;
+    availableMinor: string | null;
+  }>({ mode: null, availableMinor: null });
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    void (async () => {
+      const status = await apiFetch<CollectStatusView>('/v1/me/collect');
+      if (!current) return;
+      if (!status.ok) {
+        if (status.status === 404)
+          setFacts({ mode: 'direct', availableMinor: null });
+        return;
+      }
+      const collecting = status.data.mode === 'collect';
+      if (!collecting) {
+        setFacts({ mode: 'direct', availableMinor: null });
+        return;
+      }
+      const summary = await apiFetch<DashboardSummary>('/v1/me/dashboard');
+      if (!current) return;
+      setFacts({
+        mode: 'collect',
+        availableMinor: summary.ok ? summary.data.availableMinor : null,
+      });
+    })();
+    return () => {
+      current = false;
+    };
+  }, [enabled]);
+  return facts;
+}
+
 /** What Pro includes, the current plan, and paying for a month when buying is open. */
 export function ProPlan() {
   const { freePercent, proPercent } = usePlanFees();
@@ -213,11 +257,6 @@ export function ProPlan() {
   const [renew, setRenew] = useState(false);
   const [renewOff, setRenewOff] = useState<'done' | 'failed' | null>(null);
   const renewId = useId();
-  // Whether the balance can pay for a month: a You collect recipient's often can't (proPayOptions).
-  const { collect, known: collectKnown } = useCollectStatus();
-  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', {
-    live: ['tips.changed', 'withdrawals.changed'],
-  });
 
   const load = useCallback(async () => {
     const result = await readMyPro();
@@ -266,13 +305,16 @@ export function ProPlan() {
   const fromDate = pro?.current ? dateOf(pro.current.endsAt) : 'today';
   // Both behind the server's flags (off by default): with them off the screen is unchanged. A You
   // collect recipient is offered the balance only when it covers the month (proPayOptions).
+  const balanceFacts = useBalanceFacts(
+    Boolean(pro?.methods?.includes('balance')),
+  );
   const balanceOn =
     price !== null &&
     proPayOptions({
       methods: pro?.methods ?? [],
       priceMinor: price.amountMinor,
-      mode: collectKnown ? (collect ? 'collect' : 'direct') : null,
-      availableMinor: balance.data?.availableMinor ?? null,
+      mode: balanceFacts.mode,
+      availableMinor: balanceFacts.availableMinor,
     }).includes('balance');
   const renewOn = Boolean(pro?.autoRenew?.on);
   const renewOffered = Boolean(pro?.autoRenew?.available) && !renewOn;

@@ -40,9 +40,13 @@ test('a collect recipient whose balance covers the price can pay from it', () =>
   ]);
 });
 
-test('while the mode or the balance is unknown, the balance is not offered', () => {
-  assert.deepEqual(of({ mode: null }), ['checkout']);
-  assert.deepEqual(of({ mode: 'collect', availableMinor: null }), ['checkout']);
+test('an unknown mode or balance never hides the balance: the server refuses what it can’t take', () => {
+  // A direct recipient never depends on the You collect read (its failure, or it still loading).
+  assert.deepEqual(of({ mode: null }), ['checkout', 'balance']);
+  assert.deepEqual(of({ mode: 'collect', availableMinor: null }), [
+    'checkout',
+    'balance',
+  ]);
 });
 
 test('the switch off still means no balance for anyone', () => {

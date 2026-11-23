@@ -64,17 +64,14 @@ export const COLLECT_HELD_NOTE = {
 } as const;
 
 /**
- * Withdraw for a verified You collect recipient with nothing to withdraw (owner, 23 Nov 2026): what
- * is on its way, where they can withdraw it, and the new-account delay while it applies. Each tip's
- * share moves to their own account and can be withdrawn once it arrives. The amounts and hours are
- * put in already formatted (₦5,709,500; 24 hours). Never the partner's name.
+ * Withdraw for a verified You collect recipient with nothing to withdraw (owner, 23 Nov 2026;
+ * ADR-0016): each tip's share moves to their own account and can be withdrawn once it arrives, so
+ * nothing here says it goes straight to their bank. The bank and hours are put in already formatted
+ * (Opay ••5629; 24 hours). Never the partner's name.
  */
 export const COLLECT_WITHDRAW_WORDS = {
-  onItsWay: (amount: string) => `${amount} is on its way to you`,
-  thenWithdraw: (bank: string | null) =>
-    bank
-      ? `You can withdraw it to ${bank} once it arrives.`
-      : 'You can withdraw it once it arrives.',
+  thenWithdraw: 'You can withdraw it once it arrives.',
+  bank: (bank: string) => `Withdrawals go to ${bank}`,
   newAccountDelay: (hours: string) =>
     `New accounts’ tips arrive ${hours} after they’re received.`,
 } as const;

@@ -361,20 +361,27 @@ for (const [label, viewport] of VIEWPORTS) {
       await expect(main.getByText(COPY.verified)).toBeVisible();
 
       // A fresh visit: the tip's share waits the new-account delay (24 hours at the defaults).
+      // The amount is said once, with when it can go; the bank is where withdrawals go, never where
+      // the money is going now (it reaches their own account first, ADR-0016).
       await page.goto('/dashboard/withdraw');
-      const lamp = main.getByText(/^₦[\d,]+(\.\d\d)? is on its way to you$/);
-      await expect(lamp).toBeVisible();
-      await expect(main.getByTestId('withdraw-on-its-way')).toHaveText(
+      await expect(
+        main.getByRole('heading', { name: 'On its way to you' }),
+      ).toBeVisible();
+      await expect(main.getByTestId('withdraw-collect-figure')).toHaveText(
         /^₦[\d,]+(\.\d\d)?$/,
       );
-      const amount = (await main
-        .getByTestId('withdraw-on-its-way')
-        .textContent())!.trim();
-      await expect(lamp).toHaveText(`${amount} is on its way to you`);
       await expect(
-        main.getByText(/^You can withdraw it to .+ ••6789 once it arrives\.$/),
+        main.getByText('You can withdraw it once it arrives.', { exact: true }),
       ).toBeVisible();
+      await expect(
+        main.getByText(/^Withdrawals go to .+ ••6789$/),
+      ).toBeVisible();
+      await expect(main.getByRole('link', { name: 'Change' })).toHaveAttribute(
+        'href',
+        '/dashboard/settings#get-paid',
+      );
       await expect(main.getByText(COPY.delay)).toBeVisible();
+      await expect(main).not.toContainText(/is on its way to|To .+ ••6789/);
       // Never ₦0 with a Withdraw key, and nothing that would only be refused.
       await expect(main.getByTestId('withdraw-available')).toHaveCount(0);
       await expect(page.getByLabel('Amount (NGN)')).toHaveCount(0);
