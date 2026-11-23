@@ -22,7 +22,7 @@ const ops = { userId: TOBI.userId, grantId: null };
 const reason = 'moving to the launch provider';
 const SECRET = 'zepto-secret-key-value';
 
-async function setup(t, config = {}) {
+async function setup(t, config = {}, { brevo = false } = {}) {
   const database = await openTestDatabase();
   t.after(() => database.close());
   await database.reset();
@@ -38,6 +38,9 @@ async function setup(t, config = {}) {
   const providers = new Map([
     ['mock', provider('mock', { sandbox: null, detail: 'pretend' })],
     ['ses', provider('ses', { sandbox: true, detail: '200 emails a day' })],
+    ...(brevo
+      ? [['brevo', provider('brevo', { sandbox: false, detail: null })]]
+      : []),
   ]);
   const api = new OpsProvidersController(
     {
@@ -335,4 +338,45 @@ test('a provider that hangs cannot hang the page, and status is not fetched on e
   await api.overview();
   await api.overview();
   assert.ok(calls <= 2, `status fetched ${calls} times`);
+});
+
+// Brevo for codes and receipts (owner, 23 Nov 2026): where BREVO_TRANSACTIONAL=on puts it in the
+// map, staff see it as "Brevo", test it, switch to it and pin an account to it like the others.
+test('Brevo can be tested, switched to and pinned, and is labelled plainly', async (t) => {
+  const { api, db, pool } = await setup(t, {}, { brevo: true });
+  const card = (await api.overview()).data.providers.find(
+    (p) => p.name === 'brevo',
+  );
+  assert.equal(card.label, 'Brevo');
+  assert.equal(card.sandbox, false);
+  await api.startTest(ops, 'brevo', { to: 'staff@example.com', reason });
+  const [mail] = await queuedMail(db, sealing, { limit: 1 });
+  // The worker sends a test through the provider it tests, whichever is active.
+  const pinned = await pool.query(
+    'SELECT pinned_provider FROM mail_messages WHERE id = $1',
+    [mail.id],
+  );
+  assert.equal(pinned.rows[0].pinned_provider, 'brevo');
+  await api.confirmTest(ops, { token: mail.data.token });
+  await api.switchProvider(ops, { provider: 'brevo', reason });
+  const after = await api.overview();
+  assert.equal(
+    after.data.providers.find((p) => p.name === 'brevo').active,
+    true,
+  );
+  await api.setOverride(ops, { account: 'ada', provider: 'brevo', reason });
+  assert.deepEqual(
+    (await api.overview()).data.overrides.map((o) => o.provider),
+    ['brevo'],
+  );
+});
+
+test('Brevo is unknown where BREVO_TRANSACTIONAL is off', async (t) => {
+  const { api } = await setup(t);
+  assert.equal(
+    await code(
+      api.startTest(ops, 'brevo', { to: 'staff@example.com', reason }),
+    ),
+    'NOT_FOUND',
+  );
 });

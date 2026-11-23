@@ -24,7 +24,7 @@ export interface MailDelivery {
  * pass is logged by name and tried again next tick; mail waits safely in Postgres.
  */
 export function startMailDelivery(options: {
-  deps: Omit<MailDeliveryDeps, 'log'>;
+  deps: Omit<MailDeliveryDeps, 'log' | 'warn'>;
   logger: Logger;
   intervalMs?: number;
   limit?: number;
@@ -52,7 +52,11 @@ export function startMailDelivery(options: {
         await purgeEmailCodes(deps.db, now);
       }
       await deliverDueMail(
-        { ...deps, log: (entry) => logger.info(entry) },
+        {
+          ...deps,
+          log: (entry) => logger.info(entry),
+          warn: (entry) => logger.warn(entry),
+        },
         { now, limit },
       );
     } catch (error) {

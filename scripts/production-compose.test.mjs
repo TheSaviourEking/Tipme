@@ -525,6 +525,7 @@ test('announcement email: secrets and the sender are deploy settings, tunables a
     for (const tunable of [
       'ANNOUNCEMENT_SENDS_PER_MINUTE',
       'BREVO_SANDBOX',
+      'BREVO_TRANSACTIONAL_SANDBOX',
       'BREVO_API_BASE',
     ])
       assert.doesNotMatch(
@@ -536,6 +537,8 @@ test('announcement email: secrets and the sender are deploy settings, tunables a
       'BREVO_API_KEY',
       'BREVO_WEBHOOK_TOKEN',
       'ANNOUNCEMENT_FROM_ADDRESS',
+      // Codes and receipts through Brevo (owner, 23 Nov 2026): an opt-in, like the default provider.
+      'BREVO_TRANSACTIONAL',
     ])
       assert.match(text, new RegExp(`\\b${setting}\\b`), `${path}: ${setting}`);
   }

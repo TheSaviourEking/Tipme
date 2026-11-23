@@ -13,7 +13,9 @@ import type {
 } from '../provider.js';
 
 /*
- * Brevo, for announcements only (owner, 14 Nov 2026). Its help centre lists the email API as a way
+ * Brevo, for announcements (owner, 14 Nov 2026) and, when staff switch to it by hand, codes,
+ * receipts and alerts (owner, 23 Nov 2026): two instances, both through the transactional send API
+ * below, never a contact list or a campaign. Its help centre lists the email API as a way
  * to send marketing mail, unlike ZeptoMail, so `capabilities.marketing` is true. Documented API
  * (read 14 Nov 2026): POST {base}/v3/smtp/email with an `api-key` header; 201 { messageId };
  * 429 when rate limited. Sandbox mode is the `X-Sib-Sandbox: drop` header: the request is checked
@@ -24,12 +26,21 @@ export interface BrevoConfig {
   apiKey: string;
   /** No path, e.g. https://api.brevo.com. */
   apiBase: string;
-  /** The verified sender every announcement comes from, e.g. news@usetipme.xyz. */
-  fromAddress: string;
+  /**
+   * Set (announcements): the verified sender every mail comes from, e.g. news@usetipme.xyz, with
+   * the type's name. Unset (codes, receipts and alerts): each mail's own sender, as with ZeptoMail.
+   */
+  fromAddress?: string | undefined;
   /** The bearer token Brevo's webhook sends; without it every webhook is refused. */
   webhookToken?: string | undefined;
   /** Brevo checks each request and sends nothing (staging and tests). */
   sandbox: boolean;
+  /**
+   * The codes instance: its status warns staff that Brevo may still rewrite links. Brevo has no
+   * per-email switch for click tracking (its send reference, read 23 Nov 2026), only an account
+   * setting, so security mail is safe only once that is off for the account.
+   */
+  linkTrackingWarning?: boolean;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -130,9 +141,24 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
             accept: 'application/json',
           },
           body: JSON.stringify({
-            // Brevo sends only from a verified sender: the announcement address, with the type's name.
-            sender: { email: config.fromAddress, name: mail.from.name },
-            to: [{ email: mail.to }],
+            // Brevo sends only from a verified sender or domain: the announcement address when
+            // fixed, else the type's own address on the authenticated mail domain.
+            sender: {
+              email: config.fromAddress ?? mail.from.address,
+              name: mail.from.name,
+            },
+            // Untracked mail (security mail: never a pixel next to a code): no open pixel and no
+            // per-contact tracking. Brevo honours these only on plans that support them, and
+            // neither stops link rewriting (linkTrackingWarning).
+            to: [
+              mail.tracking
+                ? { email: mail.to }
+                : {
+                    email: mail.to,
+                    removeTrackingPixel: true,
+                    contactPixelTrackingConsent: false,
+                  },
+            ],
             ...(mail.replyTo ? { replyTo: { email: mail.replyTo } } : {}),
             subject: mail.subject,
             htmlContent: mail.html,
@@ -197,7 +223,11 @@ export function createBrevoProvider(config: BrevoConfig): MailProvider {
     async status() {
       return {
         sandbox: config.sandbox,
-        detail: config.sandbox ? 'Sandbox: Brevo checks and drops' : null,
+        detail: config.sandbox
+          ? 'Sandbox: Brevo checks and drops'
+          : config.linkTrackingWarning
+            ? 'Brevo may still rewrite links in security emails unless click tracking is off for this Brevo account'
+            : null,
       };
     },
   };

@@ -425,6 +425,8 @@ export interface MailDeliveryDeps {
   apiOrigin: string;
   /** Structured log of each outcome: ids, type, provider and codes only. */
   log?(entry: Record<string, string | number | null>): void;
+  /** The same, for what staff must act on (the worker logs it as a warning). */
+  warn?(entry: Record<string, string | number | null>): void;
 }
 
 export interface MailDeliveryResult {
@@ -456,6 +458,13 @@ export async function deliverDueMail(
   const log = (entry: Record<string, string | number | null>) => {
     try {
       deps.log?.(entry);
+    } catch {
+      /* ignored */
+    }
+  };
+  const warn = (entry: Record<string, string | number | null>) => {
+    try {
+      (deps.warn ?? deps.log)?.(entry);
     } catch {
       /* ignored */
     }
@@ -615,7 +624,19 @@ export async function deliverDueMail(
       // A quota error is a temporary error too, so it is checked first.
       if (error instanceof MailQuotaError) {
         if (viaAnnouncementProvider) quotaCode = error.code;
-        await defer(error.code);
+        // Security mail (codes, recovery and verification links) out of credits fails at once,
+        // visibly, rather than waiting an hour it doesn't have: staff see it failed on the Email
+        // console and the provider's card, and can switch provider by hand (review, 23 Nov 2026).
+        if (!viaAnnouncementProvider && mail.category === 'security') {
+          await fail(error.code, true);
+          warn({
+            event: 'mail.provider_out_of_credits',
+            message_id: mail.id,
+            type: mail.type,
+            provider: providerName,
+            code: error.code,
+          });
+        } else await defer(error.code);
       } else if (error instanceof MailRejectedError)
         await fail(error.code, true);
       else if (error instanceof MailTemporaryError)

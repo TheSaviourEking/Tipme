@@ -92,10 +92,12 @@ services:
       ZEPTOMAIL_API_BASE: ${ZEPTOMAIL_API_BASE:-}
       ZEPTOMAIL_WEBHOOK_KEY: ${ZEPTOMAIL_WEBHOOK_KEY:-}
       ZEPTOMAIL_BOUNCE_ADDRESS: ${ZEPTOMAIL_BOUNCE_ADDRESS:-}
-      # Announcements only (Brevo): optional; unset, announcements cannot be sent.
+      # Announcements (Brevo): optional; unset, announcements cannot be sent.
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       BREVO_WEBHOOK_TOKEN: ${BREVO_WEBHOOK_TOKEN:-}
       ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
+      # Codes and receipts through Brevo too, when staff switch to it (owner, 23 Nov 2026).
+      BREVO_TRANSACTIONAL: ${BREVO_TRANSACTIONAL:-off}
       SES_REGION: ${SES_REGION:-eu-north-1}
       SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
       SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}
@@ -173,10 +175,12 @@ services:
       ZEPTOMAIL_API_BASE: ${ZEPTOMAIL_API_BASE:-}
       ZEPTOMAIL_WEBHOOK_KEY: ${ZEPTOMAIL_WEBHOOK_KEY:-}
       ZEPTOMAIL_BOUNCE_ADDRESS: ${ZEPTOMAIL_BOUNCE_ADDRESS:-}
-      # Announcements only (Brevo): optional; unset, announcements cannot be sent.
+      # Announcements (Brevo): optional; unset, announcements cannot be sent.
       BREVO_API_KEY: ${BREVO_API_KEY:-}
       BREVO_WEBHOOK_TOKEN: ${BREVO_WEBHOOK_TOKEN:-}
       ANNOUNCEMENT_FROM_ADDRESS: ${ANNOUNCEMENT_FROM_ADDRESS:-}
+      # Codes and receipts through Brevo too, when staff switch to it (owner, 23 Nov 2026).
+      BREVO_TRANSACTIONAL: ${BREVO_TRANSACTIONAL:-off}
       SES_REGION: ${SES_REGION:-eu-north-1}
       SES_ACCESS_KEY_ID: ${SES_ACCESS_KEY_ID:-}
       SES_SECRET_ACCESS_KEY: ${SES_SECRET_ACCESS_KEY:-}

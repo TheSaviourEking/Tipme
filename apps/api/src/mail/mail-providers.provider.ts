@@ -11,7 +11,10 @@ import { API_CONFIG, type ApiConfig } from '../config.js';
 /** Every configured mail provider (keys present), active or not: webhooks need them all. */
 export const MAIL_PROVIDERS = Symbol('MAIL_PROVIDERS');
 export const MAIL_SEALING = Symbol('MAIL_SEALING');
-/** The provider announcements go through (Brevo), or null when none is set up. Never in MAIL_PROVIDERS. */
+/**
+ * The provider announcements go through (Brevo), or null when none is set up. A separate instance
+ * from MAIL_PROVIDERS' `brevo` (codes and receipts, BREVO_TRANSACTIONAL=on): fixed sender, own sandbox.
+ */
 export const ANNOUNCEMENT_PROVIDER = Symbol('ANNOUNCEMENT_PROVIDER');
 /** Confirms an SNS subscription by visiting its (verified) SubscribeURL. */
 export const MAIL_SUBSCRIPTION_CONFIRM = Symbol('MAIL_SUBSCRIPTION_CONFIRM');

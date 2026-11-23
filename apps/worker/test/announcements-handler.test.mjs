@@ -146,3 +146,28 @@ test('Brevo settings are optional, together, and sandbox is on/off', () => {
     /ANNOUNCEMENT_FROM_ADDRESS/,
   );
 });
+
+// Brevo for codes and receipts (owner, 23 Nov 2026): opt-in, so the worker can send through it
+// and start with it as the default only with BREVO_TRANSACTIONAL=on and its webhook token.
+test('Brevo can be the default provider only with BREVO_TRANSACTIONAL=on', () => {
+  const brevo = {
+    ...base,
+    BREVO_API_KEY: 'brevo-test-key',
+    BREVO_WEBHOOK_TOKEN: 'brevo-webhook-token-0123456789',
+    MAIL_DEFAULT_PROVIDER: 'brevo',
+  };
+  assert.throws(() => loadWorkerConfig(brevo), /MAIL_DEFAULT_PROVIDER/);
+  const config = loadWorkerConfig({ ...brevo, BREVO_TRANSACTIONAL: 'on' });
+  assert.equal(config.MAIL_DEFAULT_PROVIDER, 'brevo');
+  assert.equal(config.BREVO_TRANSACTIONAL, true);
+  assert.equal(config.BREVO_TRANSACTIONAL_SANDBOX, false);
+  assert.throws(
+    () =>
+      loadWorkerConfig({
+        ...base,
+        BREVO_TRANSACTIONAL: 'on',
+        BREVO_API_KEY: 'brevo-test-key',
+      }),
+    /BREVO_WEBHOOK_TOKEN/,
+  );
+});
