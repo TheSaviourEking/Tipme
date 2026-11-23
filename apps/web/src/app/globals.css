@@ -4929,6 +4929,11 @@ html:has(
   margin: 0;
 }
 
+/* Ops → Providers: a provider's failover note reads at the card's size, not a slip's smaller one. */
+.ops-health-slip {
+  font-size: inherit;
+}
+
 .settings-form {
   display: grid;
   gap: var(--space-4);

@@ -161,7 +161,10 @@ export class OpsProvidersController {
     const providers = await Promise.all(
       overview.providers.map(async (card) => {
         const status = await this.statusOf(this.providers.get(card.name)!);
-        const view = views?.get(card.name);
+        // Only the providers that stand in for each other carry a failover state.
+        const view = group.includes(card.name)
+          ? views?.get(card.name)
+          : undefined;
         return {
           ...card,
           // The map holds the switchable providers only: Brevo only with BREVO_TRANSACTIONAL=on.

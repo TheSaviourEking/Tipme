@@ -499,9 +499,14 @@ test('clearing while the breaker store is down is 503, never a silent success', 
     await code(api.clearHealth(ops, 'mock', { reason })),
     'DEPENDENCY_UNAVAILABLE',
   );
-  // The page still loads, every provider reading healthy.
+  // The page still loads, every provider in the failover group reading healthy.
   const { data } = await api.overview();
-  assert.ok(data.providers.every((p) => p.health.state === 'healthy'));
+  assert.deepEqual(
+    Object.fromEntries(
+      data.providers.map((p) => [p.name, p.health?.state ?? null]),
+    ),
+    { mock: 'healthy', ses: null, brevo: 'healthy' },
+  );
 });
 
 test('a fixed provider stays live whatever its state, until staff let it switch again', async (t) => {
@@ -565,4 +570,18 @@ test('M5: a clear whose audit row cannot be written leaves the provider resting'
   await assert.rejects(api.clearHealth(ops, 'mock', { reason }));
   api.database = database;
   assert.equal((await health.snapshot(['mock'])).get('mock').state, 'resting');
+});
+
+test('only providers in the failover group carry a failover state', async (t) => {
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true },
+  );
+  const { data } = await api.overview();
+  const health = Object.fromEntries(
+    data.providers.map((p) => [p.name, p.health?.state ?? null]),
+  );
+  // mock (the default) and brevo (the fallback) stand in for each other; ses is configured only.
+  assert.deepEqual(health, { mock: 'healthy', ses: null, brevo: 'healthy' });
 });

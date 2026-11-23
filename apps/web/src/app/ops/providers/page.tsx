@@ -18,13 +18,7 @@ import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
-
-const clock = new Intl.DateTimeFormat('en-GB', {
-  timeStyle: 'short',
-  timeZone: 'Africa/Lagos',
-});
-/** HH:MM, Lagos time, as staff read it. */
-const at = (iso: string) => clock.format(new Date(iso));
+import { lagosTime, liveNowNote, trialNote } from '@/lib/ops-failover';
 
 /** Automatic failover's view of one provider (owner, 23 Nov 2026). */
 function HealthLine({
@@ -47,46 +41,45 @@ function HealthLine({
           : ''}
       </p>
     );
-  const trial =
-    health.kind === 'codes'
-      ? 'the next few sign-in and other codes go through it, and if people use them it is back'
-      : 'one email goes through it, and if that works it is back';
   return (
     <Slip
       dense
+      className="ops-health-slip"
       tone={health.state === 'resting' ? 'error' : 'waiting'}
       title={
         health.state === 'resting' && health.until
-          ? `Resting until ${at(health.until)}`
+          ? `Resting until ${lagosTime(health.until)}`
           : 'On trial'
       }
+      actions={
+        canManage && (
+          <ReasonAction
+            open="Clear"
+            field="Why clear this provider by hand?"
+            submit="Mark it healthy"
+            onSubmit={async (reason) => {
+              const result = await opsFetch<{ cleared: boolean }>(
+                `/v1/ops/providers/mail/${card.name}/health/clear`,
+                { method: 'POST', body: { reason } },
+              );
+              if (result.ok) {
+                onChange();
+                return null;
+              }
+              return result.code === 'DEPENDENCY_UNAVAILABLE'
+                ? 'The failover state can’t be reached right now. Try again in a minute.'
+                : 'That didn’t go through. Please try again.';
+            }}
+          />
+        )
+      }
     >
-      <span data-testid={`health-${card.name}`}>
+      <p data-testid={`health-${card.name}`}>
         {health.reason ?? 'Tripped'}.{' '}
         {health.state === 'resting'
           ? 'New mail goes through the backup meanwhile.'
-          : `Now ${trial}.`}
-      </span>
-      {canManage && (
-        <ReasonAction
-          open="Clear"
-          field="Why clear this provider by hand?"
-          submit="Mark it healthy"
-          onSubmit={async (reason) => {
-            const result = await opsFetch<{ cleared: boolean }>(
-              `/v1/ops/providers/mail/${card.name}/health/clear`,
-              { method: 'POST', body: { reason } },
-            );
-            if (result.ok) {
-              onChange();
-              return null;
-            }
-            return result.code === 'DEPENDENCY_UNAVAILABLE'
-              ? 'The failover state can’t be reached right now. Try again in a minute.'
-              : 'That didn’t go through. Please try again.';
-          }}
-        />
-      )}
+          : `Now ${trialNote(health.kind)}.`}
+      </p>
     </Slip>
   );
 }
@@ -119,11 +112,7 @@ function Failover({
     <Card className="settings-section" data-testid="failover">
       <h2>Automatic failover</h2>
       <p>
-        <strong>Live now: {label(failover.live)}</strong>
-        {failover.live !== active
-          ? ` (${label(active)} is resting or on trial)`
-          : ''}
-        .
+        <strong>{liveNowNote(data)}</strong>
       </p>
       {failover.fixed ? (
         <p>
