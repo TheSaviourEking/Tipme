@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  createBrevoProvider,
   createMockMailProvider,
   MAIL_TYPES,
   MailQuotaError,
   MailRejectedError,
   MailTemporaryError,
+  senderAddress,
 } from '@tipme/mail';
 import {
   addressHmac,
@@ -702,4 +704,71 @@ test('once credits run out, the rest of the pass waits without asking again; oth
       now.getTime() + MAIL_QUOTA_RETRY_MS,
     );
   }
+});
+
+// Brevo for codes and receipts (owner, 23 Nov 2026), switched to by hand: with Brevo active, other
+// mail goes through the transactional instance from its own type's sender, while announcements
+// keep their own instance and sender. Both are Brevo; nothing reaches Brevo here.
+function brevoInstance(fromAddress) {
+  const bodies = [];
+  const provider = createBrevoProvider({
+    apiKey: 'brevo-placeholder-test',
+    apiBase: 'https://api.brevo.example',
+    ...(fromAddress ? { fromAddress } : {}),
+    webhookToken: 'brevo-webhook-token-0123456789',
+    sandbox: false,
+    fetchImpl: async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return Response.json(
+        { messageId: `<b${bodies.length}@smtp-relay.mailin.fr>` },
+        { status: 201 },
+      );
+    },
+  });
+  return { provider, bodies };
+}
+
+test('with Brevo active, receipts go through its transactional instance from their own sender', async (t) => {
+  const { db, rows } = await fresh(t);
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.brevo',
+  });
+  await enqueueMail(db, sealing, notice('brevo'));
+  const transactional = brevoInstance();
+  const announcements = brevoInstance('news@usetipme.xyz');
+  const result = await deliverDueMail(
+    {
+      ...deps(db, transactional.provider),
+      announcementProvider: announcements.provider,
+    },
+    { now: new Date(), limit: 20 },
+  );
+  assert.equal(result.sent, 2);
+  assert.equal(transactional.bodies.length, 1);
+  const own = senderAddress(MAIL_TYPES.tip_received.sender, {
+    domain: 'mail.usetipme.xyz',
+    name: 'TipMe',
+  });
+  assert.deepEqual(transactional.bodies[0].sender, {
+    email: own.address,
+    name: own.name,
+  });
+  assert.notEqual(own.address, 'news@usetipme.xyz');
+  assert.equal(
+    transactional.bodies[0].headers['X-Mailin-custom'],
+    `tipme_ref:${id}`,
+  );
+  assert.equal(announcements.bodies.length, 1);
+  assert.equal(announcements.bodies[0].sender.email, 'news@usetipme.xyz');
+  const [row] = await rows(
+    'SELECT provider, provider_message_id FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, {
+    provider: 'brevo',
+    provider_message_id: '<b1@smtp-relay.mailin.fr>',
+  });
 });

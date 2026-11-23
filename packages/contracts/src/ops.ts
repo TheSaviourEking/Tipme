@@ -1013,7 +1013,14 @@ export interface OpsPersonEmail {
 
 // ---- Mail providers (mail platform spec §5) ----
 
-export const mailProviderNameSchema = z.enum(['mock', 'zeptomail', 'ses']);
+// Brevo (owner, 23 Nov 2026): offered only where BREVO_TRANSACTIONAL=on; the API answers 404 for a
+// provider that isn't configured.
+export const mailProviderNameSchema = z.enum([
+  'mock',
+  'zeptomail',
+  'ses',
+  'brevo',
+]);
 
 export interface OpsMailProviderCard {
   name: z.infer<typeof mailProviderNameSchema>;

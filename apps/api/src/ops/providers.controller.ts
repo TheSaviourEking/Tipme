@@ -134,7 +134,7 @@ export class OpsProvidersController {
         const status = await this.statusOf(this.providers.get(card.name)!);
         return {
           ...card,
-          // The map holds the switchable providers only; Brevo (announcements) is never in it.
+          // The map holds the switchable providers only: Brevo only with BREVO_TRANSACTIONAL=on.
           name: card.name as OpsMailProviders['providers'][number]['name'],
           sandbox: status?.sandbox ?? null,
           statusDetail: status?.detail ?? null,

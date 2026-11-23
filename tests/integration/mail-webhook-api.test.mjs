@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { MailWebhookController } from '../../apps/api/dist/mail/mail-webhook.controller.js';
 import {
   addressHmac,
+  enqueueMail,
   mailSealing,
 } from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
@@ -298,4 +299,109 @@ test('a Brevo webhook without its token is 401; Brevo is unknown where it isn’
   );
   const rows = await db.pool.query(`SELECT 1 FROM mail_suppressions`);
   assert.equal(rows.rows.length, 0);
+});
+
+// Codes, receipts and alerts through Brevo (owner, 23 Nov 2026): the transactional instance is in
+// the providers map, and Brevo's one webhook URL feeds its delivery reports, bounces and spam
+// reports onto those messages, with or without announcements set up.
+function brevoTransactional() {
+  return createBrevoProvider({
+    apiKey: 'brevo-placeholder-test',
+    apiBase: 'https://api.brevo.example',
+    webhookToken: BREVO_TOKEN,
+    sandbox: false,
+  });
+}
+const brevoMessageEvent = (event, reference) => {
+  const hook = brevoEvent(event, 'tobi@example.com');
+  const body = JSON.parse(hook.rawBody.toString('utf8'));
+  return {
+    ...hook,
+    rawBody: Buffer.from(
+      JSON.stringify({ ...body, 'X-Mailin-custom': `tipme_ref:${reference}` }),
+    ),
+  };
+};
+async function brevoSentCode(db) {
+  const { id } = await enqueueMail(db.db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: {
+      firstName: 'Tobi',
+      netMinor: '180000',
+      supporterLabel: 'Ada',
+      pretendPayment: false,
+    },
+    dedupeKey: `brevo.${Math.random()}`,
+  });
+  await db.pool.query(
+    `UPDATE mail_messages SET status = 'sent', provider = 'brevo', provider_message_id = $2 WHERE id = $1`,
+    [id, `<${id}@smtp-relay.mailin.fr>`],
+  );
+  return id;
+}
+
+test('Brevo’s webhook reaches the transactional instance when announcements aren’t set up', async (t) => {
+  const db = await database(t);
+  const brevo = new MailWebhookController(
+    new Map([['brevo', brevoTransactional()]]),
+    { db: db.db },
+    sealing,
+    logger,
+    async () => {},
+    null,
+  );
+  const id = await brevoSentCode(db);
+  assert.deepEqual(
+    await brevo.receive('brevo', brevoMessageEvent('hard_bounce', id)),
+    { data: { received: 1 } },
+  );
+  const [row] = (
+    await db.pool.query(`SELECT status FROM mail_messages WHERE id = $1`, [id])
+  ).rows;
+  assert.equal(row.status, 'bounced');
+  const suppressed = await db.pool.query(
+    `SELECT reason FROM mail_suppressions WHERE address_hmac = $1`,
+    [addressHmac(sealing, 'tobi@example.com')],
+  );
+  assert.equal(suppressed.rows[0]?.reason, 'hard_bounce');
+});
+
+test('with both set up, one Brevo webhook feeds codes and announcements alike', async (t) => {
+  const db = await database(t);
+  const brevo = new MailWebhookController(
+    new Map([['brevo', brevoTransactional()]]),
+    { db: db.db },
+    sealing,
+    logger,
+    async () => {},
+    brevoController(db).announcements,
+  );
+  const id = await brevoSentCode(db);
+  await brevo.receive('brevo', brevoMessageEvent('delivered', id));
+  await brevo.receive('brevo', brevoMessageEvent('spam', id));
+  const events = await db.pool.query(
+    `SELECT kind, provider FROM mail_message_events WHERE message_id = $1 AND provider IS NOT NULL ORDER BY kind`,
+    [id],
+  );
+  assert.deepEqual(
+    events.rows.map((r) => [r.kind, r.provider]),
+    [
+      ['complaint', 'brevo'],
+      ['delivered', 'brevo'],
+    ],
+  );
+  const [row] = (
+    await db.pool.query(`SELECT status FROM mail_messages WHERE id = $1`, [id])
+  ).rows;
+  assert.equal(row.status, 'complained');
+  assert.equal(
+    await status(
+      brevo.receive(
+        'brevo',
+        brevoEvent('hard_bounce', 'x@example.com', 'wrong-token-0123456789'),
+      ),
+    ),
+    401,
+  );
 });

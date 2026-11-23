@@ -273,7 +273,8 @@ test('the announcement provider is Brevo when set, the pretend inbox outside pro
     announcementMailProvider(settings({ NODE_ENV: 'development' }), sink)?.name,
     'mock',
   );
-  // Never part of the providers every other email can use or be switched to.
+  // Announcements alone never make Brevo one of the providers other email can be switched to:
+  // that takes BREVO_TRANSACTIONAL=on (brevo-transactional.test.mjs).
   assert.ok(
     !configuredMailProviderNames(
       settings({
@@ -284,7 +285,7 @@ test('the announcement provider is Brevo when set, the pretend inbox outside pro
   );
 });
 
-test('the Brevo key and the sender address are set together, and Brevo is never the default', () => {
+test('the Brevo key and the sender address are set together, and Brevo is not the default without BREVO_TRANSACTIONAL', () => {
   const schema = z
     .object({ NODE_ENV: z.string().optional(), ...mailSettingsShape })
     .superRefine((value, context) => checkMailSettings(value, context));
