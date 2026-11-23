@@ -3,6 +3,9 @@ import { test } from 'node:test';
 import {
   bachsProviderProvider,
   checkoutProviderProvider,
+  mockAltProviderProvider,
+  paymentProviderProvider,
+  payoutProvidersProvider,
   withdrawalProviderProvider,
 } from '../dist/checkout/payment-provider.provider.js';
 
@@ -139,4 +142,79 @@ test('withdrawals use exactly the configured provider, and fail closed without i
       () => withdrawalProviderProvider.useFactory(live, mock, adapter),
       /PAYMENT_PROVIDER/,
     );
+});
+
+// Every provider in either role gets an adapter; checkout and the destination flows are unchanged.
+const fakeRedis = {};
+const wire = (config) => {
+  const mockProvider = paymentProviderProvider.useFactory(config, fakeRedis);
+  const bachs = bachsProviderProvider.useFactory(config);
+  const alt = mockAltProviderProvider.useFactory(config, fakeRedis);
+  const set = payoutProvidersProvider.useFactory(
+    config,
+    mockProvider,
+    bachs,
+    alt,
+  );
+  return { mockProvider, bachs, alt, set };
+};
+
+test('withdraw-only mock_alt beside active mock gives both, active last in drain order', () => {
+  const { mockProvider, alt, set } = wire({
+    PAYMENT_PROVIDER: 'mock',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt'],
+    QUEUE_PREFIX: 'q',
+  });
+  assert.equal(alt.name, 'mock_alt');
+  assert.equal(set.active, mockProvider);
+  assert.deepEqual(
+    set.withdrawOnly.map((p) => p.name),
+    ['mock_alt'],
+  );
+  assert.equal(set.withdrawOnly[0], alt);
+});
+
+test('withdraw-only bachs-sandbox beside active mock builds the sandbox adapter and its webhooks', () => {
+  const { bachs, set } = wire({
+    PAYMENT_PROVIDER: 'mock',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['bachs-sandbox'],
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+  });
+  assert.equal(bachs.name, 'bachs-sandbox');
+  assert.equal(set.active.name, 'mock');
+  assert.deepEqual(
+    set.withdrawOnly.map((p) => p.name),
+    ['bachs-sandbox'],
+  );
+  assert.equal(set.withdrawOnly[0], bachs);
+  // The webhook endpoint verifies with this same adapter.
+  assert.equal(bachs.verifyWebhook(Buffer.from('{}'), {}).ok, false);
+});
+
+test('no withdraw-only list gives withdrawOnly [] and no mock_alt adapter', () => {
+  const { alt, set } = wire({ PAYMENT_PROVIDER: 'mock' });
+  assert.deepEqual(set.withdrawOnly, []);
+  assert.equal(alt, null);
+});
+
+test('checkout still uses only the active provider', () => {
+  const config = {
+    PAYMENT_PROVIDER: 'mock',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt', 'bachs-sandbox'],
+    BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+    BACHS_WEBHOOK_SECRET: 'b'.repeat(32),
+  };
+  const { mockProvider, bachs } = wire(config);
+  const checkout = checkoutProviderProvider.useFactory(
+    config,
+    mockProvider,
+    bachs,
+  );
+  assert.equal(checkout.name, 'mock');
+  assert.equal(checkout.getCheckoutUrl, undefined);
+  assert.equal(
+    withdrawalProviderProvider.useFactory(config, mockProvider, bachs),
+    mockProvider,
+  );
 });

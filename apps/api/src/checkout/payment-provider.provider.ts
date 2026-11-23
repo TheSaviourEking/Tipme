@@ -6,6 +6,8 @@ import {
   type MockProvider,
   type PaymentProvider,
   bachsEnvironment,
+  configuredPaymentProviders,
+  type WithdrawOnlyProviderName,
   wiredPaymentProvider,
 } from '@tipme/payments';
 import type { Redis } from 'ioredis';
@@ -20,6 +22,23 @@ export const PAYMENT_PROVIDER_TOKEN = Symbol('PAYMENT_PROVIDER');
 export const BACHS_PROVIDER_TOKEN = Symbol('BACHS_PROVIDER');
 export const CHECKOUT_PROVIDER_TOKEN = Symbol('CHECKOUT_PROVIDER');
 export const WITHDRAWAL_PROVIDER_TOKEN = Symbol('WITHDRAWAL_PROVIDER');
+export const MOCK_ALT_PROVIDER_TOKEN = Symbol('MOCK_ALT_PROVIDER');
+export const PAYOUT_PROVIDERS_TOKEN = Symbol('PAYOUT_PROVIDERS');
+
+/** Every adapter that may hold a balance: the active one, then the withdraw-only ones in list order. */
+export interface PayoutProviderSet {
+  active: MockProvider | BachsProvider;
+  withdrawOnly: (MockProvider | BachsProvider)[];
+}
+
+/** The configured roles; the withdraw-only list is optional in hand-built test configs. */
+function rolesOf(config: ApiConfig) {
+  return configuredPaymentProviders({
+    PAYMENT_PROVIDER: config.PAYMENT_PROVIDER,
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS:
+      config.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? [],
+  });
+}
 
 export type CheckoutPaymentProvider = Pick<
   PaymentProvider,
@@ -64,6 +83,27 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
   useFactory: (config: ApiConfig): BachsProvider | null => {
     // Fails startup for a provider this build cannot run (never a silent mock).
     const name = wiredPaymentProvider(config.PAYMENT_PROVIDER);
+    // A Bachs that is only withdraw-only still needs its adapter, and its webhooks accepted. Config
+    // keeps sandbox and live apart by environment, so at most one Bachs exists per copy.
+    const withdrawOnlyBachs = rolesOf(config).withdrawOnly.find(
+      (n) => n === 'bachs-live' || n === 'bachs-sandbox',
+    );
+    if (!bachsEnvironment(name) && withdrawOnlyBachs)
+      return withdrawOnlyBachs === 'bachs-live'
+        ? bachsFor(
+            'live',
+            config.BACHS_LIVE_API_KEY,
+            config.BACHS_LIVE_WEBHOOK_SECRET,
+            config.BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET,
+            config.BACHS_PLATFORM_ORGANIZATION_ID,
+          )
+        : bachsFor(
+            'sandbox',
+            config.BACHS_SANDBOX_API_KEY,
+            config.BACHS_WEBHOOK_SECRET,
+            config.BACHS_PREVIOUS_WEBHOOK_SECRET,
+            config.BACHS_PLATFORM_ORGANIZATION_ID,
+          );
     switch (name) {
       case 'bachs-live':
         return bachsFor(
@@ -146,5 +186,55 @@ export const withdrawalProviderProvider: Provider<
     if (bachs?.name !== name)
       throw new Error(`PAYMENT_PROVIDER=${name} has no matching Bachs adapter`);
     return bachs;
+  },
+};
+
+/** The second pretend provider, built only when listed (test copies). */
+export const mockAltProviderProvider: Provider<MockProvider | null> = {
+  provide: MOCK_ALT_PROVIDER_TOKEN,
+  inject: [API_CONFIG, REDIS],
+  useFactory: (config: ApiConfig, redis: Redis): MockProvider | null =>
+    rolesOf(config).withdrawOnly.includes('mock_alt')
+      ? createMockProvider({
+          redis,
+          secret: config.MOCK_PROVIDER_WEBHOOK_SECRET ?? '',
+          prefix: config.QUEUE_PREFIX,
+          name: 'mock_alt',
+        })
+      : null,
+};
+
+/** One adapter per provider in either role; checkout still uses only the active one. */
+export const payoutProvidersProvider: Provider<PayoutProviderSet> = {
+  provide: PAYOUT_PROVIDERS_TOKEN,
+  inject: [
+    API_CONFIG,
+    PAYMENT_PROVIDER_TOKEN,
+    BACHS_PROVIDER_TOKEN,
+    MOCK_ALT_PROVIDER_TOKEN,
+  ],
+  useFactory: (
+    config: ApiConfig,
+    mock: MockProvider,
+    bachs: BachsProvider | null,
+    mockAlt: MockProvider | null,
+  ): PayoutProviderSet => {
+    const { active, withdrawOnly } = rolesOf(config);
+    const adapterFor = (
+      name: WithdrawOnlyProviderName | typeof active,
+    ): MockProvider | BachsProvider => {
+      if (name === 'mock') return mock;
+      if (name === 'mock_alt') {
+        if (!mockAlt) throw new Error('mock_alt is listed but has no adapter');
+        return mockAlt;
+      }
+      if (bachs?.name !== name)
+        throw new Error(`${name} is configured but has no matching adapter`);
+      return bachs;
+    };
+    return {
+      active: adapterFor(active),
+      withdrawOnly: withdrawOnly.map(adapterFor),
+    };
   },
 };

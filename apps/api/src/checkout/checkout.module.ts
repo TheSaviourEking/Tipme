@@ -6,8 +6,12 @@ import {
   bachsProviderProvider,
   CHECKOUT_PROVIDER_TOKEN,
   checkoutProviderProvider,
+  MOCK_ALT_PROVIDER_TOKEN,
+  mockAltProviderProvider,
   PAYMENT_PROVIDER_TOKEN,
   paymentProviderProvider,
+  PAYOUT_PROVIDERS_TOKEN,
+  payoutProvidersProvider,
   WITHDRAWAL_PROVIDER_TOKEN,
   withdrawalProviderProvider,
 } from './payment-provider.provider.js';
@@ -23,6 +27,8 @@ import { StatusController } from './status.controller.js';
     bachsProviderProvider,
     checkoutProviderProvider,
     withdrawalProviderProvider,
+    mockAltProviderProvider,
+    payoutProvidersProvider,
   ],
   exports: [
     CheckoutService,
@@ -30,6 +36,8 @@ import { StatusController } from './status.controller.js';
     BACHS_PROVIDER_TOKEN,
     CHECKOUT_PROVIDER_TOKEN,
     WITHDRAWAL_PROVIDER_TOKEN,
+    MOCK_ALT_PROVIDER_TOKEN,
+    PAYOUT_PROVIDERS_TOKEN,
   ],
 })
 export class CheckoutModule {}
