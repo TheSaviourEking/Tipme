@@ -893,12 +893,21 @@ test('other mail through the codes instance waits for credits, without pausing a
   assert.equal(announcements.bodies.length, 2);
 });
 
-test('announcements out of credits never hold back a code through the codes instance', async (t) => {
+// Re-review N2: a non-security email claimed after the announcements that ran out, so it reaches
+// the send only after the pause is set, and goes only if the pause stays with the announcement
+// instance. (Bulk mail is always claimed last, so the receipt is moved after it by hand.)
+test('announcements out of credits never pause mail through the codes instance', async (t) => {
   const { db, rows } = await fresh(t);
   // Delivered a second after queueing, so everything queued is due.
   const now = new Date(Date.now() + 1000);
   for (const key of ['p', 'q']) await enqueueMail(db, sealing, notice(key));
-  const { id } = await enqueueMail(db, sealing, securityCode('b', now));
+  const { id } = await enqueueMail(db, sealing, {
+    type: 'tip_received',
+    to: 'tobi@example.com',
+    data: tip,
+    dedupeKey: 'tip_received.after_pause',
+  });
+  await rows('UPDATE mail_messages SET priority = 10 WHERE id = $1', [id]);
   const codes = brevoAnswering(undefined, []);
   const announcements = brevoAnswering('news@usetipme.xyz', ['credits']);
   await deliverDueMail(
@@ -908,7 +917,15 @@ test('announcements out of credits never hold back a code through the codes inst
     },
     { now, limit: 20 },
   );
+  // The first notice ran out; the second waited without asking again.
   assert.equal(announcements.calls(), 1);
+  const order = await rows(
+    `SELECT type, status FROM mail_messages ORDER BY priority, next_attempt_at`,
+  );
+  assert.deepEqual(
+    order.map((r) => r.type),
+    ['service_notice', 'service_notice', 'tip_received'],
+  );
   const [row] = await rows('SELECT status FROM mail_messages WHERE id = $1', [
     id,
   ]);

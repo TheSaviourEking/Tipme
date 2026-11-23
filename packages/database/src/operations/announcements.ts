@@ -599,6 +599,10 @@ const DAILY_LIMIT_LOCK = 7_316_100_215;
 const BULK_TYPES = Object.entries(MAIL_TYPES)
   .filter(([, type]) => type.bulk)
   .map(([id]) => id);
+/** Every other type: codes, receipts and alerts, which count once sent through Brevo. */
+const OTHER_TYPES = Object.entries(MAIL_TYPES)
+  .filter(([, type]) => !type.bulk)
+  .map(([id]) => id);
 
 /** The limit staff set in Switches, or the default (300) while unset. */
 export async function announcementDailyLimit(
@@ -626,24 +630,36 @@ export async function announcementDailyUse(
 ): Promise<OpsAnnouncementDailyLimit> {
   const limit = await announcementDailyLimit(db);
   const since = new Date(now.getTime() - DAY_MS).toISOString();
-  const types = sql.join(
-    BULK_TYPES.map((type) => sql`${type}`),
-    sql`, `,
-  );
+  const list = (names: readonly string[]) =>
+    sql.join(
+      names.map((type) => sql`${type}`),
+      sql`, `,
+    );
+  const types = list(BULK_TYPES);
+  // Two branches, each bounded by the window through (type, sent_at), so the count reads one
+  // day's mail: `provider = 'brevo'` alone would read every Brevo message ever sent (re-review N1).
+  // The provider test is written as an expression on purpose, so the planner can't AND in the
+  // (provider, provider_message_id) index, which also holds every Brevo message ever sent.
   const result = await db.execute<{
     waiting: number;
     sent: number;
     oldest: string | Date | null;
   }>(
-    sql`SELECT
+    sql`WITH recent AS (
+      SELECT sent_at FROM mail_messages
+        WHERE type IN (${types}) AND sent_at > ${since}::timestamptz
+          AND status NOT IN ('queued', 'sending')
+      UNION ALL
+      SELECT sent_at FROM mail_messages
+        WHERE type IN (${list(OTHER_TYPES)}) AND coalesce(provider, '') = 'brevo'
+          AND sent_at > ${since}::timestamptz
+          AND status NOT IN ('queued', 'sending')
+    )
+    SELECT
       (SELECT count(*)::int FROM mail_messages
         WHERE type IN (${types}) AND status IN ('queued', 'sending')) AS waiting,
-      (SELECT count(*)::int FROM mail_messages
-        WHERE (type IN (${types}) OR provider = 'brevo') AND sent_at > ${since}::timestamptz
-          AND status NOT IN ('queued', 'sending')) AS sent,
-      (SELECT min(sent_at) FROM mail_messages
-        WHERE (type IN (${types}) OR provider = 'brevo') AND sent_at > ${since}::timestamptz
-          AND status NOT IN ('queued', 'sending')) AS oldest`,
+      (SELECT count(*)::int FROM recent) AS sent,
+      (SELECT min(sent_at) FROM recent) AS oldest`,
   );
   const row = result.rows[0];
   const used = Number(row?.waiting ?? 0) + Number(row?.sent ?? 0);

@@ -911,3 +911,47 @@ test('codes and receipts sent through Brevo count toward the daily limit; other 
   assert.equal(use.used, 2);
   assert.equal(use.remaining, 8);
 });
+
+// Fix round 2 (re-review N1): both parts of the count are bounded by the 24 hours, so the count
+// reads one day's mail, never every Brevo message ever sent.
+test('Brevo mail sent before the 24 hours counts for neither part, and the room frees from the window', async () => {
+  await dailyLimit('10');
+  const now = new Date();
+  const mail = async (type, provider, key, at) => {
+    const { id } = await ops.enqueueMail(database.db, sealing, {
+      type,
+      to: `${key}@example.com`,
+      data:
+        type === 'tip_received'
+          ? {
+              firstName: 'Tobi',
+              netMinor: '180000',
+              supporterLabel: 'Ada',
+              pretendPayment: false,
+            }
+          : { subject: 'Fees', preheader: '', text: 'Fees change' },
+      dedupeKey: `daily.window.${key}`,
+    });
+    await q(
+      `UPDATE mail_messages SET status = 'sent', provider = $2, sent_at = $3, final_at = $3 WHERE id = $1`,
+      [id, provider, at],
+    );
+  };
+  const old = new Date(now.getTime() - 25 * HOUR);
+  await mail('tip_received', 'brevo', 'old-code', old);
+  await mail('service_notice', 'brevo', 'old-notice', old);
+  const recent = new Date(now.getTime() - 2 * HOUR);
+  await mail('tip_received', 'brevo', 'recent-code', recent);
+  await mail(
+    'service_notice',
+    'brevo',
+    'recent-notice',
+    new Date(now.getTime() - HOUR),
+  );
+  assert.deepEqual(await ops.announcementDailyUse(database.db, now), {
+    limit: 10,
+    used: 2,
+    remaining: 8,
+    freesAt: new Date(recent.getTime() + 24 * HOUR).toISOString(),
+  });
+});
