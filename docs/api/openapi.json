@@ -17649,6 +17649,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []
@@ -17718,6 +17719,7 @@
         },
         "x-tipme-access": "staff-grant",
         "x-tipme-csrf": true,
+        "x-tipme-rate-limit": "ops_request",
         "security": [
           {
             "session": []

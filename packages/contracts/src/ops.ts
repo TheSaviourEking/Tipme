@@ -1058,7 +1058,7 @@ export interface OpsMailProviderHealth {
   /** What tripped it last: send failures, or unused codes. */
   kind: 'send' | 'codes' | null;
   until: string | null;
-  /** E.g. "3 send failures in 5 min (last: http_503)" or "4 of 6 codes unused in 10 min". */
+  /** E.g. "3 send failures in 5 min (last: http_503)" or "4 of 6 addresses' codes unused in 10 min". */
   reason: string | null;
   trippedAt: string | null;
 }

@@ -407,6 +407,8 @@ test('a store that is down never stops mail: every provider reads healthy, nothi
     'healthy',
   );
   assert.ok(logged.includes('mail.health_unavailable'));
+  // Ops asks before a clear and must hear the store is down, not "healthy".
+  await assert.rejects(h.inspect('zeptomail'));
 });
 
 test('an alert that fails never stops mail', async () => {

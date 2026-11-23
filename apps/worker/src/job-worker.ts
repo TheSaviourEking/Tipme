@@ -1158,7 +1158,9 @@ export async function startJobWorker(
     new Set(mailProviders.keys()),
     production,
   );
-  const failoverOn = config.MAIL_FALLBACK_PROVIDERS.length > 0;
+  // Two providers or more: a list naming only the default (refused at start anyway) or an
+  // unconfigured one never turns half of it on.
+  const failoverOn = failoverGroup.length > 1;
   const healthSettings = mailHealthSettings(config);
   const mailHealth = createMailHealth({
     store: redisMailHealthStore(markers, {

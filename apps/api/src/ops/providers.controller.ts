@@ -275,6 +275,7 @@ export class OpsProvidersController {
    */
   @Post('mail/failover')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('providers.manage')
   async setFailover(
@@ -294,6 +295,7 @@ export class OpsProvidersController {
   /** Staff clear a tripped provider by hand: it is healthy again at once. */
   @Post('mail/:provider/health/clear')
   @HttpCode(200)
+  @RateLimit('ops_request')
   @FreshCode()
   @OpsPermission('providers.manage')
   async clearHealth(
@@ -302,19 +304,24 @@ export class OpsProvidersController {
     @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
   ): Promise<ApiDataResponse<{ cleared: boolean }>> {
     const provider = this.configured(name);
-    let cleared: boolean;
+    const unavailable = () =>
+      new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    const view = await this.health
+      .inspect(provider.name)
+      .catch(() => Promise.reject(unavailable()));
+    if (view.state === 'healthy') return { data: { cleared: false } };
+    // The audit row first: a clear that can't be audited doesn't happen (review, 23 Nov 2026).
+    await recordMailHealthCleared(this.database.db, {
+      staffUserId: ops.userId,
+      provider: provider.name,
+      reason: body.reason,
+    });
     try {
-      cleared = await this.health.clear(provider.name);
+      await this.health.clear(provider.name);
     } catch {
-      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+      throw unavailable();
     }
-    if (cleared)
-      await recordMailHealthCleared(this.database.db, {
-        staffUserId: ops.userId,
-        provider: provider.name,
-        reason: body.reason,
-      });
-    return { data: { cleared } };
+    return { data: { cleared: true } };
   }
 
   @Post('overrides')

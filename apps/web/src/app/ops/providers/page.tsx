@@ -132,10 +132,10 @@ function Failover({
         </p>
       ) : (
         <p>
-          When {label(active)} fails for sure (3 failed sends in 5 minutes) or
-          too many codes it sends go unused, new email moves to{' '}
-          {label(failover.backup)} for 15 minutes, then comes back once{' '}
-          {label(active)} works again. Staff are alerted each time.
+          When {label(active)} keeps failing to send, or too many codes it sends
+          go unused, it rests for a while and new email moves to{' '}
+          {label(failover.backup)}; it comes back once {label(active)} works
+          again. Staff are alerted each time.
         </p>
       )}
       {canManage && (

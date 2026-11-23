@@ -565,6 +565,8 @@ export interface MailHealth {
   claim(name: MailProviderName, mail: { code: boolean }): Promise<boolean>;
   /** Staff cleared it by hand. Throws when the store can't be reached, so ops can say so. */
   clear(name: MailProviderName): Promise<boolean>;
+  /** One provider's state for ops. Unlike snapshot, throws when the store can't be reached. */
+  inspect(name: MailProviderName): Promise<MailHealthView>;
   snapshot(
     names: readonly MailProviderName[],
   ): Promise<Map<MailProviderName, MailHealthView>>;
@@ -646,6 +648,12 @@ export function createMailHealth(options: {
       }
     },
     clear: (name) => options.store.clear(name, now()),
+    async inspect(name) {
+      return mailHealthView(
+        (await options.store.read([name])).get(name),
+        now(),
+      );
+    },
     async snapshot(names) {
       const at = now();
       let records = new Map<MailProviderName, MailHealthRecord>();

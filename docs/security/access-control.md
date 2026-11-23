@@ -445,10 +445,10 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | GET | `/v1/ops/pro/pages/{profileId}/payments` | `payments.repair` | n/a (read) | `ops_read` | – |
 | POST | `/v1/ops/pro/purchases/{purchaseId}/refund` | `payments.repair` | yes | `ops_request` | – |
 | GET | `/v1/ops/providers/mail` | `issues.view,providers.manage` | n/a (read) | – | – |
-| POST | `/v1/ops/providers/mail/{provider}/health/clear` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/mail/{provider}/health/clear` | `providers.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/providers/mail/{provider}/test` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/mail/active` | `providers.manage` | yes | `ops_request` | – |
-| POST | `/v1/ops/providers/mail/failover` | `providers.manage` | yes | – | – |
+| POST | `/v1/ops/providers/mail/failover` | `providers.manage` | yes | `ops_request` | – |
 | POST | `/v1/ops/providers/overrides` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/overrides/remove` | `providers.manage` | yes | – | – |
 | POST | `/v1/ops/providers/suppressions/lookup` | `private.view` | yes | – | – |

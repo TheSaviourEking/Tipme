@@ -526,3 +526,43 @@ test('a fixed provider stays live whatever its state, until staff let it switch 
   assert.equal(data.failover.fixed, false);
   assert.equal(data.failover.live, 'brevo');
 });
+
+// Fix round 1 (review, 23 Nov 2026).
+
+test('M6: fixing and clearing are rate-limited like a switch', async () => {
+  const { RATE_LIMIT_ROUTE } =
+    await import('../../apps/api/dist/checkout/rate-limit.guard.js');
+  for (const method of ['switchProvider', 'setFailover', 'clearHealth'])
+    assert.equal(
+      Reflect.getMetadata(
+        RATE_LIMIT_ROUTE,
+        OpsProvidersController.prototype[method],
+      ),
+      'ops_request',
+      method,
+    );
+});
+
+test('M5: a clear whose audit row cannot be written leaves the provider resting', async (t) => {
+  const health = createMailHealth({
+    store: memoryMailHealthStore(HEALTH),
+    settings: HEALTH,
+  });
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  await health.tripCodes('mock', 'x');
+  const database = api.database;
+  api.database = {
+    db: {
+      insert: () => {
+        throw new Error('database down');
+      },
+    },
+  };
+  await assert.rejects(api.clearHealth(ops, 'mock', { reason }));
+  api.database = database;
+  assert.equal((await health.snapshot(['mock'])).get('mock').state, 'resting');
+});

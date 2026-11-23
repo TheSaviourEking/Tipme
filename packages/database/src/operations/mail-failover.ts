@@ -153,9 +153,9 @@ export interface CodeDeliverySettings {
   unusedAfterMs: number;
   /** The window the ratio is taken over (10 min). */
   windowMs: number;
-  /** At least this many decided codes before the ratio counts (5). */
+  /** At least this many decided addresses before the ratio counts (5). */
   minSamples: number;
-  /** This share of them unused trips the provider (0.6). */
+  /** This share of them using none of their codes trips the provider (0.6). */
   unusedRatio: number;
   /** Codes on trial after a codes trip (3). */
   trialCodes: number;
@@ -169,7 +169,9 @@ const TRIAL_GIVE_UP_MS = 30 * 60_000;
  * it was used within unusedAfter (used), when the same address asked for another code while it
  * was still valid (unused at once: a re-request), or when unusedAfter has passed (unused). Codes
  * still waiting are not counted, and a bounced or complained one is about the address, not the
- * provider. `redeemed` counts codes used at all, however late (trial codes).
+ * provider. `samples` and `unused` count addresses (one is unused when none of its codes was
+ * used in time); `unusedCodes` and `redeemed` count codes, for a trial (redeemed: used at all,
+ * however late).
  */
 export async function codeDeliveryStats(
   db: Database,
@@ -245,11 +247,11 @@ export type CodeDeliveryOutcome =
 /**
  * Signal (b), run by the worker every half minute: for each provider in the failover group,
  * - healthy: over the window (or since it last recovered, so old codes can't trip it again), at
- *   least minSamples decided codes and at least unusedRatio of them unused rest it;
+ *   least minSamples decided addresses and at least unusedRatio of them unused rest it;
  * - on trial after a codes trip: a trial code used restores it; trialCodes unused (or a trial
  *   nobody concluded in 30 minutes) rest it again.
  * A provider resting, or on a probe trial after send failures, is left to the breaker. The sample
- * minimum and the ratio are there so one person walking away from their code never trips it.
+ * minimum and the ratio count addresses, so one person (or a few addresses) never trips it.
  */
 export interface CodeDeliveryCheck {
   provider: MailProviderName;
