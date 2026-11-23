@@ -66,6 +66,7 @@ export {
   mailOwnersCollectReserve,
 } from './operations/account-mail.js';
 export * from './operations/mail-delivery.js';
+export * from './operations/mail-failover.js';
 export * from './operations/mail-events.js';
 export * from './operations/email-sign-in.js';
 export { normaliseStaffEmail } from './operations/email-address.js';
