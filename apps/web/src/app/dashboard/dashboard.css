@@ -7655,13 +7655,16 @@ body:has(
 }
 
 .business-public {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
   padding-bottom: var(--space-8);
 }
 
 .business-public__sheet {
-  display: grid;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   gap: var(--space-4);
   width: 100%;
   max-width: 36rem;
@@ -7923,6 +7926,7 @@ body:has(
 .business-public__foot {
   display: flex;
   flex-wrap: wrap;
+  margin-top: auto;
   gap: var(--space-2) var(--space-4);
   padding-top: var(--space-4);
   font-size: var(--text-sm);

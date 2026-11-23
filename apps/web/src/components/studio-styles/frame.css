@@ -6,13 +6,80 @@
 
 .studio[data-style] {
   --studio-ui: 'Studio Inter', 'Studio Inter Fallback', system-ui, sans-serif;
-  min-height: 100vh;
   background: var(--studio-bg);
   color: var(--studio-fg);
   font-family: var(--studio-ui);
   font-optical-sizing: auto;
   -webkit-font-smoothing: antialiased;
   color-scheme: light;
+}
+
+/* The footer is always grounded to the bottom (owner, 23 Nov 2026). The page's own height was a whole
+   screen (`min-height: 100vh`), so the site's footer sat a screen down and the tip page's own foot
+   row (Report this page, Privacy, Terms, ...) floated part-way up with the page's colour empty
+   below it. Now the page fills what the header and the site's footer leave (globals.css, `body >
+   main`) and its foot rests at the bottom of that: on a short page that is the bottom of the
+   screen, on a tall page the foot simply follows the content. */
+.studio-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio[data-style] {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.studio[data-style] > .studio-page {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+/* The editor's preview frame is its own little document, not the site's page: its page fills it. */
+.studio-preview-doc .studio-main {
+  min-height: 100vh;
+}
+
+/* Where the page is a single column (a phone, and Clear at every width) it is a flex column, so
+   the space a short page leaves goes just above the foot. Every part keeps the width a block gave it
+   (`stretch` fills the column less the part's margins, as a block does, and an auto margin still
+   centres a part under its max-width; `width` here has no weight, so a part's own width wins). On a
+   desktop the other styles are grids, whose last row takes the space (each style's file). */
+@media (max-width: 1023px) {
+  .studio[data-style] .studio-page {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+.studio[data-style='clear'] .studio-page {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1023px) {
+  :where(.studio[data-style] .studio-page > *) {
+    width: 100%;
+    width: -webkit-fill-available;
+    width: -moz-available;
+    width: stretch;
+  }
+
+  .studio[data-style] .studio-page > .studio-grid {
+    margin-bottom: auto;
+  }
+}
+
+:where(.studio[data-style='clear'] .studio-page > *) {
+  width: 100%;
+  width: -webkit-fill-available;
+  width: -moz-available;
+  width: stretch;
+}
+
+.studio[data-style='clear'] .studio-page > .studio-grid {
+  margin-bottom: auto;
 }
 
 .studio[data-style][data-mode='dark'] {

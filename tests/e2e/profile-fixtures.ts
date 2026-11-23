@@ -258,6 +258,16 @@ export async function studioFixtures() {
   >;
   const pages = [
     ...Object.entries(docs).map(([handle, doc]) => studioPage(handle, doc)),
+    // A page with nothing on it but the person and the tip form, in each style: the shortest page
+    // there is, for the footer-grounded spec (the footer rests at the bottom of the screen).
+    ...STYLE_IDS.map((style) =>
+      studioPage(`short${style}`, styleDocument(style, { blocks: [] }), {
+        links: [],
+        bio: undefined,
+        craft: undefined,
+        note: undefined,
+      }),
+    ),
     // The same pages without links: no links area, and no "See links" (§8, §14.8).
     ...STYLE_IDS.map((style) =>
       studioPage(`style${style}nolinks`, styleDocument(style), { links: [] }),
@@ -359,6 +369,10 @@ const amounts = (...naira: number[]) => ({
 
 export const PAGES: PublicProfile[] = [
   page('kemi'),
+  // The footer-grounded spec's shortest Classic pages: a one-line bio, with a cover and with none
+  // (an older API sends no cover at all).
+  page('shortcover', { bio: 'Barber.' }),
+  page('shortnocover', { bio: 'Barber.', cover: undefined }),
   page('hearts', {
     cover: { kind: 'design', design: 'large', colour: 'neutral' },
   }),
