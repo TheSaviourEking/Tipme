@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { createMockMailProvider } from './mock/provider.js';
-import type {
-  MailProvider,
-  MailProviderName,
-  OutgoingMail,
+import {
+  MAIL_PROVIDER_NAMES,
+  type MailProvider,
+  type MailProviderName,
+  type OutgoingMail,
 } from './provider.js';
+import type { MailHealthSettings } from './health.js';
 import { createBrevoProvider } from './brevo/provider.js';
 import { createSesProvider } from './ses/provider.js';
 import { createZeptoMailProvider } from './zeptomail/provider.js';
@@ -19,6 +21,42 @@ export const mailSettingsShape = {
   MAIL_DEFAULT_PROVIDER: z
     .enum(['mock', 'zeptomail', 'ses', 'brevo'])
     .default('mock'),
+  // Automatic failover (owner, 23 Nov 2026): the providers mail moves to, in order, when the active
+  // one is failing, e.g. "brevo". The backup is whichever of these and MAIL_DEFAULT_PROVIDER isn't
+  // active. Empty (the default) keeps one provider and today's behaviour exactly.
+  MAIL_FALLBACK_PROVIDERS: z
+    .string()
+    .default('')
+    .transform((value, context) => {
+      const names = value
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name !== '');
+      for (const name of names)
+        if (!MAIL_PROVIDER_NAMES.includes(name as MailProviderName))
+          context.addIssue({ code: 'custom', message: 'unknown provider' });
+      return names as MailProviderName[];
+    }),
+  // Code defaults (owner, 23 Nov 2026), overridable for tests and emergencies. Signal (a): this many
+  // definite send failures within the window rest a provider; then one probe send decides.
+  MAIL_BREAKER_FAILURES: z.coerce.number().int().min(1).max(100).default(3),
+  MAIL_BREAKER_WINDOW_MS: z.coerce.number().int().min(1000).default(300_000),
+  MAIL_BREAKER_REST_MS: z.coerce.number().int().min(1000).default(900_000),
+  // Signal (b): a code not used within UNUSED_AFTER counts as unused; at least MIN_SAMPLES codes in
+  // the window through one provider, with at least RATIO of them unused, rest it. Then the next
+  // TRIAL_CODES codes go through it on trial.
+  MAIL_CODE_UNUSED_AFTER_MS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .default(180_000),
+  MAIL_CODE_WINDOW_MS: z.coerce.number().int().min(60_000).default(600_000),
+  MAIL_CODE_MIN_SAMPLES: z.coerce.number().int().min(1).max(1000).default(5),
+  MAIL_CODE_UNUSED_RATIO: z.coerce.number().gt(0).max(1).default(0.6),
+  MAIL_CODE_TRIAL_CODES: z.coerce.number().int().min(1).max(20).default(3),
+  // (c) A new code asked for this soon after the last one to the same address goes through the
+  // provider after the one that sent the last.
+  MAIL_RESEND_WINDOW_MS: z.coerce.number().int().min(0).default(600_000),
   ZEPTOMAIL_API_KEY: z.string().min(8).optional(),
   // The account's data-centre API base, e.g. https://api.zeptomail.com (no path).
   ZEPTOMAIL_API_BASE: z.url({ protocol: /^https$/ }).optional(),
@@ -90,6 +128,22 @@ export interface MailSettings {
   ANNOUNCEMENT_FROM_ADDRESS?: string | undefined;
   BREVO_TRANSACTIONAL?: boolean | undefined;
   BREVO_TRANSACTIONAL_SANDBOX?: boolean | undefined;
+  MAIL_FALLBACK_PROVIDERS?: readonly MailProviderName[] | undefined;
+}
+
+/** The breaker's settings from the mail settings (the API and the worker read the same). */
+export function mailHealthSettings(s: {
+  MAIL_BREAKER_FAILURES: number;
+  MAIL_BREAKER_WINDOW_MS: number;
+  MAIL_BREAKER_REST_MS: number;
+  MAIL_CODE_TRIAL_CODES: number;
+}): MailHealthSettings {
+  return {
+    threshold: s.MAIL_BREAKER_FAILURES,
+    windowMs: s.MAIL_BREAKER_WINDOW_MS,
+    restMs: s.MAIL_BREAKER_REST_MS,
+    trialCodes: s.MAIL_CODE_TRIAL_CODES,
+  };
 }
 
 const ZEPTO_KEYS = [
@@ -109,7 +163,7 @@ const SES_KEYS = [
   'SES_SNS_TOPIC_ARN',
 ] as const;
 
-const isProduction = (s: MailSettings) =>
+export const isProductionMail = (s: MailSettings) =>
   s.NODE_ENV === 'production' && s.DEPLOYMENT_MODE !== 'preview';
 
 /** All or none: which of a provider's keys are missing when some are set. */
@@ -122,7 +176,7 @@ export function configuredMailProviderNames(
   s: MailSettings,
 ): Set<MailProviderName> {
   const names = new Set<MailProviderName>();
-  if (!isProduction(s)) names.add('mock');
+  if (!isProductionMail(s)) names.add('mock');
   if (partial(s, ZEPTO_KEYS)?.length === 0) names.add('zeptomail');
   if (partial(s, SES_KEYS)?.length === 0) names.add('ses');
   if (
@@ -169,12 +223,19 @@ export function checkMailSettings(
       'set both SES access keys, or neither',
     );
   // Codes would be marked sent and dropped by Brevo (review, 23 Nov 2026).
-  if (s.BREVO_TRANSACTIONAL_SANDBOX === true && isProduction(s))
+  if (s.BREVO_TRANSACTIONAL_SANDBOX === true && isProductionMail(s))
     issue('BREVO_TRANSACTIONAL_SANDBOX', 'not allowed in production');
-  if (s.MAIL_DEFAULT_PROVIDER === 'mock' && isProduction(s))
+  if (s.MAIL_DEFAULT_PROVIDER === 'mock' && isProductionMail(s))
     issue('MAIL_DEFAULT_PROVIDER', 'mock not allowed in production');
   else if (!configuredMailProviderNames(s).has(s.MAIL_DEFAULT_PROVIDER))
     issue('MAIL_DEFAULT_PROVIDER', 'provider not configured');
+  const configured = configuredMailProviderNames(s);
+  for (const name of s.MAIL_FALLBACK_PROVIDERS ?? []) {
+    if (name === 'mock' && isProductionMail(s))
+      issue('MAIL_FALLBACK_PROVIDERS', 'mock not allowed in production');
+    else if (!configured.has(name))
+      issue('MAIL_FALLBACK_PROVIDERS', `${name} not configured`);
+  }
 }
 
 /** The configured providers, keyed by name. The pretend one writes to `mockSink`. */
@@ -252,5 +313,5 @@ export function announcementMailProvider(
       webhookToken: s.BREVO_WEBHOOK_TOKEN,
       sandbox: s.BREVO_SANDBOX ?? false,
     });
-  return isProduction(s) ? null : createMockMailProvider(mockSink);
+  return isProductionMail(s) ? null : createMockMailProvider(mockSink);
 }

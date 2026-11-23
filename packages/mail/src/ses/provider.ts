@@ -32,11 +32,17 @@ const PERMANENT = new Set([
   'BadRequestException',
   'NotFoundException',
 ]);
+// Refusals about the account or its sender domain, not the mail: another provider can send it.
+const ACCOUNT = new Set([
+  'MailFromDomainNotVerifiedException',
+  'AccountSuspendedException',
+]);
 
 function sesError(error: unknown): MailRejectedError | MailTemporaryError {
   const name = error instanceof Error ? error.name : 'unknown';
   if (name === 'TimeoutError') return new MailTemporaryError('timeout');
-  if (PERMANENT.has(name)) return new MailRejectedError(name);
+  if (PERMANENT.has(name))
+    return new MailRejectedError(name, { providerFault: ACCOUNT.has(name) });
   return new MailTemporaryError(name);
 }
 
@@ -93,7 +99,9 @@ export function createSesProvider(config: SesConfig): MailProvider {
             EmailTags: [{ Name: 'ref', Value: mail.reference }],
           }),
         );
-        if (!result.MessageId) throw new MailTemporaryError('no_message_id');
+        // Accepted, perhaps: another provider could deliver it twice.
+        if (!result.MessageId)
+          throw new MailTemporaryError('no_message_id', { ambiguous: true });
         return { providerMessageId: result.MessageId };
       } catch (error) {
         if (error instanceof MailTemporaryError) throw error;
