@@ -687,38 +687,65 @@ export async function deliverDueMail(
       if (views.get(rescue[0]!)?.state === 'healthy') chain = rescue;
     }
     const failures: Array<{ name: MailProviderName; error: unknown }> = [];
-    let sent: { name: MailProviderName; providerMessageId: string } | null =
-      null;
+    // Set inside attempt(); a cast, so the checks after the loops aren't narrowed to null.
+    let sent = null as {
+      name: MailProviderName;
+      providerMessageId: string;
+    } | null;
     let tried = 0;
-    for (const name of chain) {
-      const state = views?.get(name)?.state ?? 'healthy';
-      if (state === 'resting') continue;
-      const onTrial = state === 'trial';
-      if (onTrial && !(await health!.claim(name, { code: isCode }))) continue;
+    // Providers resting (or on trial with no slot free) are tried last, only once every other
+    // one has failed for sure: a false trip plus a failing backup must never stop the mail.
+    const later: MailProviderName[] = [];
+    const attempt = async (name: MailProviderName, onTrial: boolean) => {
       const provider = providerFor(name);
-      if (!provider) continue;
+      if (!provider) return 'next' as const;
       tried += 1;
       const outcome = await sendThrough(provider, outgoing);
       if ('providerMessageId' in outcome) {
         sent = { name, providerMessageId: outcome.providerMessageId };
         if (onTrial) await health!.succeeded(name);
-        break;
+        return 'done' as const;
       }
       failures.push({ name, error: outcome.error });
       const failure = sendFailureOf(outcome.error);
       // A definite failure counts toward the breaker and moves the mail on; anything else stops.
-      if (failure.kind !== 'definite') break;
+      if (failure.kind !== 'definite') return 'done' as const;
       if (health && name !== 'mock') await health.failed(name, failure.code);
+      return 'next' as const;
+    };
+    let stopped = false;
+    for (const name of chain) {
+      const state = views?.get(name)?.state ?? 'healthy';
+      const onTrial = state === 'trial';
+      if (
+        state === 'resting' ||
+        (onTrial && !(await health!.claim(name, { code: isCode })))
+      ) {
+        later.push(name);
+        continue;
+      }
+      if ((await attempt(name, onTrial)) === 'done') {
+        stopped = true;
+        break;
+      }
     }
-    // Every provider is resting: the one routing picks takes it, as without failover.
-    if (tried === 0) {
-      const outcome = await sendThrough(providerFor(routed)!, outgoing);
-      if ('providerMessageId' in outcome)
-        sent = { name: routed, providerMessageId: outcome.providerMessageId };
-      else failures.push({ name: routed, error: outcome.error });
-    }
-    // The attempts before the last one are in the timeline (no type: not in the day's counts).
-    const earlier = sent ? failures : failures.slice(0, -1);
+    if (!stopped)
+      for (const name of later)
+        if ((await attempt(name, false)) === 'done') break;
+    // Nothing could be tried at all: the one routing picks takes it, as without failover.
+    if (tried === 0) await attempt(routed, false);
+    // The outcome comes from every attempt, not just the last (review, 23 Nov 2026): any
+    // temporary failure means the normal retry; out of credits only when no provider failed
+    // otherwise; failed for good only when every provider refused this mail.
+    const temporary = failures.findLast(
+      ({ error }) =>
+        !(error instanceof MailRejectedError) &&
+        !(error instanceof MailQuotaError),
+    );
+    const quota = failures.find(({ error }) => error instanceof MailQuotaError);
+    const final = temporary ?? quota ?? failures.at(-1);
+    // The other attempts are in the timeline (no type: not in the day's counts).
+    const earlier = failures.filter((f) => sent !== null || f !== final);
     for (const { name, error } of earlier) {
       await recordMailEvent(deps.db, {
         messageId: mail.id,
@@ -735,7 +762,7 @@ export async function deliverDueMail(
       });
     }
     if (!sent) {
-      const { name: providerName, error } = failures.at(-1)!;
+      const { name: providerName, error } = final!;
       // A quota error is a temporary error too, so it is checked first.
       if (error instanceof MailQuotaError) {
         if (viaAnnouncementProvider) quotaCode = error.code;

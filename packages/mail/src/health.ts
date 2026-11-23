@@ -52,11 +52,15 @@ export interface MailHealthRecord {
 
 /** Each call is one atomic step, so processes sharing the store never race each other. */
 export interface MailHealthStore {
-  /** A definite send failure; may trip (`send`), or rest a provider on trial again. */
+  /**
+   * A definite send failure; may trip (`send`, with `reason`), or rest a provider on trial again
+   * (with `trialReason`, which defaults to `reason`).
+   */
   fail(
     name: MailProviderName,
     now: number,
     reason: string,
+    trialReason?: string,
   ): Promise<MailHealthChange | null>;
   /** Rests a provider now, whatever its count (unused codes, or unused trial codes). */
   trip(
@@ -229,9 +233,10 @@ export function memoryMailHealthStore(
     e.recoveredAt = now;
   };
   return {
-    async fail(name, now, reason) {
+    async fail(name, now, reason, trialReason) {
       const e = entry(name);
-      if (e.state === 'trial') return reopen(e, now, reason, 'send');
+      if (e.state === 'trial')
+        return reopen(e, now, trialReason ?? reason, 'send');
       if (e.state === 'open') return null;
       e.failures = [...e.failures, now].filter(
         (at) => at > now - settings.windowMs,
@@ -256,6 +261,8 @@ export function memoryMailHealthStore(
       const e = entry(name);
       if (e.state === 'open') {
         if (e.until === null || now < e.until) return false;
+        // After a codes trip only a code starts the trial, so a quiet spell never times it out.
+        if (e.kind === 'codes' && !code) return false;
         e.state = 'trial';
         e.trialStartedAt = now;
         e.trialUsed = 0;
@@ -337,14 +344,14 @@ local function keep(h, ms)
 end
 `;
 
-// ARGV: now, reason, member, threshold, window, rest, realert, keep
+// ARGV: now, reason, member, threshold, window, rest, realert, keep, trial reason
 const FAIL = `${LUA_COMMON}
 local h, z = KEYS[1], KEYS[2]
 local now, reason, member = tonumber(ARGV[1]), ARGV[2], ARGV[3]
 local threshold, window, rest, realert = tonumber(ARGV[4]), tonumber(ARGV[5]), tonumber(ARGV[6]), tonumber(ARGV[7])
 local state = redis.call('HGET', h, 'state')
 local out = ''
-if state == 'trial' then out = reopen(h, now, rest, reason, 'send', realert)
+if state == 'trial' then out = reopen(h, now, rest, ARGV[9], 'send', realert)
 elseif state == 'open' then return ''
 else
   redis.call('ZADD', z, now, member)
@@ -383,6 +390,7 @@ local now, code, lease, codes = tonumber(ARGV[1]), ARGV[2] == '1', tonumber(ARGV
 local state = redis.call('HGET', h, 'state')
 if state == 'open' then
   if now < tonumber(redis.call('HGET', h, 'until') or '0') then return 0 end
+  if redis.call('HGET', h, 'kind') == 'codes' and not code then return 0 end
   redis.call('HSET', h, 'state', 'trial', 'trial_started_at', now, 'trial_used', 0, 'probe_until', now + lease)
   state = 'trial'
 end
@@ -455,7 +463,7 @@ export function redisMailHealthStore(
   const fails = (name: MailProviderName) => `${hash(name)}:fails`;
   const reasonText = (reason: string) => reason.slice(0, 120);
   return {
-    async fail(name, now, reason) {
+    async fail(name, now, reason, trialReason) {
       return asChange(
         await client.eval(
           FAIL,
@@ -470,6 +478,7 @@ export function redisMailHealthStore(
           options.restMs,
           realert,
           KEEP_MS,
+          reasonText(trialReason ?? reason),
         ),
       );
     },
@@ -619,6 +628,7 @@ export function createMailHealth(options: {
           name,
           now(),
           `${settings.threshold} send failures in ${minutes(settings.windowMs)} (last: ${code})`,
+          `trial send failed (${code})`,
         ),
       ),
     succeeded: (name) =>

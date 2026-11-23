@@ -162,7 +162,14 @@ test('production never lists the pretend provider as a fallback', () => {
     ['MAIL_FALLBACK_PROVIDERS'],
   );
   // Elsewhere a developer may.
-  assert.equal(parse({ MAIL_FALLBACK_PROVIDERS: 'mock' }).success, true);
+  assert.equal(
+    parse({
+      ...ZEPTO,
+      MAIL_DEFAULT_PROVIDER: 'zeptomail',
+      MAIL_FALLBACK_PROVIDERS: 'mock',
+    }).success,
+    true,
+  );
 });
 
 test('the unused-code ratio is a fraction', () => {
@@ -172,5 +179,18 @@ test('the unused-code ratio is a fraction', () => {
   assert.equal(
     parse({ MAIL_CODE_UNUSED_RATIO: '0.75' }).data.MAIL_CODE_UNUSED_RATIO,
     0.75,
+  );
+});
+
+test('a fallback list naming only the default provider is refused (no backup at all)', () => {
+  assert.deepEqual(
+    missing(
+      parse({
+        ...ZEPTO,
+        MAIL_DEFAULT_PROVIDER: 'zeptomail',
+        MAIL_FALLBACK_PROVIDERS: 'zeptomail',
+      }),
+    ),
+    ['MAIL_FALLBACK_PROVIDERS'],
   );
 });

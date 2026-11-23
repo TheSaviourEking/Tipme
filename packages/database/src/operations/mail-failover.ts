@@ -141,6 +141,8 @@ export async function previousCodeProvider(
        AND prev.created_at >= cur.created_at - make_interval(secs => ${windowMs / 1000})
       JOIN mail_messages m ON m.dedupe_key IN (${keys})
      WHERE cur.id = ${id}::uuid AND m.provider IS NOT NULL AND m.sent_at IS NOT NULL
+       -- Only someone still waiting is rescued: a used code was delivered.
+       AND prev.consumed_at IS NULL
      ORDER BY prev.created_at DESC
      LIMIT 1`);
   return (rows[0]?.provider as MailProviderName | undefined) ?? null;
@@ -177,7 +179,12 @@ export async function codeDeliveryStats(
     now: Date;
     unusedAfterMs: number;
   },
-): Promise<{ samples: number; unused: number; redeemed: number }> {
+): Promise<{
+  samples: number;
+  unused: number;
+  unusedCodes: number;
+  redeemed: number;
+}> {
   const after = sql`make_interval(secs => ${input.unusedAfterMs / 1000})`;
   const types = sql.join(
     CODE_TYPES.map((type) => sql`${type}`),
@@ -186,10 +193,11 @@ export async function codeDeliveryStats(
   const { rows } = await db.execute<{
     samples: number;
     unused: number;
+    unused_codes: number;
     redeemed: number;
   }>(sql`
     WITH sent AS (
-      SELECT m.sent_at, c.consumed_at,
+      SELECT c.email, m.sent_at, c.consumed_at,
              (c.consumed_at IS NOT NULL AND c.consumed_at <= m.sent_at + ${after}) AS used,
              (c.consumed_at IS NULL AND EXISTS (
                SELECT 1 FROM email_codes n
@@ -207,19 +215,26 @@ export async function codeDeliveryStats(
          AND m.provider = ${input.provider}
          AND m.status NOT IN ('bounced', 'complained')
     ), decided AS (
-      SELECT used, consumed_at,
+      SELECT email, used, consumed_at,
              (used OR superseded
                OR sent_at <= ${input.now.toISOString()}::timestamptz - ${after}) AS decided
         FROM sent
+    ), people AS (
+      -- One address is one sample, so one person asking again and again (or a script using a few
+      -- addresses) can't make up the minimum: used if any of its codes was used in time, decided
+      -- once one was used or all of them are decided.
+      SELECT bool_or(used) AS used, (bool_or(used) OR bool_and(decided)) AS decided
+        FROM decided GROUP BY email
     )
-    SELECT count(*) FILTER (WHERE decided)::int AS samples,
-           count(*) FILTER (WHERE decided AND NOT used)::int AS unused,
-           count(*) FILTER (WHERE consumed_at IS NOT NULL)::int AS redeemed
-      FROM decided`);
+    SELECT (SELECT count(*) FILTER (WHERE decided) FROM people)::int AS samples,
+           (SELECT count(*) FILTER (WHERE decided AND NOT used) FROM people)::int AS unused,
+           (SELECT count(*) FILTER (WHERE decided AND NOT used) FROM decided)::int AS unused_codes,
+           (SELECT count(*) FILTER (WHERE consumed_at IS NOT NULL) FROM decided)::int AS redeemed`);
   const row = rows[0];
   return {
     samples: Number(row?.samples ?? 0),
     unused: Number(row?.unused ?? 0),
+    unusedCodes: Number(row?.unused_codes ?? 0),
     redeemed: Number(row?.redeemed ?? 0),
   };
 }
@@ -276,7 +291,7 @@ export async function checkCodeDelivery(
       if (trips)
         await input.health.tripCodes(
           provider,
-          `${stats.unused} of ${stats.samples} codes unused in ${Math.round(settings.windowMs / 60_000)} min`,
+          `${stats.unused} of ${stats.samples} addresses' codes unused in ${Math.round(settings.windowMs / 60_000)} min`,
         );
       out.push({
         provider,
@@ -305,12 +320,12 @@ export async function checkCodeDelivery(
       await input.health.restoreCodes(provider);
       outcome = 'restored';
     } else if (
-      stats.unused >= settings.trialCodes ||
+      stats.unusedCodes >= settings.trialCodes ||
       now.getTime() - view.trialStartedAt.getTime() > TRIAL_GIVE_UP_MS
     ) {
       await input.health.tripCodes(
         provider,
-        `${stats.unused} of ${settings.trialCodes} trial codes unused`,
+        `${stats.unusedCodes} of ${settings.trialCodes} trial codes unused`,
       );
       outcome = 'rested_again';
     }

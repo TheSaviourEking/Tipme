@@ -124,7 +124,7 @@ function setup(db, options = {}) {
             defaultProvider: 'zeptomail',
             production: false,
             fixed: () => mailFailoverFixed(db),
-            resendWindowMs: 600_000,
+            resendWindowMs: options.resendWindowMs ?? 600_000,
           },
         }),
   };
@@ -520,7 +520,7 @@ test('(b) 4 of 6 codes unused in 10 minutes rest ZeptoMail; codes still waiting 
   const view = await s.view('zeptomail', at(200_000));
   assert.equal(view.state, 'resting');
   assert.equal(view.kind, 'codes');
-  assert.equal(view.reason, '4 of 6 codes unused in 10 min');
+  assert.equal(view.reason, "4 of 6 addresses' codes unused in 10 min");
   assert.deepEqual(
     s.changes.map((x) => [x.provider, x.change]),
     [['zeptomail', 'tripped']],
@@ -546,7 +546,7 @@ test('(b) a code asked for again counts as unused for the earlier send at once',
   await s.check(at(80_000));
   const zepto = await s.view('zeptomail', at(80_000));
   assert.equal(zepto.state, 'resting');
-  assert.equal(zepto.reason, '4 of 5 codes unused in 10 min');
+  assert.equal(zepto.reason, "4 of 5 addresses' codes unused in 10 min");
   assert.equal((await s.view('brevo', at(80_000))).state, 'healthy');
 });
 
@@ -632,5 +632,126 @@ test('(c) a code asked for again is not rescued onto a provider on trial', async
   assert.deepEqual(
     codes.map((c) => c.provider),
     ['zeptomail', 'zeptomail'],
+  );
+});
+
+// Fix round 1 (review, 23 Nov 2026).
+
+test('I1: a backup refusing the mail never turns the primary’s temporary failure into a permanent one', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db, {
+    zepto: [{ definite: 'http_503' }],
+    brevo: [{ rejected: 'invalid_parameter' }],
+  });
+  const { id } = await receipt(db);
+  const result = await s.deliver(T0);
+  assert.equal(result.retried, 1);
+  const [row] = await rows(
+    'SELECT provider, status, last_error FROM mail_messages WHERE id = $1',
+    [id],
+  );
+  assert.deepEqual(row, {
+    provider: 'zeptomail',
+    status: 'queued',
+    last_error: 'http_503',
+  });
+});
+
+test('I1: a sign-in code is not failed for credits when the primary only timed out', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db, {
+    zepto: [{ definite: 'timeout' }],
+    brevo: [{ quota: 'not_enough_credits' }],
+  });
+  await signIn(db, 'ada@gmail.com', T0);
+  await s.deliver(T0);
+  const [row] = await rows(
+    "SELECT provider, status, last_error FROM mail_messages WHERE type = 'sign_in_code'",
+  );
+  assert.deepEqual(row, {
+    provider: 'zeptomail',
+    status: 'queued',
+    last_error: 'timeout',
+  });
+});
+
+test('I1: every provider refusing the mail fails it for good; every one out of credits fails a code at once', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db, {
+    zepto: [{ rejected: 'SM_113' }, { quota: 'LE_102' }],
+    brevo: [{ quota: 'not_enough_credits' }],
+  });
+  const refused = await receipt(db);
+  await s.deliver(T0);
+  assert.equal((await providerOf(rows, refused.id)).status, 'failed');
+  assert.equal(
+    s.brevo.calls(),
+    0,
+    'a refusal of the mail itself never moves it',
+  );
+  await signIn(db, 'ada@gmail.com', at(1000));
+  await s.deliver(at(1000));
+  const [code] = await rows(
+    "SELECT status FROM mail_messages WHERE type = 'sign_in_code'",
+  );
+  assert.equal(code.status, 'failed');
+});
+
+test('I2: with ZeptoMail resting and Brevo out of credits, the code goes through ZeptoMail', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db, { brevo: [{ quota: 'not_enough_credits' }] });
+  await s.health.tripCodes('zeptomail', 'test');
+  await signIn(db, 'ada@gmail.com', T0);
+  await s.deliver(T0);
+  const [row] = await rows(
+    "SELECT provider, status FROM mail_messages WHERE type = 'sign_in_code'",
+  );
+  assert.deepEqual(row, { provider: 'zeptomail', status: 'sent' });
+  assert.equal(s.brevo.calls(), 1);
+});
+
+test('I3: one requester using two addresses (3 + 2 codes) never trips it', async (t) => {
+  const { db } = await fresh(t);
+  // No rescue, so all five codes go through ZeptoMail.
+  const s = setup(db, { resendWindowMs: 0 });
+  for (let i = 0; i < 3; i++)
+    await sendCodes(db, s, ['x1@gmail.com'], at(i * 1000));
+  for (let i = 0; i < 2; i++)
+    await sendCodes(db, s, ['x2@gmail.com'], at(5000 + i * 1000));
+  await s.check(at(400_000));
+  assert.equal((await s.view('zeptomail', at(400_000))).state, 'healthy');
+  assert.equal((await s.view('brevo', at(400_000))).state, 'healthy');
+  assert.deepEqual(s.changes, []);
+});
+
+test('M9: someone who used their code and signs in again is not moved to the other provider', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db);
+  await sendCodes(db, s, ['ada@gmail.com'], T0);
+  await useCode(rows, 'ada@gmail.com', at(10_000));
+  await sendCodes(db, s, ['ada@gmail.com'], at(60_000));
+  const codes = await rows(
+    "SELECT provider FROM mail_messages WHERE type = 'sign_in_code' ORDER BY created_at",
+  );
+  assert.deepEqual(
+    codes.map((c) => c.provider),
+    ['zeptomail', 'zeptomail'],
+  );
+});
+
+test('M2: a codes trial with no codes in a quiet half hour is not given up', async (t) => {
+  const { db, rows } = await fresh(t);
+  const s = setup(db);
+  await tripOnCodes(db, rows, s);
+  const after = 200_000 + 900_000;
+  // Only a receipt in the quiet period: it goes to Brevo and starts no trial.
+  await receipt(db, at(after));
+  await s.deliver(at(after));
+  await s.check(at(after + 31 * 60_000));
+  const view = await s.view('zeptomail', at(after + 31 * 60_000));
+  assert.equal(view.state, 'trial');
+  assert.deepEqual(
+    s.changes.map((x) => x.change),
+    ['tripped'],
   );
 });

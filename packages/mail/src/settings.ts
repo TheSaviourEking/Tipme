@@ -233,6 +233,9 @@ export function checkMailSettings(
   for (const name of s.MAIL_FALLBACK_PROVIDERS ?? []) {
     if (name === 'mock' && isProductionMail(s))
       issue('MAIL_FALLBACK_PROVIDERS', 'mock not allowed in production');
+    // The default is in the failover group already: listing it alone gives no backup at all.
+    else if (name === s.MAIL_DEFAULT_PROVIDER)
+      issue('MAIL_FALLBACK_PROVIDERS', `${name} is the default provider`);
     else if (!configured.has(name))
       issue('MAIL_FALLBACK_PROVIDERS', `${name} not configured`);
   }

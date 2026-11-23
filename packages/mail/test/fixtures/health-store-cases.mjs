@@ -160,6 +160,37 @@ export function runHealthStoreCases(test, makeStore, prefix = 'store') {
     );
   });
 
+  test(`${prefix}: after a codes trip, other mail never starts the trial clock`, async () => {
+    const store = await make();
+    await store.trip('zeptomail', T, 'x', 'codes');
+    const after = T + 900_000;
+    assert.equal(await store.claim('zeptomail', after, false), false);
+    let record = (await store.read(['zeptomail'])).get('zeptomail');
+    assert.equal(record.state, 'open', 'still waiting for a code');
+    assert.equal(record.trialStartedAt, null);
+    assert.equal(await store.claim('zeptomail', after + 60_000, true), true);
+    record = (await store.read(['zeptomail'])).get('zeptomail');
+    assert.equal(record.state, 'trial');
+    assert.equal(record.trialStartedAt, after + 60_000);
+  });
+
+  test(`${prefix}: a failed trial send keeps its own reason`, async () => {
+    const store = await make();
+    for (let i = 0; i < 3; i++)
+      await store.fail('ses', T, '3 send failures', 'probe failed');
+    assert.equal(await store.claim('ses', T + 900_000, false), true);
+    await store.fail(
+      'ses',
+      T + 900_001,
+      '3 send failures',
+      'trial send failed (http_500)',
+    );
+    assert.equal(
+      (await store.read(['ses'])).get('ses').reason,
+      'trial send failed (http_500)',
+    );
+  });
+
   test(`${prefix}: a definite failure during a codes trial rests it as a send failure`, async () => {
     const store = await make();
     await store.trip('brevo', T, 'codes', 'codes');

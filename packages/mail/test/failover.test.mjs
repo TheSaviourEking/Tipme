@@ -478,3 +478,20 @@ test('the live provider is the first healthy one, the active one first; all rest
     'zeptomail',
   );
 });
+
+test('a failed probe tells staff it was the trial send that failed', async () => {
+  const c = clock();
+  const h = createMailHealth({
+    store: memoryMailHealthStore(SETTINGS),
+    settings: SETTINGS,
+    clock: c.now,
+  });
+  for (let i = 0; i < 3; i++) await h.failed('zeptomail', 'http_503');
+  c.advance(900_000);
+  assert.equal(await h.claim('zeptomail', { code: false }), true);
+  await h.failed('zeptomail', 'http_500');
+  assert.equal(
+    (await h.snapshot(['zeptomail'])).get('zeptomail').reason,
+    'trial send failed (http_500)',
+  );
+});
