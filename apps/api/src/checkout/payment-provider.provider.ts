@@ -77,6 +77,28 @@ function bachsFor(
   });
 }
 
+/** One Bachs adapter from its own environment's settings. */
+function bachsForName(
+  name: 'bachs-live' | 'bachs-sandbox',
+  config: ApiConfig,
+): BachsProvider {
+  return name === 'bachs-live'
+    ? bachsFor(
+        'live',
+        config.BACHS_LIVE_API_KEY,
+        config.BACHS_LIVE_WEBHOOK_SECRET,
+        config.BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET,
+        config.BACHS_PLATFORM_ORGANIZATION_ID,
+      )
+    : bachsFor(
+        'sandbox',
+        config.BACHS_SANDBOX_API_KEY,
+        config.BACHS_WEBHOOK_SECRET,
+        config.BACHS_PREVIOUS_WEBHOOK_SECRET,
+        config.BACHS_PLATFORM_ORGANIZATION_ID,
+      );
+}
+
 export const bachsProviderProvider: Provider<BachsProvider | null> = {
   provide: BACHS_PROVIDER_TOKEN,
   inject: [API_CONFIG],
@@ -89,50 +111,17 @@ export const bachsProviderProvider: Provider<BachsProvider | null> = {
       (n) => n === 'bachs-live' || n === 'bachs-sandbox',
     );
     if (!bachsEnvironment(name) && withdrawOnlyBachs)
-      return withdrawOnlyBachs === 'bachs-live'
-        ? bachsFor(
-            'live',
-            config.BACHS_LIVE_API_KEY,
-            config.BACHS_LIVE_WEBHOOK_SECRET,
-            config.BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET,
-            config.BACHS_PLATFORM_ORGANIZATION_ID,
-          )
-        : bachsFor(
-            'sandbox',
-            config.BACHS_SANDBOX_API_KEY,
-            config.BACHS_WEBHOOK_SECRET,
-            config.BACHS_PREVIOUS_WEBHOOK_SECRET,
-            config.BACHS_PLATFORM_ORGANIZATION_ID,
-          );
+      return bachsForName(withdrawOnlyBachs, config);
     switch (name) {
       case 'bachs-live':
-        return bachsFor(
-          'live',
-          config.BACHS_LIVE_API_KEY,
-          config.BACHS_LIVE_WEBHOOK_SECRET,
-          config.BACHS_LIVE_PREVIOUS_WEBHOOK_SECRET,
-          config.BACHS_PLATFORM_ORGANIZATION_ID,
-        );
       case 'bachs-sandbox':
-        return bachsFor(
-          'sandbox',
-          config.BACHS_SANDBOX_API_KEY,
-          config.BACHS_WEBHOOK_SECRET,
-          config.BACHS_PREVIOUS_WEBHOOK_SECRET,
-          config.BACHS_PLATFORM_ORGANIZATION_ID,
-        );
+        return bachsForName(name, config);
       case 'mock':
         // A test or preview copy back on mock still answers Bachs sandbox callbacks and status
         // checks for tips it took earlier. Config keeps live settings off non-production copies.
         if (!config.BACHS_SANDBOX_API_KEY && !config.BACHS_WEBHOOK_SECRET)
           return null;
-        return bachsFor(
-          'sandbox',
-          config.BACHS_SANDBOX_API_KEY,
-          config.BACHS_WEBHOOK_SECRET,
-          config.BACHS_PREVIOUS_WEBHOOK_SECRET,
-          config.BACHS_PLATFORM_ORGANIZATION_ID,
-        );
+        return bachsForName('bachs-sandbox', config);
       default: {
         const unreachable: never = name;
         throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);

@@ -159,7 +159,7 @@ const wire = (config) => {
   return { mockProvider, bachs, alt, set };
 };
 
-test('withdraw-only mock_alt beside active mock gives both, active last in drain order', () => {
+test('withdraw-only mock_alt beside active mock keeps active and withdraw-only separate, withdraw-only in list order', () => {
   const { mockProvider, alt, set } = wire({
     PAYMENT_PROVIDER: 'mock',
     PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt'],
@@ -217,4 +217,25 @@ test('checkout still uses only the active provider', () => {
     withdrawalProviderProvider.useFactory(config, mockProvider, bachs),
     mockProvider,
   );
+});
+
+test('QUEUE_PREFIX reaches the mock_alt keys, and only mock_alt carries :mock_alt', async () => {
+  const keys = [];
+  const recording = {
+    set: async (key) => void keys.push(key),
+    del: async (key) => void keys.push(key),
+  };
+  const config = {
+    PAYMENT_PROVIDER: 'mock',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt'],
+    QUEUE_PREFIX: 'pfx',
+  };
+  const active = paymentProviderProvider.useFactory(config, recording);
+  const alt = mockAltProviderProvider.useFactory(config, recording);
+  await active.markPayoutBalance('acct_1', 5n);
+  await alt.markPayoutBalance('acct_1', 5n);
+  assert.equal(keys.length, 2);
+  assert.ok(keys[0].includes('pfx'));
+  assert.ok(!keys[0].includes(':mock_alt'));
+  assert.ok(keys[1].includes('pfx:mock_alt'));
 });
