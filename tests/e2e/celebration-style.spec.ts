@@ -18,6 +18,8 @@ import {
 /** Today's light panel and ink (tokens.css --brand-soft, --brand-ink). */
 const LILAC = 'rgb(241, 233, 255)';
 const TODAY_INK = 'rgb(77, 22, 168)';
+/** tokens.css --brand-mid, the other light-only purple tint. */
+const MID = 'rgb(217, 195, 255)';
 
 interface Measured {
   text: string;
@@ -219,5 +221,63 @@ test.describe('the celebration banner follows the page', () => {
       if (handle === 'celclassicfreedark') expect(dark, handle).toBe(true);
       check(`/@${handle}`, await measure(page), { dark, purple: true });
     }
+  });
+
+  // The same bug class beyond the banner: today's light-only tints (--brand-soft, --brand-mid) must
+  // paint nothing on a dark Classic page, in any state the page reaches (an amount picked, the
+  // celebration ticked, paused, not open on this copy), on a phone and a desktop.
+  test('a dark Classic page paints neither light lilac anywhere', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const handles = [
+      'celclassicpurpledarkyours',
+      'celclassicpurpledarkgradient',
+      'celclassicpurpledarkplain',
+      'celclassicgreendarkyours',
+      'celclassicfreedark',
+      'classicpauseddark',
+      'classicunlisteddark',
+    ];
+    for (const width of [390, 1440])
+      for (const handle of handles) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${stack.origin}/@${handle}`);
+        await page
+          .locator('[data-style="classic"][data-mode="dark"]')
+          .waitFor();
+        const key = page.locator('.tm-amount-choice input').first();
+        if (await key.count()) await key.check({ force: true });
+        const tick = page.getByRole('checkbox', {
+          name: 'Add to the celebration',
+        });
+        if (await tick.count()) await tick.check({ force: true });
+        const painted = await page.evaluate(
+          (light) => {
+            const out: string[] = [];
+            for (const el of document.querySelectorAll('body *'))
+              for (const pseudo of [null, '::before', '::after']) {
+                const cs = getComputedStyle(el, pseudo);
+                if (pseudo && cs.content === 'none') continue;
+                for (const prop of [
+                  'background-color',
+                  'border-top-color',
+                  'border-bottom-color',
+                  'outline-color',
+                  'color',
+                ])
+                  if (light.includes(cs.getPropertyValue(prop)))
+                    out.push(
+                      `${el.tagName.toLowerCase()}.${el.className}${pseudo ?? ''} ${prop}`,
+                    );
+                if (/241, 233, 255|217, 195, 255/.test(cs.backgroundImage))
+                  out.push(`${el.className}${pseudo ?? ''} background-image`);
+              }
+            return out;
+          },
+          [LILAC, MID],
+        );
+        expect(painted, `/@${handle} at ${width}`).toEqual([]);
+      }
   });
 });

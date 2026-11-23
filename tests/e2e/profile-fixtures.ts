@@ -314,6 +314,19 @@ export async function studioFixtures() {
     }),
     // Today's page (no design) on a Pro plan; sixkeys is its Free twin.
     page('celstandardpro', { plan: 'pro', celebration: CELEBRATION }),
+    // Classic's other states in each mode (lilac-audit.spec.ts): paused, and not open on this copy.
+    ...(['light', 'dark'] as const).flatMap((mode) => [
+      studioPage(
+        `classicpaused${mode}`,
+        styleDocument('classic', { accent: null, mode }),
+        { acceptingTips: false },
+      ),
+      studioPage(
+        `classicunlisted${mode}`,
+        styleDocument('classic', { accent: null, mode }),
+        { tippingOpen: false },
+      ),
+    ]),
     // A stale answer: Pro extras only (photo accent and a gallery on Classic) for a Free page.
     studioPage(
       'studiofree',
