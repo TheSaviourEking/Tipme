@@ -94,6 +94,20 @@ export interface MailHealthView {
   recoveredAt: Date | null;
 }
 
+/**
+ * Which provider new mail goes through now (ops): the first healthy one of `chain` (the active
+ * one first). A provider on trial only takes trial traffic. All resting: the first, as delivery does.
+ */
+export function liveMailProvider(
+  chain: readonly MailProviderName[],
+  views: ReadonlyMap<MailProviderName, Pick<MailHealthView, 'state'>>,
+): MailProviderName {
+  return (
+    chain.find((name) => (views.get(name)?.state ?? 'healthy') === 'healthy') ??
+    chain[0]!
+  );
+}
+
 const date = (ms: number | null) => (ms === null ? null : new Date(ms));
 
 export function mailHealthView(

@@ -1046,6 +1046,32 @@ export interface OpsMailProviderCard {
     bounced: number;
     complained: number;
   };
+  /**
+   * Automatic failover's view of it (owner, 23 Nov 2026); null when no fallback is set up.
+   * `resting` until `until`; `trial` once the rest is over, while trial traffic decides.
+   */
+  health: OpsMailProviderHealth | null;
+}
+
+export interface OpsMailProviderHealth {
+  state: 'healthy' | 'resting' | 'trial';
+  /** What tripped it last: send failures, or unused codes. */
+  kind: 'send' | 'codes' | null;
+  until: string | null;
+  /** E.g. "3 send failures in 5 min (last: http_503)" or "4 of 6 codes unused in 10 min". */
+  reason: string | null;
+  trippedAt: string | null;
+}
+
+/** Automatic failover between the configured providers (owner, 23 Nov 2026). */
+export interface OpsMailFailover {
+  /** MAIL_FALLBACK_PROVIDERS is set: mail moves to the backup when the active one fails. */
+  configured: boolean;
+  /** Staff fixed the active provider: no automatic switching. */
+  fixed: boolean;
+  /** Where new mail goes now. */
+  live: z.infer<typeof mailProviderNameSchema>;
+  backup: z.infer<typeof mailProviderNameSchema> | null;
 }
 
 export interface OpsMailProviderOverride {
@@ -1061,7 +1087,14 @@ export interface OpsMailProviders {
   overrides: OpsMailProviderOverride[];
   changedAt: string | null;
   reason: string | null;
+  failover: OpsMailFailover;
 }
+
+/** Fix the active provider (no automatic switching) or let it switch again. */
+export const opsMailFailoverSchema = opsReasonSchema
+  .extend({ fixed: z.boolean() })
+  .strict();
+export type OpsMailFailoverRequest = z.infer<typeof opsMailFailoverSchema>;
 
 export const opsMailTestSchema = opsReasonSchema
   .extend({ to: z.email().max(254).optional() })

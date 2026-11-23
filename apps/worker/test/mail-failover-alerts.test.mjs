@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  mailFailoverGroup,
   mailHealthAlerter,
   mailHealthAlertText,
 } from '../dist/handlers/mail-failover.js';
@@ -58,21 +57,6 @@ test('the alert says which provider rests, until when (Lagos time), why, and whe
     ),
     'TipMe staff alert: email provider ZeptoMail has recovered; mail goes through it again.',
   );
-});
-
-test('the backup is the other provider of the group; the default joins the fallbacks', () => {
-  const configured = new Set(['zeptomail', 'brevo', 'mock']);
-  assert.deepEqual(
-    mailFailoverGroup('zeptomail', ['brevo'], configured, true),
-    ['zeptomail', 'brevo'],
-  );
-  assert.deepEqual(
-    mailFailoverGroup('zeptomail', ['mock', 'brevo'], configured, true),
-    ['zeptomail', 'brevo'],
-  );
-  assert.deepEqual(mailFailoverGroup('zeptomail', ['ses'], configured, false), [
-    'zeptomail',
-  ]);
 });
 
 test('the alert is posted to the alert route; a failure is thrown for the breaker to log', async () => {

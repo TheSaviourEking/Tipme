@@ -27,11 +27,13 @@ export {
 } from './templates/define.js';
 export {
   isPretendRecipient,
+  mailFailoverGroup,
   mailProviderChain,
   resolveMailProvider,
 } from './routing.js';
 export {
   createMailHealth,
+  liveMailProvider,
   mailHealthView,
   memoryMailHealthStore,
   redisMailHealthStore,

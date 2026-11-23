@@ -7,28 +7,6 @@ import { webhookAlert, type PaymentReserveLog } from './payment-reserve.js';
  * every 6 hours, a recovery); this only words it. Provider names and our own reasons only.
  */
 
-/**
- * The providers that stand in for each other: the server default, then MAIL_FALLBACK_PROVIDERS,
- * configured ones only, and never the pretend provider in production. The backup of one is the
- * first other provider here.
- */
-export function mailFailoverGroup(
-  defaultProvider: MailProviderName,
-  fallbacks: readonly MailProviderName[],
-  configured: ReadonlySet<MailProviderName>,
-  production: boolean,
-): MailProviderName[] {
-  const group: MailProviderName[] = [];
-  for (const name of [defaultProvider, ...fallbacks])
-    if (
-      !group.includes(name) &&
-      configured.has(name) &&
-      !(production && name === 'mock')
-    )
-      group.push(name);
-  return group;
-}
-
 const time = new Intl.DateTimeFormat('en-GB', {
   hour: '2-digit',
   minute: '2-digit',

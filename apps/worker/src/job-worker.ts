@@ -21,6 +21,7 @@ import {
   configuredMailProviders,
   createMailHealth,
   isProductionMail,
+  mailFailoverGroup,
   mailHealthSettings,
   redisMailHealthStore,
   type MailProviderName,
@@ -105,10 +106,7 @@ import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
-import {
-  mailFailoverGroup,
-  mailHealthAlerter,
-} from './handlers/mail-failover.js';
+import { mailHealthAlerter } from './handlers/mail-failover.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {

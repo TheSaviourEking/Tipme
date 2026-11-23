@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 import {
   mailProviderNameSchema,
+  opsMailFailoverSchema,
   opsMailOverrideRemoveSchema,
   opsMailOverrideSchema,
   opsMailSwitchSchema,
@@ -18,7 +19,9 @@ import {
   opsProviderTestConfirmSchema,
   opsSuppressionLookupSchema,
   opsSuppressionRemoveSchema,
+  opsReasonSchema,
   type ApiDataResponse,
+  type OpsMailFailoverRequest,
   type OpsMailOverrideRemoveRequest,
   type OpsMailOverrideRequest,
   type OpsMailProviders,
@@ -27,6 +30,7 @@ import {
   type OpsSeriousPending,
   type OpsProviderTestConfirmRequest,
   type OpsSuppressionLookupRequest,
+  type OpsReasonRequest,
   type OpsSuppressionRemoveRequest,
 } from '@tipme/contracts';
 import {
@@ -36,7 +40,9 @@ import {
   findAccountByHandleOrId,
   findSuppression,
   mailProviderOverview,
+  recordMailHealthCleared,
   removeProviderOverride,
+  setMailFailoverFixed,
   removeSuppression,
   setProviderOverride,
   startMailProviderTest,
@@ -45,10 +51,14 @@ import {
   verifiedEmailOf,
   type MailSealing,
 } from '@tipme/database';
-import type {
-  MailProvider,
-  MailProviderName,
-  MailProviderStatus,
+import {
+  liveMailProvider,
+  mailFailoverGroup,
+  type MailHealth,
+  type MailHealthView,
+  type MailProvider,
+  type MailProviderName,
+  type MailProviderStatus,
 } from '@tipme/mail';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
@@ -57,6 +67,7 @@ import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import {
+  MAIL_HEALTH,
   MAIL_PROVIDERS,
   MAIL_SEALING,
   type MailProviders,
@@ -77,7 +88,20 @@ export class OpsProvidersController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(MAIL_PROVIDERS) readonly providers: MailProviders,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(MAIL_HEALTH) private readonly health: MailHealth,
   ) {}
+
+  /** The providers that stand in for each other; empty or one: no automatic failover. */
+  private failoverGroup(): MailProviderName[] {
+    const fallbacks = this.config.MAIL_FALLBACK_PROVIDERS ?? [];
+    if (fallbacks.length === 0) return [];
+    return mailFailoverGroup(
+      this.config.MAIL_DEFAULT_PROVIDER,
+      fallbacks,
+      new Set(this.providers.keys()),
+      this.production(),
+    );
+  }
 
   private configured(name: string): MailProvider {
     const parsed = mailProviderNameSchema.safeParse(name);
@@ -129,24 +153,50 @@ export class OpsProvidersController {
       configured: [...this.providers.keys()],
       fallback: this.config.MAIL_DEFAULT_PROVIDER,
     });
+    const group = this.failoverGroup();
+    const views: ReadonlyMap<MailProviderName, MailHealthView> | null =
+      group.length > 1
+        ? await this.health.snapshot([...this.providers.keys()])
+        : null;
     const providers = await Promise.all(
       overview.providers.map(async (card) => {
         const status = await this.statusOf(this.providers.get(card.name)!);
+        const view = views?.get(card.name);
         return {
           ...card,
           // The map holds the switchable providers only: Brevo only with BREVO_TRANSACTIONAL=on.
           name: card.name as OpsMailProviders['providers'][number]['name'],
           sandbox: status?.sandbox ?? null,
           statusDetail: status?.detail ?? null,
+          health: view
+            ? {
+                state: view.state,
+                kind: view.kind,
+                until: view.until?.toISOString() ?? null,
+                reason: view.reason,
+                trippedAt: view.trippedAt?.toISOString() ?? null,
+              }
+            : null,
         };
       }),
     );
+    const active = overview.active;
+    const chain = [active, ...group.filter((name) => name !== active)];
+    const live =
+      views && !overview.fixed ? liveMailProvider(chain, views) : active;
+    type Name = OpsMailProviders['failover']['live'];
     return {
       data: {
         providers,
         overrides: overview.overrides,
         changedAt: overview.changedAt,
         reason: overview.reason,
+        failover: {
+          configured: group.length > 1,
+          fixed: overview.fixed,
+          live: live as Name,
+          backup: (chain[1] ?? null) as Name | null,
+        },
       },
     };
   }
@@ -217,6 +267,54 @@ export class OpsProvidersController {
       response,
     );
     return { data: 'pending' in answer ? answer.pending : answer.result };
+  }
+
+  /**
+   * Fix the active provider (no automatic switching, e.g. during an investigation) or let it
+   * switch again. Per-person overrides and provider tests never switch either way.
+   */
+  @Post('mail/failover')
+  @HttpCode(200)
+  @FreshCode()
+  @OpsPermission('providers.manage')
+  async setFailover(
+    @CurrentOps() ops: OpsContext,
+    @Body(new ZodValidationPipe(opsMailFailoverSchema))
+    body: OpsMailFailoverRequest,
+  ): Promise<ApiDataResponse<{ fixed: boolean }>> {
+    await setMailFailoverFixed(this.database.db, {
+      staffUserId: ops.userId,
+      fixed: body.fixed,
+      reason: body.reason,
+      fallback: this.config.MAIL_DEFAULT_PROVIDER,
+    });
+    return { data: { fixed: body.fixed } };
+  }
+
+  /** Staff clear a tripped provider by hand: it is healthy again at once. */
+  @Post('mail/:provider/health/clear')
+  @HttpCode(200)
+  @FreshCode()
+  @OpsPermission('providers.manage')
+  async clearHealth(
+    @CurrentOps() ops: OpsContext,
+    @Param('provider') name: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ cleared: boolean }>> {
+    const provider = this.configured(name);
+    let cleared: boolean;
+    try {
+      cleared = await this.health.clear(provider.name);
+    } catch {
+      throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    }
+    if (cleared)
+      await recordMailHealthCleared(this.database.db, {
+        staffUserId: ops.userId,
+        provider: provider.name,
+        reason: body.reason,
+      });
+    return { data: { cleared } };
   }
 
   @Post('overrides')

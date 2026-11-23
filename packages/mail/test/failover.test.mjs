@@ -428,3 +428,53 @@ test('an alert that fails never stops mail', async () => {
   );
   assert.ok(logged.includes('mail.health_alert_failed'));
 });
+
+test('the failover group is the default, then the fallbacks, configured ones only, never the pretend provider in production', async () => {
+  const { mailFailoverGroup } = await import('../dist/index.js');
+  const configured = new Set(['zeptomail', 'brevo', 'mock']);
+  assert.deepEqual(
+    mailFailoverGroup('zeptomail', ['brevo'], configured, true),
+    ['zeptomail', 'brevo'],
+  );
+  assert.deepEqual(
+    mailFailoverGroup('zeptomail', ['mock', 'brevo'], configured, true),
+    ['zeptomail', 'brevo'],
+  );
+  assert.deepEqual(mailFailoverGroup('zeptomail', ['ses'], configured, false), [
+    'zeptomail',
+  ]);
+});
+
+test('the live provider is the first healthy one, the active one first; all resting, the active one', async () => {
+  const { liveMailProvider } = await import('../dist/index.js');
+  const view = (state) => ({ state });
+  const views = new Map([
+    ['zeptomail', view('resting')],
+    ['brevo', view('healthy')],
+  ]);
+  assert.equal(liveMailProvider(['zeptomail', 'brevo'], views), 'brevo');
+  assert.equal(
+    liveMailProvider(
+      ['zeptomail', 'brevo'],
+      new Map([
+        ['zeptomail', view('trial')],
+        ['brevo', view('healthy')],
+      ]),
+    ),
+    'brevo',
+  );
+  assert.equal(
+    liveMailProvider(
+      ['zeptomail', 'brevo'],
+      new Map([
+        ['zeptomail', view('resting')],
+        ['brevo', view('resting')],
+      ]),
+    ),
+    'zeptomail',
+  );
+  assert.equal(
+    liveMailProvider(['zeptomail', 'brevo'], new Map()),
+    'zeptomail',
+  );
+});

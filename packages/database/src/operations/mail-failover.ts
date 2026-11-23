@@ -96,6 +96,27 @@ export function setMailFailoverFixed(
   });
 }
 
+/** Staff cleared a provider's breaker by hand (Ops → Providers). */
+export async function recordMailHealthCleared(
+  db: Database,
+  input: {
+    staffUserId: string;
+    provider: MailProviderName;
+    reason: string;
+    now?: Date;
+  },
+): Promise<void> {
+  await recordAudit(db, {
+    staffUserId: input.staffUserId,
+    action: 'mail_provider.health_cleared',
+    permission: 'providers.manage',
+    subjectType: 'mail_provider',
+    subjectId: input.provider,
+    reason: input.reason,
+    now: input.now ?? new Date(),
+  });
+}
+
 /**
  * Rule (c): the provider that sent this address its previous code for the same purpose, when that
  * code was asked for within `windowMs` before this one. Null otherwise (or for any other mail).

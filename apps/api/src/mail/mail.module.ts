@@ -3,6 +3,7 @@ import { MailWebhookController } from './mail-webhook.controller.js';
 import { UnsubscribeController } from './unsubscribe.controller.js';
 import {
   announcementProviderProvider,
+  mailHealthProvider,
   mailProvidersProvider,
   mailSealingProvider,
   subscriptionConfirmProvider,
@@ -12,12 +13,14 @@ import {
   controllers: [MailWebhookController, UnsubscribeController],
   providers: [
     announcementProviderProvider,
+    mailHealthProvider,
     mailProvidersProvider,
     mailSealingProvider,
     subscriptionConfirmProvider,
   ],
   exports: [
     announcementProviderProvider,
+    mailHealthProvider,
     mailProvidersProvider,
     mailSealingProvider,
   ],
