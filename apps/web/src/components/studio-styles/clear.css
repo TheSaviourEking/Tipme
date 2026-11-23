@@ -849,3 +849,20 @@
     height: calc((100% - var(--nav-height)) * 0.6);
   }
 }
+
+/* A single column at every width, so the foot rests at the bottom of a short page (frame.css). */
+.studio[data-style='clear'] .studio-page {
+  display: flex;
+  flex-direction: column;
+}
+
+:where(.studio[data-style='clear'] .studio-page > *) {
+  width: 100%;
+  width: -webkit-fill-available;
+  width: -moz-available;
+  width: stretch;
+}
+
+.studio[data-style='clear'] .studio-page > .studio-grid {
+  margin-bottom: auto;
+}

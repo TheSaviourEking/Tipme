@@ -757,6 +757,8 @@
     grid-template-columns:
       minmax(var(--gutter), 1fr) minmax(0, 440px) 80px minmax(0, 520px)
       minmax(var(--gutter), 1fr);
+    /* The last row takes what a short page leaves, and the foot rests at its bottom. */
+    grid-template-rows: auto auto auto 1fr;
     align-items: start;
   }
 
@@ -881,6 +883,7 @@
   }
 
   .studio[data-style='horizon'] .studio-foot {
+    align-self: end;
     grid-row: 4;
     grid-column: 2 / 5;
     margin-top: 80px;
@@ -892,6 +895,13 @@
     .studio-page:not(:has(.studio-links))
     .studio-blocks {
     display: contents;
+  }
+
+  /* Its rows are as many as the sections, so none can be the one that takes the space: the space a
+     short page leaves goes between them, and the foot still ends at the bottom. */
+  .studio[data-style='horizon'] .studio-page:not(:has(.studio-links)) {
+    grid-template-rows: none;
+    align-content: space-between;
   }
 
   .studio[data-style='horizon']

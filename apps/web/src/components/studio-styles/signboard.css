@@ -682,6 +682,8 @@
 
   .studio[data-style='signboard'] .studio-page {
     display: grid;
+    /* The last row takes what a short page leaves, and the foot rests at its bottom. */
+    grid-template-rows: auto auto auto 1fr;
     grid-template-columns:
       minmax(var(--gutter), 1fr) minmax(0, 440px) 80px minmax(0, 600px)
       minmax(var(--gutter), 1fr);
@@ -796,6 +798,7 @@
   }
 
   .studio[data-style='signboard'] .studio-foot {
+    align-self: end;
     grid-row: 4;
     grid-column: 2 / 5;
     margin-top: 72px;

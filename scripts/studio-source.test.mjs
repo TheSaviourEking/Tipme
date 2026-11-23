@@ -93,7 +93,9 @@ test('every style rule is scoped to a styled Studio page', () => {
       // As written, whatever the line breaks: Prettier wraps a long `html:has(` onto lines of its own.
       .map((s) =>
         s.replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ \)/g, ')'),
-      );
+      )
+      // A rule wrapped whole in `:where()` (to carry no specificity) is still scoped to the page.
+      .map((s) => s.replace(/^:where\((\.studio\[data-style)/, '$1'));
     assert.ok(selectors.length > 10, `${file} has its rules`);
     const own = file === 'frame.css' ? '' : file.replace('.css', '');
     for (const s of selectors)
