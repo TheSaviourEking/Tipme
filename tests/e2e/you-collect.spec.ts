@@ -34,6 +34,9 @@ const COPY = {
   verified: 'You’re all set. Your tips are on their way to you.',
   paused:
     'Your page has paused tips. Add your bank details to start taking tips again.',
+  nothingNow: 'Nothing to withdraw right now',
+  nothingYet: 'You have nothing to withdraw yet.',
+  delay: 'New accounts’ tips arrive 24 hours after they’re received.',
 } as const;
 
 // A route stub still running when a test ends (its page or a visitor's context closing) must not
@@ -330,16 +333,72 @@ for (const [label, viewport] of VIEWPORTS) {
 
       const main = page.getByRole('main');
       await expect(main.getByText(COPY.verified)).toBeVisible();
-      // Withdraw works as today, with the first withdrawal's cap said.
-      await expect(
-        main.getByText(
-          /^New accounts can withdraw up to ₦[\d,]+ the first time\.$/,
-        ),
-      ).toBeVisible();
+      // Nothing to withdraw and nothing on its way (owner, 23 Nov 2026): said plainly, with no
+      // amount field, no Withdraw key and no first-withdrawal cap for money that isn't there.
+      await expect(main.getByText(COPY.nothingNow)).toBeVisible();
+      await expect(main.getByText(COPY.nothingYet)).toBeVisible();
+      await expect(page.getByLabel('Amount (NGN)')).toHaveCount(0);
+      await expect(main.getByText(/New accounts can withdraw/)).toHaveCount(0);
       await expect(bankForm(page)).toHaveCount(0);
       await expect(page.locator('body')).not.toContainText('0123456789');
       await expect(page.locator('body')).not.toContainText(/bachs/i);
       expect(await fitsViewport(page)).toBe(true);
+    });
+
+    test('verified with tips on their way: Withdraw says how much, where it can go and the new-account delay, with no Withdraw key', async ({
+      page,
+      browser,
+    }, testInfo) => {
+      test.setTimeout(90_000);
+      const { email, handle } = await collectRecipient(page, testInfo);
+      await tipAsVisitor(browser, handle);
+      await page.goto('/dashboard/withdraw');
+      const form = bankForm(page);
+      await enterDetails(page, form);
+      await confirmAndEnterCode(page, form, email);
+      await form.getByRole('button', { name: 'Add bank details' }).click();
+      const main = page.getByRole('main');
+      await expect(main.getByText(COPY.verified)).toBeVisible();
+
+      // A fresh visit: the tip's share waits the new-account delay (24 hours at the defaults).
+      // The amount is said once, with when it can go; the bank is where withdrawals go, never where
+      // the money is going now (it reaches their own account first, ADR-0016).
+      await page.goto('/dashboard/withdraw');
+      await expect(
+        main.getByRole('heading', { name: 'On its way to you' }),
+      ).toBeVisible();
+      await expect(main.getByTestId('withdraw-collect-figure')).toHaveText(
+        /^₦[\d,]+(\.\d\d)?$/,
+      );
+      await expect(
+        main.getByText('You can withdraw it once it arrives.', { exact: true }),
+      ).toBeVisible();
+      await expect(
+        main.getByText(/^Withdrawals go to .+ ••6789$/),
+      ).toBeVisible();
+      await expect(main.getByRole('link', { name: 'Change' })).toHaveAttribute(
+        'href',
+        '/dashboard/settings#get-paid',
+      );
+      await expect(main.getByText(COPY.delay)).toBeVisible();
+      await expect(main).not.toContainText(/is on its way to|To .+ ••6789/);
+      // Never ₦0 with a Withdraw key, and nothing that would only be refused.
+      await expect(main.getByTestId('withdraw-available')).toHaveCount(0);
+      await expect(page.getByLabel('Amount (NGN)')).toHaveCount(0);
+      await expect(main.getByRole('button', { name: /^Withdraw/ })).toHaveCount(
+        0,
+      );
+      await expect(main.getByText(/New accounts can withdraw/)).toHaveCount(0);
+      await expect(
+        main.getByRole('region', { name: 'Your withdrawals' }),
+      ).toBeVisible();
+      await expect(page.locator('body')).not.toContainText(/bachs/i);
+      expect(await fitsViewport(page)).toBe(true);
+      await expectAccessible(page);
+      await page.screenshot({
+        path: testInfo.outputPath(`${label}-50-withdraw-on-its-way.png`),
+        fullPage: label === 'desktop',
+      });
     });
 
     test('a name mismatch says so and keeps nothing', async ({
@@ -439,6 +498,10 @@ for (const [label, viewport] of VIEWPORTS) {
       await expect(page.getByRole('main').getByText(COPY.noBank)).toHaveCount(
         0,
       );
+      // Withdraw says it too, above the add-bank-details form.
+      await page.goto('/dashboard/withdraw');
+      await expect(page.getByRole('main').getByText(COPY.paused)).toBeVisible();
+      await expect(bankForm(page)).toBeVisible();
 
       // The supporter: refused before paying, at the quote, with no reason and no amount.
       const context = await browser.newContext({ viewport });
@@ -1273,12 +1336,15 @@ test('with the switch on, an undecided recipient whose first tip would go to Tip
        ON CONFLICT (key) DO UPDATE SET enabled = true, source = 'staff'`,
     );
     // Their next quote would put them on You collect (no account of their own), so the screens say
-    // so now: no set-up notice, and "You can take tips now".
+    // so now: no set-up notice, and "You can take tips now". The two come from separate reads
+    // (the shell's payment account, Home's You collect status), each asking the API's 15-second
+    // switch cache on its own, so one page load can straddle the switch reaching it: both are
+    // checked on the same load, and a load that caught only one is read again.
     await expect(async () => {
       await page.goto('/dashboard');
       await expect(main.getByText(COPY.noBank)).toBeVisible({ timeout: 2000 });
+      await expect(notice).toHaveCount(0, { timeout: 2000 });
     }).toPass({ timeout: 40_000, intervals: [2000] });
-    await expect(notice).toHaveCount(0);
     // Read-only: still undecided. The first quote (or adding bank details) fixes it.
     expect(await collectionModeOf(handle)).toBeNull();
   } finally {
@@ -1287,13 +1353,24 @@ test('with the switch on, an undecided recipient whose first tip would go to Tip
       `DELETE FROM feature_switches WHERE key = 'you_collect'`,
     );
     await db.close();
+    // Whatever happened above, wait until the API reads the switch as off (an undecided recipient
+    // is direct again: no You collect status), so a failure here never leaks into the next test.
+    await expect
+      .poll(
+        async () =>
+          (await page.request.get(`${API_ORIGIN}/v1/me/collect`)).status(),
+        { timeout: 40_000, intervals: [2000] },
+      )
+      .toBe(404);
   }
-  // Off again: undecided reads as direct, as before.
+  // Off again: undecided reads as direct, as before (both reads, on the same load).
   await expect(async () => {
     await page.goto('/dashboard');
     await expect(notice).toBeVisible({ timeout: 2000 });
+    await expect(main.getByText(COPY.noBank)).toHaveCount(0, {
+      timeout: 2000,
+    });
   }).toPass({ timeout: 40_000, intervals: [2000] });
-  await expect(main.getByText(COPY.noBank)).toHaveCount(0);
   expect(await collectionModeOf(handle)).toBeNull();
 });
 

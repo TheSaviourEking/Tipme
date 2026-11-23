@@ -35,6 +35,13 @@ export interface CollectStatus {
   pauseOn: string | null;
   firstWithdrawalCapMinor: string | null;
   dailyLimitMinor: string | null;
+  /**
+   * The new-account delay (spec §8), while it applies: each tip waits `hours` after it is received
+   * before it moves on to them, until `until` (the end of the profile's first `delay_for_days`).
+   * Both from the settings in force. Null when it doesn't apply (owner, 23 Nov 2026: Withdraw says
+   * "New accounts’ tips arrive {hours} after they’re received").
+   */
+  newAccountDelay: { hours: number; until: string } | null;
 }
 
 /** The settings as staff read and send them (spec §9). */
@@ -372,6 +379,7 @@ export {
   COLLECT_HELD_NOTE,
   COLLECT_HELD_WORDS,
   COLLECT_NAME_RECHECK_NOTICE,
+  COLLECT_WITHDRAW_WORDS,
 } from './copy.js';
 
 /**

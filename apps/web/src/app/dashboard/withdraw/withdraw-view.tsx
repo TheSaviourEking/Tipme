@@ -44,6 +44,8 @@ import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
   belowMinimum,
+  collectDelayLine,
+  collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
   withdrawDayNote,
@@ -329,6 +331,13 @@ export default function WithdrawPage({
     return (
       <div className="dashboard-section withdraw">
         <h1>Withdraw</h1>
+        {/* The holding cap was reached: the same words as Home's banner (spec §10). */}
+        {collect.paused && (
+          <StandingWarning
+            title={COLLECT_COPY.pausedRecipient}
+            className="withdraw__warning"
+          />
+        )}
         <div className="withdraw__layout">
           <div className="withdraw__money">
             {(summary.keptMinor !== '0' || summary.refundHeldMinor !== '0') && (
@@ -357,6 +366,73 @@ export default function WithdrawPage({
                 if (state === 'verified') reloadAll();
               }}
             />
+          </div>
+          {history}
+        </div>
+      </div>
+    );
+  // You collect, verified, with nothing to withdraw (owner, 23 Nov 2026; ADR-0016): what is on its
+  // way and where withdrawals go, never ₦0 and a Withdraw key. TipMe's own figures say it, so the
+  // partner's quote isn't waited for (a hold it reports is said once it is read). A balance keeps
+  // today's screen below, and so does a withdrawal just asked for: withdrawing the whole balance
+  // reloads it as ₦0, and its slip (or a "not confirmed" one) must stay.
+  const onItsWay = collectWithdrawView({
+    collect,
+    availableMinor: summary.availableMinor,
+    quote: latest.error ? null : latest.data,
+    outcomeShown: done !== null || unsure !== null || error !== '',
+  });
+  if (collect && onItsWay)
+    return (
+      <div className="dashboard-section withdraw">
+        <h1>Withdraw</h1>
+        {onItsWay.warning && (
+          <StandingWarning
+            title={onItsWay.warning.title}
+            className="withdraw__warning"
+          >
+            {onItsWay.warning.body}
+          </StandingWarning>
+        )}
+        {allSet && (
+          <Slip
+            tone="done"
+            title={COLLECT_COPY.verified}
+            className="withdraw__done"
+          />
+        )}
+        <div className="withdraw__layout">
+          <div className="withdraw__money">
+            <section
+              className="withdraw__meter"
+              aria-labelledby={`${id}-coming`}
+            >
+              <h2 id={`${id}-coming`} className="withdraw__cap">
+                {onItsWay.figure.caption}
+              </h2>
+              <p
+                className="withdraw__figure"
+                data-testid="withdraw-collect-figure"
+              >
+                <Money minor={onItsWay.figure.minor} />
+              </p>
+              <p className="withdraw__lamp">
+                <Lamp tone={onItsWay.lamp.tone} />
+                {onItsWay.lamp.text}
+              </p>
+              {onItsWay.lines.map((line) => (
+                <p key={line} className="withdraw__fine">
+                  {line}
+                </p>
+              ))}
+              {onItsWay.bank && (
+                <p className="withdraw__chip">
+                  <span>{onItsWay.bank}</span>
+                  <Link href="/dashboard/settings#get-paid">Change</Link>
+                </p>
+              )}
+              {pilotNotice}
+            </section>
           </div>
           {history}
         </div>
@@ -516,6 +592,11 @@ export default function WithdrawPage({
                   summary={summary}
                   className="withdraw__held-note"
                 />
+              </p>
+            )}
+            {collectDelayLine(collect) && (
+              <p className="withdraw__fine" data-testid="collect-delay">
+                {collectDelayLine(collect)}
               </p>
             )}
             {collect?.firstWithdrawalCapMinor && (

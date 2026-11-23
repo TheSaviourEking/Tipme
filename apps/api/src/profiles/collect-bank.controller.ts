@@ -163,6 +163,12 @@ export class CollectBankController {
         firstWithdrawalCapMinor:
           status.firstWithdrawalCapMinor?.toString() ?? null,
         dailyLimitMinor: status.dailyLimitMinor?.toString() ?? null,
+        newAccountDelay: status.newAccountDelay
+          ? {
+              hours: status.newAccountDelay.hours,
+              until: status.newAccountDelay.until.toISOString(),
+            }
+          : null,
         bank: await collectBankView(this.database.db, {
           profileId,
           provider: this.provider.name,

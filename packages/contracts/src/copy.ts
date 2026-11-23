@@ -64,6 +64,19 @@ export const COLLECT_HELD_NOTE = {
 } as const;
 
 /**
+ * Withdraw for a verified You collect recipient with nothing to withdraw (owner, 23 Nov 2026;
+ * ADR-0016): each tip's share moves to their own account and can be withdrawn once it arrives, so
+ * nothing here says it goes straight to their bank. The bank and hours are put in already formatted
+ * (Opay ••5629; 24 hours). Never the partner's name.
+ */
+export const COLLECT_WITHDRAW_WORDS = {
+  thenWithdraw: 'You can withdraw it once it arrives.',
+  bank: (bank: string) => `Withdrawals go to ${bank}`,
+  newAccountDelay: (hours: string) =>
+    `New accounts’ tips arrive ${hours} after they’re received.`,
+} as const;
+
+/**
  * The in-app notice after support changes a recipient's verified name (Task 15 fix round 1, I3):
  * their tips wait until our payment partner checks the new name with their bank details again.
  */

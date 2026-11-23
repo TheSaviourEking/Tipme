@@ -52,6 +52,13 @@ export interface CollectStatusResult {
   firstWithdrawalCapMinor: bigint | null;
   /** Their limit per Lagos day for the first days after verification (or until it); else null. */
   dailyLimitMinor: bigint | null;
+  /**
+   * The new-account delay (spec §8; owner, 23 Nov 2026: Withdraw says it): while the profile is
+   * younger than `delay_for_days`, each collect tip's share waits `delay_hours` after it settles
+   * (scheduleCollectTransfer). `until` is when the window ends. Null when it doesn't apply: past the
+   * window, zero hours, or not on You collect.
+   */
+  newAccountDelay: { hours: number; until: Date } | null;
 }
 
 interface Facts {
@@ -63,6 +70,8 @@ interface Facts {
   firstWaitingAt: Date | null;
   /** Withdrawals asked for and not failed, since verification (all of them before it). */
   withdrawals: number;
+  /** When the profile was made: the new-account delay's window runs from it. */
+  createdAt: Date;
 }
 
 const msOf = (text: string | null) => (text ? new Date(Number(text)) : null);
@@ -76,8 +85,10 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
     dispute_review: string;
     first_ms: string | null;
     withdrawals: number;
+    created_ms: string;
   }>(sql`
     SELECT ${profiles.collectionMode} AS mode,
+           (extract(epoch FROM profiles.created_at) * 1000)::bigint::text AS created_ms,
            (extract(epoch FROM profiles.collect_verified_at) * 1000)::bigint::text AS verified_ms,
            (SELECT COALESCE(SUM(CASE WHEN e.side = 'debit' THEN e.amount_minor ELSE -e.amount_minor END), 0)
               FROM ledger_entries e JOIN ledger_accounts a ON a.id = e.account_id
@@ -103,6 +114,7 @@ async function factsOf(db: Database | Tx, profileId: string): Promise<Facts> {
     disputeReviewMinor: BigInt(row.dispute_review),
     firstWaitingAt: msOf(row.first_ms),
     withdrawals: row.withdrawals,
+    createdAt: new Date(Number(row.created_ms)),
   };
 }
 
@@ -158,7 +170,26 @@ export async function collectStatus(
         ? settings.firstWithdrawalCapMinor
         : null,
     dailyLimitMinor: collecting && young ? settings.newDailyLimitMinor : null,
+    newAccountDelay: newAccountDelay(
+      collecting,
+      facts.createdAt,
+      settings,
+      now,
+    ),
   };
+}
+
+/** The window scheduleCollectTransfer applies, from the same settings and the same sign-up time. */
+function newAccountDelay(
+  collecting: boolean,
+  createdAt: Date,
+  settings: { delayHours: number; delayForDays: number },
+  now: Date,
+): CollectStatusResult['newAccountDelay'] {
+  const until = new Date(createdAt.getTime() + settings.delayForDays * DAY_MS);
+  if (!collecting || settings.delayHours <= 0) return null;
+  if (now.getTime() >= until.getTime()) return null;
+  return { hours: settings.delayHours, until };
 }
 
 /**

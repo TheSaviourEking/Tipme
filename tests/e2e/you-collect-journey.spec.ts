@@ -238,7 +238,16 @@ test('a new recipient takes a tip before verifying and withdraws after adding ba
       ),
     ).toBeVisible();
     await page.getByLabel('Amount (NGN)').fill('1900');
+    // The whole balance: the reload after it reads ₦0, and the slip must still say it (review I1).
+    const reloaded = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/v1/me/dashboard') &&
+        response.request().method() === 'GET',
+    );
     await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
+    await expect(page.getByText('Withdrawal requested')).toBeVisible();
+    await reloaded;
+    await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
     await expect(page.getByText('Withdrawal requested')).toBeVisible();
     const history = page.getByRole('region', { name: 'Your withdrawals' });
     await expect(
