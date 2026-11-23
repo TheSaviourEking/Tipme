@@ -154,8 +154,9 @@ tips** but still pay out money already held there, and still serve refunds, disp
 
 - **Never set on production while only `bachs-live` exists.** Production has no second provider to list; the key stays empty there.
 - Startup refuses: `mock` or `mock_alt` on production; `mock_alt` outside `NODE_ENV=test` (a test-only second adapter);
-  a duplicate or the active provider itself; `bachs-sandbox` and `bachs-live` together (both record as `bachs`, and the
-  money tables carry no environment); `bachs-sandbox` on production or `bachs-live` off it; a Bachs name without its API
+  a duplicate or the active provider itself; a withdraw-only provider from the same partner as the active one in another
+  environment (both Bachs names record as `bachs`, and the money tables carry no environment); each Bachs name has its
+  own environment rule (`bachs-sandbox` is refused on production, `bachs-live` off it); a Bachs name without its API
   key, or (API only) its webhook secret.
 - **Retiring a withdraw-only provider** (design §4): remove it from the list only once the ops screen shows no owner with
   money there and nothing open (payouts, refunds, disputes) through it for 30 days. Removing it early brings back the

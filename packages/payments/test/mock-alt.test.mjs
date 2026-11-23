@@ -38,14 +38,37 @@ test('mock_alt keys never collide with mock', async () => {
     amountMinor: 2000n,
     currency: 'NGN',
   });
-  const reference = `mock_out_${idempotencyKey}`;
-  assert.equal((await mock.fetchPayoutStatus(reference)).status, 'review');
-  assert.equal((await alt.fetchPayoutStatus(reference)).status, 'pending');
+  const mockRef = `mock_out_${idempotencyKey}`;
+  const altRef = `mock_alt_out_${idempotencyKey}`;
+  assert.equal((await mock.fetchPayoutStatus(mockRef)).status, 'review');
+  assert.equal((await alt.fetchPayoutStatus(altRef)).status, 'pending');
+  assert.equal((await alt.fetchPayoutStatus(mockRef)).status, 'not_found');
   const keys = await redis.keys(`*${shared}*`);
   assert.ok(keys.some((key) => key.includes(`${shared}:mock_alt`)));
   assert.ok(
     keys.some((key) => !key.includes(`${shared}:mock_alt`)),
     'mock keeps its own keys',
+  );
+});
+
+test('payout references carry the adapter name', async () => {
+  const shared = prefix();
+  const key = randomUUID();
+  const input = {
+    payoutId: randomUUID(),
+    idempotencyKey: key,
+    amountMinor: 1000n,
+    currency: 'NGN',
+  };
+  const mock = createMockProvider({ redis, prefix: shared });
+  const alt = createMockProvider({ redis, prefix: shared, name: 'mock_alt' });
+  assert.equal(
+    (await mock.initiatePayout(input)).providerReference,
+    `mock_out_${key}`,
+  );
+  assert.equal(
+    (await alt.initiatePayout(input)).providerReference,
+    `mock_alt_out_${key}`,
   );
 });
 

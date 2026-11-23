@@ -425,7 +425,7 @@ export function createMockProvider(options: {
       currency,
       scenario,
     }) {
-      const reference = `mock_out_${idempotencyKey}`;
+      const reference = `${name}_out_${idempotencyKey}`;
       const chosen = scenario ?? 'payout-paid';
       const status = chosen === 'payout-review' ? 'review' : 'pending';
       const result = await redis.eval(
