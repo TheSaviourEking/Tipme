@@ -1,8 +1,15 @@
 'use client';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { MyProfile, MyPro, ProPurchase } from '@tipme/contracts';
+import type {
+  DashboardSummary,
+  MyProfile,
+  MyPro,
+  ProPurchase,
+} from '@tipme/contracts';
 import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
+import { useCollectStatus } from '@/components/dashboard/collect-status';
+import { usePanel } from '@/components/dashboard/use-panel';
 import { usePlanFees } from '@/lib/use-plan-fees';
 import { dateOf } from '@/lib/lagos-time';
 import {
@@ -17,6 +24,7 @@ import {
   startPurchase,
   turnOffAutoRenew,
 } from '@/lib/pro-buy';
+import { proPayOptions } from '@/lib/pro-pay-options';
 import { apiFetch } from '@/lib/session-client';
 import { nextCheckDelay } from '@/lib/status-polling';
 import { SettingsChapter } from './section';
@@ -205,6 +213,11 @@ export function ProPlan() {
   const [renew, setRenew] = useState(false);
   const [renewOff, setRenewOff] = useState<'done' | 'failed' | null>(null);
   const renewId = useId();
+  // Whether the balance can pay for a month: a You collect recipient's often can't (proPayOptions).
+  const { collect, known: collectKnown } = useCollectStatus();
+  const balance = usePanel<DashboardSummary>('/v1/me/dashboard', {
+    live: ['tips.changed', 'withdrawals.changed'],
+  });
 
   const load = useCallback(async () => {
     const result = await readMyPro();
@@ -251,8 +264,16 @@ export function ProPlan() {
     ''
   );
   const fromDate = pro?.current ? dateOf(pro.current.endsAt) : 'today';
-  // Both behind the server's flags (off by default): with them off the screen is unchanged.
-  const balanceOn = Boolean(pro?.methods?.includes('balance'));
+  // Both behind the server's flags (off by default): with them off the screen is unchanged. A You
+  // collect recipient is offered the balance only when it covers the month (proPayOptions).
+  const balanceOn =
+    price !== null &&
+    proPayOptions({
+      methods: pro?.methods ?? [],
+      priceMinor: price.amountMinor,
+      mode: collectKnown ? (collect ? 'collect' : 'direct') : null,
+      availableMinor: balance.data?.availableMinor ?? null,
+    }).includes('balance');
   const renewOn = Boolean(pro?.autoRenew?.on);
   const renewOffered = Boolean(pro?.autoRenew?.available) && !renewOn;
 

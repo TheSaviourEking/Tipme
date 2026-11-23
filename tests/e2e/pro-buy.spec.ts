@@ -336,6 +336,9 @@ async function standInPlan(page: Page, patch: () => PlanPatch) {
     body.data = { ...body.data, ...patch() };
     await route.fulfill({ response, json: body });
   });
+  // Sign-up ends on Settings, whose plan may already be read: leave it, so the next visit to
+  // Settings is a fresh load that goes through these stand-ins (not a hash change on the same page).
+  await page.goto('about:blank');
 }
 
 function purchase(status: string) {
@@ -548,3 +551,71 @@ test('auto-renew on: the plan says so, and Turn off auto-renew turns it off', as
   await expect(plan).not.toContainText('Renews automatically');
   await expectAccessible(page);
 });
+
+/** Puts this handle's page on You collect in the lane's database, as a sign-up with the switch on does. */
+async function putOnCollect(handle: string) {
+  const { openTestDatabase } =
+    await import('../../packages/database/dist/test-support.js');
+  const db = await openTestDatabase();
+  try {
+    const { rowCount } = await db.pool.query(
+      `UPDATE profiles SET collection_mode = 'collect' WHERE handle_lower = $1`,
+      [handle.toLowerCase()],
+    );
+    expect(rowCount).toBe(1);
+  } finally {
+    await db.close();
+  }
+}
+
+// Owner, 23 Nov 2026: a You collect recipient's tips reach their balance only once each has moved
+// to them, so with nothing there the plan offers card or bank transfer only.
+for (const [label, size] of [
+  ['phone', PHONE],
+  ['desktop', WIDE],
+] as const)
+  test(`balance on, a You collect recipient with no balance at ${size.width}px: card or bank transfer only`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize(size);
+    const { handle } = await signUpRecipient(page, testInfo, { live: false });
+    await putOnCollect(handle);
+    await standInPlan(page, () => ({ methods: ['card', 'balance'] }));
+    const asked: unknown[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        request.url().includes('/v1/me/pro/purchases')
+      )
+        asked.push(request.postDataJSON());
+    });
+    const collectRead = page.waitForResponse(
+      (response) => response.url().endsWith('/v1/me/collect') && response.ok(),
+    );
+    await page.goto('/dashboard/settings#plan');
+    await collectRead;
+    const plan = page.locator('#pro');
+    await expect(plan).toContainText(
+      'Pay by card or bank transfer. You choose which on our payment partner’s page.',
+    );
+    await expect(plan).not.toContainText('from your TipMe balance');
+    await plan
+      .getByRole('button', { name: 'Get Pro · ₦5,000 a month' })
+      .click();
+    await expect(
+      plan.getByRole('button', { name: 'Continue to payment' }),
+    ).toBeVisible();
+    await expect(
+      plan.getByRole('button', { name: /from your balance/ }),
+    ).toHaveCount(0);
+    await expect(plan).not.toContainText(PROVIDER);
+    expect(asked).toEqual([]);
+    expect(await fits(page)).toBe(true);
+    await expectAccessible(page);
+    await plan
+      .getByRole('button', { name: 'Continue to payment' })
+      .scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath(`${label}-pro-collect-no-balance.png`),
+    });
+  });
