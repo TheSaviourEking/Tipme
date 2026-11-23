@@ -83,6 +83,39 @@ export const COVER_KINDS = [
   'animated',
 ] as const;
 
+/** The covers each style offers (contracts STUDIO_STYLES[…].covers): Signboard and Sprint have no gradient. */
+const coversOf = (style: StyleId) =>
+  style === 'signboard' || style === 'sprint'
+    ? (['yours', 'plain'] as const)
+    : (['yours', 'gradient', 'plain'] as const);
+
+/**
+ * A page sharing a moment ("Celebrating Kemi's 10th tip") in every style, mode and cover, and on
+ * Classic in today's purple and a chosen accent: /@cel<style>[<accent>]<mode><cover>.
+ */
+export interface CelebrationCase {
+  handle: string;
+  style: StyleId;
+  mode: 'light' | 'dark' | 'auto';
+  cover: 'yours' | 'gradient' | 'plain';
+  /** Classic only: null is today's purple. Other styles keep their default accent. */
+  accent?: 'green' | null;
+}
+export const CELEBRATION_CASES: CelebrationCase[] = STYLE_IDS.flatMap((style) =>
+  (style === 'classic' ? ([null, 'green'] as const) : [undefined]).flatMap(
+    (accent) =>
+      coversOf(style).flatMap((cover) =>
+        (['light', 'dark', 'auto'] as const).map((mode) => ({
+          handle: `cel${style}${accent === undefined ? '' : (accent ?? 'purple')}${mode}${cover}`,
+          style,
+          mode,
+          cover,
+          ...(accent === undefined ? {} : { accent }),
+        })),
+      ),
+  ),
+);
+
 /** The lab's generated images (the e2e build serves them), 2400 × 1600 like the examples. */
 const labImage = (n: number) =>
   `0000${n.toString(16).padStart(4, '0')}-0000-4000-8000-000000000000`;
@@ -256,6 +289,31 @@ export async function studioFixtures() {
       cover: { kind: 'design', design: 'danfo' },
       studio: undefined,
     }),
+    // A shared moment in every style, mode and cover (celebration-style.spec.ts).
+    ...CELEBRATION_CASES.map(({ handle, style, mode, cover, accent }) =>
+      studioPage(
+        handle,
+        styleDocument(style, {
+          mode,
+          cover,
+          ...(accent === undefined ? {} : { accent }),
+        }),
+        { celebration: CELEBRATION },
+      ),
+    ),
+    // The same moment on a Free page: Classic in dark purple, and a lapsed Pro style (Stage, dark).
+    studioPage(
+      'celclassicfreedark',
+      styleDocument('classic', { accent: null, mode: 'dark' }),
+      { plan: 'free', celebration: CELEBRATION },
+    ),
+    studioPage('cellapseddark', styleDocument('stage', { mode: 'dark' }), {
+      plan: 'free',
+      cover: { kind: 'design', design: 'danfo' },
+      celebration: CELEBRATION,
+    }),
+    // Today's page (no design) on a Pro plan; sixkeys is its Free twin.
+    page('celstandardpro', { plan: 'pro', celebration: CELEBRATION }),
     // A stale answer: Pro extras only (photo accent and a gallery on Classic) for a Free page.
     studioPage(
       'studiofree',

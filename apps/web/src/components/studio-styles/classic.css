@@ -107,6 +107,14 @@
   border-color: var(--studio-accLabel);
 }
 
+/* The shared moment ("Celebrating Kemi's 10th tip") and its heart: the mode's and accent's own
+   tint and ink (classic-tokens.ts `soft`, `ink`). Today's lilac panel is light-only; under dark
+   ink it read at about 1.6:1. Light with today's purple keeps today's lilac and ink exactly. */
+.profile-page--studio[data-style='classic'][data-mode] .profile-celebration {
+  background: var(--studio-soft);
+  color: var(--studio-ink);
+}
+
 /* The Tip key keeps Classic's ink: black in light, the paper colour in dark. */
 .profile-page--studio[data-style='classic'][data-mode] .composer-submit,
 .profile-page--studio[data-style='classic'][data-mode] .composer-submit:hover {

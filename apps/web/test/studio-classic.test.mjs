@@ -9,6 +9,7 @@ import {
   DESIGN_CHECK_VERSION,
   STUDIO_ACCENTS,
   STUDIO_STYLES,
+  contrastRatio,
   hexToOklch,
   STUDIO_HEADING_PX,
   resolveStudio,
@@ -194,7 +195,7 @@ const page = (over) =>
   renderToStaticMarkup(createElement(ClassicStudio, props(doc(over))));
 
 // The accent's tokens, and the derived ones made from it.
-const ACCENT_TOKENS = /var\(--studio-(acc\w*|ink)\)/;
+const ACCENT_TOKENS = /var\(--studio-(acc\w*|ink|soft)\)/;
 
 test('ClassicStudio renders the standard markup with Classic’s root, tokens and blocks after the tip panel', () => {
   const html = page({ accent: 'green', mode: 'dark' });
@@ -237,7 +238,7 @@ test('renderStyled sends Classic to ClassicStudio and the other styles to the fr
   assert.doesNotMatch(clear, /profile-page/);
 });
 
-test('an accent replaces the purple only on the selected key, links, focus and the wordmark', () => {
+test('an accent replaces the purple only on the selected key, links, focus, the wordmark and the shared moment', () => {
   // Every declaration that draws with the accent, by what it styles.
   const uses = rules(classicSheet).flatMap(({ selector, decls }) =>
     decls
@@ -259,6 +260,9 @@ test('an accent replaces the purple only on the selected key, links, focus and t
       `${S} .tm-amount-choice input:checked + span | background-image`,
       `${S} .tm-amount-choice input:checked + span | border-color`,
       `${S} .tm-amount-choice input:checked + span | color`,
+      // The shared moment ("Celebrating …"): its tint and its ink.
+      `${S} .profile-celebration | background`,
+      `${S} .profile-celebration | color`,
     ].sort(),
   );
   // The tokens: focus is the accent's text value, links too; the selected key's fill and label.
@@ -376,6 +380,49 @@ test('dark Classic has no shadows or gloss, and uses the canvas’s derived pale
     for (const [prop, value] of decls)
       if (prop === 'box-shadow' || prop.startsWith('--shadow'))
         assert.match(value, /^var\(--studio-sh\w+\)$/, `${selector} ${prop}`);
+});
+
+test('the shared moment’s panel is the mode’s and accent’s own tint, its ink at 4.5:1 or better', () => {
+  // Light with today's purple is today's lilac (tokens.css --brand-soft) under today's ink.
+  const tokens = readFileSync(
+    new URL('../../../packages/ui/src/tokens.css', import.meta.url),
+    'utf8',
+  );
+  const lilac = /--brand-soft:\s*(#[0-9a-f]{6});/i.exec(tokens)?.[1];
+  assert.equal(lilac, '#f1e9ff');
+  const today = classicTokens(
+    studioTokens('classic', null).light,
+    'light',
+    true,
+  );
+  assert.equal(today.soft, lilac);
+  assert.equal(today.ink, '#4d16a8');
+  for (const accent of [null, ...Object.keys(STUDIO_ACCENTS)])
+    for (const mode of ['light', 'dark']) {
+      const t = classicTokens(
+        studioTokens('classic', accent)[mode],
+        mode,
+        accent === null,
+      );
+      const label = `${accent ?? 'purple'} ${mode}`;
+      const ratio = contrastRatio(t.ink, t.soft);
+      assert.ok(ratio >= 4.5, `${label}: ink ${ratio.toFixed(2)}:1`);
+      const { l, c, h } = hexToOklch(t.soft);
+      // Dark draws a dark panel (the bug: today's light lilac under the dark palette's light ink).
+      if (mode === 'dark') assert.ok(l < 0.4, `${label}: L ${l.toFixed(2)}`);
+      else assert.ok(l > 0.9, `${label}: L ${l.toFixed(2)}`);
+      // A chosen accent's tint, not today's purple; quiet, on the accent's hue.
+      if (accent !== null) {
+        assert.notEqual(t.soft, lilac, label);
+        const acc = hexToOklch(t.acc);
+        assert.ok(c <= 0.04, `${label}: chroma ${c.toFixed(3)}`);
+        if (acc.c > 0.05)
+          assert.ok(
+            Math.abs(((h - acc.h + 540) % 360) - 180) < 12,
+            `${label}: hue ${h.toFixed(0)} vs ${acc.h.toFixed(0)}`,
+          );
+      }
+    }
 });
 
 test('light Classic with today’s purple maps every token to today’s value', () => {
