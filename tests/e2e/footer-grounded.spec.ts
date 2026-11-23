@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { accountOf, seedBusiness, seedMember } from './business-fixtures';
 import { signUpRecipient } from './helpers';
+import { sql } from './ops-helpers';
 import {
   STYLE_IDS,
   startStack,
@@ -275,6 +276,60 @@ test.describe('the rest of the site', () => {
   }, testInfo) => {
     await signUpRecipient(page, testInfo, { live: false });
     await check(page, '/dashboard/tips', true);
+  });
+});
+
+test.describe('the owner page', () => {
+  // The owner's report (23 Nov): a Free page on a big laptop screen, name "Mad", bio "Mad at madda",
+  // the standard Classic page with its preset strip, and the footer row (Report this page, Privacy,
+  // Terms, Learn about this preview, Get your own TipMe page) part-way up the screen.
+  test('a Free Classic page with a short bio, at 1800x1170 and 1440x900', async ({
+    page,
+    browser,
+  }, testInfo) => {
+    const who = await signUpRecipient(page, testInfo);
+    await sql(
+      `UPDATE profiles SET display_name = 'Mad', bio = 'Mad at madda' WHERE handle_lower = $1`,
+      [who.handle],
+    );
+    const context = await browser.newContext();
+    const visitor = await context.newPage();
+    for (const size of [
+      { width: 1800, height: 1170 },
+      { width: 1440, height: 900 },
+    ]) {
+      await visitor.setViewportSize(size);
+      await visitor.goto(`/@${who.handle}`);
+      await expect(
+        visitor.getByRole('heading', { level: 1, name: 'Mad' }),
+      ).toBeVisible();
+      await expect(visitor.getByText('Mad at madda')).toBeVisible();
+      const label = `/@${who.handle} at ${size.width}x${size.height}`;
+      const r = await read(visitor);
+      expectGrounded(r, label);
+      // The page is shorter than the window: one screen, and its foot row on the bottom edge less
+      // only the page's own bottom padding (no bar, no handle, nothing else is reserved here).
+      expectOneScreen(r, label);
+      expect(
+        r.footRowGap,
+        `${label}: only the page's 2rem gutter under the foot row`,
+      ).toBeLessThanOrEqual(33);
+      // Nothing is fixed to the bottom of the screen at this width.
+      const fixed = await visitor.evaluate(
+        () =>
+          [...document.querySelectorAll('body *')].filter((el) => {
+            const box = el.getBoundingClientRect();
+            return (
+              getComputedStyle(el).position === 'fixed' &&
+              box.width > 0 &&
+              box.height > 0 &&
+              box.bottom > innerHeight - 80
+            );
+          }).length,
+      );
+      expect(fixed, `${label}: no bar or handle fixed to the bottom`).toBe(0);
+    }
+    await context.close();
   });
 });
 
