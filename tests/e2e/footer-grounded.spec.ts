@@ -18,15 +18,15 @@ test.setTimeout(180_000);
 
 const SIZES = [
   { width: 390, height: 844 },
+  // A phone held tall: every short page is one screen here.
+  { width: 390, height: 1800 },
+  // Taller than Sprint's and Horizon's photo-first phone pages.
+  { width: 390, height: 2400 },
   { width: 1440, height: 900 },
   { width: 1440, height: 1600 },
   // Taller than even Horizon's photo hero, which alone is over 900px.
   { width: 1440, height: 2200 },
 ] as const;
-/** The gutter a tip page keeps under its own footer row (the page's bottom padding), at most. */
-const PAGE_GUTTER = 48;
-/** The room a phone's tip page keeps under its foot row for the sticky Tip bar, at most. */
-const TIP_BAR_ROOM = 170;
 const FOOT = '.site-footer, .profile-foot, .business-public__foot';
 
 interface Reading {
@@ -40,8 +40,12 @@ interface Reading {
   screenWidth: number;
   /** The lowest edge of anything above the footer. */
   contentBottom: number;
+  /** The bottom padding and border the footer's ancestors keep under it (the page's gutter, the Tip bar's room). */
+  reserve: number;
   /** A tip page's own foot row: the empty space between it and the end of the page's `main`. */
   footRowGap: number | null;
+  /** The same reserve, up to that `main` only. */
+  footRowReserve: number;
 }
 
 /** Waits for the page to settle, then reads where its (last visible) footer sits. */
@@ -52,6 +56,17 @@ async function read(page: Page): Promise<Reading> {
     const visible = (el: Element) => {
       const box = el.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
+    };
+    /** What the ancestors of \`el\`, up to and including \`top\`, keep under it as padding and border. */
+    const below = (el: Element, top: Element) => {
+      let sum = 0;
+      for (let up = el.parentElement; up; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        sum +=
+          parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
+        if (up === top) break;
+      }
+      return sum;
     };
     const feet = [...document.querySelectorAll(selector)].filter(visible);
     const footer = feet.at(-1);
@@ -73,6 +88,14 @@ async function read(page: Page): Promise<Reading> {
       footerTop: box.top + scrollY,
       footerBottom: box.bottom + scrollY,
       isSite: footer.classList.contains('site-footer'),
+      reserve: below(footer, document.body),
+      footRowReserve: (() => {
+        const row = feet
+          .filter((el) => el.classList.contains('profile-foot'))
+          .at(-1);
+        const main = row?.closest('main');
+        return row && main ? below(row, main) : 0;
+      })(),
       footRowGap: (() => {
         const row = feet
           .filter((el) => el.classList.contains('profile-foot'))
@@ -92,32 +115,25 @@ async function read(page: Page): Promise<Reading> {
 }
 
 /** Short: the footer rests at the screen's bottom and nothing scrolls. Tall: it follows the content. */
-function expectGrounded(r: Reading, label: string, phoneRoom = 0) {
-  // Never less than a screen, and the footer ends the page (within its own page gutter).
+function expectGrounded(r: Reading, label: string) {
+  // Never less than a screen, and the footer ends the page: under it only what its ancestors pad
+  // it with (a tip page's gutter, the room the sticky Tip bar needs, the dashboard's bottom bar),
+  // measured from the page itself.
   expect(
     r.doc,
     `${label}: the page is at least a screen`,
   ).toBeGreaterThanOrEqual(r.screen);
   const gap = r.doc - r.footerBottom;
   expect(gap, `${label}: the footer ends the page`).toBeGreaterThanOrEqual(-1);
-  // What may sit under a footer: a site footer ends the page; a tip page's own row leaves the
-  // page's gutter, and on a phone the room kept for the Tip bar (the dashboard: its bottom bar).
-  const room =
-    r.screenWidth < 1024 && phoneRoom > 0
-      ? phoneRoom
-      : r.isSite
-        ? 1
-        : PAGE_GUTTER;
   expect(gap, `${label}: no empty space under the footer`).toBeLessThanOrEqual(
-    r.screenWidth < 1024 && !r.isSite ? TIP_BAR_ROOM : room,
+    r.reserve + 1,
   );
-  // A tip page's own foot row rests at the bottom of its page: only the page's gutter (and, on a
-  // phone, the room kept for the Tip bar) is left under it, never a gap.
+  // A tip page's own foot row rests at the bottom of its page, the same way.
   if (r.footRowGap !== null)
     expect(
       r.footRowGap,
       `${label}: no empty space under the foot row`,
-    ).toBeLessThanOrEqual(r.screenWidth < 1024 ? TIP_BAR_ROOM : PAGE_GUTTER);
+    ).toBeLessThanOrEqual(r.footRowReserve + 1);
   // After the content, with no overlap.
   expect(
     r.footerTop,
@@ -133,7 +149,7 @@ function expectOneScreen(r: Reading, label: string) {
   expect(
     r.footerBottom,
     `${label}: the footer is at the bottom of the screen`,
-  ).toBeGreaterThanOrEqual(r.screen - (r.isSite ? 1 : PAGE_GUTTER));
+  ).toBeGreaterThanOrEqual(r.screen - r.reserve - 1);
   expect(r.footerBottom, `${label}: not past it`).toBeLessThanOrEqual(
     r.screen + 1,
   );
@@ -147,7 +163,7 @@ async function check(
   page: Page,
   path: string,
   short: boolean | number,
-  phoneRoom = 0,
+  phoneFrom = 1800,
 ) {
   for (const size of SIZES) {
     await page.setViewportSize(size);
@@ -155,10 +171,11 @@ async function check(
     await page.getByRole('main').first().waitFor();
     const label = `${path} at ${size.width}x${size.height}`;
     const r = await read(page);
-    expectGrounded(r, label, phoneRoom);
-    // The very tall windows are taller than any of these short pages.
+    expectGrounded(r, label);
+    // The very tall windows are taller than any of these short pages: one screen, no scrolling.
     const from = short === true ? 1600 : short;
-    if (from && size.height >= from) expectOneScreen(r, label);
+    if (from && size.height >= (size.width < 1024 ? phoneFrom : from))
+      expectOneScreen(r, label);
   }
 }
 
@@ -173,11 +190,17 @@ test.describe('a tip page on its own web instance', () => {
     await stack.stop();
   });
 
-  const visit = (page: Page, path: string, short: boolean | number) =>
+  const visit = (
+    page: Page,
+    path: string,
+    short: boolean | number,
+    phoneFrom?: number,
+  ) =>
     check(
       page,
       path.startsWith('http') ? path : `${stack.origin}${path}`,
       short,
+      phoneFrom,
     );
 
   test('Classic with a cover', async ({ page }) => {
@@ -196,7 +219,12 @@ test.describe('a tip page on its own web instance', () => {
     test(`the ${style} style, short and with its example blocks`, async ({
       page,
     }) => {
-      await visit(page, `/@short${style}`, style === 'horizon' ? 2200 : true);
+      await visit(
+        page,
+        `/@short${style}`,
+        style === 'horizon' ? 2200 : true,
+        style === 'horizon' || style === 'sprint' ? 2400 : 1800,
+      );
       await visit(page, `/@style${style}`, false);
     });
 });
@@ -246,7 +274,7 @@ test.describe('the rest of the site', () => {
     page,
   }, testInfo) => {
     await signUpRecipient(page, testInfo, { live: false });
-    await check(page, '/dashboard/tips', true, 100);
+    await check(page, '/dashboard/tips', true);
   });
 });
 

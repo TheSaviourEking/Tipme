@@ -5298,13 +5298,17 @@ body:has(
 }
 
 body > .coming-soon-page {
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
 .coming-soon {
   width: min(100%, 90rem);
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   margin-inline: auto;
   padding: clamp(1.5rem, 4vw, 3.5rem);
   display: grid;

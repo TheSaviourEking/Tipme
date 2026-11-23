@@ -61,7 +61,7 @@ html:has(
 /* Where the page is a single column (a phone, and Clear at every width) it is a flex column, so
    the space a short page leaves goes just above the foot. Every part keeps the width a block gave it
    (`stretch` fills the column less the part's margins, as a block does, and an auto margin still
-   centres a part under its max-width; `width` here has no weight, so a part's own width wins). On a
+   centres a part under its max-width; the selector is wrapped in `:where()`, so it has no specificity and a part's own width always wins). On a
    desktop the other styles are grids, whose last row takes the space (each style's file). */
 @media (max-width: 1023px) {
   .studio[data-style] .studio-page {
@@ -71,7 +71,7 @@ html:has(
 }
 
 @media (max-width: 1023px) {
-  .studio[data-style] :where(.studio-page > *) {
+  :where(.studio[data-style] .studio-page > *) {
     width: 100%;
     width: -webkit-fill-available;
     width: -moz-available;

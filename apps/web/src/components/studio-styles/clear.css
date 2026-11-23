@@ -856,7 +856,7 @@
   flex-direction: column;
 }
 
-.studio[data-style='clear'] :where(.studio-page > *) {
+:where(.studio[data-style='clear'] .studio-page > *) {
   width: 100%;
   width: -webkit-fill-available;
   width: -moz-available;
