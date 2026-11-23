@@ -162,6 +162,10 @@ export default defineConfig({
       env: env({
         LOG_LEVEL: 'info',
         MAIL_SEAL_KEY: E2E_MAIL_SEAL_KEY,
+        // As in production: a Pro purchase the worker's reconcile confirms first (it may beat the
+        // webhook) refreshes the cached public page at once, instead of up to 30 s later.
+        WEB_ORIGIN,
+        WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
         RECONCILE_INTERVAL_MS: '500',
         RECONCILE_MIN_AGE_MS: '0',
       }),
