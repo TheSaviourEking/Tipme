@@ -7,6 +7,8 @@
  * person chose changes. Plain TypeScript, so its test runs in Node.
  */
 import {
+  AA,
+  contrastRatio,
   hexToOklch,
   isHex,
   oklchToHex,
@@ -54,6 +56,27 @@ const COVER = {
   dark: { from: { l: 0.42, c: 0.1 }, to: { l: 0.26, c: 0.06 } },
 } as const;
 
+/**
+ * The shared moment's panel ("Celebrating Kemi's 10th tip"): today's lilac (tokens.css
+ * --brand-soft) with today's purple in light, otherwise a quiet tint of the accent at today's
+ * lilac's lightness (OKLCH L .94, chroma at most .035) in light and just above the dark card in
+ * dark. Its text is `ink`, so the lightness then moves away from the ink (lighter in light, darker
+ * in dark) until the ink reads at 4.5:1 or better (builder's call, as the registry's `control`).
+ */
+const SOFT_PURPLE = '#f1e9ff';
+const SOFT = { light: 0.94, dark: 0.3, chroma: 0.035 } as const;
+function soft(acc: Hex, ink: Hex, mode: Mode): Hex {
+  const { c, h } = hexToOklch(acc);
+  const step = mode === 'light' ? 0.005 : -0.005;
+  let l: number = SOFT[mode];
+  let out = oklchToHex({ l, c: Math.min(c, SOFT.chroma), h });
+  while (contrastRatio(ink, out) < AA.body && l > 0 && l < 1) {
+    l += step;
+    out = oklchToHex({ l, c: Math.min(c, SOFT.chroma), h });
+  }
+  return out;
+}
+
 const shade = (hex: Hex, l: number, c: number) => {
   const o = hexToOklch(hex);
   return oklchToHex({ l: o.l * l, c: o.c * c, h: o.h });
@@ -81,10 +104,13 @@ export function classicTokens(
   // (the invalid field's red edge is `var(--shadow-recessed), inset 3px 0 0 red`), and `none`
   // there would make the whole declaration invalid and drop the red edge with it.
   const off = '0 0 0 transparent';
+  const accText = base.accText && isHex(base.accText) ? base.accText : acc;
+  const ink: Hex = purple ? INK[mode] : accText;
   return {
     ...base,
     accEdge: light ? (purple ? PURPLE_EDGE : shade(acc, EDGE, EDGE)) : acc,
-    ink: purple ? INK[mode] : (base.accText ?? acc),
+    ink,
+    soft: purple && light ? SOFT_PURPLE : soft(acc, ink, mode),
     accGloss: light ? 'rgba(255,255,255,.22)' : 'rgba(255,255,255,0)',
     // The Tip key keeps Classic's ink: black in light, the paper colour in dark (§9.1).
     tip: light ? '#000000' : '#f3f2ee',
