@@ -342,6 +342,11 @@ export async function reconcilePayouts(input: {
   provider: ProviderResolver<PayoutVerifier>;
   now: Date;
   minAgeMs: number;
+  /**
+   * Recorded provider names whose parked payout events are rechecked, each through its own reader.
+   * A row for any other provider is left alone, so it is never read through another provider.
+   */
+  parkedProviders: readonly string[];
   limit?: number;
   /** Only this payout (an admin re-check). */
   payoutId?: string;
@@ -547,8 +552,11 @@ export async function reconcilePayouts(input: {
       errors += 1;
     }
 
-  if (!input.payoutId) {
-    const parked = await sweepParkedPayoutEvents(input, limit);
+  if (!input.payoutId && input.parkedProviders?.length) {
+    const parked = await sweepParkedPayoutEvents(
+      { ...input, parkedProviders: input.parkedProviders },
+      limit,
+    );
     applied += parked.applied;
     errors += parked.errors;
   }
@@ -560,11 +568,15 @@ export async function reconcilePayouts(input: {
   };
 }
 
-/** Payout events that had no payout to match when they arrived, oldest first. */
+/**
+ * Payout events that had no payout to match when they arrived, oldest first. Each row is matched,
+ * read and recorded only as its own provider's (the name it was parked under), never another's.
+ */
 async function sweepParkedPayoutEvents(
   input: {
     db: Database;
     provider: ProviderResolver<PayoutVerifier>;
+    parkedProviders: readonly string[];
     now: Date;
   },
   limit: number,
@@ -573,6 +585,7 @@ async function sweepParkedPayoutEvents(
   const parked = await db
     .select({
       id: unmatchedProviderEvents.id,
+      provider: unmatchedProviderEvents.provider,
       providerEventId: unmatchedProviderEvents.providerEventId,
       payload: unmatchedProviderEvents.payload,
       receivedAt: unmatchedProviderEvents.receivedAt,
@@ -584,7 +597,7 @@ async function sweepParkedPayoutEvents(
     )
     .where(
       and(
-        eq(unmatchedProviderEvents.provider, 'bachs'),
+        inArray(unmatchedProviderEvents.provider, [...input.parkedProviders]),
         eq(unmatchedProviderEvents.reason, 'unknown_payout'),
         sql`NOT EXISTS (
           SELECT 1 FROM provider_events e
@@ -638,7 +651,7 @@ async function sweepParkedPayoutEvents(
       };
       let payoutId = await findPayoutByReference(
         db,
-        'bachs',
+        row.provider,
         event.providerReference,
       );
       if (!payoutId && event.operationReference) {
@@ -656,6 +669,8 @@ async function sweepParkedPayoutEvents(
             and(
               sql`${payouts.id}::text = ${event.operationReference}`,
               eq(payouts.accountReference, event.accountReference),
+              // Only a payout at the provider that sent the event: never one at another.
+              eq(payouts.provider, row.provider),
             ),
           );
         if (named?.providerReference === event.providerReference) {
@@ -670,7 +685,7 @@ async function sweepParkedPayoutEvents(
           // Stored as seen, which also takes it out of the queue.
           await recordPayoutOutcome(db, {
             payoutId: named.id,
-            provider: 'bachs',
+            provider: row.provider,
             providerEventId: row.providerEventId,
             providerReference: null,
             outcome: 'failed',
@@ -695,7 +710,7 @@ async function sweepParkedPayoutEvents(
           await capParkedAge(row, named.id);
           const { status, ...details } = await providerFor(
             input.provider,
-            'bachs',
+            row.provider,
           ).fetchPayoutStatus(event.providerReference);
           if (status === 'not_found') continue;
           const adopted = await applyFoundPayout(
@@ -715,9 +730,10 @@ async function sweepParkedPayoutEvents(
       }
       if (payoutId) {
         await capParkedAge(row, payoutId);
-        const reader = providerFor(input.provider, 'bachs');
+        const reader = providerFor(input.provider, row.provider);
         const outcome = await applyPayoutSignal(db, {
           payoutId,
+          provider: row.provider,
           providerReference: event.providerReference,
           eventId: row.providerEventId,
           status: event.status,
@@ -748,6 +764,7 @@ async function sweepParkedPayoutEvents(
         continue;
       await openUnexpectedPayout(db, {
         unmatchedId: row.id,
+        provider: row.provider,
         accountReference: event.accountReference,
         providerReference: event.providerReference,
         operationReference: event.operationReference ?? null,
@@ -817,6 +834,8 @@ export async function recheckSubject(input: {
       provider: input.provider,
       now,
       minAgeMs: 0,
+      // One payout only: the parked sweep never runs for a single re-check.
+      parkedProviders: [],
       limit: 1,
       payoutId: input.payoutId,
     });

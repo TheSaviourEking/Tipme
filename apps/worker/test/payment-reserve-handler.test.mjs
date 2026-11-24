@@ -4,6 +4,12 @@ import {
   warnIfNoAlertRoute,
   webhookAlert,
 } from '../dist/handlers/payment-reserve.js';
+import {
+  ensureReserveSchedules,
+  reserveChecks,
+  workerPaymentProviders,
+} from '../dist/job-worker.js';
+import { SCHEDULED_RUN_RETENTION } from '../dist/ensure-schedule.js';
 
 const URL_WITH_SECRET =
   'https://hooks.example.test/services/T0/B0/very-secret-token';
@@ -76,4 +82,91 @@ test('one startup warning names the missing setting, and nothing else, when ther
     quiet.push(e),
   );
   assert.deepEqual(quiet, []);
+});
+
+// Per-provider balances (Task 4): one reserve check per connected-account provider in either role.
+const fakeRedis = {};
+const scheduler = () => {
+  const upserts = [];
+  return {
+    upserts,
+    queue: {
+      upsertJobScheduler: async (id, repeat, template) => {
+        upserts.push({ id, repeat, template });
+      },
+    },
+  };
+};
+const quiet = { warn: () => undefined };
+
+test('a withdraw-only Bachs gets its own reserve schedule with run retention', async () => {
+  const providers = workerPaymentProviders(
+    {
+      PAYMENT_PROVIDER: 'mock',
+      PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['bachs-sandbox'],
+      BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+      QUEUE_PREFIX: 'tipme-test',
+    },
+    fakeRedis,
+  );
+  const checks = reserveChecks(providers);
+  assert.deepEqual(
+    checks.map((c) => [c.id, c.provider.name, c.active]),
+    [['payments.reserve.bachs.sandbox', 'bachs-sandbox', false]],
+  );
+  const { queue, upserts } = scheduler();
+  const schedules = ensureReserveSchedules({ queue, logger: quiet }, checks);
+  await Promise.all(schedules.map((s) => s.ready));
+  assert.equal(upserts.length, 1);
+  assert.equal(upserts[0].id, 'payments.reserve.bachs.sandbox');
+  assert.deepEqual(upserts[0].repeat, { every: 15 * 60_000 });
+  assert.deepEqual(upserts[0].template, {
+    name: 'payments.reserve.bachs.sandbox',
+    opts: SCHEDULED_RUN_RETENTION,
+  });
+  assert.deepEqual(SCHEDULED_RUN_RETENTION, {
+    removeOnComplete: true,
+    removeOnFail: { age: 7 * 24 * 3600 },
+  });
+  await Promise.all(schedules.map((s) => s.stop()));
+});
+
+test('the active Bachs keeps the payments.reserve schedule; a mock-only copy has none', async () => {
+  const active = reserveChecks(
+    workerPaymentProviders(
+      {
+        PAYMENT_PROVIDER: 'bachs-sandbox',
+        PAYMENT_WITHDRAW_ONLY_PROVIDERS: ['mock_alt'],
+        BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+        QUEUE_PREFIX: 'tipme-test',
+      },
+      fakeRedis,
+    ),
+  );
+  assert.deepEqual(
+    active.map((c) => [c.id, c.provider.name, c.active]),
+    [['payments.reserve', 'bachs-sandbox', true]],
+  );
+  const { queue, upserts } = scheduler();
+  await Promise.all(
+    ensureReserveSchedules({ queue, logger: quiet }, active).map(
+      (s) => s.ready,
+    ),
+  );
+  assert.deepEqual(upserts[0].template.opts, SCHEDULED_RUN_RETENTION);
+  // A mock copy's legacy sandbox reader (P11) reads old tips only: no reserve check for it.
+  assert.deepEqual(
+    reserveChecks(
+      workerPaymentProviders(
+        {
+          PAYMENT_PROVIDER: 'mock',
+          PAYMENT_WITHDRAW_ONLY_PROVIDERS: [],
+          BACHS_SANDBOX_API_KEY: 'sk_sandbox_x',
+          QUEUE_PREFIX: 'tipme-test',
+        },
+        fakeRedis,
+      ),
+    ),
+    [],
+  );
 });

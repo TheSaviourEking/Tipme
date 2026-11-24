@@ -1,4 +1,8 @@
-import { PAYOUT_START_EVENT, PLATFORM_REFUSAL_EVENT } from '@tipme/contracts';
+import {
+  PAYOUT_START_EVENT,
+  PLATFORM_REFUSAL_EVENT,
+  recordedProviderName,
+} from '@tipme/contracts';
 import { and, asc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -897,6 +901,8 @@ export async function applyPayoutSignal(
   db: Database,
   input: {
     payoutId: string;
+    /** The provider the event came from, as recorded: the outcome is booked under its name. */
+    provider: string;
     providerReference: string;
     eventId: string;
     status: 'paid' | 'failed';
@@ -973,7 +979,7 @@ export async function applyPayoutSignal(
   }
   const result = await recordPayoutOutcome(db, {
     payoutId: input.payoutId,
-    provider: 'bachs',
+    provider: input.provider,
     providerEventId: input.eventId,
     providerReference: input.providerReference,
     outcome,
@@ -1025,6 +1031,8 @@ export function openUnexpectedPayout(
   db: Database,
   input: {
     unmatchedId: string;
+    /** The provider the event came from: only its accounts can be the event's. */
+    provider: string;
     accountReference: string;
     providerReference: string;
     /** The reference signed into the event, which may name a payout of ours. */
@@ -1042,7 +1050,7 @@ export function openUnexpectedPayout(
         .from(paymentAccounts)
         .where(
           and(
-            eq(paymentAccounts.provider, 'bachs'),
+            eq(paymentAccounts.provider, recordedProviderName(input.provider)),
             eq(
               paymentAccounts.providerAccountReference,
               input.accountReference,

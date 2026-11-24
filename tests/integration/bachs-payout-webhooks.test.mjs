@@ -203,7 +203,13 @@ async function fixture(t) {
     });
   const webhooks = new WebhookService({ db }, sealing);
   const reconcile = (provider, now = new Date()) =>
-    reconcilePayouts({ db, provider, now, minAgeMs: 0 });
+    reconcilePayouts({
+      db,
+      provider,
+      parkedProviders: ['bachs'],
+      now,
+      minAgeMs: 0,
+    });
   return {
     db,
     url: database.url,
@@ -921,7 +927,13 @@ test('a payout on the pretend provider has no account, bank or fee', async (t) =
   );
   assert.equal(await startPayout(db, { payoutId, provider }), 'started');
   assert.equal((await row(payoutId)).fee_transfer_reference, null);
-  await reconcilePayouts({ db, provider, now: new Date(), minAgeMs: 0 });
+  await reconcilePayouts({
+    db,
+    provider,
+    parkedProviders: ['bachs'],
+    now: new Date(),
+    minAgeMs: 0,
+  });
   assert.equal((await row(payoutId)).status, 'PAID');
   assert.equal((await ledger(payoutId)).length, 2);
 });
@@ -1586,11 +1598,20 @@ test('a parked event naming a payout that already has its reference is that payo
   const provider = scripted();
   await startPayout(db, { payoutId, provider });
   const event = paidEvent(payoutId, { operationReference: payoutId });
-  // Parked as if it arrived just before the reference was recorded, then the lookup missed it.
-  await q(`UPDATE payouts SET provider = 'bachs_old' WHERE id = $1`, [
+  // Parked as if it arrived just before the reference was recorded; recorded by the sweep. (Not by
+  // renaming the payout's provider: a parked event never adopts a payout at another provider.)
+  const [{ provider_reference: reference }] = await q(
+    `SELECT provider_reference FROM payouts WHERE id = $1`,
+    [payoutId],
+  );
+  await q(`UPDATE payouts SET provider_reference = NULL WHERE id = $1`, [
     payoutId,
   ]);
   assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  await q(`UPDATE payouts SET provider_reference = $2 WHERE id = $1`, [
+    payoutId,
+    reference,
+  ]);
   await reconcile(provider);
   assert.equal((await issues('payout_conflict')).length, 0);
   assert.equal((await row(payoutId)).status, 'PAID');
@@ -1752,6 +1773,7 @@ test('once funded it resumes under a new key, the issue closes itself, and a lat
   await reconcilePayouts({
     db,
     provider: scripted(),
+    parkedProviders: ['bachs'],
     now: after(PAYOUT_NOT_FOUND_AFTER_MS),
     minAgeMs: 0,
   });
