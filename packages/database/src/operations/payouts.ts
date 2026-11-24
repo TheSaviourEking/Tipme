@@ -2183,8 +2183,9 @@ async function requestFor(
       // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
       if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
       // Each provider's own balance, less what is promised out of it there and not yet gone
-      // (`queued_P` plus open Pro balance payments, `committedAtProvider`). Under the lock, so a request that committed meanwhile is seen: two at once never spend the
-      // same provider's money (Review Focus 2).
+      // (`queued_P` plus open Pro balance payments, `committedAtProvider`). Under the lock, so a
+      // request that committed meanwhile is seen: two at once never spend the same provider's
+      // money (Review Focus 2).
       const capsMinor: bigint[] = [];
       for (const part of read.parts)
         capsMinor.push(

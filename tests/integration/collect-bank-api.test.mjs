@@ -1695,3 +1695,49 @@ test('the status says the new-account delay while it applies, from the settings 
     until: new Date(created.getTime() + 7 * DAY).toISOString(),
   });
 });
+
+// Per-provider balances, Task 8 (spec §6): a You collect recipient's bank is registered at every
+// provider in their set, each with its own checks (the partner's name check, the same-bank review).
+// The active provider here is accountless; a connected-account fake holds an account of Tobi's.
+test("changing bank registers it at every connected provider in the owner's set (You collect)", async () => {
+  await collect(TOBI);
+  const active = partner('unused');
+  Object.assign(active.provider, {
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+  });
+  const other = partner('acct_other');
+  await q(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, provider_account_reference,
+       status, manual_payouts_at)
+     VALUES ($1, $2, 'bachs', 'sandbox', 'acct_other_seeded', 'ONBOARDING', now())`,
+    [randomUUID(), TOBI.id],
+  );
+  const controller = new CollectBankController(
+    { ...config, PAYMENT_PROVIDER: 'mock' },
+    { db: database.db },
+    active.provider,
+    { info() {}, warn() {}, error() {} },
+    sealing,
+    partnerCache,
+    { active: active.provider, withdrawOnly: [other.provider] },
+  );
+  await addBank(controller, TOBI);
+  const rows = await q(
+    `SELECT provider, bank_code, account_last4, account_hash FROM payout_destinations
+      WHERE profile_id = $1 AND replaced_at IS NULL ORDER BY provider`,
+    [TOBI.id],
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.provider, row.bank_code, row.account_last4]),
+    [
+      ['bachs', '058', '7701'],
+      ['mock', '058', '7701'],
+    ],
+  );
+  assert.ok(rows[0].account_hash);
+  assert.equal(rows[0].account_hash, rows[1].account_hash);
+  assert.deepEqual(other.state.of('add'), [
+    ['add', 'acct_other_seeded', '058'],
+  ]);
+});

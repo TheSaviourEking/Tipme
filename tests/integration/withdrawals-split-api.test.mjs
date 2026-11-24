@@ -14,9 +14,11 @@ import {
   seedDemoProfiles,
 } from '../../packages/database/dist/index.js';
 import { createMockProvider } from '../../packages/payments/dist/index.js';
+import { PAYOUT_PROVIDERS_TOKEN } from '../../apps/api/dist/checkout/payment-provider.provider.js';
 import {
   REDIS_URL,
   Redis,
+  uniquePrefix,
   WEB,
   browserHeaders,
   signIn,
@@ -54,11 +56,11 @@ after(async () => {
   await database.close();
 });
 
-/** One ₦4,000 tip to Tobi collected through `provider`, recorded as its webhook would. */
-async function tip(provider) {
+/** One ₦4,000 tip to `handle` collected through `provider`, recorded as its webhook would. */
+async function tip(provider, handle = 'tobi') {
   const { db } = database;
   const quote = await createQuote(db, {
-    handle: 'tobi',
+    handle,
     tipMinor: 400000n,
     currency: 'NGN',
   });
@@ -174,4 +176,190 @@ test('one request paid as two parts, with amounts only and no provider named', a
     rows[0].parts.map((part) => part.amountMinor),
     [each.toString(), '200000'],
   );
+});
+
+// Task 8 (spec §6 "Bank details across providers"): a bank change is registered at every provider
+// in the owner's set. The active one decides the answer; a refusal anywhere else leaves only that
+// provider's part needing action. A local connected-account stand-in joins the configured set
+// (only one Bachs exists per copy, and none may be reached from a test); Ada holds an account there.
+
+const ADA = DEMO_PROFILES[0];
+const STAND_IN_ACCOUNT = 'acct_ada_stand_in';
+const STAND_IN_MINOR = 200000n;
+
+/** A connected-account provider that answers locally; `refuse` makes its next adds fail. */
+function connectedStandIn() {
+  const state = { refuse: false, adds: [] };
+  const provider = {
+    name: 'bachs-sandbox',
+    capabilities: { connectedAccounts: true },
+    async payoutCapability() {
+      return { status: 'active', requirementsDue: [] };
+    },
+    async payoutBalance() {
+      return { availableMinor: STAND_IN_MINOR };
+    },
+    async quotePayoutFee() {
+      return { feeMinor: 5000n, exact: true };
+    },
+    async addPayoutDestination(reference, input) {
+      state.adds.push({ reference, bankCode: input.bankCode });
+      if (state.refuse) {
+        const error = new Error('refused');
+        error.name = 'BachsApiError';
+        throw error;
+      }
+      return {
+        destinationRef: `dest_${reference}_${input.bankCode}_${input.accountNumber.slice(-4)}`,
+        usable: true,
+        status: 'usable',
+      };
+    },
+    async payoutDestinationStatus() {
+      return 'usable';
+    },
+  };
+  return { provider, state };
+}
+
+let standIn;
+let ada;
+let adaLedger;
+const q = (text, values = []) =>
+  database.pool.query(text, values).then((result) => result.rows);
+const activeBanks = () =>
+  q(
+    `SELECT provider, bank_code, account_last4 FROM payout_destinations
+      WHERE profile_id = $1 AND replaced_at IS NULL ORDER BY provider`,
+    [ADA.id],
+  );
+
+/** A bank-account code sent to Ada's own address, read from the dev inbox. */
+async function adaCode() {
+  await q(`DELETE FROM email_codes`);
+  const inbox = async () =>
+    (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data.filter(
+      (mail) => mail.subject?.toLowerCase().includes('bank account'),
+    );
+  const seen = new Set((await inbox()).map((mail) => mail.body));
+  const asked = await fetch(`${stack.api}/v1/me/payout-destination/code`, {
+    method: 'POST',
+    headers: browserHeaders(ada.cookie),
+  });
+  assert.equal(asked.status, 202);
+  for (let i = 0; i < 100; i++) {
+    // Only a new mail carrying a code: a change notice from the last change may arrive late.
+    const mail = (await inbox()).find(
+      (m) => !seen.has(m.body) && /\b\d{6}\b/.test(m.body),
+    );
+    if (mail) return /\b(\d{6})\b/.exec(mail.body)[1];
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error('no code arrived');
+}
+
+const changeBank = async (bankCode, accountNumber) =>
+  fetch(`${stack.api}/v1/me/payout-destination`, {
+    method: 'PUT',
+    headers: browserHeaders(ada.cookie),
+    body: JSON.stringify({
+      bankCode,
+      accountNumber,
+      accountName: 'ADA OKAFOR',
+      emailCode: await adaCode(),
+    }),
+  });
+
+const adaQuote = async () =>
+  (
+    await (
+      await fetch(`${stack.api}/v1/me/withdrawal-quote`, {
+        headers: { cookie: ada.cookie },
+      })
+    ).json()
+  ).data;
+
+test("changing bank registers it at every connected provider in the owner's set", async () => {
+  standIn = connectedStandIn();
+  stack.app.get(PAYOUT_PROVIDERS_TOKEN).withdrawOnly.push(standIn.provider);
+  await q(
+    'UPDATE users SET email = $1, email_verified_at = now() WHERE id = $2',
+    [`ada@${uniquePrefix()}.example`, ADA.userId],
+  );
+  await q(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, provider_account_reference,
+       status, charges_enabled, payouts_enabled, manual_payouts_at)
+     VALUES ($1, $2, 'bachs', 'sandbox', $3, 'ACTIVE', true, true, now())`,
+    [randomUUID(), ADA.id, STAND_IN_ACCOUNT],
+  );
+  await tip('mock', 'ada');
+  adaLedger = (await balanceOf(database.db, ADA.id)).availableMinor;
+  // The active provider holds all but the stand-in's part, so only both together cover the ledger.
+  await createMockProvider({ redis, prefix: stack.prefix }).markPayoutBalance(
+    ADA.id,
+    adaLedger - STAND_IN_MINOR,
+  );
+  ada = await signIn(stack.api, ADA.phone);
+
+  const response = await changeBank('058', '0123456781');
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, {
+    status: 'usable',
+    bankName: 'Pretend Guaranty Bank',
+    last4: '6781',
+  });
+  assert.deepEqual(await activeBanks(), [
+    { provider: 'bachs', bank_code: '058', account_last4: '6781' },
+    { provider: 'mock', bank_code: '058', account_last4: '6781' },
+  ]);
+  assert.deepEqual(standIn.state.adds, [
+    { reference: STAND_IN_ACCOUNT, bankCode: '058' },
+  ]);
+  const quote = await adaQuote();
+  assert.equal(quote.state, 'ready');
+  assert.equal(quote.withdrawableMinor, adaLedger.toString());
+  assert.equal(quote.bankDetailsNeeded, false);
+});
+
+test('a provider that refuses the new bank leaves only its part needing action', async () => {
+  standIn.state.refuse = true;
+  const response = await changeBank('101', '0123456782');
+  // The active provider took it, so the change is made; the person is never told a provider's name.
+  assert.equal(response.status, 200);
+  const text = await response.text();
+  assert.doesNotMatch(text, /bachs|mock/);
+  assert.equal(JSON.parse(text).data.last4, '6782');
+  assert.deepEqual(await activeBanks(), [
+    { provider: 'bachs', bank_code: '058', account_last4: '6781' },
+    { provider: 'mock', bank_code: '101', account_last4: '6782' },
+  ]);
+  // Staff are told which provider refused, without any account detail.
+  const failed = stack.logs.filter(
+    (entry) => entry.event === 'withdrawal.bank_register_failed',
+  );
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].provider, 'bachs');
+  assert.equal(failed[0].error, 'BachsApiError');
+  assert.doesNotMatch(JSON.stringify(failed), /0123456782|ADA OKAFOR/);
+  // The old bank at the stand-in is never paid: that part needs action, and the rest stays.
+  const quote = await adaQuote();
+  assert.equal(quote.state, 'ready');
+  assert.equal(quote.bankDetailsNeeded, true);
+  assert.equal(
+    quote.withdrawableMinor,
+    (adaLedger - STAND_IN_MINOR).toString(),
+  );
+});
+
+test('re-entering the current bank fixes a part that needed action', async () => {
+  standIn.state.refuse = false;
+  const response = await changeBank('101', '0123456782');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await activeBanks(), [
+    { provider: 'bachs', bank_code: '101', account_last4: '6782' },
+    { provider: 'mock', bank_code: '101', account_last4: '6782' },
+  ]);
+  const quote = await adaQuote();
+  assert.equal(quote.bankDetailsNeeded, false);
+  assert.equal(quote.withdrawableMinor, adaLedger.toString());
 });

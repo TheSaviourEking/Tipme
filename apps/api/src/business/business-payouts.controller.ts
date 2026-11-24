@@ -32,6 +32,7 @@ import {
   withdrawalRequestSchema,
 } from '@tipme/contracts';
 import {
+  bankAccountAt,
   businessBalanceOf,
   businessPaymentAccount,
   businessShareMoney,
@@ -83,6 +84,10 @@ import {
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
 import { withdrawalRequestResult } from '../dashboard/withdrawal-request-result.js';
+import {
+  activeFirst,
+  registerBankEverywhere,
+} from '../profiles/register-bank-everywhere.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { SharesEnabledGuard } from './release2-flags.guard.js';
 
@@ -125,9 +130,9 @@ export class BusinessPayoutsController {
     private readonly partnerCache: RedisPartnerQuoteCache,
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly bachs: BachsProvider | null,
-    /** Every provider in either role, for the quote; bank changes stay on the active one. */
+    /** Every provider in either role: the quote reads each, and a bank change goes to each. */
     @Inject(PAYOUT_PROVIDERS_TOKEN)
-    private readonly providers: PayoutProviderSet,
+    private readonly providers: PayoutProviderSet<WithdrawalProvider>,
   ) {}
 
   @Get('balance')
@@ -407,40 +412,47 @@ export class BusinessPayoutsController {
       throw new CodedHttpException(409, 'BANK_CHANGE_HELD');
     if (checked !== 'ok') throw new CodedHttpException(400, 'CODE_INVALID');
 
-    const added = await this.calling('add', () =>
-      this.provider.addPayoutDestination(reference, {
+    // As the person's (spec §6): the active provider decides the answer; every other provider
+    // holding the business's money gets the same bank, and a refusal there needs action only there.
+    const owner = { businessId };
+    const providers = activeFirst(this.provider, this.providers);
+    await registerBankEverywhere({
+      db: this.database.db,
+      owner,
+      providers,
+      accountRefFor: (provider) =>
+        provider === this.provider
+          ? Promise.resolve(reference)
+          : bankAccountAt(this.database.db, owner, provider),
+      bank: {
         accountNumber: body.accountNumber,
         accountName: body.accountName,
         bankCode: body.bankCode,
-      }),
-    );
-    // As the person's: the add's answer may be a replay, so only a status read decides.
-    let status: PayoutDestinationView['status'] = 'pending_review';
-    try {
-      status = await this.provider.payoutDestinationStatus(
-        reference,
-        added.destinationRef,
-      );
-    } catch (error) {
-      this.logFailure('read', error);
-    }
-    await this.ownerOnly(() =>
-      setPayoutDestination(this.database.db, {
-        sealing: this.sealing,
-        businessId,
-        userId: auth.userId,
-        provider: recordedProviderName(this.provider.name),
-        destinationRef: added.destinationRef,
-        bankCode: bank.code,
         bankName: bank.name,
-        last4: body.accountNumber.slice(-4),
-        status,
-      }),
-    );
-    await this.partnerCache.invalidate({
-      provider: this.provider.name,
-      businessId,
+      },
+      callActive: (step, call) => this.calling(step, call),
+      onActiveUnread: (error) => this.logFailure('read', error),
+      log: (entry) => this.logger.warn(entry),
+      save: (provider, added, status) =>
+        this.ownerOnly(async () => {
+          await setPayoutDestination(this.database.db, {
+            sealing: this.sealing,
+            businessId,
+            userId: auth.userId,
+            provider: recordedProviderName(provider.name),
+            destinationRef: added.destinationRef,
+            bankCode: bank.code,
+            bankName: bank.name,
+            last4: body.accountNumber.slice(-4),
+            status,
+          });
+        }),
     });
+    await Promise.all(
+      providers.map((provider) =>
+        this.partnerCache.invalidate({ provider: provider.name, businessId }),
+      ),
+    );
     // A bank in the business's name is what live asks for: the account may now be ready.
     if (this.liveAccounts())
       await this.syncAccount(businessId, reference, false).catch(

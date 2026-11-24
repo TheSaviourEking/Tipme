@@ -567,7 +567,6 @@ export async function startJobWorker(
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
   const parkedProviders = parkedPayoutProviders(paymentProviders);
-  /** Pro purchases per provider this copy can read, each under the name its rows record. */
   /** A page whose plan changed: refresh it and tell open screens. */
   const announce = (pages: readonly ProCollectionPaid[]) => {
     for (const page of pages.filter((p) => p.planChanged)) {

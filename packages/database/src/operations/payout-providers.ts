@@ -8,16 +8,21 @@ import type { PayoutReader } from './payouts.js';
  * Every provider a withdrawal may be paid through (spec §4): the active one, which also takes new
  * tips, and the withdraw-only ones, in the order `PAYMENT_WITHDRAW_ONLY_PROVIDERS` lists them.
  */
-export interface PayoutProviderSet {
-  active: PayoutReader;
-  withdrawOnly: readonly PayoutReader[];
+export interface PayoutProviderSet<P extends NamedProvider = PayoutReader> {
+  active: P;
+  withdrawOnly: readonly P[];
 }
+
+/** What the set's own helpers need of a provider: its name (as configured) and nothing else. */
+export type NamedProvider = Pick<PayoutReader, 'name'>;
 
 /**
  * The order money is drawn in (P2): withdraw-only providers first, oldest (listed) first, so old
  * providers empty and can be retired; the active provider last.
  */
-export function drainOrder(set: PayoutProviderSet): PayoutReader[] {
+export function drainOrder<P extends NamedProvider>(
+  set: PayoutProviderSet<P>,
+): P[] {
   return [...set.withdrawOnly, set.active];
 }
 
@@ -78,7 +83,7 @@ async function ownerFootprint(
 /** Whether the owner has an account reference at, or a successful tip through, `provider`. */
 function holdsAt(
   footprint: { tipped: Set<string>; accounts: Set<string> },
-  provider: PayoutReader,
+  provider: NamedProvider,
 ): boolean {
   const stored = recordedProviderName(provider.name);
   if (footprint.tipped.has(stored)) return true;
@@ -95,11 +100,11 @@ function holdsAt(
  * successful tip went through a provider that is no longer configured, so its money can't be
  * reached from here (§6); the rest stays withdrawable.
  */
-export async function ownerProviderSet(
+export async function ownerProviderSet<P extends NamedProvider>(
   db: Database | Tx,
   owner: MoneyOwner,
-  set: PayoutProviderSet,
-): Promise<{ providers: PayoutReader[]; heldElsewhere: boolean }> {
+  set: PayoutProviderSet<P>,
+): Promise<{ providers: P[]; heldElsewhere: boolean }> {
   const { providers, heldElsewhere } = await ownerProviderReach(db, owner, set);
   return { providers, heldElsewhere };
 }
@@ -108,12 +113,12 @@ export async function ownerProviderSet(
  * `ownerProviderSet`, and whether any configured provider holds anything of the owner's at all (an
  * account reference there or a successful tip through it), the active one included.
  */
-export async function ownerProviderReach(
+export async function ownerProviderReach<P extends NamedProvider>(
   db: Database | Tx,
   owner: MoneyOwner,
-  set: PayoutProviderSet,
+  set: PayoutProviderSet<P>,
 ): Promise<{
-  providers: PayoutReader[];
+  providers: P[];
   heldElsewhere: boolean;
   anyConfigured: boolean;
 }> {
@@ -131,4 +136,29 @@ export async function ownerProviderReach(
     ),
     anyConfigured: order.some((provider) => holdsAt(footprint, provider)),
   };
+}
+
+/**
+ * The account a bank is registered on at a provider that isn't the active one (spec §6): the
+ * owner's account reference there, only once it pays out by hand. A bank added to an account that
+ * pays itself out could be paid with no record at TipMe, so such an account gets none (and its
+ * part is never paid either, P4). Null for a provider with no Bachs environment or no account.
+ */
+export async function bankAccountAt(
+  db: Pick<Database, 'execute'>,
+  owner: MoneyOwner,
+  provider: NamedProvider,
+): Promise<string | null> {
+  const environment = bachsEnvironment(provider.name);
+  if (!environment) return null;
+  const accountOwner =
+    'businessId' in owner
+      ? sql`business_id = ${owner.businessId}`
+      : sql`profile_id = ${owner.profileId}`;
+  const result = await db.execute<{ reference: string }>(sql`
+    SELECT provider_account_reference AS reference FROM payment_accounts
+     WHERE ${accountOwner} AND provider = ${recordedProviderName(provider.name)}
+       AND environment = ${environment} AND provider_account_reference IS NOT NULL
+       AND manual_payouts_at IS NOT NULL`);
+  return result.rows[0]?.reference ?? null;
 }
