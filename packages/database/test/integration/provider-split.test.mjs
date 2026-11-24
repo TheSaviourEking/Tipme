@@ -747,6 +747,10 @@ test('daily split check', async (t) => {
           `UPDATE disputes SET created_at = $1, updated_at = $1, last_event_at = $1 WHERE provider = 'mock_alt'`,
           [t0],
         ),
+        q(
+          `UPDATE provider_events SET received_at = $1 WHERE provider = 'mock_alt'`,
+          [t0],
+        ),
       ]);
     const at = (days, ms = 0) => new Date(t0.getTime() + days * DAY + ms);
     const only = async (days) => {
@@ -875,4 +879,91 @@ test('daily split check', async (t) => {
     row = await only(30);
     assert.equal(row.canRetire, true);
   });
+  await t.test(
+    'a stale or missing check, or a late provider event, blocks retire',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const old = reader('mock_alt', { balance: 0n });
+      const providers = set(reader('mock'), old);
+      const t0 = new Date('2026-10-01T09:00:00Z');
+      const at = (days, ms = 0) => new Date(t0.getTime() + days * DAY + ms);
+      const settle = () =>
+        Promise.all([
+          q(
+            `UPDATE payment_attempts SET created_at = $1, collected_at = NULL WHERE provider = 'mock_alt'`,
+            [t0],
+          ),
+          q(`UPDATE payouts SET created_at = $1 WHERE provider = 'mock_alt'`, [
+            t0,
+          ]),
+          q(
+            `UPDATE provider_events SET received_at = $1 WHERE provider = 'mock_alt'`,
+            [t0],
+          ),
+        ]);
+      const only = async (days) =>
+        (await retireCheck(db, providers, at(days)))[0];
+      await settle();
+
+      // Missing: a split owner never checked may still hold money there.
+      let row = await only(31);
+      assert.equal(row.ownersWithMoney, 1);
+      assert.equal(row.canRetire, false);
+
+      // Stale: a check that said 0 more than 48 h ago says nothing about now.
+      await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+        now: at(1),
+      });
+      row = await only(31);
+      assert.equal(row.ownersWithMoney, 1);
+      assert.equal(row.canRetire, false);
+      // A check within 48 h that says 0 lets it go.
+      await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+        now: at(29, HOUR),
+      });
+      row = await only(31);
+      assert.equal(row.ownersWithMoney, 0);
+      assert.equal(row.canRetire, true);
+
+      // A payout there that failed after that check (its event came later): money moved back, so the
+      // provider isn't quiet, though the payout itself has no later time of its own.
+      old.balance = 300000n;
+      await requestWithdrawal(db, {
+        profileId: TOBI.id,
+        amountMinor: 200000n,
+        idempotencyKey: randomUUID(),
+        providers,
+      });
+      const [payout] = await q(
+        `SELECT id FROM payouts WHERE provider = 'mock_alt' AND status = 'REQUESTED'`,
+      );
+      await settle();
+      await q(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [
+        payout.id,
+      ]);
+      await q(
+        `INSERT INTO provider_events (id, provider, provider_event_id, event_type, signature_verified,
+                                      payload_hash, payload, payout_id, received_at)
+         VALUES (gen_random_uuid(), 'mock_alt', $1, 'payout.failed', true, 'h', '{}'::jsonb, $2, $3)`,
+        [`evt_${randomUUID()}`, payout.id, at(30)],
+      );
+      row = await only(31);
+      assert.equal(row.ownersWithMoney, 0);
+      assert.equal(row.openPayouts, 0);
+      assert.equal(row.lastActivityAt.toISOString(), at(30).toISOString());
+      assert.equal(row.canRetire, false);
+      // A payment there whose money was seen taken later than it started counts from then.
+      await q(
+        `UPDATE payment_attempts SET collected_at = $1 WHERE provider = 'mock_alt'`,
+        [at(30, 2 * HOUR)],
+      );
+      row = await only(31);
+      assert.equal(
+        row.lastActivityAt.toISOString(),
+        at(30, 2 * HOUR).toISOString(),
+      );
+    },
+  );
 });

@@ -225,7 +225,8 @@ test('the retire check shows the withdraw-only provider', async () => {
   assert.equal(data.providers.length, 1);
   const [row] = data.providers;
   assert.equal(row.provider, 'mock_alt');
-  assert.equal(row.ownersWithMoney, 0);
+  // Tobi is split there and never checked: unknown is never "nothing".
+  assert.equal(row.ownersWithMoney, 1);
   assert.equal(row.openPayouts, 0);
   assert.equal(row.openRefunds, 0);
   assert.equal(row.openDisputes, 0);

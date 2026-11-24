@@ -175,6 +175,7 @@ function SplitRow({ item }: { item: OpsSplitAccount }) {
       <td className="ops-table__action">
         <Button
           variant="secondary"
+          className="ops-split-read"
           disabled={reading === 'busy'}
           onClick={() => void read()}
         >

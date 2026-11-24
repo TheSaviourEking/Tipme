@@ -3417,6 +3417,11 @@ a.ops-people__card:hover {
   overflow-wrap: break-word;
 }
 
+/* "Read balances now" stays on one line; the other columns give way. */
+.ops-split-read {
+  white-space: nowrap;
+}
+
 /* The retire check on Providers: one line of counts per withdraw-only provider. */
 .ops-retire-facts {
   display: flex;

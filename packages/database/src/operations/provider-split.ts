@@ -39,6 +39,8 @@ export const SPLIT_SHORT_THRESHOLD_MINOR = 10_000n;
 export const SPLIT_CHECK_BATCH = 20;
 /** An owner is due again once their latest check is this old. */
 const CHECK_EVERY_MS = 24 * 3_600_000;
+/** A check older than this says nothing about now, for the retire check. */
+const CHECK_STALE_MS = 48 * 3_600_000;
 /** Check rows are kept this long (P12). */
 const KEEP_MS = 90 * 24 * 3_600_000;
 /** The most owner ids an issue note lists; the rest are counted. */
@@ -311,10 +313,13 @@ export interface RetireState {
 /**
  * The retire check (spec §4, §7) for each withdraw-only provider, by recorded name:
  * - owners with money there: each owner's latest daily check (P12) that read more than 0 there, or
- *   could not read it (unknown is never "nothing");
+ *   could not read it (unknown is never "nothing"); and every split owner there whose latest check
+ *   is missing or more than 48 h old, since an old 0 says nothing about now;
  * - open payouts (REQUESTED, PROCESSING), refunds (not PAID or FAILED) and disputes (not yet
  *   settled by TipMe) recorded at that provider;
- * - the last activity: the latest payment, payout, refund, dispute or Pro from the balance there.
+ * - the last activity: the latest payment (started or seen taken), payout, refund, dispute, Pro
+ *   from the balance, or event the provider sent. Events catch late outcomes the rows keep no time
+ *   for, such as a payout that fails or is reversed and puts money back there.
  * It can retire only when all four are zero and nothing has moved there for 30 days (none ever
  * counts as long ago). Reads TipMe's own records only.
  */
@@ -323,18 +328,45 @@ export async function retireCheck(
   set: PayoutProviderSet<NamedProvider>,
   now: Date,
 ): Promise<RetireState[]> {
-  const names = [
-    ...new Set(
-      withdrawOnlyOf(set).map((provider) =>
-        recordedProviderName(provider.name),
-      ),
-    ),
-  ];
+  // One per recorded name; its own split owners are those with money or an account there.
+  const byRecorded = new Map<string, NamedProvider>();
+  for (const provider of withdrawOnlyOf(set))
+    if (!byRecorded.has(recordedProviderName(provider.name)))
+      byRecorded.set(recordedProviderName(provider.name), provider);
+  const names = [...byRecorded.keys()];
   if (!names.length) return [];
+  const stale = new Date(now.getTime() - CHECK_STALE_MS).toISOString();
+  const ownersWithMoney = new Map<string, number>();
+  for (const [name, provider] of byRecorded) {
+    const owners = splitOwnersSql({
+      active: set.active,
+      withdrawOnly: [provider],
+    })!;
+    const counted = await guarded(() =>
+      db.execute<{ owners: string }>(sql`
+        WITH owners AS (${owners}),
+        latest AS (
+          SELECT DISTINCT ON (COALESCE(profile_id, business_id))
+                 COALESCE(profile_id, business_id) AS owner_id, checked_at, providers
+            FROM provider_split_checks
+           ORDER BY COALESCE(profile_id, business_id), checked_at DESC
+        )
+        SELECT count(*) AS owners FROM (
+          SELECT COALESCE(o.profile_id, o.business_id) AS owner_id FROM owners o
+            LEFT JOIN latest l ON l.owner_id = COALESCE(o.profile_id, o.business_id)
+           WHERE l.checked_at IS NULL OR l.checked_at < ${stale}::timestamptz
+          UNION
+          SELECT l.owner_id FROM latest l
+           CROSS JOIN LATERAL jsonb_array_elements(l.providers) e
+           WHERE e->>'provider' = ${name}
+             AND (e->>'availableMinor' IS NULL OR (e->>'availableMinor')::numeric > 0)
+        ) holding`),
+    );
+    ownersWithMoney.set(name, Number(counted.rows[0]?.owners ?? 0));
+  }
   const result = await guarded(() =>
     db.execute<{
       provider: string;
-      owners: string;
       payouts: string;
       refunds: string;
       disputes: string;
@@ -343,20 +375,8 @@ export async function retireCheck(
       WITH names(provider) AS (VALUES ${sql.join(
         names.map((name) => sql`(${name})`),
         sql`, `,
-      )}),
-      latest AS (
-        SELECT DISTINCT ON (COALESCE(profile_id, business_id)) providers
-          FROM provider_split_checks
-         ORDER BY COALESCE(profile_id, business_id), checked_at DESC
-      ),
-      held AS (
-        SELECT e->>'provider' AS provider, count(*) AS owners
-          FROM latest CROSS JOIN LATERAL jsonb_array_elements(latest.providers) e
-         WHERE e->>'availableMinor' IS NULL OR (e->>'availableMinor')::numeric > 0
-         GROUP BY 1
-      )
+      )})
       SELECT n.provider,
-             COALESCE((SELECT owners FROM held WHERE held.provider = n.provider), 0) AS owners,
              (SELECT count(*) FROM payouts
                WHERE provider = n.provider AND status IN ('REQUESTED', 'PROCESSING')) AS payouts,
              (SELECT count(*) FROM tip_refunds
@@ -365,14 +385,16 @@ export async function retireCheck(
                WHERE provider = n.provider
                  AND (status IN ('open', 'responded') OR settled_at IS NULL)) AS disputes,
              GREATEST(
-               (SELECT max(created_at) FROM payment_attempts WHERE provider = n.provider),
+               (SELECT max(GREATEST(created_at, collected_at)) FROM payment_attempts
+                 WHERE provider = n.provider),
                (SELECT max(GREATEST(created_at, COALESCE(paid_at, created_at))) FROM payouts
                  WHERE provider = n.provider),
                (SELECT max(GREATEST(created_at, updated_at)) FROM tip_refunds
                  WHERE provider = n.provider),
                (SELECT max(GREATEST(created_at, updated_at, last_event_at)) FROM disputes
                  WHERE provider = n.provider),
-               (SELECT max(created_at) FROM pro_purchases WHERE provider = n.provider)
+               (SELECT max(created_at) FROM pro_purchases WHERE provider = n.provider),
+               (SELECT max(received_at) FROM provider_events WHERE provider = n.provider)
              ) AS last_at
         FROM names n`),
   );
@@ -382,7 +404,7 @@ export async function retireCheck(
     const lastActivityAt = row.last_at === null ? null : new Date(row.last_at);
     const state = {
       provider,
-      ownersWithMoney: Number(row.owners),
+      ownersWithMoney: ownersWithMoney.get(provider) ?? 0,
       openPayouts: Number(row.payouts),
       openRefunds: Number(row.refunds),
       openDisputes: Number(row.disputes),
