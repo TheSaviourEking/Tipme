@@ -211,6 +211,8 @@ test('a provider that can’t be read leaves the rest withdrawable', async ({
   await expectAccessible(page);
   await shoot(page, 'c-partial-notice', async () => {
     await expect(notice).toHaveCount(1);
+    await page.getByRole('button', { name: 'Everything' }).click();
+    await expect(page.getByLabel('Amount (NGN)')).toHaveValue('₦1,900');
   });
 });
 
