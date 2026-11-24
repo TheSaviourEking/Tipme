@@ -1,9 +1,10 @@
 import { ImageResponse } from 'next/og';
 import { connection } from 'next/server';
-import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/components/brand';
 import { LAGOS_LAUNCH_TARGET, launchShortLabel } from '@/lib/countdown';
 import { launchTargetFrom } from '@/lib/display-settings';
 import { getDisplaySettings } from '@/lib/display-settings-api';
+import { shareArt } from '@/lib/share-card';
+import { WORDMARK } from '@/lib/wordmark';
 
 export const alt = 'TipMe opens at midnight in Lagos';
 export const size = { width: 1200, height: 630 };
@@ -15,6 +16,7 @@ export default async function ComingSoonOpenGraphImage() {
   const target =
     launchTargetFrom(await getDisplaySettings(), process.env) ??
     Date.parse(LAGOS_LAUNCH_TARGET);
+  const { wordmark } = await shareArt();
   return new ImageResponse(
     <div
       style={{
@@ -35,11 +37,12 @@ export default async function ComingSoonOpenGraphImage() {
           justifyContent: 'space-between',
         }}
       >
-        <svg width={158} height={60} viewBox={WORDMARK_VIEWBOX}>
-          {WORDMARK_PATHS.map((path) => (
-            <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
-          ))}
-        </svg>
+        <img
+          src={wordmark}
+          width={218}
+          height={Math.round((218 * WORDMARK.height) / WORDMARK.width)}
+          alt="TipMe"
+        />
         <div
           style={{
             display: 'flex',

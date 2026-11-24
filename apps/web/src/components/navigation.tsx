@@ -6,34 +6,13 @@ import { Button, Container, Surface } from '@tipme/ui';
 import { Brand } from './brand';
 import { GuestActions, NavAccount } from './nav-account';
 import { NavLink, onProfilePage } from './nav-link';
+import { WhoWords } from './who-words';
+import { WHO } from '@/lib/who-choices';
 
-/**
- * Who the product is for. Individuals is open; the other two say so and are not links until
- * there is somewhere to go (Infrastructure has no page). Wording: owner, 3 Nov 2026.
- */
-const WHO = [
-  {
-    title: 'Individuals',
-    href: '/for-creators',
-    text: 'Creators, streamers, video editors, barbers, drivers: anyone can receive payments.',
-  },
-  {
-    // The words follow the business flag when the layout passes them (`businesses`, PR B1).
-    title: 'Businesses (coming soon)',
-    href: '/for-businesses',
-    text: 'Tell us you’re interested, and we’ll let you know.',
-    flagged: true,
-  },
-  {
-    title: 'Infrastructure (coming soon)',
-    href: undefined,
-    text: 'Consume the Tipme APIs.',
-  },
-] as const;
-
-function MenuIcon({ path }: { path: string }) {
+function MenuIcon({ path, className }: { path: string; className?: string }) {
   return (
     <svg
+      className={className}
       width="24"
       height="24"
       viewBox="0 0 24 24"
@@ -233,19 +212,25 @@ export function Navigation({
                         data-who-item
                         onClick={close}
                       >
-                        {'flagged' in choice && businesses ? (
-                          businesses
-                        ) : (
-                          <>
-                            <strong>{choice.title}</strong>
-                            <span>{choice.text}</span>
-                          </>
-                        )}
+                        <MenuIcon path={choice.icon} className="who__icon" />
+                        <div className="who__words">
+                          {'flagged' in choice && businesses ? (
+                            businesses
+                          ) : (
+                            <WhoWords title={choice.title} text={choice.text} />
+                          )}
+                        </div>
                       </NavLink>
                     ) : (
                       <div className="who__item" data-who-item>
-                        <strong>{choice.title}</strong>
-                        <span>{choice.text}</span>
+                        <MenuIcon path={choice.icon} className="who__icon" />
+                        <div className="who__words">
+                          <WhoWords
+                            title={choice.title}
+                            text={choice.text}
+                            comingSoon={'comingSoon' in choice}
+                          />
+                        </div>
                       </div>
                     )}
                   </li>

@@ -97,9 +97,11 @@ const state = (page: Page) =>
       keysBottom: Math.max(
         ...keys.map((k) => k.getBoundingClientRect().bottom),
       ),
+      // The logo's purple part as drawn (its accent: globals.css .wordmark::after).
       wordmark: getComputedStyle(
-        header.querySelector('.nav-shell > .brand path[fill="#7A32F9"]')!,
-      ).fill,
+        header.querySelector('.nav-shell > .brand .wordmark')!,
+        '::after',
+      ).backgroundColor,
       // The frosted glass past the hero: the header's own layer (::after).
       glass: (() => {
         const g = getComputedStyle(header, '::after');

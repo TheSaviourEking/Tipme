@@ -52,9 +52,11 @@ test('fix (final review): whitespace or control characters cannot turn the retur
 test('the preview password does not hold the manifest or the icons', () => {
   for (const path of [
     '/manifest.webmanifest',
+    '/icons/favicon-32.png',
+    '/icons/favicon-48.png',
+    '/icons/apple-touch-icon.png',
     '/icons/192.png',
     '/icons/512-maskable.png',
-    '/apple-icon',
   ])
     assert.equal(decide(path, undefined), 'exempt', path);
   for (const path of [
@@ -63,7 +65,10 @@ test('the preview password does not hold the manifest or the icons', () => {
     '/icons/%2e%2e/x',
     '/manifest.webmanifest/x',
     '/icons/192.png/x',
-    '/apple-icon/x',
+    '/icons/favicon-64.png',
+    // The old drawn icons are gone.
+    '/icon.svg',
+    '/apple-icon',
   ])
     assert.equal(decide(path, undefined), 'login', path);
 });
@@ -72,17 +77,21 @@ test('the preview password does not hold the manifest or the icons', () => {
 test('the preview password does not hold the email logos', () => {
   for (const scheme of ['light', 'dark'])
     for (const scale of ['2x', '3x'])
-      assert.equal(
-        decide(`/email/tipme-logo-${scheme}-${scale}.png`, undefined),
-        'exempt',
-        `${scheme} ${scale}`,
-      );
+      // The old names stay open for emails already sent; the new logo has its own.
+      for (const name of ['tipme-logo', 'tipme-logo-2026'])
+        assert.equal(
+          decide(`/email/${name}-${scheme}-${scale}.png`, undefined),
+          'exempt',
+          `${name} ${scheme} ${scale}`,
+        );
   for (const path of [
     '/email',
     '/email/',
     '/email/other.png',
     '/email/tipme-logo-light.svg',
     '/email/tipme-logo-light-2x.png/x',
+    '/email/tipme-logo-2027-light-2x.png',
+    '/email/tipme-logo-2026-light-1x.png',
     '/email/../dashboard',
     '/email/%2e%2e/x',
     '/email//tipme-logo-light-2x.png',

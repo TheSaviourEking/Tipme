@@ -896,9 +896,8 @@
       .site-header.site-header
       .nav-shell
       > .brand
-      .brand__mark
-      path[fill='#7A32F9'] {
-      fill: #7a32f9;
+      .brand__mark {
+      --logo-accent: #7a32f9;
     }
 
     html:has(

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { connection } from 'next/server';
-import { HEART_MARK, Wordmark } from '@/components/brand';
+import { BrandMark, Wordmark } from '@/components/brand';
 import { LAGOS_LAUNCH_TARGET, launchIso, launchLabel } from '@/lib/countdown';
 import { siteOrigin } from '@/lib/metadata';
 import { launchTargetFrom } from '@/lib/display-settings';
@@ -38,9 +38,7 @@ export default async function ComingSoonPage() {
           <div className="coming-soon__card" aria-hidden="true">
             <div className="coming-soon__card-cover" />
             <div className="coming-soon__card-avatar">
-              <svg viewBox={HEART_MARK.viewBox} width="26" height="26">
-                <path d={HEART_MARK.d} transform={HEART_MARK.transform} />
-              </svg>
+              <BrandMark />
             </div>
             <p className="coming-soon__card-title">Your page</p>
             <p className="coming-soon__card-link">

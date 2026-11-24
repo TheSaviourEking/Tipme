@@ -148,7 +148,8 @@ test('a code in cells copies as one string', () => {
 
 // The one thing an email loads: the TipMe logo, as PNGs from the web origin (SVG is stripped by
 // Gmail and others). No stylesheets, fonts or any other image.
-const LOGO = (origin, scheme) => `${origin}/email/tipme-logo-${scheme}-2x.png`;
+const LOGO = (origin, scheme) =>
+  `${origin}/email/tipme-logo-2026-${scheme}-2x.png`;
 const loadsOnlyTheLogo = (html, origin, label) => {
   for (const banned of ['<link', '@import', 'url(', 'srcset'])
     assert.ok(!html.includes(banned), `${label} has no ${banned}`);
@@ -184,8 +185,8 @@ test('the header is the TipMe logo: light by default, dark swapped in by dark mo
   assert.ok(light && dark);
   for (const img of [light, dark]) {
     assert.match(img, /alt="TipMe"/);
-    assert.match(img, /width="120"/);
-    assert.match(img, /height="45"/);
+    assert.match(img, /width="160"/);
+    assert.match(img, /height="44"/);
     assert.match(img, /border="0"/);
     assert.match(img, /style="display:block;/);
   }

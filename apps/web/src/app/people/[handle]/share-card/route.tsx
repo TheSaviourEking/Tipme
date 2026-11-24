@@ -9,6 +9,7 @@ import {
   PersonCard,
   personCardInput,
   serifCharacters,
+  shareArt,
   type PersonCardInput,
 } from '@/lib/share-card';
 
@@ -27,8 +28,11 @@ const headers = {
 let general: Promise<ArrayBuffer> | undefined;
 /** The general card's bytes, drawn once per process. */
 function generalCard(): Promise<ArrayBuffer> {
-  general ??= ogFonts().then((fonts) =>
-    new ImageResponse(<GeneralCard />, { ...size, fonts }).arrayBuffer(),
+  general ??= Promise.all([ogFonts(), shareArt()]).then(([fonts, art]) =>
+    new ImageResponse(<GeneralCard art={art} />, {
+      ...size,
+      fonts,
+    }).arrayBuffer(),
   );
   general.catch(() => {
     general = undefined;
@@ -74,6 +78,7 @@ export async function GET(
       host={siteOrigin.host}
       serif={await serifCharacters()}
       photo={await photoOf(person, request)}
+      mark={(await shareArt()).mark}
     />,
     {
       ...size,
