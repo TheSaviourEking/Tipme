@@ -93,3 +93,21 @@ test('the old drawn logo and icons are gone', async () => {
       path,
     );
 });
+
+test('the Studio weight estimate counts the logo masks every page loads', async () => {
+  const { STUDIO_WEIGHT } = await import('@tipme/contracts');
+  // 460 KB was the measured page before the logo became files (15 Nov 2026).
+  const masks = (
+    await Promise.all(
+      ['ink', 'accent'].map((part) =>
+        file(`public/brand/tipme-wordmark-${part}.png`),
+      ),
+    )
+  ).reduce((sum, png) => sum + png.length, 0);
+  assert.ok(masks < 20_000, `the two masks stay light: ${masks} bytes`);
+  // The files plus about 400 bytes of response headers each.
+  assert.ok(
+    STUDIO_WEIGHT.base >= 460_000 + masks + 800,
+    `base ${STUDIO_WEIGHT.base} counts ${masks} bytes of logo`,
+  );
+});

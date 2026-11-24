@@ -117,9 +117,11 @@ export function icoOf(pngs) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  // Masks 240 px tall: the header draws the logo 40 px tall, so 6x at 1x and 2x at 3x.
-  await masks('tipme-wordmark-light.png', 'tipme-wordmark', 240);
-  await masks('tipme-mark.png', 'tipme-mark', 240);
+  // Masks 160 px tall: the header draws the logo 40 px tall, so 4x at 1x and still more than 3x
+  // screens need. Every page loads the wordmark's two (about 15 kB), counted in the Studio
+  // weight estimate (packages/contracts STUDIO_WEIGHT.base).
+  await masks('tipme-wordmark-light.png', 'tipme-wordmark', 160);
+  await masks('tipme-mark.png', 'tipme-mark', 160);
 
   mkdirSync(pub('icons'), { recursive: true });
   // The tab (32, 48) and Android (192) icons: rounded, as the old tab icon (28 of 120). The white
