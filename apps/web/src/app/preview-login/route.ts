@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { issuePreviewTicket, PREVIEW_TICKET_TTL_MS } from '@tipme/domain';
 import { PREVIEW_COOKIE, safeReturnPath } from '@/lib/preview-gate';
-import { WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
+import { readFile } from 'node:fs/promises';
+import { WORDMARK } from '@/lib/wordmark';
 
 const digest = (value: string) => createHash('sha256').update(value).digest();
 const escape = (value: string) =>
@@ -11,10 +12,24 @@ const escape = (value: string) =>
 let windowStart = Date.now();
 let attempts = 0;
 
-function page(next: string, error = '', status = 200): Response {
-  // Self-contained by design: the strict policy below allows inline styles only, so the logo
-  // is inline SVG and the text uses the system interface font.
-  const logo = `<svg class="logo" viewBox="${WORDMARK_VIEWBOX}" role="img" aria-label="TipMe">${WORDMARK_PATHS.map((path) => `<path d="${path.d}" fill="${path.fill}"/>`).join('')}</svg>`;
+let logoData: Promise<string> | undefined;
+/** The light wordmark at the email's 2x size (320 px wide, 7 kB), as a data URL, read once. */
+function logoSource(): Promise<string> {
+  logoData ??= readFile(
+    new URL('../../../public/email/tipme-logo-light-2x.png', import.meta.url),
+  ).then((data) => `data:image/png;base64,${data.toString('base64')}`);
+  logoData.catch(() => {
+    logoData = undefined;
+  });
+  return logoData;
+}
+
+async function page(next: string, error = '', status = 200): Promise<Response> {
+  // Self-contained by design: the strict policy below allows inline styles and this page's own
+  // data images only, so the logo is a data URL and the text uses the system interface font.
+  const height = 36;
+  const width = Math.round((height * WORDMARK.width) / WORDMARK.height);
+  const logo = `<img class="logo" src="${await logoSource()}" width="${width}" height="${height}" alt="TipMe">`;
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>TipMe staging</title><style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;background:#f3f2ee;color:#000;font:16px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased}
@@ -35,12 +50,12 @@ input:focus,button:focus{outline:3px solid #7a32f9;outline-offset:3px}
       'cache-control': 'no-store',
       'x-robots-tag': 'noindex, nofollow, noarchive',
       'content-security-policy':
-        "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
     },
   });
 }
 
-export function GET(request: Request): Response {
+export async function GET(request: Request): Promise<Response> {
   if (!process.env.PREVIEW_PASSWORD)
     return new Response('Not found', { status: 404 });
   return page(safeReturnPath(new URL(request.url).searchParams.get('next')));

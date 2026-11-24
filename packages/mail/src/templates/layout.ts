@@ -96,11 +96,11 @@ export interface Letter {
   slab?: { amount: string; line: string };
 }
 
-// The logo (apps/web/public/email, drawn by scripts/design/email-logo.mjs): shown 120 px wide
-// (778 x 293 artwork), loaded at 2x. Light ("tip" in black) by default; dark ("tip" in white)
-// only where the client tells us it is in dark mode.
-const LOGO_W = 120;
-const LOGO_H = 45;
+// The logo (apps/web/public/email, drawn from the owner's files by scripts/design/brand-assets.mjs):
+// shown 160 x 44 (1383 x 380 artwork, ™ included), loaded at 2x. Light ("tip" and the left figure
+// in black) by default; dark (those in white) only where the client tells us it is in dark mode.
+const LOGO_W = 160;
+const LOGO_H = 44;
 // When dark: the light logo goes, the dark one's wrapper opens, the chip turns night. Outlook.com
 // and the Outlook apps answer no media query; they mark what they recolour with data-ogsc (text)
 // and data-ogsb (background), so the same rules are repeated under those. They sit in a block of

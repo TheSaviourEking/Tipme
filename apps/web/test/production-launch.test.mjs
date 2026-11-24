@@ -46,7 +46,6 @@ test('future launch rewrites user routes but leaves operational assets reachable
     '/robots.txt',
     '/sitemap.xml',
     '/favicon.ico',
-    '/icon.svg',
     '/opengraph-image',
   ])
     assert.equal(decide(path), 'exempt', path);
@@ -96,10 +95,11 @@ test('legacy profile redirects run after launch and retain only the QR source ma
 
 const ICON_PATHS = [
   '/manifest.webmanifest',
+  '/icons/favicon-32.png',
+  '/icons/favicon-48.png',
+  '/icons/apple-touch-icon.png',
   '/icons/192.png',
   '/icons/512-maskable.png',
-  // Next links it as /apple-icon?<hash>; the gate sees the path only.
-  '/apple-icon',
 ];
 const ICON_LOOKALIKES = [
   '/icons/64.png',
@@ -108,13 +108,32 @@ const ICON_LOOKALIKES = [
   '/manifest.webmanifest/x',
   '/icons',
   '/icons/192.png/x',
-  '/apple-icon/x',
+  '/icons/favicon-64.png',
+  // The old drawn icons are gone.
+  '/icon.svg',
+  '/apple-icon',
 ];
 
 test('before launch the manifest and the home-screen icons are exempt', () => {
   const decide = (path) => launchDecision({ path, target, now: target - 1 });
   for (const path of ICON_PATHS) assert.equal(decide(path), 'exempt', path);
   for (const path of ICON_LOOKALIKES)
+    assert.equal(decide(path), 'rewrite', path);
+});
+
+test('before launch the logo the holding page draws is exempt (its masks), nothing else in brand/', () => {
+  const decide = (path) => launchDecision({ path, target, now: target - 1 });
+  for (const art of ['wordmark', 'mark'])
+    for (const part of ['ink', 'accent']) {
+      const path = `/brand/tipme-${art}-${part}.png`;
+      assert.equal(decide(path), 'exempt', path);
+    }
+  for (const path of [
+    '/brand',
+    '/brand/tipme-wordmark-light.png',
+    '/brand/tipme-wordmark-ink.png/x',
+    '/brand/%2e%2e/x',
+  ])
     assert.equal(decide(path), 'rewrite', path);
 });
 

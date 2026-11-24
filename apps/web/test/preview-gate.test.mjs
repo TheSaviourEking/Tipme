@@ -52,9 +52,11 @@ test('fix (final review): whitespace or control characters cannot turn the retur
 test('the preview password does not hold the manifest or the icons', () => {
   for (const path of [
     '/manifest.webmanifest',
+    '/icons/favicon-32.png',
+    '/icons/favicon-48.png',
+    '/icons/apple-touch-icon.png',
     '/icons/192.png',
     '/icons/512-maskable.png',
-    '/apple-icon',
   ])
     assert.equal(decide(path, undefined), 'exempt', path);
   for (const path of [
@@ -63,7 +65,10 @@ test('the preview password does not hold the manifest or the icons', () => {
     '/icons/%2e%2e/x',
     '/manifest.webmanifest/x',
     '/icons/192.png/x',
-    '/apple-icon/x',
+    '/icons/favicon-64.png',
+    // The old drawn icons are gone.
+    '/icon.svg',
+    '/apple-icon',
   ])
     assert.equal(decide(path, undefined), 'login', path);
 });

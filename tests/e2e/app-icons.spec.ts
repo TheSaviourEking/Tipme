@@ -49,9 +49,11 @@ test('each icon is a PNG of its stated size', async ({ page, request }) => {
   const apple = await page
     .locator('link[rel="apple-touch-icon"]')
     .getAttribute('href');
-  expect(apple).toMatch(/^\/apple-icon/);
+  expect(apple).toBe('/icons/apple-touch-icon.png');
   for (const [src, side] of [
     [apple!, 180],
+    ['/icons/favicon-32.png', 32],
+    ['/icons/favicon-48.png', 48],
     ['/icons/192.png', 192],
     ['/icons/512-maskable.png', 512],
   ] as const) {
@@ -65,11 +67,26 @@ test('each icon is a PNG of its stated size', async ({ page, request }) => {
   }
 });
 
-test('the tab icon is still the flat icon.svg', async ({ page }) => {
+test('the tab icon is the heart on a white tile, at 32 and 48 px', async ({
+  page,
+  request,
+}) => {
   await page.goto('/');
-  await expect(
-    page.locator('link[rel="icon"][type="image/svg+xml"]'),
-  ).toHaveAttribute('href', /^\/icon\.svg/);
+  const icons = await page
+    .locator('link[rel="icon"]')
+    .evaluateAll((links) =>
+      links.map((l) => [
+        l.getAttribute('href'),
+        l.getAttribute('sizes'),
+        l.getAttribute('type'),
+      ]),
+    );
+  expect(icons).toEqual([
+    ['/icons/favicon-32.png', '32x32', 'image/png'],
+    ['/icons/favicon-48.png', '48x48', 'image/png'],
+  ]);
+  // The old drawn icon is gone.
+  expect((await request.get('/icon.svg')).status()).toBe(404);
 });
 
 test('an unknown icon file is 404', async ({ request }) => {

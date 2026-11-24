@@ -1,27 +1,42 @@
 import Link from 'next/link';
-import { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
 
-export { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX };
-
-export function Wordmark({ className }: { className?: string }) {
+/**
+ * The TipMe logo (the owner's files, public/brand; lib/wordmark.ts), drawn by CSS from two masks so
+ * each page can colour its two parts: `--logo-ink` (black by default, white on dark grounds) and
+ * `--logo-accent` (TipMe purple). `label` names it for screen readers; pass null where something
+ * around it already does (the home link).
+ */
+export function Wordmark({
+  className,
+  label = 'TipMe',
+}: {
+  className?: string;
+  label?: string | null;
+}) {
   return (
-    <svg
-      className={className}
-      viewBox={WORDMARK_VIEWBOX}
+    <span
+      className={className ? `wordmark ${className}` : 'wordmark'}
+      {...(label
+        ? { role: 'img', 'aria-label': label }
+        : { 'aria-hidden': true })}
+    />
+  );
+}
+
+/** The heart of two figures alone, drawn as the wordmark is (`.brandmark`). Decoration. */
+export function BrandMark({ className }: { className?: string }) {
+  return (
+    <span
+      className={className ? `brandmark ${className}` : 'brandmark'}
       aria-hidden="true"
-      focusable="false"
-    >
-      {WORDMARK_PATHS.map((path) => (
-        <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
-      ))}
-    </svg>
+    />
   );
 }
 
 export function Brand() {
   return (
     <Link className="brand" href="/" aria-label="TipMe home">
-      <Wordmark className="brand__mark" />
+      <Wordmark className="brand__mark" label={null} />
     </Link>
   );
 }

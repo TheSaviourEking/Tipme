@@ -2101,9 +2101,9 @@ test('the header over a cover is white on a scrim of at least 58% black wherever
   assert.match(rule(`${over} .site-header`), /--studio-head-over: #fff;/);
   assert.match(
     rule(
-      'html:has(.studio[data-style][data-header]) .site-header .nav-shell > .brand .brand__mark path',
+      'html:has(.studio[data-style][data-header]) .site-header .nav-shell > .brand .brand__mark',
     ),
-    /fill: currentColor;/,
+    /--logo-ink: currentColor;\s*--logo-accent: currentColor;/,
   );
   // On a tip page the header is the logo alone (owner, 19 Nov 2026; globals.css): nothing here
   // styles the menu, its keys or "Who it's for", which never show over the cover.

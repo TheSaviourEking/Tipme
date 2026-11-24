@@ -241,9 +241,13 @@ test('classic takes an accent, dark or auto, and a cover type', async ({
     'rgb(11, 122, 75)',
   );
   expect(await styleOf(selectedKey, 'color')).toBe('rgb(255, 255, 255)');
-  expect(await styleOf('.brand__mark path[fill="#7A32F9"]', 'fill')).toBe(
-    'rgb(11, 122, 75)',
-  );
+  // The logo's purple (its accent, globals.css .wordmark::after) takes the accent.
+  expect(
+    await page
+      .locator('.brand__mark')
+      .first()
+      .evaluate((el) => getComputedStyle(el, '::after').backgroundColor),
+  ).toBe('rgb(11, 122, 75)');
   // Focus is the accent; the Tip key stays black ink.
   expect(
     await page.evaluate(() =>

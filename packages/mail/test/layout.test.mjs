@@ -184,8 +184,8 @@ test('the header is the TipMe logo: light by default, dark swapped in by dark mo
   assert.ok(light && dark);
   for (const img of [light, dark]) {
     assert.match(img, /alt="TipMe"/);
-    assert.match(img, /width="120"/);
-    assert.match(img, /height="45"/);
+    assert.match(img, /width="160"/);
+    assert.match(img, /height="44"/);
     assert.match(img, /border="0"/);
     assert.match(img, /style="display:block;/);
   }

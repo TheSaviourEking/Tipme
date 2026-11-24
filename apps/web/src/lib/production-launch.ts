@@ -27,12 +27,13 @@ export function launchDecision({
     path === '/robots.txt' ||
     path === '/sitemap.xml' ||
     path === '/favicon.ico' ||
-    path === '/icon.svg' ||
-    // The home-screen icons and their manifest (exact paths only).
-    path === '/apple-icon' ||
+    // The tab, home-screen and Apple icons and their manifest (exact paths only).
     path === '/manifest.webmanifest' ||
-    path === '/icons/192.png' ||
-    path === '/icons/512-maskable.png' ||
+    /^\/icons\/(favicon-(32|48)|apple-touch-icon|192|512-maskable)\.png$/.test(
+      path,
+    ) ||
+    // The masks the holding page's logo is drawn from (globals.css .wordmark, .brandmark).
+    /^\/brand\/tipme-(wordmark|mark)-(ink|accent)\.png$/.test(path) ||
     path === '/opengraph-image' ||
     // The logo every email loads (packages/mail layout.ts), exact names only.
     /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/.test(path) ||

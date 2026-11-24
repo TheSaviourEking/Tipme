@@ -105,12 +105,22 @@ async function expectOnePurple(page: Page) {
   await page.evaluate(() => scrollTo({ top: 0, behavior: 'instant' }));
 }
 
+/** Each logo's two colours (globals.css .wordmark): its ink (::before) and its accent (::after). */
+const logoColours = (marks: Element[]) =>
+  marks.flatMap((m) =>
+    ['::before', '::after'].map(
+      (part) => getComputedStyle(m, part).backgroundColor,
+    ),
+  );
+
 async function expectWhiteHeaderAndFooter(page: Page, wide: boolean) {
   const header = page.locator('.site-header');
   expect((await background(page, '.site-header')).color).toBe(CLEAR);
+  // The logo all white: its ink (the dark file's white) and its purple, which would vanish here.
   const logoFills = await header
-    .locator('.nav-shell > .brand .brand__mark path')
-    .evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
+    .locator('.nav-shell > .brand .brand__mark')
+    .evaluateAll(logoColours);
+  expect(logoFills).toHaveLength(2);
   expect(new Set(logoFills)).toEqual(new Set([WHITE]));
   if (wide) {
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
@@ -148,8 +158,9 @@ async function expectWhiteHeaderAndFooter(page: Page, wide: boolean) {
     footerColours.filter((entry) => !entry.endsWith(`: ${WHITE}`)),
   ).toEqual([]);
   const footerLogo = await footer
-    .locator('.footer-brand .brand__mark path')
-    .evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
+    .locator('.footer-brand .brand__mark')
+    .evaluateAll(logoColours);
+  expect(footerLogo).toHaveLength(2);
   expect(new Set(footerLogo)).toEqual(new Set([WHITE]));
   const card = await background(page, '.footer-card');
   // Glass: a translucent white fill, never the old solid paper.
@@ -401,9 +412,9 @@ test.describe('the receipt, every other state', () => {
     );
     // The menu's own logo keeps its colours.
     const fills = await menu
-      .locator('.site-nav__bar .brand__mark path')
-      .evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
-    expect(fills).toContain(PURPLE);
+      .locator('.site-nav__bar .brand__mark')
+      .evaluateAll(logoColours);
+    expect(fills).toEqual(['rgb(0, 0, 0)', PURPLE]);
   });
 });
 
@@ -430,10 +441,10 @@ test.describe('other pages keep their own header and footer', () => {
     expect((await background(page, 'html')).color).toBe(CANVAS);
     expect((await background(page, '.site-header')).color).toBe(CANVAS);
     const fills = await page
-      .locator('.nav-shell > .brand .brand__mark path')
-      .evaluateAll((paths) => paths.map((p) => getComputedStyle(p).fill));
-    expect(fills).toContain('rgb(0, 0, 0)');
-    expect(fills).not.toContain(WHITE);
+      .locator('.nav-shell > .brand .brand__mark')
+      .evaluateAll(logoColours);
+    // The light logo: black ink, purple accent.
+    expect(fills).toEqual(['rgb(0, 0, 0)', PURPLE]);
   }
 
   test('Home', async ({ page }) => {

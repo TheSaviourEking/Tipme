@@ -8,9 +8,9 @@ export const PREVIEW_COOKIE = '__Secure-tipme_preview';
 const OPEN = [
   /^\/preview-login$/,
   /^\/api\/revalidate$/,
-  /^\/(favicon\.ico|robots\.txt|icon\.svg)$/,
-  // The home-screen icons and their manifest, exact names only.
-  /^\/(apple-icon|manifest\.webmanifest|icons\/192\.png|icons\/512-maskable\.png)$/,
+  /^\/(favicon\.ico|robots\.txt)$/,
+  // The tab, home-screen and Apple icons and their manifest, exact names only.
+  /^\/(manifest\.webmanifest|icons\/(favicon-(32|48)|apple-touch-icon|192|512-maskable)\.png)$/,
   // The logo every email loads (packages/mail layout.ts); mail clients have no ticket.
   /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/,
 ];

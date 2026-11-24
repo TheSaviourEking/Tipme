@@ -1731,8 +1731,6 @@
 
   position: absolute;
   width: 1.5rem;
-  height: 1.5rem;
-  color: var(--brand-primary);
   animation: claim-heart 600ms var(--ease-physical)
     calc(var(--claim-words) + var(--i) * 40ms) both;
 }
@@ -1881,10 +1879,6 @@
   .claim-moment__stamp,
   .claim-moment__tip {
     border: 2px solid CanvasText;
-  }
-
-  .claim-moment__heart {
-    color: CanvasText;
   }
 }
 
@@ -4246,7 +4240,8 @@ body > .coming-soon-page {
   justify-content: center;
   border: 4px solid var(--surface-raised);
   border-radius: 50%;
-  background: var(--brand-primary);
+  background: var(--surface-base);
+  box-shadow: inset 0 0 0 1px var(--edge-hairline);
 }
 
 .coming-soon__card-title {

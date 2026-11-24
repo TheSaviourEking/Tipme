@@ -31,7 +31,11 @@ const colours = (page: Page) =>
       html: css('html', 'background-color'),
       footer: css('.site-footer', 'background-color'),
       footerCard: css('.footer-card', 'background-color'),
-      wordmark: css('.site-header .brand__mark path', 'fill'),
+      // The logo's ink (globals.css .wordmark::before).
+      wordmark: getComputedStyle(
+        document.querySelector('.site-header .brand__mark')!,
+        '::before',
+      ).backgroundColor,
     };
   });
 
@@ -76,9 +80,17 @@ test('a page without a style keeps the site header and footer exactly', async ({
     'background-color',
     'rgb(243, 242, 238)',
   );
-  await expect(
-    page.locator('.site-header .brand__mark path').first(),
-  ).toHaveCSS('fill', 'rgb(0, 0, 0)');
+  // The light logo: black ink, purple accent.
+  expect(
+    await page
+      .locator('.site-header .brand__mark')
+      .first()
+      .evaluate((el) =>
+        ['::before', '::after'].map(
+          (part) => getComputedStyle(el, part).backgroundColor,
+        ),
+      ),
+  ).toEqual(['rgb(0, 0, 0)', 'rgb(122, 50, 249)']);
   expect(
     await page
       .locator('.footer-card')

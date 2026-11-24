@@ -82,6 +82,18 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   robots: { index: false, follow: false },
+  // The heart of two figures on a white tile (public/icons, scripts/design/brand-assets.mjs).
+  icons: {
+    icon: [
+      { url: '/icons/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/favicon-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    apple: {
+      url: '/icons/apple-touch-icon.png',
+      sizes: '180x180',
+      type: 'image/png',
+    },
+  },
 };
 export default function RootLayout({
   children,
