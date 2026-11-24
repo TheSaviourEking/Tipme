@@ -132,6 +132,8 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   dispute_fee_unposted: 'money',
   collect_refund_gap: 'money',
   collect_own_money_wait: 'money',
+  provider_split_short: 'money',
+  provider_unconnected_money: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -248,6 +250,10 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A refund on a tip to ${page} that TipMe collected couldn't take back everything it should have. Check what TipMe absorbed against the partner's record.`;
     case 'collect_own_money_wait':
       return 'A payout fee or fee return TipMe pays is waiting: paying it now would use money TipMe holds for recipients, or TipMe’s own money couldn’t be confirmed. Nothing failed and nobody was told. The note says why; they start again once a reserve reading allows it, and this closes itself.';
+    case 'provider_split_short':
+      return `The daily split check found that the payment providers hold less for ${handle ? page : 'a recipient or a business'} than TipMe's ledger owes them, by more than ₦100. Withdrawals stay capped by the ledger, so nothing is overpaid: find where the difference went (a refund or dispute after a withdrawal, for example) and cover it at that provider.`;
+    case 'provider_unconnected_money':
+      return 'A payment provider that is no longer connected still holds money owed to recipients or businesses, so they can’t withdraw it. Connect it again as withdraw-only to let it drain, or settle it with the provider. Nothing is sent through another provider.';
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }

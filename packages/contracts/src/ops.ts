@@ -286,6 +286,10 @@ export const ISSUE_KINDS = [
   'collect_refund_gap',
   // Task 11 (m5): a payout fee or fee return waits on TipMe's own money, with the real cause.
   'collect_own_money_wait',
+  // Per-provider balances (spec §5a, §7): the daily check found a split owner's providers holding
+  // less than the ledger owes them, and money at a provider that is no longer connected.
+  'provider_split_short',
+  'provider_unconnected_money',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**

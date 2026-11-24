@@ -4577,3 +4577,50 @@ export const collectReserveAlerts = pgTable(
     ),
   ],
 );
+
+/** One provider's figures in a daily split check, all in NGN minor units as decimal strings. */
+export interface ProviderSplitReading {
+  /** The recorded name ('bachs', 'mock', 'mock_alt'): staff screens only, never shown to a person. */
+  provider: string;
+  /** What the provider said it holds for the owner; null when it couldn't be read. */
+  availableMinor: string | null;
+  /** What is promised out of it and still in it (`committedAtProvider`). */
+  queuedMinor: string;
+}
+
+/**
+ * Per-provider balances (spec §7, P12): the daily check of a split owner's ledger available
+ * against what their providers hold, less what is queued at each. One row per check; Split
+ * accounts and the retire check read the latest per owner. Kept 90 days (`purgeSplitChecks`).
+ */
+export const providerSplitChecks = pgTable(
+  'provider_split_checks',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    // The ledger's available at the check; may be below zero (Q8).
+    ledgerMinor: minor('ledger_minor').notNull(),
+    providers: jsonb('providers').$type<ProviderSplitReading[]>().notNull(),
+    outcome: text('outcome').notNull(),
+  },
+  (table) => [
+    check(
+      'provider_split_checks_owner',
+      sql`(profile_id IS NULL) <> (business_id IS NULL)`,
+    ),
+    check(
+      'provider_split_checks_outcome',
+      sql`outcome IN ('ok', 'short', 'over', 'partial')`,
+    ),
+    index('provider_split_checks_profile').on(
+      table.profileId,
+      table.checkedAt.desc(),
+    ),
+    index('provider_split_checks_business').on(
+      table.businessId,
+      table.checkedAt.desc(),
+    ),
+  ],
+);

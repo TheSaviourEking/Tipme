@@ -15009,7 +15009,9 @@
                 "dispute_deadline",
                 "dispute_fee_unposted",
                 "collect_refund_gap",
-                "collect_own_money_wait"
+                "collect_own_money_wait",
+                "provider_split_short",
+                "provider_unconnected_money"
               ]
             }
           },

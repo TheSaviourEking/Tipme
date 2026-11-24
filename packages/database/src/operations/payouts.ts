@@ -1948,6 +1948,20 @@ async function feePayerFor(
 const ownerReference = (owner: MoneyOwner) =>
   'businessId' in owner ? owner.businessId : owner.profileId;
 
+/**
+ * The reference the owner's balance at `provider` is read under, as the quote reads it: their
+ * account reference there, or the owner's own id at an accountless (pretend) provider. Null when
+ * they have no account there, so that provider holds nothing of theirs. Never asks the provider.
+ */
+export async function balanceReferenceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+): Promise<string | null> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  return route.accountless ? ownerReference(owner) : route.accountReference;
+}
+
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;
