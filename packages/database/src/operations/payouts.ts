@@ -1710,8 +1710,8 @@ function partRoute(route: Route, active: Route): 'ok' | 'bank' | 'partial' {
   if (!route.accountless && (!route.accountReference || !route.manualPayouts))
     return 'partial';
   const there = route.destination;
-  // An accountless provider with no bank row pays the pretend bank, as today's quote does.
-  if (!there) return route.accountless && !active.destination ? 'ok' : 'bank';
+  // P5: an accountless provider with no bank row counts as the same bank, as today's pretend bank.
+  if (!there) return route.accountless ? 'ok' : 'bank';
   if (there.status !== 'usable' || !active.destination) return 'bank';
   return sameBank(active.destination, there) ? 'ok' : 'bank';
 }
@@ -1839,6 +1839,10 @@ async function quoteFor(
       ? null
       : await guarded(() => collectWithdrawalRoom(db, owner.profileId, now));
   const withdrawable = parts.reduce((sum, part) => sum + part.takeMinor, 0n);
+  // The flags say money is held back. When the providers read cover the whole ledger, none is,
+  // whatever an unread provider holds. Compared before You collect's limits, which are not a
+  // provider problem.
+  const heldBack = withdrawable < notNegative(ledgerMinor);
   return {
     state: 'ready',
     withdrawableMinor: room
@@ -1850,8 +1854,8 @@ async function quoteFor(
     capsMinor: parts
       .map((part) => part.takeMinor)
       .filter((minor) => minor > 0n),
-    partial,
-    bankDetailsNeeded,
+    partial: partial && heldBack,
+    bankDetailsNeeded: bankDetailsNeeded && heldBack,
     heldElsewhere: reach.heldElsewhere,
     feePaidBy,
     ordinalToday,

@@ -30,10 +30,14 @@ const [ADA, TOBI] = DEMO_PROFILES;
 const HUGE = 100_000_000_000n;
 
 /** A plain-object payout reader with a settable balance; `fail` makes every balance read throw. */
-const reader = (name, { connected = false, balance = HUGE } = {}) => ({
+const reader = (
+  name,
+  { connected = false, balance = HUGE, fee = 5000n } = {},
+) => ({
   name,
   capabilities: { connectedAccounts: connected },
   balance,
+  fee,
   fail: false,
   reads: [],
   async payoutCapability(accountRef) {
@@ -47,7 +51,7 @@ const reader = (name, { connected = false, balance = HUGE } = {}) => ({
   },
   async quotePayoutFee(accountRef, amountMinor) {
     this.reads.push(`fee:${accountRef}:${amountMinor}`);
-    return { feeMinor: 5000n, exact: false };
+    return { feeMinor: this.fee, exact: false };
   },
 });
 
@@ -336,6 +340,77 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(quote.bankDetailsNeeded, false);
       assert.equal(quote.withdrawableMinor, 372000n);
       assert.deepEqual(old.reads, []);
+    },
+  );
+
+  await t.test(
+    'an accountless withdraw-only provider with no bank row is the same bank (P5)',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      // The active provider has a bank row; the accountless old one has none.
+      await seedDestination('mock', '4321');
+      const active = reader('mock', { balance: 372000n });
+      const old = reader('mock_alt', { balance: 372000n });
+      const quote = await quoteOf(set(active, old));
+      assert.equal(quote.bankDetailsNeeded, false);
+      assert.equal(quote.withdrawableMinor, 744000n);
+      assert.deepEqual(quote.capsMinor, [372000n, 372000n]);
+    },
+  );
+
+  await t.test(
+    'the fee is the one the provider carrying the largest part quotes (P8)',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const pair = (oldBalance, activeBalance = HUGE) =>
+        set(
+          reader('mock', { balance: activeBalance, fee: 5000n }),
+          reader('mock_alt', { balance: oldBalance, fee: 1000n }),
+        );
+      // The old provider carries 500,000 of 744,000: its fee.
+      const oldCarries = await quoteOf(pair(500000n));
+      assert.deepEqual(oldCarries.capsMinor, [500000n, 244000n]);
+      assert.equal(oldCarries.feeMinor, 1000n);
+      // The active provider carries 644,000: its fee.
+      const activeCarries = await quoteOf(pair(100000n));
+      assert.deepEqual(activeCarries.capsMinor, [100000n, 644000n]);
+      assert.equal(activeCarries.feeMinor, 5000n);
+      // Nothing carried anywhere: the active provider's fee, though the old one is read first.
+      const none = await quoteOf(pair(0n, 0n));
+      assert.deepEqual(none.capsMinor, []);
+      assert.equal(none.withdrawableMinor, 0n);
+      assert.equal(none.feeMinor, 5000n);
+    },
+  );
+
+  await t.test(
+    'nothing held back means no partial or bank-details flag',
+    async () => {
+      await database.fresh();
+      await tip('bachs');
+      await tip('mock');
+      await seedAccount();
+      await seedDestination('mock', '4321');
+      await seedDestination('bachs', '9999');
+      // The active provider alone covers the whole ledger, so the old one's bank doesn't matter.
+      const active = reader('mock');
+      const old = reader('bachs-sandbox', { connected: true, balance: 0n });
+      const bank = await quoteOf(set(active, old));
+      assert.equal(bank.withdrawableMinor, bank.ledgerMinor);
+      assert.equal(bank.bankDetailsNeeded, false);
+      // Nor a failed read at the old provider, when nothing is held back.
+      await q(
+        `UPDATE payout_destinations SET account_last4 = '4321' WHERE provider = 'bachs'`,
+      );
+      const failing = reader('bachs-sandbox', { connected: true });
+      failing.fail = true;
+      const read = await quoteOf(set(active, failing));
+      assert.equal(read.withdrawableMinor, read.ledgerMinor);
+      assert.equal(read.partial, false);
     },
   );
 
