@@ -97,7 +97,8 @@ export interface Letter {
 }
 
 // The logo (apps/web/public/email, drawn from the owner's files by scripts/design/brand-assets.mjs):
-// shown 160 x 44 (1383 x 380 artwork, ™ included), loaded at 2x. Light ("tip" and the left figure
+// shown 160 x 44 (1383 x 380 artwork, ™ included), loaded at 2x. New names (tipme-logo-2026-*):
+// sent emails ask for the old tipme-logo-* at 120 x 45, and those files are kept for them. Light ("tip" and the left figure
 // in black) by default; dark (those in white) only where the client tells us it is in dark mode.
 const LOGO_W = 160;
 const LOGO_H = 44;
@@ -126,7 +127,12 @@ ${scoped('[data-ogsc]', LOGO_DARK)}${scoped('[data-ogsb]', LOGO_DARK)}
  */
 function logoHtml(ctx: MailContext): string {
   const src = (scheme: 'light' | 'dark') =>
-    e(new URL(`/email/tipme-logo-${scheme}-2x.png`, ctx.webOrigin).toString());
+    e(
+      new URL(
+        `/email/tipme-logo-2026-${scheme}-2x.png`,
+        ctx.webOrigin,
+      ).toString(),
+    );
   const img = (scheme: 'light' | 'dark') =>
     `<img class="tm-logo-${scheme}" src="${src(scheme)}" width="${LOGO_W}" height="${LOGO_H}" alt="TipMe" border="0" style="display:block;width:${LOGO_W}px;height:${LOGO_H}px;border:0;outline:none;text-decoration:none;">`;
   const chip = `<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td class="tm-logo" bgcolor="${PAPER}" style="background:${PAPER};background-image:linear-gradient(${PAPER},${PAPER});border-radius:12px;padding:4px;">${img('light')}<div class="tm-logo-dark-wrap" style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${img('dark')}</div></td></tr></table>`;

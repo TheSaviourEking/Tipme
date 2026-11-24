@@ -141,13 +141,16 @@ test('before launch the email logos are exempt (sent mail must show them)', () =
   const decide = (path) => launchDecision({ path, target, now: target - 1 });
   for (const scheme of ['light', 'dark'])
     for (const scale of ['2x', '3x']) {
-      const path = `/email/tipme-logo-${scheme}-${scale}.png`;
-      assert.equal(decide(path), 'exempt', path);
+      for (const name of ['tipme-logo', 'tipme-logo-2026']) {
+        const path = `/email/${name}-${scheme}-${scale}.png`;
+        assert.equal(decide(path), 'exempt', path);
+      }
     }
   for (const path of [
     '/email',
     '/email/other.png',
     '/email/tipme-logo-light-2x.png/x',
+    '/email/tipme-logo-2027-light-2x.png',
     '/email/%2e%2e/x',
   ])
     assert.equal(decide(path), 'rewrite', path);

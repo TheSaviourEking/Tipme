@@ -7,8 +7,10 @@
 //     the black part and the purple part, so CSS gives each its colour (white on the purple
 //     receipt page and in the dark Studio headers, a style's own ink and accent)
 //   public/icons/*.png  tab, home-screen and Apple icons: the heart on a white rounded tile
-//   public/email/tipme-logo-{light,dark}-{2x,3x}.png  the email header (packages/mail layout.ts)
-import { mkdirSync } from 'node:fs';
+//   public/favicon.ico  the 32 and 48 px tab icons, for browsers that ask for /favicon.ico
+//   public/email/tipme-logo-2026-{light,dark}-{2x,3x}.png  the email header (packages/mail layout.ts);
+//     the old tipme-logo-* files are left alone for emails already sent
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -94,6 +96,26 @@ async function iconTile(file, side, { mark, radius }) {
   console.log(file, out.width, out.height, out.size);
 }
 
+/** An .ico holding PNG images (allowed since Windows Vista; every current browser reads it). */
+export function icoOf(pngs) {
+  const header = Buffer.alloc(6 + 16 * pngs.length);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(pngs.length, 4);
+  let offset = header.length;
+  pngs.forEach(({ side, png }, i) => {
+    const at = 6 + i * 16;
+    header[at] = side; // width (0 would mean 256)
+    header[at + 1] = side; // height
+    header.writeUInt16LE(1, at + 4); // colour planes
+    header.writeUInt16LE(32, at + 6); // bits per pixel
+    header.writeUInt32LE(png.length, at + 8);
+    header.writeUInt32LE(offset, at + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([header, ...pngs.map(({ png }) => png)]);
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // Masks 240 px tall: the header draws the logo 40 px tall, so 6x at 1x and 2x at 3x.
   await masks('tipme-wordmark-light.png', 'tipme-wordmark', 240);
@@ -107,6 +129,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       mark: 0.78,
       radius: 28 / 120,
     });
+  writeFileSync(
+    pub('favicon.ico'),
+    icoOf(
+      [32, 48].map((side) => ({
+        side,
+        png: readFileSync(pub(`icons/favicon-${side}.png`)),
+      })),
+    ),
+  );
   await iconTile('192.png', 192, { mark: 0.72, radius: 28 / 120 });
   // Full bleed: iOS rounds its own; maskable is cropped by the platform, so the heart stays well
   // inside the centre safe circle (radius 40%): half its diagonal is about 34% here.
@@ -122,7 +153,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       const out = await sharp(pub(`brand/tipme-wordmark-${scheme}.png`))
         .resize({ width })
         .png({ ...PNG, palette: true, colours: 256 })
-        .toFile(pub(`email/tipme-logo-${scheme}-${scale}.png`));
+        .toFile(pub(`email/tipme-logo-2026-${scheme}-${scale}.png`));
       console.log(scheme, scale, out.width, out.height, out.size);
     }
 }

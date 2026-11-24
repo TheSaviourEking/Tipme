@@ -85,6 +85,17 @@ test('the cards draw the TipMe logo in its black and purple', async ({
   });
   expect(key.black).toBeGreaterThan(1000);
   expect(key.purple).toBeGreaterThan(1000);
+
+  // A person's card: the heart on its small white key at the foot, right (80 px, 72 and 48 in).
+  const person = await card(request, '/people/ada/share-card');
+  const small = await logoInks(person, {
+    left: 1048,
+    top: 502,
+    width: 80,
+    height: 80,
+  });
+  expect(small.black).toBeGreaterThan(200);
+  expect(small.purple).toBeGreaterThan(200);
 });
 
 async function advertised(page: Page) {

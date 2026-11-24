@@ -36,7 +36,8 @@ export function launchDecision({
     /^\/brand\/tipme-(wordmark|mark)-(ink|accent)\.png$/.test(path) ||
     path === '/opengraph-image' ||
     // The logo every email loads (packages/mail layout.ts), exact names only.
-    /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/.test(path) ||
+    // The old names stay for emails already sent (they ask for them at 120 x 45).
+    /^\/email\/tipme-logo-(2026-)?(light|dark)-(2x|3x)\.png$/.test(path) ||
     path.startsWith('/coming-soon/opengraph-image')
   )
     return 'exempt';

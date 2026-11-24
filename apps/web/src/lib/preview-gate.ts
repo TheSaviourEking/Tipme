@@ -12,7 +12,8 @@ const OPEN = [
   // The tab, home-screen and Apple icons and their manifest, exact names only.
   /^\/(manifest\.webmanifest|icons\/(favicon-(32|48)|apple-touch-icon|192|512-maskable)\.png)$/,
   // The logo every email loads (packages/mail layout.ts); mail clients have no ticket.
-  /^\/email\/tipme-logo-(light|dark)-(2x|3x)\.png$/,
+  // The old names stay for emails already sent (they ask for them at 120 x 45).
+  /^\/email\/tipme-logo-(2026-)?(light|dark)-(2x|3x)\.png$/,
 ];
 
 export function gateDecision(input: {

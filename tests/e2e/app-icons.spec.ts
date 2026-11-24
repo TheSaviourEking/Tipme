@@ -89,6 +89,42 @@ test('the tab icon is the heart on a white tile, at 32 and 48 px', async ({
   expect((await request.get('/icon.svg')).status()).toBe(404);
 });
 
+test('/favicon.ico is the heart tile, at 32 and 48 px', async ({ request }) => {
+  const response = await request.get('/favicon.ico');
+  expect(response.status()).toBe(200);
+  const body = await response.body();
+  // ICONDIR: reserved 0, type 1 (icon), two images.
+  expect([
+    body.readUInt16LE(0),
+    body.readUInt16LE(2),
+    body.readUInt16LE(4),
+  ]).toEqual([0, 1, 2]);
+  expect([body[6], body[22]]).toEqual([32, 48]);
+});
+
+test('the logo masks are preloaded, and each is fetched once', async ({
+  page,
+}) => {
+  const fetched: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('/brand/tipme-wordmark-'))
+      fetched.push(new URL(r.url()).pathname);
+  });
+  await page.goto('/');
+  for (const part of ['ink', 'accent'])
+    await expect(
+      page.locator(
+        `link[rel="preload"][as="image"][href="/brand/tipme-wordmark-${part}.png"]`,
+      ),
+    ).toHaveCount(1);
+  await page.waitForLoadState('networkidle');
+  // The preload and the CSS mask share one request (same CORS mode).
+  expect(fetched.sort()).toEqual([
+    '/brand/tipme-wordmark-accent.png',
+    '/brand/tipme-wordmark-ink.png',
+  ]);
+});
+
 test('an unknown icon file is 404', async ({ request }) => {
   expect((await request.get('/icons/64.png')).status()).toBe(404);
 });

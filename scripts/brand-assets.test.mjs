@@ -127,7 +127,7 @@ test('the email logos keep the artwork’s proportions at 2x and 3x', async () =
       ['3x', 480, 132],
     ]) {
       const meta = await sharp(
-        pub(`email/tipme-logo-${scheme}-${scale}.png`),
+        pub(`email/tipme-logo-2026-${scheme}-${scale}.png`),
       ).metadata();
       assert.deepEqual(
         [meta.width, meta.height],
@@ -136,4 +136,44 @@ test('the email logos keep the artwork’s proportions at 2x and 3x', async () =
       );
       assert.equal(meta.hasAlpha, true);
     }
+});
+
+// Sent emails hard-code the old logo's 120 x 45 and image proxies cache by URL: the old files stay
+// byte for byte as they were (778 x 293 artwork), and the new logo lives under new names.
+test('the old email logo files are kept as they were, for emails already sent', async () => {
+  const { createHash } = await import('node:crypto');
+  const { readFile } = await import('node:fs/promises');
+  for (const [file, sha] of [
+    ['light-2x', 'b70b2e6d3dbbf9c0'],
+    ['light-3x', '077f91b2ece369a9'],
+    ['dark-2x', '3b09f61a5c662991'],
+    ['dark-3x', '66f1b91aebfc3a8d'],
+  ]) {
+    const bytes = await readFile(pub(`email/tipme-logo-${file}.png`));
+    assert.equal(
+      createHash('sha256').update(bytes).digest('hex').slice(0, 16),
+      sha,
+      file,
+    );
+  }
+});
+
+test('favicon.ico holds the 32 and 48 px tiles as PNG', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const ico = await readFile(pub('favicon.ico'));
+  assert.deepEqual(
+    [ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)],
+    [0, 1, 2],
+  );
+  for (const [entry, side] of [
+    [0, 32],
+    [1, 48],
+  ]) {
+    const at = 6 + entry * 16;
+    assert.deepEqual([ico[at], ico[at + 1]], [side, side]);
+    const size = ico.readUInt32LE(at + 8);
+    const offset = ico.readUInt32LE(at + 12);
+    const png = ico.subarray(offset, offset + size);
+    assert.deepEqual(png, await readFile(pub(`icons/favicon-${side}.png`)));
+  }
 });

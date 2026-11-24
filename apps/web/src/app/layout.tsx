@@ -4,6 +4,7 @@ import {
 } from '@/components/release-flags-slot';
 import type { Metadata } from 'next';
 import type { CSSProperties } from 'react';
+import { preload } from 'react-dom';
 import localFont from 'next/font/local';
 import { withGlyphFallback } from '@/lib/font-stack';
 import { siteOrigin } from '@/lib/metadata';
@@ -98,6 +99,14 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The header logo's two masks (globals.css .wordmark), asked for with the HTML rather than once
+  // the CSS is read, so the logo does not paint blank first. CSS masks load in CORS mode; the
+  // preload matches it, so each is one request.
+  for (const part of ['ink', 'accent'])
+    preload(`/brand/tipme-wordmark-${part}.png`, {
+      as: 'image',
+      crossOrigin: 'anonymous',
+    });
   return (
     // Font variables must be on <html>: the :root tokens in @tipme/ui resolve them there.
     <html
