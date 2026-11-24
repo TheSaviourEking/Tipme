@@ -50,11 +50,16 @@ async function setup(t, credit = 900000n) {
   return db;
 }
 
-/** A pretend partner for the balance: the account holds `available`; each collect is recorded. */
-function partner({ available = 100_000_000n } = {}) {
+/**
+ * A pretend partner for the balance: the account holds `available`; each collect is recorded. Like
+ * the pretend provider, it has no connected accounts (`name` is what its rows record).
+ */
+function partner({ available = 100_000_000n, name = 'mock' } = {}) {
   const collects = [];
   const transfers = new Map();
   return {
+    name,
+    capabilities: { connectedAccounts: false },
     collects,
     transfers,
     next: null,
@@ -124,16 +129,21 @@ const buy = (db, provider, over = {}) =>
     profileId: ADA,
     expectedAmountMinor: 250000n,
     idempotencyKey: randomUUID(),
-    provider,
-    providerName: 'mock',
+    providers: [{ reader: provider }],
     sealing,
     now: NOW,
     ...over,
   });
-const reconcile = (db, provider, now) =>
+/** Buys through several providers, given in drain order. */
+const buyThrough = (db, readers, over = {}) =>
+  buy(db, null, {
+    providers: readers.map((reader) => ({ reader })),
+    ...over,
+  });
+const reconcile = (db, provider, now, providerName = 'mock') =>
   reconcileProCollections(db.db, {
     provider,
-    providerName: 'mock',
+    providerName,
     now,
     sealing,
   });
@@ -368,4 +378,125 @@ test('a paused account (a withdrawal hold) refuses a balance payment', async (t)
   const fake = partner();
   assert.equal(await codeOf(buy(db, fake)), 'WITHDRAWALS_PAUSED');
   assert.equal(fake.collects.length, 0);
+});
+
+// Per-provider balances, Task 7 (spec §8, P10): one provider pays, the first in drain order whose
+// own money covers the price; never a split.
+
+test('Pro is paid from the first provider in drain order that covers the price alone', async (t) => {
+  const db = await setup(t);
+  // Both cover it: the first in drain order (withdraw-only mock_alt) pays, once, and the row
+  // records that provider's own name and account.
+  const alt = partner({ name: 'mock_alt', available: 300000n });
+  const active = partner();
+  const bought = await buyThrough(db, [alt, active]);
+  assert.equal(bought.status, 'PAID');
+  assert.equal(alt.collects.length, 1);
+  assert.equal(alt.collects[0].accountRef, ADA);
+  assert.equal(
+    alt.collects[0].idempotencyKey,
+    `tipme-pro-${bought.purchaseId}`,
+  );
+  assert.equal(active.collects.length, 0);
+  const row = await purchaseRow(db, bought.purchaseId);
+  assert.equal(row.provider, 'mock_alt');
+  assert.equal(row.account_reference, ADA);
+  assert.equal(await available(db), 650000n);
+  assert.equal(await planOf(db), 'pro');
+});
+
+test('a provider that cannot cover the price alone is passed over for the next in drain order', async (t) => {
+  const db = await setup(t);
+  // mock_alt is drawn first but holds only ₦1,000; the active mock covers it.
+  const alt = partner({ name: 'mock_alt', available: 100000n });
+  const active = partner();
+  const bought = await buyThrough(db, [alt, active]);
+  assert.equal(bought.status, 'PAID');
+  assert.equal(alt.collects.length, 0);
+  assert.equal(active.collects.length, 1);
+  assert.equal((await purchaseRow(db, bought.purchaseId)).provider, 'mock');
+});
+
+test('Pro is refused INSUFFICIENT_BALANCE when only a split would cover it', async (t) => {
+  const db = await setup(t);
+  // ₦9,000 owed; ₦1,500 at each provider: ₦3,000 together, but neither covers ₦2,500 alone.
+  const alt = partner({ name: 'mock_alt', available: 150000n });
+  const active = partner({ available: 150000n });
+  assert.equal(
+    await codeOf(buyThrough(db, [alt, active])),
+    'INSUFFICIENT_BALANCE',
+  );
+  assert.equal(alt.collects.length, 0);
+  assert.equal(active.collects.length, 0);
+  assert.equal((await q(db, `SELECT 1 FROM pro_purchases`)).length, 0);
+  assert.equal(await available(db), 900000n);
+  assert.equal(await planOf(db), 'free');
+});
+
+test('a replay returns the same purchase whichever provider paid', async (t) => {
+  const db = await setup(t);
+  const key = randomUUID();
+  const alt = partner({ name: 'mock_alt', available: 300000n });
+  const active = partner();
+  const first = await buyThrough(db, [alt, active], { idempotencyKey: key });
+  assert.equal(first.status, 'PAID');
+  assert.equal(alt.collects.length, 1);
+  // The retry finds mock_alt emptied and only the active provider holding money: same purchase.
+  const emptied = partner({ name: 'mock_alt', available: 0n });
+  const again = await buyThrough(db, [emptied, active], {
+    idempotencyKey: key,
+  });
+  assert.equal(again.purchaseId, first.purchaseId);
+  assert.equal(again.replayed, true);
+  assert.equal(emptied.collects.length, 0);
+  assert.equal(active.collects.length, 0);
+  assert.equal(alt.collects.length, 1);
+  assert.equal((await proLedger(db)).length, 4);
+  assert.equal((await purchaseRow(db, first.purchaseId)).provider, 'mock_alt');
+});
+
+test('the read-back finds a balance purchase at a withdraw-only provider', async (t) => {
+  const db = await setup(t);
+  const alt = partner({ name: 'mock_alt', available: 300000n });
+  const active = partner();
+  alt.next = 'lost';
+  const bought = await buyThrough(db, [alt, active]);
+  assert.equal(bought.status, 'UNKNOWN');
+  assert.equal(await available(db), 650000n);
+  // The active provider's read-back never looks at it: it is mock_alt's.
+  const elsewhere = await reconcile(db, active, later(5 * MIN), 'mock');
+  assert.equal(elsewhere.checked, 0);
+  const found = await reconcile(db, alt, later(5 * MIN), 'mock_alt');
+  assert.equal(found.checked, 1);
+  assert.equal(found.paid.length, 1);
+  assert.equal((await purchaseRow(db, bought.purchaseId)).status, 'PAID');
+  assert.equal(alt.collects.length, 1);
+  assert.equal(active.collects.length, 0);
+  assert.equal((await proLedger(db)).length, 4);
+  assert.equal(await planOf(db), 'pro');
+});
+
+test('a withdrawal queued at a provider counts only against that provider', async (t) => {
+  const db = await setup(t, 900000n);
+  const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
+  t.after(() => redis.quit());
+  const mock = createMockProvider({
+    redis,
+    prefix: `pb-${randomUUID().slice(0, 8)}`,
+  });
+  // ₦5,000 queued at mock (not yet sent): mock's ₦6,000 covers only ₦1,000 more, so mock_alt pays.
+  await requestWithdrawal(db.db, {
+    profileId: ADA,
+    amountMinor: 500000n,
+    idempotencyKey: randomUUID(),
+    providers: { active: mock, withdrawOnly: [] },
+  });
+  const active = partner({ available: 600000n });
+  const alt = partner({ name: 'mock_alt', available: 300000n });
+  // Drain order here puts the active provider first only to prove its queue is its own.
+  const bought = await buyThrough(db, [active, alt]);
+  assert.equal(bought.status, 'PAID');
+  assert.equal(active.collects.length, 0);
+  assert.equal(alt.collects.length, 1);
+  assert.equal((await purchaseRow(db, bought.purchaseId)).provider, 'mock_alt');
 });

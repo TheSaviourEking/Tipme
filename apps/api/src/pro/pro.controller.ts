@@ -29,9 +29,12 @@ import {
   myProfileId,
   myProPurchase,
   myProState,
+  ownerProviderSet,
   pageHandleLower,
+  type PayoutProviderSet,
   type ProPurchaseView,
   featureOn,
+  guarded,
 } from '@tipme/database';
 import { liveCheckoutOpenFor } from '@tipme/payments';
 import { z } from 'zod';
@@ -44,6 +47,7 @@ import {
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
+import { PAYOUT_PROVIDERS_TOKEN } from '../checkout/payment-provider.provider.js';
 import { DatabaseProvider } from '../infra/database.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { PRO_CHECKOUT_TOKEN, type ProCheckout } from './pro-provider.js';
@@ -76,6 +80,8 @@ export class ProController {
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(PRO_CHECKOUT_TOKEN) private readonly checkout: ProCheckout,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly payoutProviders: PayoutProviderSet,
   ) {
     this.webOrigin = new URL(config.WEB_ORIGIN).origin;
   }
@@ -188,12 +194,15 @@ export class ProController {
       // Off: as if the way to pay didn't exist (ruling 8).
       if (!(await this.switchOn('pro_pay_from_balance')) || body.autoRenew)
         throw new CodedHttpException(400, 'VALIDATION_FAILED');
+      // Every provider that may hold this person's money, in drain order; exactly one pays (§8).
+      const { providers } = await guarded(() =>
+        ownerProviderSet(this.database.db, { profileId }, this.payoutProviders),
+      );
       const bought = await buyProFromBalance(this.database.db, {
         profileId,
         expectedAmountMinor,
         idempotencyKey: key,
-        provider: this.checkout.money,
-        providerName: this.checkout.adapterName,
+        providers: providers.map((reader) => ({ reader })),
         sealing: this.sealing,
         now: new Date(),
       });
