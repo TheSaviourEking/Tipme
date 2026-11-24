@@ -170,6 +170,9 @@ const bpsOf = (amount: bigint, bps: bigint): bigint =>
 /** The version recorded on a quote whose TipMe fee was waived (a fee-free reward, PR-008). */
 export const FEE_FREE_VERSION_SUFFIX = '-fee-free';
 
+/** Between a quote's base fee version and the fee-waiver rule id when TipMe covered the fee. */
+export const FEE_WAIVED_VERSION_INFIX = '-waived-';
+
 /**
  * Prices a tip. TipMe's share (processing included) comes off the tip and the recipient receives
  * the rest. `feeFree` waives TipMe's whole share: the recipient receives the full tip and TipMe
@@ -316,5 +319,13 @@ export function lagosDayStart(now: Date): Date {
   const local = now.getTime() + LAGOS_OFFSET_MS;
   return new Date(
     local - (((local % DAY_MS) + DAY_MS) % DAY_MS) - LAGOS_OFFSET_MS,
+  );
+}
+
+/** The instant the Lagos calendar month containing `now` began. */
+export function lagosMonthStart(now: Date): Date {
+  const local = new Date(now.getTime() + LAGOS_OFFSET_MS);
+  return new Date(
+    Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 1) - LAGOS_OFFSET_MS,
   );
 }
