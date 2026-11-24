@@ -18,8 +18,11 @@ import {
   seedManager,
   seedMember,
 } from '../../packages/database/test/integration/business-fixtures.mjs';
+import { createMockProvider } from '../../packages/payments/dist/index.js';
 import { PAYOUT_PROVIDERS_TOKEN } from '../../apps/api/dist/checkout/payment-provider.provider.js';
 import {
+  REDIS_URL,
+  Redis,
   WEB,
   browserHeaders,
   signIn,
@@ -458,8 +461,9 @@ test("changing bank registers it at every connected provider in the owner's set 
     async payoutCapability() {
       return { status: 'active', requirementsDue: [] };
     },
+    // Task 9: it holds all of the business's money once its bank is registered.
     async payoutBalance() {
-      return { availableMinor: 0n };
+      return { availableMinor: 100_000_000_000n };
     },
     async quotePayoutFee() {
       return { feeMinor: 5000n, exact: true };
@@ -482,6 +486,19 @@ test("changing bank registers it at every connected provider in the owner's set 
      VALUES ($1, $2, 'bachs', 'sandbox', 'acct_biz_stand_in', 'ACTIVE', true, now(), true)`,
     [randomUUID(), shared.businessId],
   );
+  // Task 9 (spec §6): the active pretend provider holds none of it, and the stand-in has no bank
+  // yet, so the quote asks for the bank details again.
+  await paidSharedTip();
+  const redis = new Redis(REDIS_URL);
+  const active = createMockProvider({ redis, prefix: stack.prefix });
+  await active.markPayoutBalance(shared.businessId, 0n);
+  const quoteNow = async () =>
+    (await call('GET', `${base()}/withdrawal-quote`, { cookie: ada.cookie }))
+      .body.data;
+  const asking = await quoteNow();
+  assert.equal(asking.state, 'ready');
+  assert.notEqual(asking.ledgerMinor, '0');
+  assert.equal(asking.bankDetailsNeeded, true);
   await q('DELETE FROM email_codes');
   const inbox = async () =>
     (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data.filter(
@@ -527,4 +544,10 @@ test("changing bank registers it at every connected provider in the owner's set 
     ],
   );
   assert.deepEqual(adds, [{ reference: 'acct_biz_stand_in', bankCode: '101' }]);
+  // Saving the bank again fixed it: nothing needs the bank details now, and all of it can go.
+  const fixed = await quoteNow();
+  assert.equal(fixed.bankDetailsNeeded, false);
+  assert.equal(fixed.withdrawableMinor, fixed.ledgerMinor);
+  await active.markPayoutBalance(shared.businessId, null);
+  await redis.quit();
 });

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, signUpRecipient, tipAsVisitor } from './helpers';
 import { saveBank, withDatabase } from './ops-helpers';
+import { shoot } from './split-shots';
 import { E2E_REDIS_URL, stackEnv } from './stack';
 
 /*
@@ -17,29 +17,6 @@ import { E2E_REDIS_URL, stackEnv } from './stack';
 type Raw = { execute(query: string): Promise<{ rows: { id: string }[] }> };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- untyped dist import in tests
 type Ops = Record<string, any>;
-
-/** Phone and desktop screenshots for the PR body, only when asked for (never a baseline). */
-const SHOTS = process.env['SPLIT_SHOTS_DIR'];
-async function shoot(page: Page, name: string) {
-  if (!SHOTS) return;
-  mkdirSync(SHOTS, { recursive: true });
-  const size = page.viewportSize();
-  // No focus ring or skip link in the picture.
-  await page.evaluate(() =>
-    (document.activeElement as HTMLElement | null)?.blur(),
-  );
-  for (const [label, width] of [
-    ['phone', 390],
-    ['desktop', 1440],
-  ] as const) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.screenshot({
-      path: join(SHOTS, `${name}-${label}-${width}.png`),
-      fullPage: true,
-    });
-  }
-  if (size) await page.setViewportSize(size);
-}
 
 const profileIdOf = (handle: string) =>
   withDatabase(async (db) => {
@@ -156,7 +133,10 @@ test('a split owner sees one balance, withdraws, and sees two parts', async ({
   await expect(hint).toHaveText('This may arrive as 2 payments.');
   await expect(main(page)).not.toContainText(/mock/i);
   await expectAccessible(page);
-  await shoot(page, 'a-withdraw-form-2-payments');
+  await shoot(page, 'a-withdraw-form-2-payments', async () => {
+    await page.getByLabel('Amount (NGN)').fill('3800');
+    await expect(hint).toHaveText('This may arrive as 2 payments.');
+  });
 
   await page.getByRole('button', { name: 'Withdraw ₦3,800' }).click();
   const receipt = main(page).locator('.withdraw__done');
@@ -168,7 +148,6 @@ test('a split owner sees one balance, withdraws, and sees two parts', async ({
   await expect(receiptParts).toHaveCount(2);
   await expect(receiptParts.nth(0)).toContainText('₦1,900');
   await expect(receiptParts.nth(1)).toContainText('₦1,900');
-  await shoot(page, 'b-receipt-two-parts');
 
   // The list: one row for the request, its total and its two payments.
   const history = page.getByRole('region', { name: 'Your withdrawals' });
@@ -224,7 +203,71 @@ test('a provider that can’t be read leaves the rest withdrawable', async ({
   await expect(main(page).getByTestId('withdraw-split-hint')).toHaveCount(0);
   await expect(main(page)).not.toContainText(/mock/i);
   await expectAccessible(page);
-  await shoot(page, 'c-partial-notice');
+  await shoot(page, 'c-partial-notice', async () => {
+    await expect(notice).toHaveCount(1);
+  });
+});
+
+test('the receipt lists each payment of a split request', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  await splitOwner(page, browser, testInfo);
+  await page.route('**/v1/me/events', (route) =>
+    route.fulfill({ status: 204, body: '' }),
+  );
+  // The request's answer is held here, so the receipt can be shown again at each width; the real
+  // request is the test above.
+  await page.route('**/v1/me/withdrawals', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          status: 201,
+          json: {
+            data: {
+              payoutId: randomUUID(),
+              status: 'REQUESTED',
+              groupId: randomUUID(),
+              parts: [
+                {
+                  payoutId: randomUUID(),
+                  amountMinor: '190000',
+                  status: 'REQUESTED',
+                },
+                {
+                  payoutId: randomUUID(),
+                  amountMinor: '190000',
+                  status: 'REQUESTED',
+                },
+              ],
+            },
+          },
+        })
+      : route.fallback(),
+  );
+  const receipt = main(page).locator('.withdraw__done');
+  const withdraw = async () => {
+    await expect(page.getByTestId('withdraw-available')).toHaveText('₦3,800');
+    await page.getByLabel('Amount (NGN)').fill('3800');
+    await page.getByRole('button', { name: 'Withdraw ₦3,800' }).click();
+    await expect(receipt.getByTestId('withdraw-split-done')).toHaveText(
+      'This may arrive as 2 payments.',
+    );
+  };
+  await expect(async () => {
+    await page.goto('/dashboard/withdraw');
+    await expect(page.getByTestId('withdraw-available')).toHaveText('₦3,800', {
+      timeout: 1000,
+    });
+  }).toPass({ timeout: 15_000 });
+  await withdraw();
+  const parts = receipt.locator('.withdraw__parts > li');
+  await expect(parts).toHaveCount(2);
+  await expect(parts.nth(0)).toHaveText('₦1,900 on its way');
+  await expect(parts.nth(1)).toHaveText('₦1,900 on its way');
+  await expect(main(page)).not.toContainText(/mock/i);
+  await expectAccessible(page);
+  await shoot(page, 'b-receipt-two-parts', withdraw);
 });
 
 test('a request with one part sent and one on its way reads "Partly sent"', async ({
@@ -247,12 +290,13 @@ test('a request with one part sent and one on its way reads "Partly sent"', asyn
                   requestedAt,
                   paidAt: null,
                   currency: 'NGN',
-                  amountMinor: '10000000',
+                  amountMinor: '8000000',
                   state: 'processing',
                   bank: { bankName: 'GTBank', last4: '6789' },
                   parts: [
-                    { amountMinor: '8000000', state: 'sent' },
+                    { amountMinor: '6000000', state: 'sent' },
                     { amountMinor: '2000000', state: 'processing' },
+                    { amountMinor: '2000000', state: 'failed' },
                   ],
                 },
               ],
@@ -264,13 +308,19 @@ test('a request with one part sent and one on its way reads "Partly sent"', asyn
   );
   await page.goto('/dashboard/withdraw');
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦100,000' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦80,000' });
   await expect(row).toContainText('Partly sent');
   const parts = row.locator('.withdraw__parts > li');
-  await expect(parts).toHaveCount(2);
-  await expect(parts.nth(0)).toHaveText('₦80,000 sent');
+  await expect(parts).toHaveCount(3);
+  await expect(parts.nth(0)).toHaveText('₦60,000 sent');
   await expect(parts.nth(1)).toHaveText('₦20,000 on its way');
+  // Each part is released on its own when it fails (releaseFailedPayout).
+  await expect(parts.nth(2)).toHaveText(
+    '₦20,000 failed · back in your balance',
+  );
   await expect(row).toContainText('to GTBank ••6789');
   await expectAccessible(page);
-  await shoot(page, 'b-list-row-partly-sent');
+  await shoot(page, 'b-list-row-partly-sent', async () => {
+    await expect(row).toContainText('Partly sent');
+  });
 });

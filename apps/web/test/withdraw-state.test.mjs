@@ -220,7 +220,8 @@ test('a split request’s parts say each one’s state, and "Partly sent" while 
     { amountMinor: '228000', state: 'failed' },
   ]);
   assert.equal(sentAndFailed.label, 'Partly sent');
-  assert.equal(sentAndFailed.parts[1].words, 'failed');
+  // Each part is released on its own (releaseFailedPayout), so its money is back in the balance.
+  assert.equal(sentAndFailed.parts[1].words, 'failed · back in your balance');
   const allSent = partsView([
     { amountMinor: '372000', state: 'sent' },
     { amountMinor: '228000', state: 'sent' },

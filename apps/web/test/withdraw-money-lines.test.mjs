@@ -9,6 +9,10 @@ import { fileURLToPath } from 'node:url';
 const src = fileURLToPath(new URL('../src', import.meta.url));
 const VIEW = 'app/dashboard/withdraw/withdraw-view.tsx';
 const view = readFileSync(join(src, VIEW), 'utf8');
+// Per-provider balances, Task 9: a failed part of a split request is released on its own
+// (releaseFailedPayout), so its line may say so too, only in partsView's failed case.
+const STATE = 'lib/withdraw-state.ts';
+const state = readFileSync(join(src, STATE), 'utf8');
 
 function sourceFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -34,7 +38,7 @@ test('“back in your balance” appears only on Withdraw and in the design-syst
     .sort();
   for (const path of found)
     assert.ok(
-      [VIEW, 'app/design-system/states-specimen.tsx'].includes(path),
+      [VIEW, STATE, 'app/design-system/states-specimen.tsx'].includes(path),
       `${path} says “back in your balance”`,
     );
 });
@@ -110,4 +114,22 @@ test('the instrument carries no reassurance', () => {
 test('Withdraw shows no Notice', () => {
   assert.doesNotMatch(view, /<Notice\b/);
   assert.doesNotMatch(view, /\bNotice\b[^.]*from '@tipme\/ui'/);
+});
+
+test('a split request’s failed part says its money is back, only in partsView’s failed case', () => {
+  const from = state.indexOf('export function partsView(');
+  assert.notEqual(from, -1, 'withdraw-state.ts has partsView');
+  const to = state.indexOf('\n}\n', from);
+  const matches = [...state.matchAll(/back in your balance/gi)];
+  assert.equal(matches.length, 1, 'one failed-part line');
+  for (const match of matches) {
+    assert.ok(
+      match.index > from && match.index < to,
+      'the line is inside partsView',
+    );
+    const lastCase = [
+      ...state.slice(from, match.index).matchAll(/case '([a-z_]+)':/g),
+    ].at(-1);
+    assert.equal(lastCase?.[1], 'failed', 'the line is the failed case');
+  }
 });

@@ -66,29 +66,42 @@ export interface WithdrawState {
 
 const onePayment = () => 1;
 
+/** The notices' words: a person's (WITHDRAW_SPLIT_COPY) or a business's (BUSINESS_SPLIT_COPY). */
+export type NoticeWords = Record<
+  | 'partialTitle'
+  | 'partial'
+  | 'bankTitle'
+  | 'bank'
+  | 'bankLink'
+  | 'heldTitle'
+  | 'held',
+  string
+>;
+
 /** The ready quote's notices (spec §6), in order: what can't be read, what to fix, what is elsewhere. */
 export function quoteNotices(
   quote: WithdrawalQuoteResponse | null,
   bankHref: string = `${SETTINGS}#get-paid`,
+  words: NoticeWords = WITHDRAW_SPLIT_COPY,
 ): ExtraNotice[] {
   if (quote?.state !== 'ready') return [];
   const notices: ExtraNotice[] = [];
   if (quote.partial)
     notices.push({
-      title: WITHDRAW_SPLIT_COPY.partialTitle,
-      body: WITHDRAW_SPLIT_COPY.partial,
+      title: words.partialTitle,
+      body: words.partial,
     });
   if (quote.bankDetailsNeeded)
     notices.push({
-      title: WITHDRAW_SPLIT_COPY.bankTitle,
-      body: WITHDRAW_SPLIT_COPY.bank,
+      title: words.bankTitle,
+      body: words.bank,
       href: bankHref,
-      linkLabel: WITHDRAW_SPLIT_COPY.bankLink,
+      linkLabel: words.bankLink,
     });
   if (quote.heldElsewhere)
     notices.push({
-      title: WITHDRAW_SPLIT_COPY.heldTitle,
-      body: WITHDRAW_SPLIT_COPY.held,
+      title: words.heldTitle,
+      body: words.held,
     });
   return notices;
 }
@@ -594,8 +607,8 @@ export interface PartView {
 
 /**
  * A request paid as parts (spec §5–§6): each part's amount and state, and "Partly sent" while some
- * parts are sent and others not. Null for a single payout. A failed part says "failed" and no
- * more: the one line about money returned stays the failed row's (withdraw-money-lines.test.mjs).
+ * parts are sent and others not. Null for a single payout. A failed part is released on its own
+ * (releaseFailedPayout), so its line says the money is back (withdraw-money-lines.test.mjs).
  */
 export function partsView(parts: WithdrawalRow['parts']): {
   label: string | null;
@@ -614,7 +627,7 @@ export function partsView(parts: WithdrawalRow['parts']): {
       case 'failed':
         return {
           amountMinor: part.amountMinor,
-          words: words.failed,
+          words: 'failed · back in your balance',
           tone: 'red',
         };
       case 'reversed':

@@ -107,7 +107,21 @@ export const WITHDRAW_SPLIT_COPY = {
   part: {
     sent: 'sent',
     onItsWay: 'on its way',
-    failed: 'failed',
     reversed: 'reversed',
   },
+} as const;
+
+/**
+ * The same notices on a business's Money section (Task 9 fix round 1), in the business's words.
+ * Never a provider's name, never the payment partner's.
+ */
+export const BUSINESS_SPLIT_COPY = {
+  partialTitle: 'Some of the business’s balance is waiting',
+  partial:
+    'Some of the business’s balance can’t be withdrawn right now. Try again later.',
+  bankTitle: 'Add the business’s bank details again',
+  bank: 'Add the business’s bank details again to withdraw all of its balance.',
+  bankLink: 'Add bank details again',
+  heldTitle: 'Some of the business’s tips can’t be withdrawn yet',
+  held: 'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
 } as const;

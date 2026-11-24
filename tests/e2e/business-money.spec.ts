@@ -10,6 +10,7 @@ import {
 } from './business-fixtures';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
+import { shoot } from './split-shots';
 import { API_ORIGIN } from './stack';
 
 // Business release 2, PR R2-B: an owner sees the business's own balance (its share of tips), adds
@@ -171,6 +172,7 @@ test('an owner sees the business balance, adds its bank and withdraws it', async
     fee: '5000',
   });
   await expect(page.locator('body')).not.toContainText(/bachs|TipMe pays/i);
+  await expect(page.locator('main')).not.toContainText(/mock/i);
   expect(await fitsViewport(page)).toBe(true);
 
   // The staff member (the owner works there too) sees what they shared, on their Work page.
@@ -295,7 +297,87 @@ test('under ₦2,000 a business may take everything, less the ₦50 fee; ₦50 o
   );
   await expect(money.getByLabel('Amount (NGN)')).toBeDisabled();
   await expect(page.locator('body')).not.toContainText(/bachs|TipMe pays/i);
+  await expect(page.locator('main')).not.toContainText(/mock/i);
   await expectAccessible(page);
+});
+
+// Per-provider balances, Task 9 fix round 1 (spec §6): what of the business's balance can't go
+// now is said beside a usable form, in the business's words, never with a provider's name.
+test('a business quote with money held back says why, beside a usable form', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo);
+  const { userId } = await accountOf(who.email);
+  const business = await seedBusiness({ owner: userId });
+  await page.route(
+    `**/v1/me/businesses/${business.businessId}/balance`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            businessId: business.businessId,
+            currency: 'NGN',
+            balanceMinor: '500000',
+            canWithdraw: true,
+            onTheWayMinor: '0',
+            heldBackMinor: '0',
+            minWithdrawalMinor: '200000',
+            payoutAccount: 'not_needed',
+          },
+        },
+      }),
+  );
+  await page.route(
+    `**/v1/me/businesses/${business.businessId}/withdrawal-quote`,
+    (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            state: 'ready',
+            withdrawableMinor: '300000',
+            ledgerMinor: '500000',
+            providerMinor: '300000',
+            feeMinor: '5000',
+            feePaidBy: 'user',
+            capsMinor: ['300000'],
+            partial: false,
+            bankDetailsNeeded: true,
+            heldElsewhere: false,
+            ordinalToday: 1,
+            freePerDay: 0,
+            destination: { bankName: 'Pretend Guaranty Bank', last4: '6789' },
+            inReview: false,
+          },
+        },
+      }),
+  );
+  await page.route('**/v1/me/events', (route) =>
+    route.fulfill({ status: 204, body: '' }),
+  );
+  await page.goto('/dashboard/business');
+  const money = page.locator('#money');
+  const notice = money.getByTestId('withdraw-extra-notice');
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText(
+    'Add the business’s bank details again to withdraw all of its balance.',
+  );
+  await expect(
+    notice.getByRole('link', { name: 'Add bank details again' }),
+  ).toHaveAttribute('href', '#business-bank');
+  await money.getByRole('button', { name: 'Everything' }).click();
+  await expect(
+    money.getByRole('button', { name: 'Withdraw ₦3,000' }),
+  ).toBeEnabled();
+  await expect(page.locator('main')).not.toContainText(/mock|bachs/i);
+  await expectAccessible(page);
+  await shoot(
+    page,
+    'd-business-notice',
+    async () => {
+      await expect(notice).toHaveCount(1);
+    },
+    money,
+  );
 });
 
 test('a supporter is told the split before paying, at 360px, and the share is fixed on the tip', async ({

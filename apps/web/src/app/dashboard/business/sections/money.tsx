@@ -27,7 +27,7 @@ import {
   withdrawSummary,
 } from '@/lib/withdraw-state';
 import type { PartView } from '@/lib/withdraw-state';
-import { PartList } from '@/components/dashboard/withdraw-parts';
+import { ExtraNotices, PartList } from '@/components/dashboard/withdraw-parts';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { Money } from '@/components/money';
 
@@ -264,6 +264,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
           </>
         )}
       </Slip>
+      <ExtraNotices notices={state.extraNotices} />
       {quote?.inReview && (
         <Slip title="Being checked">
           A withdrawal is being checked by our payment partner.

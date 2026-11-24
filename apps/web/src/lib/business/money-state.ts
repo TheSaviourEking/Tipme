@@ -1,12 +1,16 @@
 import type { WithdrawalQuoteResponse } from '@tipme/contracts';
 import { belowWithdrawalMinimum } from '@tipme/domain';
+import { BUSINESS_SPLIT_COPY } from '@tipme/contracts/copy';
 import { formatNaira } from '../demo-amount.ts';
+import { quoteNotices, type ExtraNotice } from '../withdraw-state.ts';
 
 export interface BusinessMoneyState {
   canWithdraw: boolean;
   /** The most the owner can ask for now: what the quote allows, never more; zero when refused. */
   withdrawableMinor: bigint;
   notice: { title: string; body: string; href?: string; linkLabel?: string };
+  /** Beside a ready quote: what of the balance can't go now (spec §6), in the business's words. */
+  extraNotices: ExtraNotice[];
 }
 
 const BANK = '#business-bank';
@@ -19,7 +23,16 @@ const BANK = '#business-bank';
 export function businessMoneyState(
   quote: WithdrawalQuoteResponse | null,
 ): BusinessMoneyState {
-  const no = (notice: BusinessMoneyState['notice']): BusinessMoneyState => ({
+  return {
+    ...decide(quote),
+    extraNotices: quoteNotices(quote, BANK, BUSINESS_SPLIT_COPY),
+  };
+}
+
+type Decided = Omit<BusinessMoneyState, 'extraNotices'>;
+
+function decide(quote: WithdrawalQuoteResponse | null): Decided {
+  const no = (notice: BusinessMoneyState['notice']): Decided => ({
     canWithdraw: false,
     withdrawableMinor: BigInt(0),
     notice,
