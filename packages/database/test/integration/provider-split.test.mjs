@@ -9,10 +9,13 @@ import {
   createQuote,
   DEMO_PROFILES,
   flagUnconnectedMoney,
+  listSplitAccounts,
   markAttemptInitiated,
   purgeSplitChecks,
   recordProviderEvent,
   requestWithdrawal,
+  RETIRE_AFTER_MS,
+  retireCheck,
   SPLIT_CHECK_BATCH,
   SPLIT_SHORT_THRESHOLD_MINOR,
   splitOwnersDue,
@@ -585,5 +588,291 @@ test('daily split check', async (t) => {
       ),
       /provider_split_checks_outcome/,
     );
+  });
+  await t.test(
+    'split accounts lists only owners with two or more configured providers or a withdraw-only one',
+    async () => {
+      await database.fresh();
+      // Ada: tipped through the active provider only, so not split.
+      await tip('mock', 'ada');
+      await tip('mock_alt');
+      await tip('mock');
+      const active = reader('mock');
+      const old = reader('mock_alt', { balance: 372000n });
+      const providers = set(active, old);
+      await requestWithdrawal(db, {
+        profileId: TOBI.id,
+        amountMinor: 200000n,
+        idempotencyKey: randomUUID(),
+        providers,
+      });
+      active.reads.length = 0;
+      old.reads.length = 0;
+      const page = await listSplitAccounts(db, providers, { limit: 50 });
+      assert.equal(page.nextCursor, null);
+      assert.equal(page.items.length, 1);
+      const [item] = page.items;
+      assert.deepEqual(item.owner, { profileId: TOBI.id, handle: 'tobi' });
+      assert.equal(
+        item.ledgerMinor,
+        (await balanceOf(db, TOBI.id)).availableMinor,
+      );
+      // Drain order, each with its role and what is queued there (the ₦2,000 at mock_alt).
+      assert.deepEqual(item.providers, [
+        { provider: 'mock_alt', role: 'withdraw_only', queuedMinor: 200000n },
+        { provider: 'mock', role: 'active', queuedMinor: 0n },
+      ]);
+      assert.equal(item.lastCheck, null);
+      assert.equal(item.openIssueId, null);
+      // Listing reads TipMe's own records only.
+      assert.deepEqual([...active.reads, ...old.reads], []);
+      // With no withdraw-only provider, nobody is split.
+      assert.deepEqual(
+        await listSplitAccounts(db, set(active), { limit: 50 }),
+        {
+          items: [],
+          nextCursor: null,
+        },
+      );
+      // An account reference at a withdraw-only provider counts too.
+      await q(
+        `INSERT INTO payment_accounts
+           (id, profile_id, provider, environment, provider_account_reference, status,
+            charges_enabled, payouts_enabled, fee_collector, manual_payouts_at)
+         VALUES ($1, $2, 'bachs', 'sandbox', 'acct_ada', 'ACTIVE', true, true, 'platform', now())`,
+        [randomUUID(), ADA.id],
+      );
+      const sandbox = reader('bachs-sandbox', { connected: true });
+      const withSandbox = await listSplitAccounts(db, set(active, sandbox), {
+        limit: 50,
+      });
+      assert.deepEqual(
+        withSandbox.items.map((row) => row.owner.profileId),
+        [ADA.id],
+      );
+      assert.deepEqual(
+        withSandbox.items[0].providers.map((row) => [row.provider, row.role]),
+        [
+          ['bachs', 'withdraw_only'],
+          ['mock', 'active'],
+        ],
+      );
+      // Pages: one at a time, then the rest.
+      const both = set(active, old, sandbox);
+      const first = await listSplitAccounts(db, both, { limit: 1 });
+      assert.equal(first.items.length, 1);
+      assert.ok(first.nextCursor);
+      const second = await listSplitAccounts(db, both, {
+        limit: 1,
+        cursor: first.nextCursor,
+      });
+      assert.equal(second.items.length, 1);
+      assert.equal(second.nextCursor, null);
+      assert.deepEqual(
+        [
+          first.items[0].owner.profileId,
+          second.items[0].owner.profileId,
+        ].sort(),
+        [ADA.id, TOBI.id].sort(),
+      );
+    },
+  );
+
+  await t.test(
+    'split accounts show the latest check, and its open issue only when the re-read confirmed it',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const providers = set(reader('mock'), reader('mock_alt'));
+      const insert = (checkedAt, outcome) =>
+        q(
+          `INSERT INTO provider_split_checks
+             (id, profile_id, checked_at, ledger_minor, providers, outcome)
+           VALUES ($1, $2, $3, 0, '[]'::jsonb, $4)`,
+          [randomUUID(), TOBI.id, checkedAt, outcome],
+        );
+      await insert(new Date(now.getTime() - DAY), 'ok');
+      // A one-off dip: a short row, but the re-read cleared it, so no issue.
+      await insert(now, 'short');
+      let [item] = (await listSplitAccounts(db, providers, { limit: 50 }))
+        .items;
+      assert.equal(item.lastCheck.outcome, 'short');
+      assert.equal(item.lastCheck.checkedAt.toISOString(), now.toISOString());
+      assert.equal(item.openIssueId, null);
+      // A confirmed short opens the issue, and the row links it.
+      await checkProviderSplit(
+        db,
+        { profileId: TOBI.id },
+        set(
+          reader('mock', { balance: 0n }),
+          reader('mock_alt', { balance: 0n }),
+        ),
+        { now: new Date(now.getTime() + HOUR) },
+      );
+      const [issue] = await issuesOf('provider_split_short');
+      [item] = (await listSplitAccounts(db, providers, { limit: 50 })).items;
+      assert.equal(item.lastCheck.outcome, 'short');
+      assert.equal(item.openIssueId, issue.id);
+      // Resolved: no longer linked.
+      await resolve(issue.id);
+      [item] = (await listSplitAccounts(db, providers, { limit: 50 })).items;
+      assert.equal(item.openIssueId, null);
+    },
+  );
+
+  await t.test('can retire only at zero after 30 days', async () => {
+    await database.fresh();
+    assert.equal(RETIRE_AFTER_MS, 30 * DAY);
+    const intent = await tip('mock_alt');
+    await tip('mock');
+    const old = reader('mock_alt', { balance: 372000n });
+    const providers = set(reader('mock'), old);
+    const t0 = new Date('2026-10-01T09:00:00Z');
+    // Every record at mock_alt dates from t0.
+    const settle = () =>
+      Promise.all([
+        q(
+          `UPDATE payment_attempts SET created_at = $1 WHERE provider = 'mock_alt'`,
+          [t0],
+        ),
+        q(`UPDATE payouts SET created_at = $1 WHERE provider = 'mock_alt'`, [
+          t0,
+        ]),
+        q(
+          `UPDATE tip_refunds SET created_at = $1, updated_at = $1 WHERE provider = 'mock_alt'`,
+          [t0],
+        ),
+        q(
+          `UPDATE disputes SET created_at = $1, updated_at = $1, last_event_at = $1 WHERE provider = 'mock_alt'`,
+          [t0],
+        ),
+      ]);
+    const at = (days, ms = 0) => new Date(t0.getTime() + days * DAY + ms);
+    const only = async (days) => {
+      const rows = await retireCheck(db, providers, at(days));
+      // Withdraw-only providers only: the active one is never retired here.
+      assert.deepEqual(
+        rows.map((row) => row.provider),
+        ['mock_alt'],
+      );
+      return rows[0];
+    };
+    await settle();
+
+    // An owner with money there (their latest check) blocks it.
+    await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+      now: at(31),
+    });
+    let row = await only(31);
+    assert.equal(row.ownersWithMoney, 1);
+    assert.equal(row.canRetire, false);
+    assert.equal(row.lastActivityAt.toISOString(), t0.toISOString());
+
+    // Drained (a later check says 0): nothing blocks it after 30 days.
+    old.balance = 0n;
+    await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+      now: at(31, 1),
+    });
+    row = await only(31);
+    assert.deepEqual(
+      {
+        ownersWithMoney: row.ownersWithMoney,
+        openPayouts: row.openPayouts,
+        openRefunds: row.openRefunds,
+        openDisputes: row.openDisputes,
+        canRetire: row.canRetire,
+      },
+      {
+        ownersWithMoney: 0,
+        openPayouts: 0,
+        openRefunds: 0,
+        openDisputes: 0,
+        canRetire: true,
+      },
+    );
+    // A read that failed there is not "no money".
+    old.fail = true;
+    await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+      now: at(31, 2),
+    });
+    row = await only(31);
+    assert.equal(row.ownersWithMoney, 1);
+    assert.equal(row.canRetire, false);
+    old.fail = false;
+    await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+      now: at(31, 3),
+    });
+
+    // An open refund recorded there blocks it.
+    const { tipId } = intent;
+    const [{ id: refundId }] = await q(
+      `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider,
+                                provider_reference, requested_by, reason)
+       VALUES (gen_random_uuid(), $1, 'REQUESTED', 400000, 'NGN', 'mock_alt', 'ref', $2, 'asked')
+       RETURNING id`,
+      [tipId, ADA.userId],
+    );
+    await settle();
+    row = await only(31);
+    assert.equal(row.openRefunds, 1);
+    assert.equal(row.canRetire, false);
+    await q(`UPDATE tip_refunds SET status = 'FAILED' WHERE id = $1`, [
+      refundId,
+    ]);
+    await settle();
+
+    // An open dispute recorded there blocks it, until it is settled.
+    const [{ id: disputeId }] = await q(
+      `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency,
+                             status, last_event_at)
+       VALUES (gen_random_uuid(), 'mock_alt', $1, $2, 400000, 'NGN', 'open', now())
+       RETURNING id`,
+      [`dsp_${randomUUID()}`, tipId],
+    );
+    await settle();
+    row = await only(31);
+    assert.equal(row.openDisputes, 1);
+    assert.equal(row.canRetire, false);
+    await q(
+      `UPDATE disputes SET status = 'won', decided_at = $2, settled_at = $2 WHERE id = $1`,
+      [disputeId, t0],
+    );
+
+    // An open payout recorded there blocks it.
+    old.balance = 300000n;
+    await requestWithdrawal(db, {
+      profileId: TOBI.id,
+      amountMinor: 200000n,
+      idempotencyKey: randomUUID(),
+      providers,
+    });
+    const [payout] = await q(
+      `SELECT id FROM payouts WHERE provider = 'mock_alt' AND status = 'REQUESTED'`,
+    );
+    assert.ok(payout);
+    await settle();
+    row = await only(31);
+    assert.equal(row.openPayouts, 1);
+    assert.equal(row.canRetire, false);
+    await q(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [payout.id]);
+    old.balance = 0n;
+    await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+      now: at(31, 4),
+    });
+    await settle();
+
+    // All zero: day 29 still blocks it, day 30 allows it.
+    row = await only(29);
+    assert.equal(
+      row.ownersWithMoney +
+        row.openPayouts +
+        row.openRefunds +
+        row.openDisputes,
+      0,
+    );
+    assert.equal(row.canRetire, false);
+    row = await only(30);
+    assert.equal(row.canRetire, true);
   });
 });

@@ -3383,3 +3383,58 @@ a.ops-people__card:hover {
   background: var(--state-warning-soft);
   color: var(--state-warning);
 }
+
+/* Split accounts (per-provider balances, spec §7): each provider of an owner on its own line, its
+   name, role and figures wrapping together inside the cell. */
+.ops-split-providers {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A provider's name and role, or a check's result and time, wrapping as one unit. */
+.ops-split-providers__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.ops-split-providers li,
+.ops-split-check {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* A handle breaks only when it must, so the column is as wide as the handle, not a few letters. */
+.ops-split-owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-wrap: break-word;
+}
+
+/* The retire check on Providers: one line of counts per withdraw-only provider. */
+.ops-retire-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.ops-retire-facts div {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ops-retire-facts dt {
+  color: var(--text-secondary);
+}
+
+.ops-retire-facts dd {
+  margin: 0;
+  font-weight: 600;
+}

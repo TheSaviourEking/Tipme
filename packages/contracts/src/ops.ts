@@ -1417,3 +1417,71 @@ export interface OpsStaffPerson {
   additions: string[];
   removals: string[];
 }
+
+// Per-provider balances (spec §7): Split accounts and the provider retire check. Staff screens may
+// name providers (by their recorded names, e.g. `bachs`); what users see never does.
+
+/** A daily split check's result: `short` opens an issue only when its re-read agrees. */
+export const OPS_SPLIT_OUTCOMES = ['ok', 'short', 'over', 'partial'] as const;
+export type OpsSplitOutcome = (typeof OPS_SPLIT_OUTCOMES)[number];
+
+/** One owner whose money is at more than one configured provider. Amounts in minor units (NGN). */
+export interface OpsSplitAccount {
+  owner: { profileId?: string; businessId?: string; handle: string | null };
+  ledgerMinor: string;
+  /** In drain order: withdraw-only first, the active one last. */
+  providers: {
+    provider: string;
+    role: 'active' | 'withdraw_only';
+    queuedMinor: string;
+  }[];
+  lastCheck: { checkedAt: string; outcome: OpsSplitOutcome } | null;
+  /** The open `provider_split_short` issue, if any; `short` with none was not confirmed. */
+  openIssueId: string | null;
+}
+
+/** `GET /v1/ops/split-accounts` */
+export interface OpsSplitAccounts {
+  items: OpsSplitAccount[];
+  nextCursor: string | null;
+}
+
+export const opsSplitAccountsQuerySchema = z
+  .object({
+    cursor: z.uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+
+/** `POST /v1/ops/split-accounts/read`: one owner, a person's or a business's. */
+export const opsSplitAccountReadSchema = z.union([
+  z.object({ profileId: z.uuid() }).strict(),
+  z.object({ businessId: z.uuid() }).strict(),
+]);
+export type OpsSplitAccountReadRequest = z.infer<
+  typeof opsSplitAccountReadSchema
+>;
+
+/** Each provider's balance of the owner's account now; null when it couldn't be read. */
+export interface OpsSplitAccountReading {
+  provider: string;
+  availableMinor: string | null;
+}
+
+/** One withdraw-only provider's retire state (spec §4). */
+export interface OpsProviderRetireRow {
+  provider: string;
+  ownersWithMoney: number;
+  openPayouts: number;
+  openRefunds: number;
+  openDisputes: number;
+  lastActivityAt: string | null;
+  canRetire: boolean;
+}
+
+/** `GET /v1/ops/providers/payments/retire` */
+export interface OpsProviderRetire {
+  /** Nothing may have moved through a provider for this many days before it can retire. */
+  retireAfterDays: number;
+  providers: OpsProviderRetireRow[];
+}

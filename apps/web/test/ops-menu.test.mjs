@@ -114,7 +114,7 @@ test('the menu comes in the board’s groups, in order', () => {
     groups.map((group) => group.links.map((link) => link.label)),
     [
       ['Overview', 'Approvals'],
-      ['Issues', 'Search', 'People', 'Pages', 'Usernames'],
+      ['Issues', 'Search', 'People', 'Pages', 'Usernames', 'Split accounts'],
       ['Visibility', 'Market'],
       ['Providers', 'Email', 'Audit log'],
       ['Staff members', 'Roles', 'Your access'],
@@ -163,7 +163,15 @@ test('Businesses joins the Work group while the business feature is on', () => {
     opsMenuGroups(OWNER, { business: true })
       .find((group) => group.label === 'Work')
       ?.links.map((link) => link.label),
-    ['Issues', 'Search', 'People', 'Pages', 'Usernames', 'Businesses'],
+    [
+      'Issues',
+      'Search',
+      'People',
+      'Pages',
+      'Usernames',
+      'Split accounts',
+      'Businesses',
+    ],
   );
 });
 
@@ -295,4 +303,16 @@ test('You collect needs collect.view, and its tabs include the reserve screen (T
     opsMenuCurrent(opsMenu(['collect.view']), '/ops/collect/disputes/x')?.href,
     '/ops/collect',
   );
+});
+
+// Per-provider balances (spec §7): Split accounts reads with issues.view, in Work after the money
+// screens.
+test('Split accounts sits in Work, for issues.view only', () => {
+  assert.ok(hrefs(['issues.view']).includes('/ops/split-accounts'));
+  assert.ok(!hrefs(['providers.manage']).includes('/ops/split-accounts'));
+  assert.ok(!hrefs(['collect.view']).includes('/ops/split-accounts'));
+  const work = opsMenuGroups(['issues.view', 'collect.view'])
+    .find((group) => group.label === 'Work')
+    .links.map((link) => link.label);
+  assert.deepEqual(work, ['Issues', 'You collect', 'Split accounts']);
 });

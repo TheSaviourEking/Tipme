@@ -29,6 +29,7 @@ import { OpsPlanFeesController } from './plan-fees.controller.js';
 import { OpsCollectSettingsController } from './collect-settings.controller.js';
 import { OpsCollectController } from './collect.controller.js';
 import { OpsSwitchesController } from './switches.controller.js';
+import { OpsSplitAccountsController } from './split-accounts.controller.js';
 import { OpsBusinessProPriceController } from './business-pro-price.controller.js';
 import { OpsAnnouncementsController } from './announcements.controller.js';
 import { MailModule } from '../mail/mail.module.js';
@@ -72,6 +73,7 @@ import { seriousServicesProvider } from './serious-services.js';
     OpsProPaymentsController,
     OpsTipRefundsController,
     OpsSwitchesController,
+    OpsSplitAccountsController,
   ],
   providers: [
     CsrfGuard,

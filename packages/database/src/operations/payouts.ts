@@ -1962,6 +1962,45 @@ export async function balanceReferenceAt(
   return route.accountless ? ownerReference(owner) : route.accountReference;
 }
 
+/**
+ * What `provider` holds of the owner's now, for staff (Split accounts, spec §7): read under the
+ * reference the quote uses, and through the quote's own cache entries when `cache` is given, so a
+ * staff look shares the provider's rate limit with quotes instead of adding to it. No account
+ * there: 0, and the provider is not asked. A failed read throws; the caller says which provider.
+ */
+export async function providerBalanceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+  input: { cache?: PartnerQuoteCache } = {},
+): Promise<bigint> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  const reference = route.accountless
+    ? ownerReference(owner)
+    : route.accountReference;
+  if (reference === null) return 0n;
+  const { cache } = input;
+  const entries = cache
+    ? await safely(() => cache.open({ provider: provider.name, ...owner }))
+    : null;
+  if (!entries)
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  const { availableMinor: ledgerMinor } = await guarded(() =>
+    ownerBalance(db, owner),
+  );
+  const reader = cachedReader(
+    provider,
+    entries,
+    await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
+  );
+  // The cache keeps a balance only for an account that can pay out; any other is asked directly.
+  if ((await reader.payoutCapability(reference)).status !== 'active')
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  return (await reader.payoutBalance(reference, BASE_CURRENCY)).availableMinor;
+}
+
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;

@@ -127,6 +127,7 @@ test('each route names the permission it needs', () => {
     removeAddressSuppression: 'providers.manage',
     setFailover: 'providers.manage',
     clearHealth: 'providers.manage',
+    retire: 'providers.manage',
   };
   for (const [method, permission] of Object.entries(expected))
     assert.deepEqual(

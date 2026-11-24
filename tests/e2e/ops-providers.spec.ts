@@ -71,7 +71,9 @@ test('@alone staff send a test, confirm it from the inbox, and make the provider
   await noOtherStaff();
   await enrolOwner(page, testInfo);
   await page.goto('/ops/providers');
-  await expect(page.getByRole('heading', { name: 'Providers' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Providers' }),
+  ).toBeVisible();
   await expectAccessible(page);
   expect(await fitsViewport(page)).toBe(true);
 

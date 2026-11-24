@@ -21,6 +21,8 @@ import {
 import {
   balanceReferenceAt,
   committedAtProvider,
+  providerBalanceAt,
+  type PartnerQuoteCache,
   type PayoutReader,
   type ProviderReadFailureLog,
 } from './payouts.js';
@@ -78,12 +80,51 @@ export async function splitOwnersDue(
   set: PayoutProviderSet<NamedProvider>,
   input: { now: Date; limit: number },
 ): Promise<MoneyOwner[]> {
+  const owners = splitOwnersSql(set);
+  if (!owners || input.limit <= 0) return [];
+  const cutoff = new Date(input.now.getTime() - CHECK_EVERY_MS).toISOString();
+  const result = await guarded(() =>
+    db.execute<{ profile_id: string | null; business_id: string | null }>(sql`
+      WITH owners AS (${owners})
+      SELECT o.profile_id, o.business_id FROM owners o
+       CROSS JOIN LATERAL (SELECT COALESCE(
+         (SELECT max(c.checked_at) FROM provider_split_checks c WHERE c.profile_id = o.profile_id),
+         (SELECT max(c.checked_at) FROM provider_split_checks c WHERE c.business_id = o.business_id)
+       ) AS checked_at) latest
+       WHERE latest.checked_at IS NULL OR latest.checked_at <= ${cutoff}::timestamptz
+       ORDER BY latest.checked_at ASC NULLS FIRST, o.profile_id, o.business_id
+       LIMIT ${input.limit}`),
+  );
+  return result.rows.map(ownerOfRow);
+}
+
+const ownerOfRow = (row: {
+  profile_id: string | null;
+  business_id: string | null;
+}): MoneyOwner =>
+  row.profile_id !== null
+    ? { profileId: row.profile_id }
+    : { businessId: row.business_id! };
+
+/** The withdraw-only providers that are not the active one under another environment's name. */
+function withdrawOnlyOf<P extends NamedProvider>(
+  set: PayoutProviderSet<P>,
+): P[] {
   const active = recordedProviderName(set.active.name);
   // Config refuses a withdraw-only provider recorded as the active one; never treat it as another.
-  const old = set.withdrawOnly.filter(
+  return set.withdrawOnly.filter(
     (provider) => recordedProviderName(provider.name) !== active,
   );
-  if (!old.length || input.limit <= 0) return [];
+}
+
+/**
+ * The split owners as a query of `(profile_id, business_id)` rows, one per owner: those with an
+ * account reference at, or a successful tip through, a withdraw-only provider, so their provider
+ * set has two or more providers. Null when nothing is withdraw-only (nobody is split).
+ */
+function splitOwnersSql(set: PayoutProviderSet<NamedProvider>): SQL | null {
+  const old = withdrawOnlyOf(set);
+  if (!old.length) return null;
   const names = listOf([
     ...new Set(old.map((provider) => recordedProviderName(provider.name))),
   ]);
@@ -100,10 +141,7 @@ export async function splitOwnersDue(
            WHERE provider_account_reference IS NOT NULL
              AND (provider, environment::text) IN (${sql.join(accounts, sql`, `)})`
     : sql``;
-  const cutoff = new Date(input.now.getTime() - CHECK_EVERY_MS).toISOString();
-  const result = await guarded(() =>
-    db.execute<{ profile_id: string | null; business_id: string | null }>(sql`
-      WITH owners AS (
+  return sql`
         SELECT t.profile_id, NULL::uuid AS business_id FROM tips t
           JOIN payment_attempts a ON a.intent_id = t.intent_id
          WHERE t.status = 'SUCCEEDED' AND a.status = 'VERIFIED_SUCCEEDED'
@@ -114,22 +152,255 @@ export async function splitOwnersDue(
           JOIN payment_attempts a ON a.intent_id = t.intent_id
          WHERE t.status = 'SUCCEEDED' AND a.status = 'VERIFIED_SUCCEEDED'
            AND a.provider IN (${names})
-        ${accountOwners}
+        ${accountOwners}`;
+}
+
+/** One owner on Split accounts (spec §7). */
+export interface SplitAccount {
+  owner: { profileId?: string; businessId?: string; handle: string | null };
+  ledgerMinor: bigint;
+  /** The owner's provider set in drain order, by recorded name, with what is committed there. */
+  providers: {
+    provider: string;
+    role: 'active' | 'withdraw_only';
+    queuedMinor: bigint;
+  }[];
+  lastCheck: { checkedAt: Date; outcome: string } | null;
+  /**
+   * The open `provider_split_short` issue for this owner, if any. A `short` check with none was not
+   * confirmed by its re-read (a one-off dip), or staff already resolved it.
+   */
+  openIssueId: string | null;
+}
+
+/**
+ * Split accounts (spec §7, P12): every split owner, by id, `limit` at a time after `cursor` (the
+ * last owner id of the page before). The ledger and what is queued are TipMe's own figures, and the
+ * last check is the latest row. Never asks a provider; staff read balances one owner at a time.
+ */
+export async function listSplitAccounts(
+  db: Database,
+  set: PayoutProviderSet<NamedProvider>,
+  input: { cursor?: string; limit: number },
+): Promise<{ items: SplitAccount[]; nextCursor: string | null }> {
+  const owners = splitOwnersSql(set);
+  if (!owners || input.limit <= 0) return { items: [], nextCursor: null };
+  const after = input.cursor
+    ? sql`WHERE COALESCE(o.profile_id, o.business_id) > ${input.cursor}::uuid`
+    : sql``;
+  const result = await guarded(() =>
+    db.execute<{
+      profile_id: string | null;
+      business_id: string | null;
+      handle: string | null;
+      checked_at: Date | string | null;
+      outcome: string | null;
+      issue_id: string | null;
+    }>(sql`
+      WITH owners AS (${owners})
+      SELECT o.profile_id, o.business_id,
+             COALESCE(p.handle, b.slug) AS handle,
+             latest.checked_at, latest.outcome, issue.id AS issue_id
+        FROM owners o
+        LEFT JOIN profiles p ON p.id = o.profile_id
+        LEFT JOIN businesses b ON b.id = o.business_id
+        LEFT JOIN LATERAL (
+          SELECT c.checked_at, c.outcome FROM provider_split_checks c
+           WHERE (o.profile_id IS NOT NULL AND c.profile_id = o.profile_id)
+              OR (o.business_id IS NOT NULL AND c.business_id = o.business_id)
+           ORDER BY c.checked_at DESC LIMIT 1) latest ON true
+        LEFT JOIN LATERAL (
+          SELECT i.id FROM issues i
+           WHERE i.status = 'open' AND i.kind = 'provider_split_short'
+             AND starts_with(i.dedupe_key,
+                   'provider_split_short.' || COALESCE(o.profile_id, o.business_id)::text || '.')
+           ORDER BY i.opened_at DESC LIMIT 1) issue ON true
+       ${after}
+       ORDER BY COALESCE(o.profile_id, o.business_id)
+       LIMIT ${input.limit + 1}`),
+  );
+  const rows = result.rows.slice(0, input.limit);
+  const items: SplitAccount[] = [];
+  for (const row of rows) {
+    const owner = ownerOfRow(row);
+    const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+    const listed: SplitAccount['providers'] = [];
+    for (const provider of providers) {
+      const stored = recordedProviderName(provider.name);
+      listed.push({
+        provider: stored,
+        role: provider === set.active ? 'active' : 'withdraw_only',
+        queuedMinor: await guarded(() =>
+          committedAtProvider(db, owner, stored),
+        ),
+      });
+    }
+    items.push({
+      owner: { ...owner, handle: row.handle },
+      ledgerMinor: await guarded(() => ledgerAvailable(db, owner)),
+      providers: listed,
+      lastCheck:
+        row.checked_at !== null && row.outcome !== null
+          ? { checkedAt: new Date(row.checked_at), outcome: row.outcome }
+          : null,
+      openIssueId: row.issue_id,
+    });
+  }
+  const last = rows.at(-1);
+  return {
+    items,
+    nextCursor:
+      result.rows.length > input.limit && last
+        ? (last.profile_id ?? last.business_id)
+        : null,
+  };
+}
+
+/**
+ * Staff's on-demand read of one owner (Split accounts): each provider in their set, now, through
+ * the quote's cache. A failed read is null, never a guess. Null, with nothing read, when the owner
+ * isn't split. `beforeRead` runs before any provider is asked (the audit row), and a throw there
+ * stops the read.
+ */
+export async function readSplitAccount(
+  db: Database,
+  owner: MoneyOwner,
+  set: PayoutProviderSet,
+  input: {
+    cache?: PartnerQuoteCache;
+    onReadFailure?: ProviderReadFailureLog;
+    beforeRead?: () => Promise<void>;
+  } = {},
+): Promise<{ provider: string; availableMinor: bigint | null }[] | null> {
+  const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+  if (providers.length < 2) return null;
+  await input.beforeRead?.();
+  const read: { provider: string; availableMinor: bigint | null }[] = [];
+  for (const provider of providers) {
+    let availableMinor: bigint | null;
+    try {
+      availableMinor = await providerBalanceAt(db, owner, provider, {
+        ...(input.cache ? { cache: input.cache } : {}),
+      });
+    } catch (error) {
+      input.onReadFailure?.(safeError(error), provider.name);
+      availableMinor = null;
+    }
+    read.push({
+      provider: recordedProviderName(provider.name),
+      availableMinor,
+    });
+  }
+  return read;
+}
+
+/** A withdraw-only provider may be retired this long after the last money moved through it (§4). */
+export const RETIRE_AFTER_MS = 30 * 24 * 3_600_000;
+
+/** One withdraw-only provider on the Providers page's retire check (spec §4, §7). */
+export interface RetireState {
+  provider: string;
+  ownersWithMoney: number;
+  openPayouts: number;
+  openRefunds: number;
+  openDisputes: number;
+  lastActivityAt: Date | null;
+  canRetire: boolean;
+}
+
+/**
+ * The retire check (spec §4, §7) for each withdraw-only provider, by recorded name:
+ * - owners with money there: each owner's latest daily check (P12) that read more than 0 there, or
+ *   could not read it (unknown is never "nothing");
+ * - open payouts (REQUESTED, PROCESSING), refunds (not PAID or FAILED) and disputes (not yet
+ *   settled by TipMe) recorded at that provider;
+ * - the last activity: the latest payment, payout, refund, dispute or Pro from the balance there.
+ * It can retire only when all four are zero and nothing has moved there for 30 days (none ever
+ * counts as long ago). Reads TipMe's own records only.
+ */
+export async function retireCheck(
+  db: Database,
+  set: PayoutProviderSet<NamedProvider>,
+  now: Date,
+): Promise<RetireState[]> {
+  const names = [
+    ...new Set(
+      withdrawOnlyOf(set).map((provider) =>
+        recordedProviderName(provider.name),
+      ),
+    ),
+  ];
+  if (!names.length) return [];
+  const result = await guarded(() =>
+    db.execute<{
+      provider: string;
+      owners: string;
+      payouts: string;
+      refunds: string;
+      disputes: string;
+      last_at: Date | string | null;
+    }>(sql`
+      WITH names(provider) AS (VALUES ${sql.join(
+        names.map((name) => sql`(${name})`),
+        sql`, `,
+      )}),
+      latest AS (
+        SELECT DISTINCT ON (COALESCE(profile_id, business_id)) providers
+          FROM provider_split_checks
+         ORDER BY COALESCE(profile_id, business_id), checked_at DESC
+      ),
+      held AS (
+        SELECT e->>'provider' AS provider, count(*) AS owners
+          FROM latest CROSS JOIN LATERAL jsonb_array_elements(latest.providers) e
+         WHERE e->>'availableMinor' IS NULL OR (e->>'availableMinor')::numeric > 0
+         GROUP BY 1
       )
-      SELECT o.profile_id, o.business_id FROM owners o
-       CROSS JOIN LATERAL (SELECT COALESCE(
-         (SELECT max(c.checked_at) FROM provider_split_checks c WHERE c.profile_id = o.profile_id),
-         (SELECT max(c.checked_at) FROM provider_split_checks c WHERE c.business_id = o.business_id)
-       ) AS checked_at) latest
-       WHERE latest.checked_at IS NULL OR latest.checked_at <= ${cutoff}::timestamptz
-       ORDER BY latest.checked_at ASC NULLS FIRST, o.profile_id, o.business_id
-       LIMIT ${input.limit}`),
+      SELECT n.provider,
+             COALESCE((SELECT owners FROM held WHERE held.provider = n.provider), 0) AS owners,
+             (SELECT count(*) FROM payouts
+               WHERE provider = n.provider AND status IN ('REQUESTED', 'PROCESSING')) AS payouts,
+             (SELECT count(*) FROM tip_refunds
+               WHERE provider = n.provider AND status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN')) AS refunds,
+             (SELECT count(*) FROM disputes
+               WHERE provider = n.provider
+                 AND (status IN ('open', 'responded') OR settled_at IS NULL)) AS disputes,
+             GREATEST(
+               (SELECT max(created_at) FROM payment_attempts WHERE provider = n.provider),
+               (SELECT max(GREATEST(created_at, COALESCE(paid_at, created_at))) FROM payouts
+                 WHERE provider = n.provider),
+               (SELECT max(GREATEST(created_at, updated_at)) FROM tip_refunds
+                 WHERE provider = n.provider),
+               (SELECT max(GREATEST(created_at, updated_at, last_event_at)) FROM disputes
+                 WHERE provider = n.provider),
+               (SELECT max(created_at) FROM pro_purchases WHERE provider = n.provider)
+             ) AS last_at
+        FROM names n`),
   );
-  return result.rows.map((row) =>
-    row.profile_id !== null
-      ? { profileId: row.profile_id }
-      : { businessId: row.business_id! },
-  );
+  const byName = new Map(result.rows.map((row) => [row.provider, row]));
+  return names.map((provider) => {
+    const row = byName.get(provider)!;
+    const lastActivityAt = row.last_at === null ? null : new Date(row.last_at);
+    const state = {
+      provider,
+      ownersWithMoney: Number(row.owners),
+      openPayouts: Number(row.payouts),
+      openRefunds: Number(row.refunds),
+      openDisputes: Number(row.disputes),
+      lastActivityAt,
+    };
+    const quiet =
+      lastActivityAt === null ||
+      now.getTime() - lastActivityAt.getTime() >= RETIRE_AFTER_MS;
+    return {
+      ...state,
+      canRetire:
+        quiet &&
+        state.ownersWithMoney === 0 &&
+        state.openPayouts === 0 &&
+        state.openRefunds === 0 &&
+        state.openDisputes === 0,
+    };
+  });
 }
 
 /** The ledger's available for the owner, less payouts in flight; may be below zero (Q8). */
