@@ -19,6 +19,11 @@ import {
 import {
   announcementMailProvider,
   configuredMailProviders,
+  createMailHealth,
+  isProductionMail,
+  mailFailoverGroup,
+  mailHealthSettings,
+  redisMailHealthStore,
   type MailProviderName,
 } from '@tipme/mail';
 import { Queue, UnrecoverableError, Worker, type Job } from 'bullmq';
@@ -33,6 +38,9 @@ import {
   expireStaleTips,
   previousIsoWeek,
   activeMailProvider,
+  checkCodeDelivery,
+  mailFailoverFixed,
+  MAIL_PROVIDER_LABELS,
   mailOverrideFor,
   mailSealing,
   pretendMailSink,
@@ -58,10 +66,15 @@ import {
   featureOn,
   onFeatureSwitchReadError,
   seedFeatureSwitches,
+  withdrawalSignalDue,
+  type PayoutProviderSet,
 } from '@tipme/database';
 import {
+  bachsEnvironment,
+  configuredPaymentProviders,
   createBachsProvider,
   createMockProvider,
+  recordedProviderName,
   type BachsProvider,
   type MockProvider,
   wiredPaymentProvider,
@@ -69,6 +82,7 @@ import {
 import { Redis } from 'ioredis';
 import { closeWithin } from './close-within.js';
 import { ensureSchedule } from './ensure-schedule.js';
+import { workerErrorLogger } from './redis-error-log.js';
 import { SERVICE_NAME, type WorkerConfig } from './config.js';
 import {
   DOMAIN_EVENT_NAMES,
@@ -80,14 +94,35 @@ import {
   warnIfNoAlertRoute,
 } from './handlers/payment-reserve.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
+import {
+  ensureSplitCheckSchedule,
+  runProviderSplitCheck,
+  SPLIT_CHECK_JOB,
+} from './handlers/provider-split.js';
+import {
+  collectTransferProviders,
+  handleDisputeSteps,
+  handleCollectTransfers,
+  handleDisputeEvidence,
+} from './handlers/collect-transfers.js';
+import { handleCollectReminders } from './handlers/collect-reminders.js';
+import {
+  collectReconReader,
+  collectReserveReader,
+  handleCollectRecon,
+  handleCollectReserve,
+} from './handlers/collect-reserve.js';
 import { handleWithdrawalFreezeOpened } from './handlers/withdrawal-freeze.js';
 import { handlePayoutStart } from './handlers/payout-start.js';
 import { handleTraceProbe } from './handlers/trace-probe.js';
 import { startMailDelivery } from './mail-delivery-loop.js';
+import { mailHealthAlerter } from './handlers/mail-failover.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
   jobSignalsFor,
+  requestGate,
+  whenRequestMoved,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
   businessTipSignals,
@@ -135,6 +170,18 @@ const PAYMENT_RESERVE_INTERVAL_MS = 15 * 60_000;
 // A reserve check takes seconds (the provider client gives up within 10 s, so does the alert). The
 // lock outlasts any run and frees itself well before the next one if the process dies mid-run.
 const PAYMENT_RESERVE_LOCK_TTL_MS = 5 * 60_000;
+// You collect (plan Task 8): held shares move to recipients' accounts. Every 2 minutes, always
+// scheduled (with no rows it asks the partner nothing). A run still going when the next fires makes
+// it skip; the lock frees itself before the following one if the process dies mid-run. Overlap
+// would be safe anyway: every move is conditional, so only the partner calls are saved.
+// You collect (plan Task 11, spec §7): the daily reconciliation, 02:00 in Lagos. It reads every
+// recently active recipient's transfers, so it may take minutes; a run still going makes the next
+// skip, and the lock frees itself well before the following day if the process dies mid-run.
+const COLLECT_RECON_JOB = 'collect.recon';
+const COLLECT_RECON_LOCK_TTL_MS = 60 * 60_000;
+const COLLECT_TRANSFERS_JOB = 'collect.transfers';
+const COLLECT_TRANSFERS_INTERVAL_MS = 2 * 60_000;
+const COLLECT_TRANSFERS_LOCK_TTL_MS = 110_000;
 /** A release check takes minutes: anything still tagged after this was left behind. */
 const REHEARSAL_GRACE_MS = 2 * 3_600_000;
 const ANALYTICS_RETENTION_MS = 90 * 86_400_000;
@@ -164,44 +211,275 @@ const knownReasons = new Set([
 ]);
 
 /**
- * The worker's Bachs reader for the configured provider: that environment's key only, and no
- * webhook secret, so it can ask for statuses but never accept a webhook. Fails startup for a
- * provider this build cannot run (never a silent mock).
+ * The worker's Bachs reader: that environment's key only, and no webhook secret, so it can ask for
+ * statuses but never accept a webhook. The active Bachs, else a withdraw-only one (config keeps
+ * sandbox and live apart, so at most one exists per copy), else on a mock copy the sandbox reader
+ * for tips it took earlier (P11). Fails startup for a provider this build cannot run (never a
+ * silent mock).
  */
 export function workerBachsProvider(
   config: Pick<
     WorkerConfig,
     'PAYMENT_PROVIDER' | 'BACHS_SANDBOX_API_KEY' | 'BACHS_LIVE_API_KEY'
-  >,
+  > &
+    Partial<Pick<WorkerConfig, 'PAYMENT_WITHDRAW_ONLY_PROVIDERS'>>,
 ): BachsProvider | null {
+  const bachsFor = (environment: 'sandbox' | 'live'): BachsProvider => {
+    const apiKey =
+      environment === 'live'
+        ? config.BACHS_LIVE_API_KEY
+        : config.BACHS_SANDBOX_API_KEY;
+    if (!apiKey)
+      throw new Error(
+        environment === 'live'
+          ? 'BACHS_LIVE_API_KEY is required for Bachs live'
+          : 'BACHS_SANDBOX_API_KEY is required for Bachs sandbox',
+      );
+    return createBachsProvider({ apiKey, environment });
+  };
   const name = wiredPaymentProvider(config.PAYMENT_PROVIDER);
   switch (name) {
     case 'bachs-live':
-      if (!config.BACHS_LIVE_API_KEY)
-        throw new Error('BACHS_LIVE_API_KEY is required for Bachs live');
-      return createBachsProvider({
-        apiKey: config.BACHS_LIVE_API_KEY,
-        environment: 'live',
-      });
+      return bachsFor('live');
     case 'bachs-sandbox':
-      if (!config.BACHS_SANDBOX_API_KEY)
-        throw new Error('BACHS_SANDBOX_API_KEY is required for Bachs sandbox');
-      return createBachsProvider({
-        apiKey: config.BACHS_SANDBOX_API_KEY,
-        environment: 'sandbox',
-      });
-    case 'mock':
+      return bachsFor('sandbox');
+    case 'mock': {
+      const withdrawOnly = (config.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? [])
+        .map((n) => bachsEnvironment(n))
+        .find((environment) => environment !== null);
+      if (withdrawOnly) return bachsFor(withdrawOnly);
       // A test or preview copy back on mock still checks the sandbox tips it took earlier.
-      return config.BACHS_SANDBOX_API_KEY
-        ? createBachsProvider({
-            apiKey: config.BACHS_SANDBOX_API_KEY,
-            environment: 'sandbox',
-          })
-        : null;
+      return config.BACHS_SANDBOX_API_KEY ? bachsFor('sandbox') : null;
+    }
     default: {
       const unreachable: never = name;
       throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);
     }
+  }
+}
+
+export type WorkerPaymentAdapter = MockProvider | BachsProvider;
+
+/**
+ * Every payment adapter the worker holds, by the name rows record ('mock', 'mock_alt', 'bachs'),
+ * and the configured withdrawal roles (configured names, e.g. 'bachs-sandbox').
+ */
+export interface WorkerPaymentProviders {
+  byRecordedName: Map<string, WorkerPaymentAdapter>;
+  withdrawalRoles: { active: string; withdrawOnly: string[] };
+}
+
+/**
+ * One adapter per provider in either role, as the API builds them (PAYOUT_PROVIDERS_TOKEN), plus
+ * the legacy readers (P11): mock always, and the sandbox reader on a mock copy with sandbox keys.
+ * mock_alt shares the worker's Redis and QUEUE_PREFIX, as in the API. A role with no adapter stops
+ * startup.
+ */
+export function workerPaymentProviders(
+  config: Pick<
+    WorkerConfig,
+    | 'PAYMENT_PROVIDER'
+    | 'BACHS_SANDBOX_API_KEY'
+    | 'BACHS_LIVE_API_KEY'
+    | 'QUEUE_PREFIX'
+  > &
+    Partial<Pick<WorkerConfig, 'PAYMENT_WITHDRAW_ONLY_PROVIDERS'>>,
+  redis: Redis,
+): WorkerPaymentProviders {
+  const { active, withdrawOnly } = configuredPaymentProviders({
+    PAYMENT_PROVIDER: config.PAYMENT_PROVIDER,
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS:
+      config.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? [],
+  });
+  const byRecordedName = new Map<string, WorkerPaymentAdapter>();
+  // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
+  // a secret the worker can never accept webhooks.
+  byRecordedName.set(
+    'mock',
+    createMockProvider({ redis, prefix: config.QUEUE_PREFIX }),
+  );
+  if (withdrawOnly.includes('mock_alt'))
+    byRecordedName.set(
+      'mock_alt',
+      createMockProvider({
+        redis,
+        prefix: config.QUEUE_PREFIX,
+        name: 'mock_alt',
+      }),
+    );
+  const bachs = workerBachsProvider(config);
+  if (bachs) byRecordedName.set(recordedProviderName(bachs.name), bachs);
+  for (const name of [active, ...withdrawOnly]) {
+    const adapter = byRecordedName.get(recordedProviderName(name));
+    if (!adapter || (bachsEnvironment(name) && adapter.name !== name))
+      throw new Error(`${name} is configured but has no matching adapter`);
+  }
+  return {
+    byRecordedName,
+    withdrawalRoles: { active, withdrawOnly: [...withdrawOnly] },
+  };
+}
+
+/**
+ * The adapter for a recorded provider name. Anything else throws, so a row at a provider this copy
+ * no longer holds is never started or read through another one.
+ */
+export function workerProviderFor(
+  providers: Pick<WorkerPaymentProviders, 'byRecordedName'>,
+): (name: string) => WorkerPaymentAdapter {
+  return (name) => {
+    const adapter = providers.byRecordedName.get(name);
+    if (!adapter) throw new Error('Unsupported persisted payment provider');
+    return adapter;
+  };
+}
+
+/** A balance purchase the read-back booked: its page may need refreshing. */
+export interface ProCollectionPaid {
+  profileId: string | null;
+  handleLower: string | null;
+  planChanged: boolean;
+}
+
+/**
+ * The read-back for Pro paid from the balance (plan Task 8), for every adapter the worker holds,
+ * each under the name its rows record. Its own loop: a balance payment can go through any provider
+ * in either role (per-provider balances, spec §8), not only one that also sells Pro by card. Read
+ * back, never re-sent.
+ */
+export async function readBackProCollections<A>(
+  providers: readonly (readonly [string, A])[],
+  readBack: (
+    providerName: string,
+    provider: A,
+  ) => Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }>,
+): Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }> {
+  const totals = {
+    checked: 0,
+    failed: 0,
+    paid: [] as ProCollectionPaid[],
+  };
+  for (const [providerName, provider] of providers) {
+    const result = await readBack(providerName, provider);
+    totals.checked += result.checked;
+    totals.failed += result.failed;
+    totals.paid.push(...result.paid);
+  }
+  return totals;
+}
+
+/** One platform reserve check: which schedule runs it, and for which adapter. */
+export interface ReserveCheck {
+  id: string;
+  provider: WorkerPaymentAdapter;
+  /** The active provider's: only it also checks TipMe's own money (collect reserve). */
+  active: boolean;
+}
+
+/**
+ * A reserve check for every connected-account adapter in either role: `payments.reserve` for the
+ * active one, `payments.reserve.<recordedName>.<environment>` otherwise. A legacy reader that is in
+ * no role (P11) gets none: it answers old tips only.
+ */
+export function reserveChecks(
+  providers: WorkerPaymentProviders,
+): ReserveCheck[] {
+  const { active, withdrawOnly } = providers.withdrawalRoles;
+  return [active, ...withdrawOnly].flatMap((name) => {
+    const recorded = recordedProviderName(name);
+    const adapter = providers.byRecordedName.get(recorded);
+    if (adapter?.capabilities?.connectedAccounts !== true) return [];
+    const isActive = name === active;
+    return [
+      {
+        id: isActive
+          ? PAYMENT_RESERVE_JOB
+          : `${PAYMENT_RESERVE_JOB}.${recorded}.${adapter.environment}`,
+        provider: adapter,
+        active: isActive,
+      },
+    ];
+  });
+}
+
+/**
+ * The configured withdrawal roles as the database's provider set (spec §4): the active adapter and
+ * the withdraw-only ones, in the order the setting lists them. Legacy readers in no role (P11) are
+ * left out: the split check reads only providers a withdrawal may be paid through.
+ */
+export function workerPayoutProviderSet(
+  providers: WorkerPaymentProviders,
+): PayoutProviderSet {
+  const adapterFor = (name: string) => {
+    const adapter = providers.byRecordedName.get(recordedProviderName(name));
+    // workerPaymentProviders already refuses a role with no adapter; this only keeps that true.
+    if (!adapter)
+      throw new Error(`${name} is configured but has no matching adapter`);
+    return adapter;
+  };
+  const { active, withdrawOnly } = providers.withdrawalRoles;
+  return {
+    active: adapterFor(active),
+    withdrawOnly: withdrawOnly.map(adapterFor),
+  };
+}
+
+/** One schedule per reserve check, every 15 minutes, each with SCHEDULED_RUN_RETENTION. */
+export function ensureReserveSchedules(
+  deps: Pick<Parameters<typeof ensureSchedule>[0], 'queue' | 'logger'>,
+  checks: readonly ReserveCheck[],
+): ReturnType<typeof ensureSchedule>[] {
+  return checks.map((check) =>
+    ensureSchedule({
+      ...deps,
+      id: check.id,
+      every: PAYMENT_RESERVE_INTERVAL_MS,
+    }),
+  );
+}
+
+/**
+ * The providers whose parked payout events reconciliation rechecks: always 'bachs', plus any other
+ * connected-account adapter held. Bachs is swept even on a copy with no Bachs adapter, since
+ * issues.ts leaves parked Bachs rows to this sweep: its read-free checks (payout_unexpected,
+ * conflicts, the age cap) still open staff issues, and a read fails as an error. The pretend
+ * providers' unmatched events go to staff as unmatched_event instead.
+ */
+export function parkedPayoutProviders(
+  providers: Pick<WorkerPaymentProviders, 'byRecordedName'>,
+): string[] {
+  const names = new Set(['bachs']);
+  for (const [name, adapter] of providers.byRecordedName)
+    if (adapter.capabilities?.connectedAccounts === true) names.add(name);
+  return [...names];
+}
+
+/**
+ * Removes reserve schedules that no check owns now (a provider left its role, or a Bachs moved
+ * environment), so they stop firing. A failure is logged and never stops startup: a leftover run
+ * finds no check and is skipped.
+ */
+export async function removeLeftoverReserveSchedules(
+  deps: {
+    queue: Pick<Queue, 'getJobSchedulers' | 'removeJobScheduler'>;
+    logger: { warn(fields: object): void };
+  },
+  keep: ReadonlySet<string>,
+): Promise<number> {
+  try {
+    const leftovers = (await deps.queue.getJobSchedulers())
+      .map((scheduler) => scheduler.key)
+      .filter(
+        (id) =>
+          (id === PAYMENT_RESERVE_JOB ||
+            id.startsWith(`${PAYMENT_RESERVE_JOB}.`)) &&
+          !keep.has(id),
+      );
+    for (const id of leftovers) await deps.queue.removeJobScheduler(id);
+    return leftovers.length;
+  } catch {
+    deps.logger.warn({ event: 'reserve.schedule_cleanup_failed' });
+    return 0;
   }
 }
 
@@ -306,34 +584,39 @@ export async function startJobWorker(
       error: error instanceof Error ? error.name : 'unknown',
     });
   }
-  // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
-  // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
-  const mockProvider = createMockProvider({
-    redis: markers,
-    prefix: config.QUEUE_PREFIX,
-  });
-  // The worker never holds a webhook secret.
-  const bachsProvider = workerBachsProvider(config);
+  // Every adapter in either role plus the legacy readers, on the fail-fast Redis client. The worker
+  // never holds a webhook secret.
+  const paymentProviders = workerPaymentProviders(config, markers);
+  const mockProvider = paymentProviders.byRecordedName.get('mock')!;
+  const bachsProvider =
+    (paymentProviders.byRecordedName.get('bachs') as
+      BachsProvider | undefined) ?? null;
+  /** [recorded name, adapter] for every provider held: the loops below cover each, by its own name. */
+  const providers = [...paymentProviders.byRecordedName];
   const defaultProvider = mockProvider;
-  const providerFor = (name: string): BachsProvider | MockProvider => {
-    if (name === 'mock') return mockProvider;
-    if (name === 'bachs' && bachsProvider) return bachsProvider;
-    throw new Error('Unsupported persisted payment provider');
-  };
+  const providerFor = workerProviderFor(paymentProviders);
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
-  /** Pro purchases per provider this copy can read (rows record 'mock' or 'bachs'). */
+  const parkedProviders = parkedPayoutProviders(paymentProviders);
+  /** A page whose plan changed: refresh it and tell open screens. */
+  const announce = (pages: readonly ProCollectionPaid[]) => {
+    for (const page of pages.filter((p) => p.planChanged)) {
+      // A business's month (Business Pro) changes no page; its signals come with Phase B.
+      if (page.profileId === null) continue;
+      void publishLive([
+        { to: { profile: page.profileId }, type: 'profile.changed' },
+      ]);
+      if (page.handleLower && takeBackRevalidate)
+        void takeBackRevalidate(page.handleLower);
+    }
+  };
   const reconcileProEverywhere = async (now: Date) => {
     const totals = { checked: 0, paid: 0, failed: 0 };
-    const providers: [string, MockProvider | BachsProvider | null][] = [
-      ['mock', mockProvider],
-      ['bachs', bachsProvider],
-    ];
     // Staff tip refunds (owner, 14 Nov 2026): approved ones are sent once, as the recipient's
     // account; refund.paid settles them. Only the `tip_refunds` switch lets anyone ask or approve one,
     // as with Pro refunds: one already approved is still sent.
     for (const [providerName, provider] of providers) {
-      if (!provider?.refundAccountCharge) continue;
+      if (!provider.refundAccountCharge) continue;
       const tipRefunds = await sendTipRefunds(database.db, {
         provider,
         providerName,
@@ -342,7 +625,7 @@ export async function startJobWorker(
       totals.failed += tipRefunds.failed;
     }
     for (const [providerName, provider] of providers) {
-      if (!provider?.initializePlatformCheckout) continue;
+      if (!provider.initializePlatformCheckout) continue;
       const result = await reconcileProPurchases(database.db, {
         provider: {
           initializePlatformCheckout: (input) =>
@@ -360,17 +643,6 @@ export async function startJobWorker(
       totals.checked += result.checked;
       totals.paid += result.paid.length;
       totals.failed += result.failed;
-      // Pro paid from the balance (plan Task 8): read back, never re-sent.
-      const collected = await reconcileProCollections(database.db, {
-        provider,
-        providerName,
-        now,
-        sealing,
-        minAgeMs: config.RECONCILE_MIN_AGE_MS,
-      });
-      totals.checked += collected.checked;
-      totals.paid += collected.paid.length;
-      totals.failed += collected.failed;
       // Approved Pro refunds (plan Task 9): sent once; refund.paid settles them.
       const refunds = await sendProRefunds(database.db, {
         provider,
@@ -378,18 +650,24 @@ export async function startJobWorker(
         now,
       });
       totals.failed += refunds.failed;
-      for (const page of [...result.paid, ...collected.paid].filter(
-        (p) => p.planChanged,
-      )) {
-        // A business's month (Business Pro) changes no page; its signals come with Phase B.
-        if (page.profileId === null) continue;
-        void publishLive([
-          { to: { profile: page.profileId }, type: 'profile.changed' },
-        ]);
-        if (page.handleLower && takeBackRevalidate)
-          void takeBackRevalidate(page.handleLower);
-      }
+      announce(result.paid);
     }
+    // Pro paid from the balance (plan Task 8): read back at every adapter, never re-sent.
+    const collected = await readBackProCollections(
+      providers,
+      (providerName, provider) =>
+        reconcileProCollections(database.db, {
+          provider,
+          providerName,
+          now,
+          sealing,
+          minAgeMs: config.RECONCILE_MIN_AGE_MS,
+        }),
+    );
+    totals.checked += collected.checked;
+    totals.paid += collected.paid.length;
+    totals.failed += collected.failed;
+    announce(collected.paid);
     return totals;
   };
   const schedule = ensureSchedule({
@@ -479,18 +757,50 @@ export async function startJobWorker(
         logger,
       })
     : null;
-  // The platform reserve is read for the same provider only. A run still going when the next one
-  // fires makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
-  if (payoutSetupProvider)
+  // The platform reserve is read for every connected-account provider in either role, each on its
+  // own schedule (`payments.reserve` for the active one). A run still going when the next one fires
+  // makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
+  const reserves = reserveChecks(paymentProviders);
+  const reserveById = new Map(reserves.map((check) => [check.id, check]));
+  if (reserves.length)
     warnIfNoAlertRoute(config.ALERT_WEBHOOK_URL, (entry) => logger.warn(entry));
-  const reserveSchedule = payoutSetupProvider
+  const reserveSchedules = ensureReserveSchedules({ queue, logger }, reserves);
+  void removeLeftoverReserveSchedules(
+    { queue, logger },
+    new Set(reserveById.keys()),
+  );
+  // The same provider as the reserve check: TipMe's own account there is what is reconciled.
+  const collectReserve = payoutSetupProvider
+    ? collectReserveReader(payoutSetupProvider)
+    : null;
+  const collectRecon = payoutSetupProvider
+    ? collectReconReader(payoutSetupProvider)
+    : null;
+  const collectReconSchedule = collectRecon
     ? ensureSchedule({
         queue,
-        id: PAYMENT_RESERVE_JOB,
-        every: PAYMENT_RESERVE_INTERVAL_MS,
+        id: COLLECT_RECON_JOB,
+        repeat: { pattern: '0 2 * * *', tz: 'Africa/Lagos' },
         logger,
       })
     : null;
+  // Per-provider balances (spec §7, P12): the daily split check, always scheduled. With no
+  // withdraw-only provider nobody is split, but money at a provider no longer connected is still
+  // flagged once a day.
+  const splitCheckProviders = workerPayoutProviderSet(paymentProviders);
+  const splitCheckSchedule = ensureSplitCheckSchedule({ queue, logger });
+  const collectTransfersSchedule = ensureSchedule({
+    queue,
+    id: COLLECT_TRANSFERS_JOB,
+    every: COLLECT_TRANSFERS_INTERVAL_MS,
+    logger,
+  });
+  // mock and Bachs only, as before: collect transfers follow tips, and mock_alt never takes one (its
+  // pretend account rule in collect-transfers.ts is still mock's alone).
+  const collectProviders = collectTransferProviders([
+    mockProvider,
+    bachsProvider,
+  ]);
   queue.on('error', () => undefined);
 
   const meter = getMeter(SERVICE_NAME);
@@ -558,6 +868,7 @@ export async function startJobWorker(
             const payoutResult = await reconcilePayouts({
               db: database.db,
               provider: providerFor,
+              parkedProviders,
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
@@ -566,7 +877,8 @@ export async function startJobWorker(
             const pro = await reconcileProEverywhere(now);
             // Option B: business shares between partner accounts, each leg once and read back.
             // Shares move with the `business` and `business_shares` switches (admin); a chargeback's
-            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee).
+            // fee return always moves (owner, 14 Nov 2026: TipMe always bears its fee), and so does
+            // You collect's business money (final review I2: shareTransferKinds).
             const shares = { checked: 0, failed: 0 };
             const [businessOn, sharesSwitchOn] = await Promise.all([
               featureOn(database.db, 'business'),
@@ -575,8 +887,8 @@ export async function startJobWorker(
             const kinds = shareTransferKinds({
               sharesOn: businessOn && sharesSwitchOn,
             });
-            for (const provider of [mockProvider, bachsProvider]) {
-              if (!provider?.collectToPlatform || !provider.transferToAccount)
+            for (const [, provider] of providers) {
+              if (!provider.collectToPlatform || !provider.transferToAccount)
                 continue;
               const result = await runShareTransfers(database.db, {
                 provider,
@@ -718,11 +1030,8 @@ export async function startJobWorker(
             if (!(await featureOn(database.db, 'pro_auto_renew')))
               return 'skipped';
             const totals = { charged: 0, retried: 0 };
-            for (const [providerName, provider] of [
-              ['mock', mockProvider],
-              ['bachs', bachsProvider],
-            ] as const) {
-              if (!provider?.chargeSavedCard) continue;
+            for (const [providerName, provider] of providers) {
+              if (!provider.chargeSavedCard) continue;
               const result = await renewProAutomatically(database.db, {
                 provider,
                 providerName,
@@ -812,22 +1121,39 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'payout_setup' });
             return 'swept';
           }
-          if (job.name === PAYMENT_RESERVE_JOB) {
-            if (!payoutSetupProvider) return 'skipped';
+          if (
+            job.name === PAYMENT_RESERVE_JOB ||
+            job.name.startsWith(`${PAYMENT_RESERVE_JOB}.`)
+          ) {
+            // A schedule left from an earlier configuration reads nothing.
+            const check = reserveById.get(job.name);
+            if (!check) return 'skipped';
             const result = await runUnlessRunning(
               markers,
               {
-                key: `${config.QUEUE_PREFIX}:lock:${PAYMENT_RESERVE_JOB}`,
+                key: `${config.QUEUE_PREFIX}:lock:${check.id}`,
                 ttlMs: PAYMENT_RESERVE_LOCK_TTL_MS,
               },
-              () =>
-                handlePaymentReserve({
+              async () => {
+                const outcome = await handlePaymentReserve({
                   db: database.db,
-                  provider: payoutSetupProvider,
+                  provider: check.provider,
                   thresholdMinor: config.BACHS_RESERVE_ALERT_MINOR,
                   alertWebhookUrl: config.ALERT_WEBHOOK_URL,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
-                }),
+                });
+                // You collect (Task 11): TipMe's own money against what it holds, per currency. The
+                // active provider's check only.
+                if (check.active && collectReserve)
+                  await handleCollectReserve({
+                    db: database.db,
+                    provider: collectReserve,
+                    alertWebhookUrl: config.ALERT_WEBHOOK_URL,
+                    sealing,
+                    log: (entry) => logger.warn({ ...entry, ...fields }),
+                  });
+                return outcome;
+              },
             );
             if (!result.ran) {
               logger.info({ event: 'reserve.skipped_running', ...fields });
@@ -841,6 +1167,117 @@ export async function startJobWorker(
             });
             processed.add(1, { outcome: `reserve_${result.value}` });
             return result.value;
+          }
+          if (job.name === SPLIT_CHECK_JOB) {
+            const result = await runProviderSplitCheck(
+              markers,
+              `${config.QUEUE_PREFIX}:lock:${SPLIT_CHECK_JOB}`,
+              {
+                db: database.db,
+                providers: splitCheckProviders,
+                // Staff logs only: the provider's name and the failure, never an owner or account.
+                log: (entry) => logger.warn({ ...entry, ...fields }),
+                onReadFailure: (failure, provider) =>
+                  logger.warn({
+                    event: 'split_check.read_failed',
+                    provider,
+                    ...failure,
+                    ...fields,
+                  }),
+              },
+            );
+            if (!result.ran) {
+              logger.info({ event: 'split_check.skipped_running', ...fields });
+              processed.add(1, { outcome: 'split_check_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'split_check.completed',
+              ...result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'split_check' });
+            return 'checked';
+          }
+          if (job.name === COLLECT_RECON_JOB) {
+            if (!collectRecon) return 'skipped';
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${COLLECT_RECON_JOB}`,
+                ttlMs: COLLECT_RECON_LOCK_TTL_MS,
+              },
+              () =>
+                handleCollectRecon({
+                  db: database.db,
+                  provider: collectRecon,
+                  log: (entry) => logger.info({ ...entry, ...fields }),
+                }),
+            );
+            if (!result.ran) {
+              processed.add(1, { outcome: 'collect_recon_skipped' });
+              return 'skipped';
+            }
+            processed.add(1, { outcome: `collect_recon_${result.value}` });
+            return result.value;
+          }
+          if (job.name === COLLECT_TRANSFERS_JOB) {
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${COLLECT_TRANSFERS_JOB}`,
+                ttlMs: COLLECT_TRANSFERS_LOCK_TTL_MS,
+              },
+              async () => {
+                const transfers = await handleCollectTransfers({
+                  db: database.db,
+                  providers: collectProviders,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                // Task 12: reminders to add bank details ride the same sweep and lock.
+                const reminders = await handleCollectReminders({
+                  db: database.db,
+                  sealing,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                // Task 9: disputes whose share was settled by this run move on (Review Focus 3).
+                const disputes = await handleDisputeSteps({
+                  db: database.db,
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                // Task 15: evidence staff approved is submitted, once per attempt.
+                const evidence = await handleDisputeEvidence({
+                  db: database.db,
+                  providers: providers.map(([name, provider]) => ({
+                    name,
+                    provider,
+                  })),
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                });
+                return {
+                  ...transfers,
+                  evidenceSubmitted: evidence.submitted,
+                  reminded: reminders.reminded,
+                  disputesAdvanced: disputes.advanced,
+                  disputeReminders: disputes.reminded,
+                };
+              },
+            );
+            if (!result.ran) {
+              logger.info({
+                event: 'collect_transfers.skipped_running',
+                ...fields,
+              });
+              processed.add(1, { outcome: 'collect_transfers_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'collect_transfers.ran',
+              ...result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'collect_transfers' });
+            return result.value.stopped ?? 'ran';
           }
           if (job.name === WITHDRAWALS_SWITCH_EVENT) {
             const outcome = await handleWithdrawalsSwitchChanged(job.data, {
@@ -873,8 +1310,15 @@ export async function startJobWorker(
               log: (entry) => logger.warn({ ...entry, ...fields }),
             });
             logger.info({ event: 'payout.start', outcome, ...fields });
-            // After startPayout's own commits; never awaited, never thrown.
-            void publishLive(jobSignalsFor(job.name, outcome, job.data));
+            // After startPayout's own commits; never awaited, never thrown. A split request's part
+            // signals once no part of its request is still waiting to be sent (Task 9).
+            void whenRequestMoved(
+              jobSignalsFor(job.name, outcome, job.data),
+              requestGate(job.name, outcome, job.data),
+              (input) => withdrawalSignalDue(database.db, input),
+            ).then((messages) =>
+              messages.length > 0 ? publishLive(messages) : undefined,
+            );
             processed.add(1, { outcome: `payout_${outcome}` });
             return outcome;
           }
@@ -963,9 +1407,8 @@ export async function startJobWorker(
     },
     { connection, prefix: config.QUEUE_PREFIX, concurrency: 4 },
   );
-  worker.on('error', (error) =>
-    logger.warn({ event: 'worker.error', error: error.name }),
-  );
+  // Rate-limited per Redis code: a full Redis raised this ~3,000 times a second (21 Nov 2026).
+  worker.on('error', workerErrorLogger({ logger }));
   const relay = startOutboxRelay({
     db: database.db,
     queue,
@@ -998,8 +1441,78 @@ export async function startJobWorker(
     activeCache = { provider, at: Date.now() };
     return provider;
   };
+  // Automatic failover (owner, 23 Nov 2026): only with MAIL_FALLBACK_PROVIDERS set. The breaker
+  // lives in Redis on the fail-fast client: while Redis is down every provider reads healthy.
+  const production = isProductionMail(config);
+  const failoverGroup = mailFailoverGroup(
+    config.MAIL_DEFAULT_PROVIDER,
+    config.MAIL_FALLBACK_PROVIDERS,
+    new Set(mailProviders.keys()),
+    production,
+  );
+  // Two providers or more: a list naming only the default (refused at start anyway) or an
+  // unconfigured one never turns half of it on.
+  const failoverOn = failoverGroup.length > 1;
+  const healthSettings = mailHealthSettings(config);
+  const mailHealth = createMailHealth({
+    store: redisMailHealthStore(markers, {
+      ...healthSettings,
+      prefix: config.QUEUE_PREFIX,
+    }),
+    settings: healthSettings,
+    onChange: mailHealthAlerter({
+      url: config.ALERT_WEBHOOK_URL,
+      labels: MAIL_PROVIDER_LABELS,
+      group: failoverGroup,
+      log: (entry) => logger.warn(entry),
+    }),
+    log: (entry) => logger.warn(entry),
+  });
+  // Whether staff fixed the provider in ops, read at most every 5 seconds like the active one.
+  let fixedCache: { fixed: boolean; at: number } | null = null;
+  const failoverFixed = async (): Promise<boolean> => {
+    if (fixedCache && Date.now() - fixedCache.at < 5000)
+      return fixedCache.fixed;
+    const fixed = await mailFailoverFixed(database.db);
+    fixedCache = { fixed, at: Date.now() };
+    return fixed;
+  };
   const mailDelivery = startMailDelivery({
+    ...(failoverOn
+      ? {
+          checkCodes: async (now: Date) => {
+            if (await failoverFixed()) return;
+            const checks = await checkCodeDelivery(database.db, {
+              health: mailHealth,
+              providers: failoverGroup,
+              now,
+              settings: {
+                unusedAfterMs: config.MAIL_CODE_UNUSED_AFTER_MS,
+                windowMs: config.MAIL_CODE_WINDOW_MS,
+                minSamples: config.MAIL_CODE_MIN_SAMPLES,
+                unusedRatio: config.MAIL_CODE_UNUSED_RATIO,
+                trialCodes: config.MAIL_CODE_TRIAL_CODES,
+              },
+            });
+            for (const check of checks)
+              if (check.outcome !== 'ok' && check.outcome !== 'skipped')
+                logger.warn({ event: 'mail.code_check', ...check });
+          },
+        }
+      : {}),
     deps: {
+      ...(failoverOn
+        ? {
+            failover: {
+              health: mailHealth,
+              fallbacks: config.MAIL_FALLBACK_PROVIDERS,
+              defaultProvider: config.MAIL_DEFAULT_PROVIDER,
+              production,
+              fixed: failoverFixed,
+              resendWindowMs: config.MAIL_RESEND_WINDOW_MS,
+            },
+          }
+        : {}),
       db: database.db,
       sealing,
       providers: mailProviders,
@@ -1037,7 +1550,11 @@ export async function startJobWorker(
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
       await payoutSetupSchedule?.stop();
-      await reserveSchedule?.stop();
+      for (const reserveSchedule of reserveSchedules)
+        await reserveSchedule.stop();
+      await collectTransfersSchedule.stop();
+      await splitCheckSchedule.stop();
+      await collectReconSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
       await takeBacksSchedule.stop();

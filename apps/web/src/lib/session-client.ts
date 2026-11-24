@@ -1,4 +1,5 @@
 'use client';
+import type { StudioIssue } from '@tipme/contracts';
 import { hintFromAnswer, writeSignedInHint } from './signed-in-hint.ts';
 
 /** Calls the API as the signed-in recipient: the session cookie travels, never readable here. */
@@ -19,6 +20,8 @@ export type SessionResult<T> =
       reason?: string;
       /** The API's fixed words for this code. */
       message?: string;
+      /** STUDIO_DESIGN_CHECK_FAILED: the server's design check issues. */
+      issues?: StudioIssue[];
     };
 
 interface ApiFetchInit {
@@ -29,6 +32,8 @@ interface ApiFetchInit {
   headers?: Record<string, string>;
   /** Gives up after this long, as a network failure; the outcome of a write is then unknown. */
   timeoutMs?: number;
+  /** Cancels the call (a newer keystroke replaces a check); it then ends as a network failure. */
+  signal?: AbortSignal;
 }
 
 const READ_RETRY_MS = 400;
@@ -68,15 +73,22 @@ async function sendOnce<T>(
   path: string,
   init: ApiFetchInit,
 ): Promise<SessionResult<T>> {
-  const abort = init.timeoutMs ? new AbortController() : undefined;
-  const timer = abort
-    ? setTimeout(() => abort.abort(), init.timeoutMs)
-    : undefined;
+  const abort =
+    init.timeoutMs || init.signal ? new AbortController() : undefined;
+  const timer =
+    abort && init.timeoutMs
+      ? setTimeout(() => abort.abort(), init.timeoutMs)
+      : undefined;
+  // The caller's own cancel ends the call the same way as the time limit.
+  const forward = () => abort?.abort();
+  if (init.signal?.aborted) forward();
+  init.signal?.addEventListener('abort', forward, { once: true });
   try {
     return await sendWith<T>(path, init, abort);
   } finally {
     // An answered call no longer needs its time limit (and must not keep a timer alive).
     clearTimeout(timer);
+    init.signal?.removeEventListener('abort', forward);
   }
 }
 
@@ -122,6 +134,7 @@ async function sendWith<T>(
       fields?: string[];
       reason?: string;
       message?: string;
+      issues?: StudioIssue[];
     };
   } | null;
   if (response.ok && body && 'data' in body)
@@ -133,6 +146,9 @@ async function sendWith<T>(
     ...(body?.error?.fields ? { fields: body.error.fields } : {}),
     ...(body?.error?.reason ? { reason: body.error.reason } : {}),
     ...(body?.error?.message ? { message: body.error.message } : {}),
+    ...(Array.isArray(body?.error?.issues)
+      ? { issues: body.error.issues }
+      : {}),
   };
 }
 

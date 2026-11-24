@@ -135,3 +135,43 @@ test('the business’s ready notice says the fee comes off the amount, never tha
   assert.match(state.notice.body, /₦50 transfer fee comes off/);
   assert.doesNotMatch(state.notice.body, /TipMe pays/);
 });
+
+// Per-provider balances, Task 9 fix round 1: the business's Money section says what of its balance
+// can't go now, in the business's words, beside a usable form. Never a provider's name.
+test('a ready business quote adds its notices in the business’s words', () => {
+  assert.deepEqual(businessMoneyState(ready()).extraNotices, []);
+  const all = businessMoneyState(
+    ready({ partial: true, bankDetailsNeeded: true, heldElsewhere: true }),
+  );
+  assert.equal(all.canWithdraw, true);
+  assert.deepEqual(
+    all.extraNotices.map((notice) => notice.body),
+    [
+      'Some of the business’s balance can’t be withdrawn right now. Try again later.',
+      'Add the business’s bank details again to withdraw all of its balance.',
+      'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
+    ],
+  );
+  const bank = all.extraNotices[1];
+  assert.equal(bank.href, '#business-bank');
+  assert.equal(bank.linkLabel, 'Add bank details again');
+  assert.deepEqual(
+    all.extraNotices.map((notice) => notice.title),
+    [
+      'Some of the business’s balance is on hold',
+      'Bank details needed',
+      'Some tips can’t be paid out yet',
+    ],
+  );
+  for (const notice of all.extraNotices) {
+    assert.ok(!notice.body.startsWith(notice.title), notice.title);
+    assert.doesNotMatch(JSON.stringify(notice), /\byour\b|mock|bachs/i);
+  }
+  // A quote that isn't ready, or none: its own notice says it.
+  assert.deepEqual(businessMoneyState(null).extraNotices, []);
+  assert.deepEqual(
+    businessMoneyState({ state: 'no_destination', inReview: false })
+      .extraNotices,
+    [],
+  );
+});

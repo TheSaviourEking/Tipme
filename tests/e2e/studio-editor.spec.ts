@@ -1,20 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible, fitsViewport, signUpRecipient } from './helpers';
 import { sql } from './ops-helpers';
-import { settled } from './studio-probes';
 import { API_ORIGIN, WEB_ORIGIN } from './stack';
 
-// Page Studio editor, PR G1 (plan 2026-11-12-page-studio, Task 9a): the way in from My page, the
-// shell, the Style tab and the design check. The `page_studio` switch is on in the e2e stack
-// (playwright.config.ts); "off" is the API's own answer while it is off, a 404 on every Studio
-// route (its API tests prove the 404), played here so nothing else in the run changes.
+// Page Studio editor on v2 (styles plan Task 12, PR 4a; spec §10): the Style tab. Every page edits:
+// Free picks the free styles and Pro all nine, with an accent, an appearance and a cover type, and
+// the preview (the real renderer, in its own frame) follows. Free sees the Pro styles marked and
+// can choose them as a preview that isn't saved (§12.4; studio-free-preview.spec.ts). The
+// `page_studio` switch is on in the e2e stack; "off" is the API's own 404, played here so nothing
+// else in the run changes.
 
 const headers = { origin: WEB_ORIGIN, 'x-tipme-csrf': '1' };
 
-async function makePro(handle: string) {
+// Sign-up and saves take a while on a busy machine; the steps wait on end states.
+test.describe.configure({ timeout: 90_000 });
+
+async function setPlan(handle: string, plan: 'pro' | 'free') {
   await sql(
-    `UPDATE profiles SET staff_pro = true, plan = 'pro' WHERE handle_lower = $1`,
-    [handle],
+    `UPDATE profiles SET staff_pro = $2, plan = $3 WHERE handle_lower = $1`,
+    [handle, plan === 'pro', plan],
   );
 }
 
@@ -25,9 +29,49 @@ async function savedDraft(page: Page) {
   return (await mine.json()).data;
 }
 
-const studioCard = (page: Page) => page.locator('#page-studio');
+async function saveDraft(page: Page, draft: Record<string, unknown>) {
+  const mine = await savedDraft(page);
+  const saved = await page.request.put(`${API_ORIGIN}/v1/me/studio/draft`, {
+    headers,
+    data: { rev: mine.rev, draft: { ...mine.draft, ...draft } },
+  });
+  expect(saved.status(), await saved.text()).toBe(200);
+}
 
-test('G1: with Page Studio switched off, My page has no way in and the editor says it isn’t open', async ({
+const studioCard = (page: Page) => page.locator('#page-studio');
+const cards = (page: Page) =>
+  page.getByRole('radiogroup', { name: 'Style', exact: true });
+const card = (page: Page, name: string) =>
+  cards(page).getByRole('radio', { name: new RegExp(`^${name},`) });
+const swatch = (page: Page, name: string) =>
+  page
+    .getByRole('radiogroup', { name: /^Accent/ })
+    .getByRole('radio', { name, exact: true });
+const choice = (page: Page, group: string, name: string) =>
+  page
+    .getByRole('radiogroup', { name: group, exact: true })
+    .getByRole('radio', { name, exact: true });
+/** The page inside the preview frame. */
+const previewPage = (page: Page) =>
+  page.frameLocator('iframe[title="Preview of your page"]').locator('.studio');
+/** The saved draft's fields, polled until the debounced save has landed. */
+const savedSoon = (
+  page: Page,
+  pick: (draft: Record<string, unknown>) => unknown,
+) =>
+  expect.poll(async () => pick((await savedDraft(page)).draft), {
+    timeout: 10_000,
+  });
+
+async function openEditor(page: Page) {
+  await page.goto('/dashboard/studio');
+  await expect(
+    page.getByRole('heading', { name: 'Page Studio', level: 1 }),
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(cards(page)).toBeVisible();
+}
+
+test('with Page Studio switched off, My page has no way in and the editor says it isn’t open', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo, { live: false });
@@ -48,240 +92,318 @@ test('G1: with Page Studio switched off, My page has no way in and the editor sa
   await expect(page.getByRole('tablist')).toHaveCount(0);
 });
 
-test('G1: Free sees what Page Studio is and that it comes with Pro @mobile', async ({
-  page,
-}, testInfo) => {
-  await signUpRecipient(page, testInfo, { live: false });
-  const card = studioCard(page);
-  await expect(
-    card.getByRole('heading', { name: 'Page Studio (Pro)' }),
-  ).toBeVisible();
-  await expect(card.getByRole('link', { name: 'See Pro' })).toHaveAttribute(
-    'href',
-    '/pro',
-  );
-  await expect(
-    card.getByRole('link', { name: 'Design your page' }),
-  ).toHaveCount(0);
-  // The editor's address gives the same honest answer, and writes nothing.
-  await page.goto('/dashboard/studio');
-  await expect(
-    page.locator('.pst-gate').getByText('Page Studio comes with Pro'),
-  ).toBeVisible();
-  await expect(
-    page.locator('.pst-gate').getByRole('link', { name: 'See Pro' }),
-  ).toBeVisible();
-  expect(await fitsViewport(page)).toBe(true);
-});
-
-test('G1: Pro opens the editor from My page; a colour updates the preview and saves the draft', async ({
+test('a Pro person picks Stage, Rose and Dark, and the preview shows it', async ({
   page,
 }, testInfo) => {
   const who = await signUpRecipient(page, testInfo, { live: false });
-  await makePro(who.handle);
+  await setPlan(who.handle, 'pro');
   await page.goto('/dashboard/settings');
   await studioCard(page)
     .getByRole('link', { name: 'Design your page' })
     .click();
   await page.waitForURL(/\/dashboard\/studio$/);
-  await expect(
-    page.getByRole('heading', { name: 'Page Studio', level: 1 }),
-  ).toBeVisible();
-  const preview = page.locator('.pst-preview .studio');
-  await expect(preview).toBeVisible();
-  const button = () =>
-    preview.evaluate((el) =>
-      (el as HTMLElement).style.getPropertyValue('--studio-l-button'),
-    );
-  const before = await button();
+  await expect(cards(page)).toBeVisible();
+  // Pro: every card can be chosen, and none says PRO.
+  await expect(page.getByText('9 styles')).toBeVisible();
+  await expect(cards(page).getByText('PRO', { exact: true })).toHaveCount(0);
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
 
-  await page.getByLabel('Main colour', { exact: true }).fill('#0F766E');
-  await expect.poll(button).not.toBe(before);
-  expect(await button()).toBe('#0f766e');
+  await card(page, 'Stage').click();
+  await swatch(page, 'Rose').click();
+  await choice(page, 'Appearance', 'Dark').click();
+  await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
+  await expect(swatch(page, 'Rose')).toHaveAttribute('aria-checked', 'true');
   await expect(
-    page.getByRole('status').filter({ hasText: 'Draft saved' }),
-  ).toBeVisible();
-  expect((await savedDraft(page)).draft.brand).toEqual(['#0f766e']);
+    page.locator('.pst-section__head').filter({ hasText: 'Accent' }),
+  ).toContainText('Rose');
 
-  // A typed code that isn't a colour is refused in plain words, and nothing is saved.
-  await page.getByLabel('Main colour', { exact: true }).fill('#12');
-  await page.getByLabel('Main colour', { exact: true }).blur();
-  await expect(page.getByText('Use a colour code like #7A32F9')).toBeVisible();
-  expect((await savedDraft(page)).draft.brand).toEqual(['#0f766e']);
-
-  // Mode, fonts, text size and corners are saved too; picking a font replaces its slot.
-  await page.getByRole('button', { name: 'Dark page' }).click();
-  await page.getByLabel(/Headings/).selectOption('space-grotesk');
-  await page.getByRole('button', { name: 'Roomy' }).click();
-  await page.getByRole('button', { name: 'Round' }).click();
-  await expect(preview).toHaveAttribute('data-mode', 'dark');
-  await expect(preview).toHaveAttribute('data-corners', 'round');
-  await expect(page.getByText('Fonts · 2 of 2 families')).toBeVisible();
-  await expect
-    .poll(async () => {
-      const d = (await savedDraft(page)).draft;
-      return [d.mode, d.fonts.heading, d.scale, d.corners].join(' ');
-    })
-    .toBe('dark space-grotesk roomy round');
-  await expect(
-    page.getByText('Made from your colours · dark page'),
-  ).toBeVisible();
-});
-
-test('G1: a picked yellow shows the accent-only note and passing chips @mobile', async ({
-  page,
-}, testInfo) => {
-  const who = await signUpRecipient(page, testInfo, { live: false });
-  await makePro(who.handle);
-  await page.goto('/dashboard/studio');
-  await page.getByLabel('Main colour', { exact: true }).fill('#f5c400');
-  await expect(
-    page.getByText('Your yellow is too light for text on a light page.'),
-  ).toBeVisible();
-  await expect(
-    page.getByText(
-      'We’ll use it for highlights and for buttons with dark text, and a deeper shade of it for links and headings. Your page will still look yellow.',
-    ),
-  ).toBeVisible();
-  const use = page.locator('.pst-use');
-  await expect(use.getByText(/, not used$/)).toBeVisible();
-  // Every text chip passes: text and links at 4.5 to 1 or more.
-  for (const label of ['Text', 'Quiet text', 'Links']) {
-    const ratio = await page
-      .locator('.pst-chip', { has: page.getByText(label, { exact: true }) })
-      .locator('span')
-      .textContent();
-    expect(Number(ratio?.split(' ')[0]), label).toBeGreaterThanOrEqual(4.5);
-  }
-  expect(await fitsViewport(page)).toBe(true);
-  await page.setViewportSize({ width: 320, height: 800 });
-  await settled(page);
-  expect(await fitsViewport(page)).toBe(true);
-});
-
-/** A photo of `size` px a side, made in the browser and uploaded as the person. */
-async function uploadPhoto(page: Page, size: number): Promise<string> {
-  return page.evaluate(
-    async ({ api, size }) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = size;
-      canvas.height = size;
-      const g = canvas.getContext('2d')!;
-      g.fillStyle = '#2878c8';
-      g.fillRect(0, 0, size, size);
-      g.fillStyle = '#f5c400';
-      g.fillRect(size / 10, size / 10, size / 3, size / 3);
-      const blob = await new Promise<Blob>((done) =>
-        canvas.toBlob((b) => done(b!), 'image/jpeg', 0.9),
-      );
-      const response = await fetch(`${api}/v1/me/studio/images`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'content-type': 'image/jpeg', 'x-tipme-csrf': '1' },
-        body: blob,
-      });
-      if (response.status !== 201)
-        throw new Error(`upload: ${response.status} ${await response.text()}`);
-      return (await response.json()).meta.imageId as string;
-    },
-    { api: API_ORIGIN, size },
+  // The frame is a picture: hidden from screen readers, out of the Tab order, described in text.
+  const frame = page.locator('iframe[title="Preview of your page"]').first();
+  await expect(frame).toHaveAttribute('aria-hidden', 'true');
+  await expect(frame).toHaveAttribute('tabindex', '-1');
+  await expect(page.locator('.pst-frame .sr-only').first()).toHaveText(
+    'Preview of your page',
   );
-}
-
-test('G1: the check panel shows a low-res photo issue and its fix clears it', async ({
-  page,
-}, testInfo) => {
-  const who = await signUpRecipient(page, testInfo, { live: false });
-  await makePro(who.handle);
-  await page.goto('/dashboard/settings');
-  const imageId = await uploadPhoto(page, 640);
-  const mine = await savedDraft(page);
-  const saved = await page.request.put(`${API_ORIGIN}/v1/me/studio/draft`, {
-    headers,
-    data: {
-      rev: mine.rev,
-      draft: {
-        ...mine.draft,
-        rows: [
-          {
-            id: 'e2erow01',
-            columns: '1',
-            spacing: 'm',
-            background: 'page',
-            cells: [
-              [
-                {
-                  id: 'e2eblk01',
-                  kind: 'photo',
-                  variant: 'square',
-                  imageId,
-                  alt: 'Studio night, Yaba',
-                },
-              ],
-            ],
-          },
-        ],
-      },
-    },
-  });
-  expect(saved.status(), await saved.text()).toBe(200);
-
-  await page.goto('/dashboard/studio');
-  const check = page.getByRole('complementary', { name: 'Design check' });
-  await expect(check.getByText('1 to fix before publishing')).toBeVisible();
-  await expect(check.getByText('A photo will look blurry')).toBeVisible();
-  await expect(
-    page.getByRole('tab', { name: /Check\s*1 to fix/ }),
-  ).toBeVisible();
-  // Desktop: the Style tab, the preview and the check beside it, with an issue showing.
-  await expectAccessible(page);
-  await check.getByRole('button', { name: 'Make the photo smaller' }).click();
-  await expect(check.getByText('Every check passes')).toBeVisible();
-  await expect(check.getByText('A photo will look blurry')).toHaveCount(0);
-  await expect(check.getByText('Photos are sharp')).toBeVisible();
-  // Focus lands on the count, not on the page's top, once the issue and its button are gone.
-  await expect(check.getByText('Every check passes')).toBeFocused();
-  // The fix is a document change like any other: saved, and the server agrees.
+  const shown = previewPage(page);
+  await expect(shown).toHaveAttribute('data-style', 'stage');
+  await expect(shown).toHaveAttribute('data-mode', 'dark');
   await expect
-    .poll(async () => (await savedDraft(page)).draft.rows[0].columns)
-    .toBe('1-1');
-  expect((await savedDraft(page)).check.issues).toEqual([]);
+    .poll(() =>
+      shown.evaluate((el) =>
+        (el as HTMLElement).style.getPropertyValue('--studio-acc'),
+      ),
+    )
+    .toBe('#ff8db8');
+  await savedSoon(page, (d) => [
+    d.v,
+    d.style,
+    d.accent,
+    d.mode,
+    d.cover,
+  ]).toEqual([2, 'stage', 'rose', 'dark', 'yours']);
+  await expect(page.locator('.pst-bar').getByRole('status')).toHaveText(
+    'Saved · not published',
+  );
 });
 
-test('G1: the editor works by keyboard and passes axe on each tab @mobile', async ({
+test('a Free person picks Journal and Green and it saves @mobile', async ({
   page,
 }, testInfo) => {
-  const who = await signUpRecipient(page, testInfo, { live: false });
-  await makePro(who.handle);
-  await page.goto('/dashboard/studio');
-  const style = page.getByRole('tab', { name: 'Style' });
-  await expect(style).toHaveAttribute('aria-selected', 'true');
-  await expectAccessible(page);
-  await style.focus();
-  // G2 put Blocks between Style and Check; End jumps to the last tab.
+  await signUpRecipient(page, testInfo, { live: false });
+  await page.goto('/dashboard/settings');
+  await studioCard(page)
+    .getByRole('link', { name: 'Design your page' })
+    .click();
+  await expect(cards(page)).toBeVisible();
+  await expect(page.getByText('4 of 9 free')).toBeVisible();
+  // Green is Journal's own accent, so it is chosen on Classic first: a picked accent stays picked
+  // across styles (§10), where Journal's own would be stored as no accent at all.
+  await swatch(page, 'Green').click();
+  await card(page, 'Journal').click();
+  await expect(swatch(page, 'Green')).toHaveAttribute('aria-checked', 'true');
+  await expect(previewPage(page)).toHaveAttribute('data-style', 'journal');
+  await savedSoon(page, (d) => [d.style, d.accent]).toEqual([
+    'journal',
+    'green',
+  ]);
+  expect(await fitsViewport(page)).toBe(true);
+});
+
+test('Free sees PRO on five cards, the banner "PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.", and can choose them to preview', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  await expect(cards(page).getByText('PRO', { exact: true })).toHaveCount(5);
+  const banner = page.getByRole('link', {
+    name: 'PRO · Stage, Signboard, Sprint, Tiles and Horizon come with Pro.',
+  });
+  await expect(banner).toHaveAttribute('href', '/pro');
+  // Every card is a real radio, Pro ones included (§12.4 overrides the canvas's aria-disabled).
+  for (const name of [
+    'Stage',
+    'Signboard',
+    'Sprint',
+    'Tiles',
+    'Horizon',
+    'Clear',
+  ])
+    await expect(card(page, name)).not.toHaveAttribute('aria-disabled', 'true');
+  // The label says what the card is: "{Name}, {mood}. {Free|Pro}." (Classic adds the default).
+  await expect(card(page, 'Clear')).toHaveAccessibleName(
+    'Clear, Quiet, bright, precise. Free.',
+  );
+  await expect(card(page, 'Classic')).toHaveAccessibleName(
+    'Classic, Today’s TipMe page, unchanged. Free. The default.',
+  );
+
+  // A click on a Pro card chooses it (a preview); arrow keys choose each card in turn and never
+  // leave the group.
+  await card(page, 'Stage').click();
+  await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
+  await card(page, 'Classic').click();
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('ArrowRight');
-  await expect(page.getByRole('tab', { name: 'Blocks' })).toBeFocused();
+  await expect(card(page, 'Clear')).toBeFocused();
+  await expect(card(page, 'Clear')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(card(page, 'Stage')).toBeFocused();
+  await expect(card(page, 'Stage')).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('End');
-  const checkTab = page.getByRole('tab', { name: /^Check/ });
-  await expect(checkTab).toBeFocused();
-  await expect(checkTab).toHaveAttribute('aria-selected', 'true');
-  await expect(
-    page.getByRole('tabpanel').getByRole('heading', { name: 'Design check' }),
-  ).toBeVisible();
-  await expectAccessible(page);
-  await page.keyboard.press('Home');
-  await expect(style).toBeFocused();
-  // The segmented choices are buttons that say which one is on.
-  await page.getByRole('button', { name: 'Compact' }).focus();
-  await page.keyboard.press('Enter');
-  await expect(page.getByRole('button', { name: 'Compact' })).toHaveAttribute(
-    'aria-pressed',
+  await expect(card(page, 'Horizon')).toBeFocused();
+  await expect(card(page, 'Horizon')).toHaveAttribute('aria-checked', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(card(page, 'Classic')).toBeFocused();
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
+
+  // The photo accent is Pro too.
+  await expect(swatch(page, 'From your photo')).toHaveAttribute(
+    'aria-disabled',
     'true',
   );
-  // The preview is a picture: nothing in it takes focus.
-  expect(
-    await page
-      .locator('.pst-preview a, .pst-preview button')
-      .evaluateAll((els) => els.filter((el) => !el.closest('[inert]')).length),
-  ).toBe(0);
+  await expect(
+    page.getByText('“From your photo” comes with Pro.'),
+  ).toBeVisible();
+  await savedSoon(page, (d) => d.style).toBe('classic');
 });
+
+test('choosing TipMe purple stores no accent', async ({ page }, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  await expect(swatch(page, 'TipMe purple')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await swatch(page, 'Coral').click();
+  await savedSoon(page, (d) => d.accent).toBe('coral');
+  // Arrow keys move along the swatches and choose; they never leave the group.
+  await swatch(page, 'Coral').focus();
+  await page.keyboard.press('Home');
+  await expect(swatch(page, 'TipMe purple')).toBeFocused();
+  await expect(swatch(page, 'TipMe purple')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await savedSoon(page, (d) => d.accent).toBeNull();
+});
+
+test('the Cover control shows Your cover and Plain only for Signboard and Sprint, with "Change your cover in Settings." linking to the setting', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await openEditor(page);
+  const cover = page.getByRole('radiogroup', { name: 'Cover', exact: true });
+  await expect(cover.getByRole('radio')).toHaveText([
+    'Your cover',
+    'Gradient',
+    'Plain',
+  ]);
+  await choice(page, 'Cover', 'Gradient').click();
+  for (const name of ['Signboard', 'Sprint']) {
+    await card(page, name).click();
+    await expect(cover.getByRole('radio')).toHaveText(['Your cover', 'Plain']);
+    // A style without the gradient selects Your cover (Review Focus 5).
+    await expect(choice(page, 'Cover', 'Your cover')).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    await card(page, 'Clear').click();
+    await choice(page, 'Cover', 'Gradient').click();
+  }
+  // Arrow keys choose as they move: passing Sprint (no gradient) must not lose the Gradient choice.
+  await card(page, 'Clear').focus();
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowRight');
+  await expect(card(page, 'Sprint')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Cover', 'Your cover')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  for (let i = 0; i < 3; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
+  await expect(choice(page, 'Cover', 'Gradient')).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+  await card(page, 'Clear').click();
+  await expect(
+    page.getByRole('link', { name: 'Change your cover in Settings.' }),
+  ).toHaveAttribute('href', '/dashboard/settings#cover');
+  await savedSoon(page, (d) => [d.style, d.cover]).toEqual([
+    'clear',
+    'gradient',
+  ]);
+});
+
+test('Stage on a non-photo cover shows "Stage looks best with a cover photo. Add one in Settings."', async ({
+  page,
+}, testInfo) => {
+  // A new page's cover is the automatic one, not a photo.
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await openEditor(page);
+  const notice = page.getByText(
+    'Stage looks best with a cover photo. Add one in Settings.',
+  );
+  await expect(notice).toHaveCount(0);
+  await card(page, 'Stage').click();
+  await expect(
+    page
+      .getByRole('tabpanel')
+      .getByText('Stage looks best with a cover photo. Add one in Settings.'),
+  ).toBeVisible();
+  await card(page, 'Clear').click();
+  await expect(notice).toHaveCount(0);
+});
+
+test('a refused save puts back the draft as it was last saved', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo, { live: false });
+  await openEditor(page);
+  const frame = page.frameLocator('iframe[title="Preview of your page"]');
+  // Classic with every default: today's page in the preview.
+  await expect(frame.locator('.profile-page')).toBeVisible({ timeout: 20_000 });
+  // The server refuses the next save as needing Pro (as for a plan that changed meanwhile).
+  await page.route(`${API_ORIGIN}/v1/me/studio/draft`, (route) =>
+    route.request().method() === 'PUT'
+      ? route.fulfill({
+          status: 403,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: 'STUDIO_PRO_REQUIRED' } }),
+        })
+      : route.continue(),
+  );
+  await card(page, 'Journal').click();
+  await expect(page.getByText('That change needs Pro')).toBeVisible({
+    timeout: 15_000,
+  });
+  // The screen matches "kept as it was last saved": Classic again, in the cards and the preview.
+  await expect(card(page, 'Classic')).toHaveAttribute('aria-checked', 'true');
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('.pst-stage__name')).toHaveText('Classic');
+  await expect(frame.locator('.profile-page')).toBeVisible();
+  await expect(frame.locator('.studio')).toHaveCount(0);
+  expect((await savedDraft(page)).draft.style).toBe('classic');
+});
+
+test('a lapsed draft with a Pro style shows the issue on the Check tab; “Choose a free style” opens the cards', async ({
+  page,
+}, testInfo) => {
+  const who = await signUpRecipient(page, testInfo, { live: false });
+  await setPlan(who.handle, 'pro');
+  await saveDraft(page, { style: 'tiles' });
+  await setPlan(who.handle, 'free');
+  await openEditor(page);
+  const tab = page.getByRole('tab', { name: /^Check/ });
+  await expect(tab).toContainText('1 to fix');
+  // The draft keeps its style; the other Pro cards can be previewed (§12.4).
+  await expect(card(page, 'Tiles')).toHaveAttribute('aria-checked', 'true');
+  await expect(card(page, 'Stage')).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  );
+  await tab.click();
+  const panel = page.getByRole('tabpanel');
+  await expect(panel.getByText('Tiles is a Pro style')).toBeVisible();
+  await expect(panel.getByRole('link', { name: 'See Pro' })).toHaveAttribute(
+    'href',
+    '/pro',
+  );
+  await panel.getByRole('button', { name: 'Choose a free style' }).click();
+  await expect(card(page, 'Tiles')).toBeFocused();
+  // Left through the Pro cards (each a preview, never saved) to Journal, which saves.
+  for (let i = 0; i < 4; i += 1) await page.keyboard.press('ArrowLeft');
+  await expect(card(page, 'Journal')).toBeFocused();
+  await expect(card(page, 'Journal')).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('tab', { name: /^Check/ })).toContainText('Pass');
+  await savedSoon(page, (d) => d.style).toBe('journal');
+});
+
+for (const width of [390, 1440])
+  test(`axe is clean on the Style and Blocks tabs at ${width}`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    const who = await signUpRecipient(page, testInfo, { live: false });
+    await setPlan(who.handle, 'pro');
+    await saveDraft(page, {
+      style: 'clear',
+      blocks: [
+        { id: 'e2eaxe01', kind: 'text', variant: 'heading', text: 'Hello' },
+        { id: 'e2eaxe02', kind: 'quote', text: 'Sang like home.' },
+      ],
+    });
+    await openEditor(page);
+    await expect(previewPage(page)).toBeVisible();
+    await expectAccessible(page);
+    expect(await fitsViewport(page)).toBe(true);
+    await page.getByRole('tab', { name: 'Blocks' }).click();
+    await expect(
+      page.getByRole('list', { name: 'Your blocks' }).getByRole('listitem'),
+    ).toHaveCount(2);
+    await expectAccessible(page);
+    expect(await fitsViewport(page)).toBe(true);
+  });

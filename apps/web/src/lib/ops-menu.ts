@@ -67,6 +67,28 @@ const LINKS: {
     needs: ['pro.price'],
   },
   {
+    // TipMe's fee per plan (owner, 18 Nov 2026): Free and Pro, for new tips only.
+    href: '/ops/plan-fees',
+    label: 'Fees',
+    group: 'Work',
+    needs: ['fees.manage'],
+  },
+  {
+    // You collect (plan Task 15, spec §9): held money, transfers, disputes, the reserve, unclaimed
+    // and settings, as tabs of one entry.
+    href: '/ops/collect',
+    label: 'You collect',
+    group: 'Work',
+    needs: ['collect.view'],
+  },
+  {
+    // Per-provider balances (spec §7): owners whose money is at more than one payment provider.
+    href: '/ops/split-accounts',
+    label: 'Split accounts',
+    group: 'Work',
+    needs: ['issues.view'],
+  },
+  {
     href: '/ops/businesses',
     label: 'Businesses',
     group: 'Work',

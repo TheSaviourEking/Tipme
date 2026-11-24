@@ -88,7 +88,7 @@ async function setup(t) {
         profileId: TOBI,
         amountMinor: 200000n,
         idempotencyKey: randomUUID(),
-        provider: fakeProvider(),
+        providers: { active: fakeProvider(), withdrawOnly: [] },
       })
     ).payoutId;
   const available = async () => (await balanceOf(db, TOBI)).availableMinor;
@@ -834,11 +834,14 @@ test('a failed balance read reaches the caller by name only, never with account 
   const failures = [];
   const quote = await withdrawalQuote(s.db, {
     profileId: TOBI,
-    provider: {
-      ...fakeProvider(),
-      payoutBalance: async () => {
-        throw new TypeError('acct_secret_123 was refused');
+    providers: {
+      active: {
+        ...fakeProvider(),
+        payoutBalance: async () => {
+          throw new TypeError('acct_secret_123 was refused');
+        },
       },
+      withdrawOnly: [],
     },
     onReadFailure: (failure) => failures.push(failure),
   });

@@ -49,6 +49,7 @@ import {
 } from '../auth/session.guard.js';
 import { CsrfGuard } from '../auth/csrf.guard.js';
 import { BACHS_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { effectiveCollectionMode } from '../checkout/collection-mode.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { LOGGER } from '../tokens.js';
 import { ProfileRevalidator } from './revalidate.js';
@@ -101,7 +102,12 @@ export class PaymentAccountsController {
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<BachsPaymentAccountStatus>> {
     const bachs = this.bachs();
-    if (!bachs)
+    if (!bachs) {
+      // No page yet answers as before (no account, nothing collecting): only the mode is read.
+      const owner = await getPaymentAccountRecipient(
+        this.database.db,
+        auth.userId,
+      );
       return {
         data: {
           enabled: false,
@@ -112,8 +118,10 @@ export class PaymentAccountsController {
           feeCollector: null,
           requirementsDue: [],
           lastSyncedAt: null,
+          collecting: owner ? await this.collecting(owner.profileId) : false,
         },
       };
+    }
 
     const recipient = await this.recipient(auth.userId);
     const account = await getPaymentAccountForProfile(this.database.db, {
@@ -137,8 +145,24 @@ export class PaymentAccountsController {
         feeCollector,
         requirementsDue: account?.requirementsDue ?? [],
         lastSyncedAt: account?.lastSyncedAt?.toISOString() ?? null,
+        collecting: await this.collecting(recipient.profileId),
       },
     };
+  }
+
+  /**
+   * You collect (plan Task 14): TipMe takes this recipient's tips, so there is no account of their
+   * own to set up. Their mode, or, undecided, the one their next quote would fix now (re-review 2
+   * R2-I1), read without writing.
+   */
+  private async collecting(profileId: string): Promise<boolean> {
+    return (
+      (await effectiveCollectionMode(
+        this.database.db,
+        profileId,
+        this.config.PAYMENT_PROVIDER,
+      )) === 'collect'
+    );
   }
 
   @Post('onboarding')

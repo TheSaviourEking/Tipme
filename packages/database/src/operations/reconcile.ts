@@ -43,9 +43,15 @@ import { recordProviderEvent } from './provider-events.js';
 /**
  * What reconciliation needs from a provider: an authoritative, server-to-server status check.
  * `expectation` is TipMe's whole quoted share (processing included); a provider that reports
- * the platform fee it applied (Bachs) confirms success only when the two match.
+ * the platform fee it applied (Bachs) confirms success only when the two match. A collect tip
+ * (TipMe's own checkout) has none: there is no platform fee to check (Task 4).
  */
 export interface TransactionVerifier {
+  /**
+   * The partner environment this verifier reads (the pretend provider: `sandbox`); a collect tip's
+   * transfer records it.
+   */
+  environment: 'sandbox' | 'live';
   verifyTransaction(
     providerReference: string,
     expectation?: { platformFeeMinor: bigint },
@@ -58,6 +64,8 @@ export interface TransactionVerifier {
     collected?: true;
     /** The provider settled the money in another currency than it was paid in. */
     settlementCurrency?: string;
+    /** TipMe's own account: the partner's charge, which a collect tip's refund or dispute names. */
+    chargeReference?: string;
   }>;
 }
 
@@ -88,7 +96,8 @@ export async function findAttemptsToReconcile(
     provider: string;
     providerReference: string;
     createdAt: Date;
-    expectation: { platformFeeMinor: bigint };
+    /** Undefined for a collect tip: its checkout is TipMe's own, with no platform fee. */
+    expectation: { platformFeeMinor: bigint } | undefined;
   }[]
 > {
   const rows = await db
@@ -99,6 +108,7 @@ export async function findAttemptsToReconcile(
       createdAt: paymentAttempts.createdAt,
       platformFeeMinor: tipQuotes.platformFeeMinor,
       providerFeeMinor: tipQuotes.providerFeeMinor,
+      collectionMode: tipQuotes.collectionMode,
     })
     .from(paymentAttempts)
     .innerJoin(paymentIntents, eq(paymentIntents.id, paymentAttempts.intentId))
@@ -128,17 +138,21 @@ export async function findAttemptsToReconcile(
       asc(paymentAttempts.createdAt),
     )
     .limit(input.limit);
-  return rows.flatMap(({ platformFeeMinor, providerFeeMinor, ...row }) =>
-    row.provider && row.providerReference
-      ? [
-          {
-            ...row,
-            provider: row.provider,
-            providerReference: row.providerReference,
-            expectation: quotedShare({ platformFeeMinor, providerFeeMinor }),
-          },
-        ]
-      : [],
+  return rows.flatMap(
+    ({ platformFeeMinor, providerFeeMinor, collectionMode, ...row }) =>
+      row.provider && row.providerReference
+        ? [
+            {
+              ...row,
+              provider: row.provider,
+              providerReference: row.providerReference,
+              expectation:
+                collectionMode === 'collect'
+                  ? undefined
+                  : quotedShare({ platformFeeMinor, providerFeeMinor }),
+            },
+          ]
+        : [],
   );
 }
 
@@ -174,10 +188,11 @@ export async function reconcileAttempts(input: {
   const errorKinds: Record<string, number> = {};
   for (const attempt of attempts) {
     try {
-      const answer = await providerFor(
-        input.provider,
-        attempt.provider,
-      ).verifyTransaction(attempt.providerReference, attempt.expectation);
+      const verifier = providerFor(input.provider, attempt.provider);
+      const answer = await verifier.verifyTransaction(
+        attempt.providerReference,
+        attempt.expectation,
+      );
       if (answer.status === 'succeeded' || answer.status === 'failed') {
         const result = await recordProviderEvent(input.db, {
           provider: attempt.provider,
@@ -191,6 +206,10 @@ export async function reconcileAttempts(input: {
           amountMinor: answer.amountMinor,
           currency: answer.currency,
           providerFeeMinor: answer.feeMinor,
+          environment: verifier.environment,
+          ...(answer.chargeReference
+            ? { chargeReference: answer.chargeReference }
+            : {}),
           signatureVerified: true,
           payload: { source: 'reconciliation' },
           now: input.now,
@@ -323,6 +342,11 @@ export async function reconcilePayouts(input: {
   provider: ProviderResolver<PayoutVerifier>;
   now: Date;
   minAgeMs: number;
+  /**
+   * Recorded provider names whose parked payout events are rechecked, each through its own reader.
+   * A row for any other provider is left alone, so it is never read through another provider.
+   */
+  parkedProviders: readonly string[];
   limit?: number;
   /** Only this payout (an admin re-check). */
   payoutId?: string;
@@ -528,8 +552,11 @@ export async function reconcilePayouts(input: {
       errors += 1;
     }
 
-  if (!input.payoutId) {
-    const parked = await sweepParkedPayoutEvents(input, limit);
+  if (!input.payoutId && input.parkedProviders?.length) {
+    const parked = await sweepParkedPayoutEvents(
+      { ...input, parkedProviders: input.parkedProviders },
+      limit,
+    );
     applied += parked.applied;
     errors += parked.errors;
   }
@@ -541,11 +568,15 @@ export async function reconcilePayouts(input: {
   };
 }
 
-/** Payout events that had no payout to match when they arrived, oldest first. */
+/**
+ * Payout events that had no payout to match when they arrived, oldest first. Each row is matched,
+ * read and recorded only as its own provider's (the name it was parked under), never another's.
+ */
 async function sweepParkedPayoutEvents(
   input: {
     db: Database;
     provider: ProviderResolver<PayoutVerifier>;
+    parkedProviders: readonly string[];
     now: Date;
   },
   limit: number,
@@ -554,6 +585,7 @@ async function sweepParkedPayoutEvents(
   const parked = await db
     .select({
       id: unmatchedProviderEvents.id,
+      provider: unmatchedProviderEvents.provider,
       providerEventId: unmatchedProviderEvents.providerEventId,
       payload: unmatchedProviderEvents.payload,
       receivedAt: unmatchedProviderEvents.receivedAt,
@@ -565,7 +597,7 @@ async function sweepParkedPayoutEvents(
     )
     .where(
       and(
-        eq(unmatchedProviderEvents.provider, 'bachs'),
+        inArray(unmatchedProviderEvents.provider, [...input.parkedProviders]),
         eq(unmatchedProviderEvents.reason, 'unknown_payout'),
         sql`NOT EXISTS (
           SELECT 1 FROM provider_events e
@@ -619,7 +651,7 @@ async function sweepParkedPayoutEvents(
       };
       let payoutId = await findPayoutByReference(
         db,
-        'bachs',
+        row.provider,
         event.providerReference,
       );
       if (!payoutId && event.operationReference) {
@@ -637,6 +669,8 @@ async function sweepParkedPayoutEvents(
             and(
               sql`${payouts.id}::text = ${event.operationReference}`,
               eq(payouts.accountReference, event.accountReference),
+              // Only a payout at the provider that sent the event: never one at another.
+              eq(payouts.provider, row.provider),
             ),
           );
         if (named?.providerReference === event.providerReference) {
@@ -651,7 +685,7 @@ async function sweepParkedPayoutEvents(
           // Stored as seen, which also takes it out of the queue.
           await recordPayoutOutcome(db, {
             payoutId: named.id,
-            provider: 'bachs',
+            provider: row.provider,
             providerEventId: row.providerEventId,
             providerReference: null,
             outcome: 'failed',
@@ -676,7 +710,7 @@ async function sweepParkedPayoutEvents(
           await capParkedAge(row, named.id);
           const { status, ...details } = await providerFor(
             input.provider,
-            'bachs',
+            row.provider,
           ).fetchPayoutStatus(event.providerReference);
           if (status === 'not_found') continue;
           const adopted = await applyFoundPayout(
@@ -696,9 +730,10 @@ async function sweepParkedPayoutEvents(
       }
       if (payoutId) {
         await capParkedAge(row, payoutId);
-        const reader = providerFor(input.provider, 'bachs');
+        const reader = providerFor(input.provider, row.provider);
         const outcome = await applyPayoutSignal(db, {
           payoutId,
+          provider: row.provider,
           providerReference: event.providerReference,
           eventId: row.providerEventId,
           status: event.status,
@@ -729,6 +764,7 @@ async function sweepParkedPayoutEvents(
         continue;
       await openUnexpectedPayout(db, {
         unmatchedId: row.id,
+        provider: row.provider,
         accountReference: event.accountReference,
         providerReference: event.providerReference,
         operationReference: event.operationReference ?? null,
@@ -798,6 +834,8 @@ export async function recheckSubject(input: {
       provider: input.provider,
       now,
       minAgeMs: 0,
+      // One payout only: the parked sweep never runs for a single re-check.
+      parkedProviders: [],
       limit: 1,
       payoutId: input.payoutId,
     });

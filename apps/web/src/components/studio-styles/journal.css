@@ -1,0 +1,849 @@
+/* Journal: "A well-set magazine column" (spec 2026-11-17-page-studio-styles §9.3; canvas "Journal ·
+   phone", "Journal · desktop"). Source Serif 4 for the name, bio, section titles and pull quote;
+   Inter for the rest. Radii 6 (controls and Tip) and 4 (photos), plus the circle avatar. No cards,
+   no shadows: hairlines and a reading column. */
+
+.studio[data-style='journal'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --serif:
+    'Studio Source Serif 4', 'Studio Source Serif 4 Fallback', Georgia, serif;
+  letter-spacing: 0;
+}
+
+.studio[data-style='journal'] .studio-page {
+  box-sizing: border-box;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding: 48px var(--gutter) 0;
+}
+
+/* The top row: the category label left, the 40 px avatar right, a 1 px fg rule under it. */
+.studio[data-style='journal'] .studio-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--studio-fg);
+}
+
+.studio[data-style='journal'] .studio-kicker {
+  min-width: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+
+.studio[data-style='journal'] .studio-avatar--top {
+  width: 40px;
+  height: 40px;
+  margin-inline-start: auto;
+  font-size: 15px;
+}
+
+.studio[data-style='journal'] .studio-top__handle,
+.studio[data-style='journal'] .studio-identity .studio-avatar.studio-avatar {
+  display: none;
+}
+
+/* Cover. Plain (default): none. Photo: inset in the column, 3:2, r4. Gradient: a flat el2 band
+   in the same slot. Today's cover art takes the same slot. */
+.studio[data-style='journal'] .studio-cover {
+  margin-top: 24px;
+  aspect-ratio: 3 / 2;
+  border-radius: 4px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='journal'] .studio-cover[data-cover='plain'],
+.studio[data-style='journal'] .studio-cover__fade {
+  display: none;
+}
+
+/* Identity: name 44/46 600, handle 13/18, bio (serif) 20/30. */
+.studio[data-style='journal'] .studio-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.studio[data-style='journal'] .studio-name {
+  max-width: 100%;
+  margin-top: 24px;
+  font-family: var(--serif);
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 46px;
+  letter-spacing: -0.022em;
+}
+
+/* A name that would take a third line steps down about 80% (§9.10). */
+.studio[data-style='journal'] .studio-name--long {
+  font-size: 36px;
+  line-height: 40px;
+}
+
+/* The whole-name fallback (§4.1) keeps Inter 700, tracked as drawn. */
+.studio[data-style='journal'] .studio-name--fallback {
+  font-family: var(--studio-ui);
+  font-weight: 700;
+}
+
+.studio[data-style='journal'] .studio-meta {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* The role is the top row's label. */
+.studio[data-style='journal'] :is(.studio-meta__sep, .studio-meta__role) {
+  display: none;
+}
+
+.studio[data-style='journal'] .studio-bio {
+  margin-top: 20px;
+  font-family: var(--serif);
+  font-size: 20px;
+  line-height: 30px;
+}
+
+.studio[data-style='journal'] .studio-celebration {
+  margin-top: 16px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* The Tip moment: 4 chips, 44 tall, r6, 1 px control edge on bg; the Tip 48 tall, r6. */
+.studio[data-style='journal'] .studio-tip {
+  margin-top: 28px;
+}
+
+.studio[data-style='journal'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+.studio[data-style='journal'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+/* Narrow phones: below 336 px four chips leave a label less room than "₦10,000" needs, so they
+   stand two by two, still 44 tall. */
+@media (max-width: 335px) {
+  .studio[data-style='journal'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.studio[data-style='journal'] .studio-tip .tm-amount-choice > span {
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--studio-control);
+  border-radius: 6px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    border-color 150ms,
+    background-color 150ms,
+    color 150ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='journal'] .studio-tip .tm-amount-choice:hover > span {
+    border-color: var(--studio-fg);
+    transform: none;
+  }
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  .tm-amount-choice
+  input:active
+  + span {
+  background: var(--studio-el2);
+  box-shadow: none;
+  transform: none;
+}
+
+/* Selected: a 1.5 px accText border on chipOn, fg text at 650 (never colour alone). */
+.studio[data-style='journal']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span {
+  border: 1.5px solid var(--studio-accText);
+  background: var(--studio-chipOn);
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-weight: 650;
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+.studio[data-style='journal'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='journal'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='journal'] .studio-tip textarea.tm-input {
+  padding: 12px 14px;
+}
+
+.studio[data-style='journal'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px solid var(--studio-line);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='journal'] .studio-tip .composer-extras summary::after {
+  margin-inline-start: auto;
+  color: var(--studio-fg2);
+  content: '+';
+  font-size: 18px;
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  .composer-extras[open]
+  summary::after {
+  content: '−';
+}
+
+.studio[data-style='journal'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 12px 0 8px;
+}
+
+.studio[data-style='journal'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+.studio[data-style='journal']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 16px/20px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transform: none;
+  transition: filter 150ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='journal']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    filter: brightness(1.08);
+    transform: none;
+  }
+}
+
+.studio[data-style='journal']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  filter: brightness(0.92);
+  transform: none;
+}
+
+.studio[data-style='journal'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='journal']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.studio[data-style='journal'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 6px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='journal'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 6px;
+  background: var(--studio-bg);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: one column of sections, 48 apart; a serif title over each. */
+.studio[data-style='journal'] .studio-grid {
+  display: grid;
+  gap: 48px;
+  margin-top: 48px;
+}
+
+.studio[data-style='journal'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='journal'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.studio[data-style='journal'] .studio-section {
+  gap: 12px;
+}
+
+.studio[data-style='journal'] .studio-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 29px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='journal'] .studio-title--fallback {
+  font-family: var(--studio-ui);
+}
+
+/* Links: a hairline index. A 1 px fg rule on top, rows ≥ 56 with a 1 px line under each. */
+.studio[data-style='journal'] .studio-links__list {
+  border-top: 1px solid var(--studio-fg);
+}
+
+.studio[data-style='journal'] .studio-links__list li {
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.studio[data-style='journal'] .studio-link {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  color: var(--studio-fg);
+  text-decoration: none;
+}
+
+.studio[data-style='journal'] .studio-link .link-badge {
+  display: none;
+}
+
+.studio[data-style='journal'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  gap: 16px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.studio[data-style='journal'] .studio-link__title {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='journal'] .studio-link:hover .studio-link__title {
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+}
+
+.studio[data-style='journal'] .studio-link__sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='journal'] .studio-link__chevron {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--studio-fg);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks. Text: no card, 17/27, at most 62ch. */
+.studio[data-style='journal'] .studio-text {
+  display: grid;
+  gap: 12px;
+  max-width: 62ch;
+  font-size: 17px;
+  line-height: 27px;
+}
+
+/* The pull quote: serif italic 24/32, its opening mark hung in the margin. */
+.studio[data-style='journal'] .studio-quote p {
+  font-family: var(--serif);
+  font-size: 24px;
+  font-style: italic;
+  font-weight: 400;
+  line-height: 32px;
+  letter-spacing: -0.01em;
+  text-indent: -0.42em;
+  text-wrap: balance;
+}
+
+.studio[data-style='journal'] .studio-quote p::before {
+  content: '“';
+}
+
+.studio[data-style='journal'] .studio-quote p::after {
+  content: '”';
+}
+
+.studio[data-style='journal'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.studio[data-style='journal'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 10px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='journal'] .studio-video {
+  overflow: hidden;
+  border-radius: 4px;
+}
+
+.studio[data-style='journal'] .studio-video__still {
+  border: 1px solid var(--studio-line);
+  border-radius: 4px;
+  background: var(--studio-bg);
+}
+
+/* Photos: a 3-up grid, gap 6, 150 tall, r4. */
+.studio[data-style='journal'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.studio[data-style='journal'] .studio-strip li {
+  height: 150px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='journal'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: hairline rows, as the links. */
+.studio[data-style='journal'] :is(div.studio-list > ul, ul.studio-list) {
+  display: grid;
+  border-top: 1px solid var(--studio-fg);
+}
+
+.studio[data-style='journal'] .studio-list li {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--studio-line);
+}
+
+.studio[data-style='journal'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.studio[data-style='journal'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.studio[data-style='journal'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.studio[data-style='journal'] .studio-price {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.studio[data-style='journal'] .studio-date {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  width: 44px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.studio[data-style='journal'] .studio-date__day {
+  color: var(--studio-fg);
+  font-family: var(--serif);
+  font-size: 22px;
+  line-height: 28px;
+  letter-spacing: 0;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='journal'] .studio-foot {
+  margin-top: 56px;
+}
+
+.studio[data-style='journal'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='journal'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar: solid bg, a 1 px line on top, padding 12/20/34; the name and handle on the
+   left, a 168×48 Tip on the right. */
+.studio[data-style='journal'] .tip-bar {
+  grid-template-columns: minmax(0, 1fr) 168px;
+  column-gap: 16px;
+  padding: 12px 20px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 1px solid var(--studio-line);
+  background: var(--studio-bg);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+.studio[data-style='journal'] .tip-bar > p {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='journal'] .tip-bar__button {
+  grid-column: 2;
+}
+
+.studio[data-style='journal'] .studio-barname {
+  position: fixed;
+  bottom: calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  left: 20px;
+  z-index: 21;
+  display: grid;
+  align-content: center;
+  width: calc(100% - 40px - 168px - 16px);
+  height: 48px;
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style='journal']:has(form[data-bar='shown']) .studio-barname {
+  visibility: visible;
+  opacity: 1;
+  transition:
+    opacity 240ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.studio[data-style='journal']:has(
+    :is(input:not([type='radio'], [type='checkbox']), textarea):focus
+  )
+  .studio-barname {
+  visibility: hidden;
+}
+
+.studio[data-style='journal'] .studio-barname p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='journal'] .studio-barname__name {
+  font-family: var(--serif);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.studio[data-style='journal'] .studio-barname__name--fallback {
+  font-family: var(--studio-ui);
+  font-weight: 700;
+}
+
+.studio[data-style='journal'] .studio-barname__handle {
+  margin-top: 2px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+/* Tablet: one column, 24 px gutters, up to 720. */
+@media (min-width: 768px) {
+  .studio[data-style='journal'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: 1120 wide; the top row spans it, then 420 px and the rest, gap 96. The left column
+   holds the identity, the Tip and the links (the board's "Elsewhere"; Ruling U); every block flows
+   on the right (text at most 520). The last row is flexible, so the right column's height never spreads the
+   left column's parts apart. */
+@media (min-width: 1024px) {
+  .studio[data-style='journal'] {
+    --measure: 1120px;
+  }
+
+  .studio[data-style='journal'] .studio-page {
+    display: grid;
+    grid-template-columns: 420px minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto auto auto 1fr auto;
+    column-gap: 96px;
+    align-items: start;
+    padding-top: 72px;
+  }
+
+  .studio[data-style='journal'] .studio-top {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    margin-bottom: 56px;
+    padding-bottom: 16px;
+  }
+
+  .studio[data-style='journal'] .studio-top__handle {
+    display: block;
+    color: var(--studio-fg2);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 18px;
+  }
+
+  /* Beats the frame's initials rule (.studio-avatar.avatar--initials). */
+  .studio[data-style='journal'] .studio-top .studio-avatar--top.studio-avatar,
+  .studio[data-style='journal'] .studio-meta__handle {
+    display: none;
+  }
+
+  .studio[data-style='journal'] .studio-identity .studio-avatar.studio-avatar {
+    display: block;
+    width: 72px;
+    height: 72px;
+    font-size: 26px;
+  }
+
+  .studio[data-style='journal']
+    .studio-identity
+    .studio-avatar.avatar--initials {
+    display: inline-flex;
+  }
+
+  .studio[data-style='journal'] .studio-cover {
+    grid-row: 2;
+    grid-column: 1;
+    margin: 0 0 28px;
+  }
+
+  .studio[data-style='journal'] .studio-identity {
+    grid-row: 3;
+    grid-column: 1;
+  }
+
+  .studio[data-style='journal'] .studio-name {
+    margin-top: 28px;
+    font-size: 64px;
+    line-height: 64px;
+    letter-spacing: -0.028em;
+  }
+
+  .studio[data-style='journal'] .studio-name--long {
+    font-size: 52px;
+    line-height: 56px;
+  }
+
+  .studio[data-style='journal'] .studio-meta:not(:has(.studio-pro)) {
+    display: none;
+  }
+
+  .studio[data-style='journal'] .studio-bio {
+    margin-top: 24px;
+    font-size: 21px;
+    line-height: 32px;
+  }
+
+  .studio[data-style='journal'] .studio-tip {
+    grid-row: 4;
+    grid-column: 1;
+    margin-top: 32px;
+  }
+
+  .studio[data-style='journal'] .studio-grid {
+    display: contents;
+  }
+
+  .studio[data-style='journal'] .studio-links {
+    grid-row: 5;
+    grid-column: 1;
+    margin-top: 64px;
+  }
+
+  .studio[data-style='journal'] .studio-blocks {
+    display: flex;
+    flex-direction: column;
+    grid-row: 2 / 8;
+    grid-column: 2;
+    gap: 56px;
+    min-width: 0;
+    padding-top: 8px;
+  }
+
+  .studio[data-style='journal']
+    .studio-blocks
+    :is(.studio-text, .studio-quote) {
+    max-width: 520px;
+  }
+
+  .studio[data-style='journal'] .studio-section {
+    gap: 16px;
+  }
+
+  .studio[data-style='journal'] .studio-title {
+    font-size: 24px;
+    line-height: 31px;
+  }
+
+  .studio[data-style='journal'] .studio-text {
+    font-size: 18px;
+    line-height: 29px;
+  }
+
+  .studio[data-style='journal'] .studio-quote p {
+    font-size: 32px;
+    line-height: 43px;
+  }
+
+  .studio[data-style='journal'] .studio-strip li {
+    height: 320px;
+  }
+
+  .studio[data-style='journal'] .studio-foot {
+    align-self: end;
+    grid-row: 8;
+    grid-column: 1 / -1;
+    margin-top: 80px;
+    padding-top: 20px;
+    border-top: 1px solid var(--studio-line);
+  }
+
+  .studio[data-style='journal'] .studio-barname {
+    display: none;
+  }
+}
+
+/* Reduced motion (§4.5): no transitions at all. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='journal'] .studio-tip .tm-amount-choice > span,
+  .studio[data-style='journal']
+    :is(.studio-tip .composer-submit, .tip-bar__button),
+  .studio[data-style='journal'] .studio-barname {
+    transition: none;
+  }
+}

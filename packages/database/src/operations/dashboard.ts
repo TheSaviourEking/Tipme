@@ -12,7 +12,7 @@ import type {
 } from '@tipme/contracts';
 import { sql } from 'drizzle-orm';
 import type { Database } from '../client.js';
-import { balanceQuery } from './balance.js';
+import { balanceQuery, heldParts } from './balance.js';
 import { guarded } from './errors.js';
 import { tipProof } from './proof.js';
 
@@ -34,6 +34,10 @@ export function dashboardSummary(
       last_week: string;
       payable: string;
       reserved: string;
+      held: string;
+      refund_held: string;
+      dispute_review: string;
+      verified: boolean | null;
       confirming: string;
       date: string;
       net: string;
@@ -81,17 +85,34 @@ export function dashboardSummary(
       ),
       balance AS (${balanceQuery(profileId)})
       SELECT totals.today, totals.yesterday, totals.this_week, totals.last_week,
-             balance.payable, balance.reserved, balance.confirming, days.date, days.net
+             balance.payable, balance.reserved, balance.held, balance.refund_held, balance.dispute_review,
+             balance.verified,
+             balance.confirming,
+             days.date, days.net
         FROM totals CROSS JOIN balance CROSS JOIN days
        ORDER BY days.day
     `);
     const row = rows.rows[0];
+    const parts = heldParts(
+      BigInt(row?.held ?? '0'),
+      BigInt(row?.refund_held ?? '0'),
+      row?.verified === true,
+      BigInt(row?.dispute_review ?? '0'),
+    );
     return {
       currency: 'NGN',
+      // You collect: what TipMe still holds for them is shown apart, never as available (Task 12).
       availableMinor: (
-        BigInt(row?.payable ?? '0') - BigInt(row?.reserved ?? '0')
+        BigInt(row?.payable ?? '0') -
+        BigInt(row?.reserved ?? '0') -
+        BigInt(row?.held ?? '0')
       ).toString(),
       confirmingMinor: BigInt(row?.confirming ?? '0').toString(),
+      // Kept for them until they are verified, then on its way (spec §10); held while a refund of
+      // one of their tips is settled shown apart (RM7).
+      keptMinor: parts.keptMinor.toString(),
+      onItsWayMinor: parts.onItsWayMinor.toString(),
+      refundHeldMinor: parts.refundHeldMinor.toString(),
       today: row?.today ?? '0',
       yesterday: row?.yesterday ?? '0',
       thisWeek: row?.this_week ?? '0',
@@ -342,7 +363,108 @@ const bankOf = (
 ): { bankName: string; last4: string } | null =>
   bankName && last4 ? { bankName, last4 } : null;
 
-/** The recipient's withdrawals, newest request first, each with the bank it went to. */
+/**
+ * How far along a part is, for a request's one state: the least advanced part that has not failed
+ * speaks for the request. Reversed ranks below sent, so a part sent and then returned is never shown
+ * as sent.
+ */
+const ADVANCE: Record<WithdrawalState, number> = {
+  requested: 0,
+  in_review: 1,
+  processing: 2,
+  reversed: 3,
+  sent: 4,
+  failed: 5,
+};
+
+/**
+ * A request's state from its parts that have not failed: sent only when every one of those is sent,
+ * otherwise the least advanced of them. Failed only when every part failed.
+ */
+function requestState(states: WithdrawalState[]): WithdrawalState {
+  const going = states.filter((state) => state !== 'failed');
+  if (going.length === 0) return 'failed';
+  return going.reduce((least, state) =>
+    ADVANCE[state] < ADVANCE[least] ? state : least,
+  );
+}
+
+/**
+ * A request paid as parts, as one row: its state from the parts that have not failed, and its
+ * amount what is still coming or came (a failed part's money is back in the balance). When every
+ * part failed, what was asked for, as a single failed payout shows.
+ */
+function requestOf<P extends { amount: string; state: WithdrawalState }>(
+  parts: P[],
+): { state: WithdrawalState; amountMinor: string; standing: P[] } {
+  const state = requestState(parts.map((part) => part.state));
+  const standing = parts.filter((part) => part.state !== 'failed');
+  const counted = standing.length > 0 ? standing : parts;
+  return {
+    state,
+    amountMinor: counted
+      .reduce((sum, part) => sum + BigInt(part.amount), 0n)
+      .toString(),
+    standing,
+  };
+}
+
+/** Every part of these groups, in order, keyed by group. */
+async function groupParts(
+  db: Database,
+  profileId: string,
+  groups: string[],
+): Promise<
+  Map<
+    string,
+    {
+      amount: string;
+      state: WithdrawalState;
+      paid_at: string | null;
+      bank_name: string | null;
+      last4: string | null;
+    }[]
+  >
+> {
+  const partsOf = new Map<
+    string,
+    {
+      amount: string;
+      state: WithdrawalState;
+      paid_at: string | null;
+      bank_name: string | null;
+      last4: string | null;
+    }[]
+  >();
+  if (groups.length === 0) return partsOf;
+  const parts = await db.execute<{
+    group_id: string;
+    amount: string;
+    state: WithdrawalState;
+    paid_at: string | null;
+    bank_name: string | null;
+    last4: string | null;
+  }>(sql`
+    SELECT p.withdrawal_group_id AS group_id, p.amount_minor::text AS amount,
+           ${payoutStateSql} AS state, ${microsSql(sql.raw('p.paid_at'))} AS paid_at,
+           d.bank_name, d.account_last4 AS last4
+      FROM payouts p
+      ${payoutBankJoin}
+     WHERE p.profile_id = ${profileId}
+       AND p.withdrawal_group_id IN (${sql.join(
+         groups.map((id) => sql`${id}::uuid`),
+         sql`, `,
+       )})
+     ORDER BY p.withdrawal_group_id, p.group_part`);
+  for (const part of parts.rows)
+    partsOf.set(part.group_id, [...(partsOf.get(part.group_id) ?? []), part]);
+  return partsOf;
+}
+
+/**
+ * The recipient's withdrawals, newest request first, each with the bank it went to. A request paid
+ * as parts is one row (P6): listed and paged by part 1, with its total and its parts.
+ */
 export function listMyWithdrawals(
   db: Database,
   profileId: string,
@@ -353,6 +475,7 @@ export function listMyWithdrawals(
   return guarded(async () => {
     const rows = await db.execute<{
       id: string;
+      group_id: string | null;
       requested_at: string;
       paid_at: string | null;
       currency: string;
@@ -361,26 +484,65 @@ export function listMyWithdrawals(
       bank_name: string | null;
       last4: string | null;
     }>(sql`
-      SELECT p.id, ${microsSql(sql.raw('p.created_at'))} AS requested_at,
+      SELECT p.id, p.withdrawal_group_id AS group_id,
+             ${microsSql(sql.raw('p.created_at'))} AS requested_at,
              ${microsSql(sql.raw('p.paid_at'))} AS paid_at,
              p.currency, p.amount_minor::text AS amount, ${payoutStateSql} AS state,
              d.bank_name, d.account_last4 AS last4
         FROM payouts p
         ${payoutBankJoin}
        WHERE p.profile_id = ${profileId}
+         AND (p.withdrawal_group_id IS NULL OR p.group_part = 1)
          ${after ? sql`AND (p.created_at, p.id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
        -- NULLS LAST spells the index's order (drizzle writes it); both columns are NOT NULL.
        ORDER BY p.created_at DESC NULLS LAST, p.id DESC NULLS LAST
        LIMIT ${limit + 1}`);
-    const items: WithdrawalRow[] = rows.rows.slice(0, limit).map((row) => ({
-      payoutId: row.id,
-      requestedAt: row.requested_at,
-      paidAt: row.paid_at,
-      currency: row.currency,
-      amountMinor: row.amount,
-      state: row.state,
-      bank: bankOf(row.bank_name, row.last4),
-    }));
+    const page = rows.rows.slice(0, limit);
+    const partsOf = await groupParts(
+      db,
+      profileId,
+      page.flatMap((row) => (row.group_id ? [row.group_id] : [])),
+    );
+    const items: WithdrawalRow[] = page.map((row) => {
+      const parts = row.group_id ? partsOf.get(row.group_id) : undefined;
+      if (!parts)
+        return {
+          payoutId: row.id,
+          requestedAt: row.requested_at,
+          paidAt: row.paid_at,
+          currency: row.currency,
+          amountMinor: row.amount,
+          state: row.state,
+          bank: bankOf(row.bank_name, row.last4),
+          parts: null,
+        };
+      const { state, amountMinor, standing } = requestOf(parts);
+      // Every part went to the same bank (P5); a pretend part records none, so the first that did.
+      const banked = parts.find((part) => bankOf(part.bank_name, part.last4));
+      return {
+        payoutId: row.id,
+        requestedAt: row.requested_at,
+        // Paid when the last part still standing was; ISO strings of one format compare as times.
+        paidAt:
+          state === 'sent'
+            ? standing.reduce<string | null>(
+                (latest, part) =>
+                  part.paid_at && (!latest || part.paid_at > latest)
+                    ? part.paid_at
+                    : latest,
+                null,
+              )
+            : null,
+        currency: row.currency,
+        amountMinor,
+        state,
+        bank: banked ? bankOf(banked.bank_name, banked.last4) : null,
+        parts: parts.map((part) => ({
+          amountMinor: part.amount,
+          state: part.state,
+        })),
+      };
+    });
     const last = items[items.length - 1];
     return {
       items,
@@ -392,7 +554,11 @@ export function listMyWithdrawals(
   });
 }
 
-/** Tips and withdrawals together, newest first. */
+/**
+ * Tips and withdrawals together, newest first. A withdrawal request paid as parts is one row (as in
+ * the withdrawals list): part 1's id, the request's amount and state, and it sorts by when its last
+ * part was paid once it is sent.
+ */
 export function recentActivity(
   db: Database,
   profileId: string,
@@ -408,35 +574,88 @@ export function recentActivity(
       label: string | null;
       bank_name: string | null;
       last4: string | null;
+      group_id: string | null;
     }>(sql`
       SELECT * FROM (
         SELECT 'tip' AS kind, t.id, COALESCE(t.completed_at, t.created_at) AS sort_at,
                to_char(COALESCE(t.completed_at, t.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS at,
                q.recipient_net_minor::text AS amount, ${stateSql} AS state, t.payer_display_label AS label,
-               NULL::text AS bank_name, NULL::text AS last4
+               NULL::text AS bank_name, NULL::text AS last4, NULL::uuid AS group_id
           FROM tips t
           JOIN payment_intents i ON i.id = t.intent_id
           JOIN tip_quotes q ON q.id = i.quote_id
          WHERE t.profile_id = ${profileId} AND t.status IN ('SUCCEEDED', 'PENDING_VERIFICATION')
         UNION ALL
-        SELECT 'withdrawal', p.id, COALESCE(p.paid_at, p.created_at),
-               to_char(COALESCE(p.paid_at, p.created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+        SELECT 'withdrawal', p.id, w.at,
+               to_char(w.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
                p.amount_minor::text,
                ${payoutStateSql},
-               NULL, d.bank_name, d.account_last4
+               NULL, d.bank_name, d.account_last4, p.withdrawal_group_id
           FROM payouts p
           ${payoutBankJoin}
+          -- A split request is paid when its last part still standing is, and only once all settled.
+          LEFT JOIN LATERAL (
+            SELECT max(x.paid_at) FILTER (WHERE x.status = 'PAID') AS paid_at
+              FROM payouts x
+             WHERE x.withdrawal_group_id = p.withdrawal_group_id
+            HAVING bool_and(x.status IN ('PAID', 'FAILED')) AND bool_or(x.status = 'PAID')
+          ) g ON p.withdrawal_group_id IS NOT NULL
+          CROSS JOIN LATERAL (
+            SELECT CASE WHEN p.withdrawal_group_id IS NULL
+                        THEN COALESCE(p.paid_at, p.created_at)
+                        ELSE COALESCE(g.paid_at, p.created_at) END AS at
+          ) w
          WHERE p.profile_id = ${profileId}
+           AND (p.withdrawal_group_id IS NULL OR p.group_part = 1)
       ) activity
       ORDER BY sort_at DESC LIMIT ${Math.min(Math.max(limit, 1), 50)}`);
-    return rows.rows.map((row) => ({
-      kind: row.kind,
-      id: row.id,
-      at: row.at,
-      amountMinor: row.amount,
-      state: row.state,
-      supporterLabel: row.label,
-      bank: row.kind === 'withdrawal' ? bankOf(row.bank_name, row.last4) : null,
-    }));
+    const partsOf = await groupParts(
+      db,
+      profileId,
+      rows.rows.flatMap((row) => (row.group_id ? [row.group_id] : [])),
+    );
+    return rows.rows.map((row) => {
+      const parts = row.group_id ? partsOf.get(row.group_id) : undefined;
+      const request = parts ? requestOf(parts) : null;
+      return {
+        kind: row.kind,
+        id: row.id,
+        at: row.at,
+        amountMinor: request?.amountMinor ?? row.amount,
+        state: request?.state ?? row.state,
+        supporterLabel: row.label,
+        bank:
+          row.kind === 'withdrawal' ? bankOf(row.bank_name, row.last4) : null,
+      };
+    });
+  });
+}
+
+/**
+ * Whether a payout's change is one its request makes as a whole, so the person's pages are told
+ * (live updates). A request one payout carries: always. A request paid as parts moves only when
+ * its last part does: `started` once no part is still waiting to be sent, `settled` once every
+ * part is paid or failed. Two parts settling together may both say yes; a page re-reads twice,
+ * never zero times. An unknown payout says yes: a signal is only a prompt to re-read.
+ */
+export function withdrawalSignalDue(
+  db: Database,
+  input: { payoutId: string; after: 'started' | 'settled' },
+): Promise<boolean> {
+  // Only a payout id can name a request; anything else is answered as a single payout would be.
+  if (!/^[0-9a-f-]{36}$/i.test(input.payoutId)) return Promise.resolve(true);
+  return guarded(async () => {
+    const open =
+      input.after === 'started'
+        ? sql`x.status = 'REQUESTED'`
+        : sql`x.status IN ('REQUESTED', 'PROCESSING')`;
+    const rows = await db.execute<{ waiting: boolean }>(sql`
+      SELECT EXISTS (
+               SELECT 1 FROM payouts x
+                WHERE x.withdrawal_group_id = p.withdrawal_group_id AND ${open}
+             ) AS waiting
+        FROM payouts p
+       WHERE p.id = ${input.payoutId}::uuid AND p.withdrawal_group_id IS NOT NULL`);
+    return !rows.rows[0]?.waiting;
   });
 }

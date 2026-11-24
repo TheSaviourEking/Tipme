@@ -26,6 +26,7 @@ import {
   UncertainProviderOutcomeError,
 } from './errors.js';
 import { decimalToMinor, minorToDecimal } from './money.js';
+import { createBachsDisputes } from './disputes.js';
 import { PAYOUT_CONFIGURATION, createBachsPayouts } from './payouts.js';
 import { verifyBachsWebhook } from './webhooks.js';
 
@@ -126,6 +127,34 @@ const accountInputSchema = z.object({
     .regex(/^[\w.:-]+$/),
 });
 
+// A name part as a person would type it: no control characters, within the partner's 255.
+const namePartSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  .regex(/^[^\u0000-\u001f\u007f]+$/);
+const personKeySchema = z
+  .string()
+  .min(1)
+  .max(250)
+  .regex(/^[\w.:-]+$/);
+const legalNameSchema = z.object({
+  first: namePartSchema,
+  last: namePartSchema,
+});
+const personAccountInputSchema = z.object({
+  contactEmail: z.email(),
+  country: z.literal('NG'),
+  legalName: legalNameSchema,
+  idempotencyKey: personKeySchema,
+});
+const personNameInputSchema = z.object({
+  accountReference: z.string(),
+  legalName: legalNameSchema,
+  idempotencyKey: personKeySchema,
+});
+
 const urlInputSchema = z.string().url();
 
 export type { BachsEnvironment };
@@ -143,6 +172,11 @@ export interface BachsProviderConfig {
   platformOrganizationId?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /**
+   * A note about something the adapter skipped (allowlisted fields only, never amounts). Defaults
+   * to a process warning, which the observability setup records.
+   */
+  onNote?: (message: string, fields: Record<string, string>) => void;
 }
 
 export interface BachsRecipientAccount {
@@ -187,6 +221,31 @@ export interface BachsProvider
     displayName?: string;
     idempotencyKey: string;
   }): Promise<BachsRecipientAccount>;
+  /**
+   * You collect: a receive-only account for one person, named as the requirements ask (R8). Holds
+   * only USD until holdLocalCurrency (P12).
+   */
+  createReceiveOnlyPersonAccount(input: {
+    contactEmail: string;
+    country: 'NG';
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+    /**
+     * Told the new account's reference the moment create answers, before the name is sent, so the
+     * caller keeps it and a retry names that account instead of creating another (Task 13). If it
+     * throws, no name is sent and the error is raised.
+     */
+    onCreated?: (accountReference: string) => Promise<void>;
+  }): Promise<BachsRecipientAccount>;
+  /**
+   * You collect: the person's legal name on an existing account (`fields.persons`, R8), with the
+   * caller's key: a retry with the key replays the write, a new name needs a new key.
+   */
+  nameReceiveOnlyPerson(input: {
+    accountReference: string;
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
   createOnboardingLink(input: {
     accountReference: string;
     refreshUrl: string;
@@ -199,6 +258,9 @@ export interface BachsProvider
    */
   holdLocalCurrency(accountReference: string): Promise<BachsRecipientAccount>;
   getCheckoutUrl(providerReference: string): Promise<string>;
+  submitDisputeEvidence: NonNullable<PaymentProvider['submitDisputeEvidence']>;
+  uploadDisputeFile: NonNullable<PaymentProvider['uploadDisputeFile']>;
+  listDisputes: NonNullable<PaymentProvider['listDisputes']>;
 }
 
 const capabilities: ProviderCapabilities = {
@@ -477,6 +539,139 @@ export function createBachsProvider(
     return normalizedAccount(updated);
   }
 
+  /**
+   * The person's legal name as `fields.persons` on POST /v1/accounts/{id}. Create's own first_name
+   * and last_name only label the account and do not satisfy `persons.name`, and create silently
+   * ignores fields it does not read (https://docs.bachs.io/connect/accounts.md,
+   * https://docs.bachs.io/api-reference/accounts/create-an-account.md,
+   * https://docs.bachs.io/connect/requirements.md "The persons shape").
+   */
+  async function namePerson(
+    accountReference: string,
+    legalName: { first: string; last: string },
+    operation: string,
+  ) {
+    const named = await client.request({
+      method: 'POST',
+      path: `/v1/accounts/${encodeURIComponent(accountReference)}`,
+      idempotencyKey: operation,
+      operationReference: operation,
+      body: {
+        fields: {
+          persons: [
+            {
+              first_name: legalName.first,
+              last_name: legalName.last,
+              // The person opening the account is its representative.
+              relationship: { representative: true },
+            },
+          ],
+        },
+      },
+      schema: accountSchema,
+    });
+    if (named.id !== accountReference)
+      throw new BachsProtocolError(
+        'Bachs answered the name with another account',
+      );
+    return normalizedAccount(named);
+  }
+
+  /** What every checkout on TipMe's own account checks before sending (Pro and You collect). */
+  function checkedOwnCheckout(input: {
+    amountMinor: bigint;
+    idempotencyKey: string;
+    successUrl: string;
+    cancelUrl: string;
+  }): { successUrl: string; cancelUrl: string } {
+    if (input.amountMinor <= 0n)
+      throw new RangeError('Checkout amount must be positive');
+    if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
+      throw new TypeError('Invalid Bachs idempotency key');
+    return {
+      successUrl: validateHttpsOrLocalUrl(input.successUrl),
+      cancelUrl: validateHttpsOrLocalUrl(input.cancelUrl),
+    };
+  }
+
+  /**
+   * A checkout on TipMe's own account (paid Pro, You collect): no X-Account-Id, no platform fee,
+   * naira methods only, TipMe bears the fee. `extra` goes last (Pro's saved card).
+   */
+  async function ownCheckout(input: {
+    reference: string;
+    amountMinor: bigint;
+    idempotencyKey: string;
+    successUrl: string;
+    cancelUrl: string;
+    extra?: Record<string, unknown>;
+  }): Promise<{
+    providerReference: `platform:${string}`;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }> {
+    let checkout: z.infer<typeof checkoutCreatedSchema>;
+    try {
+      checkout = await client.request({
+        method: 'POST',
+        path: '/v1/checkout-sessions',
+        // No X-Account-Id: the checkout is on TipMe's own account, and no platform fee.
+        idempotencyKey: input.idempotencyKey,
+        operationReference: input.reference,
+        body: {
+          pricing: {
+            amount: minorToDecimal(input.amountMinor, 'NGN'),
+            currency: 'NGN',
+          },
+          reference: input.reference,
+          success_url: input.successUrl,
+          cancel_url: input.cancelUrl,
+          customer_creation: 'if_required',
+          payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
+          customer_bears_fee: false,
+          expires_in_minutes: PLATFORM_CHECKOUT_MINUTES,
+          ...input.extra,
+        },
+        schema: checkoutCreatedSchema,
+      });
+    } catch (error) {
+      // TipMe's own account can't take payments here (live needs it verified): definite.
+      if (
+        error instanceof BachsApiError &&
+        error.providerCode === 'ACCOUNT_NOT_ACTIVATED'
+      )
+        throw new PlatformCheckoutUnavailableError(error.providerCode);
+      throw error;
+    }
+    if (checkout.status.toLowerCase() !== 'open')
+      throw new UncertainProviderOutcomeError(
+        input.reference,
+        'Bachs created a checkout in an unexpected state',
+        { cause: 'unexpected_state' },
+      );
+    let checkoutUrl: string;
+    try {
+      checkoutUrl = bachsHostedUrl(checkout.checkout_url);
+    } catch (error) {
+      if (error instanceof BachsProtocolError)
+        throw new UncertainProviderOutcomeError(
+          input.reference,
+          'Bachs created a checkout but returned an unsafe URL',
+          { cause: 'unsafe_url' },
+        );
+      throw error;
+    }
+    const stated = checkout.expires_at ? new Date(checkout.expires_at) : null;
+    return {
+      providerReference: `${PLATFORM_PREFIX}${providerIdentifier(checkout.checkout_id, 'checkout reference')}`,
+      checkoutUrl,
+      expiresAt:
+        stated && !Number.isNaN(stated.getTime())
+          ? stated
+          : new Date(Date.now() + PLATFORM_CHECKOUT_MINUTES * 60_000),
+    };
+  }
+
   /** A tip's charge on its recipient's account, read as that account, for a staff refund. */
   async function readTipCharge(providerReference: string): Promise<{
     chargeReference: string;
@@ -666,95 +861,61 @@ export function createBachsProvider(
 
     async initializePlatformCheckout(input) {
       // Checked before anything is sent: a refusal here means Bachs never saw the request.
-      let successUrl: string;
-      let cancelUrl: string;
+      let checked: { successUrl: string; cancelUrl: string };
       try {
         if (input.currency !== 'NGN')
           throw new TypeError('TipMe sells Pro in naira only');
-        if (input.amountMinor <= 0n)
-          throw new RangeError('Checkout amount must be positive');
         providerIdentifier(input.purchaseId, 'purchase reference');
-        if (!/^[\w.:-]{1,255}$/.test(input.idempotencyKey))
-          throw new TypeError('Invalid Bachs idempotency key');
-        successUrl = validateHttpsOrLocalUrl(input.successUrl);
-        cancelUrl = validateHttpsOrLocalUrl(input.cancelUrl);
+        checked = checkedOwnCheckout(input);
       } catch (error) {
         throw new BachsRequestNotSentError(
           error instanceof Error ? error.message : 'Invalid Bachs checkout',
           { cause: error },
         );
       }
-      let checkout: z.infer<typeof checkoutCreatedSchema>;
+      return ownCheckout({
+        reference: input.purchaseId,
+        amountMinor: input.amountMinor,
+        idempotencyKey: input.idempotencyKey,
+        ...checked,
+        // Auto-renew opt-in: the card is saved on this customer as they pay.
+        ...(input.saveCard
+          ? {
+              extra: {
+                customer: {
+                  customer_id: providerIdentifier(
+                    input.saveCard.customerReference,
+                    'customer reference',
+                  ),
+                },
+                save_payment_method: true,
+              },
+            }
+          : {}),
+      });
+    },
+
+    // You collect: a tip's checkout on TipMe's own account. The same request as Pro's, with the
+    // attempt as reference and nothing saved; TipMe is the merchant and bears the fee.
+    async initializeCollectCheckout(input) {
+      let checked: { successUrl: string; cancelUrl: string };
       try {
-        checkout = await client.request({
-          method: 'POST',
-          path: '/v1/checkout-sessions',
-          // No X-Account-Id: the checkout is on TipMe's own account, and no platform fee.
-          idempotencyKey: input.idempotencyKey,
-          operationReference: input.purchaseId,
-          body: {
-            pricing: {
-              amount: minorToDecimal(input.amountMinor, input.currency),
-              currency: input.currency,
-            },
-            reference: input.purchaseId,
-            success_url: successUrl,
-            cancel_url: cancelUrl,
-            customer_creation: 'if_required',
-            payment_method_types: ['NGN_CARD', 'NGN_BANK_TRANSFER'],
-            customer_bears_fee: false,
-            expires_in_minutes: PLATFORM_CHECKOUT_MINUTES,
-            // Auto-renew opt-in: the card is saved on this customer as they pay.
-            ...(input.saveCard
-              ? {
-                  customer: {
-                    customer_id: providerIdentifier(
-                      input.saveCard.customerReference,
-                      'customer reference',
-                    ),
-                  },
-                  save_payment_method: true,
-                }
-              : {}),
-          },
-          schema: checkoutCreatedSchema,
-        });
+        if (input.currency !== 'NGN')
+          throw new TypeError('TipMe takes tips in naira only');
+        providerIdentifier(input.attemptId, 'attempt reference');
+        checked = checkedOwnCheckout(input);
       } catch (error) {
-        // TipMe's own account can't take payments here (live needs it verified): definite.
-        if (
-          error instanceof BachsApiError &&
-          error.providerCode === 'ACCOUNT_NOT_ACTIVATED'
-        )
-          throw new PlatformCheckoutUnavailableError(error.providerCode);
-        throw error;
-      }
-      if (checkout.status.toLowerCase() !== 'open')
-        throw new UncertainProviderOutcomeError(
-          input.purchaseId,
-          'Bachs created a checkout in an unexpected state',
-          { cause: 'unexpected_state' },
+        throw new BachsRequestNotSentError(
+          error instanceof Error ? error.message : 'Invalid Bachs checkout',
+          { cause: error },
         );
-      let checkoutUrl: string;
-      try {
-        checkoutUrl = bachsHostedUrl(checkout.checkout_url);
-      } catch (error) {
-        if (error instanceof BachsProtocolError)
-          throw new UncertainProviderOutcomeError(
-            input.purchaseId,
-            'Bachs created a checkout but returned an unsafe URL',
-            { cause: 'unsafe_url' },
-          );
-        throw error;
       }
-      const stated = checkout.expires_at ? new Date(checkout.expires_at) : null;
-      return {
-        providerReference: `${PLATFORM_PREFIX}${providerIdentifier(checkout.checkout_id, 'checkout reference')}`,
-        checkoutUrl,
-        expiresAt:
-          stated && !Number.isNaN(stated.getTime())
-            ? stated
-            : new Date(Date.now() + PLATFORM_CHECKOUT_MINUTES * 60_000),
-      };
+      return ownCheckout({
+        reference: input.attemptId,
+        amountMinor: input.amountMinor,
+        idempotencyKey: input.idempotencyKey,
+        ...checked,
+      });
     },
 
     async findPayment(attemptId) {
@@ -1210,6 +1371,69 @@ export function createBachsProvider(
       return normalizedAccount(account);
     },
 
+    // You collect: POST /v1/accounts as an individual with only the recipient persona, then the
+    // person's legal name (namePerson).
+    async createReceiveOnlyPersonAccount(input) {
+      let valid: z.infer<typeof personAccountInputSchema>;
+      try {
+        valid = personAccountInputSchema.parse(input);
+      } catch (error) {
+        throw new BachsRequestNotSentError('Invalid person account', {
+          cause: error,
+        });
+      }
+      const { first, last } = valid.legalName;
+      const created = await client.request({
+        method: 'POST',
+        path: '/v1/accounts',
+        idempotencyKey: valid.idempotencyKey,
+        operationReference: valid.idempotencyKey,
+        body: {
+          contact_email: valid.contactEmail,
+          country: valid.country,
+          entity_type: 'individual',
+          first_name: first,
+          last_name: last,
+          configuration: { ...PAYOUT_CONFIGURATION },
+          responsibilities: { fees: { collector: 'platform' } },
+          ...NO_DASHBOARD_REFUNDS,
+        },
+        schema: accountSchema,
+      });
+      const accountReference = providerIdentifier(
+        created.id,
+        'account reference',
+      );
+      // Kept by the caller before anything else is sent: a later failure must never lead to a
+      // second create for this person (Task 4 note).
+      await input.onCreated?.(accountReference);
+      // Always sent, whatever the requirements list: an absent entry proves nothing about the
+      // person (it may be eventually_due, or not computed yet). Its own key makes a retry replay the
+      // same write rather than add a second person.
+      return namePerson(
+        accountReference,
+        valid.legalName,
+        `${valid.idempotencyKey}.name`,
+      );
+    },
+
+    async nameReceiveOnlyPerson(input) {
+      let valid: z.infer<typeof personNameInputSchema>;
+      try {
+        valid = personNameInputSchema.parse(input);
+        providerIdentifier(valid.accountReference, 'account reference');
+      } catch (error) {
+        throw new BachsRequestNotSentError('Invalid person name', {
+          cause: error,
+        });
+      }
+      return namePerson(
+        valid.accountReference,
+        valid.legalName,
+        valid.idempotencyKey,
+      );
+    },
+
     async createOnboardingLink(input) {
       const accountReference = input.accountReference;
       providerIdentifier(accountReference, 'account reference');
@@ -1232,7 +1456,8 @@ export function createBachsProvider(
     getRecipientAccount: getAccount,
     holdLocalCurrency,
 
-    ...createBachsPayouts(client, config.apiKey),
+    ...createBachsPayouts(client, config.apiKey, config.onNote),
+    ...createBachsDisputes(client),
   };
 }
 

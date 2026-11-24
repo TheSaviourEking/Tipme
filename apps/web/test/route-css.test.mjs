@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
+import { STUDIO_STYLE_IDS } from '@tipme/contracts';
 
 // The home page's first paint waits for its whole stylesheet. Dashboard and admin styles live in
 // their own stylesheets (app/dashboard/dashboard.css, app/ops/ops.css), loaded only there (15 Nov
@@ -103,31 +104,12 @@ test(
   },
 );
 
-// Page Studio (plan Task 8): its stylesheet travels with the renderer, which only the public page,
-// the Studio preview and the Studio lab import. Every rule is scoped to a Studio page and matches
-// nothing on a standard one.
-const studioCss = readFileSync(
-  new URL('../src/components/studio/studio.css', import.meta.url),
-  'utf8',
-);
-
-test('Studio styles stay out of globals.css and the root layout, and only style a Studio page', () => {
+// Page Studio: no Studio rule lives in globals.css or the root layout. Every style's rules ship in
+// their own stylesheet behind next/dynamic (components/studio-styles/style-sheets.tsx), and the
+// selector scoping of those sheets is held by scripts/studio-source.test.mjs.
+test('Studio styles stay out of globals.css and the root layout', () => {
   assert.doesNotMatch(read('globals.css'), /\.studio[\w-]*|studio\.css/);
   assert.doesNotMatch(read('layout.tsx'), /studio/);
-  const selectors = rules(studioCss).flatMap(({ key }) =>
-    key
-      .split(' / ')
-      .at(-1)
-      .split(',')
-      .map((s) => s.trim()),
-  );
-  assert.ok(selectors.length > 50, 'studio.css has its rules');
-  for (const selector of selectors)
-    assert.match(
-      selector,
-      /^\.(studio|profile-page--studio)\b/,
-      `studio.css: "${selector}" could style a page without a Studio design`,
-    );
 });
 
 test(
@@ -140,26 +122,158 @@ test(
     ))
       assert.doesNotMatch(
         readFileSync(new URL(sheet, built), 'utf8'),
-        /\.studio-frame/,
+        /\.studio\[data-style|\.profile-page--studio/,
         sheet,
       );
   },
 );
 
-// Chrome warned "preloaded using link preload but not used" (17 Nov 2026): imported by the renderer,
-// studio.css belonged to the /@username route, so every prefetched link to a public page preloaded it
-// on pages that never use it. Only the dynamically loaded sheet imports it now (studio-styles.tsx).
-test('studio.css loads only through the dynamic sheet, never with the /@username route', () => {
-  const studio = (file) =>
-    readFileSync(
-      new URL(`../src/components/studio/${file}`, import.meta.url),
-      'utf8',
+// Chrome warned "preloaded using link preload but not used" (17 Nov 2026): a stylesheet imported by
+// code the /@username route links statically is linked on every profile page, so every prefetched
+// link to a public page preloaded it. Only the dynamically loaded sheets import any Studio CSS.
+test('Studio CSS loads only through the dynamic sheets, never with the /@username route', () => {
+  const dir = new URL('../src/components/studio-styles/', import.meta.url);
+  const sheets = readFileSync(new URL('style-sheets.tsx', dir), 'utf8');
+  assert.match(sheets, /dynamic\(\(\) => import\('\.\/sheets\/clear'\)\)/);
+  for (const file of ['style-page.tsx', 'parts.tsx', 'style-sheets.tsx'])
+    assert.doesNotMatch(
+      readFileSync(new URL(file, dir), 'utf8'),
+      /import '[^']*\.css'/,
+      file,
     );
-  assert.doesNotMatch(studio('studio-page.tsx'), /import '[^']*studio\.css'/);
-  assert.match(studio('studio-sheet.tsx'), /import '\.\/studio\.css';/);
-  assert.match(
-    studio('studio-styles.tsx'),
-    /dynamic\(\(\) => import\('\.\/studio-sheet'\)\)/,
-  );
-  assert.match(studio('studio-page.tsx'), /<StudioStyles \/>/);
 });
+
+// Page Studio styles (spec 2026-11-17-page-studio-styles §4.3). Every style's rules ship in their
+// own stylesheet behind next/dynamic (components/studio-styles/style-sheets.tsx: frame.css plus the
+// style's own file), linked only in the HTML of a page that renders that style. So a standard or
+// Classic /@username page downloads only what its route links (no Studio rules today), and a
+// styled page that plus its style's sheet. Both are measured on the production build.
+// The standard budget was 8 KB (spec §4.3). Measured on the production build for PR 4b (18 Nov
+// 2026, studio.css and the v1 renderer gone): a standard page links 20 bytes gzip of Studio rules and
+// a Classic page with choices 1,675 bytes (its sheet), so the line is lowered to 3 KB, a margin of
+// about 80% over Classic. It is never raised: a style's rules belong in its own sheet.
+const STUDIO_STANDARD_BUDGET = 3 * 1024;
+const STUDIO_STYLED_BUDGET = 12 * 1024;
+const routeManifest = (route) =>
+  new URL(`server/app/${route}/page_client-reference-manifest.js`, built);
+const profileRoute = 'people/[handle]';
+
+/** The stylesheets a route links on every visit, from its client reference manifest. */
+function routeSheets(route) {
+  const scope = {};
+  new Function('globalThis', readFileSync(routeManifest(route), 'utf8'))(scope);
+  const manifest = Object.values(scope.__RSC_MANIFEST ?? {})[0];
+  assert.ok(manifest, `${route}: a client reference manifest`);
+  const css =
+    manifest.entryCSSFiles[`[project]/apps/web/src/app/${route}/page`];
+  assert.ok(css?.length, `${route}: its stylesheets`);
+  return css.map((f) => f.path);
+}
+
+/** The Studio rules in a stylesheet (selectors scoped to a Studio page), as text. */
+const studioRules = (css) =>
+  rules(css)
+    .filter(({ key }) => /\.studio\b|\.profile-page--studio\b/.test(key))
+    .map(({ key, body }) => `${key}{${body}}`)
+    .join('');
+const gzip = (text) => gzipSync(text, { level: 9 }).length;
+
+// The routes that render a style: the lab now, the public page from PR 3a.
+const styledRoutes = ['dev/studio-lab', profileRoute];
+const styleSheetsSource = readFileSync(
+  new URL('../src/components/studio-styles/style-sheets.tsx', import.meta.url),
+  'utf8',
+);
+const STYLES_WITH_SHEETS = [
+  ...styleSheetsSource.matchAll(/import\('\.\/sheets\/([a-z]+)'\)/g),
+].map((m) => m[1]);
+
+// Every style the registry has is drawn (PR 2e drew the last three): each has its own sheet.
+const DRAWN_STYLES = STUDIO_STYLE_IDS.filter((s) => s !== 'classic');
+
+test('every style the registry has has its own sheet', () => {
+  for (const style of STUDIO_STYLE_IDS)
+    assert.ok(STYLES_WITH_SHEETS.includes(style), `${style} has no sheet`);
+});
+
+/** The Studio CSS every /@username page links with its route, gzip. */
+const routeStudioBytes = () =>
+  gzip(
+    routeSheets(profileRoute)
+      .map((sheet) => studioRules(readFileSync(new URL(sheet, built), 'utf8')))
+      .join(''),
+  );
+
+/** A style's dynamic sheet files (from the routes' loadable manifests), gzip, summed. */
+function styleSheetBytes(style) {
+  const entries = styledRoutes.flatMap((route) => {
+    const file = new URL(
+      `server/app/${route}/page/react-loadable-manifest.json`,
+      built,
+    );
+    if (!existsSync(file)) return [];
+    return Object.values(JSON.parse(readFileSync(file, 'utf8'))).map((e) =>
+      e.files.filter((f) => f.endsWith('.css')),
+    );
+  });
+  const marker = new RegExp(`\\[data-style=["']?${style}["']?\\]`);
+  const sheets = entries.find((files) =>
+    files.some((f) => marker.test(readFileSync(new URL(f, built), 'utf8'))),
+  );
+  assert.ok(sheets, `${style}: no built stylesheet holds its rules`);
+  return sheets.reduce(
+    (sum, f) => sum + gzip(readFileSync(new URL(f, built))),
+    0,
+  );
+}
+
+// A Classic page with choices (§4.3, §9.1) links the route's sheets plus classic.css, and stays
+// in the standard budget; a standard page (or Classic with every default) links only the route's.
+test(
+  'a standard or Classic profile page downloads at most 3 KB gzip of Studio CSS',
+  {
+    skip:
+      !existsSync(routeManifest(profileRoute)) &&
+      'no production build (run pnpm build)',
+  },
+  () => {
+    const standard = routeStudioBytes();
+    assert.ok(STYLES_WITH_SHEETS.includes('classic'), 'Classic has its sheet');
+    const classic = standard + styleSheetBytes('classic');
+    console.log(`STUDIO_STANDARD_CSS ${JSON.stringify({ standard, classic })}`);
+    assert.ok(
+      standard <= STUDIO_STANDARD_BUDGET,
+      `a standard /@username page downloads ${(standard / 1024).toFixed(1)} KB gzip of Studio CSS (budget 3 KB). Per-style rules belong in the style's own sheet (studio-styles/style-sheets.tsx), not in a stylesheet the route links.`,
+    );
+    assert.ok(
+      classic <= STUDIO_STANDARD_BUDGET,
+      `a Classic page downloads ${(classic / 1024).toFixed(1)} KB gzip of Studio CSS (budget 3 KB)`,
+    );
+  },
+);
+
+test(
+  'a styled profile page downloads at most 12 KB gzip of Studio CSS',
+  {
+    skip:
+      !existsSync(routeManifest(profileRoute)) &&
+      'no production build (run pnpm build)',
+  },
+  () => {
+    const base = routeStudioBytes();
+    // Every style in the registry but Classic (held to the standard budget above), so a style
+    // drawn without a sheet fails here instead of passing unmeasured.
+    for (const style of DRAWN_STYLES) {
+      assert.ok(
+        STYLES_WITH_SHEETS.includes(style),
+        `${style} has its sheet in style-sheets.tsx`,
+      );
+      const bytes = base + styleSheetBytes(style);
+      console.log(`STUDIO_STYLE_CSS ${JSON.stringify({ style, bytes })}`);
+      assert.ok(
+        bytes <= STUDIO_STYLED_BUDGET,
+        `a ${style} page downloads ${(bytes / 1024).toFixed(1)} KB gzip of Studio CSS (budget 12 KB)`,
+      );
+    }
+  },
+);

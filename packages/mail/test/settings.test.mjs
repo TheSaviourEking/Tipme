@@ -97,3 +97,100 @@ test('a person’s override wins, unless that provider is not configured', async
   assert.equal(route('mock'), 'zeptomail');
   assert.equal(route('ses', 'mock'), 'mock', 'a test stays on its provider');
 });
+
+// Automatic failover (owner, 23 Nov 2026): an ordered fallback list, empty by default so nothing
+// changes until it is set, with the approved defaults for both signals. The pretend provider is
+// never a fallback in production, and a fallback must be configured.
+
+const BREVO_CODES = {
+  BREVO_API_KEY: 'brevo-secret-key-value',
+  BREVO_WEBHOOK_TOKEN: 'brevo-webhook-token-value',
+  BREVO_TRANSACTIONAL: 'on',
+};
+const LIVE = { NODE_ENV: 'production', DEPLOYMENT_MODE: 'production' };
+
+test('no fallback by default, and the failover settings have the approved defaults', () => {
+  const config = parse({ ...ZEPTO, MAIL_DEFAULT_PROVIDER: 'zeptomail' }).data;
+  assert.deepEqual(config.MAIL_FALLBACK_PROVIDERS, []);
+  assert.equal(config.MAIL_BREAKER_FAILURES, 3);
+  assert.equal(config.MAIL_BREAKER_WINDOW_MS, 300_000);
+  assert.equal(config.MAIL_BREAKER_REST_MS, 900_000);
+  assert.equal(config.MAIL_CODE_UNUSED_AFTER_MS, 180_000);
+  assert.equal(config.MAIL_CODE_WINDOW_MS, 600_000);
+  assert.equal(config.MAIL_CODE_MIN_SAMPLES, 5);
+  assert.equal(config.MAIL_CODE_UNUSED_RATIO, 0.6);
+  assert.equal(config.MAIL_CODE_TRIAL_CODES, 3);
+  assert.equal(config.MAIL_RESEND_WINDOW_MS, 600_000);
+});
+
+test('the fallback list is read in order and names known, configured providers only', () => {
+  const config = parse({
+    ...ZEPTO,
+    ...SES,
+    ...BREVO_CODES,
+    MAIL_DEFAULT_PROVIDER: 'zeptomail',
+    MAIL_FALLBACK_PROVIDERS: ' brevo , ses ',
+  }).data;
+  assert.deepEqual(config.MAIL_FALLBACK_PROVIDERS, ['brevo', 'ses']);
+  assert.deepEqual(
+    missing(parse({ ...ZEPTO, MAIL_FALLBACK_PROVIDERS: 'postmark' })),
+    ['MAIL_FALLBACK_PROVIDERS'],
+  );
+  // Brevo as a fallback needs BREVO_TRANSACTIONAL=on and its keys.
+  assert.deepEqual(
+    missing(
+      parse({
+        ...ZEPTO,
+        MAIL_DEFAULT_PROVIDER: 'zeptomail',
+        MAIL_FALLBACK_PROVIDERS: 'brevo',
+      }),
+    ),
+    ['MAIL_FALLBACK_PROVIDERS'],
+  );
+});
+
+test('production never lists the pretend provider as a fallback', () => {
+  assert.deepEqual(
+    missing(
+      parse({
+        ...ZEPTO,
+        ...LIVE,
+        MAIL_DEFAULT_PROVIDER: 'zeptomail',
+        MAIL_FALLBACK_PROVIDERS: 'mock',
+      }),
+    ),
+    ['MAIL_FALLBACK_PROVIDERS'],
+  );
+  // Elsewhere a developer may.
+  assert.equal(
+    parse({
+      ...ZEPTO,
+      MAIL_DEFAULT_PROVIDER: 'zeptomail',
+      MAIL_FALLBACK_PROVIDERS: 'mock',
+    }).success,
+    true,
+  );
+});
+
+test('the unused-code ratio is a fraction', () => {
+  assert.deepEqual(missing(parse({ MAIL_CODE_UNUSED_RATIO: '1.5' })), [
+    'MAIL_CODE_UNUSED_RATIO',
+  ]);
+  assert.equal(
+    parse({ MAIL_CODE_UNUSED_RATIO: '0.75' }).data.MAIL_CODE_UNUSED_RATIO,
+    0.75,
+  );
+});
+
+test('a fallback list naming only the default provider is refused (no backup at all)', () => {
+  assert.deepEqual(
+    missing(
+      parse({
+        ...ZEPTO,
+        MAIL_DEFAULT_PROVIDER: 'zeptomail',
+        MAIL_FALLBACK_PROVIDERS: 'zeptomail',
+      }),
+    ),
+    ['MAIL_FALLBACK_PROVIDERS'],
+  );
+});

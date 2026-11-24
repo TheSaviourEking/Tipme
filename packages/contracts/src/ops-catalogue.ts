@@ -30,6 +30,8 @@ export const OPS_PERMISSIONS = [
   'pro.price',
   'switches.manage',
   'announcements.send',
+  'collect.view',
+  'collect.manage',
 ] as const;
 export type OpsPermission = (typeof OPS_PERMISSIONS)[number];
 
@@ -67,6 +69,21 @@ export const OPS_CATALOGUE: Record<OpsPermission, OpsCatalogueEntry> = {
     description:
       'Write announcements by email, and send one to users with a second person',
     group: 'content',
+    sensitive: true,
+  },
+  // You collect (plan Task 15, spec §9): the staff screens. Viewing shows handles, amounts, states
+  // and the last four digits of a bank account only, never a full account number or anything about
+  // a supporter. Acting moves or releases money, so each act is a serious action.
+  'collect.view': {
+    description:
+      'See You collect: money TipMe holds for recipients, its transfers, disputes and recipients past the holding cap',
+    group: 'money',
+    sensitive: false,
+  },
+  'collect.manage': {
+    description:
+      'Act on You collect money with a second person: retry, hold or record a transfer, release a hold, record a refund, submit dispute evidence',
+    group: 'money',
     sensitive: true,
   },
   'audit.view': {
@@ -264,11 +281,30 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Every account with masked emails; private.view adds tip totals only: amounts, no contact, card or bank details. The full email is a reveal that asks for a code.',
   },
+  // Per-provider balances (spec §7): the Providers page's retire check, read on every visit.
+  'OpsProvidersController.retire': {
+    verb: 'GET',
+    permission: 'providers.manage',
+    reason:
+      'Counts per withdraw-only payment provider and a last-activity time, for deciding a retire; no owner, amount or account details; changes nothing.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',
     reason:
       'The Pro price and its history: amounts, reasons and staff ids, nobody’s private details.',
+  },
+  'OpsPlanFeesController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
+  },
+  'OpsCollectSettingsController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'The You collect limits and their history: amounts, days, reasons and staff ids, nobody’s private details.',
   },
   'OpsSwitchesController.list': {
     verb: 'GET',
@@ -409,6 +445,25 @@ export const SERIOUS_ACTIONS = [
   'announcement.send',
   // Owner, 14 Nov 2026: refund a tip, the tip minus TipMe's fee (TipMe keeps its fee).
   'tip.refund',
+  // Owner, 18 Nov 2026: TipMe's share per plan (Free, Pro), for new quotes only.
+  'plan_fees.change',
+  // You collect (plan Task 12, spec §9, R11): its settings, and staff's pause of every collect transfer.
+  'collect_settings.change',
+  'collect_transfers.pause',
+  'collect_transfers.resume',
+  // You collect (plan Task 13): a recipient's verified legal name, changed only through support.
+  'collect_name.change',
+  // You collect (plan Task 10, §6.1 case 3): refund a collect tip TipMe can't fully recover first.
+  'tip_refund.absorb_gap',
+  // Task 10 fix round 2 (RI1): send back what a failed collect refund took from the recipient.
+  'tip_refund.return',
+  // You collect (plan Task 15, spec §9): the staff screens' money actions.
+  'collect_transfer.retry',
+  'collect_transfer.record_paid',
+  'collect_dispute.release_hold',
+  'collect_dispute.evidence',
+  'collect_same_bank.clear',
+  'tip_refund.record_paid',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -435,6 +490,23 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'business_pro_price.change': 'Change the Business Pro price',
   'announcement.send': 'Send an announcement by email',
   'tip.refund': 'Refund a tip (TipMe keeps its fee)',
+  'plan_fees.change': 'Change TipMe’s fee per plan',
+  'collect_settings.change': 'Change the You collect limits',
+  'collect_transfers.pause': 'Pause every You collect transfer',
+  'collect_transfers.resume': 'Resume You collect transfers',
+  'collect_name.change': 'Change a recipient’s verified name',
+  'tip_refund.absorb_gap':
+    'Refund a tip when TipMe has to absorb what can’t be taken back',
+  'tip_refund.return':
+    'Return money a failed refund took back to the recipient',
+  'collect_transfer.retry': 'Retry a You collect transfer in review',
+  'collect_transfer.record_paid':
+    'Record a You collect transfer in review as paid, as the partner shows it',
+  'collect_dispute.release_hold': 'Release a closed dispute’s hold early',
+  'collect_dispute.evidence': 'Submit evidence for a dispute',
+  'collect_same_bank.clear': 'Clear a shared bank account hold',
+  'tip_refund.record_paid':
+    'Record a refund the payment partner paid that TipMe didn’t book',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -461,4 +533,17 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'business_pro_price.change': 'pro.price',
     'announcement.send': 'announcements.send',
     'tip.refund': 'payments.repair',
+    'plan_fees.change': 'fees.manage',
+    'collect_settings.change': 'fees.manage',
+    'collect_transfers.pause': 'payments.repair',
+    'collect_transfers.resume': 'payments.repair',
+    'collect_name.change': 'recoveries.manage',
+    'tip_refund.absorb_gap': 'payments.repair',
+    'tip_refund.return': 'payments.repair',
+    'collect_transfer.retry': 'collect.manage',
+    'collect_transfer.record_paid': 'collect.manage',
+    'collect_dispute.release_hold': 'collect.manage',
+    'collect_dispute.evidence': 'collect.manage',
+    'collect_same_bank.clear': 'collect.manage',
+    'tip_refund.record_paid': 'collect.manage',
   };

@@ -15,6 +15,10 @@ import {
   openTestDatabase,
   queuedMail,
 } from '../../packages/database/dist/test-support.js';
+import {
+  createMailHealth,
+  memoryMailHealthStore,
+} from '../../packages/mail/dist/index.js';
 
 const sealing = mailSealing(Buffer.alloc(32, 7));
 const [ADA, TOBI] = DEMO_PROFILES;
@@ -22,7 +26,14 @@ const ops = { userId: TOBI.userId, grantId: null };
 const reason = 'moving to the launch provider';
 const SECRET = 'zepto-secret-key-value';
 
-async function setup(t, config = {}) {
+const HEALTH = {
+  threshold: 3,
+  windowMs: 300_000,
+  restMs: 900_000,
+  trialCodes: 3,
+};
+
+async function setup(t, config = {}, { brevo = false, health } = {}) {
   const database = await openTestDatabase();
   t.after(() => database.close());
   await database.reset();
@@ -38,6 +49,9 @@ async function setup(t, config = {}) {
   const providers = new Map([
     ['mock', provider('mock', { sandbox: null, detail: 'pretend' })],
     ['ses', provider('ses', { sandbox: true, detail: '200 emails a day' })],
+    ...(brevo
+      ? [['brevo', provider('brevo', { sandbox: false, detail: null })]]
+      : []),
   ]);
   const api = new OpsProvidersController(
     {
@@ -60,6 +74,11 @@ async function setup(t, config = {}) {
         status: async (name) => providers.get(name).status(),
       },
     },
+    health ??
+      createMailHealth({
+        store: memoryMailHealthStore(HEALTH),
+        settings: HEALTH,
+      }),
   );
   // Switching is a serious action: Tobi is the one owner, with a fresh code, so it runs alone.
   registerRealSeriousActions();
@@ -106,6 +125,9 @@ test('each route names the permission it needs', () => {
     removeOverride: 'providers.manage',
     lookupSuppression: 'private.view',
     removeAddressSuppression: 'providers.manage',
+    setFailover: 'providers.manage',
+    clearHealth: 'providers.manage',
+    retire: 'providers.manage',
   };
   for (const [method, permission] of Object.entries(expected))
     assert.deepEqual(
@@ -335,4 +357,232 @@ test('a provider that hangs cannot hang the page, and status is not fetched on e
   await api.overview();
   await api.overview();
   assert.ok(calls <= 2, `status fetched ${calls} times`);
+});
+
+// Brevo for codes and receipts (owner, 23 Nov 2026): where BREVO_TRANSACTIONAL=on puts it in the
+// map, staff see it as "Brevo", test it, switch to it and pin an account to it like the others.
+test('Brevo can be tested, switched to and pinned, and is labelled plainly', async (t) => {
+  const { api, db, pool } = await setup(t, {}, { brevo: true });
+  const card = (await api.overview()).data.providers.find(
+    (p) => p.name === 'brevo',
+  );
+  assert.equal(card.label, 'Brevo');
+  assert.equal(card.sandbox, false);
+  await api.startTest(ops, 'brevo', { to: 'staff@example.com', reason });
+  const [mail] = await queuedMail(db, sealing, { limit: 1 });
+  // The worker sends a test through the provider it tests, whichever is active.
+  const pinned = await pool.query(
+    'SELECT pinned_provider FROM mail_messages WHERE id = $1',
+    [mail.id],
+  );
+  assert.equal(pinned.rows[0].pinned_provider, 'brevo');
+  await api.confirmTest(ops, { token: mail.data.token });
+  await api.switchProvider(ops, { provider: 'brevo', reason });
+  const after = await api.overview();
+  assert.equal(
+    after.data.providers.find((p) => p.name === 'brevo').active,
+    true,
+  );
+  await api.setOverride(ops, { account: 'ada', provider: 'brevo', reason });
+  assert.deepEqual(
+    (await api.overview()).data.overrides.map((o) => o.provider),
+    ['brevo'],
+  );
+});
+
+test('Brevo is unknown where BREVO_TRANSACTIONAL is off', async (t) => {
+  const { api } = await setup(t);
+  assert.equal(
+    await code(
+      api.startTest(ops, 'brevo', { to: 'staff@example.com', reason }),
+    ),
+    'NOT_FOUND',
+  );
+});
+
+// Automatic failover (owner, 23 Nov 2026): Ops → Providers shows each provider's state and why, and
+// which provider is live; staff can fix the provider (no automatic switching) or clear a trip.
+
+test('without a fallback the page shows no failover and no health', async (t) => {
+  const { api } = await setup(t, {}, { brevo: true });
+  const { data } = await api.overview();
+  assert.deepEqual(data.failover, {
+    configured: false,
+    fixed: false,
+    live: 'mock',
+    backup: null,
+  });
+  assert.ok(data.providers.every((p) => p.health === null));
+});
+
+test('a resting provider shows until when and why, and the backup is live', async (t) => {
+  const health = createMailHealth({
+    store: memoryMailHealthStore(HEALTH),
+    settings: HEALTH,
+  });
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  let { data } = await api.overview();
+  assert.deepEqual(data.failover, {
+    configured: true,
+    fixed: false,
+    live: 'mock',
+    backup: 'brevo',
+  });
+  assert.equal(
+    data.providers.find((p) => p.name === 'mock').health.state,
+    'healthy',
+  );
+  await health.tripCodes('mock', '4 of 6 codes unused in 10 min');
+  ({ data } = await api.overview());
+  const mock = data.providers.find((p) => p.name === 'mock').health;
+  assert.equal(mock.state, 'resting');
+  assert.equal(mock.kind, 'codes');
+  assert.equal(mock.reason, '4 of 6 codes unused in 10 min');
+  assert.ok(Date.parse(mock.until) > Date.now());
+  assert.equal(data.failover.live, 'brevo');
+});
+
+test('staff clear a trip by hand, audited; clearing a healthy provider says so', async (t) => {
+  const health = createMailHealth({
+    store: memoryMailHealthStore(HEALTH),
+    settings: HEALTH,
+  });
+  const { api, pool } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  await health.tripCodes('mock', 'x');
+  assert.deepEqual((await api.clearHealth(ops, 'mock', { reason })).data, {
+    cleared: true,
+  });
+  assert.equal((await health.snapshot(['mock'])).get('mock').state, 'healthy');
+  assert.deepEqual((await api.clearHealth(ops, 'mock', { reason })).data, {
+    cleared: false,
+  });
+  const audits = await pool.query(
+    "SELECT action, subject_id, reason FROM audit_events WHERE action = 'mail_provider.health_cleared'",
+  );
+  assert.deepEqual(audits.rows, [
+    { action: 'mail_provider.health_cleared', subject_id: 'mock', reason },
+  ]);
+  assert.equal(
+    await code(api.clearHealth(ops, 'zeptomail', { reason })),
+    'NOT_FOUND',
+  );
+});
+
+test('clearing while the breaker store is down is 503, never a silent success', async (t) => {
+  const down = async () => {
+    throw new Error('redis down');
+  };
+  const health = createMailHealth({
+    store: {
+      fail: down,
+      trip: down,
+      succeed: down,
+      claim: down,
+      clear: down,
+      read: down,
+    },
+    settings: HEALTH,
+  });
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  assert.equal(
+    await code(api.clearHealth(ops, 'mock', { reason })),
+    'DEPENDENCY_UNAVAILABLE',
+  );
+  // The page still loads, every provider in the failover group reading healthy.
+  const { data } = await api.overview();
+  assert.deepEqual(
+    Object.fromEntries(
+      data.providers.map((p) => [p.name, p.health?.state ?? null]),
+    ),
+    { mock: 'healthy', ses: null, brevo: 'healthy' },
+  );
+});
+
+test('a fixed provider stays live whatever its state, until staff let it switch again', async (t) => {
+  const health = createMailHealth({
+    store: memoryMailHealthStore(HEALTH),
+    settings: HEALTH,
+  });
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  await health.tripCodes('mock', 'x');
+  assert.deepEqual((await api.setFailover(ops, { fixed: true, reason })).data, {
+    fixed: true,
+  });
+  let { data } = await api.overview();
+  assert.equal(data.failover.fixed, true);
+  assert.equal(data.failover.live, 'mock');
+  await api.setFailover(ops, { fixed: false, reason });
+  ({ data } = await api.overview());
+  assert.equal(data.failover.fixed, false);
+  assert.equal(data.failover.live, 'brevo');
+});
+
+// Fix round 1 (review, 23 Nov 2026).
+
+test('M6: fixing and clearing are rate-limited like a switch', async () => {
+  const { RATE_LIMIT_ROUTE } =
+    await import('../../apps/api/dist/checkout/rate-limit.guard.js');
+  for (const method of ['switchProvider', 'setFailover', 'clearHealth'])
+    assert.equal(
+      Reflect.getMetadata(
+        RATE_LIMIT_ROUTE,
+        OpsProvidersController.prototype[method],
+      ),
+      'ops_request',
+      method,
+    );
+});
+
+test('M5: a clear whose audit row cannot be written leaves the provider resting', async (t) => {
+  const health = createMailHealth({
+    store: memoryMailHealthStore(HEALTH),
+    settings: HEALTH,
+  });
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true, health },
+  );
+  await health.tripCodes('mock', 'x');
+  const database = api.database;
+  api.database = {
+    db: {
+      insert: () => {
+        throw new Error('database down');
+      },
+    },
+  };
+  await assert.rejects(api.clearHealth(ops, 'mock', { reason }));
+  api.database = database;
+  assert.equal((await health.snapshot(['mock'])).get('mock').state, 'resting');
+});
+
+test('only providers in the failover group carry a failover state', async (t) => {
+  const { api } = await setup(
+    t,
+    { MAIL_FALLBACK_PROVIDERS: ['brevo'] },
+    { brevo: true },
+  );
+  const { data } = await api.overview();
+  const health = Object.fromEntries(
+    data.providers.map((p) => [p.name, p.health?.state ?? null]),
+  );
+  // mock (the default) and brevo (the fallback) stand in for each other; ses is configured only.
+  assert.deepEqual(health, { mock: 'healthy', ses: null, brevo: 'healthy' });
 });

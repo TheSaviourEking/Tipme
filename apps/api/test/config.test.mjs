@@ -544,3 +544,29 @@ test('an old switch variable is kept only to seed the switch, in its own words; 
     /PRO_REFUNDS/,
   );
 });
+
+// Brevo for codes and receipts (owner, 23 Nov 2026): a production copy may start with Brevo as its
+// default provider once BREVO_TRANSACTIONAL=on, and not before.
+test('production may default to Brevo only with BREVO_TRANSACTIONAL=on and its keys', () => {
+  const brevo = {
+    MAIL_DEFAULT_PROVIDER: 'brevo',
+    BREVO_API_KEY: 'brevo-test-key',
+    BREVO_WEBHOOK_TOKEN: 'brevo-webhook-token-0123456789',
+  };
+  assert.match(productionIssues(brevo), /MAIL_DEFAULT_PROVIDER/);
+  assert.equal(productionIssues({ ...brevo, BREVO_TRANSACTIONAL: 'on' }), '');
+  assert.ok(!productionIssues(brevo).includes('brevo-test-key'));
+});
+
+test('withdraw-only providers: mock_alt loads under NODE_ENV=test and is refused in production', () => {
+  const config = loadApiConfig({
+    ...valid,
+    NODE_ENV: 'test',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
+  });
+  assert.deepEqual(config.PAYMENT_WITHDRAW_ONLY_PROVIDERS, ['mock_alt']);
+  assert.match(
+    productionIssues({ PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt' }),
+    /PAYMENT_WITHDRAW_ONLY_PROVIDERS/,
+  );
+});

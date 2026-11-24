@@ -4,9 +4,12 @@ import {
   MailRejectedError,
   MailTemporaryError,
   isPretendRecipient,
+  mailProviderChain,
   renderMail,
   resolveMailProvider,
+  sendFailureOf,
   type MailCategory,
+  type MailHealth,
   type MailProvider,
   type MailProviderName,
   type OutgoingMail,
@@ -29,6 +32,10 @@ import {
 import { writePretendMessage } from './pretend-outbox.js';
 import { openSecret, sealSecret } from './secret-box.js';
 import { canUnsubscribe, unsubscribeToken } from './mail-preferences.js';
+import {
+  ONE_TIME_CODE_MAIL_TYPES,
+  previousCodeProvider,
+} from './mail-failover.js';
 
 /** Waits before each retry; the sixth temporary failure fails the mail. */
 export const MAIL_BACKOFF_MS = [
@@ -46,6 +53,8 @@ const CONTENT_KEPT_MS = 7 * 86_400_000;
 export interface ClaimedMail {
   id: string;
   type: string;
+  /** For a code email, `<type>.<email_codes.id>`: which code it carries. */
+  dedupeKey: string;
   category: MailCategory;
   userId: string | null;
   to: string;
@@ -118,6 +127,7 @@ export async function claimDueMail(
     claimed.push({
       id: row.id,
       type: row.type,
+      dedupeKey: row.dedupeKey,
       category: row.category as MailCategory,
       userId: row.userId,
       to,
@@ -425,6 +435,25 @@ export interface MailDeliveryDeps {
   apiOrigin: string;
   /** Structured log of each outcome: ids, type, provider and codes only. */
   log?(entry: Record<string, string | number | null>): void;
+  /** The same, for what staff must act on (the worker logs it as a warning). */
+  warn?(entry: Record<string, string | number | null>): void;
+  /** Automatic failover (owner, 23 Nov 2026). Left out, or with no fallbacks: today's behaviour. */
+  failover?: MailFailoverDeps;
+}
+
+export interface MailFailoverDeps {
+  /** The breaker, shared through Redis with the API and the other workers. */
+  health: MailHealth;
+  /** MAIL_FALLBACK_PROVIDERS, in order. Empty: nothing changes. */
+  fallbacks: readonly MailProviderName[];
+  /** MAIL_DEFAULT_PROVIDER: the backup when staff made a fallback active. */
+  defaultProvider: MailProviderName;
+  /** Production never falls back to the pretend provider. */
+  production: boolean;
+  /** Staff fixed the active provider in ops: no automatic switching. */
+  fixed(): Promise<boolean>;
+  /** MAIL_RESEND_WINDOW_MS: a code asked for again this soon goes through the next provider. */
+  resendWindowMs: number;
 }
 
 export interface MailDeliveryResult {
@@ -460,10 +489,24 @@ export async function deliverDueMail(
       /* ignored */
     }
   };
+  const warn = (entry: Record<string, string | number | null>) => {
+    try {
+      (deps.warn ?? deps.log)?.(entry);
+    } catch {
+      /* ignored */
+    }
+  };
   const claimed = await claimDueMail(deps.db, deps.sealing, input);
   if (claimed.length === 0) return result;
   const active = await deps.activeProvider();
   const configured = new Set(deps.providers.keys());
+  // With no fallback, or the provider fixed in ops, nothing switches and the breaker is not asked.
+  const failover =
+    deps.failover &&
+    deps.failover.fallbacks.length > 0 &&
+    !(await deps.failover.fixed())
+      ? deps.failover
+      : null;
   // Set once the announcement provider says its allowance is used up: the rest of this pass's
   // announcements wait with it rather than each asking again.
   let quotaCode: string | null = null;
@@ -486,19 +529,22 @@ export async function deliverDueMail(
     const pretend =
       configured.has('mock') &&
       isPretendRecipient(mail.to, deps.pretendDomains ?? []);
-    const providerName: MailProviderName | null = bulk
+    const override =
+      !bulk && mail.userId ? await deps.overrideFor(mail.userId) : null;
+    const routing = {
+      pinned: mail.pinnedProvider,
+      override,
+      active,
+      configured,
+      to: mail.to,
+      pretendDomains: deps.pretendDomains ?? [],
+    };
+    const routed: MailProviderName | null = bulk
       ? pretend
         ? 'mock'
         : (deps.announcementProvider?.name ?? null)
-      : resolveMailProvider({
-          pinned: mail.pinnedProvider,
-          override: mail.userId ? await deps.overrideFor(mail.userId) : null,
-          active,
-          configured,
-          to: mail.to,
-          pretendDomains: deps.pretendDomains ?? [],
-        });
-    if (providerName === null) {
+      : resolveMailProvider(routing);
+    if (routed === null) {
       const outcome = await recordMailFailure(deps.db, {
         id: mail.id,
         type: mail.type,
@@ -519,16 +565,21 @@ export async function deliverDueMail(
       });
       continue;
     }
-    const provider =
-      bulk && !pretend
+    const viaAnnouncementProvider = bulk && !pretend;
+    const providerFor = (name: MailProviderName) =>
+      viaAnnouncementProvider
         ? (deps.announcementProvider ?? undefined)
-        : deps.providers.get(providerName);
-    const fail = async (code: string, permanent: boolean) => {
+        : deps.providers.get(name);
+    const fail = async (
+      name: MailProviderName,
+      code: string,
+      permanent: boolean,
+    ) => {
       const outcome = await recordMailFailure(deps.db, {
         id: mail.id,
         type: mail.type,
         category: mail.category,
-        provider: providerName,
+        provider: name,
         code,
         permanent,
         attempts: mail.attempts,
@@ -542,14 +593,14 @@ export async function deliverDueMail(
         event: outcome === 'failed' ? 'mail.failed' : 'mail.retry',
         message_id: mail.id,
         type: mail.type,
-        provider: providerName,
+        provider: name,
         code,
       });
     };
-    const defer = async (code: string) => {
+    const defer = async (name: MailProviderName, code: string) => {
       const outcome = await recordMailDeferred(deps.db, {
         id: mail.id,
-        provider: providerName,
+        provider: name,
         code,
         claimedAt: mail.claimedAt,
         now: input.now,
@@ -560,17 +611,16 @@ export async function deliverDueMail(
         event: 'mail.quota_wait',
         message_id: mail.id,
         type: mail.type,
-        provider: providerName,
+        provider: name,
         code,
       });
     };
-    if (!provider) {
-      await fail('provider_not_configured', false);
+    if (!providerFor(routed)) {
+      await fail(routed, 'provider_not_configured', false);
       continue;
     }
-    const viaAnnouncementProvider = bulk && !pretend;
     if (viaAnnouncementProvider && quotaCode !== null) {
-      await defer(quotaCode);
+      await defer(routed, quotaCode);
       continue;
     }
     // Security, account and money mail always go, so they carry no way to turn them off.
@@ -585,50 +635,163 @@ export async function deliverDueMail(
         unsubscribeUrl,
       });
     } catch {
-      await fail('render_failed', true);
+      await fail(routed, 'render_failed', true);
       continue;
     }
-    // Only the provider call is inside this try: a failure after the provider accepted the mail
-    // must never be mistaken for a send failure (that would send it again).
-    let providerMessageId: string;
-    try {
-      ({ providerMessageId } = await provider.send({
-        reference: mail.id,
-        to: mail.to,
-        from: senderAddress(
-          MAIL_TYPES[mail.type]?.sender ?? 'hello',
-          deps.sender,
-        ),
-        ...(deps.replyTo ? { replyTo: deps.replyTo } : {}),
-        subject: rendered.subject,
-        text: rendered.text,
-        html: rendered.html,
-        headers: unsubscribeUrl
-          ? {
-              'List-Unsubscribe': `<${unsubscribeUrl}>`,
-              'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-            }
-          : {},
-        tracking: MAIL_TYPES[mail.type]?.tracking ?? false,
-      }));
-    } catch (error) {
+    const outgoing: OutgoingMail = {
+      reference: mail.id,
+      to: mail.to,
+      from: senderAddress(
+        MAIL_TYPES[mail.type]?.sender ?? 'hello',
+        deps.sender,
+      ),
+      ...(deps.replyTo ? { replyTo: deps.replyTo } : {}),
+      subject: rendered.subject,
+      text: rendered.text,
+      html: rendered.html,
+      headers: unsubscribeUrl
+        ? {
+            'List-Unsubscribe': `<${unsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+          }
+        : {},
+      tracking: MAIL_TYPES[mail.type]?.tracking ?? false,
+    };
+    // Automatic failover (owner, 23 Nov 2026), for mail other than announcements and only with a
+    // fallback configured: the providers this mail may try, in order, skipping any the breaker is
+    // resting. A provider whose rest is over takes trial traffic: one probe, or the next codes.
+    // Without failover the chain is the one provider routing picks, exactly as before.
+    const isCode = ONE_TIME_CODE_MAIL_TYPES.has(mail.type);
+    const chainInput =
+      failover && !bulk
+        ? {
+            ...routing,
+            defaultProvider: failover.defaultProvider,
+            fallbacks: failover.fallbacks,
+            production: failover.production,
+          }
+        : null;
+    let chain = chainInput ? mailProviderChain(chainInput) : [routed];
+    const health = failover && !bulk ? failover.health : null;
+    const views =
+      health && chain.length > 1 ? await health.snapshot(chain) : null;
+    // (c) A code asked for again soon after the last goes through the provider after the one
+    // that sent it, but only when that provider is healthy (not resting, not on trial).
+    if (chainInput && views && isCode) {
+      const after = await previousCodeProvider(
+        deps.db,
+        mail,
+        failover!.resendWindowMs,
+      );
+      const rescue = mailProviderChain({ ...chainInput, after });
+      if (views.get(rescue[0]!)?.state === 'healthy') chain = rescue;
+    }
+    const failures: Array<{ name: MailProviderName; error: unknown }> = [];
+    // Set inside attempt(); a cast, so the checks after the loops aren't narrowed to null.
+    let sent = null as {
+      name: MailProviderName;
+      providerMessageId: string;
+    } | null;
+    let tried = 0;
+    // Providers resting (or on trial with no slot free) are tried last, only once every other
+    // one has failed for sure: a false trip plus a failing backup must never stop the mail.
+    const later: MailProviderName[] = [];
+    const attempt = async (name: MailProviderName, onTrial: boolean) => {
+      const provider = providerFor(name);
+      if (!provider) return 'next' as const;
+      tried += 1;
+      const outcome = await sendThrough(provider, outgoing);
+      if ('providerMessageId' in outcome) {
+        sent = { name, providerMessageId: outcome.providerMessageId };
+        if (onTrial) await health!.succeeded(name);
+        return 'done' as const;
+      }
+      failures.push({ name, error: outcome.error });
+      const failure = sendFailureOf(outcome.error);
+      // A definite failure counts toward the breaker and moves the mail on; anything else stops.
+      if (failure.kind !== 'definite') return 'done' as const;
+      if (health && name !== 'mock') await health.failed(name, failure.code);
+      return 'next' as const;
+    };
+    let stopped = false;
+    for (const name of chain) {
+      const state = views?.get(name)?.state ?? 'healthy';
+      const onTrial = state === 'trial';
+      if (
+        state === 'resting' ||
+        (onTrial && !(await health!.claim(name, { code: isCode })))
+      ) {
+        later.push(name);
+        continue;
+      }
+      if ((await attempt(name, onTrial)) === 'done') {
+        stopped = true;
+        break;
+      }
+    }
+    if (!stopped)
+      for (const name of later)
+        if ((await attempt(name, false)) === 'done') break;
+    // Nothing could be tried at all: the one routing picks takes it, as without failover.
+    if (tried === 0) await attempt(routed, false);
+    // The outcome comes from every attempt, not just the last (review, 23 Nov 2026): any
+    // temporary failure means the normal retry; out of credits only when no provider failed
+    // otherwise; failed for good only when every provider refused this mail.
+    const temporary = failures.findLast(
+      ({ error }) =>
+        !(error instanceof MailRejectedError) &&
+        !(error instanceof MailQuotaError),
+    );
+    const quota = failures.find(({ error }) => error instanceof MailQuotaError);
+    const final = temporary ?? quota ?? failures.at(-1);
+    // The other attempts are in the timeline (no type: not in the day's counts).
+    const earlier = failures.filter((f) => sent !== null || f !== final);
+    for (const { name, error } of earlier) {
+      await recordMailEvent(deps.db, {
+        messageId: mail.id,
+        kind: 'send_failed',
+        provider: name,
+        occurredAt: input.now,
+      });
+      log({
+        event: 'mail.failover',
+        message_id: mail.id,
+        type: mail.type,
+        provider: name,
+        code: sendFailureOf(error).code,
+      });
+    }
+    if (!sent) {
+      const { name: providerName, error } = final!;
       // A quota error is a temporary error too, so it is checked first.
       if (error instanceof MailQuotaError) {
         if (viaAnnouncementProvider) quotaCode = error.code;
-        await defer(error.code);
+        // Security mail (codes, recovery and verification links) out of credits fails at once,
+        // visibly, rather than waiting an hour it doesn't have: staff see it failed on the Email
+        // console and the provider's card, and can switch provider by hand (review, 23 Nov 2026).
+        if (!viaAnnouncementProvider && mail.category === 'security') {
+          await fail(providerName, error.code, true);
+          warn({
+            event: 'mail.provider_out_of_credits',
+            message_id: mail.id,
+            type: mail.type,
+            provider: providerName,
+            code: error.code,
+          });
+        } else await defer(providerName, error.code);
       } else if (error instanceof MailRejectedError)
-        await fail(error.code, true);
+        await fail(providerName, error.code, true);
       else if (error instanceof MailTemporaryError)
-        await fail(error.code, false);
-      else await fail('send_error', false);
+        await fail(providerName, error.code, false);
+      else await fail(providerName, 'send_error', false);
       continue;
     }
     const recorded = await recordMailSent(deps.db, {
       id: mail.id,
       type: mail.type,
       category: mail.category,
-      provider: providerName,
-      providerMessageId,
+      provider: sent.name,
+      providerMessageId: sent.providerMessageId,
       snapshot: rendered.snapshot,
       sealing: deps.sealing,
       claimedAt: mail.claimedAt,
@@ -639,10 +802,25 @@ export async function deliverDueMail(
       event: recorded === 'sent' ? 'mail.sent' : 'mail.sent_stale_claim',
       message_id: mail.id,
       type: mail.type,
-      provider: providerName,
+      provider: sent.name,
     });
   }
   return result;
+}
+
+/**
+ * Only the provider call: a failure after the provider accepted the mail must never be mistaken
+ * for a send failure (that would send it again).
+ */
+async function sendThrough(
+  provider: MailProvider,
+  mail: OutgoingMail,
+): Promise<{ providerMessageId: string } | { error: unknown }> {
+  try {
+    return await provider.send(mail);
+  } catch (error) {
+    return { error };
+  }
 }
 
 /**

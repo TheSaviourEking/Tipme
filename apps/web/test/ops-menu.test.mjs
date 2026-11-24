@@ -114,7 +114,7 @@ test('the menu comes in the board’s groups, in order', () => {
     groups.map((group) => group.links.map((link) => link.label)),
     [
       ['Overview', 'Approvals'],
-      ['Issues', 'Search', 'People', 'Pages', 'Usernames'],
+      ['Issues', 'Search', 'People', 'Pages', 'Usernames', 'Split accounts'],
       ['Visibility', 'Market'],
       ['Providers', 'Email', 'Audit log'],
       ['Staff members', 'Roles', 'Your access'],
@@ -163,7 +163,15 @@ test('Businesses joins the Work group while the business feature is on', () => {
     opsMenuGroups(OWNER, { business: true })
       .find((group) => group.label === 'Work')
       ?.links.map((link) => link.label),
-    ['Issues', 'Search', 'People', 'Pages', 'Usernames', 'Businesses'],
+    [
+      'Issues',
+      'Search',
+      'People',
+      'Pages',
+      'Usernames',
+      'Split accounts',
+      'Businesses',
+    ],
   );
 });
 
@@ -258,4 +266,53 @@ test('Prices, Announcements and Switches all show for someone with every permiss
     'Changelog',
     'Announcements',
   ]);
+});
+
+// Owner, 18 Nov 2026: TipMe's fee per plan is an admin setting, beside the prices, for fees.manage.
+test('Fees sits in Work after Prices, only with fees.manage', () => {
+  assert.ok(!hrefs(['pro.price']).includes('/ops/plan-fees'));
+  assert.deepEqual(
+    opsMenuGroups(['pro.price', 'fees.manage'])
+      .find((group) => group.label === 'Work')
+      ?.links.map((link) => link.label),
+    ['Pages', 'Prices', 'Fees'],
+  );
+});
+
+// You collect (plan Task 15, spec §9): one entry for its screens, for whoever reads them.
+test('You collect needs collect.view, and its tabs include the reserve screen (Task 11 merged)', async () => {
+  assert.deepEqual(hrefs(['collect.view']), [
+    '/ops',
+    '/ops/approvals',
+    '/ops/collect',
+    '/ops/staff',
+  ]);
+  assert.ok(!hrefs(['collect.manage']).includes('/ops/collect'));
+  const { COLLECT_TABS } = await import('../src/lib/collect-ops-words.ts');
+  assert.deepEqual(
+    COLLECT_TABS.filter((tab) => tab.needs === 'collect.view').map(
+      (t) => t.label,
+    ),
+    ['Overview', 'Held money', 'Transfers', 'Disputes', 'Reserve', 'Unclaimed'],
+  );
+  assert.equal(
+    COLLECT_TABS.find((tab) => tab.label === 'Reserve')?.href,
+    '/ops/collect/reserve',
+  );
+  assert.equal(
+    opsMenuCurrent(opsMenu(['collect.view']), '/ops/collect/disputes/x')?.href,
+    '/ops/collect',
+  );
+});
+
+// Per-provider balances (spec §7): Split accounts reads with issues.view, in Work after the money
+// screens.
+test('Split accounts sits in Work, for issues.view only', () => {
+  assert.ok(hrefs(['issues.view']).includes('/ops/split-accounts'));
+  assert.ok(!hrefs(['providers.manage']).includes('/ops/split-accounts'));
+  assert.ok(!hrefs(['collect.view']).includes('/ops/split-accounts'));
+  const work = opsMenuGroups(['issues.view', 'collect.view'])
+    .find((group) => group.label === 'Work')
+    .links.map((link) => link.label);
+  assert.deepEqual(work, ['Issues', 'You collect', 'Split accounts']);
 });

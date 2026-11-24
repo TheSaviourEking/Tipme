@@ -14,6 +14,8 @@ import {
 } from '@tipme/contracts';
 import {
   ATTEMPT_STATUSES,
+  COLLECT_TRANSFER_STATUSES,
+  DISPUTE_STATUSES,
   PAYOUT_STATUSES,
   SHARE_OPTIONS_BPS,
   TIP_STATUSES,
@@ -36,6 +38,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -106,6 +109,11 @@ export const operationType = pgEnum('operation_type', [
   'pro_sale',
   // Paid Pro: a card month refunded by the partner (refund.paid), taken back out of Pro revenue.
   'pro_refund',
+  // You collect (ADR-0016, proposed): money TipMe holds for a recipient moved to or from their own
+  // partner account (`provider_clearing` against `held_for_recipients`), and a dispute's fee, which
+  // TipMe pays from its own money. Nothing posts these until the later You collect PRs.
+  'collect_transfer',
+  'dispute_fee',
 ]);
 
 /** Auth subject and contact details arrive with ADR-0003. */
@@ -685,9 +693,30 @@ export const profiles = pgTable(
     thanksLine: text('thanks_line'),
     thanksStyle: text('thanks_style'),
     thanksSigned: boolean('thanks_signed').notNull().default(false),
+    // You collect (ADR-0016, proposed; ruling R7): who collects this recipient's tips. `direct` is
+    // today's flow (their own partner account), `collect` is TipMe's account. Null is "not decided"
+    // and behaves as `direct`; a quote copies the mode, so a tip keeps the one it was quoted under.
+    collectionMode: text('collection_mode'),
+    // You collect (P4): when the recipient's name and bank account were verified, and the legal name
+    // then, locked from that moment (Tasks 12 and 13).
+    collectVerifiedAt: timestamp('collect_verified_at', { withTimezone: true }),
+    collectLegalName: text('collect_legal_name'),
+    // You collect (Task 13 fix C1/I1): the digest of the legal name our payment partner last confirmed
+    // holding for this person, so a name is sent only when it changed, and a refused one is put back.
+    collectPartnerNameDigest: text('collect_partner_name_digest'),
+    // You collect (Task 15): support changed the locked legal name (`collect_name.change`). Until our
+    // payment partner has checked the current bank against the new name (the recipient adds their
+    // bank details again), nothing more is transferred to them. Cleared by that check.
+    collectNameRecheckAt: timestamp('collect_name_recheck_at', {
+      withTimezone: true,
+    }),
     createdAt: createdAt(),
   },
   (table) => [
+    check(
+      'profiles_collection_mode',
+      sql`collection_mode IN ('direct', 'collect')`,
+    ),
     check(
       'profiles_page_state',
       sql`page_state IN ('live', 'not_live', 'deleted')`,
@@ -849,7 +878,9 @@ export const notifications = pgTable(
   (table) => [
     check(
       'notifications_kind',
-      sql`kind IN ('tip', 'weekly_report', 'moment', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
+      // You collect (ADR-0016, proposed): a reminder to add bank details, the details verified, and
+      // a dispute holding part of the balance.
+      sql`kind IN ('tip', 'weekly_report', 'moment', 'collect_reminder', 'collect_verified', 'collect_name_recheck', 'dispute_hold', ${sql.raw(BUSINESS_NOTIFICATION_KINDS.map((k) => `'${k}'`).join(', '))})`,
     ),
     // One notification per invitation, however often B3's write is retried.
     uniqueIndex('notifications_invitation_once')
@@ -1017,6 +1048,8 @@ export const handleReservations = pgTable(
     releasedAt: timestamp('released_at', { withTimezone: true }),
     releasedBy: uuid('released_by').references(() => users.id),
     releaseReason: text('release_reason'),
+    // The page the name was handed over to, when the release was a handover (18 Nov 2026).
+    handedOverTo: uuid('handed_over_to').references(() => profiles.id),
   },
   (table) => [
     uniqueIndex('handle_reservations_active')
@@ -1108,6 +1141,47 @@ export const handleTakeBacks = pgTable(
   ],
 );
 
+/**
+ * One-time claim links for a reserved username (handover, 18 Nov 2026). Only the code's sha256 is
+ * kept; staff see the link once. One open link per reservation: a new one cancels the old. A link
+ * is used once, by the account that claimed the name; cancelled_by is null when TipMe ended it (the
+ * reservation was released or the name given to an account).
+ */
+export const handleHandoverLinks = pgTable(
+  'handle_handover_links',
+  {
+    id: uuid('id').primaryKey(),
+    reservationId: uuid('reservation_id')
+      .notNull()
+      .references(() => handleReservations.id),
+    handleLower: text('handle_lower').notNull(),
+    tokenSha256: text('token_sha256').notNull().unique(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    usedBy: uuid('used_by').references(() => users.id),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    cancelledBy: uuid('cancelled_by').references(() => users.id),
+    cancelReason: text('cancel_reason'),
+  },
+  (table) => [
+    uniqueIndex('handle_handover_links_open')
+      .on(table.reservationId)
+      .where(sql`used_at IS NULL AND cancelled_at IS NULL`),
+    check(
+      'handle_handover_links_outcome',
+      sql`(${table.usedAt} IS NULL OR ${table.cancelledAt} IS NULL) AND (${table.usedAt} IS NULL) = (${table.usedBy} IS NULL) AND (${table.cancelledAt} IS NULL) = (${table.cancelReason} IS NULL)`,
+    ),
+    check(
+      'handle_handover_links_expiry',
+      sql`${table.expiresAt} > ${table.createdAt}`,
+    ),
+  ],
+);
+
 export const tipQuotes = pgTable(
   'tip_quotes',
   {
@@ -1133,11 +1207,18 @@ export const tipQuotes = pgTable(
     shareAgreementId: uuid('share_agreement_id').references(
       () => shareAgreements.id,
     ),
+    // You collect (ADR-0016, proposed): the recipient's collection mode when this quote was made.
+    // Every later step reads this, never the profile's current mode. Every quote before is `direct`.
+    collectionMode: text('collection_mode').notNull().default('direct'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
   () => [
     currencyCheck('tip_quotes'),
+    check(
+      'tip_quotes_collection_mode',
+      sql`collection_mode IN ('direct', 'collect')`,
+    ),
     check(
       'tip_quotes_recipient',
       sql`(profile_id IS NULL) <> (team_location_id IS NULL)`,
@@ -1171,9 +1252,19 @@ export const paymentIntents = pgTable(
     requestFingerprint: text('request_fingerprint').notNull(),
     status: tipStatus('status').notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    // You collect (Task 12 fix round 3, ruling P34): a keyed hash of the supporter's address (the
+    // rate-limit subject), never the address itself, so one address can hold only a few unfinished
+    // intents on a page under its holding cap. Kept on collect intents only, and only until the tip
+    // is final (`expireStaleTips` clears it); null for a direct intent or an unknown address.
+    addressKey: text('address_key'),
     createdAt: createdAt(),
   },
   (table) => [
+    // The few intents still holding an address key, for the expiry job's clearing sweep. The cap's
+    // per-address count needs none: it reads one page's unfinished tips, found from `tips`.
+    index('payment_intents_address_key_held')
+      .on(table.id)
+      .where(sql`address_key IS NOT NULL`),
     unique('payment_intents_idempotency').on(
       table.profileId,
       table.idempotencyKey,
@@ -1357,10 +1448,22 @@ export const payouts = pgTable(
     providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
     // The provider's connected account the payout was requested on, recorded at request time.
     accountReference: text('account_reference'),
+    // One request paid as parts across providers (per-provider balances, P6): every part shares the
+    // group, numbered from 1 in drain order. Both NULL for a request one provider paid alone.
+    withdrawalGroupId: uuid('withdrawal_group_id'),
+    groupPart: smallint('group_part'),
     createdAt: createdAt(),
   },
   (table) => [
     currencyCheck('payouts'),
+    check(
+      'payouts_group_part',
+      sql`(withdrawal_group_id IS NULL) = (group_part IS NULL)`,
+    ),
+    // A request's parts, found from any one of them (P13).
+    index('payouts_withdrawal_group')
+      .on(table.withdrawalGroupId)
+      .where(sql`withdrawal_group_id IS NOT NULL`),
     check('payouts_amount_positive', sql`amount_minor > 0`),
     check('payouts_owner', sql`(profile_id IS NULL) <> (business_id IS NULL)`),
     index('payouts_business_created')
@@ -1432,10 +1535,19 @@ export const payoutDestinations = pgTable(
     bankName: text('bank_name').notNull(),
     accountLast4: char('account_last4', { length: 4 }).notNull(),
     status: text('status').notNull(),
+    // You collect (P4, Task 13): a keyed hash of the bank and full account number, never the number
+    // itself, so a second recipient adding the same account can be sent to review.
+    accountHash: text('account_hash'),
+    // You collect (Task 13 fix C1): the digest of the legal name the partner checked this bank
+    // against. A recipient is verified only while it is their own name's.
+    nameDigest: text('name_digest'),
     createdAt: createdAt(),
     replacedAt: timestamp('replaced_at', { withTimezone: true }),
   },
   (table) => [
+    index('payout_destinations_account_hash')
+      .on(table.accountHash)
+      .where(sql`account_hash IS NOT NULL`),
     check(
       'payout_destinations_status',
       sql`status IN ('usable', 'pending_review', 'rejected')`,
@@ -1590,10 +1702,11 @@ export const ledgerAccounts = pgTable(
       'ledger_accounts_one_owner',
       sql`profile_id IS NULL OR business_id IS NULL`,
     ),
-    // Only a business holds a business_payable, and a business holds nothing else.
+    // A business_payable always has a business. A business holds only that and (You collect,
+    // ruling R3) the share TipMe holds for it, `held_for_recipients`.
     check(
       'ledger_accounts_business_payable',
-      sql`(code = 'business_payable') = (business_id IS NOT NULL)`,
+      sql`(code <> 'business_payable' OR business_id IS NOT NULL) AND (business_id IS NULL OR code IN ('business_payable', 'held_for_recipients'))`,
     ),
   ],
 );
@@ -2164,9 +2277,47 @@ export const profileCovers = pgTable(
 );
 
 /**
+ * Smaller copies of a page's uploaded cover (640, 1080 and 1600 wide, `COVER_RENDITION_WIDTHS`),
+ * re-encoded on the server from the stored cover, for `srcset` on the Studio styles that show it
+ * full-bleed. Shaped like `studio_image_files`: in Postgres or in R2, exactly one of the two, and
+ * always where the cover itself is. `version` is the cover's: a row for another version is never
+ * served. A cover uploaded before these existed has none, so the read model reports none.
+ *
+ * `shape` is `wide` for those copies, or `tall` for the 4:5 crop the phone hero of Stage and
+ * Horizon shows (`COVER_TALL_WIDTHS`, 480 and 720). The two width lists never overlap, and the
+ * check holds each shape to its own: an API from before `shape` reads and writes by width alone
+ * (its rows default to `wide`), so during a blue/green overlap it never mistakes a crop for a copy.
+ */
+export const profileCoverRenditions = pgTable(
+  'profile_cover_renditions',
+  {
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profileCovers.profileId, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    shape: text('shape').notNull().default('wide'),
+    width: integer('width').notNull(),
+    bytes: bytea('bytes'),
+    objectKey: text('object_key'),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.profileId, table.shape, table.width] }),
+    check(
+      'profile_cover_renditions_one_place',
+      sql`(bytes IS NULL) <> (object_key IS NULL)`,
+    ),
+    check(
+      'profile_cover_renditions_width',
+      sql`(shape = 'wide' AND width IN (640, 1080, 1600)) OR (shape = 'tall' AND width IN (480, 720))`,
+    ),
+  ],
+);
+
+/**
  * Page Studio (plan 2026-11-12-page-studio): one row per page that has used it. `draft` and
- * `published` are StudioDocument JSON, written only after the strict schema accepted them; a
- * read always goes through `resolveStudio`. `rev` counts saves, so two tabs can't overwrite each
+ * `published` are StudioDocumentV1 JSON, written only after the strict schema accepted them; a
+ * read always goes through `resolveStudioV1`. `rev` counts saves, so two tabs can't overwrite each
  * other. Kept when Pro lapses (owner ruling): the standard page shows until Pro returns.
  */
 export const pageStudios = pgTable('page_studios', {
@@ -2181,6 +2332,12 @@ export const pageStudios = pgTable('page_studios', {
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
+  /**
+   * "From your photo" (styles spec §5.3, §6): a `PhotoAccent` the server computed from the
+   * profile photo (`avatarVersion` names which), or the curated fallback when no colour passed.
+   * Written only by the server; read through `photoAccentOf`, so a stale or invalid value is none.
+   */
+  photoAccent: jsonb('photo_accent'),
 });
 
 /**
@@ -3291,6 +3448,41 @@ export const proPrices = pgTable(
   ],
 );
 
+/**
+ * TipMe's share of each tip on each plan (owner, 18 Nov 2026), append-only, in basis points. The
+ * rates in force are the latest row whose `effective_from` has passed; with no row the coded
+ * defaults apply (DEFAULT_PLAN_FEE_RATES). A quote records the rate it used, so a change applies to
+ * new quotes only. The first row (Free 500, Pro 300) is seeded by its migration with no `set_by`.
+ */
+export const planFeeRates = pgTable(
+  'plan_fee_rates',
+  {
+    id: uuid('id').primaryKey(),
+    freeBps: integer('free_bps').notNull(),
+    proBps: integer('pro_bps').notNull(),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('plan_fee_rates_effective_from').on(table.effectiveFrom),
+    check(
+      'plan_fee_rates_free_bps',
+      sql`${table.freeBps} BETWEEN 150 AND 1000`,
+    ),
+    check('plan_fee_rates_pro_bps', sql`${table.proBps} BETWEEN 150 AND 1000`),
+    check(
+      'plan_fee_rates_pro_not_above_free',
+      sql`${table.proBps} <= ${table.freeBps}`,
+    ),
+    check('plan_fee_rates_reason', sql`char_length(${table.reason}) > 0`),
+  ],
+);
+
 export const PRO_PERIOD_STATUSES = [
   'SCHEDULED',
   'ACTIVE',
@@ -3679,6 +3871,28 @@ export const tipRefunds = pgTable(
     reason: text('reason').notNull(),
     // Set when TipMe claims the partner call, before making it.
     sentAt: timestamp('sent_at', { withTimezone: true }),
+    // You collect (plan Task 10): how the recipient's part comes back before TipMe refunds from its
+    // own balance. Null for a direct tip (refunded as its recipient, unchanged). `cancel_held`: the
+    // share never moved and is held for the refund; `take_back`: it moved and is taken back first;
+    // `absorb`: some of it can't be taken back, and a second person decided TipMe absorbs up to
+    // `gap_minor` (serious action `tip_refund.absorb_gap`).
+    collectPlan: text('collect_plan'),
+    gapMinor: minor('gap_minor'),
+    // What this refund holds of the recipient's balance while it is open (as a dispute's, R4):
+    // their part being cancelled or taken back. Zero once it is booked, or let go on a failure that
+    // moved nothing; kept on a failure after money was already taken back (staff are told).
+    heldMinor: minor('held_minor')
+      .notNull()
+      .default(sql`0`),
+    // When everything to take back had come back: only then is the refund sent.
+    recoveredAt: timestamp('recovered_at', { withTimezone: true }),
+    // A collect refund's first send under its key: the partner's replay window counts from here
+    // (P24's 23 hours), not from when it was asked.
+    firstSentAt: timestamp('first_sent_at', { withTimezone: true }),
+    // Fix round 2 (RM1): a send that never left the building waits before it is tried again
+    // (backoff), and after a few such tries staff are told.
+    retryAfter: timestamp('retry_after', { withTimezone: true }),
+    notSentCount: integer('not_sent_count').notNull().default(0),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
@@ -3695,9 +3909,17 @@ export const tipRefunds = pgTable(
     ),
     check(
       'tip_refunds_failure',
-      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed'))`,
+      sql`${table.failure} IS NULL OR (${table.status} = 'FAILED' AND ${table.failure} IN ('bank_transfer', 'not_refundable', 'refused', 'partner_failed', 'balance', 'not_recovered', 'disputed'))`,
     ),
     check('tip_refunds_amount_positive', sql`${table.amountMinor} > 0`),
+    check(
+      'tip_refunds_collect_plan',
+      sql`(${table.collectPlan} IS NULL OR ${table.collectPlan} IN ('cancel_held', 'take_back', 'absorb'))
+        AND ((COALESCE(${table.collectPlan}, '') = 'absorb') = (${table.gapMinor} IS NOT NULL))
+        AND (${table.gapMinor} IS NULL OR ${table.gapMinor} > 0)
+        AND ${table.heldMinor} >= 0 AND ${table.heldMinor} <= ${table.amountMinor}
+        AND (${table.collectPlan} IS NOT NULL OR (${table.heldMinor} = 0 AND ${table.recoveredAt} IS NULL))`,
+    ),
     currencyCheck('tip_refunds'),
   ],
 );
@@ -3811,9 +4033,23 @@ export const shareTransfers = pgTable(
       (): AnyPgColumn => shareHoldbacks.id,
     ),
     attempts: integer('attempts').notNull().default(0),
+    // Task 11 (N2): since when a fee return has waited on TipMe's own money (not a try). Its wait's
+    // issue stays open while any is set; cleared when the return goes ahead.
+    ownMoneyWaitSince: timestamp('own_money_wait_since', {
+      withTimezone: true,
+    }),
     nextAttemptAt: timestamp('next_attempt_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Task 9: a collect sweep held in review after its leg in was definitely refused again and
+    // again (nothing moved), as opposed to one whose transfer the partner lists with other money.
+    // Task 9 (P29): the lost dispute a `collect_recover` pull-back answers (one each).
+    disputeId: uuid('dispute_id').references((): AnyPgColumn => disputes.id),
+    // Task 10: or the collect tip refund it answers (one each).
+    tipRefundId: uuid('tip_refund_id').references(
+      (): AnyPgColumn => tipRefunds.id,
+    ),
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
     sentAt: timestamp('sent_at', { withTimezone: true }),
     createdAt: createdAt(),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -3822,9 +4058,13 @@ export const shareTransfers = pgTable(
   },
   (table) => [
     currencyCheck('share_transfers'),
+    // You collect (R3, P3): `collect_sweep` is a business's share of a collect tip, already in TipMe's
+    // balance, so only the `in` leg runs. It needs a business and has no `out` leg (the checks below).
+    // Task 11 (RI2): `collect_return` sends back to a business what a failed refund pulled back from
+    // it (in leg only); `parent_id` is that `collect_recover` row.
     check(
       'share_transfers_kind',
-      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay')`,
+      sql`kind IN ('sweep', 'recover', 'fee_return', 'holdback_repay', 'collect_sweep', 'collect_recover', 'collect_return')`,
     ),
     check(
       'share_transfers_status',
@@ -3838,21 +4078,24 @@ export const shareTransfers = pgTable(
     // Without an `out` leg there is nothing to wait for or claim on the way out.
     check(
       'share_transfers_one_leg',
-      sql`kind IN ('sweep', 'recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
+      sql`kind IN ('sweep', 'recover', 'collect_recover') OR status NOT IN ('waiting', 'out_sent', 'gap')`,
     ),
     check(
       'share_transfers_links',
       sql`(kind = 'recover') = (reversal_transaction_id IS NOT NULL)
         AND (kind = 'fee_return') = (partner_reversal_id IS NOT NULL)
-        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)`,
+        AND (kind = 'holdback_repay') = (parent_id IS NOT NULL AND holdback_id IS NOT NULL)
+        AND (kind = 'collect_recover') = (dispute_id IS NOT NULL OR tip_refund_id IS NOT NULL)
+        AND (dispute_id IS NULL OR tip_refund_id IS NULL)`,
     ),
     check(
       'share_transfers_business',
       sql`kind = 'fee_return' OR business_id IS NOT NULL`,
     ),
+    // One sweep per tip, of either kind: a tip is direct or collect, never both.
     uniqueIndex('share_transfers_one_sweep')
       .on(table.tipId)
-      .where(sql`kind = 'sweep'`),
+      .where(sql`kind IN ('sweep', 'collect_sweep')`),
     uniqueIndex('share_transfers_once_per_reversal')
       .on(table.reversalTransactionId)
       .where(sql`kind = 'recover'`),
@@ -3860,6 +4103,23 @@ export const shareTransfers = pgTable(
     uniqueIndex('share_transfers_fee_once')
       .on(table.partnerReversalId)
       .where(sql`kind = 'fee_return'`),
+    check(
+      'share_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
+    ),
+    // Task 9 (P29): each lost dispute pulls its part of a swept business share back once.
+    uniqueIndex('share_transfers_one_collect_recover')
+      .on(table.disputeId)
+      .where(sql`kind = 'collect_recover'`),
+    // Task 10: each collect tip refund pulls a swept business share back once.
+    uniqueIndex('share_transfers_one_refund_recover')
+      .on(table.tipRefundId)
+      .where(sql`kind = 'collect_recover'`),
+    // Task 11 (m4): one return per pull-back (`parent_id`), moving or done; a cancelled one (a lost
+    // dispute used the money) frees it for another. In the database, not only under the tip's lock.
+    uniqueIndex('share_transfers_one_collect_return')
+      .on(table.parentId)
+      .where(sql`kind = 'collect_return' AND status <> 'cancelled'`),
     uniqueIndex('share_transfers_once_per_holdback')
       .on(table.parentId, table.holdbackId)
       .where(sql`parent_id IS NOT NULL`),
@@ -3910,5 +4170,457 @@ export const shareHoldbacks = pgTable(
     index('share_holdbacks_open')
       .on(table.businessId, table.createdAt)
       .where(sql`remaining_minor > 0`),
+  ],
+);
+
+// ---- You collect (ADR-0016, PROPOSED; plan Task 3) ----
+// TipMe takes a `collect` recipient's tips on its own partner account, holds each share
+// (`held_for_recipients`) and transfers it on. Only `collect` recipients' tips write these tables, and
+// the `you_collect` switch that puts new sign-ups on it is off everywhere until the owner turns it on
+// (plan Task 16); D-04 (custody), D-06 (verification) and D-07 stay open.
+
+/**
+ * A partner dispute on a tip TipMe collected (spec §6.2). The partner's ids and codes only: never the
+ * supporter's words. `held_minor` is what is held from the recipient's balance while it is open
+ * (ruling R4: added to `reserved`, not a `withdrawal_holds` row). The fee is posted in the currency the
+ * partner reports; without one, nothing is posted and an issue opens (R6).
+ */
+export const disputes = pgTable(
+  'disputes',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    partnerDisputeId: text('partner_dispute_id').notNull().unique(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    // The partner's reason code only.
+    reason: text('reason'),
+    status: text('status').notNull(),
+    respondBy: timestamp('respond_by', { withTimezone: true }),
+    // Task 15: staff's evidence (`collect_dispute.evidence`, a second person). `draft` while files are
+    // uploaded, `sending` once approved (the worker submits it to the partner once, under
+    // `tipme-dispute-evidence-<id>-<attempt>`), then `submitted`, or `refused` (a definite refusal:
+    // nothing was submitted, and staff may ask again before the deadline with the next attempt).
+    evidenceState: text('evidence_state').notNull().default('none'),
+    // Staff's own words for the partner (never the supporter's), and the partner's file ids.
+    evidenceText: text('evidence_text'),
+    evidenceFiles: jsonb('evidence_files')
+      .$type<{ fileRef: string; contentType: string; bytes: number }[]>()
+      .notNull()
+      .default([]),
+    evidenceAttempt: integer('evidence_attempt').notNull().default(0),
+    evidenceAskedAt: timestamp('evidence_asked_at', { withTimezone: true }),
+    evidenceSubmittedAt: timestamp('evidence_submitted_at', {
+      withTimezone: true,
+    }),
+    feeMinor: minor('fee_minor'),
+    feeCurrency: char('fee_currency', { length: 3 }),
+    // What the partner set aside from TipMe's available balance while it is open.
+    setAsideMinor: minor('set_aside_minor'),
+    heldMinor: minor('held_minor')
+      .notNull()
+      .default(sql`0`),
+    // What TipMe did with the tip's share when the dispute opened (Task 9): `held` (the share, never
+    // sent, held in review), `balance` (it had moved: `held_minor` of the balance is held), `none`
+    // (no share to hold). Null while the share's transfer may be in flight: decided after its
+    // read-back (Review Focus 3).
+    shareStep: text('share_step'),
+    // When TipMe finished acting on the outcome: the hold released (won, or closed with no refund),
+    // or the loss booked (lost). Null while anything is left to do, and nothing moves meanwhile.
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+    // When TipMe first saw it reach a final status (won, lost or closed): a closed dispute's hold is
+    // released 14 days on when no refund booked it, and a lost one waiting on a transfer in flight
+    // for a day is raised to staff.
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    lastEventAt: timestamp('last_event_at', { withTimezone: true }).notNull(),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    currencyCheck('disputes'),
+    check('disputes_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    check('disputes_amount', sql`amount_minor > 0`),
+    check(
+      'disputes_status',
+      sql`status IN (${sql.raw(DISPUTE_STATUSES.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check(
+      'disputes_evidence_state',
+      sql`evidence_state IN ('none', 'draft', 'sending', 'submitted', 'refused')`,
+    ),
+    // Task 15: at most five files, and a submitted dispute keeps when it was submitted.
+    check(
+      'disputes_evidence',
+      sql`jsonb_typeof(evidence_files) = 'array' AND jsonb_array_length(evidence_files) <= 5
+        AND evidence_attempt >= 0
+        AND (evidence_state <> 'submitted' OR evidence_submitted_at IS NOT NULL)
+        AND (evidence_state NOT IN ('sending', 'submitted') OR (evidence_text IS NOT NULL AND evidence_asked_at IS NOT NULL))`,
+    ),
+    check(
+      'disputes_fee',
+      sql`(fee_minor IS NULL OR fee_minor >= 0) AND (fee_currency IS NULL OR fee_currency ~ '^[A-Z]{3}$')`,
+    ),
+    check(
+      'disputes_set_aside',
+      sql`set_aside_minor IS NULL OR set_aside_minor >= 0`,
+    ),
+    check('disputes_held', sql`held_minor >= 0 AND held_minor <= amount_minor`),
+    check(
+      'disputes_share_step',
+      sql`share_step IS NULL OR share_step IN ('held', 'balance', 'none')`,
+    ),
+    // Only a final dispute is settled.
+    check(
+      'disputes_settled',
+      sql`settled_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    check(
+      'disputes_decided',
+      sql`decided_at IS NULL OR status IN ('won', 'lost', 'closed')`,
+    ),
+    index('disputes_unsettled')
+      .on(table.createdAt)
+      .where(sql`settled_at IS NULL`),
+    index('disputes_tip').on(table.tipId),
+    index('disputes_status').on(table.status, table.respondBy),
+  ],
+);
+
+export const COLLECT_TRANSFER_KINDS = ['share', 'back', 'return'] as const;
+/** Why a collect transfer is in `review` (P13): a release or retry clears only its own reason. */
+export const COLLECT_REVIEW_REASONS = [
+  'dispute',
+  'same_bank',
+  'provider',
+  'refund',
+  'staff',
+] as const;
+
+/**
+ * One money movement between TipMe's partner balance and a collect recipient's own account (spec §5).
+ * `share`: a tip's held share on to the recipient (one per tip, key `tipme-collect-<tipId>`). `back`:
+ * money taken back for a refund or a dispute (key `tipme-collect-back-<refundId|disputeId>`). `return`: money a failed refund took back, sent back to the recipient by staff (Task 10, key `tipme-collect-return-<refundId>`). The key
+ * is also the transfer's `transfer_group`, so a lost answer is read back, never sent blindly. The
+ * account is filled when the row moves to `ready` (P8), from the account verified then.
+ */
+export const collectTransfers = pgTable(
+  'collect_transfers',
+  {
+    id: uuid('id').primaryKey(),
+    kind: text('kind').notNull(),
+    tipId: uuid('tip_id')
+      .notNull()
+      .references(() => tips.id),
+    profileId: uuid('profile_id')
+      .notNull()
+      .references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    refundId: uuid('refund_id').references(() => tipRefunds.id),
+    disputeId: uuid('dispute_id').references(() => disputes.id),
+    accountReference: text('account_reference'),
+    provider: text('provider').notNull(),
+    environment: providerEnvironment('environment').notNull(),
+    amountMinor: minor('amount_minor').notNull(),
+    currency: currency(),
+    status: text('status').notNull(),
+    reviewReason: text('review_reason'),
+    idempotencyKey: text('idempotency_key').notNull().unique(),
+    transferReference: text('transfer_reference'),
+    chargeReference: text('charge_reference'),
+    // The new-recipient delay (spec §8): not sent before this.
+    releaseAfter: timestamp('release_after', { withTimezone: true }),
+    attempts: integer('attempts').notNull().default(0),
+    nextTryAt: timestamp('next_try_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    // Task 9: the last send under the key was definitely refused by the partner (nothing moved), so
+    // the row, held in review, is proven unmoved. Cleared by any later claim.
+    refusedAt: timestamp('refused_at', { withTimezone: true }),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    currencyCheck('collect_transfers'),
+    check(
+      'collect_transfers_kind',
+      sql`kind IN (${sql.raw(COLLECT_TRANSFER_KINDS.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check(
+      'collect_transfers_status',
+      sql`status IN (${sql.raw(COLLECT_TRANSFER_STATUSES.map((k) => `'${k}'`).join(', '))})`,
+    ),
+    check('collect_transfers_amount', sql`amount_minor > 0`),
+    check('collect_transfers_attempts', sql`attempts >= 0`),
+    check('collect_transfers_provider', sql`provider ~ '^[a-z][a-z0-9_]*$'`),
+    // A share answers no refund or dispute; a transfer back answers exactly one.
+    check(
+      'collect_transfers_back_source',
+      sql`(kind = 'share' AND refund_id IS NULL AND dispute_id IS NULL)
+        OR (kind = 'back' AND (refund_id IS NULL) <> (dispute_id IS NULL))
+        OR (kind = 'return' AND refund_id IS NOT NULL AND dispute_id IS NULL)`,
+    ),
+    // The plan's exact keys, so a key can never name another tip, refund or dispute.
+    check(
+      'collect_transfers_key',
+      sql`(kind = 'share' AND idempotency_key = 'tipme-collect-' || tip_id::text)
+        OR (kind = 'back' AND idempotency_key = 'tipme-collect-back-' || coalesce(refund_id, dispute_id)::text)
+        OR (kind = 'return' AND idempotency_key = 'tipme-collect-return-' || refund_id::text)`,
+    ),
+    // A row in review says why (P13).
+    check(
+      'collect_transfers_review_reason',
+      sql`(review_reason IS NULL OR review_reason IN (${sql.raw(COLLECT_REVIEW_REASONS.map((k) => `'${k}'`).join(', '))}))
+        AND (status <> 'review' OR review_reason IS NOT NULL)`,
+    ),
+    // Nothing is claimed or sent without the account it goes to (P8).
+    check(
+      'collect_transfers_account',
+      sql`status IN ('waiting', 'cancelled', 'review') OR account_reference IS NOT NULL`,
+    ),
+    check(
+      'collect_transfers_paid',
+      sql`status <> 'paid' OR paid_at IS NOT NULL`,
+    ),
+    // P27: a share whose money may have moved (it was sent under its key) is never cancelled. Only a
+    // read-back on its account that found nothing clears `sent_at`. The guard all dispute and refund
+    // hooks use is `takeUnsentShare`; this makes it hold whatever the code does.
+    // The one exception: a row whose last send the partner definitely refused (`refused_at`).
+    check(
+      'collect_transfers_never_cancel_sent',
+      sql`status <> 'cancelled' OR sent_at IS NULL OR refused_at IS NOT NULL`,
+    ),
+    check(
+      'collect_transfers_refused',
+      sql`refused_at IS NULL OR status IN ('review', 'cancelled')`,
+    ),
+    uniqueIndex('collect_transfers_one_share')
+      .on(table.tipId)
+      .where(sql`kind = 'share'`),
+    index('collect_transfers_due').on(table.status, table.nextTryAt),
+    index('collect_transfers_profile').on(table.profileId, table.status),
+  ],
+);
+
+/**
+ * You collect's settings (spec §9), as the plan fee rates: one row per change, never edited, the
+ * latest whose `effective_from` has passed in force, and the coded defaults (`COLLECT_DEFAULTS`) with
+ * none. `paused` is the staff emergency pause of every collect transfer (ruling R11). Bounds are §9's;
+ * the first-withdrawal cap's floor (the minimum withdrawal) is the fee policy's, checked by the
+ * setting's serious action (Task 12).
+ */
+export const collectSettings = pgTable(
+  'collect_settings',
+  {
+    id: uuid('id').primaryKey(),
+    capMinor: minor('cap_minor').notNull(),
+    capDays: integer('cap_days').notNull(),
+    reminderDays: integer('reminder_days').array().notNull(),
+    delayHours: integer('delay_hours').notNull(),
+    delayForDays: integer('delay_for_days').notNull(),
+    firstWithdrawalCapMinor: minor('first_withdrawal_cap_minor').notNull(),
+    newDailyLimitMinor: minor('new_daily_limit_minor').notNull(),
+    newDailyLimitDays: integer('new_daily_limit_days').notNull(),
+    reserveWarningMinor: minor('reserve_warning_minor').notNull(),
+    reserveCriticalMinor: minor('reserve_critical_minor').notNull(),
+    paused: boolean('paused').notNull().default(false),
+    effectiveFrom: timestamp('effective_from', {
+      withTimezone: true,
+    }).notNull(),
+    setBy: uuid('set_by').references(() => users.id),
+    approvedBy: uuid('approved_by').references(() => users.id),
+    reason: text('reason').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('collect_settings_effective_from').on(table.effectiveFrom),
+    // ₦10,000 to ₦500,000, for 7 to 90 days.
+    check(
+      'collect_settings_cap_minor',
+      sql`cap_minor BETWEEN 1000000 AND 50000000`,
+    ),
+    check('collect_settings_cap_days', sql`cap_days BETWEEN 7 AND 90`),
+    // One to ten reminders, each a day from 1 to the day before the cap.
+    check(
+      'collect_settings_reminder_days',
+      sql`cardinality(reminder_days) BETWEEN 1 AND 10
+        AND array_position(reminder_days, NULL) IS NULL
+        AND 1 <= ALL (reminder_days) AND cap_days > ALL (reminder_days)`,
+    ),
+    check(
+      'collect_settings_delay',
+      sql`delay_hours BETWEEN 0 AND 72 AND delay_for_days BETWEEN 0 AND 30`,
+    ),
+    check(
+      'collect_settings_first_withdrawal_cap',
+      sql`first_withdrawal_cap_minor > 0`,
+    ),
+    check(
+      'collect_settings_new_daily_limit',
+      sql`new_daily_limit_minor > 0 AND new_daily_limit_days BETWEEN 0 AND 365`,
+    ),
+    check(
+      'collect_settings_reserve',
+      sql`reserve_critical_minor >= 0 AND reserve_critical_minor < reserve_warning_minor`,
+    ),
+    check('collect_settings_reason', sql`char_length(reason) > 0`),
+  ],
+);
+
+/**
+ * One read of TipMe's own partner balance against what it holds for recipients (spec §4, §6.3; P9),
+ * per currency. Kept apart from `payment_reserve_readings`, so today's NGN payout-fee alert and its
+ * re-alert window are untouched. `own_minor` is available less held; the level follows it: `breach`
+ * below zero (held money not covered), `critical` and `warning` below those levels. A read that
+ * failed has no available, own or level ("unknown"), never a guess.
+ */
+export const collectReserveReadings = pgTable(
+  'collect_reserve_readings',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    currency: currency(),
+    availableMinor: minor('available_minor'),
+    heldMinor: minor('held_minor').notNull(),
+    ownMinor: minor('own_minor'),
+    warningMinor: minor('warning_minor').notNull(),
+    criticalMinor: minor('critical_minor').notNull(),
+    level: text('level'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    // Task 11 (I5): when the owners were emailed for this spell. Set once per spell, whatever the
+    // staff alert route did, so an unset or failing webhook never stops the owners hearing.
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
+  },
+  (table) => [
+    currencyCheck('collect_reserve_readings'),
+    check(
+      'collect_reserve_readings_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    // Task 11: a currency the alert levels don't apply to (any but NGN, or You collect not in use)
+    // is read with both levels at zero.
+    check(
+      'collect_reserve_readings_amounts',
+      sql`held_minor >= 0 AND critical_minor >= 0 AND critical_minor <= warning_minor`,
+    ),
+    check(
+      'collect_reserve_readings_own',
+      sql`(available_minor IS NULL AND own_minor IS NULL AND level IS NULL)
+        OR (available_minor IS NOT NULL AND own_minor IS NOT NULL AND own_minor = available_minor - held_minor)`,
+    ),
+    check(
+      'collect_reserve_readings_level',
+      // Task 11: the rule (available >= held) is broken only where money is held; a negative balance
+      // with nothing held in it is critical (it still blocks every transfer, §6.3).
+      sql`own_minor IS NULL OR (level IS NOT NULL AND level = CASE
+          WHEN held_minor > 0 AND own_minor < 0 THEN 'breach'
+          WHEN available_minor < 0 OR own_minor < critical_minor THEN 'critical'
+          WHEN own_minor < warning_minor THEN 'warning'
+          ELSE 'ok' END)`,
+    ),
+    index('collect_reserve_readings_latest').on(
+      table.provider,
+      table.currency,
+      table.readAt.desc(),
+    ),
+  ],
+);
+
+/**
+ * You collect (plan Task 11, review I4/I5): the reserve check's conditions that are not one
+ * currency's level, one row per condition per check, so their alerts follow the same claim and
+ * 6-hour rule as the readings (`claimReserveAlert`): automatic payouts on TipMe's own balance, a
+ * balance read that failed while money is held, and a negative balance in a currency TipMe doesn't
+ * list (a crypto bucket), whose name is `detail`.
+ */
+export const collectReserveAlerts = pgTable(
+  'collect_reserve_alerts',
+  {
+    id: uuid('id').primaryKey(),
+    provider: text('provider').notNull(),
+    condition: text('condition').notNull(),
+    active: boolean('active').notNull(),
+    detail: text('detail'),
+    readAt: timestamp('read_at', { withTimezone: true }).notNull(),
+    alertedAt: timestamp('alerted_at', { withTimezone: true }),
+    alertClaimedAt: timestamp('alert_claimed_at', { withTimezone: true }),
+    ownersEmailedAt: timestamp('owners_emailed_at', { withTimezone: true }),
+  },
+  (table) => [
+    check(
+      'collect_reserve_alerts_provider',
+      sql`provider ~ '^[a-z][a-z0-9_-]*$'`,
+    ),
+    check(
+      'collect_reserve_alerts_condition',
+      // Task 15b (I1): a payout schedule that couldn't be read while You collect is in use.
+      sql`condition IN ('auto_payout', 'unreadable', 'unlisted_negative', 'schedule_unreadable')`,
+    ),
+    check(
+      'collect_reserve_alerts_detail',
+      sql`detail IS NULL OR char_length(detail) <= 32`,
+    ),
+    index('collect_reserve_alerts_latest').on(
+      table.provider,
+      table.condition,
+      table.readAt.desc(),
+    ),
+  ],
+);
+
+/** One provider's figures in a daily split check, all in NGN minor units as decimal strings. */
+export interface ProviderSplitReading {
+  /** The recorded name ('bachs', 'mock', 'mock_alt'): staff screens only, never shown to a person. */
+  provider: string;
+  /** What the provider said it holds for the owner; null when it couldn't be read. */
+  availableMinor: string | null;
+  /** What is promised out of it and still in it (`committedAtProvider`). */
+  queuedMinor: string;
+}
+
+/**
+ * Per-provider balances (spec §7, P12): the daily check of a split owner's ledger available
+ * against what their providers hold, less what is queued at each. One row per check; Split
+ * accounts and the retire check read the latest per owner. Kept 90 days (`purgeSplitChecks`).
+ */
+export const providerSplitChecks = pgTable(
+  'provider_split_checks',
+  {
+    id: uuid('id').primaryKey(),
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    checkedAt: timestamp('checked_at', { withTimezone: true }).notNull(),
+    // The ledger's available at the check; may be below zero (Q8).
+    ledgerMinor: minor('ledger_minor').notNull(),
+    providers: jsonb('providers').$type<ProviderSplitReading[]>().notNull(),
+    outcome: text('outcome').notNull(),
+  },
+  (table) => [
+    check(
+      'provider_split_checks_owner',
+      sql`(profile_id IS NULL) <> (business_id IS NULL)`,
+    ),
+    check(
+      'provider_split_checks_outcome',
+      sql`outcome IN ('ok', 'short', 'over', 'partial')`,
+    ),
+    index('provider_split_checks_profile').on(
+      table.profileId,
+      table.checkedAt.desc(),
+    ),
+    index('provider_split_checks_business').on(
+      table.businessId,
+      table.checkedAt.desc(),
+    ),
   ],
 );

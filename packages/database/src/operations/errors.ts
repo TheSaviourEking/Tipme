@@ -22,6 +22,7 @@ export type OperationErrorCode =
   | 'HANDLE_CHANGE_LIMIT'
   | 'PRO_REQUIRED'
   | 'PRO_ALREADY_RENEWED'
+  | 'PLAN_FEES_CONFIRM_REQUIRED'
   | 'PRO_PRICE_NOT_SET'
   | 'PRO_PRICE_CHANGED'
   | 'PRO_PURCHASE_OPEN'
@@ -45,6 +46,19 @@ export type OperationErrorCode =
   | 'WITHDRAWAL_TOO_SMALL'
   | 'WITHDRAWAL_BELOW_FEE'
   | 'WITHDRAWAL_UNAVAILABLE'
+  // You collect (Task 12): the page at its holding cap, and a new account's withdrawal limits.
+  | 'PAGE_PAUSED'
+  | 'WITHDRAWAL_FIRST_CAP'
+  | 'WITHDRAWAL_DAILY_LIMIT'
+  // You collect (Task 13): a verified legal name changes only through support; support's change
+  // needs one that is locked.
+  | 'NAME_LOCKED'
+  | 'NAME_NOT_LOCKED'
+  | 'BANK_RECHECK_LATER'
+  // You collect staff screens (Task 15).
+  | 'COLLECT_ACTION_REFUSED'
+  | 'COLLECT_EVIDENCE_LATE'
+  | 'COLLECT_READ_BACK_UNCONFIRMED'
   | 'WITHDRAWALS_PAUSED'
   | 'WITHDRAWALS_SWITCHED_OFF'
   | 'PAYOUT_SETUP_NEEDED'
@@ -105,6 +119,12 @@ export type OperationErrorCode =
   | 'TAKE_BACK_OPEN'
   | 'TAKE_BACK_NOT_FOUND'
   | 'TAKE_BACK_CLOSED'
+  | 'USERNAME_IN_HOLD'
+  | 'HANDOVER_LINK_NOT_FOUND'
+  | 'HANDOVER_ACCOUNT_UNAVAILABLE'
+  | 'CLAIM_LINK_INVALID'
+  | 'HANDOVER_STAFF_ACCOUNT'
+  | 'HANDOVER_ACCOUNT_CHANGED'
   // TipMe for businesses (PR B0). NOT_A_MANAGER and NO_MEMBERSHIP answer as "not found".
   | 'NOT_A_MANAGER'
   | 'NO_MEMBERSHIP'

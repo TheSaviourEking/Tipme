@@ -60,6 +60,24 @@ export const apiErrorCodes = [
   'COUNTRY_NOT_SUPPORTED',
   'PAYMENT_START_REJECTED',
   'TIPPING_NOT_OPEN',
+  // You collect: the page has reached its holding cap and takes no new tips (refused from Task 12).
+  'PAGE_PAUSED',
+  // You collect (Task 12): a new account's first withdrawal is capped, and its Lagos day limited.
+  'WITHDRAWAL_FIRST_CAP',
+  'WITHDRAWAL_DAILY_LIMIT',
+  // You collect (Task 13): the bank couldn't name the account; no match with the recipient's name;
+  // their verified name is locked (support changes it).
+  'BANK_NAME_UNKNOWN',
+  'NAME_MISMATCH',
+  'NAME_LOCKED',
+  'NAME_NOT_LOCKED',
+  // Task 13 fix round 2: our payment partner answered for a bank checked under another name.
+  'BANK_RECHECK_LATER',
+  // You collect staff screens (Task 15): the money moved on since the screen was read; evidence
+  // after the dispute's deadline; the partner's read-back doesn't show the transfer paid.
+  'COLLECT_ACTION_REFUSED',
+  'COLLECT_EVIDENCE_LATE',
+  'COLLECT_READ_BACK_UNCONFIRMED',
   'NO_CONFIRMED_TEST',
   'EMAIL_TAKEN',
   'EMAIL_INVALID',
@@ -91,6 +109,7 @@ export const apiErrorCodes = [
   'ANNOUNCEMENT_NOT_DRAFT',
   'ANNOUNCEMENT_NO_RECIPIENTS',
   'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
+  'PLAN_FEES_CONFIRM_REQUIRED',
   'PRO_PRICE_NOT_SET',
   'PRO_PRICE_CHANGED',
   'PRO_PURCHASE_OPEN',
@@ -100,6 +119,9 @@ export const apiErrorCodes = [
   'PRO_BALANCE_REFUSED',
   'PRO_REFUND_REFUSED',
   'TIP_REFUND_REFUSED',
+  // You collect (plan Task 10): part of a collect tip can't be taken back; staff decide first.
+  'TIP_REFUND_NEEDS_DECISION',
+  'TIP_REFUND_NO_GAP',
   'PRO_REFUNDS_OFF',
   // A feature switch with nothing built behind it can't be turned on (16 Nov 2026).
   'SWITCH_NOT_BUILT',
@@ -116,6 +138,12 @@ export const apiErrorCodes = [
   'TAKE_BACK_OPEN',
   'TAKE_BACK_NOT_FOUND',
   'TAKE_BACK_CLOSED',
+  'USERNAME_IN_HOLD',
+  'HANDOVER_LINK_NOT_FOUND',
+  'HANDOVER_ACCOUNT_UNAVAILABLE',
+  'CLAIM_LINK_INVALID',
+  'HANDOVER_STAFF_ACCOUNT',
+  'HANDOVER_ACCOUNT_CHANGED',
   'ROLE_IN_USE',
   'ROLE_PROTECTED',
   'STAFF_PROTECTED',

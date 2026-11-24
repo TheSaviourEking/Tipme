@@ -1,23 +1,19 @@
 /**
- * Page Studio type scale and font library (plan 2026-11-12-page-studio, Task 2).
+ * Page Studio font library (plan 2026-11-12-page-studio, Task 2).
  *
  * Fonts are self-hosted WOFF2 files in `apps/web/public/fonts/studio/`, cut from google/fonts at a
  * pinned commit by `scripts/studio-fonts.mjs` (which also measured the metrics below). A page uses
  * at most two families, one for headings and one for text, so it loads at most 2 files and well
- * under 200 KB of fonts. Every size is a `clamp()` between a 320px and a 1440px screen.
+ * under 200 KB of fonts.
  */
 
 export type StudioFontId =
-  | 'manrope'
   | 'dm-serif-display'
   | 'inter'
-  | 'work-sans'
-  | 'space-grotesk'
-  | 'bricolage-grotesque'
-  | 'outfit'
-  | 'nunito'
-  | 'fraunces'
-  | 'source-serif-4';
+  | 'source-serif-4'
+  | 'unbounded'
+  | 'anton'
+  | 'linen-serif';
 
 export interface StudioFont {
   id: StudioFontId;
@@ -28,7 +24,7 @@ export interface StudioFont {
     path: `/fonts/studio/${string}.woff2`;
     /** One weight, or the range a variable file keeps ("400 700"). */
     weight: `${number}` | `${number} ${number}`;
-    style: 'normal';
+    style: 'normal' | 'italic';
     bytes: number;
   }[];
   headingWeight: number;
@@ -79,12 +75,21 @@ const NOT_REQUIRED = new Set([
  * The characters a body font must draw: Basic Latin, Latin-1 (not the soft hyphen, which is never
  * drawn), Latin Extended-A (less NOT_REQUIRED), the Yoruba and Igbo letters Ẹ ẹ Ọ ọ Ṣ ṣ Ị ị Ụ ụ Ṅ ṅ,
  * the combining marks those languages and European names put on letters, the naira sign, and the
- * punctuation people type or autocorrect gives them.
+ * punctuation people type or autocorrect gives them, and the Hausa hooked letters ɓ ɗ ƙ ƴ Ɓ Ɗ Ƙ Ƴ.
  */
 export const STUDIO_REQUIRED_CODEPOINTS: readonly number[] = [
   ...range(0x20, 0x7e),
   ...range(0xa0, 0xff).filter((c) => c !== 0xad),
   ...range(0x100, 0x17f).filter((c) => !NOT_REQUIRED.has(c)),
+  // The Hausa hooked letters: Ɓ Ɗ Ƙ ƙ Ƴ ƴ ɓ ɗ.
+  0x181,
+  0x18a,
+  0x198,
+  0x199,
+  0x1b3,
+  0x1b4,
+  0x253,
+  0x257,
   0x1e44,
   0x1e45,
   0x1e62,
@@ -126,48 +131,14 @@ export const STUDIO_REQUIRED_CODEPOINTS: readonly number[] = [
 ];
 
 /**
- * The library: 10 of the plan's 14 families. A family sets text only if it draws every required
- * character; the others are heading-only (Manrope lacks Ṣ and ₦ upstream). IBM Plex Sans, Lora,
- * Playfair Display and Libre Baskerville are not shipped: their licences reserve the family's own
- * name, which a subset may not use without the authors' written permission (OFL 1.1 §3).
+ * The library: the 6 faces the styles use (Classic's DM Serif Display, Inter, Journal's Source Serif
+ * 4, Signboard's Unbounded, Sprint's Anton, Linen's Serif). The v1 editor's other faces were retired
+ * with it (PR 4b). A family sets text only if it draws every required character; the others are
+ * heading-only. IBM Plex Sans, Lora, Playfair Display and Libre Baskerville are not shipped: their
+ * licences reserve the family's own name, which a subset may not use without the authors' written
+ * permission (OFL 1.1 §3). Gentium Book Plus is shipped renamed, as Linen Serif.
  */
 export const STUDIO_FONTS: readonly StudioFont[] = [
-  {
-    id: 'manrope',
-    name: 'Manrope',
-    category: 'sans',
-    roles: ['heading'],
-    files: [
-      {
-        path: '/fonts/studio/manrope-700.woff2',
-        weight: '700',
-        style: 'normal',
-        bytes: 18188,
-      },
-    ],
-    headingWeight: 700,
-    metrics: {
-      unitsPerEm: 2000,
-      ascent: 2132,
-      descent: -600,
-      lineGap: 0,
-      xHeight: 1080,
-      avgAdvance: 1079,
-      maxWordAdvance: 1951,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '111.94%',
-      ascentOverride: '95.23%',
-      descentOverride: '26.80%',
-    },
-    wordFallback: true,
-    missing: [
-      0x114, 0x115, 0x13f, 0x140, 0x14e, 0x14f, 0x1e44, 0x1e45, 0x1e62, 0x1e63,
-      0x300, 0x301, 0x302, 0x303, 0x304, 0x306, 0x307, 0x308, 0x30a, 0x30c,
-      0x323, 0x327, 0x328, 0x20a6,
-    ],
-  },
   {
     id: 'dm-serif-display',
     name: 'DM Serif Display',
@@ -202,8 +173,9 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       0x108, 0x109, 0x10a, 0x10b, 0x114, 0x115, 0x11c, 0x11d, 0x120, 0x121,
       0x124, 0x125, 0x126, 0x127, 0x128, 0x129, 0x134, 0x135, 0x14a, 0x14b,
       0x14e, 0x14f, 0x15c, 0x15d, 0x168, 0x169, 0x16c, 0x16d, 0x174, 0x175,
-      0x176, 0x177, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
-      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
+      0x176, 0x177, 0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257,
+      0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca, 0x1ecb, 0x1ecc,
+      0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
     ],
   },
   {
@@ -213,10 +185,10 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     roles: ['heading', 'body'],
     files: [
       {
-        path: '/fonts/studio/inter-400-700.woff2',
-        weight: '400 700',
+        path: '/fonts/studio/inter-400-800.woff2',
+        weight: '400 800',
         style: 'normal',
-        bytes: 63180,
+        bytes: 66076,
       },
     ],
     headingWeight: 700,
@@ -240,213 +212,10 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
     missing: [],
   },
   {
-    id: 'work-sans',
-    name: 'Work Sans',
-    category: 'sans',
-    roles: ['heading', 'body'],
-    files: [
-      {
-        path: '/fonts/studio/work-sans-400-600.woff2',
-        weight: '400 600',
-        style: 'normal',
-        bytes: 45256,
-      },
-    ],
-    headingWeight: 600,
-    bodyWeight: 400,
-    metrics: {
-      unitsPerEm: 1000,
-      ascent: 930,
-      descent: -243,
-      lineGap: 0,
-      xHeight: 500,
-      avgAdvance: 540,
-      maxWordAdvance: 961,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '112.05%',
-      ascentOverride: '83.00%',
-      descentOverride: '21.69%',
-    },
-    wordFallback: false,
-    missing: [],
-  },
-  {
-    id: 'space-grotesk',
-    name: 'Space Grotesk',
-    category: 'sans',
-    roles: ['heading'],
-    files: [
-      {
-        path: '/fonts/studio/space-grotesk-600.woff2',
-        weight: '600',
-        style: 'normal',
-        bytes: 19864,
-      },
-    ],
-    headingWeight: 600,
-    metrics: {
-      unitsPerEm: 1000,
-      ascent: 984,
-      descent: -292,
-      lineGap: 0,
-      xHeight: 486,
-      avgAdvance: 545,
-      maxWordAdvance: 892,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '113.09%',
-      ascentOverride: '87.01%',
-      descentOverride: '25.82%',
-    },
-    wordFallback: false,
-    missing: [],
-  },
-  {
-    id: 'bricolage-grotesque',
-    name: 'Bricolage Grotesque',
-    category: 'display',
-    roles: ['heading'],
-    files: [
-      {
-        path: '/fonts/studio/bricolage-grotesque-700.woff2',
-        weight: '700',
-        style: 'normal',
-        bytes: 26160,
-      },
-    ],
-    headingWeight: 700,
-    metrics: {
-      unitsPerEm: 1000,
-      ascent: 930,
-      descent: -270,
-      lineGap: 0,
-      xHeight: 525,
-      avgAdvance: 495,
-      maxWordAdvance: 909,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '102.71%',
-      ascentOverride: '90.55%',
-      descentOverride: '26.29%',
-    },
-    wordFallback: true,
-    missing: [
-      0xa4, 0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x134,
-      0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163, 0x1e44,
-      0x1e45, 0x1e62, 0x1e63,
-    ],
-  },
-  {
-    id: 'outfit',
-    name: 'Outfit',
-    category: 'sans',
-    roles: ['heading'],
-    files: [
-      {
-        path: '/fonts/studio/outfit-600.woff2',
-        weight: '600',
-        style: 'normal',
-        bytes: 16452,
-      },
-    ],
-    headingWeight: 600,
-    metrics: {
-      unitsPerEm: 1000,
-      ascent: 1000,
-      descent: -260,
-      lineGap: 0,
-      xHeight: 483,
-      avgAdvance: 504,
-      maxWordAdvance: 992,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '104.58%',
-      ascentOverride: '95.62%',
-      descentOverride: '24.86%',
-    },
-    wordFallback: true,
-    missing: [
-      0x108, 0x109, 0x114, 0x115, 0x11c, 0x11d, 0x124, 0x125, 0x128, 0x129,
-      0x134, 0x135, 0x13f, 0x140, 0x14e, 0x14f, 0x15c, 0x15d, 0x162, 0x163,
-      0x168, 0x169, 0x1e44, 0x1e45, 0x1e62, 0x1e63, 0x1eb8, 0x1eb9, 0x1eca,
-      0x1ecb, 0x1ecc, 0x1ecd, 0x1ee4, 0x1ee5, 0x323, 0x20a6,
-    ],
-  },
-  {
-    id: 'nunito',
-    name: 'Nunito',
-    category: 'rounded',
-    roles: ['heading', 'body'],
-    files: [
-      {
-        path: '/fonts/studio/nunito-400-700.woff2',
-        weight: '400 700',
-        style: 'normal',
-        bytes: 39072,
-      },
-    ],
-    headingWeight: 700,
-    bodyWeight: 400,
-    metrics: {
-      unitsPerEm: 1000,
-      ascent: 1011,
-      descent: -353,
-      lineGap: 0,
-      xHeight: 484,
-      avgAdvance: 498,
-      maxWordAdvance: 1101,
-    },
-    fallback: {
-      family: 'Arial',
-      sizeAdjust: '103.33%',
-      ascentOverride: '97.84%',
-      descentOverride: '34.16%',
-    },
-    wordFallback: false,
-    missing: [],
-  },
-  {
-    id: 'fraunces',
-    name: 'Fraunces',
-    category: 'serif',
-    roles: ['heading'],
-    files: [
-      {
-        path: '/fonts/studio/fraunces-600.woff2',
-        weight: '600',
-        style: 'normal',
-        bytes: 25328,
-      },
-    ],
-    headingWeight: 600,
-    metrics: {
-      unitsPerEm: 2000,
-      ascent: 1956,
-      descent: -510,
-      lineGap: 0,
-      xHeight: 964,
-      avgAdvance: 1092,
-      maxWordAdvance: 2128,
-    },
-    fallback: {
-      family: 'Georgia',
-      sizeAdjust: '111.49%',
-      ascentOverride: '87.72%',
-      descentOverride: '22.87%',
-    },
-    wordFallback: true,
-    missing: [0x1e44, 0x1e45, 0x30a, 0x323],
-  },
-  {
     id: 'source-serif-4',
     name: 'Source Serif 4',
     category: 'serif',
-    roles: ['heading', 'body'],
+    roles: ['heading'],
     files: [
       {
         path: '/fonts/studio/source-serif-4-400-600.woff2',
@@ -454,9 +223,14 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
         style: 'normal',
         bytes: 40904,
       },
+      {
+        path: '/fonts/studio/source-serif-4-400-italic.woff2',
+        weight: '400',
+        style: 'italic',
+        bytes: 25052,
+      },
     ],
     headingWeight: 600,
-    bodyWeight: 400,
     metrics: {
       unitsPerEm: 1000,
       ascent: 1036,
@@ -472,91 +246,123 @@ export const STUDIO_FONTS: readonly StudioFont[] = [
       ascentOverride: '101.48%',
       descentOverride: '32.81%',
     },
+    // Draws every Nigerian letter and ₦ but not the Hausa hooked letters (checked 17 Nov 2026), so
+    // a heading it cannot draw whole is set in Inter 700. Journal uses it for headings only.
+    wordFallback: true,
+    missing: [0x181, 0x18a, 0x198, 0x199, 0x1b3, 0x1b4, 0x253, 0x257],
+  },
+  {
+    id: 'unbounded',
+    name: 'Unbounded',
+    category: 'display',
+    roles: ['heading'],
+    files: [
+      {
+        path: '/fonts/studio/unbounded-600-700.woff2',
+        weight: '600 700',
+        style: 'normal',
+        bytes: 94160,
+      },
+    ],
+    headingWeight: 700,
+    metrics: {
+      unitsPerEm: 1000,
+      ascent: 995,
+      descent: -245,
+      lineGap: 0,
+      xHeight: 570,
+      avgAdvance: 704,
+      maxWordAdvance: 1349,
+    },
+    fallback: {
+      family: 'Arial',
+      sizeAdjust: '146.08%',
+      ascentOverride: '68.11%',
+      descentOverride: '16.77%',
+    },
+    wordFallback: true,
+    missing: [0xb5],
+  },
+  {
+    id: 'anton',
+    name: 'Anton',
+    category: 'display',
+    roles: ['heading'],
+    files: [
+      {
+        path: '/fonts/studio/anton-400.woff2',
+        weight: '400',
+        style: 'normal',
+        bytes: 22524,
+      },
+    ],
+    headingWeight: 400,
+    metrics: {
+      unitsPerEm: 2048,
+      ascent: 2409,
+      descent: -674,
+      lineGap: 0,
+      xHeight: 1500,
+      avgAdvance: 916,
+      maxWordAdvance: 1553,
+    },
+    fallback: {
+      family: 'Arial',
+      sizeAdjust: '92.81%',
+      ascentOverride: '126.74%',
+      descentOverride: '35.46%',
+    },
+    wordFallback: false,
+    missing: [],
+  },
+  {
+    // Gentium Book Plus, renamed: its licence reserves "Gentium" and "SIL", so the cut is a
+    // Modified Version under another name (plan ruling R2; scripts/studio-fonts.mjs).
+    id: 'linen-serif',
+    name: 'Linen Serif',
+    category: 'serif',
+    roles: ['heading', 'body'],
+    files: [
+      {
+        path: '/fonts/studio/linen-serif-400.woff2',
+        weight: '400',
+        style: 'normal',
+        bytes: 40812,
+      },
+      {
+        path: '/fonts/studio/linen-serif-700.woff2',
+        weight: '700',
+        style: 'normal',
+        bytes: 40088,
+      },
+      {
+        path: '/fonts/studio/linen-serif-400-italic.woff2',
+        weight: '400',
+        style: 'italic',
+        bytes: 45724,
+      },
+    ],
+    headingWeight: 700,
+    bodyWeight: 400,
+    metrics: {
+      unitsPerEm: 2048,
+      ascent: 2250,
+      descent: -750,
+      lineGap: 0,
+      xHeight: 930,
+      avgAdvance: 962,
+      maxWordAdvance: 1741,
+    },
+    fallback: {
+      family: 'Georgia',
+      sizeAdjust: '95.91%',
+      ascentOverride: '114.55%',
+      descentOverride: '38.18%',
+    },
     wordFallback: false,
     missing: [],
   },
 ];
 
-/** A new page, and a page whose font was retired, use these. */
-export const STUDIO_DEFAULT_FONTS = {
-  heading: 'manrope',
-  body: 'inter',
-} as const satisfies { heading: StudioFontId; body: StudioFontId };
-
-/** Whether this pair is allowed: each font can take its role (one id for both is one family). */
-export function fontsOk(heading: StudioFontId, body: StudioFontId): boolean {
-  const h = STUDIO_FONTS.find((f) => f.id === heading);
-  const b = STUDIO_FONTS.find((f) => f.id === body);
-  return Boolean(h?.roles.includes('heading') && b?.roles.includes('body'));
-}
-
+/** The v1 document's type size step (`StudioDocumentV1['scale']`); the v1 type scale itself is gone. */
 export type StudioScaleStep = 'compact' | 'standard' | 'roomy';
-export type StudioTextRole = 'display' | 'h2' | 'h3' | 'body' | 'small';
-
-export interface StudioTypeSize {
-  /** px at a 320px screen and at 1440px; `css` is the clamp() between them. */
-  min: number;
-  max: number;
-  css: string;
-  lineHeight: number;
-  measure: string;
-}
-
-const RATIO: Record<StudioScaleStep, number> = {
-  compact: 1.2,
-  standard: 1.25,
-  roomy: 1.333,
-};
-
-const NARROW = 320;
-const WIDE = 1440;
-const round = (n: number, places: number) => Number(n.toFixed(places));
-
-function fluid(min: number, max: number): string {
-  const slope = (max - min) / (WIDE - NARROW);
-  // Rounded down, so the fluid size never passes `min` at 320px (display stays ≤ 40px).
-  const rem = Math.floor(((min - slope * NARROW) / 16) * 1e4) / 1e4;
-  return `clamp(${min}px, ${rem}rem + ${round(slope * 100, 4)}vw, ${max}px)`;
-}
-
-/**
- * Body is 16–18px; each step up multiplies both ends by the ratio (h3 once, h2 twice, display four
- * times); small divides by it. Display never passes 40px on a 320px screen, small never drops
- * below 13px. Body text keeps a 68-character line; headings 24.
- */
-export function studioTypeScale(
-  step: StudioScaleStep,
-): Record<StudioTextRole, StudioTypeSize> {
-  const r = RATIO[step];
-  const size = (
-    power: number,
-    lineHeight: number,
-    measure: string,
-    floor = 0,
-    cap = Infinity,
-  ) => {
-    const min = round(Math.min(cap, Math.max(floor, 16 * r ** power)), 2);
-    const max = round(Math.max(min, 18 * r ** power), 2);
-    return { min, max, css: fluid(min, max), lineHeight, measure };
-  };
-  return {
-    display: size(4, 1.1, '24ch', 0, 40),
-    h2: size(2, 1.2, '24ch'),
-    h3: size(1, 1.3, '24ch'),
-    body: {
-      min: 16,
-      max: 18,
-      css: 'clamp(16px, 0.95rem + 0.25vw, 18px)',
-      lineHeight: 1.6,
-      measure: '68ch',
-    },
-    small: size(-1, 1.5, '68ch', 13),
-  };
-}
-
-/** Row spacing steps, px at 320 and 1440. */
-export const STUDIO_SPACING = {
-  s: { min: 16, max: 24 },
-  m: { min: 24, max: 48 },
-  l: { min: 40, max: 80 },
-} as const;

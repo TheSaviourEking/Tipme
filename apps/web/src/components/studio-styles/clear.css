@@ -1,0 +1,868 @@
+/* Clear: "Quiet, bright, precise" (spec 2026-11-17-page-studio-styles §9.2; canvas "Clear ·
+   phone", "Clear · desktop" and "Clear · style card"). Inter only. Radii 16 (cards), 12 (photos),
+   pill (controls), plus the circle avatar. The one shadow is the segmented thumb's. */
+
+.studio[data-style='clear'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  letter-spacing: 0;
+}
+
+.studio[data-style='clear']
+  :is(.studio-identity, .studio-tip, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* Cover: photo 220 phone / 380 desktop, full-bleed, fading into bg over its lower 60%. */
+.studio[data-style='clear'] .studio-cover {
+  height: 220px;
+  background: var(--studio-el2);
+}
+
+.studio[data-style='clear'] .studio-cover__fade {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 60%;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--studio-bg) 0%, transparent) 0%,
+    color-mix(in srgb, var(--studio-bg) 35%, transparent) 40%,
+    color-mix(in srgb, var(--studio-bg) 80%, transparent) 75%,
+    var(--studio-bg) 100%
+  );
+}
+
+.studio[data-style='clear'] .studio-cover[data-cover='gradient'] {
+  background: linear-gradient(
+    180deg,
+    var(--studio-coverFrom),
+    var(--studio-coverTo)
+  );
+}
+
+.studio[data-style='clear'] .studio-cover[data-cover='plain'] {
+  height: 72px;
+  background: var(--studio-bg);
+}
+
+/* Identity: avatar 104 with a 4 px bg ring over the cover's edge; name 32/36 700. */
+.studio[data-style='clear'] .studio-identity {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -56px;
+  text-align: center;
+}
+
+.studio[data-style='clear'] .studio-avatar {
+  width: 104px;
+  height: 104px;
+  box-shadow: 0 0 0 4px var(--studio-bg);
+  font-size: 36px;
+}
+
+.studio[data-style='clear'] .studio-name {
+  max-width: 100%;
+  margin-top: 16px;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 36px;
+  letter-spacing: -0.025em;
+}
+
+/* A name that would take a third line steps down about 80% (§9.10). */
+.studio[data-style='clear'] .studio-name--long {
+  font-size: 26px;
+  line-height: 30px;
+}
+
+.studio[data-style='clear'] .studio-meta {
+  margin-top: 6px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.studio[data-style='clear'] .studio-bio {
+  max-width: 330px;
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 25px;
+  letter-spacing: -0.012em;
+}
+
+.studio[data-style='clear'] .studio-celebration {
+  margin-top: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--studio-el2);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* The Tip moment. */
+.studio[data-style='clear'] .studio-tip {
+  margin-top: 24px;
+}
+
+.studio[data-style='clear'] .studio-tip form {
+  display: grid;
+  gap: 12px;
+}
+
+/* Signature: the segmented amount control. A 44 px pill track (track, 4 px padding, 2 px gaps)
+   holding 36 px segments; the selected one is a raised thumb that slides to it. The track's edge is
+   drawn in `control` (§4.2: control borders reach 3:1). */
+.studio[data-style='clear'] .studio-tip .amount-options {
+  --segs: 4;
+  --seg: 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--segs), minmax(0, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 4px;
+  border-radius: 999px;
+  background: var(--studio-track);
+  box-shadow: inset 0 0 0 1px var(--studio-control);
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :last-child:nth-child(1)) {
+  --segs: 1;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :last-child:nth-child(2)) {
+  --segs: 2;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :last-child:nth-child(3)) {
+  --segs: 3;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :nth-child(2) input:checked) {
+  --seg: 1;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :nth-child(3) input:checked) {
+  --seg: 2;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :nth-child(4) input:checked) {
+  --seg: 3;
+}
+
+.studio[data-style='clear'] .studio-tip .amount-options::before {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: calc((100% - 8px - (var(--segs) - 1) * 2px) / var(--segs));
+  height: calc(100% - 8px);
+  border-radius: 999px;
+  background: var(--studio-thumb);
+  box-shadow:
+    0 0.5px 0 rgb(0 0 0 / 4%),
+    0 1px 2px rgb(0 0 0 / 10%),
+    0 3px 8px rgb(0 0 0 / 6%);
+  content: '';
+  transform: translateX(calc(var(--seg) * (100% + 2px)));
+  transition: transform 220ms var(--ease);
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:not(:has(input:checked))::before {
+  opacity: 0;
+}
+
+/* More than four choices (a Pro page's own amounts): rows of four, the thumb on the segment. */
+.studio[data-style='clear'] .studio-tip .amount-options:has(> :nth-child(5)) {
+  border-radius: 22px;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :nth-child(5))::before {
+  display: none;
+}
+
+.studio[data-style='clear'] .studio-tip .tm-amount-choice > span {
+  position: relative;
+  z-index: 1;
+  min-height: 36px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--studio-fg);
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  transition:
+    background-color 200ms var(--ease),
+    transform 200ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice:hover > span {
+    background-color: color-mix(in srgb, var(--studio-fg) 5%, transparent);
+    transform: none;
+  }
+}
+
+.studio[data-style='clear'] .studio-tip .tm-amount-choice input:active + span {
+  box-shadow: none;
+  transform: scale(0.96);
+}
+
+.studio[data-style='clear'] .studio-tip .tm-amount-choice input:checked + span {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--studio-accText);
+  font-weight: 650;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .amount-options:has(> :nth-child(5))
+  input:checked
+  + span {
+  background: var(--studio-thumb);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 10%),
+    0 3px 8px rgb(0 0 0 / 6%);
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: -2px;
+}
+
+/* The Other-amount field Custom reveals, and the message drawer's fields. */
+.studio[data-style='clear'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='clear'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='clear'] .studio-tip textarea.tm-input {
+  padding: 12px 20px;
+  border-radius: 16px;
+}
+
+.studio[data-style='clear'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 550;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='clear'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-fg2);
+  border-bottom: 1.5px solid var(--studio-fg2);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='clear'] .studio-tip .composer-extras[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='clear'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='clear'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+/* Tip: a full-width 52 px pill (desktop 56) in the accent. */
+.studio[data-style='clear']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--studio-acc);
+  box-shadow: none;
+  color: var(--studio-accLabel);
+  font: 600 17px/22px var(--studio-ui);
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transition:
+    filter 200ms,
+    transform 200ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='clear']
+    :is(.studio-tip .composer-submit, .tip-bar__button):hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    filter: brightness(1.06);
+    transform: none;
+  }
+}
+
+.studio[data-style='clear']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  filter: brightness(0.94);
+  transform: scale(0.98);
+}
+
+.studio[data-style='clear'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='clear']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='clear'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border-color: var(--studio-control);
+  border-radius: 999px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style='clear'] .studio-tip .tm-slip {
+  border-color: var(--studio-line);
+  border-radius: 16px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Links and blocks: one column of sections on a phone, 40 apart; a title over each. */
+.studio[data-style='clear'] .studio-grid {
+  display: grid;
+  gap: 40px;
+  margin-top: 40px;
+}
+
+.studio[data-style='clear'] .studio-blocks {
+  display: contents;
+}
+
+.studio[data-style='clear'] :is(.studio-links, .studio-section) {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.studio[data-style='clear'] .studio-title {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 26px;
+  letter-spacing: -0.015em;
+}
+
+/* Links: a grouped inset list, one card r16, rows 56 with 16 px sides, 0.5 px lines between. */
+.studio[data-style='clear'] .studio-links__list {
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='clear'] .studio-links__list li + li {
+  margin-left: 54px;
+  border-top: 0.5px solid var(--studio-line);
+}
+
+.studio[data-style='clear'] .studio-links__list li + li .studio-link {
+  margin-left: -54px;
+}
+
+.studio[data-style='clear'] .studio-link {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  padding: 0 16px;
+  color: var(--studio-fg);
+  text-decoration: none;
+  transition: background-color 150ms;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='clear'] .studio-link:hover {
+    background-color: color-mix(in srgb, var(--studio-fg) 4%, transparent);
+  }
+}
+
+.studio[data-style='clear'] .studio-link:focus-visible {
+  outline-offset: -2px;
+}
+
+.studio[data-style='clear'] .studio-link__words {
+  display: flex;
+  flex: 1;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.studio[data-style='clear'] .studio-link__title {
+  flex: none;
+  font-size: 16px;
+  font-weight: 550;
+  line-height: 22px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='clear'] .studio-link__sub {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 15px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='clear'] .studio-link__chevron {
+  flex: none;
+  fill: none;
+  stroke: var(--studio-fg2);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Blocks. Text: card r16, 20 px padding, 17/26. */
+.studio[data-style='clear'] .studio-card {
+  border-radius: 16px;
+  background: var(--studio-card);
+}
+
+.studio[data-style='clear'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  font-size: 17px;
+  line-height: 26px;
+  letter-spacing: -0.012em;
+}
+
+.studio[data-style='clear'] .studio-quote {
+  padding: 20px;
+}
+
+.studio[data-style='clear'] .studio-quote p {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.015em;
+}
+
+.studio[data-style='clear'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.studio[data-style='clear'] :is(.studio-photo figcaption, .studio-fine) {
+  margin-top: 8px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.studio[data-style='clear'] .studio-video {
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+/* Photos: a horizontal strip of 150×200 r12 tiles, gap 8, bleeding to the screen's edges. */
+.studio[data-style='clear'] .studio-strip {
+  display: flex;
+  gap: 8px;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: var(--gutter);
+  overflow-x: auto;
+  scroll-padding-inline: var(--gutter);
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.studio[data-style='clear'] .studio-strip li {
+  flex: none;
+  width: 150px;
+  height: 200px;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--studio-el2);
+  scroll-snap-align: start;
+}
+
+.studio[data-style='clear'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows in one card, 0.5 px lines between, money tabular on the right. */
+.studio[data-style='clear'] .studio-list > ul,
+.studio[data-style='clear'] ul.studio-list {
+  display: grid;
+}
+
+.studio[data-style='clear'] .studio-list li {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 16px;
+}
+
+.studio[data-style='clear'] .studio-list li + li {
+  border-top: 0.5px solid var(--studio-line);
+}
+
+.studio[data-style='clear'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 16px 14px;
+}
+
+.studio[data-style='clear'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+
+.studio[data-style='clear'] .studio-list__title {
+  font-size: 16px;
+  font-weight: 550;
+  line-height: 22px;
+}
+
+.studio[data-style='clear'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.studio[data-style='clear'] .studio-price {
+  flex: none;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.studio[data-style='clear'] .studio-date {
+  display: grid;
+  flex: none;
+  justify-items: center;
+  width: 44px;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.studio[data-style='clear'] .studio-date__day {
+  color: var(--studio-fg);
+  font-size: 20px;
+  line-height: 24px;
+  letter-spacing: -0.015em;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='clear'] .studio-foot {
+  margin-top: 40px;
+}
+
+.studio[data-style='clear'] .studio-foot .profile-foot {
+  justify-content: center;
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='clear'] .studio-foot .profile-foot__quiet {
+  justify-content: center;
+}
+
+.studio[data-style='clear'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* Load: name and bio fade up 8 px, 240 ms ease-out, 40 ms apart. */
+/* From .01, not 0: a text at opacity 0 is not yet a largest-paint candidate. */
+@keyframes studio-clear-rise {
+  from {
+    opacity: 0.01;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes studio-clear-fade {
+  from {
+    opacity: 0.01;
+  }
+}
+
+.studio[data-style='clear'] :is(.studio-name, .studio-bio) {
+  animation: studio-clear-rise 240ms ease-out both;
+}
+
+.studio[data-style='clear'] .studio-bio {
+  animation-delay: 40ms;
+}
+
+/* Narrow phones: below 360 px a segment's 4 px sides leave "₦10,000" too little room; the label
+   takes the whole segment. */
+@media (max-width: 359px) {
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice > span {
+    padding: 0;
+  }
+}
+
+/* Tablet: one column, 24 px gutters, up to 720. */
+@media (min-width: 768px) {
+  .studio[data-style='clear'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: content 920; identity, the 440 Tip column, then a 2-column grid with a 40 px gap. */
+@media (min-width: 1024px) {
+  .studio[data-style='clear'] {
+    --measure: 920px;
+  }
+
+  .studio[data-style='clear'] .studio-cover {
+    height: 380px;
+  }
+
+  .studio[data-style='clear'] .studio-cover[data-cover='plain'] {
+    height: 96px;
+  }
+
+  .studio[data-style='clear'] .studio-identity {
+    margin-top: -68px;
+  }
+
+  .studio[data-style='clear'] .studio-avatar {
+    width: 128px;
+    height: 128px;
+    box-shadow: 0 0 0 5px var(--studio-bg);
+  }
+
+  .studio[data-style='clear'] .studio-name {
+    margin-top: 20px;
+    font-size: 48px;
+    line-height: 56px;
+    letter-spacing: -0.03em;
+  }
+
+  .studio[data-style='clear'] .studio-name--long {
+    font-size: 40px;
+    line-height: 46px;
+  }
+
+  .studio[data-style='clear'] .studio-meta {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .studio[data-style='clear'] .studio-bio {
+    max-width: 460px;
+    margin-top: 16px;
+    font-size: 19px;
+    line-height: 28px;
+    letter-spacing: -0.014em;
+  }
+
+  .studio[data-style='clear'] .studio-tip {
+    max-width: calc(440px + 2 * var(--gutter));
+    margin-top: 32px;
+  }
+
+  .studio[data-style='clear'] .studio-tip .amount-options {
+    min-height: 48px;
+  }
+
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice > span {
+    min-height: 40px;
+  }
+
+  .studio[data-style='clear'] .studio-tip .composer-submit {
+    min-height: 56px;
+  }
+
+  .studio[data-style='clear'] .studio-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    margin-top: 72px;
+  }
+
+  .studio[data-style='clear'] :is(.studio-links, .studio-section) {
+    gap: 16px;
+  }
+
+  .studio[data-style='clear'] .studio-title {
+    font-size: 22px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='clear'] .studio-text {
+    padding: 24px;
+  }
+
+  .studio[data-style='clear'] .studio-strip {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-inline: 0;
+    padding-inline: 0;
+    overflow: visible;
+  }
+
+  .studio[data-style='clear'] .studio-strip li {
+    width: auto;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .studio[data-style='clear'] .studio-foot {
+    margin-top: 64px;
+  }
+}
+
+/* Reduced motion (§4.5): the thumb jumps, the name and bio only fade, nothing scales. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='clear'] .studio-tip .amount-options::before,
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice > span,
+  .studio[data-style='clear']
+    :is(.studio-tip .composer-submit, .tip-bar__button) {
+    transition: none;
+  }
+
+  .studio[data-style='clear'] .studio-tip .tm-amount-choice input:active + span,
+  .studio[data-style='clear']
+    :is(.studio-tip .composer-submit, .tip-bar__button):active {
+    transform: none;
+  }
+
+  .studio[data-style='clear'] :is(.studio-name, .studio-bio) {
+    animation-name: studio-clear-fade;
+  }
+}
+
+/* The header over the cover (frame.css): the cover runs up under the header, its fade still the
+   lower 60% of the part below it. */
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  .studio[data-style='clear'][data-header] .studio-cover {
+    box-sizing: content-box;
+    padding-top: var(--nav-height);
+  }
+
+  .studio[data-style='clear'][data-header] .studio-cover__fade {
+    height: calc((100% - var(--nav-height)) * 0.6);
+  }
+}
+
+/* A single column at every width, so the foot rests at the bottom of a short page (frame.css). */
+.studio[data-style='clear'] .studio-page {
+  display: flex;
+  flex-direction: column;
+}
+
+:where(.studio[data-style='clear'] .studio-page > *) {
+  width: 100%;
+  width: -webkit-fill-available;
+  width: -moz-available;
+  width: stretch;
+}
+
+.studio[data-style='clear'] .studio-page > .studio-grid {
+  margin-bottom: auto;
+}

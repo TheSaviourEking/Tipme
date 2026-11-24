@@ -59,8 +59,50 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed twenty-one', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 21);
+test('the serious actions are the agreed thirty-four', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 34);
+  // You collect staff screens (plan Task 15): every money action there needs collect.manage.
+  for (const name of [
+    'collect_transfer.retry',
+    'collect_transfer.record_paid',
+    'collect_dispute.release_hold',
+    'collect_dispute.evidence',
+    'collect_same_bank.clear',
+    'tip_refund.record_paid',
+  ])
+    assert.equal(SERIOUS_ACTION_PERMISSIONS[name], 'collect.manage', name);
+  assert.equal(OPS_CATALOGUE['collect.manage'].sensitive, true);
+  assert.equal(OPS_CATALOGUE['collect.view'].sensitive, false);
+  // Task 10 fix round 2 (RI1): money a failed collect refund took back goes back, with a second person.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['tip_refund.return'],
+    'payments.repair',
+  );
+  // You collect (plan Task 10, §6.1 case 3): TipMe absorbing what a refund can't take back.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['tip_refund.absorb_gap'],
+    'payments.repair',
+  );
+  // You collect (plan Task 13): a verified name changes only through support, with a second person.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_name.change'],
+    'recoveries.manage',
+  );
+  // You collect (plan Task 12, spec §9, R11): its settings and staff's pause are money changes.
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_settings.change'],
+    'fees.manage',
+  );
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_transfers.pause'],
+    'payments.repair',
+  );
+  assert.equal(
+    SERIOUS_ACTION_PERMISSIONS['collect_transfers.resume'],
+    'payments.repair',
+  );
+  // Owner, 18 Nov 2026: TipMe's fee per plan is a money change, with a second person.
+  assert.equal(SERIOUS_ACTION_PERMISSIONS['plan_fees.change'], 'fees.manage');
   // Owner, 14 Nov 2026: a staff tip refund (the tip minus TipMe's fee) needs a second person.
   assert.equal(SERIOUS_ACTION_PERMISSIONS['tip.refund'], 'payments.repair');
   // Owner-change lock (14 Nov 2026): only TipMe removes a business owner, with a second person.
@@ -126,8 +168,9 @@ test('changelog.edit is not sensitive; changelog.publish is, and names its serio
     group: 'content',
     sensitive: true,
   });
-  // 24 before; switches.manage (#216) and announcements.send (#213).
-  assert.equal(OPS_PERMISSIONS.length, 26);
+  // 24 before; switches.manage (#216) and announcements.send (#213); collect.view and
+  // collect.manage (You collect, Task 15).
+  assert.equal(OPS_PERMISSIONS.length, 28);
   assert.ok(SERIOUS_ACTIONS.includes('changelog.publish'));
   assert.equal(
     SERIOUS_ACTION_PERMISSIONS['changelog.publish'],

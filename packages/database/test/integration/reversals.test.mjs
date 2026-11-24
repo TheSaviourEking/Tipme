@@ -22,7 +22,7 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 // Business release 2, PR R2-A: the business's share is its own ledger line, and a refund or
 // chargeback that staff confirm takes back every line of the tip (Q7), even below zero (Q8).
@@ -38,7 +38,7 @@ const GROSS = 400000n;
 const NET = 372000n;
 
 test('reversals and the business share', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   t.after(() => redis.quit());
   const { db } = database;
@@ -704,7 +704,7 @@ test('reversals and the business share', async (t) => {
         profileId: TOBI.id,
         amountMinor: NET,
         idempotencyKey: randomUUID(),
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.equal(withdrawn.status, 'REQUESTED');
       // The money has gone (reserved for the withdrawal); the refund is booked anyway (Q8).
@@ -721,7 +721,7 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: 1n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'INSUFFICIENT_BALANCE',
@@ -744,7 +744,7 @@ test('reversals and the business share', async (t) => {
         profileId: TOBI.id,
         amountMinor: NET,
         idempotencyKey: randomUUID(),
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       await reverse(first);
       // A smaller tip later: the payable is positive, but the balance is still below zero.
@@ -782,14 +782,14 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: 100000n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'BALANCE_BELOW_ZERO',
       );
       const quoted = await withdrawalQuote(db, {
         profileId: TOBI.id,
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.deepEqual(quoted, { state: 'paused', reason: 'reversal' });
       assert.equal((await belowZeroIssues()).length, 1);
@@ -811,7 +811,7 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: mine,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
           reverse(tipId),
         ]);

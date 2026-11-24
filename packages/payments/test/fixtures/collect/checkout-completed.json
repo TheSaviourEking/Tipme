@@ -1,0 +1,9 @@
+{
+  "_source": "Adapted from COMPLETED in packages/payments/test/bachs-platform-checkout.test.mjs (TipMe's own checkout read back, sandbox evidence of 9 Nov 2026); amount set to a ₦10,000 tip.",
+  "checkout_id": "cs_collect_7f2a",
+  "status": "completed",
+  "amount": "10000.00",
+  "currency": "NGN",
+  "payment_status": "paid",
+  "charge": { "payment_id": "pay_collect_7f2a" }
+}

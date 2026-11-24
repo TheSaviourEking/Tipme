@@ -14,27 +14,32 @@ export async function studioModules() {
   return { contracts, arbitrary, pbt };
 }
 
-/** Sizes of the viewport, the frame and every row, read in the page (what `settled` and a failure's snapshot use). */
+/**
+ * Sizes of the viewport, the styled page's root and every block, read in the page (what `settled`
+ * and a failure's snapshot use). The root is `.studio`, or Classic's `.profile-page--studio`.
+ */
 export const readLayout = () => {
   const root = document.documentElement;
-  const rows = [...document.querySelectorAll('.studio-row')].map((row) => {
-    const box = row.getBoundingClientRect();
-    return {
-      columns: row.getAttribute('data-columns'),
-      bg: row.getAttribute('data-bg'),
-      client: row.clientWidth,
-      scroll: row.scrollWidth,
-      left: Math.round(box.left),
-      right: Math.round(box.right),
-    };
-  });
+  const page = document.querySelector('.studio, .profile-page--studio');
+  const blocks = [...document.querySelectorAll('.studio-block')].map(
+    (block) => {
+      const box = block.getBoundingClientRect();
+      return {
+        kind: block.getAttribute('data-kind'),
+        client: block.clientWidth,
+        scroll: block.scrollWidth,
+        left: Math.round(box.left),
+        right: Math.round(box.right),
+      };
+    },
+  );
   return {
     innerWidth: window.innerWidth,
     clientWidth: root.clientWidth,
     scrollWidth: root.scrollWidth,
     visualViewport: window.visualViewport?.width ?? null,
-    frameClient: document.querySelector('.studio-frame')?.clientWidth ?? null,
-    rows,
+    pageClient: page?.clientWidth ?? null,
+    blocks,
   };
 };
 
@@ -52,7 +57,7 @@ const frames = (page: Page) =>
  * seed -732091363, 16 Nov 2026) saw a row 272px wide holding content 288px wide, which no single
  * layout produces, and the failure screenshot showed the previous width. So wait for `innerWidth`
  * to equal the width Playwright set (the document agreeing, less a scrollbar), then for two
- * readings in a row of the same frame and row sizes. Throws, with the last reading, if that does
+ * readings in a row of the same page and block sizes. Throws, with the last reading, if that does
  * not happen within `timeout`.
  */
 export async function settled(page: Page, timeout = 10_000) {
@@ -71,8 +76,8 @@ export async function settled(page: Page, timeout = 10_000) {
           Math.abs(read.visualViewport - want) <= 24));
     const signature = JSON.stringify([
       read.innerWidth,
-      read.frameClient,
-      read.rows,
+      read.pageClient,
+      read.blocks,
     ]);
     if (applied && signature === previous) return;
     previous = signature;
@@ -83,13 +88,15 @@ export async function settled(page: Page, timeout = 10_000) {
   }
 }
 
-/** A failure's attachment: the viewport, the frame, and every row with the ones that overflow marked. */
+/** A failure's attachment: the viewport, the page, and every block with the ones that overflow marked. */
 export async function layoutSnapshot(page: Page) {
   const read = await page.evaluate(readLayout);
   return {
     requestedViewport: page.viewportSize(),
     ...read,
-    overflowingRows: read.rows.filter((row) => row.scroll > row.client),
+    overflowingBlocks: read.blocks.filter(
+      (block) => block.scroll > block.client,
+    ),
   };
 }
 
@@ -97,74 +104,81 @@ export async function layoutSnapshot(page: Page) {
 export const encodeDoc = (doc: unknown) =>
   deflateRawSync(Buffer.from(JSON.stringify(doc))).toString('base64url');
 
+/** Where a drawn ellipsis is never excused: names, amounts and Tip labels (Ruling V). */
+export const NEVER_TRUNCATED =
+  '.studio-name, .profile-name, .tm-amount-choice, .composer-submit, .tip-bar__button';
+
 /**
  * Layout faults on a Studio page, as labels (empty when there are none): the page scrolls
- * sideways; an element that clips (overflow not visible) holds more than it shows; two blocks
- * overlap; or the tip rail overlaps the rows. TipMe's cover is tested on its own and skipped.
+ * sideways, or an element that clips (overflow not visible) holds more than it shows. TipMe's
+ * cover is tested on its own and skipped.
  */
-export async function geometryProblems(page: Page): Promise<string[]> {
+export async function geometryProblems(
+  page: Page,
+  // Classic renders today's page, whose root is `.profile-page` (spec §9.1).
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
-    const out: string[] = [];
-    const root = document.documentElement;
-    if (root.scrollWidth > root.clientWidth)
-      out.push(
-        `page scrolls sideways (${root.scrollWidth} > ${root.clientWidth})`,
-      );
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
-    const label = (el: Element) =>
-      `${el.tagName.toLowerCase()}${el.classList[0] ? `.${el.classList[0]}` : ''}`;
-    for (const el of studio.querySelectorAll('*')) {
-      if (
-        el.closest('.studio-cover') ||
-        /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName)
-      )
-        continue;
-      const box = el.getBoundingClientRect();
-      if (box.width <= 1 || box.height <= 1) continue; // visually hidden or empty
-      const cs = getComputedStyle(el);
-      if (cs.overflowX !== 'visible' && el.scrollWidth > el.clientWidth + 1) {
-        // Name the widest thing inside, so a failure says what didn't fit.
-        const widest = [...el.querySelectorAll('*')].reduce<
-          [Element | null, number]
-        >(
-          (best, child) => {
-            const w = child.getBoundingClientRect().width;
-            return w > best[1] ? [child, w] : best;
-          },
-          [null, 0],
-        );
+  return page.evaluate(
+    ([scope, NEVER_TRUNCATED]) => {
+      const out: string[] = [];
+      const root = document.documentElement;
+      if (root.scrollWidth > root.clientWidth)
         out.push(
-          `${label(el)} overflows sideways (${el.scrollWidth} > ${el.clientWidth}; widest: ${widest[0] ? label(widest[0]) : '?'} ${Math.round(widest[1])})`,
+          `page scrolls sideways (${root.scrollWidth} > ${root.clientWidth})`,
         );
+      const studio = document.querySelector(scope);
+      if (!studio) return [`no ${scope} on the page`];
+      const label = (el: Element) =>
+        `${el.tagName.toLowerCase()}${el.classList[0] ? `.${el.classList[0]}` : ''}`;
+      for (const el of studio.querySelectorAll('*')) {
+        if (
+          el.closest('.studio-cover, .profile-cover') ||
+          /^(INPUT|TEXTAREA|SELECT|OPTION)$/.test(el.tagName)
+        )
+          continue;
+        const box = el.getBoundingClientRect();
+        if (box.width <= 1 || box.height <= 1) continue; // visually hidden or empty
+        const cs = getComputedStyle(el);
+        // A style's photo strip scrolls sideways by design (Clear, §9.2): it is focusable, and its
+        // own box must still fit the page, which the page check above proves.
+        // A one-line ellipsis is a drawn truncation, not a fault, only where the markup opts in
+        // with data-truncate (§9.10: the bar's name; link titles and handles). Never on a name, an
+        // amount or a Tip label: clipping there is always reported (Ruling V).
+        const ellipsis =
+          el.matches('[data-truncate]') &&
+          !el.closest(NEVER_TRUNCATED) &&
+          cs.textOverflow === 'ellipsis' &&
+          cs.whiteSpace === 'nowrap';
+        if (
+          cs.overflowX !== 'visible' &&
+          el.scrollWidth > el.clientWidth + 1 &&
+          !el.matches('[data-strip]') &&
+          !ellipsis
+        ) {
+          // Name the widest thing inside, so a failure says what didn't fit.
+          const widest = [...el.querySelectorAll('*')].reduce<
+            [Element | null, number]
+          >(
+            (best, child) => {
+              const w = child.getBoundingClientRect().width;
+              return w > best[1] ? [child, w] : best;
+            },
+            [null, 0],
+          );
+          out.push(
+            `${label(el)} overflows sideways (${el.scrollWidth} > ${el.clientWidth}; widest: ${widest[0] ? label(widest[0]) : '?'} ${Math.round(widest[1])})`,
+          );
+        }
+        if (cs.overflowY === 'hidden' && el.scrollHeight > el.clientHeight + 1)
+          out.push(
+            `${label(el)} clips its content (${el.scrollHeight} > ${el.clientHeight})`,
+          );
       }
-      if (cs.overflowY === 'hidden' && el.scrollHeight > el.clientHeight + 1)
-        out.push(
-          `${label(el)} clips its content (${el.scrollHeight} > ${el.clientHeight})`,
-        );
-    }
-    const boxes = [...studio.querySelectorAll('.studio-cell > *')].map(
-      (el) => ({
-        el,
-        r: el.getBoundingClientRect(),
-      }),
-    );
-    const meet = (a: DOMRect, b: DOMRect) =>
-      Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
-    for (let i = 0; i < boxes.length; i += 1)
-      for (let j = i + 1; j < boxes.length; j += 1)
-        if (meet(boxes[i]!.r, boxes[j]!.r))
-          out.push(`${label(boxes[i]!.el)} overlaps ${label(boxes[j]!.el)}`);
-    const rail = studio.querySelector('.studio-rail')?.getBoundingClientRect();
-    for (const part of ['.studio-rows', '.studio-identity']) {
-      const r = studio.querySelector(part)?.getBoundingClientRect();
-      if (rail && r && r.height > 1 && meet(rail, r))
-        out.push(`the tip rail overlaps ${part}`);
-    }
-    return out;
-  });
+      return out;
+    },
+    [scope, NEVER_TRUNCATED] as const,
+  );
 }
 
 /**
@@ -172,9 +186,27 @@ export async function geometryProblems(page: Page): Promise<string[]> {
  * first opaque background behind it (inside `.studio-scrim`, the scrim over a white photo, its
  * worst case), at 4.5:1, or 3:1 for large text (≥24px, or ≥18.66px and bold).
  */
-export async function contrastProblems(page: Page): Promise<string[]> {
+export async function contrastProblems(
+  page: Page,
+  scope = '.studio',
+): Promise<string[]> {
   await settled(page);
-  return page.evaluate(() => {
+  // A thumb sliding (220 ms) or fading would be measured mid-way: wait for every animation
+  // that ends. An endless one (a pulse, a nudge) never finishes, so waiting on it would hang;
+  // nor does one driven by scrolling (the header over the cover), which ends only on a scroll.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (a) =>
+            a.timeline instanceof DocumentTimeline &&
+            a.effect?.getComputedTiming().iterations !== Infinity,
+        )
+        .map((a) => a.finished.catch(() => null)),
+    ),
+  );
+  return page.evaluate((scope) => {
     type Rgba = [number, number, number, number];
     const parse = (c: string): Rgba | null => {
       const m =
@@ -216,6 +248,61 @@ export async function contrastProblems(page: Page): Promise<string[]> {
           base = [97, 97, 97, 1];
           break;
         }
+        // A solid `::before` that an ancestor positions under the element is the surface the text
+        // is read on (Clear's selected amount sits on the segmented control's `::before` thumb,
+        // while its own span and the track are other colours). `getBoundingClientRect` can't
+        // measure a pseudo-element, so its box comes from the resolved left, top, size and
+        // translate of an absolutely positioned one.
+        if (at !== el) {
+          const pseudo = getComputedStyle(at, '::before');
+          const fill = parse(pseudo.backgroundColor);
+          // Only a pseudo-element that is really painted: Chromium reports the background of an
+          // invisible one (Clear's thumb is opacity 0 while no amount is selected) as if it showed.
+          let opacity = Number(pseudo.opacity);
+          for (let up: Element | null = at; up; up = up.parentElement)
+            opacity *= Number(getComputedStyle(up).opacity);
+          const px = (v: string) =>
+            /^-?[\d.]+px$/.test(v) ? parseFloat(v) : null;
+          const [pl, pt, pw, ph] = [
+            px(pseudo.left),
+            px(pseudo.top),
+            px(pseudo.width),
+            px(pseudo.height),
+          ];
+          if (
+            pseudo.content !== 'none' &&
+            pseudo.display !== 'none' &&
+            pseudo.visibility !== 'hidden' &&
+            opacity >= 0.999 &&
+            pseudo.position === 'absolute' &&
+            pseudo.backgroundImage === 'none' &&
+            fill &&
+            fill[3] >= 0.999 &&
+            pl !== null &&
+            pt !== null &&
+            pw !== null &&
+            ph !== null
+          ) {
+            const host = at.getBoundingClientRect();
+            const move = new DOMMatrixReadOnly(
+              pseudo.transform === 'none' ? undefined : pseudo.transform,
+            );
+            const left = host.left + pl + move.m41;
+            const top = host.top + pt + move.m42;
+            const box = el.getBoundingClientRect();
+            const cx = box.left + box.width / 2;
+            const cy = box.top + box.height / 2;
+            if (
+              cx >= left - 1 &&
+              cx <= left + pw + 1 &&
+              cy >= top - 1 &&
+              cy <= top + ph + 1
+            ) {
+              layers.push(fill);
+              break;
+            }
+          }
+        }
         const cs = getComputedStyle(at);
         if (cs.backgroundImage !== 'none') return null; // an image: not measurable here
         const bg = parse(cs.backgroundColor);
@@ -229,8 +316,8 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       return colour;
     };
     const out: string[] = [];
-    const studio = document.querySelector('.studio');
-    if (!studio) return ['no .studio on the page'];
+    const studio = document.querySelector(scope);
+    if (!studio) return [`no ${scope} on the page`];
     const walker = document.createTreeWalker(studio, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const text = node.textContent?.trim();
@@ -238,7 +325,9 @@ export async function contrastProblems(page: Page): Promise<string[]> {
       if (
         !text ||
         !el ||
-        el.closest('.studio-cover, .sr-only, [aria-hidden="true"]')
+        el.closest(
+          '.studio-cover, .profile-cover, .sr-only, [aria-hidden="true"]',
+        )
       )
         continue;
       const box = el.getBoundingClientRect();
@@ -264,5 +353,5 @@ export async function contrastProblems(page: Page): Promise<string[]> {
         );
     }
     return out;
-  });
+  }, scope);
 }

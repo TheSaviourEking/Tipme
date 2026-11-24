@@ -1,0 +1,6 @@
+{
+  "_source": "Recorded body of sandbox S5 (11 Nov 2026) in packages/payments/test/bachs-business-shares.test.mjs; status 400 per https://docs.bachs.io/connect/transfers.md (Errors).",
+  "_status": 400,
+  "error_code": "INSUFFICIENT_BALANCE",
+  "message": "Insufficient available balance for this transfer"
+}

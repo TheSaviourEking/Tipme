@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  allocateWithdrawal,
   belowWithdrawalMinimum,
   buildPayoutFeePosting,
   buildPayoutPosting,
@@ -8,6 +9,8 @@ import {
   userPaidWithdrawal,
   canTransition,
   formatMinor,
+  FREE_WITHDRAWALS_PER_DAY,
+  lagosDayStart,
   PAYOUT_TRANSITIONS,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
@@ -24,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  or,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -39,17 +43,27 @@ import {
   payoutItems,
   payouts,
   profiles,
+  proPurchases,
   providerEvents,
   providerFeeCredits,
+  shareTransfers,
   tipQuotes,
   teamTipSplits,
   tipBusinessShares,
+  tipRefunds,
   tips,
   withdrawalHolds,
   type IssueSubject,
 } from '../schema.js';
-import { balanceIn, businessBalanceIn } from './balance.js';
+import { creditDisputeHolds } from './dispute-hold.js';
+import { balanceWithModeIn, businessBalanceIn } from './balance.js';
+import {
+  collectWithdrawalRoom,
+  refuseOverCollectLimits,
+  withinCollectLimits,
+} from './collect-guards.js';
 import { freeFeeCredit } from './fee-credits.js';
+import { readFeatureSwitch } from './feature-switches.js';
 import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
@@ -65,6 +79,14 @@ import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
 import { ownerColumns, ownerOf, type MoneyOwner } from './owner.js';
+import {
+  ownerProviderReach,
+  ownerProviderSet,
+  providerRoleIn,
+  sameBank,
+  type PayoutProviderSet,
+  type ProviderRole,
+} from './payout-providers.js';
 
 export type { MoneyOwner } from './owner.js';
 
@@ -88,7 +110,11 @@ export function holdsOf(owner: MoneyOwner, ownersSince?: Date): SQL {
 
 /** Rows of `table` that belong to the owner. */
 const ownedBy = (
-  table: typeof payouts | typeof payoutDestinations | typeof paymentAccounts,
+  table:
+    | typeof payouts
+    | typeof payoutDestinations
+    | typeof paymentAccounts
+    | typeof proPurchases,
   owner: MoneyOwner,
 ): SQL =>
   'businessId' in owner
@@ -100,9 +126,28 @@ async function ownerAvailable(
   tx: Database | Tx,
   owner: MoneyOwner,
 ): Promise<bigint> {
-  return 'businessId' in owner
-    ? (await businessBalanceIn(tx, owner.businessId)).availableMinor
-    : (await balanceIn(tx, owner.profileId)).availableMinor;
+  return (await ownerBalance(tx, owner)).availableMinor;
+}
+
+/**
+ * The same read, and whether the owner is a person on You collect. That comes from the balance's
+ * own query, so a direct recipient's withdrawal makes no You collect query at all (Task 12, M4).
+ */
+async function ownerBalance(
+  tx: Database | Tx,
+  owner: MoneyOwner,
+): Promise<{ availableMinor: bigint; collecting: boolean }> {
+  if ('businessId' in owner)
+    return {
+      availableMinor: (await businessBalanceIn(tx, owner.businessId))
+        .availableMinor,
+      collecting: false,
+    };
+  const balance = await balanceWithModeIn(tx, owner.profileId);
+  return {
+    availableMinor: balance.availableMinor,
+    collecting: balance.collecting,
+  };
 }
 
 export interface PayoutResult {
@@ -164,8 +209,11 @@ export async function createPayout(
           // ...and a tip a refund or chargeback took back (in part) is not paid out tip by tip.
           reversed: sql<boolean>`EXISTS (SELECT 1 FROM ledger_transactions r
             WHERE r.tip_id = ${tips.id} AND r.operation_type = 'reversal')`,
+          // You collect: read with the tips, so a direct recipient's payout asks nothing more.
+          collecting: sql<boolean>`${profiles.collectionMode} IS NOT DISTINCT FROM 'collect'`,
         })
         .from(tips)
+        .innerJoin(profiles, eq(profiles.id, tips.profileId))
         .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
         .innerJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
         .leftJoin(tipBusinessShares, eq(tipBusinessShares.tipId, tips.id))
@@ -213,6 +261,12 @@ export async function createPayout(
         (sum, row) => sum + row.net - (row.share ?? 0n),
         0n,
       );
+      // You collect (Task 12, spec §8): the same new-account limits as a withdrawal request.
+      if (rows.some((row) => row.collecting))
+        refuseOverCollectLimits(
+          amountMinor,
+          await collectWithdrawalRoom(tx, input.profileId, new Date()),
+        );
 
       const payoutId = newId();
       const inserted = await tx
@@ -770,6 +824,24 @@ async function releaseFailedPayout(
     aggregateId: payout.id,
     payload: { payoutId: payout.id, ...ownerOf(payout) },
   });
+  // Final review I1: what it reserved is back in the person's balance. A dispute on their tips that
+  // opened meanwhile held only what was left then, so this money is held for it, up to what it
+  // still needs, in this transaction (the one move to FAILED, so once).
+  if (payout.profileId) {
+    const [reserved] = await tx
+      .select({
+        amountMinor: payouts.amountMinor,
+        userFeeMinor: payouts.userFeeMinor,
+      })
+      .from(payouts)
+      .where(eq(payouts.id, payout.id));
+    if (reserved)
+      await creditDisputeHolds(tx, {
+        profileId: payout.profileId,
+        returningMinor: reserved.amountMinor + reserved.userFeeMinor,
+        now: new Date(),
+      });
+  }
 }
 
 /**
@@ -1071,12 +1143,37 @@ export type WithdrawalQuoteResult =
       withdrawableMinor: bigint;
       ledgerMinor: bigint;
       providerMinor: bigint;
+      /**
+       * The fee quoted by the provider that would carry the largest part of a full withdrawal: the
+       * one fee the person (or a business) may pay (P8).
+       */
       feeMinor: bigint;
       /**
-       * Who pays `feeMinor` on a withdrawal asked for now (owner, 12 Nov 2026): 'user' takes it from
-       * the amount chosen; 'tipme' only while an unused top-up TipMe already sent can pay it.
+       * What each provider in the owner's set would carry of a full withdrawal, in drain order, with
+       * the providers that carry nothing left out. Before You collect's limits, which only lower the
+       * total. Amounts only: a provider is never named to the person.
+       */
+      capsMinor: bigint[];
+      /** Some of the balance can't be read or paid right now (a failed read, an account issue). */
+      partial: boolean;
+      /** Money at a provider whose bank isn't the one shown: "add your bank details again". */
+      bankDetailsNeeded: boolean;
+      /** A tip went through a provider that is no longer connected; its money isn't counted. */
+      heldElsewhere: boolean;
+      /**
+       * Who pays `feeMinor` on a withdrawal asked for now: 'tipme' for a person's page (owner, 18 Nov
+       * 2026: withdrawals are free, covered by the plan fee), and for a business while the
+       * absorbed-fee switch is on or an unused top-up can pay it; otherwise 'user' (a business, since
+       * 12 Nov 2026), which takes it from the amount chosen.
        */
       feePaidBy: 'user' | 'tipme';
+      /**
+       * A person's page: which withdrawal of the Lagos day this one would be (1 for the first, not
+       * counting failed ones), and how many a day are free. 1 and 0 for a business, which has no daily
+       * allowance.
+       */
+      ordinalToday: number;
+      freePerDay: number;
       destination: { bankName: string; last4: string };
     }
   | { state: 'setup_needed'; requirementsDue: string[]; onboardingUrl?: string }
@@ -1093,43 +1190,23 @@ export type WithdrawalQuoteResult =
     }
   | { state: 'provider_unavailable' };
 
-// Money can only leave through the provider that collected it. A paid tip collected by any other
-// provider sits where this one cannot reach it, so it blocks the withdrawal rather than paying it
-// out twice. Attempts record the stored name ('bachs'), so the adapter's name is converted first.
-async function collectedElsewhere(
-  db: Pick<Database, 'execute'>,
-  input: { owner: MoneyOwner; provider: string },
-): Promise<boolean> {
-  const stored = recordedProviderName(input.provider);
-  const { owner } = input;
-  // A business's money is its share of tips made to its people (R2-B).
-  const whose =
-    'businessId' in owner
-      ? sql`EXISTS (SELECT 1 FROM tip_business_shares s
-                     WHERE s.tip_id = t.id AND s.business_id = ${owner.businessId})`
-      : sql`t.profile_id = ${owner.profileId}`;
-  const foreign = await db.execute<{ found: boolean }>(sql`
-    SELECT EXISTS (
-      SELECT 1 FROM tips t
-        JOIN payment_attempts a ON a.intent_id = t.intent_id
-       WHERE ${whose} AND t.status = 'SUCCEEDED'
-         AND a.status = 'VERIFIED_SUCCEEDED' AND a.provider IS DISTINCT FROM ${stored}
-    ) AS found`);
-  return Boolean(foreign.rows[0]?.found);
-}
-
-/** Whether a withdrawal through `provider` can be requested at all, before an amount is chosen. */
+/**
+ * Whether a withdrawal can be requested at all, before an amount is chosen (spec §8): false only
+ * when the person's money is at providers that are no longer connected and no configured provider
+ * holds an account or a successful tip of theirs.
+ */
 export function withdrawalsAvailable(
   db: Database,
-  input: { profileId: string; provider: string },
+  input: { profileId: string; providers: PayoutProviderSet },
 ): Promise<boolean> {
-  return guarded(
-    async () =>
-      !(await collectedElsewhere(db, {
-        owner: { profileId: input.profileId },
-        provider: input.provider,
-      })),
-  );
+  return guarded(async () => {
+    const reach = await ownerProviderReach(
+      db,
+      { profileId: input.profileId },
+      input.providers,
+    );
+    return !reach.heldElsewhere || reach.anyConfigured;
+  });
 }
 
 /** Where a withdrawal would go, from TipMe's own records; the provider is not asked here. */
@@ -1146,8 +1223,10 @@ async function payoutRoute(
   accountChangedAt: string | null;
   destination: {
     id: string;
+    bankCode: string;
     bankName: string;
     last4: string;
+    accountHash: string | null;
     status: string;
   } | null;
 }> {
@@ -1174,8 +1253,10 @@ async function payoutRoute(
   const [destination] = await db
     .select({
       id: payoutDestinations.id,
+      bankCode: payoutDestinations.bankCode,
       bankName: payoutDestinations.bankName,
       last4: payoutDestinations.accountLast4,
+      accountHash: payoutDestinations.accountHash,
       status: payoutDestinations.status,
     })
     .from(payoutDestinations)
@@ -1217,9 +1298,13 @@ function routeBlock(
   return null;
 }
 
-/** Told why a read failed, so wrong keys don't pass as an outage. Never carries account data. */
+/**
+ * Told why a read failed, and at which provider (for staff logs only), so wrong keys don't pass as
+ * an outage. Never carries account data.
+ */
 export type ProviderReadFailureLog = (
   failure: ReturnType<typeof safeError>,
+  provider: string,
 ) => void;
 
 /**
@@ -1436,7 +1521,7 @@ async function readProvider(
     );
     return { state: 'ok', availableMinor, feeMinor };
   } catch (error) {
-    onReadFailure?.(safeError(error));
+    onReadFailure?.(safeError(error), provider.name);
     return { state: 'unavailable' };
   }
 }
@@ -1444,10 +1529,13 @@ async function readProvider(
 /**
  * Money queued for the worker has left the ledger's available balance but not yet the provider's,
  * so the provider's figure still includes it. Counting it again would promise the same money twice.
+ * With `provider` (a recorded name, such as `'bachs'`), only what is queued at that provider: its
+ * own balance is the only one still holding it (`queued_P`, spec §5).
  */
-async function queuedNotStarted(
+export async function queuedNotStarted(
   db: Pick<Database, 'select'>,
   owner: MoneyOwner,
+  provider?: string,
 ): Promise<bigint> {
   const [row] = await db
     .select({
@@ -1460,9 +1548,133 @@ async function queuedNotStarted(
         ownedBy(payouts, owner),
         eq(payouts.status, 'REQUESTED'),
         isNull(payouts.providerReference),
+        provider === undefined ? undefined : eq(payouts.provider, provider),
       ),
     );
   return BigInt(row?.total ?? 0);
+}
+
+/**
+ * What is promised out of the owner's account at `provider` (a recorded name) that its balance still
+ * shows: withdrawals queued there and not yet started (amount plus the user's fee), and Pro paid from
+ * the balance there that is still open (COLLECTING or UNKNOWN). An UNKNOWN one may already have
+ * moved and so be counted twice until it is read back; that only ever refuses, never overspends.
+ * The one figure the withdrawal quote, the withdrawal request, Pro from the balance and the split
+ * check all take off a provider's balance, so none can spend what another has reserved (spec §5, §8).
+ *
+ * Also, at every provider but a plain single-provider owner's only one (`role` 'only'), the money
+ * there that is someone else's and still has to leave this account: `owedToOthersAt` (rulings
+ * F-R1, F-R2). A single provider's share may be of a tip not yet settled, so not yet in its
+ * available balance, and taking it off would lower the withdrawable below the truth; the ledger,
+ * which already leaves the share out, caps that owner. Any other owner may reach the active
+ * provider with more of the ledger left than their own money there (an earlier part passed over:
+ * bank details, unread, not set up, money held elsewhere), so there the share is left out too: that
+ * only refuses, for a share not yet settled, during its settle window.
+ */
+export async function committedAtProvider(
+  db: Pick<Database, 'select'>,
+  owner: MoneyOwner,
+  provider: string,
+  role: ProviderRole,
+): Promise<bigint> {
+  const queued = await queuedNotStarted(db, owner, provider);
+  const [pro] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${proPurchases.amountMinor}), 0)`,
+    })
+    .from(proPurchases)
+    .where(
+      and(
+        ownedBy(proPurchases, owner),
+        eq(proPurchases.method, 'balance'),
+        inArray(proPurchases.status, ['COLLECTING', 'UNKNOWN']),
+        eq(proPurchases.provider, provider),
+      ),
+    );
+  const others =
+    role === 'only' ? 0n : await owedToOthersAt(db, owner, provider);
+  return queued + BigInt(pro?.total ?? 0) + others;
+}
+
+/**
+ * Money in the owner's account at `provider` that is owed to someone else and hasn't left it yet:
+ *
+ * - a share transfer whose `out` leg takes from this owner there and hasn't been confirmed: a
+ *   staff member's `sweep`, a business's `recover` or `collect_recover`, `waiting` or `out_sent`,
+ *   or in `review` before its out leg was confirmed (`deliver_minor` unset; it may not have moved,
+ *   so it is counted: that only refuses). A recover `waiting` counts only once its tip's sweep is
+ *   `done`: until then the share isn't in the business's account to take (`sendOut` waits too);
+ * - a person's refund of a direct tip there still open (REQUESTED, PROCESSING, UNKNOWN): our partner
+ *   takes it from the recipient's account, and only refund.paid books it in the ledger. A collect
+ *   tip's refund (`collect_plan` set) comes from TipMe's own balance, so it isn't counted.
+ */
+async function owedToOthersAt(
+  db: Pick<Database, 'select'>,
+  owner: MoneyOwner,
+  provider: string,
+): Promise<bigint> {
+  const outLegOpen = or(
+    eq(shareTransfers.status, 'out_sent'),
+    and(
+      eq(shareTransfers.status, 'review'),
+      isNull(shareTransfers.deliverMinor),
+    ),
+  );
+  if ('businessId' in owner) {
+    const [shares] = await db
+      .select({
+        total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+      })
+      .from(shareTransfers)
+      .where(
+        and(
+          eq(shareTransfers.businessId, owner.businessId),
+          eq(shareTransfers.provider, provider),
+          inArray(shareTransfers.kind, ['recover', 'collect_recover']),
+          or(
+            outLegOpen,
+            and(
+              eq(shareTransfers.status, 'waiting'),
+              sql`EXISTS (
+                SELECT 1 FROM share_transfers s
+                 WHERE s.tip_id = ${shareTransfers.tipId}
+                   AND s.kind = CASE ${shareTransfers.kind}
+                                  WHEN 'recover' THEN 'sweep' ELSE 'collect_sweep' END
+                   AND s.status = 'done')`,
+            ),
+          ),
+        ),
+      );
+    return BigInt(shares?.total ?? 0);
+  }
+  const [shares] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+    })
+    .from(shareTransfers)
+    .where(
+      and(
+        eq(shareTransfers.profileId, owner.profileId),
+        eq(shareTransfers.provider, provider),
+        eq(shareTransfers.kind, 'sweep'),
+        or(eq(shareTransfers.status, 'waiting'), outLegOpen),
+      ),
+    );
+  const [refunds] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${tipRefunds.amountMinor}), 0)`,
+    })
+    .from(tipRefunds)
+    .innerJoin(tips, eq(tips.id, tipRefunds.tipId))
+    .where(
+      and(
+        eq(tips.profileId, owner.profileId),
+        eq(tipRefunds.provider, provider),
+        isNull(tipRefunds.collectPlan),
+        inArray(tipRefunds.status, ['REQUESTED', 'PROCESSING', 'UNKNOWN']),
+      ),
+    );
+  return BigInt(shares?.total ?? 0) + BigInt(refunds?.total ?? 0);
 }
 
 const lower = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -1514,34 +1726,30 @@ export type WithdrawalQuoteBlock = Exclude<
 
 /**
  * Everything a quote decides from TipMe's own records, before the payment partner: the switch,
- * holds, below zero, money collected elsewhere and the payout route. `route` when nothing blocks.
- * For a person or a business (R2-B), the same checks.
+ * holds, below zero and the active provider's payout route. `route` when nothing blocks. Money at
+ * another provider no longer blocks (spec §8): the quote counts it, or says why it can't. For a
+ * person or a business (R2-B), the same checks.
  */
 async function quoteGate(
   db: Database,
   owner: MoneyOwner,
-  provider: PayoutReader,
+  active: PayoutReader,
 ): Promise<
   | { block: WithdrawalQuoteBlock }
   | { route: Awaited<ReturnType<typeof payoutRoute>> }
 > {
   if (await withdrawalsSwitchedOff(db))
     return { block: { state: 'paused', reason: 'switched_off' } };
-  const { hold, route, foreign } = await guarded(async () => ({
+  const { hold, route } = await guarded(async () => ({
     hold: await activeHold(db, owner),
-    route: await payoutRoute(db, { owner, provider }),
-    foreign: await collectedElsewhere(db, {
-      owner,
-      provider: provider.name,
-    }),
+    route: await payoutRoute(db, { owner, provider: active }),
   }));
   if (hold) return { block: { state: 'paused', reason: hold } };
   // Q8 (R2-A): below zero after a reversal, withdrawals wait until it is back above zero.
   if ((await guarded(() => ownerAvailable(db, owner))) < 0n)
     return { block: { state: 'paused', reason: 'reversal' } };
-  // A request would be refused, so the quote must not say otherwise. The states have no word for
-  // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
-  if (foreign) return { block: { state: 'provider_unavailable' } };
+  // P3: the active route decides the setup and bank states. The screen's one bank is the active
+  // provider's, so without it no other provider's part can be checked as the same bank.
   const block = routeBlock(route);
   if (block) return { block };
   return { route };
@@ -1554,21 +1762,24 @@ async function quoteGate(
  */
 export async function localWithdrawalQuote(
   db: Database,
-  input: { profileId: string; provider: PayoutReader },
+  input: { profileId: string; providers: PayoutProviderSet },
 ): Promise<WithdrawalQuoteBlock | { state: 'unchecked' }> {
   const gate = await quoteGate(
     db,
     { profileId: input.profileId },
-    input.provider,
+    input.providers.active,
   );
   return 'block' in gate ? gate.block : { state: 'unchecked' };
 }
 
 type QuoteInput = {
-  provider: PayoutReader;
+  /** Every configured provider; the quote reads those in the owner's set (spec §5). */
+  providers: PayoutProviderSet;
   onReadFailure?: ProviderReadFailureLog;
   /** Only for showing the quote; a request takes none and always asks the provider. */
   cache?: PartnerQuoteCache;
+  /** The moment "today" is counted at (the Lagos calendar day); tests only. */
+  now?: Date;
 };
 
 /** What the recipient can withdraw right now and, if nothing, why. Never moves money. */
@@ -1591,66 +1802,241 @@ export function businessWithdrawalQuote(
   return quoteFor(db, { businessId: input.businessId }, input);
 }
 
+type Route = Awaited<ReturnType<typeof payoutRoute>>;
+
+/**
+ * Whether a withdraw-only provider's part can be paid to the bank the screen shows (the active
+ * provider's), P4 and P5. 'bank': a missing, pending, rejected or different bank there, which the
+ * person fixes by adding their bank details again. 'partial': what the person can't fix (no account
+ * reference, or the provider would pay the account out by itself). Neither is ever paid.
+ */
+function partRoute(route: Route, active: Route): 'ok' | 'bank' | 'partial' {
+  if (!route.accountless && (!route.accountReference || !route.manualPayouts))
+    return 'partial';
+  const there = route.destination;
+  // P5: an accountless provider with no bank row counts as the same bank, as today's pretend bank.
+  if (!there) return route.accountless ? 'ok' : 'bank';
+  if (there.status !== 'usable' || !active.destination) return 'bank';
+  return sameBank(active.destination, there) ? 'ok' : 'bank';
+}
+
+/** What one provider in the owner's set carries of a full withdrawal. */
+type QuotedPart = {
+  provider: PayoutReader;
+  route: Route;
+  /** max(0, balance − queued at this provider) */
+  availMinor: bigint;
+  /** What it carries, after the providers before it in drain order and the ledger cap. */
+  takeMinor: bigint;
+  feeMinor: bigint;
+};
+
 async function quoteFor(
   db: Database,
   owner: MoneyOwner,
   input: QuoteInput,
 ): Promise<WithdrawalQuoteResult> {
-  const gate = await quoteGate(db, owner, input.provider);
+  const { active } = input.providers;
+  const gate = await quoteGate(db, owner, active);
   if ('block' in gate) return gate.block;
-  const { route } = gate;
-  const { ledgerMinor, queuedMinor } = await guarded(async () => ({
-    ledgerMinor: await ownerAvailable(db, owner),
-    queuedMinor: await queuedNotStarted(db, owner),
+  const activeRoute = gate.route;
+  const { ledger, reach } = await guarded(async () => ({
+    ledger: await ownerBalance(db, owner),
+    reach: await ownerProviderSet(db, owner, input.providers),
   }));
+  const ledgerMinor = ledger.availableMinor;
   const { cache } = input;
-  const entries = cache
-    ? await safely(() =>
-        cache.open({ provider: input.provider.name, ...owner }),
-      )
-    : null;
-  const reader = entries
-    ? cachedReader(
-        input.provider,
-        entries,
-        await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
-      )
-    : input.provider;
-  const read = await readProvider(
-    reader,
-    route.accountReference ?? ownerReference(owner),
-    (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
-    input.onReadFailure,
+  // Spec §5: each provider in drain order takes what it can, until the ledger total is reached.
+  let remaining = notNegative(ledgerMinor);
+  let partial = false;
+  let bankDetailsNeeded = false;
+  const parts: QuotedPart[] = [];
+  for (const provider of reach.providers) {
+    const isActive = provider === active;
+    const route = isActive
+      ? activeRoute
+      : await guarded(() => payoutRoute(db, { owner, provider }));
+    if (!isActive) {
+      const state = partRoute(route, activeRoute);
+      // Never read, so never counted: this money can't go to the bank the screen shows.
+      if (state === 'bank') bankDetailsNeeded = true;
+      if (state === 'partial') partial = true;
+      if (state !== 'ok') continue;
+    }
+    const queuedMinor = await guarded(() =>
+      committedAtProvider(
+        db,
+        owner,
+        recordedProviderName(provider.name),
+        providerRoleIn(reach, provider, active),
+      ),
+    );
+    const entries = cache
+      ? await safely(() => cache.open({ provider: provider.name, ...owner }))
+      : null;
+    const reader = entries
+      ? cachedReader(
+          provider,
+          entries,
+          await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
+        )
+      : provider;
+    const take = (available: bigint) =>
+      lower(remaining, notNegative(available - queuedMinor));
+    const read = await readProvider(
+      reader,
+      route.accountReference ?? ownerReference(owner),
+      take,
+      input.onReadFailure,
+    );
+    if (read.state === 'setup_needed') {
+      // The active provider's account is the person's to finish, as today (P3).
+      if (isActive) return read;
+      partial = true;
+      continue;
+    }
+    if (read.state === 'unavailable') {
+      partial = true;
+      continue;
+    }
+    const takeMinor = take(read.availableMinor);
+    remaining -= takeMinor;
+    parts.push({
+      provider,
+      route,
+      availMinor: notNegative(read.availableMinor - queuedMinor),
+      takeMinor,
+      feeMinor: read.feeMinor,
+    });
+  }
+  // Nothing could be read at all: today's outage, not a ready quote of nothing.
+  const [first, ...others] = parts;
+  if (!first) return { state: 'provider_unavailable' };
+  // P8: the fee is the one the provider carrying the largest part quotes (the active one when
+  // nothing can be carried), as that is the part a fee the person pays comes off.
+  const carrier = others.reduce(
+    (best, part) =>
+      part.takeMinor > best.takeMinor ||
+      (best.takeMinor === 0n &&
+        part.takeMinor === 0n &&
+        part.provider === active)
+        ? part
+        : best,
+    first,
   );
-  if (read.state === 'unavailable') return { state: 'provider_unavailable' };
-  if (read.state === 'setup_needed') return read;
-  const providerMinor = notNegative(read.availableMinor - queuedMinor);
+  const providerMinor = parts.reduce((sum, part) => sum + part.availMinor, 0n);
+  const now = input.now ?? new Date();
   const feePaidBy = await guarded(() =>
-    feePayerFor(db, route, input.provider.name, read.feeMinor),
+    feePayerFor(
+      db,
+      owner,
+      carrier.route,
+      carrier.provider.name,
+      carrier.feeMinor,
+      now,
+    ),
   );
+  const ordinalToday =
+    'businessId' in owner
+      ? 1
+      : (await guarded(() => personsWithdrawalsToday(db, owner.profileId, now)))
+          .counted + 1;
+  // You collect (Task 12, spec §8): a collect recipient's new-account limits lower what the quote
+  // offers, as the request would refuse more. Nothing for a direct recipient or a business.
+  const room =
+    'businessId' in owner || !ledger.collecting
+      ? null
+      : await guarded(() => collectWithdrawalRoom(db, owner.profileId, now));
+  const withdrawable = parts.reduce((sum, part) => sum + part.takeMinor, 0n);
+  // The flags say money is held back. When the providers read cover the whole ledger, none is,
+  // whatever an unread provider holds. Compared before You collect's limits, which are not a
+  // provider problem.
+  const heldBack = withdrawable < notNegative(ledgerMinor);
   return {
     state: 'ready',
-    withdrawableMinor: notNegative(lower(ledgerMinor, providerMinor)),
+    withdrawableMinor: room
+      ? notNegative(withinCollectLimits(withdrawable, room))
+      : withdrawable,
     ledgerMinor,
     providerMinor,
-    feeMinor: read.feeMinor,
+    feeMinor: carrier.feeMinor,
+    capsMinor: parts
+      .map((part) => part.takeMinor)
+      .filter((minor) => minor > 0n),
+    partial: partial && heldBack,
+    bankDetailsNeeded: bankDetailsNeeded && heldBack,
+    heldElsewhere: reach.heldElsewhere,
     feePaidBy,
-    destination: route.destination
-      ? { bankName: route.destination.bankName, last4: route.destination.last4 }
+    ordinalToday,
+    freePerDay: 'businessId' in owner ? 0 : FREE_WITHDRAWALS_PER_DAY,
+    destination: activeRoute.destination
+      ? {
+          bankName: activeRoute.destination.bankName,
+          last4: activeRoute.destination.last4,
+        }
       : { bankName: 'Pretend bank', last4: '0000' },
   };
 }
 
 /**
- * Who pays the partner's fee on a withdrawal asked for now (owner, 12 Nov 2026): the user, from the
- * amount, unless an unused top-up TipMe already sent to this account can pay it (fee-credits.ts).
+ * A person's withdrawal requests on the Lagos calendar day of `now`: those asked for and not wholly
+ * failed (`counted`), and how many of them TipMe pays the fee on (`free`, by the parts' stored
+ * `fee_payer`). Read under the profile row lock a request already holds, so two at once can't both
+ * take the last free slot.
+ */
+async function personsWithdrawalsToday(
+  db: Database | Tx,
+  profileId: string,
+  now: Date,
+): Promise<{ counted: number; free: number }> {
+  const start = lagosDayStart(now);
+  const end = new Date(start.getTime() + 86_400_000);
+  // P7: a request is one withdrawal however many parts it has. It counts until every part failed,
+  // and it is free when none of its parts still standing has the person paying the fee.
+  const result = await db.execute<{ counted: number; free: number }>(sql`
+    SELECT count(*)::int AS counted, (count(*) FILTER (WHERE NOT r.paid))::int AS free
+      FROM (
+        SELECT COALESCE(bool_or(${payouts.feePayer} = 'user')
+                          FILTER (WHERE ${payouts.status} <> 'FAILED'), false) AS paid
+          FROM ${payouts}
+         WHERE ${payouts.profileId} = ${profileId}
+           AND ${payouts.createdAt} >= ${start.toISOString()}::timestamptz
+           AND ${payouts.createdAt} < ${end.toISOString()}::timestamptz
+         GROUP BY COALESCE(${payouts.withdrawalGroupId}, ${payouts.id})
+        HAVING bool_or(${payouts.status} <> 'FAILED')
+      ) r`);
+  const row = result.rows[0];
+  return { counted: row?.counted ?? 0, free: row?.free ?? 0 };
+}
+
+/**
+ * Who pays the partner's fee on a withdrawal asked for now. A person's own page: TipMe for the first
+ * FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day (owner, 18 Nov 2026: withdrawals are free twice
+ * a day), counted by the stored `fee_payer` of those not failed; from the next one the user pays from
+ * the amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the
+ * fee up from the platform payment reserve before the payout (coverFee, or an unused top-up), and
+ * books the partner's real fee as its own cost when the payout is paid. A
+ * business is unchanged until the owner says otherwise: it pays from the amount (owner, 12 Nov 2026),
+ * unless an unused top-up TipMe already sent to its account can pay it (fee-credits.ts). A payout
+ * keeps the rule it was asked under (`fee_payer`), so one asked for before this release finishes as
+ * it was asked.
  */
 async function feePayerFor(
   db: Database | Tx,
+  owner: MoneyOwner,
   route: { accountReference: string | null },
   providerName: string,
   feeMinor: bigint,
+  now: Date,
 ): Promise<'user' | 'tipme'> {
+  if (!('businessId' in owner)) {
+    const today = await personsWithdrawalsToday(db, owner.profileId, now);
+    return today.free < FREE_WITHDRAWALS_PER_DAY ? 'tipme' : 'user';
+  }
+  // Staff may switch TipMe paying a business's fee on (`business_payout_fee_absorbed`, a money
+  // switch: two people, audited). Read uncached, so a quote and the request agree with the switch.
+  if (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
+    return 'tipme';
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
     accountRef: route.accountReference,
@@ -1665,24 +2051,92 @@ async function feePayerFor(
 const ownerReference = (owner: MoneyOwner) =>
   'businessId' in owner ? owner.businessId : owner.profileId;
 
+/**
+ * The reference the owner's balance at `provider` is read under, as the quote reads it: their
+ * account reference there, or the owner's own id at an accountless (pretend) provider. Null when
+ * they have no account there, so that provider holds nothing of theirs. Never asks the provider.
+ */
+export async function balanceReferenceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+): Promise<string | null> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  return route.accountless ? ownerReference(owner) : route.accountReference;
+}
+
+/**
+ * What `provider` holds of the owner's now, for staff (Split accounts, spec §7): read under the
+ * reference the quote uses, and through the quote's own cache entries when `cache` is given, so a
+ * staff look shares the provider's rate limit with quotes instead of adding to it. No account
+ * there: 0, and the provider is not asked. A failed read throws; the caller says which provider.
+ */
+export async function providerBalanceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+  input: { cache?: PartnerQuoteCache } = {},
+): Promise<bigint> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  const reference = route.accountless
+    ? ownerReference(owner)
+    : route.accountReference;
+  if (reference === null) return 0n;
+  const { cache } = input;
+  const entries = cache
+    ? await safely(() => cache.open({ provider: provider.name, ...owner }))
+    : null;
+  if (!entries)
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  const { availableMinor: ledgerMinor } = await guarded(() =>
+    ownerBalance(db, owner),
+  );
+  const reader = cachedReader(
+    provider,
+    entries,
+    await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
+  );
+  // The cache keeps a balance only for an account that can pay out; any other is asked directly.
+  if ((await reader.payoutCapability(reference)).status !== 'active')
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  return (await reader.payoutBalance(reference, BASE_CURRENCY)).availableMinor;
+}
+
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;
-  provider: PayoutReader;
+  /** Every configured provider; the request may be paid through those in the owner's set (§5). */
+  providers: PayoutProviderSet;
   traceId?: string | null;
   onReadFailure?: ProviderReadFailureLog;
+  /** The moment "today" is counted at (the Lagos calendar day); tests only. */
+  now?: Date;
 };
 
-type RequestResult = { payoutId: string; status: string; replayed: boolean };
+/**
+ * What a request recorded. `payoutId` is part 1, or the only payout. `groupId` is null when one
+ * provider paid it alone (P6). `parts` are in drain order, each with what it sends.
+ */
+export type RequestResult = {
+  payoutId: string;
+  status: string;
+  replayed: boolean;
+  groupId: string | null;
+  parts: { payoutId: string; amountMinor: bigint; status: string }[];
+};
 
 /**
- * A recipient withdraws any amount up to what both TipMe's ledger and the provider's balance allow
- * (PR-008). The provider is read first, outside any transaction; then the profile row is locked so
- * two withdrawals at once can never overdraw, and holds are checked under that lock so a concurrent
- * one is seen. Nothing is posted to the ledger until the provider confirms the payout as paid: until
- * then the amount is reserved, and a failed payout simply releases it. The provider is never asked
- * to move money here: the `payouts.start` job, committed with the payout, makes the worker do that.
- * A replay returns the original payout whatever has changed since, and queues nothing.
+ * A recipient withdraws any amount up to what both TipMe's ledger and the providers' balances allow
+ * (PR-008, spec §5). Every provider in the owner's set is read first, outside any transaction; then
+ * the owner row is locked so two withdrawals at once can never overdraw, and holds are checked under
+ * that lock so a concurrent one is seen. Under it the request is split across the providers, as few
+ * payouts as possible in drain order, each part reserved against its own provider's balance. Nothing
+ * is posted to the ledger until a provider confirms a part as paid: until then its amount is reserved,
+ * and a failed part simply releases its own. No provider is asked to move money here: each part's
+ * `payouts.start` job, committed with it, makes the worker do that. A replay returns the original
+ * payouts whatever has changed since, and queues nothing.
  */
 export function requestWithdrawal(
   db: Database,
@@ -1693,16 +2147,93 @@ export function requestWithdrawal(
 
 /**
  * A business's own withdrawal (R2-B), from its `business_payable` balance to its own bank, through
- * exactly the person's path: the same states, idempotency, switch, holds and start job, with no new
- * kind of partner call. The business row is the lock (as `reverseTip` takes it), so two at once
- * can never overdraw and a reversal is seen; below zero refuses `BALANCE_BELOW_ZERO` (Q8). Only an
- * owner of the business may ask, checked again under that lock.
+ * exactly the person's path: the same states, idempotency, switch, holds, parts and start jobs, with
+ * no new kind of partner call. The business row is the lock (as `reverseTip` takes it), so two at
+ * once can never overdraw and a reversal is seen; below zero refuses `BALANCE_BELOW_ZERO` (Q8). Only
+ * an owner of the business may ask, checked again under that lock.
  */
 export function requestBusinessWithdrawal(
   db: Database,
   input: RequestInput & { businessId: string; userId: string },
 ): Promise<RequestResult> {
   return requestFor(db, { businessId: input.businessId }, input, input.userId);
+}
+
+/** What each provider carries of `totalMinor` drawn in drain order (the quote's takes, spec §5). */
+function drainTakes(
+  capsMinor: readonly bigint[],
+  totalMinor: bigint,
+): bigint[] {
+  let remaining = totalMinor;
+  return capsMinor.map((cap) => {
+    const take = lower(remaining, cap);
+    remaining -= take;
+    return take;
+  });
+}
+
+/** One provider the request may draw from: read, usable, and on the bank the screen shows. */
+type ReadPart = {
+  provider: PayoutReader;
+  /** For what is reserved out of it (`committedAtProvider`). */
+  role: ProviderRole;
+  route: Route;
+  availableMinor: bigint;
+  feeMinor: bigint;
+};
+
+/**
+ * What every provider in the owner's set can carry, read outside any transaction (P9). A provider
+ * whose route can't reach the bank the screen shows is never read, so never sent to (P4, P5). One
+ * that can't be read counts as 0, and `unreadable` says so for the refusal.
+ */
+async function readRequestParts(
+  db: Database,
+  owner: MoneyOwner,
+  input: RequestInput,
+): Promise<{ parts: ReadPart[]; unreadable: boolean }> {
+  const { active } = input.providers;
+  const { activeRoute, reach } = await guarded(async () => ({
+    activeRoute: await payoutRoute(db, { owner, provider: active }),
+    reach: await ownerProviderSet(db, owner, input.providers),
+  }));
+  // P3: the active route decides the setup and bank states, as for a single provider today.
+  const block = routeBlock(activeRoute);
+  if (block?.state === 'setup_needed')
+    throw new OperationError('PAYOUT_SETUP_NEEDED');
+  if (block) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
+  const parts: ReadPart[] = [];
+  let unreadable = false;
+  for (const provider of reach.providers) {
+    const isActive = provider === active;
+    const route = isActive
+      ? activeRoute
+      : await guarded(() => payoutRoute(db, { owner, provider }));
+    if (!isActive && partRoute(route, activeRoute) !== 'ok') continue;
+    const read = await readProvider(
+      provider,
+      route.accountReference ?? ownerReference(owner),
+      // The fee for the most this provider could carry; the part is decided under the lock.
+      (available) => lower(input.amountMinor, notNegative(available)),
+      input.onReadFailure,
+    );
+    if (read.state === 'setup_needed') {
+      if (isActive) throw new OperationError('PAYOUT_SETUP_NEEDED');
+      continue;
+    }
+    if (read.state === 'unavailable') {
+      unreadable = true;
+      continue;
+    }
+    parts.push({
+      provider,
+      role: providerRoleIn(reach, provider, active),
+      route,
+      availableMinor: read.availableMinor,
+      feeMinor: read.feeMinor,
+    });
+  }
+  return { parts, unreadable };
 }
 
 async function requestFor(
@@ -1712,12 +2243,8 @@ async function requestFor(
   actingUserId?: string,
 ): Promise<RequestResult> {
   const traceId = input.traceId ?? activeTraceId();
-  const route = await guarded(() =>
-    payoutRoute(db, { owner, provider: input.provider }),
-  );
-  const destinationId = route.destination?.id ?? null;
-  // Not the bank account: a retry after a bank change replays the payout in flight, which keeps the
-  // destination it recorded. The new account is for the next withdrawal. A person's stays as it
+  // Not the bank account: a retry after a bank change replays the payouts in flight, which keep the
+  // destinations they recorded. The new account is for the next withdrawal. A person's stays as it
   // always was; a business's names the business, so a key can never cross between the two.
   const fingerprint = createHash('sha256')
     .update(
@@ -1733,7 +2260,10 @@ async function requestFor(
       ),
     )
     .digest('hex');
-  const replayIn = async (reader: Pick<Database, 'select'>) => {
+  // P6: part 1 carries the client's key; a replay finds it and returns the whole group.
+  const replayIn = async (
+    reader: Pick<Database, 'select'>,
+  ): Promise<RequestResult | null> => {
     const [existing] = await reader
       .select()
       .from(payouts)
@@ -1741,13 +2271,30 @@ async function requestFor(
     if (!existing) return null;
     if (existing.requestFingerprint !== fingerprint)
       throw new OperationError('IDEMPOTENCY_CONFLICT');
+    const group = existing.withdrawalGroupId
+      ? await reader
+          .select({
+            id: payouts.id,
+            amountMinor: payouts.amountMinor,
+            status: payouts.status,
+          })
+          .from(payouts)
+          .where(eq(payouts.withdrawalGroupId, existing.withdrawalGroupId))
+          .orderBy(asc(payouts.groupPart))
+      : [existing];
     return {
       payoutId: existing.id,
       status: existing.status as string,
       replayed: true,
+      groupId: existing.withdrawalGroupId,
+      parts: group.map((part) => ({
+        payoutId: part.id,
+        amountMinor: part.amountMinor,
+        status: part.status as string,
+      })),
     };
   };
-  // Before any provider read: a retry must get its payout even when the provider is down.
+  // Before any provider read: a retry must get its payouts even when a provider is down.
   const earlier = await guarded(() => replayIn(db));
   if (earlier) return earlier;
   if (input.amountMinor <= 0n) throw new OperationError('INVALID_INPUT');
@@ -1764,25 +2311,7 @@ async function requestFor(
   // Before any provider read: while off nothing about this request needs one.
   if ((await withdrawalsSwitchState(db)).paused)
     throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
-  const providerName = input.provider.name;
-  const isForeign = () =>
-    collectedElsewhere(db, { owner, provider: providerName });
-  if (await guarded(isForeign))
-    throw new OperationError('WITHDRAWAL_UNAVAILABLE');
-  const block = routeBlock(route);
-  if (block?.state === 'setup_needed')
-    throw new OperationError('PAYOUT_SETUP_NEEDED');
-  if (block) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
-  const read = await readProvider(
-    input.provider,
-    route.accountReference ?? ownerReference(owner),
-    () => input.amountMinor,
-    input.onReadFailure,
-  );
-  if (read.state === 'unavailable')
-    throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
-  if (read.state === 'setup_needed')
-    throw new OperationError('PAYOUT_SETUP_NEEDED');
+  const read = await readRequestParts(db, owner, input);
 
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -1808,42 +2337,106 @@ async function requestFor(
         throw new OperationError('WITHDRAWALS_SWITCHED_OFF');
       if (await activeHold(tx, owner))
         throw new OperationError('WITHDRAWALS_PAUSED');
-      const availableMinor = await ownerAvailable(tx, owner);
+      const { availableMinor, collecting } = await ownerBalance(tx, owner);
       // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
       // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
       if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
-      const withdrawable = lower(
-        availableMinor,
-        notNegative(read.availableMinor - (await queuedNotStarted(tx, owner))),
-      );
+      // Each provider's own balance, less what is promised out of it there and not yet gone
+      // (`queued_P` plus open Pro balance payments, `committedAtProvider`). Under the lock, so a
+      // request that committed meanwhile is seen: two at once never spend the same provider's
+      // money (Review Focus 2).
+      const capsMinor: bigint[] = [];
+      for (const part of read.parts)
+        capsMinor.push(
+          notNegative(
+            part.availableMinor -
+              (await committedAtProvider(
+                tx,
+                owner,
+                recordedProviderName(part.provider.name),
+                part.role,
+              )),
+          ),
+        );
+      const providersMinor = capsMinor.reduce((sum, cap) => sum + cap, 0n);
+      const withdrawable = lower(availableMinor, providersMinor);
+      // P9 (T6-R2): more than the ledger holds is too little money, whatever could be read. Within
+      // the ledger, an unread provider might have covered it, so it is an outage.
       if (input.amountMinor > withdrawable)
-        throw new OperationError('INSUFFICIENT_BALANCE');
+        throw new OperationError(
+          input.amountMinor <= availableMinor && read.unreadable
+            ? 'PAYOUT_PROVIDER_UNAVAILABLE'
+            : 'INSUFFICIENT_BALANCE',
+        );
+      // You collect (Task 12, spec §8): a collect recipient's first withdrawal is capped, and their
+      // Lagos day limited while the account is young, on the request's total. Under the profile
+      // lock, so two at once can't both use the same room. A direct recipient and a business have
+      // no such limits.
+      if (!('businessId' in owner) && collecting)
+        refuseOverCollectLimits(
+          input.amountMinor,
+          await collectWithdrawalRoom(
+            tx,
+            owner.profileId,
+            input.now ?? new Date(),
+          ),
+        );
       // The smallest tip is the smallest withdrawal (owner, 14 Nov 2026), for a person and a
       // business alike, except to take all that can be taken: nobody is left with money they
       // cannot withdraw, or an account they cannot close.
       if (belowWithdrawalMinimum(input.amountMinor, withdrawable))
         throw new OperationError('WITHDRAWAL_TOO_SMALL');
-      // The fee comes off the amount chosen (owner, 12 Nov 2026): what is sent is the rest, and
-      // nothing can be sent when the amount is not more than the fee.
+      // As few payouts as possible, in drain order; a part under the minimum only to empty its
+      // provider (spec §5). Taking everything is always allowed, also when the ledger, not a
+      // provider, is what runs out: then each provider carries what the quote said it would (its
+      // take in drain order), so every part empties what it can give.
+      const allocation =
+        allocateWithdrawal(input.amountMinor, capsMinor) ??
+        (input.amountMinor === withdrawable
+          ? allocateWithdrawal(
+              input.amountMinor,
+              drainTakes(capsMinor, withdrawable),
+            )
+          : null);
+      if (!allocation) throw new OperationError('WITHDRAWAL_TOO_SMALL');
+      const chosen = read.parts.flatMap((part, index) => {
+        const amountMinor = allocation[index] ?? 0n;
+        return amountMinor > 0n ? [{ ...part, amountMinor }] : [];
+      });
+      const [head, ...rest] = chosen;
+      if (!head) throw new OperationError('INSUFFICIENT_BALANCE');
+      // The fee is decided once for the request (spec §5): whoever pays it pays it once, off the
+      // largest part (the first in drain order among equals), so the small parts never fall below
+      // it. TipMe pays every other part's fee. A person's page: TipMe pays on the first two
+      // requests of the Lagos day, however many parts each has (P7); from the 3rd the fee comes off
+      // the amount chosen (owner, 18 Nov 2026). A business: one fee under its own rule (owner, 12
+      // and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when the largest
+      // part is not more than its fee.
+      const carrier = rest.reduce(
+        (best, part) => (part.amountMinor > best.amountMinor ? part : best),
+        head,
+      );
       const feePayer = await feePayerFor(
         tx,
-        route,
-        providerName,
-        read.feeMinor,
+        owner,
+        carrier.route,
+        carrier.provider.name,
+        carrier.feeMinor,
+        input.now ?? new Date(),
       );
       const userPaid =
         feePayer === 'user'
           ? userPaidWithdrawal({
-              chosenMinor: input.amountMinor,
-              feeMinor: read.feeMinor,
+              chosenMinor: carrier.amountMinor,
+              feeMinor: carrier.feeMinor,
             })
           : null;
       if (feePayer === 'user' && !userPaid)
         throw new OperationError('WITHDRAWAL_BELOW_FEE');
-      if (await collectedElsewhere(tx, { owner, provider: providerName }))
-        throw new OperationError('WITHDRAWAL_UNAVAILABLE');
-      if (destinationId) {
-        // Held until commit: a bank change waits, and the payout never records a replaced account.
+      for (const part of chosen) {
+        const destinationId = part.route.destination?.id;
+        if (!destinationId) continue;
+        // Held until commit: a bank change waits, and no part ever records a replaced account.
         const [current] = await tx
           .select({ id: payoutDestinations.id })
           .from(payoutDestinations)
@@ -1857,45 +2450,68 @@ async function requestFor(
           .for('share');
         if (!current) throw new OperationError('PAYOUT_DESTINATION_NEEDED');
       }
-      const payoutId = newId();
-      const inserted = await tx
-        .insert(payouts)
-        .values({
-          id: payoutId,
-          ...ownerColumns(owner),
-          currency: 'NGN',
-          amountMinor: userPaid ? userPaid.sendMinor : input.amountMinor,
-          feePayer,
-          userFeeMinor: userPaid ? userPaid.feeMinor : 0n,
-          status: 'REQUESTED',
-          idempotencyKey: input.idempotencyKey,
-          requestFingerprint: fingerprint,
-          provider: recordedProviderName(providerName),
-          destinationId,
-          feeMinor: read.feeMinor,
-          accountReference: route.accountReference,
-        })
-        .onConflictDoNothing({ target: payouts.idempotencyKey })
-        .returning({ id: payouts.id });
-      if (inserted.length === 0) {
-        const raced = await replayIn(tx);
-        if (raced) return raced;
-        throw new OperationError('IDEMPOTENCY_CONFLICT');
+      // P6: one provider alone leaves the group NULL, so the common path does not change.
+      const groupId = chosen.length > 1 ? newId() : null;
+      const recorded: RequestResult['parts'] = [];
+      for (const [index, part] of chosen.entries()) {
+        const payoutId = newId();
+        const paysFee = part === carrier && userPaid;
+        const amountMinor = paysFee ? userPaid.sendMinor : part.amountMinor;
+        const inserted = await tx
+          .insert(payouts)
+          .values({
+            id: payoutId,
+            ...ownerColumns(owner),
+            currency: 'NGN',
+            amountMinor,
+            feePayer: paysFee ? 'user' : 'tipme',
+            userFeeMinor: paysFee ? userPaid.feeMinor : 0n,
+            status: 'REQUESTED',
+            // Client keys are UUIDs, so `<key>:<n>` never meets another request's key (P6).
+            idempotencyKey:
+              index === 0
+                ? input.idempotencyKey
+                : `${input.idempotencyKey}:${index + 1}`,
+            requestFingerprint: fingerprint,
+            provider: recordedProviderName(part.provider.name),
+            destinationId: part.route.destination?.id ?? null,
+            feeMinor: part.feeMinor,
+            accountReference: part.route.accountReference,
+            withdrawalGroupId: groupId,
+            groupPart: groupId ? index + 1 : null,
+          })
+          .onConflictDoNothing({ target: payouts.idempotencyKey })
+          .returning({ id: payouts.id });
+        if (inserted.length === 0) {
+          // Part 1's key was taken meanwhile: that request's payouts are the answer. Any later
+          // part's conflict means a key that is not this request's, so nothing is kept.
+          const raced = index === 0 ? await replayIn(tx) : null;
+          if (raced) return raced;
+          throw new OperationError('IDEMPOTENCY_CONFLICT');
+        }
+        await recordTransition(tx, {
+          entityType: 'payout',
+          entityId: payoutId,
+          fromStatus: null,
+          toStatus: 'REQUESTED',
+          cause: 'system',
+          traceId,
+        });
+        await enqueueOutbox(tx, {
+          eventType: PAYOUT_START_EVENT,
+          aggregateId: payoutId,
+          payload: { payoutId, ...owner },
+        });
+        recorded.push({ payoutId, amountMinor, status: 'REQUESTED' });
       }
-      await recordTransition(tx, {
-        entityType: 'payout',
-        entityId: payoutId,
-        fromStatus: null,
-        toStatus: 'REQUESTED',
-        cause: 'system',
-        traceId,
-      });
-      await enqueueOutbox(tx, {
-        eventType: PAYOUT_START_EVENT,
-        aggregateId: payoutId,
-        payload: { payoutId, ...owner },
-      });
-      return { payoutId, status: 'REQUESTED', replayed: false };
+      const [first] = recorded as [RequestResult['parts'][number]];
+      return {
+        payoutId: first.payoutId,
+        status: 'REQUESTED',
+        replayed: false,
+        groupId,
+        parts: recorded,
+      };
     }),
   );
 }

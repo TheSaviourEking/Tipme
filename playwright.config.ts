@@ -111,12 +111,16 @@ export default defineConfig({
         RATE_LIMIT_INTENTS_PER_MIN: '10000',
         RATE_LIMIT_ANALYTICS_PER_MIN: '10000',
         RATE_LIMIT_REPORTS_PER_HOUR: '10000',
+        RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR: '10000',
         RATE_LIMIT_QR_ART_PER_HOUR: '10000',
         // Every photo, cover and logo upload and every cover-design save comes from 127.0.0.1, and CI
         // runs a changed spec five times; both limits are covered by
         // tests/integration/avatars-limit.test.mjs.
         RATE_LIMIT_AVATARS_PER_HOUR: '10000',
         RATE_LIMIT_COVER_DESIGNS_PER_HOUR: '10000',
+        // Every Studio save, publish and discard comes from 127.0.0.1 too (a burn-in passes 60 a
+        // minute); the limit is covered by tests/integration/studio-discard-limit.test.mjs.
+        RATE_LIMIT_STUDIO_DRAFTS_PER_MIN: '10000',
         LIVE_UPDATES_ENABLED: 'true',
         // TipMe for businesses: the e2e stack tests it on (it is off by default everywhere else).
         BUSINESS_ENABLED: 'true',
@@ -146,6 +150,9 @@ export default defineConfig({
         // The Get paid card now checks a name on its own, so many tests check from 127.0.0.1.
         // The 10-a-day limit per person still applies (every test is a new person).
         RATE_LIMIT_BANK_RESOLVE_PER_HOUR: '10000',
+        // Per-provider balances: a second, test-only pretend provider that only pays out, so a
+        // balance held in two places can be withdrawn (tests/e2e/withdraw-split.spec.ts).
+        PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
       }),
     },
     {
@@ -158,8 +165,14 @@ export default defineConfig({
       env: env({
         LOG_LEVEL: 'info',
         MAIL_SEAL_KEY: E2E_MAIL_SEAL_KEY,
+        // As in production: a Pro purchase the worker's reconcile confirms first (it may beat the
+        // webhook) refreshes the cached public page at once, instead of up to 30 s later.
+        WEB_ORIGIN,
+        WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
         RECONCILE_INTERVAL_MS: '500',
         RECONCILE_MIN_AGE_MS: '0',
+        // The same providers as the API (per-provider balances): mock_alt pays out its parts.
+        PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
       }),
     },
   ],

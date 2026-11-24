@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { createMockMailProvider } from './mock/provider.js';
-import type {
-  MailProvider,
-  MailProviderName,
-  OutgoingMail,
+import {
+  MAIL_PROVIDER_NAMES,
+  type MailProvider,
+  type MailProviderName,
+  type OutgoingMail,
 } from './provider.js';
+import type { MailHealthSettings } from './health.js';
 import { createBrevoProvider } from './brevo/provider.js';
 import { createSesProvider } from './ses/provider.js';
 import { createZeptoMailProvider } from './zeptomail/provider.js';
@@ -14,8 +16,47 @@ import { createZeptoMailProvider } from './zeptomail/provider.js';
  * are never logged and never appear in configuration errors, which name keys only.
  */
 export const mailSettingsShape = {
-  // Sends until staff choose a provider in ops. mock is refused in production.
-  MAIL_DEFAULT_PROVIDER: z.enum(['mock', 'zeptomail', 'ses']).default('mock'),
+  // Sends until staff choose a provider in ops. mock is refused in production; brevo needs
+  // BREVO_TRANSACTIONAL=on.
+  MAIL_DEFAULT_PROVIDER: z
+    .enum(['mock', 'zeptomail', 'ses', 'brevo'])
+    .default('mock'),
+  // Automatic failover (owner, 23 Nov 2026): the providers mail moves to, in order, when the active
+  // one is failing, e.g. "brevo". The backup is whichever of these and MAIL_DEFAULT_PROVIDER isn't
+  // active. Empty (the default) keeps one provider and today's behaviour exactly.
+  MAIL_FALLBACK_PROVIDERS: z
+    .string()
+    .default('')
+    .transform((value, context) => {
+      const names = value
+        .split(',')
+        .map((name) => name.trim())
+        .filter((name) => name !== '');
+      for (const name of names)
+        if (!MAIL_PROVIDER_NAMES.includes(name as MailProviderName))
+          context.addIssue({ code: 'custom', message: 'unknown provider' });
+      return names as MailProviderName[];
+    }),
+  // Code defaults (owner, 23 Nov 2026), overridable for tests and emergencies. Signal (a): this many
+  // definite send failures within the window rest a provider; then one probe send decides.
+  MAIL_BREAKER_FAILURES: z.coerce.number().int().min(1).max(100).default(3),
+  MAIL_BREAKER_WINDOW_MS: z.coerce.number().int().min(1000).default(300_000),
+  MAIL_BREAKER_REST_MS: z.coerce.number().int().min(1000).default(900_000),
+  // Signal (b): a code not used within UNUSED_AFTER counts as unused; at least MIN_SAMPLES codes in
+  // the window through one provider, with at least RATIO of them unused, rest it. Then the next
+  // TRIAL_CODES codes go through it on trial.
+  MAIL_CODE_UNUSED_AFTER_MS: z.coerce
+    .number()
+    .int()
+    .min(10_000)
+    .default(180_000),
+  MAIL_CODE_WINDOW_MS: z.coerce.number().int().min(60_000).default(600_000),
+  MAIL_CODE_MIN_SAMPLES: z.coerce.number().int().min(1).max(1000).default(5),
+  MAIL_CODE_UNUSED_RATIO: z.coerce.number().gt(0).max(1).default(0.6),
+  MAIL_CODE_TRIAL_CODES: z.coerce.number().int().min(1).max(20).default(3),
+  // (c) A new code asked for this soon after the last one to the same address goes through the
+  // provider after the one that sent the last.
+  MAIL_RESEND_WINDOW_MS: z.coerce.number().int().min(0).default(600_000),
   ZEPTOMAIL_API_KEY: z.string().min(8).optional(),
   // The account's data-centre API base, e.g. https://api.zeptomail.com (no path).
   ZEPTOMAIL_API_BASE: z.url({ protocol: /^https$/ }).optional(),
@@ -34,8 +75,9 @@ export const mailSettingsShape = {
     .string()
     .regex(/^arn:aws:sns:[a-z0-9-]+:\d{12}:[\w-]+$/)
     .optional(),
-  // Announcements only (owner, 14 Nov 2026): Brevo, never the provider above. Optional: without
-  // them, announcements can't be sent in production ("Announcement email isn't set up").
+  // Announcements (owner, 14 Nov 2026) always go through Brevo, never the provider above, and
+  // with BREVO_TRANSACTIONAL=on other mail may too. Optional: without them, announcements can't be
+  // sent in production ("Announcement email isn't set up").
   BREVO_API_KEY: z.string().min(8).optional(),
   // Code defaults, not deploy settings (owner, 14 Nov 2026): overrides for tests and emergencies.
   BREVO_API_BASE: z
@@ -50,6 +92,19 @@ export const mailSettingsShape = {
     .transform((value) => value === 'on'),
   // The verified sender of every announcement, e.g. news@usetipme.xyz.
   ANNOUNCEMENT_FROM_ADDRESS: z.email().optional(),
+  // on: Brevo is also a provider staff can switch codes, receipts and alerts to in ops (owner,
+  // 23 Nov 2026), by hand only: no automatic fallback. Needs BREVO_API_KEY and BREVO_WEBHOOK_TOKEN.
+  // Each mail comes from its own type's sender on the mail domain, as with ZeptoMail.
+  BREVO_TRANSACTIONAL: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
+  // on: Brevo checks each code, receipt and alert and sends nothing. Separate from BREVO_SANDBOX
+  // (announcements) so staging can keep announcements dropped while codes really arrive.
+  BREVO_TRANSACTIONAL_SANDBOX: z
+    .enum(['on', 'off'])
+    .default('off')
+    .transform((value) => value === 'on'),
 };
 
 export interface MailSettings {
@@ -71,6 +126,24 @@ export interface MailSettings {
   BREVO_WEBHOOK_TOKEN?: string | undefined;
   BREVO_SANDBOX?: boolean | undefined;
   ANNOUNCEMENT_FROM_ADDRESS?: string | undefined;
+  BREVO_TRANSACTIONAL?: boolean | undefined;
+  BREVO_TRANSACTIONAL_SANDBOX?: boolean | undefined;
+  MAIL_FALLBACK_PROVIDERS?: readonly MailProviderName[] | undefined;
+}
+
+/** The breaker's settings from the mail settings (the API and the worker read the same). */
+export function mailHealthSettings(s: {
+  MAIL_BREAKER_FAILURES: number;
+  MAIL_BREAKER_WINDOW_MS: number;
+  MAIL_BREAKER_REST_MS: number;
+  MAIL_CODE_TRIAL_CODES: number;
+}): MailHealthSettings {
+  return {
+    threshold: s.MAIL_BREAKER_FAILURES,
+    windowMs: s.MAIL_BREAKER_WINDOW_MS,
+    restMs: s.MAIL_BREAKER_REST_MS,
+    trialCodes: s.MAIL_CODE_TRIAL_CODES,
+  };
 }
 
 const ZEPTO_KEYS = [
@@ -79,13 +152,18 @@ const ZEPTO_KEYS = [
   'ZEPTOMAIL_WEBHOOK_KEY',
 ] as const;
 const BREVO_KEYS = ['BREVO_API_KEY', 'ANNOUNCEMENT_FROM_ADDRESS'] as const;
+/** What BREVO_TRANSACTIONAL=on needs: the key, and the token its delivery reports carry. */
+const BREVO_TRANSACTIONAL_KEYS = [
+  'BREVO_API_KEY',
+  'BREVO_WEBHOOK_TOKEN',
+] as const;
 const SES_KEYS = [
   'SES_CONFIGURATION_SET',
   'SES_CONFIGURATION_SET_UNTRACKED',
   'SES_SNS_TOPIC_ARN',
 ] as const;
 
-const isProduction = (s: MailSettings) =>
+export const isProductionMail = (s: MailSettings) =>
   s.NODE_ENV === 'production' && s.DEPLOYMENT_MODE !== 'preview';
 
 /** All or none: which of a provider's keys are missing when some are set. */
@@ -98,9 +176,14 @@ export function configuredMailProviderNames(
   s: MailSettings,
 ): Set<MailProviderName> {
   const names = new Set<MailProviderName>();
-  if (!isProduction(s)) names.add('mock');
+  if (!isProductionMail(s)) names.add('mock');
   if (partial(s, ZEPTO_KEYS)?.length === 0) names.add('zeptomail');
   if (partial(s, SES_KEYS)?.length === 0) names.add('ses');
+  if (
+    s.BREVO_TRANSACTIONAL === true &&
+    BREVO_TRANSACTIONAL_KEYS.every((key) => s[key] !== undefined)
+  )
+    names.add('brevo');
   return names;
 }
 
@@ -115,8 +198,20 @@ export function checkMailSettings(
     issue(key, 'required with the other ZeptoMail settings');
   for (const key of partial(s, SES_KEYS) ?? [])
     issue(key, 'required with the other SES settings');
+  const brevoMissing = new Set<string>();
+  if (s.BREVO_TRANSACTIONAL === true)
+    for (const key of BREVO_TRANSACTIONAL_KEYS)
+      if (s[key] === undefined) {
+        brevoMissing.add(key);
+        issue(key, 'required with BREVO_TRANSACTIONAL=on');
+      }
+  // A key used for codes and receipts doesn't need an announcement sender too.
   for (const key of partial(s, BREVO_KEYS) ?? [])
-    issue(key, 'required with the other announcement email settings');
+    if (
+      !brevoMissing.has(key) &&
+      !(key === 'ANNOUNCEMENT_FROM_ADDRESS' && s.BREVO_TRANSACTIONAL === true)
+    )
+      issue(key, 'required with the other announcement email settings');
   if (
     (s.SES_ACCESS_KEY_ID === undefined) !==
     (s.SES_SECRET_ACCESS_KEY === undefined)
@@ -127,16 +222,31 @@ export function checkMailSettings(
         : 'SES_SECRET_ACCESS_KEY',
       'set both SES access keys, or neither',
     );
-  if (s.MAIL_DEFAULT_PROVIDER === 'mock' && isProduction(s))
+  // Codes would be marked sent and dropped by Brevo (review, 23 Nov 2026).
+  if (s.BREVO_TRANSACTIONAL_SANDBOX === true && isProductionMail(s))
+    issue('BREVO_TRANSACTIONAL_SANDBOX', 'not allowed in production');
+  if (s.MAIL_DEFAULT_PROVIDER === 'mock' && isProductionMail(s))
     issue('MAIL_DEFAULT_PROVIDER', 'mock not allowed in production');
   else if (!configuredMailProviderNames(s).has(s.MAIL_DEFAULT_PROVIDER))
     issue('MAIL_DEFAULT_PROVIDER', 'provider not configured');
+  const configured = configuredMailProviderNames(s);
+  for (const name of s.MAIL_FALLBACK_PROVIDERS ?? []) {
+    if (name === 'mock' && isProductionMail(s))
+      issue('MAIL_FALLBACK_PROVIDERS', 'mock not allowed in production');
+    // The default is in the failover group already: listing it alone gives no backup at all.
+    else if (name === s.MAIL_DEFAULT_PROVIDER)
+      issue('MAIL_FALLBACK_PROVIDERS', `${name} is the default provider`);
+    else if (!configured.has(name))
+      issue('MAIL_FALLBACK_PROVIDERS', `${name} not configured`);
+  }
 }
 
 /** The configured providers, keyed by name. The pretend one writes to `mockSink`. */
 export function configuredMailProviders(
   s: MailSettings,
   mockSink: (mail: OutgoingMail) => Promise<void>,
+  /** Tests only: what Brevo's requests go through. */
+  options: { fetchImpl?: typeof fetch } = {},
 ): Map<MailProviderName, MailProvider> {
   const names = configuredMailProviderNames(s);
   const providers = new Map<MailProviderName, MailProvider>();
@@ -172,6 +282,20 @@ export function configuredMailProviders(
           : {}),
       }),
     );
+  // The announcement account's key, as its own instance: no fixed sender (each mail's own, like
+  // ZeptoMail) and its own sandbox flag. Same webhook token, so one webhook URL serves both.
+  if (names.has('brevo'))
+    providers.set(
+      'brevo',
+      createBrevoProvider({
+        apiKey: s.BREVO_API_KEY!,
+        apiBase: s.BREVO_API_BASE ?? 'https://api.brevo.com',
+        webhookToken: s.BREVO_WEBHOOK_TOKEN,
+        sandbox: s.BREVO_TRANSACTIONAL_SANDBOX ?? false,
+        linkTrackingWarning: true,
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+      }),
+    );
   return providers;
 }
 
@@ -192,5 +316,5 @@ export function announcementMailProvider(
       webhookToken: s.BREVO_WEBHOOK_TOKEN,
       sandbox: s.BREVO_SANDBOX ?? false,
     });
-  return isProduction(s) ? null : createMockMailProvider(mockSink);
+  return isProductionMail(s) ? null : createMockMailProvider(mockSink);
 }

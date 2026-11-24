@@ -11,6 +11,7 @@ import {
 import type { Response } from 'express';
 import {
   mailProviderNameSchema,
+  opsMailFailoverSchema,
   opsMailOverrideRemoveSchema,
   opsMailOverrideSchema,
   opsMailSwitchSchema,
@@ -18,15 +19,19 @@ import {
   opsProviderTestConfirmSchema,
   opsSuppressionLookupSchema,
   opsSuppressionRemoveSchema,
+  opsReasonSchema,
   type ApiDataResponse,
+  type OpsMailFailoverRequest,
   type OpsMailOverrideRemoveRequest,
   type OpsMailOverrideRequest,
   type OpsMailProviders,
   type OpsMailSwitchRequest,
   type OpsMailTestRequest,
+  type OpsProviderRetire,
   type OpsSeriousPending,
   type OpsProviderTestConfirmRequest,
   type OpsSuppressionLookupRequest,
+  type OpsReasonRequest,
   type OpsSuppressionRemoveRequest,
 } from '@tipme/contracts';
 import {
@@ -36,8 +41,12 @@ import {
   findAccountByHandleOrId,
   findSuppression,
   mailProviderOverview,
+  recordMailHealthCleared,
   removeProviderOverride,
+  setMailFailoverFixed,
   removeSuppression,
+  RETIRE_AFTER_MS,
+  retireCheck,
   setProviderOverride,
   startMailProviderTest,
   requestSeriousAction,
@@ -45,18 +54,27 @@ import {
   verifiedEmailOf,
   type MailSealing,
 } from '@tipme/database';
-import type {
-  MailProvider,
-  MailProviderName,
-  MailProviderStatus,
+import {
+  liveMailProvider,
+  mailFailoverGroup,
+  type MailHealth,
+  type MailHealthView,
+  type MailProvider,
+  type MailProviderName,
+  type MailProviderStatus,
 } from '@tipme/mail';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import {
+  PAYOUT_PROVIDERS_TOKEN,
+  type PayoutProviderSet,
+} from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
 import {
+  MAIL_HEALTH,
   MAIL_PROVIDERS,
   MAIL_SEALING,
   type MailProviders,
@@ -77,7 +95,22 @@ export class OpsProvidersController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(MAIL_PROVIDERS) readonly providers: MailProviders,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
+    @Inject(MAIL_HEALTH) private readonly health: MailHealth,
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly payoutProviders: PayoutProviderSet,
   ) {}
+
+  /** The providers that stand in for each other; empty or one: no automatic failover. */
+  private failoverGroup(): MailProviderName[] {
+    const fallbacks = this.config.MAIL_FALLBACK_PROVIDERS ?? [];
+    if (fallbacks.length === 0) return [];
+    return mailFailoverGroup(
+      this.config.MAIL_DEFAULT_PROVIDER,
+      fallbacks,
+      new Set(this.providers.keys()),
+      this.production(),
+    );
+  }
 
   private configured(name: string): MailProvider {
     const parsed = mailProviderNameSchema.safeParse(name);
@@ -129,24 +162,77 @@ export class OpsProvidersController {
       configured: [...this.providers.keys()],
       fallback: this.config.MAIL_DEFAULT_PROVIDER,
     });
+    const group = this.failoverGroup();
+    const views: ReadonlyMap<MailProviderName, MailHealthView> | null =
+      group.length > 1
+        ? await this.health.snapshot([...this.providers.keys()])
+        : null;
     const providers = await Promise.all(
       overview.providers.map(async (card) => {
         const status = await this.statusOf(this.providers.get(card.name)!);
+        // Only the providers that stand in for each other carry a failover state.
+        const view = group.includes(card.name)
+          ? views?.get(card.name)
+          : undefined;
         return {
           ...card,
-          // The map holds the switchable providers only; Brevo (announcements) is never in it.
+          // The map holds the switchable providers only: Brevo only with BREVO_TRANSACTIONAL=on.
           name: card.name as OpsMailProviders['providers'][number]['name'],
           sandbox: status?.sandbox ?? null,
           statusDetail: status?.detail ?? null,
+          health: view
+            ? {
+                state: view.state,
+                kind: view.kind,
+                until: view.until?.toISOString() ?? null,
+                reason: view.reason,
+                trippedAt: view.trippedAt?.toISOString() ?? null,
+              }
+            : null,
         };
       }),
     );
+    const active = overview.active;
+    const chain = [active, ...group.filter((name) => name !== active)];
+    const live =
+      views && !overview.fixed ? liveMailProvider(chain, views) : active;
+    type Name = OpsMailProviders['failover']['live'];
     return {
       data: {
         providers,
         overrides: overview.overrides,
         changedAt: overview.changedAt,
         reason: overview.reason,
+        failover: {
+          configured: group.length > 1,
+          fixed: overview.fixed,
+          live: live as Name,
+          backup: (chain[1] ?? null) as Name | null,
+        },
+      },
+    };
+  }
+
+  /**
+   * Payment providers (per-provider balances, spec §4, §7): each withdraw-only provider's retire
+   * check, from TipMe's own records. "Can retire" only at zero, after 30 days quiet.
+   */
+  @Get('payments/retire')
+  @RateLimit('ops_read')
+  @OpsPermission('providers.manage')
+  async retire(): Promise<ApiDataResponse<OpsProviderRetire>> {
+    const rows = await retireCheck(
+      this.database.db,
+      this.payoutProviders,
+      new Date(),
+    );
+    return {
+      data: {
+        retireAfterDays: RETIRE_AFTER_MS / 86_400_000,
+        providers: rows.map((row) => ({
+          ...row,
+          lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
+        })),
       },
     };
   }
@@ -217,6 +303,61 @@ export class OpsProvidersController {
       response,
     );
     return { data: 'pending' in answer ? answer.pending : answer.result };
+  }
+
+  /**
+   * Fix the active provider (no automatic switching, e.g. during an investigation) or let it
+   * switch again. Per-person overrides and provider tests never switch either way.
+   */
+  @Post('mail/failover')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('providers.manage')
+  async setFailover(
+    @CurrentOps() ops: OpsContext,
+    @Body(new ZodValidationPipe(opsMailFailoverSchema))
+    body: OpsMailFailoverRequest,
+  ): Promise<ApiDataResponse<{ fixed: boolean }>> {
+    await setMailFailoverFixed(this.database.db, {
+      staffUserId: ops.userId,
+      fixed: body.fixed,
+      reason: body.reason,
+      fallback: this.config.MAIL_DEFAULT_PROVIDER,
+    });
+    return { data: { fixed: body.fixed } };
+  }
+
+  /** Staff clear a tripped provider by hand: it is healthy again at once. */
+  @Post('mail/:provider/health/clear')
+  @HttpCode(200)
+  @RateLimit('ops_request')
+  @FreshCode()
+  @OpsPermission('providers.manage')
+  async clearHealth(
+    @CurrentOps() ops: OpsContext,
+    @Param('provider') name: string,
+    @Body(new ZodValidationPipe(opsReasonSchema)) body: OpsReasonRequest,
+  ): Promise<ApiDataResponse<{ cleared: boolean }>> {
+    const provider = this.configured(name);
+    const unavailable = () =>
+      new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+    const view = await this.health
+      .inspect(provider.name)
+      .catch(() => Promise.reject(unavailable()));
+    if (view.state === 'healthy') return { data: { cleared: false } };
+    // The audit row first: a clear that can't be audited doesn't happen (review, 23 Nov 2026).
+    await recordMailHealthCleared(this.database.db, {
+      staffUserId: ops.userId,
+      provider: provider.name,
+      reason: body.reason,
+    });
+    try {
+      await this.health.clear(provider.name);
+    } catch {
+      throw unavailable();
+    }
+    return { data: { cleared: true } };
   }
 
   @Post('overrides')

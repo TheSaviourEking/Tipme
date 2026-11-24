@@ -50,7 +50,7 @@ const messages: Record<ApiErrorCode, string> = {
     'Your page was changed somewhere else. Load the latest version, then save again.',
   STUDIO_DESIGN_CHECK_FAILED:
     'Your page can’t be published yet. Fix what the design check lists first; your draft is saved.',
-  STUDIO_PRO_REQUIRED: 'Page Studio is part of TipMe Pro.',
+  STUDIO_PRO_REQUIRED: 'This part of Page Studio needs TipMe Pro.',
   IMAGE_TOO_SMALL:
     'This photo is too small. Choose one at least 600 pixels on its shortest side, so it looks sharp on every screen.',
   STUDIO_IMAGE_LIMIT:
@@ -141,6 +141,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Nobody in this audience can get announcements right now. Nothing was sent.',
   ANNOUNCEMENT_EMAIL_NOT_SET_UP:
     'Announcement email isn’t set up on this server, so nothing can be sent.',
+  PLAN_FEES_CONFIRM_REQUIRED:
+    'That moves a rate by more than 2 percentage points. Confirm the big change to go ahead.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -154,6 +156,10 @@ const messages: Record<ApiErrorCode, string> = {
     'Our payment partner couldn’t take this from your balance. Nothing was paid. You can pay by card or bank transfer instead.',
   PRO_REFUND_REFUSED: 'This Pro payment can’t be refunded.',
   TIP_REFUND_REFUSED: 'This tip can’t be refunded.',
+  TIP_REFUND_NEEDS_DECISION:
+    'Part of this tip can’t be taken back first. Going ahead means TipMe absorbs it, which a second person decides.',
+  TIP_REFUND_NO_GAP:
+    'Everything this tip gave can be taken back first, so there is nothing for TipMe to absorb. Ask for the refund instead.',
   PRO_REFUNDS_OFF: 'Pro refunds aren’t switched on.',
   SWITCH_NOT_BUILT:
     'Nothing is built behind this switch yet, so it can’t be turned on.',
@@ -172,6 +178,15 @@ const messages: Record<ApiErrorCode, string> = {
   TAKE_BACK_OPEN: 'This username already has a take-back under way.',
   TAKE_BACK_NOT_FOUND: 'We couldn’t find that take-back.',
   TAKE_BACK_CLOSED: 'This take-back has already finished.',
+  USERNAME_IN_HOLD:
+    'A deleted page’s hold on this username hasn’t ended yet, so it can’t be handed over.',
+  HANDOVER_LINK_NOT_FOUND: 'This username has no open claim link.',
+  HANDOVER_ACCOUNT_UNAVAILABLE: 'This account can’t take a username right now.',
+  CLAIM_LINK_INVALID:
+    'This claim link doesn’t work any more. Ask the TipMe team for a new one.',
+  HANDOVER_STAFF_ACCOUNT: 'Staff accounts can’t receive a username this way.',
+  HANDOVER_ACCOUNT_CHANGED:
+    'The account changed while this was happening. Nothing changed; try again.',
   ROLE_IN_USE: 'Move everyone off this role before deleting it.',
   ROLE_PROTECTED: 'This built-in role can’t be changed.',
   STAFF_PROTECTED: 'This person’s access can’t be adjusted.',
@@ -284,6 +299,27 @@ const messages: Record<ApiErrorCode, string> = {
   PAYMENT_START_REJECTED:
     'The payment provider refused to start this payment. Nothing was charged.',
   TIPPING_NOT_OPEN: 'Tipping opens soon. Nothing was charged.',
+  PAGE_PAUSED: 'This page can’t take tips right now. Please try again later.',
+  // You collect (spec §8, §10). The amounts are admin settings: withdrawalLimitMessage puts them in.
+  WITHDRAWAL_FIRST_CAP: 'New accounts have a limit on their first withdrawal.',
+  WITHDRAWAL_DAILY_LIMIT:
+    'New accounts have a limit on what they can withdraw each day.',
+  // You collect (Task 13, spec §10).
+  BANK_NAME_UNKNOWN:
+    'We couldn’t find this account. Check the bank and account number.',
+  NAME_MISMATCH: 'This account isn’t in your name. Use one that is.',
+  NAME_LOCKED:
+    'Your verified name can only be changed by support. Contact support@usetipme.xyz.',
+  NAME_NOT_LOCKED: 'This person has no verified name to change.',
+  BANK_RECHECK_LATER:
+    'We can’t check this account again right now. Use another account, or contact support@usetipme.xyz.',
+  // Staff only (Task 15).
+  COLLECT_ACTION_REFUSED:
+    'This can’t be done now: the money has moved on since this screen was read. Reload to see where it stands.',
+  COLLECT_EVIDENCE_LATE:
+    'The deadline to answer this dispute has passed, so evidence can’t be sent.',
+  COLLECT_READ_BACK_UNCONFIRMED:
+    'The payment partner doesn’t show this transfer paid for its amount, so it can’t be recorded as paid.',
   PROVIDER_OUTCOME_UNKNOWN:
     'The provider may have accepted the request. Do not retry; contact support.',
   COUNTRY_NOT_SUPPORTED:
@@ -338,6 +374,19 @@ const operationErrors: Partial<
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_BELOW_FEE: { status: 409, code: 'WITHDRAWAL_BELOW_FEE' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
+  // You collect (Task 12). A paused page says no reason, to protect the recipient (spec §2.2).
+  PAGE_PAUSED: { status: 409, code: 'PAGE_PAUSED' },
+  WITHDRAWAL_FIRST_CAP: { status: 409, code: 'WITHDRAWAL_FIRST_CAP' },
+  WITHDRAWAL_DAILY_LIMIT: { status: 409, code: 'WITHDRAWAL_DAILY_LIMIT' },
+  NAME_LOCKED: { status: 409, code: 'NAME_LOCKED' },
+  NAME_NOT_LOCKED: { status: 409, code: 'NAME_NOT_LOCKED' },
+  BANK_RECHECK_LATER: { status: 409, code: 'BANK_RECHECK_LATER' },
+  COLLECT_ACTION_REFUSED: { status: 409, code: 'COLLECT_ACTION_REFUSED' },
+  COLLECT_EVIDENCE_LATE: { status: 409, code: 'COLLECT_EVIDENCE_LATE' },
+  COLLECT_READ_BACK_UNCONFIRMED: {
+    status: 409,
+    code: 'COLLECT_READ_BACK_UNCONFIRMED',
+  },
   WITHDRAWALS_PAUSED: { status: 409, code: 'WITHDRAWALS_PAUSED' },
   WITHDRAWALS_SWITCHED_OFF: { status: 409, code: 'WITHDRAWALS_SWITCHED_OFF' },
   PAYOUT_SETUP_NEEDED: { status: 409, code: 'PAYOUT_SETUP_NEEDED' },
@@ -405,6 +454,16 @@ const operationErrors: Partial<
   TAKE_BACK_OPEN: { status: 409, code: 'TAKE_BACK_OPEN' },
   TAKE_BACK_NOT_FOUND: { status: 404, code: 'TAKE_BACK_NOT_FOUND' },
   TAKE_BACK_CLOSED: { status: 409, code: 'TAKE_BACK_CLOSED' },
+  USERNAME_IN_HOLD: { status: 409, code: 'USERNAME_IN_HOLD' },
+  HANDOVER_LINK_NOT_FOUND: { status: 404, code: 'HANDOVER_LINK_NOT_FOUND' },
+  HANDOVER_ACCOUNT_UNAVAILABLE: {
+    status: 409,
+    code: 'HANDOVER_ACCOUNT_UNAVAILABLE',
+  },
+  // Unknown, used, expired or cancelled: one answer; the preview says which, to the code's holder.
+  CLAIM_LINK_INVALID: { status: 404, code: 'CLAIM_LINK_INVALID' },
+  HANDOVER_STAFF_ACCOUNT: { status: 409, code: 'HANDOVER_STAFF_ACCOUNT' },
+  HANDOVER_ACCOUNT_CHANGED: { status: 409, code: 'HANDOVER_ACCOUNT_CHANGED' },
   // Changelog plan (5 Nov 2026), Task 4.3. CHANGELOG_SIGNATURE_INVALID is the ingest PR's (401).
   APPROVAL_NO_APPROVER: { status: 409, code: 'APPROVAL_NO_APPROVER' },
   CHANGELOG_EDITED_ELSEWHERE: {
@@ -440,6 +499,10 @@ const operationErrors: Partial<
   CAMPAIGN_HEADLINE_NAME: { status: 422, code: 'CAMPAIGN_HEADLINE_NAME' },
   SUPPORT_TOO_MANY_OPEN: { status: 409, code: 'SUPPORT_TOO_MANY_OPEN' },
   // Paid Pro (ADR-0015).
+  PLAN_FEES_CONFIRM_REQUIRED: {
+    status: 400,
+    code: 'PLAN_FEES_CONFIRM_REQUIRED',
+  },
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },
   PRO_PURCHASE_OPEN: { status: 409, code: 'PRO_PURCHASE_OPEN' },
@@ -609,6 +672,26 @@ function changelogProblemsOf(exception: unknown): string | undefined {
     : undefined;
 }
 
+/**
+ * The withdrawal limits' words with the limit in force (spec §10: "New accounts can withdraw up to
+ * {amount} the first time."). The limit is the one OperationError detail these carry, the admin
+ * setting the refusal was decided on, re-checked here as whole minor units before it is shown.
+ */
+function withdrawalLimitMessage(exception: unknown): string | undefined {
+  if (
+    !(exception instanceof OperationError) ||
+    !exception.detail ||
+    !/^[1-9][0-9]{0,14}$/.test(exception.detail)
+  )
+    return undefined;
+  const amount = wholeNgn(BigInt(exception.detail));
+  if (exception.code === 'WITHDRAWAL_FIRST_CAP')
+    return `New accounts can withdraw up to ${amount} the first time.`;
+  if (exception.code === 'WITHDRAWAL_DAILY_LIMIT')
+    return `New accounts can withdraw up to ${amount} a day.`;
+  return undefined;
+}
+
 /** Fixed words and codes only: what the next person needs to tell one 503 from another. */
 function dependencyFields(failure: DatabaseFailure | null) {
   if (!failure) return { cause: 'not_database' };
@@ -676,6 +759,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     // The person's own draft, checked by the server: what the editor lists with its fixes.
     if (exception instanceof StudioCheckFailedException)
       body.error.issues = exception.issues;
+    const limit = withdrawalLimitMessage(exception);
+    if (limit) body.error.message = limit;
     const problems = changelogProblemsOf(exception);
     if (problems) body.error.reason = problems;
     if (

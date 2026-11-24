@@ -239,8 +239,47 @@ export function coverPlay(p: {
   return isProAnimation(p.animation) || p.colour ? 'still' : 'once';
 }
 
+/** The size every uploaded cover is stored at: twice the widest the standard page shows. */
+export const COVER_SIZE = { width: 2240, height: 600 } as const;
+
+/**
+ * Smaller copies of an uploaded cover (2240×600), written beside it on upload, for `srcset` on the
+ * Studio styles that show the cover full-bleed on phones (Stage, Horizon: spec 2026-11-17 §9.4,
+ * §9.9), where it is the largest paint. A width at or above the cover's own is never made.
+ */
+export const COVER_RENDITION_WIDTHS = [640, 1080, 1600] as const;
+export type CoverRenditionWidth = (typeof COVER_RENDITION_WIDTHS)[number];
+
+/** `/v1/covers/<page>/<n>.webp` at a rendition's width: `/v1/covers/<page>/<n>-640.webp`. */
+export const coverRenditionPath = (path: string, width: CoverRenditionWidth) =>
+  path.replace(/\.webp$/, `-${width}.webp`);
+
+/**
+ * Tall crops of an uploaded cover: the 4:5 region the phone hero of Stage and Horizon shows
+ * (`object-fit: cover`, `object-position: 50% 33%`), cut on the server so a phone fetches that region
+ * and not the whole band. Its full height, so a 2240×600 cover's crop is 480×600 and only 480 is
+ * made (720 would be an upscale); a taller source also gets 720. Never the same numbers as
+ * `COVER_RENDITION_WIDTHS`: an API from before these existed reads rows by width alone.
+ */
+export const COVER_TALL_WIDTHS = [480, 720] as const;
+export type CoverTallWidth = (typeof COVER_TALL_WIDTHS)[number];
+
+/** `/v1/covers/<page>/<n>.webp` as a tall crop: `/v1/covers/<page>/<n>-tall-480.webp`. */
+export const coverTallPath = (path: string, width: CoverTallWidth) =>
+  path.replace(/\.webp$/, `-tall-${width}.webp`);
+
 export type ResolvedCover =
-  | { kind: 'photo'; path: string }
+  | {
+      kind: 'photo';
+      path: string;
+      /**
+       * The renditions stored for this cover, narrowest first. Absent when there are none (a
+       * cover uploaded before renditions existed): use `path` alone.
+       */
+      widths?: CoverRenditionWidth[];
+      /** The tall crops stored for this cover (`coverTallPath`), narrowest first; absent if none. */
+      tall?: CoverTallWidth[];
+    }
   | { kind: 'design'; design: string; colour?: string }
   | { kind: 'animated'; animation: string; colour?: string; play: CoverPlay };
 
@@ -248,13 +287,28 @@ export type ResolvedCover =
 export function resolveCover(p: {
   handle: string;
   coverPath: string | null;
+  /** The widths of the renditions stored for the uploaded cover, if any. */
+  coverWidths?: readonly number[];
+  /** The widths of the tall crops stored for the uploaded cover, if any. */
+  coverTall?: readonly number[];
   coverDesign: string | null;
   coverColour: string | null;
   coverAnimation?: string | null;
   coverMotion?: string | null;
   plan?: string;
 }): ResolvedCover {
-  if (p.coverPath) return { kind: 'photo', path: p.coverPath };
+  if (p.coverPath) {
+    const widths = COVER_RENDITION_WIDTHS.filter((w) =>
+      p.coverWidths?.includes(w),
+    );
+    const tall = COVER_TALL_WIDTHS.filter((w) => p.coverTall?.includes(w));
+    return {
+      kind: 'photo',
+      path: p.coverPath,
+      ...(widths.length ? { widths } : {}),
+      ...(tall.length ? { tall } : {}),
+    };
+  }
   const animation = p.coverAnimation
     ? animationById(p.coverAnimation)
     : undefined;

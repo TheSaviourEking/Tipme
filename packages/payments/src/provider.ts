@@ -1,3 +1,5 @@
+import type { BachsRecipientAccount } from './bachs/provider.js';
+
 export type TransactionStatus =
   'succeeded' | 'failed' | 'pending' | 'not_found';
 
@@ -107,10 +109,55 @@ export type NormalizedProviderEvent =
       paymentMethodReference: string;
     }
   | {
+      /**
+       * You collect (plan Task 5, R1): a dispute on a charge on TipMe's own account (no top-level
+       * `account`), so TipMe is liable for it. Only a `dispute.created` or `dispute.updated` TipMe can
+       * read becomes this; an unreadable one, and a connected account's, stay a `reversal`, unchanged. Free text never leaves
+       * the adapter: `reason` is the partner's code, or null.
+       */
+      kind: 'dispute';
+      eventId: string;
+      eventType: 'dispute.created' | 'dispute.updated';
+      scope: 'platform';
+      partnerDisputeId: string;
+      /** The disputed charge (`data.charge_id`), which a collect attempt stores. */
+      chargeReference: string | null;
+      /** `platform:<checkout_id>`, when the event names a checkout (the docs show none). */
+      providerReference: string | null;
+      /** TipMe's own reference, when the event repeats one (the docs show none). */
+      operationReference: string | null;
+      status: DisputeStatus;
+      /** The disputed amount, in minor units of `currency`. Always positive. */
+      amountMinor: bigint;
+      currency: string;
+      reason: string | null;
+      /** When evidence is due (`response_deadline_at`); null when the partner gives none. */
+      respondBy: Date | null;
+      /**
+       * The dispute fee and its currency, when reported. The partner documents no such field on a
+       * dispute or its events, so both are null from Bachs today (R6: nothing is posted on a guess).
+       */
+      feeMinor: bigint | null;
+      feeCurrency: string | null;
+      /** When the event occurred (its `created_at`), to order deliveries. */
+      occurredAt: Date;
+    }
+  | {
       kind: 'ignored';
       eventId: string;
       eventType: string;
     };
+
+/**
+ * A dispute's state in TipMe's words. `open`: evidence is due. `responded`: submitted and being
+ * decided. `won`, `lost` and `closed` are final.
+ */
+export type DisputeStatus = 'open' | 'responded' | 'won' | 'lost' | 'closed';
+
+export type DisputeEvent = Extract<
+  NormalizedProviderEvent,
+  { kind: 'dispute' }
+>;
 
 export type WebhookVerification<TEvent = NormalizedProviderEvent> =
   | { ok: true; event: TEvent }
@@ -161,6 +208,25 @@ export interface PaymentProvider<
     saveCard?: { customerReference: string };
   }): Promise<{
     providerReference: string;
+    checkoutUrl: string;
+    expiresAt: Date;
+  }>;
+  /**
+   * You collect: a tip's checkout on TipMe's own account (the same request as
+   * initializePlatformCheckout, with the attempt as reference, naira methods only, no platform fee
+   * and no saved card). Read back with verifyTransaction like any `platform:` checkout. Raises
+   * PlatformCheckoutUnavailableError when TipMe's account is refused, UncertainProviderOutcomeError
+   * when the outcome is unknown.
+   */
+  initializeCollectCheckout?(input: {
+    attemptId: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    successUrl: string;
+    cancelUrl: string;
+    idempotencyKey: string;
+  }): Promise<{
+    providerReference: `platform:${string}`;
     checkoutUrl: string;
     expiresAt: Date;
   }>;
@@ -247,6 +313,36 @@ export interface PaymentProvider<
     providerReference: string;
     status: 'succeeded' | 'pending' | 'failed';
   }>;
+  /**
+   * You collect (plan Task 5): saves staff's evidence on one of TipMe's own disputes, then submits
+   * it (irreversible). The same key always sends the same partner keys, so a retry submits once.
+   * DisputeEvidenceRefusedError is definite (nothing submitted); UncertainProviderOutcomeError is not.
+   */
+  submitDisputeEvidence?(input: {
+    partnerDisputeId: string;
+    text: string;
+    fileRefs: string[];
+    idempotencyKey: string;
+  }): Promise<{ state: 'submitted' }>;
+  /** You collect: one evidence file for a dispute; the ref goes into submitDisputeEvidence. */
+  uploadDisputeFile?(input: {
+    partnerDisputeId: string;
+    bytes: Buffer;
+    contentType: 'application/pdf' | 'image/png' | 'image/jpeg';
+  }): Promise<{ fileRef: string }>;
+  /**
+   * You collect: TipMe's own disputes created since a time, across every page, for reconciliation.
+   * Anything unreadable throws: never a partial list.
+   */
+  listDisputes?(since: Date): Promise<
+    {
+      partnerDisputeId: string;
+      status: DisputeStatus;
+      amountMinor: bigint;
+      currency: string;
+      chargeReference: string | null;
+    }[]
+  >;
   verifyWebhook(
     rawBody: Buffer,
     headers: Record<string, string | string[] | undefined>,
@@ -275,7 +371,16 @@ export interface PayoutPort {
   }): Promise<{ accountName: string } | null>;
   addPayoutDestination(
     accountRef: string,
-    input: { accountNumber: string; accountName: string; bankCode: string },
+    input: {
+      accountNumber: string;
+      accountName: string;
+      bankCode: string;
+      /**
+       * You collect: the SHA-256 hex digest of the legal name this bank is checked against. A new
+       * name is a new add (a fresh check); the same name replays the same add.
+       */
+      nameDigest?: string;
+    },
   ): Promise<{
     destinationRef: string;
     usable: boolean;
@@ -349,6 +454,60 @@ export interface PayoutPort {
     amountMinor: bigint;
     currency: string;
   } | null>;
+  /**
+   * You collect: a receive-only account for one person (entity `individual`, the recipient persona
+   * with `payouts` and `transfers` only, no dashboard refunds). Their legal name is the person's
+   * name the requirements ask for (R8). It holds only USD until holdLocalCurrency is called (P12).
+   */
+  createReceiveOnlyPersonAccount?(input: {
+    contactEmail: string;
+    country: 'NG';
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+    /** Told the reference as soon as create answers, before the name is sent (Task 13). */
+    onCreated?: (accountReference: string) => Promise<void>;
+  }): Promise<BachsRecipientAccount>;
+  /** You collect: the person's legal name on an existing account, with the caller's key (R8). */
+  nameReceiveOnlyPerson?(input: {
+    accountReference: string;
+    legalName: { first: string; last: string };
+    idempotencyKey: string;
+  }): Promise<BachsRecipientAccount>;
+  /**
+   * You collect (R9): a recipient's share from TipMe's balance to their account, `transfer_group` =
+   * the key. It can't be reversed. CollectTransferRefusedError is definite (no money moved);
+   * UncertainProviderOutcomeError is not, including an answer naming another account or amount.
+   */
+  sendCollectTransfer?(input: {
+    accountRef: string;
+    amountMinor: bigint;
+    currency: 'NGN';
+    idempotencyKey: string;
+  }): Promise<{ transferRef: string; status: 'paid' | 'pending' }>;
+  /**
+   * Every transfer the account was a party to, newest first, across every page (P17): the read-back
+   * and reconciliation match on `group`. Raises UncertainProviderOutcomeError when any page fails or
+   * the pages disagree, never a partial list.
+   */
+  listAccountTransfers?(accountRef: string): Promise<
+    {
+      transferRef: string;
+      status: 'paid' | 'pending';
+      amountMinor: bigint;
+      currency: string;
+      group: string | null;
+    }[]
+  >;
+  /**
+   * TipMe's own balance in every ISO currency the partner lists, signed: a negative balance (a lost
+   * dispute's fee, P5) is reported as it is, never clamped. An unreadable figure throws. A crypto
+   * bucket is skipped with a note, unless it is negative: then UnlistedNegativeBalanceError.
+   */
+  platformBalances?(): Promise<
+    { currency: string; availableMinor: bigint; pendingMinor: bigint }[]
+  >;
+  /** TipMe's own payout schedule: currency → interval (`manual` means nothing pays out by itself). */
+  platformPayoutSchedule?(): Promise<Record<string, string>>;
   /** Repeated requests with the same key must resolve to the same provider payout. */
   initiatePayout(input: {
     payoutId: string;
@@ -422,6 +581,38 @@ export class PlatformRefusalError extends Error {
   }
 }
 
+/** Why the partner definitely refused a You collect transfer (R9). */
+export type CollectTransferRefusal =
+  'insufficient' | 'capability' | 'in_debt' | 'not_found' | 'other';
+
+/**
+ * You collect (R9): the partner definitely refused to move a recipient's share from TipMe's balance
+ * to their account, so no money moved for this request. `insufficient` is TipMe's available balance
+ * (retry later), `capability` the account's `transfers` capability not active, `in_debt` a negative
+ * balance on TipMe's side, `not_found` an account TipMe doesn't own. Option B keeps its own refusals.
+ */
+export class CollectTransferRefusedError extends Error {
+  constructor(
+    readonly reason: CollectTransferRefusal,
+    readonly providerCode?: string,
+  ) {
+    super('The payment provider refused the collect transfer');
+    this.name = 'CollectTransferRefusedError';
+  }
+}
+
+/**
+ * TipMe's own balance lists a negative bucket in a currency TipMe can't put in minor units (a crypto
+ * code). It is never skipped like a positive one: any negative balance blocks every transfer
+ * (/connect/balances), so the read fails naming the currency, and staff are told.
+ */
+export class UnlistedNegativeBalanceError extends Error {
+  constructor(readonly currency: string) {
+    super(`TipMe's ${currency} balance at the payment provider is negative`);
+    this.name = 'UnlistedNegativeBalanceError';
+  }
+}
+
 /**
  * The provider definitely refused a checkout on TipMe's own account (e.g. the account isn't
  * activated for live payments): nothing was created, and nobody can pay this way right now.
@@ -452,6 +643,17 @@ export class TipRefundRefusedError extends Error {
   ) {
     super('The payment provider will not refund this tip');
     this.name = 'TipRefundRefusedError';
+  }
+}
+
+/**
+ * The partner definitely refused dispute evidence (for example the dispute is no longer editable):
+ * nothing was submitted by this request.
+ */
+export class DisputeEvidenceRefusedError extends Error {
+  constructor(readonly providerCode?: string) {
+    super('The payment provider refused the dispute evidence');
+    this.name = 'DisputeEvidenceRefusedError';
   }
 }
 

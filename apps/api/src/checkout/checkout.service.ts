@@ -23,6 +23,7 @@ import {
 import {
   BachsApiError,
   BachsRequestNotSentError,
+  PlatformCheckoutUnavailableError,
   UncertainProviderOutcomeError,
   isLiveProvider,
   liveCheckoutOpenFor,
@@ -41,6 +42,8 @@ import {
   PAYMENT_PROVIDER_TOKEN,
   type CheckoutPaymentProvider,
 } from './payment-provider.provider.js';
+import { intentAddressKey } from './address-key.js';
+import { quoteRouting } from './collection-mode.js';
 import { createStatusToken } from './status-token.js';
 
 /** Guest checkout through the PR-005 operations; prices and fees only ever come from the server. */
@@ -56,6 +59,15 @@ export function classifyBachsStartError(error: unknown): {
   // Refused before it was sent: Bachs never saw it, so nothing can have started.
   if (error instanceof BachsRequestNotSentError)
     return { outcome: 'failed', diagnostic: { error: error.name } };
+  // You collect: TipMe's own account definitely refused the checkout (not activated); none exists.
+  if (error instanceof PlatformCheckoutUnavailableError)
+    return {
+      outcome: 'failed',
+      diagnostic: {
+        error: error.name,
+        ...(error.providerCode ? { provider_code: error.providerCode } : {}),
+      },
+    };
   // A 4xx is a refusal; 408 (timeout) and 409 (conflict) may hide an accepted request.
   if (
     error instanceof BachsApiError &&
@@ -136,6 +148,9 @@ export class CheckoutService {
       pageHandleOf(this.database.db, request.handle),
     );
     const sharesOn = request.businessMemberId ? await this.sharesOn() : false;
+    // You collect (R7): read once per quote. On, an undecided recipient is decided against this
+    // copy's partner accounts; off, the quote takes their mode as it stands.
+    const youCollectOn = await featureOn(this.database.db, 'you_collect');
     const result = await createQuote(this.database.db, {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
@@ -143,6 +158,16 @@ export class CheckoutService {
       ...(sharesOn && request.businessMemberId
         ? { businessMemberId: request.businessMemberId, sharesOn: true }
         : {}),
+      // The same inputs every screen's preview uses (collection-mode.ts), so they never disagree.
+      ...(youCollectOn
+        ? {
+            youCollectOn: true,
+            ...quoteRouting(
+              this.defaultProvider.name,
+              this.bachsProvider?.environment,
+            ),
+          }
+        : { youCollectOn: false }),
     });
     const { breakdown } = result;
     return {
@@ -167,6 +192,9 @@ export class CheckoutService {
             },
           }
         : {}),
+      ...(result.collectionMode === 'collect'
+        ? { collectedByTipMe: true as const }
+        : {}),
     };
   }
 
@@ -184,6 +212,8 @@ export class CheckoutService {
   async createIntent(
     request: TipIntentRequest,
     idempotencyKey: string,
+    /** The supporter's address, as the rate limit sees it; stored only as a keyed hash. */
+    ip?: string,
   ): Promise<TipIntentCreated> {
     await this.refuseWhileClosed(() =>
       quoteHandleOf(this.database.db, request.quoteId),
@@ -194,6 +224,8 @@ export class CheckoutService {
       featureOn(db, 'business'),
       featureOn(db, 'business_shares'),
     ]);
+    // Keyed with the receipt-token secret under its own label (see intentAddressKey).
+    const addressKey = intentAddressKey(this.config.STATUS_TOKEN_SECRET, ip);
     const intent = await createPaymentIntent(db, {
       quoteId: request.quoteId,
       idempotencyKey,
@@ -204,6 +236,7 @@ export class CheckoutService {
       noteMayShow: request.noteMayShow,
       supporterKey: request.supporterKey,
       recognitionOn,
+      ...(addressKey ? { addressKey } : {}),
       // Campaign Studio: which campaign link the page was opened from; ignored when not one.
       ...(request.campaign ? { campaign: request.campaign } : {}),
       // With the business feature off, the label never reaches the database (plan, the flag).
@@ -236,13 +269,60 @@ export class CheckoutService {
     if (providerName === 'bachs') {
       if (!this.bachsProvider)
         throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
-      const accountReference = await getReadyPaymentAccount(db, {
-        profileId: quote.profileId,
-        provider: 'bachs',
-        environment: this.bachsProvider.environment,
-      });
-      if (!accountReference)
-        throw new CodedHttpException(409, 'PAYMENT_ACCOUNT_REQUIRED');
+      const bachs = this.bachsProvider;
+      const successUrl = new URL(
+        `/tip/${intent.tipId}`,
+        this.webOrigin,
+      ).toString();
+      const cancelUrl = new URL(
+        `/tip/${intent.tipId}`,
+        this.webOrigin,
+      ).toString();
+      const idempotencyKey = `tipme-checkout-${intent.attemptId}`;
+      // The mode fixed on the quote, never the person's mode now (plan, "mode is fixed per tip").
+      const collect = quote.collectionMode === 'collect';
+      let begin: () => Promise<{
+        providerReference: string;
+        checkoutUrl?: string;
+      }>;
+      if (collect) {
+        // You collect: on TipMe's own account, so the recipient needs no partner account yet.
+        const collectCheckout = bachs.initializeCollectCheckout?.bind(bachs);
+        if (!collectCheckout)
+          throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+        const currency = quote.currency;
+        if (currency !== 'NGN') throw new OperationError('TIP_NOT_PAYABLE');
+        begin = () =>
+          collectCheckout({
+            attemptId: intent.attemptId,
+            amountMinor: quote.payerTotalMinor,
+            currency,
+            successUrl,
+            cancelUrl,
+            idempotencyKey,
+          });
+      } else {
+        const accountReference = await getReadyPaymentAccount(db, {
+          profileId: quote.profileId,
+          provider: 'bachs',
+          environment: bachs.environment,
+        });
+        if (!accountReference)
+          throw new CodedHttpException(409, 'PAYMENT_ACCOUNT_REQUIRED');
+        begin = () =>
+          bachs.initializePayment({
+            attemptId: intent.attemptId,
+            amountMinor: quote.payerTotalMinor,
+            currency: quote.currency,
+            recipientAccountReference: accountReference,
+            tipmeShareMinor: quote.platformFeeMinor + quote.providerFeeMinor,
+            successUrl,
+            cancelUrl,
+            idempotencyKey,
+          });
+      }
+      // Logged only for collect, so direct starts log exactly as before.
+      const mode = collect ? { collection_mode: 'collect' } : {};
 
       const claim = await claimAttemptStart(db, {
         attemptId: intent.attemptId,
@@ -264,21 +344,10 @@ export class CheckoutService {
         throw new OperationError('TIP_NOT_PAYABLE');
       }
 
-      let started: Awaited<ReturnType<BachsProvider['initializePayment']>>;
+      // Started once per claimed attempt; an uncertain start stays UNKNOWN and is never retried here.
+      let started: Awaited<ReturnType<typeof begin>>;
       try {
-        started = await this.bachsProvider.initializePayment({
-          attemptId: intent.attemptId,
-          amountMinor: quote.payerTotalMinor,
-          currency: quote.currency,
-          recipientAccountReference: accountReference,
-          tipmeShareMinor: quote.platformFeeMinor + quote.providerFeeMinor,
-          successUrl: new URL(
-            `/tip/${intent.tipId}`,
-            this.webOrigin,
-          ).toString(),
-          cancelUrl: new URL(`/tip/${intent.tipId}`, this.webOrigin).toString(),
-          idempotencyKey: `tipme-checkout-${intent.attemptId}`,
-        });
+        started = await begin();
       } catch (error) {
         const { outcome, diagnostic } = classifyBachsStartError(error);
         if (outcome === 'failed') {
@@ -290,6 +359,7 @@ export class CheckoutService {
             event: 'payment.start_rejected',
             provider: 'bachs',
             attempt_id: intent.attemptId,
+            ...mode,
             ...diagnostic,
           });
           throw new CodedHttpException(502, 'PAYMENT_START_REJECTED');
@@ -302,6 +372,7 @@ export class CheckoutService {
           event: 'payment.start_unknown',
           provider: 'bachs',
           attempt_id: intent.attemptId,
+          ...mode,
           ...diagnostic,
         });
         const current = await findAttemptStart(db, intent.attemptId);
@@ -329,22 +400,48 @@ export class CheckoutService {
       }
       const checkoutUrl =
         started.checkoutUrl ??
-        (await this.bachsProvider.getCheckoutUrl(started.providerReference));
+        (await bachs.getCheckoutUrl(started.providerReference));
       return this.intentResponse(intent.tipId, checkoutUrl);
     }
 
     if (providerName !== 'mock')
       throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
 
-    const started = await this.mockProvider.initializePayment({
-      attemptId: intent.attemptId,
-      amountMinor: quote.payerTotalMinor,
-      currency: quote.currency,
-    });
+    // You collect: the pretend provider's checkout on TipMe's own account (`platform:mock_collect_…`).
+    let started: { providerReference: string };
+    if (quote.collectionMode === 'collect') {
+      const collectCheckout = this.mockProvider.initializeCollectCheckout?.bind(
+        this.mockProvider,
+      );
+      const currency = quote.currency;
+      if (!collectCheckout)
+        throw new CodedHttpException(503, 'DEPENDENCY_UNAVAILABLE');
+      if (currency !== 'NGN') throw new OperationError('TIP_NOT_PAYABLE');
+      // A courtesy before the pretend provider is asked; markAttemptInitiated's check binds.
+      if (quote.expiresAt.getTime() <= Date.now())
+        throw new OperationError('QUOTE_EXPIRED');
+      started = await collectCheckout({
+        attemptId: intent.attemptId,
+        amountMinor: quote.payerTotalMinor,
+        currency,
+        successUrl: new URL(`/tip/${intent.tipId}`, this.webOrigin).toString(),
+        cancelUrl: new URL(`/tip/${intent.tipId}`, this.webOrigin).toString(),
+        idempotencyKey: `tipme-checkout-${intent.attemptId}`,
+      });
+    } else {
+      started = await this.mockProvider.initializePayment({
+        attemptId: intent.attemptId,
+        amountMinor: quote.payerTotalMinor,
+        currency: quote.currency,
+      });
+    }
+    // You collect (fix round 4): opening a checkout, so an expired collect quote is refused here
+    // as the partner's claim refuses it. A direct tip is unaffected.
     const outcome = await markAttemptInitiated(db, {
       attemptId: intent.attemptId,
       provider: 'mock',
       providerReference: started.providerReference,
+      opensCheckout: true,
     });
     const reference =
       outcome === 'initiated'

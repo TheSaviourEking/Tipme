@@ -19,6 +19,7 @@ import {
 } from './types/sign-in-code.js';
 import {
   accountDeletedNotice,
+  disputeHold,
   milestone,
   pagePaused,
   pageImageRemoved,
@@ -55,11 +56,16 @@ import {
   proRenewalReminder,
 } from './types/pro-notices.js';
 import { tipReceived } from './types/tip-received.js';
+import { collectReminder } from './types/collect-reminder.js';
+import { collectVerified } from './types/collect-verified.js';
+import { collectReserveAlert } from './types/collect-reserve.js';
+import { collectNameRecheck } from './types/collect-name-recheck.js';
 import {
   usernameTakeBackCancelled,
   usernameTakeBackDone,
   usernameTakeBackNotice,
   usernameTakeBackReminder,
+  usernameAssigned,
 } from './types/username-take-back.js';
 import { weeklyReport } from './types/weekly-report.js';
 import { monthlyRecap } from './types/monthly-recap.js';
@@ -70,6 +76,10 @@ import { announcement, serviceNotice } from './types/announcement.js';
 export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
   [
     tipReceived,
+    collectReminder,
+    collectVerified,
+    collectReserveAlert,
+    collectNameRecheck,
     proRenewalReminder,
     proGraceStarted,
     proEnded,
@@ -112,11 +122,13 @@ export const MAIL_TYPES: Record<string, MailType<any>> = Object.fromEntries(
     withdrawalPaid,
     withdrawalFailed,
     tipReversed,
+    disputeHold,
     milestone,
     usernameTakeBackNotice,
     usernameTakeBackReminder,
     usernameTakeBackDone,
     usernameTakeBackCancelled,
+    usernameAssigned,
     businessInvitation,
     businessOwnerChange,
     shareProposed,

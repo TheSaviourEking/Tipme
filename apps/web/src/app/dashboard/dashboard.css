@@ -777,12 +777,6 @@
   }
 }
 
-.tip-status-page:has(.tip-thanks) {
-  background:
-    linear-gradient(rgb(255 255 255 / 10%), transparent 30%),
-    var(--brand-primary);
-}
-
 .tip-thanks.tm-surface {
   border: 0;
   background: none;
@@ -2783,6 +2777,12 @@
   font-weight: 600;
 }
 
+.balance-held-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
 .balance-card__figures {
   display: grid;
   gap: var(--space-1);
@@ -4147,20 +4147,31 @@
   margin-top: var(--space-2);
 }
 
-body:has(.coming-soon-page) {
+body:has(
+  .coming-soon-page:not(
+    [style*='display: none'],
+    [style*='display:none'],
+    [style*='display: none'] *,
+    [style*='display:none'] *
+  )
+) {
   background:
     linear-gradient(135deg, rgb(122 50 249 / 3.5%), transparent 34%),
     var(--canvas);
 }
 
 body > .coming-soon-page {
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
 .coming-soon {
   width: min(100%, 90rem);
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   margin-inline: auto;
   padding: clamp(1.5rem, 4vw, 3.5rem);
   display: grid;
@@ -6588,6 +6599,36 @@ body > .coming-soon-page {
   text-transform: uppercase;
 }
 
+/* A request paid as more than one payment (per-provider balances §6): each part is a lamp and its
+   words, as the step lamps are, one part to a line. No box. */
+.withdraw__parts {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.withdraw__row > .withdraw__parts {
+  grid-column: 1 / -1;
+}
+
+.withdraw__parts > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.withdraw__split {
+  display: block;
+  margin-top: 0.5rem;
+}
+
 /* Compact step lamps: no wells, and the three labels read as one line, joined by dots. */
 .withdraw__row > .withdraw__steps {
   grid-column: 1 / -1;
@@ -7617,20 +7658,47 @@ p.tip-choice {
   gap: var(--space-3);
 }
 
-body:has(.business-public) .site-nav,
-body:has(.business-public) .menu-toggle,
-body:has(.business-public) > .site-footer {
+body:has(
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+  )
+  .site-nav,
+body:has(
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+  )
+  .menu-toggle,
+body:has(
+    .business-public:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+  )
+  > .site-footer {
   display: none;
 }
 
 .business-public {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
   padding-bottom: var(--space-8);
 }
 
 .business-public__sheet {
-  display: grid;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   gap: var(--space-4);
   width: 100%;
   max-width: 36rem;
@@ -7892,6 +7960,7 @@ body:has(.business-public) > .site-footer {
 .business-public__foot {
   display: flex;
   flex-wrap: wrap;
+  margin-top: auto;
   gap: var(--space-2) var(--space-4);
   padding-top: var(--space-4);
   font-size: var(--text-sm);
@@ -9869,4 +9938,85 @@ body:has(.business-public) > .site-footer {
 .dashboard-page :is(.campaign-page-editor__preview-title, .miy-receipt__label) {
   letter-spacing: normal;
   text-transform: none;
+}
+
+/* You collect (plan Task 14, spec §2.1): the no-bank line, the add-bank-details form and the notes
+   for what TipMe holds. Existing tokens only. */
+.collect-line {
+  margin: 0 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.collect-line a {
+  font-weight: 700;
+  text-underline-offset: 3px;
+}
+
+.collect-paused {
+  margin-bottom: var(--space-4);
+}
+
+.collect-bank {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The same heading as "Your withdrawals" beside it. */
+.collect-bank h2 {
+  margin: 0;
+  font: 400 1.625rem / 1.1 var(--font-editorial);
+}
+
+.collect-bank > .tm-hint {
+  margin: 0;
+}
+
+.collect-bank__panel {
+  padding: clamp(1.25rem, 4vw, 2rem);
+}
+
+.collect-bank__name {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.collect-bank__keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.collect-bank__waiting {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.withdraw__held,
+.earnings-held {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.withdraw__meter .withdraw__held-note {
+  color: var(--text-on-night-quiet);
+}
+
+.collect-dispute {
+  margin-bottom: var(--space-4);
+}
+
+/* Task 15 fix round 2: the plain line above the bank form after support changed their name. */
+.collect-bank__recheck {
+  margin: 0 0 var(--space-3);
+  font-weight: 600;
 }

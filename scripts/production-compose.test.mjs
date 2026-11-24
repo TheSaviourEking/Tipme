@@ -237,15 +237,69 @@ test(
   },
 );
 
-test('every long-running service caps its json-file logs', { skip }, () => {
+const CAPPED_LOGS = {
+  driver: 'json-file',
+  options: { 'max-size': '10m', 'max-file': '3' },
+};
+
+test('every production service caps its json-file logs', { skip }, () => {
   const { services } = parse();
   for (const name of ['api-blue', 'api-green', 'worker-a', 'worker-b', 'redis'])
-    assert.deepEqual(
-      services[name].logging,
-      { driver: 'json-file', options: { 'max-size': '10m', 'max-file': '3' } },
-      `${name} has no log limit`,
-    );
+    assert.ok(name in services, `${name} is missing`);
+  for (const [name, service] of Object.entries(services))
+    assert.deepEqual(service.logging, CAPPED_LOGS, `${name} has no log limit`);
 });
+
+// Staging shares its server's disk with production: on 21 Nov 2026 a staging worker logging a full
+// Redis's error ~3,000 times a second wrote 26 GB, filled the disk and took production down.
+test(
+  'every staging service caps its json-file logs, as production does',
+  { skip },
+  () => {
+    const stagingUrl = new URL(
+      '../deploy/compose.staging.yml',
+      import.meta.url,
+    );
+    const stagingRaw = readFileSync(stagingUrl, 'utf8');
+    const env = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' };
+    for (const [, name] of stagingRaw.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g))
+      // A path for directories and files, so bind mounts stay bind mounts.
+      env[name] = /_(DIR|FILE)$/.test(name) ? '/srv/dummy' : 'dummy';
+    const result = spawnSync(
+      'docker',
+      [
+        'compose',
+        '-f',
+        stagingUrl.pathname,
+        '--profile',
+        'tools',
+        '--profile',
+        'offsite',
+        'config',
+        '--format',
+        'json',
+      ],
+      { encoding: 'utf8', env },
+    );
+    assert.equal(result.status, 0, `compose config failed: ${result.stderr}`);
+    const { services } = JSON.parse(result.stdout);
+    for (const name of [
+      'api',
+      'worker',
+      'postgres',
+      'redis',
+      'offsite',
+      'backup',
+    ])
+      assert.ok(name in services, `${name} is missing`);
+    for (const [name, service] of Object.entries(services))
+      assert.deepEqual(
+        service.logging,
+        CAPPED_LOGS,
+        `${name} has no log limit`,
+      );
+  },
+);
 
 // Not Docker-dependent.
 test('production.env.example names every ${VAR} the compose file reads, with no values for secrets', () => {
@@ -471,6 +525,7 @@ test('announcement email: secrets and the sender are deploy settings, tunables a
     for (const tunable of [
       'ANNOUNCEMENT_SENDS_PER_MINUTE',
       'BREVO_SANDBOX',
+      'BREVO_TRANSACTIONAL_SANDBOX',
       'BREVO_API_BASE',
     ])
       assert.doesNotMatch(
@@ -482,7 +537,57 @@ test('announcement email: secrets and the sender are deploy settings, tunables a
       'BREVO_API_KEY',
       'BREVO_WEBHOOK_TOKEN',
       'ANNOUNCEMENT_FROM_ADDRESS',
+      // Codes and receipts through Brevo (owner, 23 Nov 2026): an opt-in, like the default provider.
+      'BREVO_TRANSACTIONAL',
     ])
       assert.match(text, new RegExp(`\\b${setting}\\b`), `${path}: ${setting}`);
+  }
+});
+
+// Automatic email failover (owner, 23 Nov 2026): the fallback list is a deploy setting (empty by
+// default, like the default provider); the breaker and code-signal numbers are code defaults.
+test('mail failover: the fallback list is a deploy setting, its tunables are not', () => {
+  for (const path of [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+    'deploy/production.env.example',
+    'deploy/staging.env.example',
+  ]) {
+    const text = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+    assert.match(
+      text,
+      /\bMAIL_FALLBACK_PROVIDERS\b/,
+      `${path}: MAIL_FALLBACK_PROVIDERS`,
+    );
+    for (const tunable of [
+      'MAIL_BREAKER_FAILURES',
+      'MAIL_BREAKER_WINDOW_MS',
+      'MAIL_BREAKER_REST_MS',
+      'MAIL_CODE_UNUSED_AFTER_MS',
+      'MAIL_CODE_WINDOW_MS',
+      'MAIL_CODE_MIN_SAMPLES',
+      'MAIL_CODE_UNUSED_RATIO',
+      'MAIL_CODE_TRIAL_CODES',
+      'MAIL_RESEND_WINDOW_MS',
+    ])
+      assert.doesNotMatch(
+        text,
+        new RegExp(`\\b${tunable}\\b`),
+        `${path}: ${tunable}`,
+      );
+  }
+  // Empty by default in compose, so nothing changes until it is set.
+  for (const path of [
+    'deploy/compose.production.yml',
+    'deploy/compose.staging.yml',
+  ]) {
+    const text = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
+    const lines = text.match(/MAIL_FALLBACK_PROVIDERS: .*/g) ?? [];
+    assert.equal(lines.length, 2, `${path}: the API and the worker`);
+    for (const line of lines)
+      assert.equal(
+        line,
+        'MAIL_FALLBACK_PROVIDERS: ${MAIL_FALLBACK_PROVIDERS:-}',
+      );
   }
 });

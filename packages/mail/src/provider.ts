@@ -2,8 +2,9 @@
 export type MailProviderName = 'mock' | 'zeptomail' | 'ses' | 'brevo';
 
 /**
- * Every name a provider can have. `brevo` sends announcements only (announcementMailProvider): it
- * is never one of the providers other mail uses, never the default and never switched to.
+ * Every name a provider can have. `brevo` always sends announcements (announcementMailProvider);
+ * with BREVO_TRANSACTIONAL=on it is also one of the providers staff can switch other mail to
+ * (owner, 23 Nov 2026), as a separate instance. Announcements never go anywhere but Brevo.
  */
 export const MAIL_PROVIDER_NAMES: readonly MailProviderName[] = [
   'mock',

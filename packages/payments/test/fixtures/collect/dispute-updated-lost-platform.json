@@ -1,0 +1,21 @@
+{
+  "_source": "Built from the docs, not recorded: the example event in https://docs.bachs.io/guides/webhooks/events/dispute-updated.md ('Key off `status` to know whether it was won or lost'), with `status: lost` from the status list there and in https://docs.bachs.io/api-reference/disputes/get-dispute.md. TipMe's own account (no `account`, TipMe's organization), as in dispute-created-platform.json. The sandbox may not raise disputes.",
+  "id": "evt_dsp_updated_platform_2",
+  "type": "dispute.updated",
+  "created_at": "2026-11-30T09:00:00.000000+00:00",
+  "organization_id": "acct_stWbI4933A4WVqkc",
+  "data": {
+    "dispute_id": "dsp_1a2b3c4d5e",
+    "charge_id": "ch_9f4c1d2e7b6a4f8e9c0d1a2b3c4d5e6f",
+    "amount": "10000.00",
+    "currency": "NGN",
+    "status": "lost",
+    "is_response_editable": false,
+    "reason": "fraudulent",
+    "response_deadline_at": "2026-12-02T00:00:00Z",
+    "created_at": "2026-11-19T12:00:00Z",
+    "updated_at": "2026-11-30T09:00:00Z",
+    "charge_amount": "10000.00",
+    "charge_currency": "NGN"
+  }
+}

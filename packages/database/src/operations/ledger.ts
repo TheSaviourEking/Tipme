@@ -23,6 +23,12 @@ const KIND: Record<AccountCode, 'asset' | 'liability' | 'revenue' | 'expense'> =
     // Paid Pro (ADR-0015; ADR-0006 addendum, needs finance sign-off).
     subscription_revenue: 'revenue',
     platform_clearing: 'asset',
+    // You collect (ADR-0016; codes illustrative pending finance sign-off): money held on TipMe's
+    // own partner account for recipients, debited when a tip arrives. Nothing posts these yet.
+    held_for_recipients: 'asset',
+    dispute_fee_expense: 'expense',
+    dispute_loss_expense: 'expense',
+    refund_loss_expense: 'expense',
   };
 
 async function accountId(
@@ -71,7 +77,16 @@ export async function postLedgerTransaction(
   tx: Tx,
   input: {
     operationType:
-      'payment' | 'payout' | 'reward' | 'reversal' | 'pro_sale' | 'pro_refund';
+      | 'payment'
+      | 'payout'
+      | 'reward'
+      | 'reversal'
+      | 'pro_sale'
+      | 'pro_refund'
+      // You collect (ADR-0016, proposed): held money moved to or from a recipient's account, and a
+      // dispute's fee from TipMe's own money.
+      | 'collect_transfer'
+      | 'dispute_fee';
     operationKey: string;
     currency: string;
     tipId?: string;

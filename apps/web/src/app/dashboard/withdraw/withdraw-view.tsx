@@ -1,12 +1,19 @@
 'use client';
 import Link from 'next/link';
-import { useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import type {
   DashboardSummary,
+  PayoutBank,
+  WithdrawalRequestResult,
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
+import {
+  COLLECT_COPY,
+  COLLECT_NAME_RECHECK_NOTICE,
+  WITHDRAW_SPLIT_COPY,
+} from '@tipme/contracts/copy';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
   Button,
@@ -21,6 +28,11 @@ import {
 } from '@tipme/ui';
 import type { StampTone } from '@tipme/ui';
 import { usePanel } from '@/components/dashboard/use-panel';
+import {
+  CollectHeldNotes,
+  useCollectStatus,
+  withAmount,
+} from '@/components/dashboard/collect-status';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { useWithdrawalQuote } from '@/components/dashboard/use-withdrawal-quote';
 import { useWithdrawalInFlight } from '@/components/live/live-provider';
@@ -34,17 +46,25 @@ import { bankLine } from '@/lib/withdrawal-bank';
 import { withdrawalInFlight } from '@/lib/quote-merge';
 import {
   belowMinimum,
+  collectDelayLine,
+  collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
+  withdrawDayNote,
   withdrawFee,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
+  partsView,
+  requestParts,
   withdrawLamp,
   withdrawRefusal,
   withdrawState,
   withdrawUnsure,
 } from '@/lib/withdraw-state';
+import type { PartView } from '@/lib/withdraw-state';
+import { ExtraNotices, PartList } from '@/components/dashboard/withdraw-parts';
 import { Money } from '@/components/money';
+import { CollectBankForm } from './collect-bank-form';
 
 /**
  * Re-read on a withdrawal change or a tip (live updates, PR 2), but never on a resync, a tab focus
@@ -149,6 +169,7 @@ function History({
         <ol className="withdraw__rows">
           {rows.map((row) => {
             const view = describe(row);
+            const split = partsView(row.parts);
             const open = view.steps > 0 && view.steps < 3;
             const bank = bankLine(row.bank);
             // History, not news: a row has no live role, so nothing here is announced.
@@ -157,7 +178,7 @@ function History({
                 <span className="withdraw__amount">
                   <Money minor={row.amountMinor} />
                 </span>
-                <Stamp tone={view.stamp}>{view.label}</Stamp>
+                <Stamp tone={view.stamp}>{split?.label ?? view.label}</Stamp>
                 {open && (
                   <Steps
                     className="withdraw__steps"
@@ -166,6 +187,7 @@ function History({
                   />
                 )}
                 <p className="withdraw__note">{view.note}</p>
+                {split && <PartList parts={split.parts} />}
                 {/* Proven: a failed payout is released and its amount no longer reserved
                     (withdraw-and-audit plan, money-safety proofs). Only on a row the API reports failed. */}
                 {row.state === 'failed' && (
@@ -225,16 +247,68 @@ export default function WithdrawPage({
   const [unsure, setUnsure] = useState<{ title: string; body: string } | null>(
     null,
   );
-  const [done, setDone] = useState<string | null>(null);
+  // What was asked for, and its payments when it arrives as more than one.
+  const [done, setDone] = useState<{
+    amount: string;
+    parts: PartView[] | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per request, so a double tap never withdraws twice.
   const key = useRef<string | null>(null);
+  // You collect (plan Task 14): a recipient on collect adds their first bank details here, checked
+  // by our payment partner, before anything else on this page applies. Everyone else: unchanged.
+  const {
+    collect,
+    known: collectKnown,
+    failed: collectFailed,
+    reload: reloadCollect,
+  } = useCollectStatus();
+  // Task 15 fix round 2: after support changed their name, the bank is added again (readdBank).
+  const collecting =
+    collect !== null && (!collect.verified || collect.readdBank);
+  // The partner's bank list, only for the add-bank-details form, read once it is needed.
+  const [banks, setBanks] = useState<PayoutBank[] | null>(null);
+  useEffect(() => {
+    if (!collecting) return;
+    let current = true;
+    void apiFetch<PayoutBank[]>('/v1/payout-banks').then((result) => {
+      if (current && result.ok) setBanks(result.data);
+    });
+    return () => {
+      current = false;
+    };
+  }, [collecting]);
+  // Verified while this page was open: "You’re all set" stays for this visit.
+  const [wasCollecting, setWasCollecting] = useState(false);
+  if (collecting && !wasCollecting) setWasCollecting(true);
+  const allSet = wasCollecting && collect?.verified === true;
   const reloadAll = () =>
     void Promise.all([
       balance.reload(),
       latest.reload(),
       withdrawalsPanel.reload(),
     ]);
+  // The extra pages belong to the first page they followed; a fresh first page drops them.
+  const extra = more && more.source === withdrawalsPanel.data ? more : null;
+  const withdrawals = withdrawalsPanel.data
+    ? [...withdrawalsPanel.data.items, ...(extra?.items ?? [])]
+    : null;
+  const nextWithdrawals = extra
+    ? extra.next
+    : (withdrawalsPanel.data?.nextCursor ?? null);
+  const showMoreWithdrawals = async () => {
+    const source = withdrawalsPanel.data;
+    if (!source || !nextWithdrawals) return;
+    const result = await apiFetch<WithdrawalsPage>(
+      `${firstPath}?cursor=${encodeURIComponent(nextWithdrawals)}`,
+    );
+    if (result.ok)
+      setMore({
+        source,
+        items: [...(extra?.items ?? []), ...result.data.items],
+        next: result.data.nextCursor,
+      });
+  };
 
   const amount = parseNaira(raw.replace(/^₦\s*/, '').trim());
   const summary = balance.data;
@@ -245,8 +319,139 @@ export default function WithdrawPage({
         onRetry={balance.reload}
       />
     );
+  // Whether they are on You collect decides this whole page: a read that failed (anything but
+  // "not on it") is a load error, never today's screen shown to a collect recipient.
+  if (collectFailed)
+    return (
+      <LoadFailed
+        title="We couldn’t load your balance"
+        onRetry={reloadCollect}
+      />
+    );
+  if (!summary || !collectKnown)
+    return <Skeleton label="Loading your balance" />;
+  const history = (
+    <History
+      rows={withdrawals}
+      failed={withdrawalsPanel.error === 'load'}
+      refreshFailed={withdrawalsPanel.error === 'refresh'}
+      next={nextWithdrawals}
+      onMore={() => void showMoreWithdrawals()}
+    />
+  );
+  if (collect && collecting)
+    return (
+      <div className="dashboard-section withdraw">
+        <h1>Withdraw</h1>
+        {/* The holding cap was reached: the same words as Home's banner (spec §10). */}
+        {collect.paused && (
+          <StandingWarning
+            title={COLLECT_COPY.pausedRecipient}
+            className="withdraw__warning"
+          />
+        )}
+        <div className="withdraw__layout">
+          <div className="withdraw__money">
+            {(summary.keptMinor !== '0' || summary.refundHeldMinor !== '0') && (
+              <p className="withdraw__held">
+                <CollectHeldNotes
+                  summary={summary}
+                  className="withdraw__held-note"
+                />
+              </p>
+            )}
+            {collect.readdBank && (
+              <p
+                className="collect-bank__recheck"
+                data-testid="name-recheck-line"
+              >
+                {COLLECT_NAME_RECHECK_NOTICE.formLine}
+              </p>
+            )}
+            <CollectBankForm
+              bank={collect.readdBank ? null : collect.bank}
+              read={collect}
+              banks={banks}
+              onCheckAgain={reloadCollect}
+              onAdded={(state) => {
+                void reloadCollect();
+                if (state === 'verified') reloadAll();
+              }}
+            />
+          </div>
+          {history}
+        </div>
+      </div>
+    );
+  // You collect, verified, with nothing to withdraw (owner, 23 Nov 2026; ADR-0016): what is on its
+  // way and where withdrawals go, never ₦0 and a Withdraw key. TipMe's own figures say it, so the
+  // partner's quote isn't waited for (a hold it reports is said once it is read). A balance keeps
+  // today's screen below, and so does a withdrawal just asked for: withdrawing the whole balance
+  // reloads it as ₦0, and its slip (or a "not confirmed" one) must stay.
+  const onItsWay = collectWithdrawView({
+    collect,
+    availableMinor: summary.availableMinor,
+    quote: latest.error ? null : latest.data,
+    outcomeShown: done !== null || unsure !== null || error !== '',
+  });
+  if (collect && onItsWay)
+    return (
+      <div className="dashboard-section withdraw">
+        <h1>Withdraw</h1>
+        {onItsWay.warning && (
+          <StandingWarning
+            title={onItsWay.warning.title}
+            className="withdraw__warning"
+          >
+            {onItsWay.warning.body}
+          </StandingWarning>
+        )}
+        {allSet && (
+          <Slip
+            tone="done"
+            title={COLLECT_COPY.verified}
+            className="withdraw__done"
+          />
+        )}
+        <div className="withdraw__layout">
+          <div className="withdraw__money">
+            <section
+              className="withdraw__meter"
+              aria-labelledby={`${id}-coming`}
+            >
+              <h2 id={`${id}-coming`} className="withdraw__cap">
+                {onItsWay.figure.caption}
+              </h2>
+              <p
+                className="withdraw__figure"
+                data-testid="withdraw-collect-figure"
+              >
+                <Money minor={onItsWay.figure.minor} />
+              </p>
+              <p className="withdraw__lamp">
+                <Lamp tone={onItsWay.lamp.tone} />
+                {onItsWay.lamp.text}
+              </p>
+              {onItsWay.lines.map((line) => (
+                <p key={line} className="withdraw__fine">
+                  {line}
+                </p>
+              ))}
+              {onItsWay.bank && (
+                <p className="withdraw__chip">
+                  <span>{onItsWay.bank}</span>
+                  <Link href="/dashboard/settings#get-paid">Change</Link>
+                </p>
+              )}
+              {pilotNotice}
+            </section>
+          </div>
+          {history}
+        </div>
+      </div>
+    );
   // A quote that failed to refresh is no quote: it is never read as a yes.
-  if (!summary || (!latest.data && !latest.error && !latest.needsCheck))
+  if (!latest.data && !latest.error && !latest.needsCheck)
     return <Skeleton label="Loading your balance" />;
   const quote = latest.error ? null : latest.data;
   const state = withdrawState({
@@ -283,11 +488,14 @@ export default function WithdrawPage({
     setUnsure(null);
     key.current ??= crypto.randomUUID();
     const sent = key.current;
-    const result = await apiFetch<{ payoutId: string }>('/v1/me/withdrawals', {
-      method: 'POST',
-      body: { amountMinor: String(amount) },
-      headers: { 'idempotency-key': sent },
-    });
+    const result = await apiFetch<WithdrawalRequestResult>(
+      '/v1/me/withdrawals',
+      {
+        method: 'POST',
+        body: { amountMinor: String(amount) },
+        headers: { 'idempotency-key': sent },
+      },
+    );
     setBusy(false);
     // The amount changed while this was on its way (typing clears the key): a refusal belongs to
     // the old amount, so it doesn't bring back a slip or an error over the new one. A success still
@@ -295,7 +503,10 @@ export default function WithdrawPage({
     const stale = key.current !== sent;
     if (result.ok) {
       // What arrives: the amount less the fee when the user pays it (owner, 12 Nov 2026).
-      setDone(formatNaira(figures ? Number(figures.receiveMinor) : amount));
+      setDone({
+        amount: formatNaira(figures ? Number(figures.receiveMinor) : amount),
+        parts: partsView(requestParts(result.data.parts ?? []))?.parts ?? null,
+      });
       setRaw('');
       setChecked(false);
       key.current = null;
@@ -324,27 +535,6 @@ export default function WithdrawPage({
     key.current = null;
   };
   const shortcuts = SHORTCUTS_MINOR.filter((minor) => minor < withdrawable);
-  // The extra pages belong to the first page they followed; a fresh first page drops them.
-  const extra = more && more.source === withdrawalsPanel.data ? more : null;
-  const withdrawals = withdrawalsPanel.data
-    ? [...withdrawalsPanel.data.items, ...(extra?.items ?? [])]
-    : null;
-  const nextWithdrawals = extra
-    ? extra.next
-    : (withdrawalsPanel.data?.nextCursor ?? null);
-  const showMoreWithdrawals = async () => {
-    const source = withdrawalsPanel.data;
-    if (!source || !nextWithdrawals) return;
-    const result = await apiFetch<WithdrawalsPage>(
-      `${firstPath}?cursor=${encodeURIComponent(nextWithdrawals)}`,
-    );
-    if (result.ok)
-      setMore({
-        source,
-        items: [...(extra?.items ?? []), ...result.data.items],
-        next: result.data.nextCursor,
-      });
-  };
   const smallest = formatNaira(withdrawalMinimumMinor());
   // Only an amount the server would accept gets figures: within what can be withdrawn, and at
   // least the minimum unless it is all of it.
@@ -352,14 +542,14 @@ export default function WithdrawPage({
     chosen !== null &&
     chosen <= withdrawable &&
     !belowWithdrawalMinimum(chosen, withdrawable);
-  // Users pay the transfer fee from the amount (owner, 12 Nov 2026): what arrives is the amount
-  // less the fee, and the whole amount leaves the balance. Only an amount that sends something
-  // gets figures.
+  // A person's withdrawals are free (owner, 18 Nov 2026): what arrives is the amount. Under the
+  // user-pays rule it is the amount less the fee. Only an amount that sends something gets figures.
   const figures =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
+  const dayNote = withdrawDayNote(quote);
   // Ready with money to send: the lamp line and the bank chip say what the notice used to.
   const readyWithMoney = state.kind === 'ready' && withdrawable > BigInt(0);
   const notice = state.notice;
@@ -374,15 +564,33 @@ export default function WithdrawPage({
           {notice.body}
         </StandingWarning>
       )}
+      {allSet && (
+        <Slip
+          tone="done"
+          title={COLLECT_COPY.verified}
+          className="withdraw__done"
+        />
+      )}
       {done && (
         <Slip
           tone="done"
           title="Withdrawal requested"
           className="withdraw__done"
         >
-          <span className="money">{done}</span>
+          <span className="money">{done.amount}</span>
           {copy.withdrawDoneSuffix}{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
+          {done.parts && (
+            <>
+              <span
+                className="withdraw__split"
+                data-testid="withdraw-split-done"
+              >
+                {WITHDRAW_SPLIT_COPY.mayArrive(done.parts.length)}
+              </span>
+              <PartList parts={done.parts} />
+            </>
+          )}
         </Slip>
       )}
       <div className="withdraw__layout">
@@ -403,6 +611,30 @@ export default function WithdrawPage({
             </p>
             {readyWithMoney && feeLine && (
               <p className="withdraw__fine">{feeLine}</p>
+            )}
+            {/* You collect (spec §2.1 step 6, §8): what is still on its way or held for a refund, and the
+                first cap. */}
+            {(summary.onItsWayMinor !== '0' ||
+              summary.refundHeldMinor !== '0') && (
+              <p className="withdraw__fine">
+                <CollectHeldNotes
+                  summary={summary}
+                  className="withdraw__held-note"
+                />
+              </p>
+            )}
+            {collectDelayLine(collect) && (
+              <p className="withdraw__fine" data-testid="collect-delay">
+                {collectDelayLine(collect)}
+              </p>
+            )}
+            {collect?.firstWithdrawalCapMinor && (
+              <p className="withdraw__fine" data-testid="first-withdrawal-cap">
+                {withAmount(
+                  COLLECT_COPY.firstWithdrawalCap,
+                  collect.firstWithdrawalCapMinor,
+                )}
+              </p>
             )}
             {state.place === 'instrument' && !readyWithMoney && (
               <p className="withdraw__fine">
@@ -430,6 +662,7 @@ export default function WithdrawPage({
             {ready && (
               <p className="withdraw__chip">
                 <span>{bankLine(ready.destination)}</span>
+                {/* Get paid shows a collect recipient the You collect form (name check, step-up). */}
                 <Link href="/dashboard/settings#get-paid">Change</Link>
               </p>
             )}
@@ -455,6 +688,7 @@ export default function WithdrawPage({
               {notice.body}
             </Slip>
           )}
+          <ExtraNotices notices={state.extraNotices} />
           {unsure && (
             <Slip tone="unsure" stamp={'Not\nconfirmed'} title={unsure.title}>
               {unsure.body}
@@ -519,7 +753,7 @@ export default function WithdrawPage({
                       <dd data-testid="transfer-fee">
                         {figures ? (
                           figures.feePaidBy === 'tipme' ? (
-                            'Paid by TipMe'
+                            'Free'
                           ) : (
                             <Money minor={figures.feeMinor} />
                           )
@@ -541,6 +775,16 @@ export default function WithdrawPage({
                       </dd>
                     </dl>
                   </section>
+                )}
+                {figures && chosen !== null && state.partsFor(chosen) > 1 && (
+                  <p className="tm-hint" data-testid="withdraw-split-hint">
+                    {WITHDRAW_SPLIT_COPY.mayArrive(state.partsFor(chosen))}
+                  </p>
+                )}
+                {dayNote && (
+                  <p className="tm-hint" data-testid="withdrawal-day-note">
+                    {dayNote}
+                  </p>
                 )}
                 <Button
                   type="submit"
@@ -570,13 +814,7 @@ export default function WithdrawPage({
             </Surface>
           )}
         </div>
-        <History
-          rows={withdrawals}
-          failed={withdrawalsPanel.error === 'load'}
-          refreshFailed={withdrawalsPanel.error === 'refresh'}
-          next={nextWithdrawals}
-          onMore={() => void showMoreWithdrawals()}
-        />
+        {history}
       </div>
     </div>
   );

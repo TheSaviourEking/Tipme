@@ -66,7 +66,7 @@ test('CI gives @alone its own job in the matrix, not behind a shard', () => {
   );
   assert.match(
     job('e2e'),
-    /test:e2e tests\/e2e\/studio-lab\.spec\.ts --grep @studio-lab/,
+    /test:e2e tests\/e2e\/studio-styles-random\.spec\.ts --grep @studio-lab/,
   );
   // scripts/test-integration.mjs only takes numbered shards.
   assert.match(job('integration'), /shard: \[1, 2, 3\]/);
@@ -80,7 +80,7 @@ test('@studio-lab picks exactly the render property; --grep-invert leaves everyt
   const rest = listed(['--grep-invert', '@studio-lab']);
   assert.ok(studio.length > 0);
   for (const line of studio)
-    assert.match(line, /studio-lab\.spec\.ts.*@studio-lab/);
+    assert.match(line, /studio-styles-random\.spec\.ts.*@studio-lab/);
   assert.deepEqual([...studio, ...rest].sort(), [...whole].sort());
 });
 

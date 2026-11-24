@@ -12,6 +12,7 @@ import {
   withdrawalHolds,
 } from '../schema.js';
 import { mailOwner } from './account-mail.js';
+import { flagSharedBankIn } from './collect-verification.js';
 import {
   checkEmailCode,
   issueEmailCode,
@@ -143,6 +144,23 @@ type DestinationInput = {
   last4: string;
   status: PayoutDestinationStatus;
   sealing: MailSealing;
+  /**
+   * You collect (P13): the keyed hash of bank and number (`bankAccountHash`), never the number. A
+   * `collect` recipient's bank is only ever set with it, through the bank-details route, which
+   * checks the name with our payment partner and looks for the same account on another page.
+   */
+  accountHash?: string;
+  /**
+   * You collect (fix C1): the digest of the legal name our payment partner checked this bank
+   * against (`legalNameDigest`). Kept from the first save of a destination: a replayed answer for
+   * the same destination never moves it to another name.
+   */
+  nameDigest?: string;
+  /**
+   * One bank change saved at several providers (spec §6) is one change to the person: every save
+   * of it passes the same id, and only the first that replaces a bank sends the security email.
+   */
+  changeId?: string;
   now?: Date;
 };
 
@@ -161,13 +179,19 @@ export function setPayoutDestination(
   db: Database,
   input: DestinationInput &
     ({ profileId: string } | { businessId: string; userId: string }),
-): Promise<{ replaced: boolean }> {
+): Promise<{
+  replaced: boolean;
+  /** You collect (P13): the account is another recipient's too, and this one's shares now wait. */
+  sharedBank: boolean;
+}> {
   const now = input.now ?? new Date();
   if (
     input.destinationRef.trim() === '' ||
     input.bankName.trim() === '' ||
     !/^\d{4}$/.test(input.last4) ||
-    !STATUSES.has(input.status)
+    !STATUSES.has(input.status) ||
+    (input.accountHash !== undefined &&
+      !/^[0-9a-f]{64}$/.test(input.accountHash))
   )
     return Promise.reject(new OperationError('INVALID_INPUT'));
   const owner: MoneyOwner =
@@ -194,11 +218,18 @@ export function setPayoutDestination(
         actingUserId = input.userId;
       } else {
         const [profile] = await tx
-          .select({ userId: profiles.userId })
+          .select({
+            userId: profiles.userId,
+            mode: profiles.collectionMode,
+          })
           .from(profiles)
           .where(eq(profiles.id, input.profileId))
           .for('update');
         if (!profile) throw new OperationError('NO_PAGE');
+        // The name lock (Task 13): a collect recipient's bank goes only through the route that has
+        // our payment partner check it against their locked name.
+        if (profile.mode === 'collect' && input.accountHash === undefined)
+          throw new OperationError('NAME_LOCKED');
         // Whoever is signed in may be the thief. Checked under the same lock the freeze takes.
         if (await withdrawalsFrozen(tx, { profileId: input.profileId }))
           throw new OperationError('WITHDRAWALS_PAUSED');
@@ -214,6 +245,22 @@ export function setPayoutDestination(
         if (heldUntil(acting?.changedAt ?? null, now))
           throw new OperationError('BANK_CHANGE_HELD');
       }
+      // C1b (You collect): an answer for a destination saved under another name proves nothing.
+      if (input.nameDigest !== undefined) {
+        const [other] = await tx
+          .select({ id: payoutDestinations.id })
+          .from(payoutDestinations)
+          .where(
+            and(
+              destinationOf(owner),
+              eq(payoutDestinations.provider, input.provider),
+              eq(payoutDestinations.destinationReference, input.destinationRef),
+              sql`${payoutDestinations.nameDigest} IS DISTINCT FROM ${input.nameDigest}`,
+            ),
+          )
+          .limit(1);
+        if (other) throw new OperationError('BANK_RECHECK_LATER');
+      }
       const [current] = await tx
         .select()
         .from(payoutDestinations)
@@ -225,15 +272,29 @@ export function setPayoutDestination(
           ),
         )
         .for('update');
+      // Final review M5: a collect recipient's bank shared with another recipient holds their
+      // waiting shares in this transaction, before the bank is saved as usable, so no release
+      // between the two can send them first. Undone with everything else if the save is refused.
+      const sharedBank =
+        'profileId' in owner && input.accountHash !== undefined
+          ? await flagSharedBankIn(tx, {
+              profileId: owner.profileId,
+              accountHash: input.accountHash,
+              now,
+            })
+          : false;
       // The same account sent again: the provider's newest word on it, and nothing has changed.
       // Rejected is permanent (provider docs), so nothing raises a rejected row.
       if (current?.destinationReference === input.destinationRef) {
         if (current.status !== 'rejected')
           await tx
             .update(payoutDestinations)
-            .set({ status: input.status })
+            .set({
+              status: input.status,
+              ...(input.accountHash ? { accountHash: input.accountHash } : {}),
+            })
             .where(eq(payoutDestinations.id, current.id));
-        return { replaced: false };
+        return { replaced: false, sharedBank };
       }
       // A refused number must not strand an account that works.
       if (input.status === 'rejected' && current?.status === 'usable')
@@ -255,6 +316,8 @@ export function setPayoutDestination(
         bankName: input.bankName,
         accountLast4: input.last4,
         status: input.status,
+        accountHash: input.accountHash ?? null,
+        nameDigest: input.nameDigest ?? null,
         createdAt: now,
       });
       if (current) {
@@ -284,7 +347,7 @@ export function setPayoutDestination(
               userId: each.userId,
               type: 'payout_destination_changed',
               data: { ...data, businessName: each.name },
-              dedupeKey: `payout_destination_changed.${id}.${each.userId}`,
+              dedupeKey: `payout_destination_changed.${input.changeId ?? id}.${each.userId}`,
               now,
             });
         } else
@@ -292,11 +355,11 @@ export function setPayoutDestination(
             profileId: owner.profileId,
             type: 'payout_destination_changed',
             data,
-            dedupeKey: `payout_destination_changed.${id}`,
+            dedupeKey: `payout_destination_changed.${input.changeId ?? id}`,
             now,
           });
       }
-      return { replaced: Boolean(current) };
+      return { replaced: Boolean(current), sharedBank };
     }),
   );
 }
@@ -315,6 +378,8 @@ export function getPayoutDestination(
   status: PayoutDestinationStatus;
   bankName: string;
   last4: string;
+  /** The legal name's digest this bank was checked against (You collect), or null. */
+  nameDigest: string | null;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -324,6 +389,7 @@ export function getPayoutDestination(
         status: payoutDestinations.status,
         bankName: payoutDestinations.bankName,
         last4: payoutDestinations.accountLast4,
+        nameDigest: payoutDestinations.nameDigest,
       })
       .from(payoutDestinations)
       .where(

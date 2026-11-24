@@ -1,7 +1,12 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import type { OpsMailProviderCard, OpsMailProviders } from '@tipme/contracts';
+import type {
+  OpsMailProviderCard,
+  OpsMailProviders,
+  OpsProviderRetire,
+} from '@tipme/contracts';
 import {
+  Badge,
   Button,
   Card,
   InputField,
@@ -18,6 +23,144 @@ import { ReasonAction } from '@/components/ops/reason-action';
 import { can, useOpsAccess, when } from '@/lib/ops-client';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { lagosTime, liveNowNote, trialNote } from '@/lib/ops-failover';
+
+/** Automatic failover's view of one provider (owner, 23 Nov 2026). */
+function HealthLine({
+  card,
+  canManage,
+  onChange,
+}: {
+  card: OpsMailProviderCard;
+  canManage: boolean;
+  onChange: () => void;
+}) {
+  const health = card.health;
+  if (!health) return null;
+  if (health.state === 'healthy')
+    return (
+      <p data-testid={`health-${card.name}`}>
+        Failover: healthy.
+        {health.trippedAt && health.reason
+          ? ` Last tripped ${when(health.trippedAt)}: ${health.reason}.`
+          : ''}
+      </p>
+    );
+  return (
+    <Slip
+      dense
+      className="ops-health-slip"
+      tone={health.state === 'resting' ? 'error' : 'waiting'}
+      title={
+        health.state === 'resting' && health.until
+          ? `Resting until ${lagosTime(health.until)}`
+          : 'On trial'
+      }
+      actions={
+        canManage && (
+          <ReasonAction
+            open="Clear"
+            field="Why clear this provider by hand?"
+            submit="Mark it healthy"
+            onSubmit={async (reason) => {
+              const result = await opsFetch<{ cleared: boolean }>(
+                `/v1/ops/providers/mail/${card.name}/health/clear`,
+                { method: 'POST', body: { reason } },
+              );
+              if (result.ok) {
+                onChange();
+                return null;
+              }
+              return result.code === 'DEPENDENCY_UNAVAILABLE'
+                ? 'The failover state can’t be reached right now. Try again in a minute.'
+                : 'That didn’t go through. Please try again.';
+            }}
+          />
+        )
+      }
+    >
+      <p data-testid={`health-${card.name}`}>
+        {health.reason ?? 'Tripped'}.{' '}
+        {health.state === 'resting'
+          ? 'New mail goes through the backup meanwhile.'
+          : `Now ${trialNote(health.kind)}.`}
+      </p>
+    </Slip>
+  );
+}
+
+/** Which provider is live, the backup, and the "fixed" choice. */
+function Failover({
+  data,
+  canManage,
+  onChange,
+}: {
+  data: OpsMailProviders;
+  canManage: boolean;
+  onChange: () => void;
+}) {
+  const label = (name: string | null) =>
+    data.providers.find((p) => p.name === name)?.label ?? name ?? '';
+  const { failover } = data;
+  if (!failover.configured)
+    return (
+      <Card className="settings-section" data-testid="failover">
+        <h2>Automatic failover</h2>
+        <p>
+          Off on this copy: all email goes through the active provider, and
+          nothing switches by itself.
+        </p>
+      </Card>
+    );
+  const active = data.providers.find((p) => p.active)?.name ?? null;
+  return (
+    <Card className="settings-section" data-testid="failover">
+      <h2>Automatic failover</h2>
+      <p>
+        <strong>{liveNowNote(data)}</strong>
+      </p>
+      {failover.fixed ? (
+        <p>
+          Fixed: everything goes through {label(active)}, and nothing switches
+          by itself until staff let it.
+        </p>
+      ) : (
+        <p>
+          When {label(active)} keeps failing to send, or too many codes it sends
+          go unused, it rests for a while and new email moves to{' '}
+          {label(failover.backup)}; it comes back once {label(active)} works
+          again. Staff are alerted each time.
+        </p>
+      )}
+      {canManage && (
+        <ReasonAction
+          open={
+            failover.fixed
+              ? 'Let it switch automatically'
+              : 'Fix the active provider'
+          }
+          field={
+            failover.fixed
+              ? 'Why let it switch again?'
+              : 'Why fix the provider (e.g. an investigation)?'
+          }
+          submit={failover.fixed ? 'Switch automatically' : 'Fix provider'}
+          onSubmit={async (reason) => {
+            const result = await opsFetch('/v1/ops/providers/mail/failover', {
+              method: 'POST',
+              body: { fixed: !failover.fixed, reason },
+            });
+            if (result.ok) {
+              onChange();
+              return null;
+            }
+            return 'That didn’t go through. Please try again.';
+          }}
+        />
+      )}
+    </Card>
+  );
+}
 
 const TEST_STATUS: Record<string, string> = {
   pending: 'Waiting for the link in the email to be opened',
@@ -82,6 +225,7 @@ function ProviderCard({
             : 'Status: unknown until a test is confirmed.'}
         </p>
       )}
+      <HealthLine card={card} canManage={canManage} onChange={onChange} />
       <p>
         Last 24 hours: {card.last24h.sent} sent, {card.last24h.failed} failed
         attempts, {card.last24h.bounced} bounced, {card.last24h.complained}{' '}
@@ -381,6 +525,89 @@ function Suppressions({ canManage }: { canManage: boolean }) {
   );
 }
 
+/**
+ * Payment providers (per-provider balances, spec §4, §7): each withdraw-only provider's retire
+ * check. "Can retire" only once no owner has money there, nothing is open through it, and nothing
+ * has moved there for 30 days. Removing it from the list is a configuration change, not a button.
+ */
+function PaymentProviders() {
+  const [data, setData] = useState<OpsProviderRetire | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    void opsFetch<OpsProviderRetire>('/v1/ops/providers/payments/retire').then(
+      (result) => {
+        if (result.ok) setData(result.data);
+        else setFailed(true);
+      },
+    );
+  }, []);
+  return (
+    <Card className="settings-section" data-testid="payment-providers">
+      <h2>Payment providers</h2>
+      <p>
+        A withdraw-only provider takes no new tips, but people can still
+        withdraw what it holds. It can be retired once nobody has money there,
+        nothing is open through it
+        {data
+          ? `, and nothing has moved there for ${data.retireAfterDays} days`
+          : ''}
+        .
+      </p>
+      {failed && (
+        <Slip dense tone="error" title="Couldn’t load payment providers">
+          Please refresh the page.
+        </Slip>
+      )}
+      {!data && !failed && <Skeleton label="Loading payment providers" />}
+      {data?.providers.length === 0 && (
+        <p>No provider is withdraw-only: there is nothing to retire.</p>
+      )}
+      {data && data.providers.length > 0 && (
+        <ul className="ops-list" aria-label="Withdraw-only providers">
+          {data.providers.map((row) => (
+            <li
+              key={row.provider}
+              className="ops-row"
+              data-testid={`retire-${row.provider}`}
+            >
+              <span className="ops-row__head">
+                <strong className="ops-mono">{row.provider}</strong>
+                <Badge>{row.canRetire ? 'Can retire' : 'Not yet'}</Badge>
+              </span>
+              <dl className="ops-retire-facts">
+                <div>
+                  <dt>Owners with money</dt>
+                  <dd>{row.ownersWithMoney}</dd>
+                </div>
+                <div>
+                  <dt>Open payouts</dt>
+                  <dd>{row.openPayouts}</dd>
+                </div>
+                <div>
+                  <dt>Open refunds</dt>
+                  <dd>{row.openRefunds}</dd>
+                </div>
+                <div>
+                  <dt>Open disputes</dt>
+                  <dd>{row.openDisputes}</dd>
+                </div>
+              </dl>
+              <span className="tm-hint">
+                {row.lastActivityAt
+                  ? `Last money movement ${when(row.lastActivityAt)}.`
+                  : 'No money has moved through it.'}{' '}
+                {row.canRetire
+                  ? 'It can be taken off the withdraw-only list.'
+                  : 'Keep it on the withdraw-only list for now.'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export default function ProvidersPage() {
   const access = useOpsAccess();
   const [data, setData] = useState<OpsMailProviders | null>(null);
@@ -393,8 +620,13 @@ export default function ProvidersPage() {
     });
   }, [version]);
   const refresh = () => setVersion((v) => v + 1);
-  // A test moves on its own (sent, retried, failed): follow it while one is waiting.
-  const waiting = data?.providers.some((p) => p.lastTest?.status === 'pending');
+  // A test moves on its own (sent, retried, failed), and so does a resting provider (trial,
+  // recovered): follow them while one is waiting.
+  const waiting = data?.providers.some(
+    (p) =>
+      p.lastTest?.status === 'pending' ||
+      (p.health !== null && p.health.state !== 'healthy'),
+  );
   useEffect(() => {
     if (!waiting) return;
     const timer = setInterval(() => setVersion((v) => v + 1), 5000);
@@ -422,6 +654,7 @@ export default function ProvidersPage() {
               Last switched {when(data.changedAt)}: {data.reason}
             </p>
           )}
+          <Failover data={data} canManage={canManage} onChange={refresh} />
           {data.providers.map((card) => (
             <ProviderCard
               key={card.name}
@@ -436,6 +669,7 @@ export default function ProvidersPage() {
           )}
         </>
       )}
+      {canManage && <PaymentProviders />}
     </div>
   );
 }

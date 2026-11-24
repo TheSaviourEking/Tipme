@@ -1,0 +1,856 @@
+/* Page Studio styles: the frame every new style shares (spec 2026-11-17-page-studio-styles §8).
+   The skeleton, the tip form's common skin, the phone's sticky Tip bar, and reduced motion. Each
+   style's own file (clear.css, …) gives the look. Every selector starts `.studio[data-style]`, so
+   nothing here can touch a standard or Classic page. Colours come only from the root's
+   `--studio-*` tokens (style-tokens.ts). */
+
+.studio[data-style] {
+  --studio-ui: 'Studio Inter', 'Studio Inter Fallback', system-ui, sans-serif;
+  background: var(--studio-bg);
+  color: var(--studio-fg);
+  font-family: var(--studio-ui);
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: light;
+}
+
+/* The footer is always grounded to the bottom (owner, 23 Nov 2026). The page's own height was a whole
+   screen (`min-height: 100vh`), so the site's footer sat a screen down and the tip page's own foot
+   row (Report this page, Privacy, Terms, ...) floated part-way up with the page's colour empty
+   below it. Now the page fills what the header and the site's footer leave (globals.css, `body >
+   main`) and its foot rests at the bottom of that: on a short page that is the bottom of the
+   screen, on a tall page the foot simply follows the content. */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .studio-main {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The editor's preview frame is its own little document, not the site's page: its page fills it. */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .studio-preview-doc
+  .studio-main {
+  min-height: 100vh;
+}
+
+.studio[data-style] {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+}
+
+.studio[data-style] > .studio-page {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+/* Where the page is a single column (a phone, and Clear at every width) it is a flex column, so
+   the space a short page leaves goes just above the foot. Every part keeps the width a block gave it
+   (`stretch` fills the column less the part's margins, as a block does, and an auto margin still
+   centres a part under its max-width; the selector is wrapped in `:where()`, so it has no specificity and a part's own width always wins). On a
+   desktop the other styles are grids, whose last row takes the space (each style's file). */
+@media (max-width: 1023px) {
+  .studio[data-style] .studio-page {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 1023px) {
+  :where(.studio[data-style] .studio-page > *) {
+    width: 100%;
+    width: -webkit-fill-available;
+    width: -moz-available;
+    width: stretch;
+  }
+
+  .studio[data-style] .studio-page > .studio-grid {
+    margin-bottom: auto;
+  }
+}
+
+.studio[data-style][data-mode='dark'] {
+  color-scheme: dark;
+}
+
+.studio[data-style][data-mode='auto'] {
+  color-scheme: light dark;
+}
+
+/* Money is Inter with tabular, lining figures (§4.1), from the page's own Inter file. */
+.studio[data-style] .money,
+.studio[data-style] .studio-price {
+  font-family: var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+.studio[data-style] :is(h1, h2, p, figure, blockquote, ul) {
+  margin: 0;
+}
+
+.studio[data-style] ul {
+  padding: 0;
+  list-style: none;
+}
+
+.studio[data-style] img {
+  display: block;
+  max-width: 100%;
+}
+
+/* User text wraps instead of overflowing; names and bios balance, paragraphs wrap pretty. */
+.studio[data-style]
+  :is(.studio-name, .studio-bio, .studio-meta, .studio-title, .studio-block) {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.studio[data-style]
+  :is(.studio-text p, .studio-quote p, .studio-list__words, figcaption) {
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.studio[data-style] :is(.studio-name, .studio-bio) {
+  text-wrap: balance;
+}
+
+/* A name the display face can't draw is set wholly in Inter 700 (§4.1); a heading in Inter at its
+   own weight. */
+.studio[data-style] .studio-name--fallback {
+  font-family: var(--studio-ui);
+  font-weight: 700;
+}
+
+.studio[data-style] .studio-title--fallback {
+  font-family: var(--studio-ui);
+}
+
+.studio[data-style] .studio-cover {
+  position: relative;
+  overflow: hidden;
+}
+
+.studio[data-style] .studio-cover__photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 33%;
+}
+
+/* Today's cover art in the style's slot: it fills the slot instead of its own frame. */
+.studio[data-style] .studio-cover .profile-cover {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.studio[data-style] .studio-avatar {
+  display: block;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.studio[data-style] .studio-avatar.avatar--initials {
+  display: inline-flex;
+  background: var(--studio-el2);
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-meta .studio-pro {
+  margin-inline-start: 0.375rem;
+  vertical-align: middle;
+}
+
+.studio[data-style] .link-badge {
+  border-color: transparent;
+  background: var(--studio-el2);
+  color: var(--studio-fg);
+}
+
+.studio[data-style] a {
+  color: inherit;
+}
+
+/* Focus: a 2 px ring in the accent's text value, offset 2 (§4.4). */
+.studio[data-style]
+  :is(a, button, summary, input, select, textarea):focus-visible,
+.studio[data-style] .tm-choice input:focus-visible + span {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 2px;
+}
+
+/* The video still, in the page's own colours: no request to the video site until a tap. */
+.studio[data-style] .studio-video__still {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  min-height: 88px;
+  padding: 16px;
+  border: 0;
+  background: var(--studio-card);
+  color: var(--studio-fg);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.studio[data-style] .studio-video__still svg {
+  flex: none;
+  color: var(--studio-accText);
+}
+
+.studio[data-style] .studio-video__words {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.studio[data-style] .studio-video__note {
+  color: var(--studio-fg2);
+  font-size: 13px;
+}
+
+.studio[data-style] .studio-video__frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+
+/* The tip form's common skin: the panel is the page, the form's heading is for screen readers,
+   the fixed parts sit in the page's colours. Amounts, fields and the Tip are the style's. */
+.studio[data-style] .studio-tip .appreciation-card {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+}
+
+.studio[data-style] .studio-tip form > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.studio[data-style] .studio-tip fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.studio[data-style] .studio-tip .amount-fit {
+  margin: 0;
+}
+
+.studio[data-style] .studio-tip .tip-custom[hidden] {
+  display: none;
+}
+
+.studio[data-style]
+  .studio-tip
+  :is(.tm-field label, .tip-remember, .composer-extras summary) {
+  color: var(--studio-fg);
+}
+
+.studio[data-style]
+  .studio-tip
+  :is(
+    .tm-hint,
+    .tm-field-error,
+    .composer-disclaimer,
+    .composer-trust,
+    .composer-action__partner,
+    .tip-remember small
+  ) {
+  color: var(--studio-fg2);
+}
+
+.studio[data-style] .studio-tip .tm-field-error {
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-tip .tm-input {
+  border-color: var(--studio-control);
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+.studio[data-style] .studio-tip .tm-input::placeholder {
+  color: var(--studio-fg2);
+}
+
+.studio[data-style] .studio-tip .tip-remember input {
+  accent-color: var(--studio-acc);
+}
+
+/* The arrow belongs to Classic's black key; the styles' Tip is the label alone, as drawn. */
+.studio[data-style] .studio-tip .composer-submit svg {
+  display: none;
+}
+
+/* The phone's sticky Tip bar (§8). It is out of sight until the form's one IntersectionObserver
+   sets data-bar="shown" (the in-page Tip has scrolled away), so it never paints over the page
+   before the script runs; without JavaScript there is none, and the in-page Tip is the page's
+   Tip. It steps aside while a typing field has focus (the keyboard needs the room), and
+   desktops have none. */
+.studio[data-style] .tip-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  display: grid;
+  gap: 6px;
+  padding: 10px 16px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 0.5px solid var(--studio-line);
+  background: var(--studio-bar);
+  -webkit-backdrop-filter: saturate(1.8) blur(20px);
+  backdrop-filter: saturate(1.8) blur(20px);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateY(100%);
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 240ms;
+}
+
+.studio[data-style] form[data-bar='shown'] .tip-bar {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 240ms ease-out,
+    transform 240ms ease-out,
+    visibility 0s linear 0s;
+}
+
+.studio[data-style] .tip-bar__failed {
+  color: var(--studio-fg);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+.studio[data-style] .tip-bar__notice {
+  color: var(--studio-fg2);
+  font-size: 11px;
+  line-height: 15px;
+  text-align: center;
+}
+
+.studio[data-style]:has(
+    :is(input:not([type='radio'], [type='checkbox']), textarea):focus
+  )
+  .tip-bar {
+  visibility: hidden;
+}
+
+/* The page keeps room under its last block for the bar, sized to the bar by the form. */
+@media (max-width: 1023px) {
+  .studio[data-style] .studio-page {
+    padding-bottom: calc(var(--tip-bar, 136px) + 16px);
+  }
+
+  /* Anything scrolled into view (a focused link, the form's problem) stops above the bar
+     (WCAG 2.4.11), as on Classic. The fallback holds the bar as drawn, notice included. */
+  html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+      form[data-skin]
+  ) {
+    scroll-padding-bottom: calc(var(--tip-bar, 136px) + 8px);
+  }
+
+  /* The site's "TipMe has been updated" notice sits above the bar, as on Classic (globals.css
+     lifts it over `.composer-action` there); a styled page isn't `.profile-page`. */
+  html:has(
+      .studio[data-style]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+        form[data-skin]
+    )
+    .update-notice {
+    bottom: calc(var(--tip-bar, 136px) + 12px);
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio[data-style] .tip-bar {
+    display: none;
+  }
+}
+
+/* Reduced motion (§4.5): fades only. No slide, scale, press travel or lift. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style] *,
+  .studio[data-style] *::before,
+  .studio[data-style] *::after {
+    scroll-behavior: auto !important;
+  }
+
+  .studio[data-style] .tip-bar {
+    transform: none;
+  }
+}
+
+/* The payment moment stays still: nothing moves while a tip starts. */
+.studio[data-style] form[data-submitting] *,
+.studio[data-style] form[data-submitting] *::before,
+.studio[data-style] form[data-submitting] *::after {
+  transition: none !important;
+  animation: none !important;
+}
+
+/* The site's own header and footer on a styled page (owner, 17 Nov 2026, ruling P): the page's
+   neutrals, written on <html> by the page (style-tokens.ts chromeCss), take the place of the
+   site's paper tokens inside them, so they run into the page with no band or seam. On a tip page
+   the header is the logo alone (owner, 19 Nov 2026; globals.css). */
+html:has(
+  .studio[data-style]:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+) {
+  background: var(--studio-bg);
+}
+
+html:has(
+  .studio[data-style][data-mode='dark']:not(
+      [style*='display: none'],
+      [style*='display:none'],
+      [style*='display: none'] *,
+      [style*='display:none'] *
+    )
+) {
+  color-scheme: dark;
+}
+
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  :is(.site-header, .site-footer) {
+  --canvas: var(--studio-bg);
+  --surface-raised: var(--studio-card);
+  --surface-recessed: var(--studio-el2);
+  --surface-subtle: var(--studio-el2);
+  --text-primary: var(--studio-fg);
+  --text-secondary: var(--studio-fg2);
+  --edge-hairline: var(--studio-line);
+  --border-material: var(--studio-line);
+  --edge-light: transparent;
+  color: var(--studio-fg);
+}
+
+/* Someone's tip page (/@username, every style; the owner, 19 Nov 2026): the header is the TipMe
+   logo alone, as on the standard page and Classic (globals.css, .profile-page), so nothing competes
+   with the Tip button. The menu, Sign in, Get tipped, the account's links and the phone's menu
+   button step aside, out of sight and out of the keyboard's and screen readers' way; the site's
+   footer stays. The Studio lab stands in for these pages in the tests (test copies only). Every
+   rule here reads only the page on screen (the guard on `.studio`: globals.css, "Only the page on
+   screen"). */
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  :is(.site-nav, .menu-toggle) {
+  display: none;
+}
+
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-header
+  .brand__mark
+  path[fill='#000000'],
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-footer
+  .brand__mark
+  path[fill='#000000'] {
+  fill: var(--studio-fg);
+}
+
+html:has(
+    .studio[data-style]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  )
+  .site-footer
+  .footer-card {
+  box-shadow: none;
+}
+
+/* The site header over the cover (owner, 18 Nov 2026: "this header should be transparent or
+   blend into the theme on the hero"). A page that starts with a full-bleed cover marks its root
+   `data-header` (style-page.tsx); each style lifts its cover under the header (its own file). At
+   the top of the page the header is transparent: over a cover its words are white on a soft
+   scrim, 58% black or more wherever they sit, 4.5:1 (§4.2; the unit test reads the stops); over
+   Signboard's band they are the band's label colour. Just before the hero has gone, the header
+   turns to frosted glass in the page's bg, with today's words, in one short step, by a scroll-driven animation on the
+   hero's view timeline: colour and opacity only, no script. Browsers without scroll timelines skip
+   all of it and keep today's solid header; browsers without backdrop-filter get a solid bg. On a tip
+   page the header is the TipMe logo alone (owner, 19 Nov 2026; globals.css), so the logo is all
+   this styles. The ink is a registered colour, so it blends over that step instead of flipping. */
+@property --studio-head-ink {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #fff;
+}
+
+@supports (animation-timeline: view()) and (timeline-scope: none) {
+  html:has(
+    .studio[data-style][data-header]:not(
+        [style*='display: none'],
+        [style*='display:none'],
+        [style*='display: none'] *,
+        [style*='display:none'] *
+      )
+  ) {
+    timeline-scope: --studio-hero;
+  }
+
+  /* The hero's view timeline, measured from the header's foot: the header is solid by the time
+     the cover's foot reaches it. */
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .studio-cover,
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .studio-band {
+    view-timeline: --studio-hero block;
+    view-timeline-inset: var(--nav-height) 0;
+  }
+
+  /* The header writes in its ink. */
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
+    position: sticky;
+    top: 0;
+    margin-bottom: calc(-1 * var(--nav-height));
+    background: transparent;
+    --studio-head-ink: var(--studio-head-over);
+    color: var(--studio-head-ink);
+    animation: studio-head linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
+    --studio-head-over: #fff;
+  }
+
+  html:has(
+      .studio[data-style][data-header='band']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header {
+    --studio-head-over: var(--studio-accLabel);
+  }
+
+  /* The scrim: about 60% black at the top edge, 58% down to 72 px (the words' foot, links wrapped
+     to two lines included), then fading out below the header. It leaves with the hero. */
+  html:has(
+      .studio[data-style][data-header='over']:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header::before {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: -1;
+    height: calc(var(--nav-height) + 76px);
+    background: linear-gradient(
+      to bottom,
+      rgba(8, 8, 10, 0.62) 0px,
+      rgba(8, 8, 10, 0.58) 72px,
+      rgba(8, 8, 10, 0.24) 108px,
+      transparent 152px
+    );
+    content: '';
+    pointer-events: none;
+    animation: studio-head-scrim linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  /* Past the hero the header is frosted glass (the owner, 18 Nov 2026: "keep it fixed but kind
+     of make it glassy when you scroll"): the page's bg at 64% over a blur of what scrolls under
+     it, with a hairline. 64% is the lowest whole percent at which the page's words keep 4.5:1 on
+     it over pure black or pure white, in every style and mode (the unit test). It is the header's
+     own layer, not the header: a backdrop-filter on the header would hold the phone menu (fixed,
+     inside it) in the header's box. */
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header::after {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-bottom: 0.5px solid var(--studio-line);
+    background: color-mix(in srgb, var(--studio-bg) 64%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    content: '';
+    pointer-events: none;
+    opacity: 0;
+    animation: studio-head-glass linear both;
+    animation-timeline: --studio-hero;
+    animation-range: exit-crossing 70% exit-crossing 100%;
+  }
+
+  /* No backdrop-filter, or reduced transparency asked for: today's solid bg. */
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
+      background: var(--studio-bg);
+    }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
+      background: var(--studio-bg);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* The wordmark in the header's ink over the cover: its purple would vanish on a photo or a
+     purple band. "me" and the heart are purple again once the header is solid. */
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header
+    .nav-shell
+    > .brand
+    .brand__mark
+    path {
+    fill: currentColor;
+  }
+
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header
+    .nav-shell
+    > .brand
+    .brand__mark
+    path[fill='#7A32F9'] {
+    fill: var(--studio-head-me, currentColor);
+  }
+
+  /* Focus follows the ink, so the ring shows over the cover and on bg. */
+  html:has(
+      .studio[data-style][data-header]:not(
+          [style*='display: none'],
+          [style*='display:none'],
+          [style*='display: none'] *,
+          [style*='display:none'] *
+        )
+    )
+    .site-header
+    .nav-shell
+    > .brand:focus-visible {
+    outline-color: var(--studio-head-ink);
+  }
+
+  /* The words keep their over-the-cover ink on the full scrim, with no bg, until the cover's foot
+     is almost at the header's. Then, in one short step: the glass (below), the page's words, the
+     purple "me", no scrim. No mid-way where light words meet
+     half-drawn glass. Custom properties switch half way through the step. */
+  @keyframes studio-head {
+    0%,
+    85% {
+      --studio-head-ink: var(--studio-head-over);
+    }
+
+    88%,
+    100% {
+      --studio-head-ink: var(--studio-fg);
+      --studio-head-me: #7a32f9;
+    }
+  }
+
+  @keyframes studio-head-scrim {
+    0%,
+    85% {
+      opacity: 1;
+    }
+
+    88%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes studio-head-glass {
+    0%,
+    85% {
+      opacity: 0;
+    }
+
+    88%,
+    100% {
+      opacity: 1;
+    }
+  }
+
+  /* Reduced motion: the header switches once the hero has gone, with no fade between. */
+  @media (prefers-reduced-motion: reduce) {
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header,
+    html:has(
+        .studio[data-style][data-header='over']:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::before,
+    html:has(
+        .studio[data-style][data-header]:not(
+            [style*='display: none'],
+            [style*='display:none'],
+            [style*='display: none'] *,
+            [style*='display:none'] *
+          )
+      )
+      .site-header::after {
+      animation-timing-function: steps(1, end);
+    }
+  }
+}

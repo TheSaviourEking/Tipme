@@ -16,7 +16,7 @@ import {
   withdrawalQuote,
   withdrawalsAvailable,
 } from '../../dist/index.js';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 const { createMockProvider } = await import('../../../payments/dist/index.js');
 const { Redis } = createRequire(
@@ -25,7 +25,7 @@ const { Redis } = createRequire(
 const [ADA, TOBI] = DEMO_PROFILES;
 
 test('withdrawals', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const redis = new Redis(process.env.REDIS_URL ?? 'redis://127.0.0.1:6379');
   t.after(() => redis.quit());
   const { db } = database;
@@ -113,7 +113,7 @@ test('withdrawals', async (t) => {
         profileId: TOBI.id,
         amountMinor: 200000n,
         idempotencyKey: key,
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.equal(first.status, 'REQUESTED');
       assert.equal(await available(), 172000n);
@@ -130,7 +130,7 @@ test('withdrawals', async (t) => {
             profileId: TOBI.id,
             amountMinor: 200000n,
             idempotencyKey: key,
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           })
         ).payoutId,
         first.payoutId,
@@ -141,7 +141,7 @@ test('withdrawals', async (t) => {
             profileId: TOBI.id,
             amountMinor: 300000n,
             idempotencyKey: key,
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'IDEMPOTENCY_CONFLICT',
@@ -172,7 +172,7 @@ test('withdrawals', async (t) => {
         profileId: TOBI.id,
         amountMinor: 372000n,
         idempotencyKey: randomUUID(),
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.equal(await available(), 0n);
       await provider.settlePayout(
@@ -193,7 +193,7 @@ test('withdrawals', async (t) => {
         profileId: TOBI.id,
         amountMinor: 200000n,
         idempotencyKey,
-        provider: mock(),
+        providers: { active: mock(), withdrawOnly: [] },
       };
       const [first, replay] = await Promise.all([
         requestWithdrawal(db, input),
@@ -227,7 +227,7 @@ test('withdrawals', async (t) => {
             profileId: TOBI.id,
             amountMinor: 374002n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'INSUFFICIENT_BALANCE',
@@ -238,7 +238,7 @@ test('withdrawals', async (t) => {
             profileId: TOBI.id,
             amountMinor: 0n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'INVALID_INPUT',
@@ -248,13 +248,13 @@ test('withdrawals', async (t) => {
           profileId: TOBI.id,
           amountMinor: 200000n,
           idempotencyKey: randomUUID(),
-          provider,
+          providers: { active: provider, withdrawOnly: [] },
         }),
         requestWithdrawal(db, {
           profileId: TOBI.id,
           amountMinor: 200000n,
           idempotencyKey: randomUUID(),
-          provider,
+          providers: { active: provider, withdrawOnly: [] },
         }),
       ]);
       assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
@@ -289,19 +289,28 @@ test('withdrawals', async (t) => {
       profileId: TOBI.id,
       amountMinor: 200000n,
       idempotencyKey: randomUUID(),
-      provider: mock(),
+      providers: { active: mock(), withdrawOnly: [] },
     });
     assert.equal(withdrawal.status, 'REQUESTED');
   });
 });
 
-test('money collected by a provider without payouts can never be withdrawn through another', async (t) => {
-  const database = await useDatabase(t);
+test('money collected by a provider no longer connected is never withdrawn through another', async (t) => {
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   await database.fresh();
+  // Only the pretend provider is configured. It holds none of Tobi's money: its balance is 0.
+  const active = {
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+    payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
+    payoutBalance: async () => ({ availableMinor: 0n }),
+    quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
+  };
+  const providers = { active, withdrawOnly: [] };
   // The dashboard asks the same question before the owner types an amount.
   assert.equal(
-    await withdrawalsAvailable(db, { profileId: TOBI.id, provider: 'mock' }),
+    await withdrawalsAvailable(db, { profileId: TOBI.id, providers }),
     true,
   );
   const quote = await createQuote(db, {
@@ -332,21 +341,32 @@ test('money collected by a provider without payouts can never be withdrawn throu
     payload: {},
   });
   assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 372000n);
+  // Spec §8: the money at the unconnected provider no longer blocks the quote. It says the money
+  // is held elsewhere, and offers only what a configured provider holds: here nothing.
+  const quoted = await withdrawalQuote(db, { profileId: TOBI.id, providers });
+  assert.equal(quoted.state, 'ready');
+  assert.equal(quoted.heldElsewhere, true);
+  assert.equal(quoted.withdrawableMinor, 0n);
+  assert.equal(quoted.ledgerMinor, 372000n);
+  // The request takes only what a configured provider holds: none of it here (spec §5, §8).
   let started = false;
   await assert.rejects(
     requestWithdrawal(db, {
       profileId: TOBI.id,
       amountMinor: 372000n,
       idempotencyKey: randomUUID(),
-      provider: {
-        name: 'mock',
-        async initiatePayout() {
-          started = true;
-          return { providerReference: 'never' };
+      providers: {
+        active: {
+          ...active,
+          async initiatePayout() {
+            started = true;
+            return { providerReference: 'never' };
+          },
         },
+        withdrawOnly: [],
       },
     }),
-    { code: 'WITHDRAWAL_UNAVAILABLE' },
+    { code: 'INSUFFICIENT_BALANCE' },
   );
   assert.equal(started, false);
   assert.equal(
@@ -354,19 +374,20 @@ test('money collected by a provider without payouts can never be withdrawn throu
       .rows[0].n,
     0,
   );
+  // Nothing configured holds an account or a tip of Tobi's: nothing can pay them.
   assert.equal(
-    await withdrawalsAvailable(db, { profileId: TOBI.id, provider: 'mock' }),
+    await withdrawalsAvailable(db, { profileId: TOBI.id, providers }),
     false,
   );
   // Only the profile that holds such money is affected.
   assert.equal(
-    await withdrawalsAvailable(db, { profileId: ADA.id, provider: 'mock' }),
+    await withdrawalsAvailable(db, { profileId: ADA.id, providers }),
     true,
   );
 });
 
 test('withdrawals through the provider', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);
@@ -476,7 +497,7 @@ test('withdrawals through the provider', async (t) => {
       profileId: TOBI.id,
       amountMinor,
       idempotencyKey,
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
     });
   const payoutCount = async () =>
     (await q('SELECT count(*)::int AS n FROM payouts'))[0].n;
@@ -487,7 +508,10 @@ test('withdrawals through the provider', async (t) => {
       )
     )[0].n;
   const quoteOf = (provider) =>
-    withdrawalQuote(db, { profileId: TOBI.id, provider });
+    withdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: provider, withdrawOnly: [] },
+    });
   const withBalance = (availableMinor) =>
     bachsLike({
       async payoutBalance() {
@@ -505,8 +529,15 @@ test('withdrawals through the provider', async (t) => {
         ledgerMinor: 372000n,
         providerMinor: 240000n,
         feeMinor: 5000n,
-        // Users pay it, from the amount (owner, 12 Nov 2026).
-        feePaidBy: 'user',
+        // One provider holds it all: one part, nothing unread, no other bank.
+        capsMinor: [240000n],
+        partial: false,
+        bankDetailsNeeded: false,
+        heldElsewhere: false,
+        // TipMe pays it for a person's page (owner, 18 Nov 2026): withdrawals are free.
+        feePaidBy: 'tipme',
+        ordinalToday: 1,
+        freePerDay: 2,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
       const more = await quoteOf(withBalance(1800000n));
@@ -822,7 +853,7 @@ test('withdrawals through the provider', async (t) => {
       assert.equal(
         await withdrawalsAvailable(db, {
           profileId: TOBI.id,
-          provider: 'bachs-sandbox',
+          providers: { active: { name: 'bachs-sandbox' }, withdrawOnly: [] },
         }),
         true,
       );
@@ -835,7 +866,7 @@ test('withdrawals through the provider', async (t) => {
       assert.equal(
         await withdrawalsAvailable(db, {
           profileId: TOBI.id,
-          provider: 'bachs-live',
+          providers: { active: { name: 'bachs-live' }, withdrawOnly: [] },
         }),
         true,
       );

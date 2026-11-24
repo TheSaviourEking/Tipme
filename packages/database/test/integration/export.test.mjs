@@ -11,10 +11,10 @@ import {
   writeBusinessNote,
 } from '../../dist/index.js';
 import { leaveMember, seedBusiness, seedMember } from './business-fixtures.mjs';
-import { ADA, TOBI, useDatabase } from './helpers.mjs';
+import { ADA, TOBI, AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 test('a recipient’s CSV has the 10% amounts and status, never message text', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   await database.fresh();
   const quote = await createQuote(db, {
@@ -100,7 +100,7 @@ async function paidTipToAda(db, { memberId } = {}) {
 }
 
 test('the tips CSV names the business a tip was made at and the note written about the person', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   await database.fresh();
   const { locations } = await seedBusiness(database, {
@@ -157,7 +157,7 @@ test('the tips CSV names the business a tip was made at and the note written abo
 });
 
 test('the work CSV lists every membership of the person’s page, left ones included', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   await database.fresh();
   const { locations } = await seedBusiness(database, {

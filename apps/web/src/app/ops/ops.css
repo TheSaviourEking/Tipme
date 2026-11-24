@@ -270,6 +270,38 @@
   gap: var(--space-3);
 }
 
+/* Username handover (18 Nov 2026): the claim link and "Give to an account", under a reserved name. */
+.ops-handover {
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+.ops-handover h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ops-handover__link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.ops-handover__link .tm-input {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+}
+
+@media (max-width: 30rem) {
+  .ops-handover__link {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .ops-reason {
   display: grid;
   gap: var(--space-3);
@@ -517,13 +549,17 @@
 }
 
 body > .coming-soon-page {
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   overflow: hidden;
 }
 
 .coming-soon {
   width: min(100%, 90rem);
+  min-height: 100vh;
   min-height: 100svh;
+  min-height: 100dvh;
   margin-inline: auto;
   padding: clamp(1.5rem, 4vw, 3.5rem);
   display: grid;
@@ -1878,13 +1914,16 @@ body > .coming-soon-page {
 }
 
 .business-public {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
   background: var(--canvas);
   padding-bottom: var(--space-8);
 }
 
 .business-public__sheet {
-  display: grid;
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
   gap: var(--space-4);
   width: 100%;
   max-width: 36rem;
@@ -2126,6 +2165,7 @@ body > .coming-soon-page {
 .business-public__foot {
   display: flex;
   flex-wrap: wrap;
+  margin-top: auto;
   gap: var(--space-2) var(--space-4);
   padding-top: var(--space-4);
   font-size: var(--text-sm);
@@ -2465,6 +2505,13 @@ body > .coming-soon-page {
 .ops-people__table td {
   vertical-align: middle;
   white-space: nowrap;
+}
+
+/* You collect (Task 15): "Account collects" may wrap onto two lines, so the extra column still fits
+   a 1440px screen's column. */
+.ops-people__table td.ops-people__collection {
+  min-width: 5.5rem;
+  white-space: normal;
 }
 
 /* The name and email may wrap, so the table fits a 1440px screen's column (UI audit F3). */
@@ -3296,4 +3343,103 @@ a.ops-people__card:hover {
 .ops-pro-refund p,
 .ops-tip-reverse p {
   margin: 0;
+}
+
+/* You collect (Task 15): its screens as a row of tabs, wrapping on a phone. */
+.ops-collect-tabs ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.ops-collect-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill, 999px);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.ops-collect-tabs a[aria-current='page'] {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+/* You collect reserve (Task 15 follow-up): a level that needs a person reads as such, not purple. */
+.ops-reserve-level--critical,
+.ops-reserve-level--broken {
+  background: var(--state-danger-soft);
+  color: var(--state-danger);
+}
+
+.ops-reserve-level--warning {
+  background: var(--state-warning-soft);
+  color: var(--state-warning);
+}
+
+/* Split accounts (per-provider balances, spec §7): each provider of an owner on its own line, its
+   name, role and figures wrapping together inside the cell. */
+.ops-split-providers {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A provider's name and role, or a check's result and time, wrapping as one unit. */
+.ops-split-providers__name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+}
+
+.ops-split-providers li,
+.ops-split-check {
+  display: grid;
+  gap: var(--space-1);
+}
+
+/* A handle breaks only when it must, so the column is as wide as the handle, not a few letters. */
+.ops-split-owner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-wrap: break-word;
+}
+
+/* "Read balances now" stays on one line; the other columns give way. */
+.ops-split-read {
+  white-space: nowrap;
+}
+
+/* The retire check on Providers: one line of counts per withdraw-only provider. */
+.ops-retire-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0;
+}
+
+.ops-retire-facts div {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.ops-retire-facts dt {
+  color: var(--text-secondary);
+}
+
+.ops-retire-facts dd {
+  margin: 0;
+  font-weight: 600;
 }

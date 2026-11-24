@@ -553,3 +553,19 @@ test('the worker has no business-share or refund variables; the switch ones only
     REFUND_FEE_RETURN: 'true',
   });
 });
+
+test('withdraw-only providers: mock_alt loads under NODE_ENV=test and is refused in production', () => {
+  const config = loadWorkerConfig({
+    REDIS_URL: 'redis://127.0.0.1:6379',
+    DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/d',
+    MAIL_SEAL_KEY: Buffer.alloc(32, 5).toString('base64'),
+    MOCK_PROVIDER_WEBHOOK_SECRET: 'x'.repeat(32),
+    NODE_ENV: 'test',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
+  });
+  assert.deepEqual(config.PAYMENT_WITHDRAW_ONLY_PROVIDERS, ['mock_alt']);
+  assert.match(
+    productionIssues({ PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt' }),
+    /PAYMENT_WITHDRAW_ONLY_PROVIDERS/,
+  );
+});

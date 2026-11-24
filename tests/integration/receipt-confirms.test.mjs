@@ -85,7 +85,7 @@ test('the receipt asks Bachs at once, so a paid tip shows paid without a webhook
   const status = receipt(db, tipId, {
     async verifyTransaction(reference, expectation) {
       asked.push(reference);
-      assert.deepEqual(expectation, { platformFeeMinor: 14000n });
+      assert.deepEqual(expectation, { platformFeeMinor: 10000n });
       return paid;
     },
   });

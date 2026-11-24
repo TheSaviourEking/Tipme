@@ -12,6 +12,7 @@ import type { Database, Tx } from '../client.js';
 import {
   businesses,
   businessManagers,
+  disputes,
   issues,
   payouts,
   profiles,
@@ -57,13 +58,55 @@ import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import { announcementSendAction } from './announcements.js';
 import { askProRefund, proRefundFacts } from './pro-refunds.js';
-import { askTipRefund, tipRefundFacts } from './tip-refunds.js';
+import {
+  askTipRefund,
+  recordUnbookedRefund,
+  recoveredOnTip,
+  returnHeldRefundMoney,
+  tipRefundFacts,
+} from './tip-refunds.js';
 import {
   checkedProPrice,
   currentProPrice,
   nairaOf,
   setProPrice,
 } from './pro-price.js';
+import {
+  checkedPlanFeeRates,
+  requirePlanFeeConfirm,
+  percentOf,
+  PLAN_FEES_CHANGE_ACTION,
+  planFeeRatesInForce,
+  setPlanFeeRates,
+} from './plan-fee-rates.js';
+import {
+  checkedCollectSettings,
+  COLLECT_SETTINGS_CHANGE_ACTION,
+  COLLECT_TRANSFERS_PAUSE_ACTION,
+  COLLECT_TRANSFERS_RESUME_ACTION,
+  collectSettingsInForce,
+  collectSettingsPayload,
+  describeCollectSettingsChange,
+  setCollectSettings,
+  setCollectTransfersPaused,
+} from './collect-settings.js';
+import {
+  changeCollectLegalName,
+  collectNameStamp,
+} from './collect-verification.js';
+import {
+  askDisputeEvidence,
+  clearSameBankHold,
+  collectTransferStamp,
+  disputeEvidenceStamp,
+  releaseDisputeHold,
+  retryTransferInReview,
+  sameBankStamp,
+} from './collect-ops.js';
+import {
+  collectTransferForStaff,
+  recordReviewTransferPaid,
+} from './collect-transfers.js';
 import {
   qualifiedApprovers,
   registerSeriousAction,
@@ -584,6 +627,140 @@ const proPriceChange = acting<{ amountMinor: string }>({
 });
 
 /*
+ * TipMe's share per plan (owner, 18 Nov 2026): the Free and Pro rates, for new quotes only. A money
+ * change, so a second person decides. Pinned on the rates in force, so a change made while this
+ * waited makes it stale. Nobody is its subject: it applies to every new quote.
+ */
+const planFeesChange = acting<{
+  freeBps: string;
+  proBps: string;
+  confirmLargeChange?: boolean;
+}>({
+  name: PLAN_FEES_CHANGE_ACTION,
+  permission: 'fees.manage',
+  target: () => 'plan_fees',
+  current: async (tx) => {
+    const rates = await planFeeRatesInForce(tx);
+    return {
+      id: rates.row?.id ?? null,
+      freeBps: String(rates.freeBps),
+      proBps: String(rates.proBps),
+    };
+  },
+  describe: async (tx, payload) => {
+    const to = checkedPlanFeeRates(payload);
+    const from = await planFeeRatesInForce(tx);
+    // Asked at request time too, so a big move without the confirm never opens a request.
+    requirePlanFeeConfirm(from, to, payload.confirmLargeChange);
+    return `Change TipMe’s fee from Free ${percentOf(from.freeBps)} and Pro ${percentOf(from.proBps)} to Free ${percentOf(to.freeBps)} and Pro ${percentOf(to.proBps)}, for new tips only`;
+  },
+  act: (tx, payload, context) => {
+    const to = checkedPlanFeeRates(payload);
+    return setPlanFeeRates(tx, {
+      ...to,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+      confirmedLargeChange: payload.confirmLargeChange === true,
+    }).then((set) => ({
+      id: set.id,
+      freeBps: String(set.freeBps),
+      proBps: String(set.proBps),
+    }));
+  },
+});
+
+/*
+ * You collect's settings (plan Task 12, spec §9), as the plan fee rates: a money change, so a second
+ * person decides (or a lone admin acts alone, with the alert). Pinned on the settings in force, so a
+ * change made while this waited makes it stale. Nobody is its subject: it applies to everyone on
+ * You collect from now.
+ */
+const collectSettingsChange = acting<Record<string, unknown>>({
+  name: COLLECT_SETTINGS_CHANGE_ACTION,
+  permission: 'fees.manage',
+  target: () => 'collect_settings',
+  current: async (tx) => {
+    const settings = await collectSettingsInForce(tx);
+    return { id: settings.rowId, ...collectSettingsPayload(settings) };
+  },
+  describe: async (tx, payload) =>
+    describeCollectSettingsChange(
+      await collectSettingsInForce(tx),
+      checkedCollectSettings(payload),
+    ),
+  act: (tx, payload, context) =>
+    setCollectSettings(tx, {
+      values: checkedCollectSettings(payload),
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }),
+});
+
+/*
+ * Staff's emergency pause of every collect transfer, and its resume (R11, spec §12.5): a new settings
+ * row with `paused`, which the transfer machine reads before each row. Pinned on the pause as it
+ * stands, so a request the pause has since moved past goes stale.
+ */
+const collectTransfersPaused = (paused: boolean) =>
+  acting<Record<string, never>>({
+    name: paused
+      ? COLLECT_TRANSFERS_PAUSE_ACTION
+      : COLLECT_TRANSFERS_RESUME_ACTION,
+    permission: 'payments.repair',
+    target: () => 'collect_transfers',
+    current: async (tx) => {
+      const settings = await collectSettingsInForce(tx);
+      return { id: settings.rowId, paused: settings.paused };
+    },
+    describe: async () =>
+      paused
+        ? 'Pause every You collect transfer: held tips stay with TipMe until resumed'
+        : 'Resume You collect transfers: held tips move to recipients again',
+    act: (tx, _payload, context) =>
+      setCollectTransfersPaused(tx, {
+        paused,
+        staffUserId: context.actorId,
+        approvedBy: context.approverId ?? null,
+        reason: context.reason,
+        now: context.now,
+      }),
+  });
+
+/*
+ * You collect (plan Task 13, spec §2.1 "Name lock", §8): a recipient's verified legal name, changed
+ * by support after checking it, with a second person. Pinned on the name in force, so a request the
+ * name has moved past goes stale. The new name is in the payload only while it waits: the summary
+ * names no one, and the decided request keeps the page alone.
+ */
+const collectNameChange = acting<{
+  profileId: string;
+  first?: string;
+  last?: string;
+}>({
+  name: 'collect_name.change',
+  permission: 'recoveries.manage',
+  subjects: ({ profileId }, db) => pageOwner(db, profileId),
+  target: ({ profileId }) => profileId,
+  current: (tx, { profileId }) => collectNameStamp(tx, profileId),
+  describe: async (tx, { profileId }) =>
+    `Change @${await handleOf(tx, profileId)}’s verified name, as support checked it`,
+  afterClose: ({ profileId }) => ({ profileId }),
+  act: (tx, { profileId, first, last }, context) =>
+    changeCollectLegalName(tx, {
+      profileId,
+      legalName: { first: first ?? '', last: last ?? '' },
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+      sealing: context.services?.sealing,
+    }),
+});
+
+/*
  * Business Pro (plan Task A5): the business monthly price, exactly like `pro_price.change` but on
  * plan 'business'. Pinned on the current business price only, so a personal change never makes it
  * stale (and the other way round).
@@ -669,7 +846,12 @@ const tipRefund = acting<{ tipId: string }>({
   target: ({ tipId }) => tipId,
   current: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
-    return { refund: facts.refund?.status ?? null, refusal: facts.refusal };
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      // You collect (Task 10): a plan that changed since asking makes it stale. Direct: unchanged.
+      ...(facts.collect ? { plan: facts.collect.plan } : {}),
+    };
   },
   describe: async (tx, { tipId }) => {
     const facts = await tipRefundFacts(tx, tipId);
@@ -691,6 +873,301 @@ const tipRefund = acting<{ tipId: string }>({
       now: context.now,
     });
   },
+});
+
+/**
+ * You collect (plan Task 10, spec §6.1 case 3): a collect tip whose recipient (or business) no longer
+ * has all of their part to give back. Going ahead is this serious action: a second person decides
+ * that TipMe absorbs up to the gap from its own balance. Pinned on the plan and the gap, so money
+ * that moved since asking makes it stale. What can still be taken back is, first.
+ */
+const tipRefundAbsorbGap = acting<{ tipId: string }>({
+  name: 'tip_refund.absorb_gap',
+  permission: 'payments.repair',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      plan: facts.collect?.plan ?? null,
+      gap: facts.collect ? String(facts.collect.gapMinor) : null,
+    };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'a page';
+    const gap = facts.collect?.gapMinor ?? 0n;
+    return `Refund ${naira(facts.refundMinor)} of a ${naira(facts.grossMinor)} tip to ${page} (tip ending ${tipId.slice(-6)}) from TipMe's own balance, although up to ${naira(gap)} of it can't be taken back from the recipients first: TipMe absorbs that as a loss. What can still be taken back is, before the refund is sent. TipMe keeps its ${naira(facts.feeMinor)} fee.`;
+  },
+  act: async (tx, { tipId }, context) => {
+    if (!(await readFeatureSwitch(tx, 'tip_refunds')))
+      throw new OperationError('TIP_REFUND_REFUSED', 'switched_off');
+    return askTipRefund(tx, {
+      tipId,
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+      absorbGap: true,
+    });
+  },
+});
+
+/**
+ * You collect (plan Task 10, fix round 2, RI1): money a failed refund of a collect tip took back from
+ * the recipient goes back to them (a `return` transfer from TipMe's balance to their account). A
+ * second person decides. Pinned on what is held, so a change since asking makes it stale.
+ */
+const tipRefundReturn = acting<{ tipId: string }>({
+  name: 'tip_refund.return',
+  permission: 'payments.repair',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return {
+      refund: facts.refund?.status ?? null,
+      refusal: facts.refusal,
+      held: String(facts.heldMinor),
+      businessHeld: String(facts.businessHeldMinor),
+    };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'the page';
+    const tip = `a tip to ${page} (tip ending ${tipId.slice(-6)})`;
+    const person =
+      facts.heldMinor > 0n
+        ? `Return ${naira(facts.heldMinor)} that a failed refund of ${tip} took back: TipMe sends it from its own balance to their account with our payment partner (Bachs), and it is theirs to withdraw again.`
+        : '';
+    const business =
+      facts.businessHeldMinor > 0n
+        ? `Return ${naira(facts.businessHeldMinor)} that a failed refund of ${tip} pulled back from ${facts.businessName ?? 'the business'}: TipMe sends it from its own balance to the business's account with our payment partner (Bachs).`
+        : '';
+    return `${[person, business].filter(Boolean).join(' ')} No refund is made.`;
+  },
+  act: async (tx, { tipId }, context) => {
+    if (!(await readFeatureSwitch(tx, 'tip_refunds')))
+      throw new OperationError('TIP_REFUND_REFUSED', 'switched_off');
+    return returnHeldRefundMoney(tx, { tipId, now: context.now });
+  },
+});
+
+/*
+ * You collect staff screens (plan Task 15, spec §9): each money action waits for a second person
+ * holding `collect.manage`, pinned on the row as it stood when asked, and refused at the run if the
+ * money has moved on since (COLLECT_ACTION_REFUSED). The recipient can't decide one about their own
+ * page.
+ */
+
+const transferOwner = async (db: Database | Tx, transferId: string) => {
+  const row = await collectTransferForStaff(db, transferId);
+  return row ? pageOwner(db, row.profileId) : [];
+};
+
+const transferWords = async (db: Database | Tx, transferId: string) => {
+  const row = await collectTransferForStaff(db, transferId);
+  if (!row) return 'a transfer that no longer exists';
+  return `the ${naira(row.amountMinor)} ${row.kind === 'share' ? 'transfer' : row.kind === 'back' ? 'transfer back' : 'return'} to @${await handleOf(db, row.profileId)} (group ${row.idempotencyKey})`;
+};
+
+const disputeOwner = async (db: Database | Tx, disputeId: string) => {
+  const [row] = await db
+    .select({ profileId: tips.profileId })
+    .from(disputes)
+    .innerJoin(tips, eq(tips.id, disputes.tipId))
+    .where(eq(disputes.id, disputeId));
+  return row?.profileId ? pageOwner(db, row.profileId) : [];
+};
+
+const disputeWords = async (db: Database | Tx, disputeId: string) => {
+  const [row] = await db
+    .select({
+      amountMinor: disputes.amountMinor,
+      partnerDisputeId: disputes.partnerDisputeId,
+      respondBy: disputes.respondBy,
+      profileId: tips.profileId,
+    })
+    .from(disputes)
+    .innerJoin(tips, eq(tips.id, disputes.tipId))
+    .where(eq(disputes.id, disputeId));
+  if (!row) return { what: 'a dispute that no longer exists', respondBy: null };
+  return {
+    what: `the ${naira(row.amountMinor)} dispute ${row.partnerDisputeId} on a tip to @${row.profileId ? await handleOf(db, row.profileId) : 'a page'}`,
+    respondBy: row.respondBy,
+  };
+};
+
+const collectTransferRetry = acting<{ transferId: string }>({
+  name: 'collect_transfer.retry',
+  permission: 'collect.manage',
+  subjects: ({ transferId }, db) => transferOwner(db, transferId),
+  target: ({ transferId }) => transferId,
+  current: (tx, { transferId }) => collectTransferStamp(tx, transferId),
+  describe: async (tx, { transferId }) =>
+    `Retry ${await transferWords(tx, transferId)}: it leaves review and is sent again with the same key, after the partner dashboard was checked for its group`,
+  act: (tx, { transferId }, context) =>
+    retryTransferInReview(tx, { transferId, now: context.now }),
+});
+
+/** What `prepare` found at the partner for a record-as-paid: the transfer that paid. */
+type ReadBack = { transferRef: string };
+
+const collectTransferRecordPaid = acting<{ transferId: string }>({
+  name: 'collect_transfer.record_paid',
+  permission: 'collect.manage',
+  subjects: ({ transferId }, db) => transferOwner(db, transferId),
+  target: ({ transferId }) => transferId,
+  current: (tx, { transferId }) => collectTransferStamp(tx, transferId),
+  // P24–P27: only the partner's read-back by the transfer's group proves it moved. Read before the
+  // transaction, each time (asking and approving alike): one transfer in the group, paid, for this
+  // amount and currency, or nothing is recorded.
+  prepare: async (db, { transferId }, input): Promise<ReadBack> => {
+    const row = await collectTransferForStaff(db, transferId);
+    if (
+      !row ||
+      row.status !== 'review' ||
+      row.reviewReason !== 'provider' ||
+      !row.accountReference
+    )
+      throw new OperationError('COLLECT_ACTION_REFUSED', 'not_in_review');
+    const reader = servicesOf(input).collectReader?.(row.provider);
+    if (!reader) throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    let listed: Awaited<ReturnType<typeof reader.listAccountTransfers>>;
+    try {
+      listed = await reader.listAccountTransfers(row.accountReference);
+    } catch {
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    }
+    const ours = listed.filter((t) => t.group === row.idempotencyKey);
+    const [found] = ours;
+    if (
+      ours.length !== 1 ||
+      !found ||
+      found.status !== 'paid' ||
+      found.amountMinor !== row.amountMinor ||
+      found.currency !== row.currency
+    )
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    return { transferRef: found.transferRef };
+  },
+  describe: async (tx, { transferId }) =>
+    `Record ${await transferWords(tx, transferId)} as paid: the partner shows it paid in its group for this amount, so it is booked as moved, once`,
+  act: (tx, { transferId }, context) => {
+    const facts = context.facts as ReadBack | undefined;
+    if (!facts?.transferRef)
+      throw new OperationError('COLLECT_READ_BACK_UNCONFIRMED');
+    return recordReviewTransferPaid(tx, {
+      transferId,
+      transferRef: facts.transferRef,
+      now: context.now,
+      staffUserId: context.actorId,
+      reason: context.reason,
+    });
+  },
+});
+
+const collectDisputeReleaseHold = acting<{ disputeId: string }>({
+  name: 'collect_dispute.release_hold',
+  permission: 'collect.manage',
+  subjects: ({ disputeId }, db) => disputeOwner(db, disputeId),
+  target: ({ disputeId }) => disputeId,
+  current: async (tx, { disputeId }) => {
+    const [row] = await tx
+      .select({
+        status: disputes.status,
+        settledAt: disputes.settledAt,
+        heldMinor: disputes.heldMinor,
+        shareStep: disputes.shareStep,
+      })
+      .from(disputes)
+      .where(eq(disputes.id, disputeId));
+    return row
+      ? {
+          status: row.status,
+          settled: row.settledAt !== null,
+          held: String(row.heldMinor),
+          shareStep: row.shareStep,
+        }
+      : null;
+  },
+  describe: async (tx, { disputeId }) =>
+    `Release the hold on ${(await disputeWords(tx, disputeId)).what}, closed without a ruling, before its 14 days end: no refund of the tip is in progress or used it, and the money goes on to the recipient`,
+  act: (tx, { disputeId }, context) =>
+    releaseDisputeHold(tx, { disputeId, now: context.now }),
+});
+
+const collectDisputeEvidence = acting<{ disputeId: string; text?: string }>({
+  name: 'collect_dispute.evidence',
+  permission: 'collect.manage',
+  subjects: ({ disputeId }, db) => disputeOwner(db, disputeId),
+  target: ({ disputeId }) => disputeId,
+  current: (tx, { disputeId }) => disputeEvidenceStamp(tx, disputeId),
+  describe: async (tx, { disputeId }) => {
+    const { what, respondBy } = await disputeWords(tx, disputeId);
+    const stamp = await disputeEvidenceStamp(tx, disputeId);
+    return `Submit evidence for ${what} to our payment partner (Bachs), with ${stamp?.files ?? 0} file(s)${respondBy ? `, before ${respondBy.toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''}. It is submitted once and can't be changed after.`;
+  },
+  afterClose: ({ disputeId }) => ({ disputeId }),
+  act: (tx, { disputeId, text }, context) =>
+    askDisputeEvidence(tx, { disputeId, text: text ?? '', now: context.now }),
+});
+
+const collectSameBankClear = acting<{ profileId: string }>({
+  name: 'collect_same_bank.clear',
+  permission: 'collect.manage',
+  subjects: ({ profileId }, db) => pageOwner(db, profileId),
+  target: ({ profileId }) => profileId,
+  current: (tx, { profileId }) => sameBankStamp(tx, profileId),
+  describe: async (tx, { profileId }) =>
+    `Clear the shared bank account hold on @${await handleOf(tx, profileId)}: staff checked the account, its issues are resolved and its held transfers go back to the queue`,
+  act: (tx, { profileId }, context) =>
+    clearSameBankHold(tx, {
+      profileId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      sealing: context.services?.sealing,
+      now: context.now,
+    }),
+});
+
+const tipRefundRecordPaid = acting<{ tipId: string }>({
+  name: 'tip_refund.record_paid',
+  permission: 'collect.manage',
+  subjects: async ({ tipId }, db) => {
+    const facts = await tipRefundFacts(db, tipId);
+    return facts.profileId ? pageOwner(db, facts.profileId) : [];
+  },
+  target: ({ tipId }) => tipId,
+  current: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    return {
+      refusal: facts.refusal,
+      unbooked: String(facts.unbookedMinor),
+      // I2: a return to the recipient starting or finishing since asking makes it stale.
+      returning: (await recoveredOnTip(tx, tipId)).returning,
+    };
+  },
+  describe: async (tx, { tipId }) => {
+    const facts = await tipRefundFacts(tx, tipId);
+    const page = facts.handle ? `@${facts.handle}` : 'a page';
+    return `Book the ${naira(facts.unbookedMinor)} refund our payment partner (Bachs) paid on a tip to ${page} (tip ending ${tipId.slice(-6)}) that TipMe didn't book: from what TipMe still holds for the tip, and TipMe absorbs the rest. Booked once.`;
+  },
+  act: (tx, { tipId }, context) =>
+    recordUnbookedRefund(tx, {
+      tipId,
+      staffUserId: context.actorId,
+      reason: context.reason,
+      now: context.now,
+    }),
 });
 
 /* TipMe for businesses */
@@ -1251,6 +1728,19 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(businessProPriceChange);
   registerSeriousAction(announcementSendAction);
   registerSeriousAction(tipRefund);
+  registerSeriousAction(tipRefundAbsorbGap);
+  registerSeriousAction(tipRefundReturn);
+  registerSeriousAction(planFeesChange);
+  registerSeriousAction(collectSettingsChange);
+  registerSeriousAction(collectTransfersPaused(true));
+  registerSeriousAction(collectTransfersPaused(false));
+  registerSeriousAction(collectNameChange);
+  registerSeriousAction(collectTransferRetry);
+  registerSeriousAction(collectTransferRecordPaid);
+  registerSeriousAction(collectDisputeReleaseHold);
+  registerSeriousAction(collectDisputeEvidence);
+  registerSeriousAction(collectSameBankClear);
+  registerSeriousAction(tipRefundRecordPaid);
 }
 
 /* Routes whose seriousness depends on what is being done */

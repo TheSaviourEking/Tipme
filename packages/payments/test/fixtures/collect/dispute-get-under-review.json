@@ -1,0 +1,25 @@
+{
+  "_source": "Built from the docs, not recorded: the 200 example of GET /v1/disputes/{dispute_id} (DisputeResponse) in https://docs.bachs.io/api-reference/disputes/get-dispute.md, for TipMe's ₦10,000 dispute. `under_review`: 'your evidence has been submitted and the outcome is being decided'.",
+  "dispute_id": "dsp_1a2b3c4d5e",
+  "charge_id": "ch_9f4c1d2e7b6a4f8e9c0d1a2b3c4d5e6f",
+  "amount": "10000.00",
+  "currency": "NGN",
+  "status": "under_review",
+  "is_response_editable": false,
+  "reason": "fraudulent",
+  "response_deadline_at": "2026-12-02T00:00:00.000Z",
+  "evidence": {
+    "notes": "The supporter tipped on 19 Nov and was sent a receipt.",
+    "uncategorized_attachment_id": "upl_9f2c7b3d1e45"
+  },
+  "latest_submission": {
+    "submission_id": "dse_a1b2c3d4e5f6",
+    "status": "submitted",
+    "trigger_source": "merchant_submit",
+    "submitted_at": "2026-11-20T11:31:00.000Z",
+    "failed_at": null,
+    "attempt_sequence": 1
+  },
+  "created_at": "2026-11-19T12:00:00.000Z",
+  "updated_at": "2026-11-20T11:31:00.000Z"
+}

@@ -1,0 +1,24 @@
+{
+  "_source": "Recorded from today's initializePayment (branch feat/you-collect-4-adapter at cb3dc7ec, before any Task 4 change) with a faked fetchImpl; the authorization header is left out. The direct-checkout request must stay byte-identical.",
+  "method": "POST",
+  "url": "https://sandbox-api.bachs.io/v1/checkout-sessions",
+  "headers": {
+    "accept": "application/json",
+    "User-Agent": "TipMe/1.0 (+https://usetipme.xyz)",
+    "content-type": "application/json",
+    "X-Account-Id": "acct_ZH5luf3xSXZkDevh",
+    "Idempotency-Key": "tipme-checkout-0193f7a2-0000-7000-8000-00000000d1ec"
+  },
+  "body": {
+    "pricing": {
+      "amount": "10000.00",
+      "currency": "NGN"
+    },
+    "reference": "0193f7a2-0000-7000-8000-00000000d1ec",
+    "success_url": "https://usetipme.xyz/checkout/return",
+    "cancel_url": "https://usetipme.xyz/checkout/cancel",
+    "customer_creation": "if_required",
+    "payment_method_types": ["NGN_CARD", "NGN_BANK_TRANSFER"],
+    "platform_fee": "500.00"
+  }
+}

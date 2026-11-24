@@ -1,0 +1,12 @@
+{
+  "_source": "Built from the docs, not recorded: the 200 example of POST /v1/disputes/{dispute_id}/submit (DisputeSubmitResponse; 'This action is irreversible and locks further evidence edits'; no request body) in https://docs.bachs.io/api-reference/disputes/submit-dispute.md.",
+  "dispute_id": "dsp_1a2b3c4d5e",
+  "status": "under_review",
+  "is_response_editable": false,
+  "submission": {
+    "submission_id": "dse_a1b2c3d4e5f6",
+    "submission_status": "submitted",
+    "trigger_source": "merchant_submit",
+    "submitted_at": "2026-11-20T11:31:00.000Z"
+  }
+}

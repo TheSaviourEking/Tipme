@@ -182,10 +182,16 @@ test('a reversal opens its issue and pauses that recipient’s withdrawals', asy
     name: 'bachs-sandbox',
     capabilities: { connectedAccounts: true },
   };
-  assert.deepEqual(await withdrawalQuote(db, { profileId: ADA, provider }), {
-    state: 'paused',
-    reason: 'reversal',
-  });
+  assert.deepEqual(
+    await withdrawalQuote(db, {
+      profileId: ADA,
+      providers: { active: provider, withdrawOnly: [] },
+    }),
+    {
+      state: 'paused',
+      reason: 'reversal',
+    },
+  );
 
   // Redelivered: still one hold. Redelivered after staff closed it: no hold comes back.
   await webhooks.applyBachs(reversal, { environment: 'sandbox' });

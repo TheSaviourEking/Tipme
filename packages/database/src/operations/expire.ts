@@ -11,6 +11,9 @@ import { recordTransition } from './transitions.js';
 
 const EXPIRABLE = ['CREATED', 'INITIATED'] as const;
 
+/** Most address keys one expiry run clears. */
+export const ADDRESS_KEY_SWEEP_LIMIT = 500;
+
 /** Reconciliation's verifier, plus a lookup by TipMe's own attempt id (the merchant reference). */
 export interface PaymentLookup extends TransactionVerifier {
   name: string;
@@ -40,6 +43,7 @@ export async function expireStaleTips(input: {
         providerReference: paymentAttempts.providerReference,
         platformFeeMinor: tipQuotes.platformFeeMinor,
         providerFeeMinor: tipQuotes.providerFeeMinor,
+        collectionMode: tipQuotes.collectionMode,
       })
       .from(paymentAttempts)
       .innerJoin(
@@ -85,9 +89,12 @@ export async function expireStaleTips(input: {
         }
       }
       if (candidate.provider && candidate.providerReference) {
+        // A collect tip is TipMe's own checkout: no platform fee to expect, as in reconciliation.
         const answer = await provider.verifyTransaction(
           candidate.providerReference,
-          quotedShare(candidate),
+          candidate.collectionMode === 'collect'
+            ? undefined
+            : quotedShare(candidate),
         );
         if (answer.status === 'pending' && answer.collected) {
           // The provider took the money but its settlement evidence is not final: never cancel
@@ -118,6 +125,10 @@ export async function expireStaleTips(input: {
             amountMinor: answer.amountMinor,
             currency: answer.currency,
             providerFeeMinor: answer.feeMinor,
+            environment: provider.environment,
+            ...(answer.chargeReference
+              ? { chargeReference: answer.chargeReference }
+              : {}),
             signatureVerified: true,
             payload: { source: 'expiry' },
             now,
@@ -139,7 +150,39 @@ export async function expireStaleTips(input: {
         .catch(() => undefined);
     }
   }
+  // Last, so the tips cancelled above lose their key in this same run.
+  await clearFinishedAddressKeys(db).catch(() => {
+    errors += 1;
+  });
   return { expired, paid, errors };
+}
+
+/**
+ * You collect (ruling P34, fix round 4): a supporter's address key is needed only while their tip
+ * is unfinished, since only unfinished tips count against the per-address limit. Once the tip is
+ * final, however it got there (booked, failed, cancelled here or by a provider event), the key is
+ * cleared. One sweep after the expiry pass covers every path; it reads only the intents still
+ * holding a key (`payment_intents_address_key_held`), which are few.
+ */
+export async function clearFinishedAddressKeys(
+  db: Database,
+  limit: number = ADDRESS_KEY_SWEEP_LIMIT,
+): Promise<number> {
+  // Bounded per run (the job runs every minute), so a day of worker downtime never becomes one
+  // statement that row-locks every key; leftovers are cleared on the next run. The subselect keeps
+  // the partial index in use.
+  const result = await guarded(() =>
+    db.execute(sql`
+      UPDATE payment_intents SET address_key = NULL
+       WHERE payment_intents.id IN (
+         SELECT pi.id FROM payment_intents pi
+          WHERE pi.address_key IS NOT NULL
+            AND EXISTS (SELECT 1 FROM tips
+                         WHERE tips.intent_id = pi.id
+                           AND tips.status IN ('SUCCEEDED', 'FAILED', 'CANCELLED'))
+          LIMIT ${limit})`),
+  );
+  return result.rowCount ?? 0;
 }
 
 /** Attempt → EXPIRED and tip → CANCELLED together, only if nothing moved them meanwhile. */

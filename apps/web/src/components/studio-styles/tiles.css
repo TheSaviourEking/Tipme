@@ -1,0 +1,1068 @@
+/* Tiles: "A tidy desk of things you made" (spec 2026-11-17-page-studio-styles §9.7; canvas
+   "Tiles · phone", "Tiles · desktop"). Inter only, the name 700. Tiles r24, chips and Tip pills,
+   a circle avatar. The Tip tile (acc, accLabel) is the signature and, with the link glyphs, the
+   style's accent exception (§7.2); the soft tile shadow is light mode's only (§8). 250 ms
+   cubic-bezier(.2, .9, .3, 1.2), a slight overshoot. */
+
+.studio[data-style='tiles'] {
+  --gutter: 20px;
+  --measure: 100%;
+  --ease: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  letter-spacing: 0;
+}
+
+.studio[data-style='tiles'] :is(.studio-identity, .studio-grid, .studio-foot) {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: calc(var(--measure) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+
+/* The profile: no cover above it (plain), 56 px at the top, the 80 px avatar beside the name. */
+.studio[data-style='tiles'] .studio-identity {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  column-gap: 16px;
+  padding-top: 56px;
+}
+
+.studio[data-style='tiles'] .studio-avatar {
+  grid-row: 1 / 3;
+  grid-column: 1;
+  align-self: center;
+  width: 80px;
+  height: 80px;
+  font-size: 28px;
+}
+
+.studio[data-style='tiles'] .studio-name {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: end;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 32px;
+  letter-spacing: -0.025em;
+}
+
+/* Over 18 letters (it shares the line with the avatar) the name steps to 22, about 80% (§9.10). */
+.studio[data-style='tiles'] .studio-name--long {
+  font-size: 22px;
+  line-height: 26px;
+  letter-spacing: -0.02em;
+}
+
+.studio[data-style='tiles'] .studio-meta {
+  grid-row: 2;
+  grid-column: 2;
+  align-self: start;
+  margin-top: 4px;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.studio[data-style='tiles'] :is(.studio-bio, .studio-celebration) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='tiles'] .studio-bio {
+  margin-top: 16px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.studio[data-style='tiles'] .studio-celebration {
+  justify-self: start;
+  margin-top: 12px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--studio-card);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+/* A narrow phone sets the avatar above the name, so a long name keeps whole words. */
+@media (max-width: 359px) {
+  .studio[data-style='tiles'] .studio-identity {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .studio[data-style='tiles'] .studio-avatar {
+    grid-row: auto;
+    margin-bottom: 16px;
+  }
+
+  .studio[data-style='tiles'] :is(.studio-name, .studio-meta) {
+    grid-row: auto;
+    grid-column: 1;
+  }
+}
+
+/* Focus: 2 px accText, offset 3 (§4.4); inside the Tip tile, on acc, it is accLabel. */
+.studio[data-style='tiles']
+  :is(a, button, summary, input, select, textarea):focus-visible {
+  outline: 2px solid var(--studio-accText);
+  outline-offset: 3px;
+}
+
+.studio[data-style='tiles'] .tm-choice input:focus-visible + span {
+  outline-offset: 3px;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  :is(a, button, summary, input, select, textarea):focus-visible {
+  outline-color: var(--studio-tileFocus);
+}
+
+.studio[data-style='tiles'] .studio-tip .tm-choice input:focus-visible + span {
+  outline-color: var(--studio-tileFocus);
+}
+
+/* The grid: 2 columns, gap 12. The links, sections and their blocks are its tiles. */
+.studio[data-style='tiles'] .studio-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.studio[data-style='tiles']
+  :is(.studio-links, .studio-links__list, .studio-blocks, .studio-section) {
+  display: contents;
+}
+
+.studio[data-style='tiles'] .studio-block {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+/* Titles (the links' and a heading block's): the text tile title, 15/20 600 fg2. */
+.studio[data-style='tiles'] .studio-title {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+  padding-inline: 4px;
+  color: var(--studio-fg2);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: 0;
+}
+
+/* "Your cover" or the gradient: a 2-column, 2:1 tile at the top of the grid, not a banner. */
+.studio[data-style='tiles'] .studio-cover {
+  grid-column: 1 / -1;
+  aspect-ratio: 2 / 1;
+  border-radius: 24px;
+  background: var(--studio-el2);
+  box-shadow: var(--studio-shadow);
+}
+
+.studio[data-style='tiles'] .studio-cover[data-cover='plain'] {
+  display: none;
+}
+
+.studio[data-style='tiles'] .studio-cover[data-cover='gradient'] {
+  background: linear-gradient(
+    135deg,
+    var(--studio-coverFrom),
+    var(--studio-coverTo)
+  );
+}
+
+/* The Tip tile: 2 wide, first after the profile; acc, accLabel, r24, padding 20 (desktop 24). It
+   holds "Send a tip", "Goes to {first name}", the chips and the Tip. Every word in it is accLabel
+   (proved on acc); the form's own heading stays for screen readers. */
+.studio[data-style='tiles'] .studio-tip {
+  display: grid;
+  grid-column: span 2;
+  gap: 14px;
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--studio-acc);
+  color: var(--studio-accLabel);
+}
+
+.studio[data-style='tiles'] .studio-tip__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.studio[data-style='tiles'] .studio-tip__title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 26px;
+  letter-spacing: -0.02em;
+}
+
+.studio[data-style='tiles'] .studio-tip__to {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.studio[data-style='tiles'] .studio-tip form {
+  display: grid;
+  gap: 14px;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  :is(
+    .tm-field label,
+    .tip-remember,
+    .composer-extras summary,
+    .tm-hint,
+    .tm-field-error,
+    .composer-disclaimer,
+    .composer-trust,
+    .composer-action__partner,
+    .composer-action__notice,
+    .tip-remember small
+  ) {
+  color: var(--studio-accLabel);
+}
+
+.studio[data-style='tiles'] .studio-tip .tip-remember input {
+  accent-color: var(--studio-accLabel);
+}
+
+.studio[data-style='tiles'] .studio-tip .amount-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+/* Phones below 390: the tile's padding and the chips' inset ring leave four chips too little
+   room, so two by two, 44 tall. */
+@media (max-width: 389px) {
+  .studio[data-style='tiles'] .studio-tip .amount-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Chips: 44 tall, clear, with a 1.5 px inset ring of accLabel at the registry's proved mix (64%,
+   STUDIO_TILES_RING_MIX); selected: accLabel with acc text and a weight up (§4.4). */
+.studio[data-style='tiles'] .studio-tip .tm-amount-choice > span {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px
+    color-mix(in srgb, var(--studio-accLabel) 64%, var(--studio-acc));
+  color: var(--studio-accLabel);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+  transform: none;
+  transition:
+    transform 250ms var(--ease),
+    background-color 250ms var(--ease),
+    color 250ms var(--ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='tiles'] .studio-tip .tm-amount-choice:hover > span {
+    background: transparent;
+    transform: none;
+  }
+}
+
+.studio[data-style='tiles'] .studio-tip .tm-amount-choice input:active + span {
+  transform: scale(0.94);
+}
+
+.studio[data-style='tiles'] .studio-tip .tm-amount-choice input:checked + span {
+  background: var(--studio-accLabel);
+  box-shadow: none;
+  color: var(--studio-acc);
+  font-weight: 750;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  .tm-amount-choice
+  input:checked
+  + span::after {
+  display: none;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  .tm-amount-choice[data-suggested='true']
+  > span {
+  outline: 2px solid var(--studio-tileFocus);
+  outline-offset: 2px;
+}
+
+/* The Other-amount field in the tile: card, fg, its edge the chips' ring (3:1 on acc). */
+.studio[data-style='tiles'] .studio-tip .tm-input {
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--studio-card);
+  box-shadow: inset 0 0 0 1.5px
+    color-mix(in srgb, var(--studio-accLabel) 64%, var(--studio-acc));
+  color: var(--studio-fg);
+  font-size: 17px;
+  line-height: 22px;
+}
+
+.studio[data-style='tiles'] .studio-tip textarea.tm-input {
+  padding: 12px 18px;
+  border-radius: 18px;
+}
+
+.studio[data-style='tiles'] .studio-tip .tm-field label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-extras summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 44px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  .composer-extras
+  summary::-webkit-details-marker {
+  display: none;
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-extras summary::after {
+  width: 7px;
+  height: 7px;
+  margin-inline-start: auto;
+  border-right: 1.5px solid var(--studio-accLabel);
+  border-bottom: 1.5px solid var(--studio-accLabel);
+  content: '';
+  transform: rotate(45deg);
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-extras[open] summary::after {
+  transform: rotate(-135deg);
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-extras__body {
+  display: grid;
+  gap: 12px;
+  padding: 4px 0 8px;
+}
+
+.studio[data-style='tiles'] .studio-tip .tip-remember {
+  min-height: 44px;
+  align-items: center;
+  font-size: 15px;
+}
+
+/* The in-tile Tip is inverted: accLabel with acc text, a 52 px pill. The phone bar's is acc. */
+.studio[data-style='tiles']
+  :is(.studio-tip .composer-submit, .tip-bar__button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  box-shadow: none;
+  font: 650 17px/22px var(--studio-ui);
+  font-variant-numeric: tabular-nums lining-nums;
+  cursor: pointer;
+  transform: none;
+  transition: transform 250ms var(--ease);
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-action .composer-submit {
+  background: var(--studio-accLabel);
+  color: var(--studio-acc);
+}
+
+.studio[data-style='tiles'] .tip-bar__button {
+  background: var(--studio-acc);
+  color: var(--studio-accLabel);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='tiles']
+    .studio-tip
+    .composer-action
+    .composer-submit:hover {
+    background: var(--studio-accLabel);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .studio[data-style='tiles'] .tip-bar__button:hover {
+    background: var(--studio-acc);
+    box-shadow: none;
+    transform: none;
+  }
+}
+
+.studio[data-style='tiles']
+  :is(.studio-tip .composer-submit, .tip-bar__button):active {
+  box-shadow: none;
+  transform: scale(0.97);
+}
+
+.studio[data-style='tiles'] .studio-tip .composer-action {
+  display: grid;
+  gap: 8px;
+}
+
+.studio[data-style='tiles']
+  .studio-tip
+  :is(.composer-disclaimer, .composer-trust, .composer-action__partner) {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.studio[data-style='tiles'] .studio-tip .tip-quote__failed .tm-button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--studio-accLabel);
+  box-shadow: none;
+  color: var(--studio-acc);
+}
+
+.studio[data-style='tiles'] .studio-tip .tm-slip {
+  border: 0;
+  border-radius: 18px;
+  background: var(--studio-card);
+  box-shadow: none;
+  color: var(--studio-fg);
+}
+
+/* Link tiles: card r24, the light shadow, 128 tall, padding 16; the glyph in the accent (≥ 24 px,
+   ≥ 3:1: the style's accent exception), the arrow top right, the words at the foot. An odd last
+   link is the short one: two wide, 78 tall, a row. Hover: up 2 px; press .98. */
+.studio[data-style='tiles'] .studio-links__list li {
+  min-width: 0;
+}
+
+.studio[data-style='tiles'] .studio-link {
+  box-sizing: border-box;
+  display: grid;
+  grid-template:
+    'glyph arrow' auto
+    '. .' 1fr
+    'words words' auto / minmax(0, 1fr) auto;
+  height: 128px;
+  padding: 16px;
+  border-radius: 24px;
+  background: var(--studio-card);
+  box-shadow: var(--studio-shadow);
+  color: var(--studio-fg);
+  text-decoration: none;
+  transform: none;
+  transition: transform 250ms var(--ease);
+}
+
+.studio[data-style='tiles'] .studio-links__list li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.studio[data-style='tiles']
+  .studio-links__list
+  li:last-child:nth-child(odd)
+  .studio-link {
+  grid-template: 'glyph words arrow' auto / auto minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: center;
+  height: 78px;
+  padding-block: 0;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .studio[data-style='tiles'] .studio-link:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.studio[data-style='tiles'] .studio-link:active {
+  transform: scale(0.98);
+}
+
+.studio[data-style='tiles'] .studio-link .link-badge {
+  grid-area: glyph;
+  justify-self: start;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: 1.5px solid var(--studio-accText);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--studio-accText);
+  font-size: 11px;
+}
+
+.studio[data-style='tiles'] .studio-link__chevron {
+  grid-area: arrow;
+  fill: none;
+  stroke: var(--studio-fg2);
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.studio[data-style='tiles'] .studio-link__words {
+  display: flex;
+  grid-area: words;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.studio[data-style='tiles'] .studio-link__title {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio[data-style='tiles'] .studio-link__sub {
+  overflow: hidden;
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Block tiles: card r24, the light shadow. Text: padding 20, 16/24. */
+.studio[data-style='tiles']
+  :is(.studio-card, .studio-photo, .studio-video, .studio-strip li) {
+  overflow: hidden;
+  border-radius: 24px;
+  background: var(--studio-card);
+  box-shadow: var(--studio-shadow);
+}
+
+.studio[data-style='tiles'] .studio-text {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.studio[data-style='tiles'] .studio-quote {
+  padding: 20px;
+}
+
+.studio[data-style='tiles'] .studio-quote p {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 26px;
+  letter-spacing: -0.01em;
+}
+
+.studio[data-style='tiles'] .studio-photo img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 1;
+  object-fit: cover;
+}
+
+.studio[data-style='tiles'] .studio-photo figcaption {
+  padding: 12px 16px;
+}
+
+.studio[data-style='tiles'] :is(.studio-photo figcaption, .studio-fine) {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* A gallery's photos are tiles of their own: one column each, square, in the grid's columns. */
+.studio[data-style='tiles'] .studio-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.studio[data-style='tiles'] .studio-strip li {
+  align-self: stretch;
+  aspect-ratio: 1;
+  background: var(--studio-el2);
+}
+
+/* An odd last photo spans both columns, so no row is left half empty (fix round 1). */
+.studio[data-style='tiles'] .studio-strip li:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+  aspect-ratio: 350 / 169;
+}
+
+.studio[data-style='tiles'] .studio-strip img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Services and events: rows in one tile, 1 px line between. */
+.studio[data-style='tiles'] .studio-list > ul,
+.studio[data-style='tiles'] ul.studio-list {
+  display: grid;
+  padding-inline: 20px;
+}
+
+.studio[data-style='tiles'] .studio-list li {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  min-height: 60px;
+  padding: 12px 0;
+}
+
+.studio[data-style='tiles'] .studio-list li + li {
+  border-top: 1px solid var(--studio-line);
+}
+
+.studio[data-style='tiles'] div.studio-list .studio-fine {
+  margin: 0;
+  padding: 0 20px 16px;
+}
+
+.studio[data-style='tiles'] .studio-list__words {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+
+.studio[data-style='tiles'] .studio-list__title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.studio[data-style='tiles'] .studio-list__sub {
+  color: var(--studio-fg2);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+.studio[data-style='tiles'] .studio-price {
+  flex: none;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.studio[data-style='tiles'] .studio-date {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--studio-el2);
+  color: var(--studio-fg2);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.studio[data-style='tiles'] .studio-date__day {
+  order: -1;
+  color: var(--studio-fg);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 22px;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+/* Footer: today's ProfileFoot at 12/16 Inter 500 in fg2. */
+.studio[data-style='tiles'] .studio-foot {
+  margin-top: 32px;
+}
+
+.studio[data-style='tiles'] .studio-foot .profile-foot {
+  padding-top: 0;
+  color: var(--studio-fg2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.studio[data-style='tiles'] .studio-foot :is(a, .tm-button--quiet) {
+  color: var(--studio-fg2);
+  font: inherit;
+  text-decoration-color: var(--studio-accText);
+  text-decoration-thickness: 1.5px;
+}
+
+/* The phone's Tip bar, as Clear's: bar + saturate(1.8) blur(20px), 1 px line, 10/16/34. */
+.studio[data-style='tiles'] .tip-bar {
+  padding: 10px 16px calc(max(12px, env(safe-area-inset-bottom)) + 34px);
+  border-top: 1px solid var(--studio-line);
+}
+
+@media (min-width: 768px) {
+  .studio[data-style='tiles'] {
+    --gutter: 24px;
+    --measure: 720px;
+  }
+}
+
+/* Desktop: 1200 wide; a 340 px identity rail, 72, and a 4-column tile grid, gap 16, tiles 172
+   tall. The Tip tile is first and 2 wide; the links' title and tiles sit beside it; every block
+   but a gallery photo spans the grid. */
+@media (min-width: 1024px) {
+  .studio[data-style='tiles'] .studio-page {
+    display: grid;
+    grid-template-columns:
+      minmax(var(--gutter), 1fr) min(340px, 27vw) 72px minmax(0, 788px)
+      minmax(var(--gutter), 1fr);
+    /* The second row takes what a short page leaves, and the foot rests at its bottom. */
+    grid-template-rows: auto 1fr;
+    align-items: start;
+    padding-top: 88px;
+  }
+
+  .studio[data-style='tiles']
+    :is(.studio-identity, .studio-grid, .studio-foot) {
+    max-width: none;
+    margin-inline: 0;
+    padding-inline: 0;
+  }
+
+  .studio[data-style='tiles'] .studio-identity {
+    position: sticky;
+    top: 24px;
+    grid-row: 1 / 3;
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: 0;
+  }
+
+  .studio[data-style='tiles'] .studio-avatar {
+    grid-row: auto;
+    width: 136px;
+    height: 136px;
+    margin-bottom: 28px;
+    font-size: 44px;
+  }
+
+  .studio[data-style='tiles'] :is(.studio-name, .studio-meta) {
+    grid-row: auto;
+    grid-column: 1;
+  }
+
+  .studio[data-style='tiles'] .studio-name {
+    font-size: 44px;
+    line-height: 48px;
+    letter-spacing: -0.03em;
+  }
+
+  .studio[data-style='tiles'] .studio-name--long {
+    font-size: 34px;
+    line-height: 40px;
+  }
+
+  .studio[data-style='tiles'] .studio-meta {
+    margin-top: 10px;
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .studio[data-style='tiles'] .studio-bio {
+    margin-top: 20px;
+    font-size: 18px;
+    line-height: 28px;
+  }
+
+  .studio[data-style='tiles'] .studio-grid {
+    grid-row: 1;
+    grid-column: 4;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-top: 0;
+  }
+
+  /* The first row is closed (fix round 1, the board's TilesDesktop): beside the 2-wide Tip tile
+     sits the cover tile; else the links' title and two link tiles (the Tip then spans two rows);
+     else the first block. */
+  .studio[data-style='tiles'] .studio-tip {
+    grid-row: 1;
+    grid-column: 1 / 3;
+    padding: 24px;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(.studio-links):not(
+      :has(> .studio-cover:not([data-cover='plain']))
+    )
+    .studio-tip {
+    grid-row: 1 / span 2;
+  }
+
+  /* Then the first row is the links' title, sized to its text (it grows with text zoom, WCAG
+     1.4.4), and the second row is flexible: the Tip tile spans a flexible row, so it isn't counted
+     when the title's row is sized, and its extra height goes to the links, not above the title. */
+  .studio[data-style='tiles']
+    .studio-grid:has(.studio-links):not(
+      :has(> .studio-cover:not([data-cover='plain']))
+    ) {
+    grid-template-rows: auto 1fr;
+  }
+
+  .studio[data-style='tiles'] .studio-cover {
+    grid-row: 1;
+    grid-column: 3 / 5;
+    aspect-ratio: auto;
+    min-height: 172px;
+  }
+
+  .studio[data-style='tiles'] .studio-block[data-beside] {
+    grid-row: 1;
+    grid-column: 3 / 5;
+  }
+
+  /* A photo, gallery or video fills the Tip tile's height. */
+  .studio[data-style='tiles']
+    .studio-block[data-beside]:is(
+      [data-kind='photo'],
+      [data-kind='gallery'],
+      [data-kind='video']
+    )
+    > *,
+  .studio[data-style='tiles']
+    .studio-block[data-beside]
+    :is(.studio-photo img, .studio-video) {
+    box-sizing: border-box;
+    height: 100%;
+    aspect-ratio: auto;
+  }
+
+  /* A whole section beside the Tip (its heading over its blocks): one column of tiles at the
+     top of the row, its own height, so no empty card stretches beside the Tip. */
+  .studio[data-style='tiles'] .studio-section[data-beside] {
+    display: grid;
+    grid-row: 1;
+    grid-column: 3 / 5;
+    align-self: start;
+    align-content: start;
+    gap: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-section[data-beside] > .studio-block {
+    grid-column: auto;
+  }
+
+  .studio[data-style='tiles'] .studio-section[data-beside] .studio-title {
+    margin-top: 0;
+  }
+
+  .studio[data-style='tiles'] .studio-links > .studio-title {
+    grid-column: span 2;
+    align-self: end;
+    margin-top: 0;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links
+    > .studio-title {
+    grid-column: 1 / -1;
+    margin-top: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-title {
+    margin-top: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-tip__title {
+    font-size: 22px;
+    line-height: 26px;
+  }
+
+  .studio[data-style='tiles'] .studio-link,
+  .studio[data-style='tiles']
+    .studio-links__list
+    li:last-child:nth-child(odd)
+    .studio-link {
+    grid-template:
+      'glyph arrow' auto
+      '. .' 1fr
+      'words words' auto / minmax(0, 1fr) auto;
+    align-items: stretch;
+    height: 100%;
+    min-height: 172px;
+    padding: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-links__list li:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  /* The last link closes its row. Beside the Tip go two links; then rows of four. */
+  .studio[data-style='tiles'] .studio-links__list li:only-child {
+    grid-column: span 2;
+  }
+
+  .studio[data-style='tiles']
+    .studio-links__list
+    li:last-child:nth-child(4n + 3) {
+    grid-column: span 4;
+  }
+
+  .studio[data-style='tiles'] .studio-links__list li:last-child:nth-child(4n) {
+    grid-column: span 3;
+  }
+
+  .studio[data-style='tiles']
+    .studio-links__list
+    li:last-child:nth-child(4n + 5) {
+    grid-column: span 2;
+  }
+
+  /* With the cover beside the Tip, the links start their own rows of four. */
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n) {
+    grid-column: auto;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 1) {
+    grid-column: span 4;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 2) {
+    grid-column: span 3;
+  }
+
+  .studio[data-style='tiles']
+    .studio-grid:has(> .studio-cover:not([data-cover='plain']))
+    .studio-links__list
+    li:last-child:nth-child(4n + 3) {
+    grid-column: span 2;
+  }
+
+  /* A gallery: 4 across; its last photo spans what its row has left (the design check's slot is
+     the widest, 788, and each photo's sizes says its own width). */
+  .studio[data-style='tiles'] .studio-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(odd) {
+    grid-column: auto;
+    aspect-ratio: 1;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 1) {
+    grid-column: span 4;
+    aspect-ratio: 788 / 185;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 2) {
+    grid-column: span 3;
+    aspect-ratio: 587 / 185;
+  }
+
+  .studio[data-style='tiles'] .studio-strip li:last-child:nth-child(4n + 3) {
+    grid-column: span 2;
+    aspect-ratio: 386 / 185;
+  }
+
+  /* A gallery beside the Tip (on its own or in its section) is two across, as on a phone. */
+  .studio[data-style='tiles']
+    :is(.studio-block, .studio-section)[data-beside]
+    .studio-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .studio[data-style='tiles']
+    :is(.studio-block, .studio-section)[data-beside]
+    .studio-strip
+    li:last-child {
+    grid-column: auto;
+    aspect-ratio: 1;
+  }
+
+  .studio[data-style='tiles']
+    :is(.studio-block, .studio-section)[data-beside]
+    .studio-strip
+    li:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    aspect-ratio: 2 / 1;
+  }
+
+  .studio[data-style='tiles'] .studio-photo img {
+    aspect-ratio: 16 / 9;
+  }
+
+  .studio[data-style='tiles'] .studio-foot {
+    align-self: end;
+    grid-row: 2;
+    grid-column: 4;
+    margin-top: 40px;
+  }
+}
+
+/* Reduced motion (§4.5): none of the lifts or presses. */
+@media (prefers-reduced-motion: reduce) {
+  .studio[data-style='tiles']
+    :is(
+      .studio-link,
+      .studio-link:hover,
+      .studio-link:active,
+      .studio-tip .tm-amount-choice input:active + span,
+      .studio-tip .composer-submit:active,
+      .tip-bar__button:active
+    ) {
+    transform: none;
+    transition: none;
+  }
+
+  .studio[data-style='tiles']
+    :is(
+      .studio-tip .tm-amount-choice > span,
+      .studio-tip .composer-submit,
+      .tip-bar__button
+    ) {
+    transition: none;
+  }
+}

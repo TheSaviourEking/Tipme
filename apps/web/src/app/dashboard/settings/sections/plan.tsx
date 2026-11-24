@@ -1,9 +1,15 @@
 'use client';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import type { MyProfile, MyPro, ProPurchase } from '@tipme/contracts';
+import type {
+  CollectStatusView,
+  DashboardSummary,
+  MyProfile,
+  MyPro,
+  ProPurchase,
+} from '@tipme/contracts';
 import { ActionLink, Button, Card, ProBadge, Skeleton, Slip } from '@tipme/ui';
 import { useRecipient } from '@/components/account/recipient-context';
-import { FREE_SHARE_PERCENT, PRO_SHARE_PERCENT } from '@/lib/fee-share';
+import { usePlanFees } from '@/lib/use-plan-fees';
 import { dateOf } from '@/lib/lagos-time';
 import {
   ASK_FOR_PRO,
@@ -17,6 +23,7 @@ import {
   startPurchase,
   turnOffAutoRenew,
 } from '@/lib/pro-buy';
+import { proPayOptions } from '@/lib/pro-pay-options';
 import { apiFetch } from '@/lib/session-client';
 import { nextCheckDelay } from '@/lib/status-polling';
 import { SettingsChapter } from './section';
@@ -193,8 +200,54 @@ function FollowedSlip({
   }
 }
 
+/**
+ * Whether the TipMe balance can pay for a month (proPayOptions): read once, and only while paying
+ * from the balance is offered at all, so a direct recipient's plan never waits on You collect and
+ * Settings adds no re-reads against the shared bank-read limit. A 404 means not on You collect; any
+ * other failure leaves it unknown, which offers the balance as before (the server refuses what it
+ * can't take).
+ */
+function useBalanceFacts(enabled: boolean): {
+  mode: 'direct' | 'collect' | null;
+  availableMinor: string | null;
+} {
+  const [facts, setFacts] = useState<{
+    mode: 'direct' | 'collect' | null;
+    availableMinor: string | null;
+  }>({ mode: null, availableMinor: null });
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    void (async () => {
+      const status = await apiFetch<CollectStatusView>('/v1/me/collect');
+      if (!current) return;
+      if (!status.ok) {
+        if (status.status === 404)
+          setFacts({ mode: 'direct', availableMinor: null });
+        return;
+      }
+      const collecting = status.data.mode === 'collect';
+      if (!collecting) {
+        setFacts({ mode: 'direct', availableMinor: null });
+        return;
+      }
+      const summary = await apiFetch<DashboardSummary>('/v1/me/dashboard');
+      if (!current) return;
+      setFacts({
+        mode: 'collect',
+        availableMinor: summary.ok ? summary.data.availableMinor : null,
+      });
+    })();
+    return () => {
+      current = false;
+    };
+  }, [enabled]);
+  return facts;
+}
+
 /** What Pro includes, the current plan, and paying for a month when buying is open. */
 export function ProPlan() {
+  const { freePercent, proPercent } = usePlanFees();
   const { profile, setProfile } = useRecipient();
   const [pro, setPro] = useState<MyPro | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -250,8 +303,19 @@ export function ProPlan() {
     ''
   );
   const fromDate = pro?.current ? dateOf(pro.current.endsAt) : 'today';
-  // Both behind the server's flags (off by default): with them off the screen is unchanged.
-  const balanceOn = Boolean(pro?.methods?.includes('balance'));
+  // Both behind the server's flags (off by default): with them off the screen is unchanged. A You
+  // collect recipient is offered the balance only when it covers the month (proPayOptions).
+  const balanceFacts = useBalanceFacts(
+    Boolean(pro?.methods?.includes('balance')),
+  );
+  const balanceOn =
+    price !== null &&
+    proPayOptions({
+      methods: pro?.methods ?? [],
+      priceMinor: price.amountMinor,
+      mode: balanceFacts.mode,
+      availableMinor: balanceFacts.availableMinor,
+    }).includes('balance');
   const renewOn = Boolean(pro?.autoRenew?.on);
   const renewOffered = Boolean(pro?.autoRenew?.available) && !renewOn;
 
@@ -317,11 +381,11 @@ export function ProPlan() {
               ? 'Your page is on TipMe Pro, turned on by the TipMe team.'
               : 'Your page is on TipMe Pro.'}
       </p>
-      {/* The owner's pricing, 12 Nov 2026: the plan sets TipMe's share of each new tip. */}
+      {/* The plan sets TipMe's share of each new tip, at the rates staff set (owner, 18 Nov 2026). */}
       <p className="settings-plan__status">
         {onPro
-          ? `TipMe keeps ${PRO_SHARE_PERCENT}% of each tip while you’re on Pro, instead of ${FREE_SHARE_PERCENT}% on Free.`
-          : `TipMe keeps ${FREE_SHARE_PERCENT}% of each tip on Free. On Pro it keeps ${PRO_SHARE_PERCENT}%.`}
+          ? `TipMe keeps ${proPercent}% of each tip while you’re on Pro, instead of ${freePercent}% on Free. Payment and withdrawal fees are included.`
+          : `TipMe keeps ${freePercent}% of each tip on Free, payment and withdrawal fees included. On Pro it keeps ${proPercent}%.`}
       </p>
       {pro?.next && (
         <p className="settings-plan__status">

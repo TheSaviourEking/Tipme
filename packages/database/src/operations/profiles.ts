@@ -74,7 +74,7 @@ import {
 } from '../schema.js';
 import { recordAudit } from './audit.js';
 import { isOpenReleaseRun } from './release-runs.js';
-import { balanceIn } from './balance.js';
+import { balanceIn, collectMoneyHeld } from './balance.js';
 import { endBusinessRolesForDeletion } from './business-members.js';
 import { guarded, OperationError, sqlStateOf } from './errors.js';
 import {
@@ -87,7 +87,12 @@ import {
 import { mailOwner } from './account-mail.js';
 import { legacySocials } from './legacy-socials.js';
 import { proStatusOf, setStaffPro } from './pro-periods.js';
-import { removeObjects } from './page-images.js';
+import {
+  coverWidthsOf,
+  deleteCoverRenditions,
+  removeObjects,
+} from './page-images.js';
+
 import type { MailSealing } from './mail-queue.js';
 import type { PhotoStore } from '../photo-store.js';
 import { newId } from './ids.js';
@@ -102,10 +107,8 @@ import {
   publicStudioFor,
   studioPageFacts,
 } from './studio.js';
-import {
-  getReadyPaymentAccount,
-  type PaymentAccountEnvironment,
-} from './payment-accounts.js';
+import { readyForNewTips, type TipReadiness } from './payment-accounts.js';
+import { signUpCollectionMode } from './collection-mode.js';
 
 export const HANDLE_HOLD_MS = 90 * 24 * 60 * 60 * 1000;
 /** Handle changes a Pro page gets in total, including switching back; staff can allow more. */
@@ -201,6 +204,8 @@ export function claimHandle(
     now?: Date;
     /** Release check only (PR-010): honoured only for an open run. */
     rehearsalRunId?: string;
+    /** The `you_collect` switch (ADR-0016, proposed): on, a new page is put on `collect` (R7, P11). */
+    youCollectOn?: boolean;
   },
 ): Promise<{ profileId: string; handle: string }> {
   const now = input.now ?? new Date();
@@ -215,25 +220,35 @@ export function claimHandle(
     const rehearsalRunId = (await isOpenReleaseRun(db, input.rehearsalRunId))
       ? input.rehearsalRunId
       : null;
-    const inserted = await db
-      .insert(profiles)
-      .values({
-        id: profileId,
-        rehearsalRunId,
-        userId: input.userId,
-        handle,
-        handleLower: handle,
-        displayName: handle,
-        pageState: 'not_live',
-      })
-      .onConflictDoNothing()
-      .returning({ id: profiles.id })
-      .catch((error: unknown) => {
-        // The database refused an old handle of another page (lost a race with a rename).
-        if (sqlStateOf(error) === '23505')
-          throw new OperationError('HANDLE_TAKEN');
-        throw error;
-      });
+    const insertPage = async (runner: Database | Tx) =>
+      runner
+        .insert(profiles)
+        .values({
+          id: profileId,
+          rehearsalRunId,
+          userId: input.userId,
+          handle,
+          handleLower: handle,
+          displayName: handle,
+          pageState: 'not_live',
+          collectionMode: await signUpCollectionMode(
+            runner,
+            input.youCollectOn,
+          ),
+        })
+        .onConflictDoNothing()
+        .returning({ id: profiles.id })
+        .catch((error: unknown) => {
+          // The database refused an old handle of another page (lost a race with a rename).
+          if (sqlStateOf(error) === '23505')
+            throw new OperationError('HANDLE_TAKEN');
+          throw error;
+        });
+    // You collect (P11): with the switch on, the gate and the insert share one transaction. Off,
+    // the page is written undecided, exactly as before.
+    const inserted = input.youCollectOn
+      ? await db.transaction(async (tx) => insertPage(tx))
+      : await insertPage(db);
     // Lost a race for the same handle (or the same user claimed twice at once).
     if (!inserted[0]) {
       if (await hasProfile(db, input.userId))
@@ -550,7 +565,10 @@ const toMine = async (
   plan: row.profile.plan as PagePlan,
   tipAmounts: tipAmountsOf(row.profile),
   avatarPath: row.profile.avatarPath,
-  cover: resolveCover(row.profile),
+  cover: resolveCover({
+    ...row.profile,
+    ...(row.profile.coverPath ? await coverWidthsOf(db, row.profile.id) : {}),
+  }),
   coverChoice: {
     design: row.profile.coverDesign,
     colour: row.profile.coverColour,
@@ -966,10 +984,9 @@ export function publicProfile(
   raw: string,
   options: {
     /** Set when new tips need the owner's own account with this provider (the same rule checkout applies). */
-    requiredAccount?: {
-      provider: string;
-      environment: PaymentAccountEnvironment;
-    };
+    requiredAccount?: TipReadiness['requiredAccount'];
+    /** You collect: the mode a quote would fix now; a collect recipient needs no account of their own. */
+    modeOf?: TipReadiness['modeOf'];
     /** False while ADULT_PLATFORM_LINKS is off: OnlyFans and Fansly links don't show. */
     adultLinks?: boolean;
     /** True while SUPPORTER_RECOGNITION is on: a Pro page then offers the recognition tick box. */
@@ -1003,12 +1020,7 @@ export function publicProfile(
       adult: options.adultLinks ?? true,
     });
     const celebration = await publicCelebration(db, profile.id);
-    const acceptingTips = options.requiredAccount
-      ? (await getReadyPaymentAccount(db, {
-          profileId: profile.id,
-          ...options.requiredAccount,
-        })) !== null
-      : true;
+    const acceptingTips = await readyForNewTips(db, profile.id, options);
     const studio = options.studio
       ? await publicStudioFor(db, studioPageFacts(profile))
       : undefined;
@@ -1028,7 +1040,10 @@ export function publicProfile(
       ...(celebration ? { celebration } : {}),
       tipAmounts: tipAmountsOf(profile),
       acceptingTips,
-      cover: resolveCover(profile),
+      cover: resolveCover({
+        ...profile,
+        ...(profile.coverPath ? await coverWidthsOf(db, profile.id) : {}),
+      }),
       plan: profile.plan as PagePlan,
       ...(options.recognition === true && profile.plan === 'pro'
         ? { recognition: true as const }
@@ -1115,7 +1130,14 @@ export function deleteAccount(
         const balance = await balanceIn(tx, row.id);
         if (
           !input.rehearsalCleanup &&
-          (balance.availableMinor > 0n || balance.confirmingMinor > 0n)
+          (balance.availableMinor > 0n ||
+            balance.confirmingMinor > 0n ||
+            // You collect: money TipMe still holds for them is theirs too.
+            balance.keptMinor > 0n ||
+            balance.onItsWayMinor > 0n ||
+            balance.refundHeldMinor > 0n ||
+            // Final review M1: or held for a dispute on their tips (a win gives it back to them).
+            (await collectMoneyHeld(tx, row.id)))
         )
           throw new OperationError('HAS_BALANCE');
         await tx
@@ -1166,6 +1188,7 @@ export function deleteAccount(
             for (const r of removed)
               if (r.objectKey) photoKeys.push(r.objectKey);
           });
+        photoKeys.push(...(await deleteCoverRenditions(tx, row.id)));
         await tx
           .delete(profileCovers)
           .where(eq(profileCovers.profileId, row.id))

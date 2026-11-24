@@ -10,8 +10,10 @@ import type { Database } from '../client.js';
 import {
   businessMembers,
   paymentAttempts,
+  paymentIntents,
   profiles,
   tipMessages,
+  tipQuotes,
   tips,
 } from '../schema.js';
 import { noteWindowStart } from './business-notes.js';
@@ -52,10 +54,14 @@ export function tipStatusView(
         thanksStyle: profiles.thanksStyle,
         thanksSigned: profiles.thanksSigned,
         businessMemberId: tips.businessMemberId,
+        collectionMode: tipQuotes.collectionMode,
       })
       .from(tips)
       .innerJoin(profiles, eq(profiles.id, tips.profileId))
       .leftJoin(businessMembers, eq(businessMembers.id, tips.businessMemberId))
+      // You collect: the mode the tip was quoted under, never the recipient's mode now.
+      .leftJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
+      .leftJoin(tipQuotes, eq(tipQuotes.id, paymentIntents.quoteId))
       .where(eq(tips.id, tipId));
     if (!tip) return null;
     let state: TipStatusState;
@@ -177,6 +183,10 @@ export function tipStatusView(
       ...(businessNote ? { businessNote } : {}),
       ...(refund
         ? { refund: { refundedMinor: refund.refundedMinor.toString() } }
+        : {}),
+      // Ruling P16: the receipt says who was paid (Task 14 shows "Paid to TipMe for {Name}").
+      ...(tip.collectionMode === 'collect'
+        ? { collectedByTipMe: true as const }
         : {}),
     };
   });

@@ -21,6 +21,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'analytics',
     'business',
     'business_owners',
+    'business_payout_fee_absorbed',
     'business_pro',
     'business_shares',
     'business_signup',
@@ -34,6 +35,7 @@ test('the registered switches, page_studio and refund_fee_return included for th
     'supporter_recognition',
     'team_tips',
     'tip_refunds',
+    'you_collect',
   ]);
   for (const key of FEATURE_SWITCHES) {
     const entry = FEATURE_SWITCH_CATALOGUE[key];
@@ -48,6 +50,7 @@ test('money switches are exactly the owner’s list (and team tips), and none de
     (key) => FEATURE_SWITCH_CATALOGUE[key].money,
   ).sort();
   assert.deepEqual(money, [
+    'business_payout_fee_absorbed',
     'business_shares',
     'pro_auto_renew',
     'pro_billing',
@@ -56,6 +59,7 @@ test('money switches are exactly the owner’s list (and team tips), and none de
     'refund_fee_return',
     'team_tips',
     'tip_refunds',
+    'you_collect',
   ]);
   for (const key of money)
     assert.equal(FEATURE_SWITCH_CATALOGUE[key].default, false, key);
@@ -338,4 +342,38 @@ test('team_tips and business_owners are marked not built; every other switch is 
   }
   assert.ok(isFeatureSwitch('team_tips'));
   assert.ok(isFeatureSwitch('business_owners'));
+});
+
+// Owner, 18 Nov 2026 ("the admin should be able to set business fees too"): whether TipMe pays a
+// business's payout fee is a money switch, off by default so businesses keep today's rule.
+test('business_payout_fee_absorbed is a money switch, off by default (businesses pay their fee today)', () => {
+  const entry = FEATURE_SWITCH_CATALOGUE.business_payout_fee_absorbed;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.env.name, 'BUSINESS_PAYOUT_FEE_ABSORBED');
+  assert.doesNotMatch(entry.description, /bachs/i);
+});
+
+// You collect (ADR-0016, proposed; plan Tasks 3 and 16): registered by Task 3 with nothing behind it;
+// Task 16 removed the mark once the flow was built. It stays a money switch, off by default, so
+// production stays off until the owner turns it on (with a second person).
+test('you_collect is a money switch, off by default, and staff can turn it on', async () => {
+  const { featureSwitchBuilt } = await import('../dist/index.js');
+  const entry = FEATURE_SWITCH_CATALOGUE.you_collect;
+  assert.equal(entry.money, true);
+  assert.equal(entry.default, false);
+  assert.equal(entry.notBuilt, undefined);
+  assert.equal(featureSwitchBuilt('you_collect'), true);
+  assert.equal(entry.label, 'You collect for new recipients');
+  assert.equal(
+    entry.description,
+    'New sign-ups take tips through TipMe and add bank details when they first withdraw. Off, nobody new is put on it; recipients already on it keep it.',
+  );
+  assert.deepEqual(entry.env, { name: 'YOU_COLLECT', on: 'on', off: 'off' });
+  assert.equal(
+    featureSwitchFromEnv('you_collect', { YOU_COLLECT: 'on' }),
+    true,
+  );
+  // Users never see the partner's name, and staff read no wallet or custody words here.
+  assert.doesNotMatch(entry.description, /bachs|wallet|protected|insured/i);
 });

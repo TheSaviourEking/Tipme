@@ -270,6 +270,26 @@ export const ISSUE_KINDS = [
   'share_transfer_stuck',
   // A staff "Refund tip" our payment partner refused or failed (owner, 14 Nov 2026).
   'tip_refund_failed',
+  // You collect (ADR-0016, proposed): money TipMe holds for recipients on its own partner account,
+  // its transfers on, the reserve that must cover it, and the disputes now modelled.
+  'collect_transfer_stuck',
+  'collect_transfer_review',
+  'collect_in_debt',
+  'collect_invariant_broken',
+  'collect_reserve_low',
+  'collect_auto_payout_on',
+  'collect_recon_mismatch',
+  'collect_same_bank',
+  'dispute_opened',
+  'dispute_deadline',
+  'dispute_fee_unposted',
+  'collect_refund_gap',
+  // Task 11 (m5): a payout fee or fee return waits on TipMe's own money, with the real cause.
+  'collect_own_money_wait',
+  // Per-provider balances (spec §5a, §7): the daily check found a split owner's providers holding
+  // less than the ledger owes them, and money at a provider that is no longer connected.
+  'provider_split_short',
+  'provider_unconnected_money',
 ] as const;
 export type OpsIssueKind = (typeof ISSUE_KINDS)[number];
 /**
@@ -966,6 +986,11 @@ export interface OpsPerson {
   plan: 'free' | 'pro';
   pageStatus: OpsPeoplePageStatus;
   payoutsSetUp: boolean;
+  /**
+   * You collect (Task 15, spec §9), read-only: `collect` while TipMe collects the page's tips ("You
+   * collect"), `direct` while their own payment account does ("Account collects"); null with no page.
+   */
+  collectionMode: 'collect' | 'direct' | null;
   /** Runs a business (an open manager on one). */
   business: boolean;
   joinedAt: string;
@@ -992,7 +1017,14 @@ export interface OpsPersonEmail {
 
 // ---- Mail providers (mail platform spec §5) ----
 
-export const mailProviderNameSchema = z.enum(['mock', 'zeptomail', 'ses']);
+// Brevo (owner, 23 Nov 2026): offered only where BREVO_TRANSACTIONAL=on; the API answers 404 for a
+// provider that isn't configured.
+export const mailProviderNameSchema = z.enum([
+  'mock',
+  'zeptomail',
+  'ses',
+  'brevo',
+]);
 
 export interface OpsMailProviderCard {
   name: z.infer<typeof mailProviderNameSchema>;
@@ -1018,6 +1050,32 @@ export interface OpsMailProviderCard {
     bounced: number;
     complained: number;
   };
+  /**
+   * Automatic failover's view of it (owner, 23 Nov 2026); null when no fallback is set up.
+   * `resting` until `until`; `trial` once the rest is over, while trial traffic decides.
+   */
+  health: OpsMailProviderHealth | null;
+}
+
+export interface OpsMailProviderHealth {
+  state: 'healthy' | 'resting' | 'trial';
+  /** What tripped it last: send failures, or unused codes. */
+  kind: 'send' | 'codes' | null;
+  until: string | null;
+  /** E.g. "3 send failures in 5 min (last: http_503)" or "4 of 6 addresses' codes unused in 10 min". */
+  reason: string | null;
+  trippedAt: string | null;
+}
+
+/** Automatic failover between the configured providers (owner, 23 Nov 2026). */
+export interface OpsMailFailover {
+  /** MAIL_FALLBACK_PROVIDERS is set: mail moves to the backup when the active one fails. */
+  configured: boolean;
+  /** Staff fixed the active provider: no automatic switching. */
+  fixed: boolean;
+  /** Where new mail goes now. */
+  live: z.infer<typeof mailProviderNameSchema>;
+  backup: z.infer<typeof mailProviderNameSchema> | null;
 }
 
 export interface OpsMailProviderOverride {
@@ -1033,7 +1091,14 @@ export interface OpsMailProviders {
   overrides: OpsMailProviderOverride[];
   changedAt: string | null;
   reason: string | null;
+  failover: OpsMailFailover;
 }
+
+/** Fix the active provider (no automatic switching) or let it switch again. */
+export const opsMailFailoverSchema = opsReasonSchema
+  .extend({ fixed: z.boolean() })
+  .strict();
+export type OpsMailFailoverRequest = z.infer<typeof opsMailFailoverSchema>;
 
 export const opsMailTestSchema = opsReasonSchema
   .extend({ to: z.email().max(254).optional() })
@@ -1351,4 +1416,72 @@ export interface OpsStaffPerson {
   permissions: string[];
   additions: string[];
   removals: string[];
+}
+
+// Per-provider balances (spec §7): Split accounts and the provider retire check. Staff screens may
+// name providers (by their recorded names, e.g. `bachs`); what users see never does.
+
+/** A daily split check's result: `short` opens an issue only when its re-read agrees. */
+export const OPS_SPLIT_OUTCOMES = ['ok', 'short', 'over', 'partial'] as const;
+export type OpsSplitOutcome = (typeof OPS_SPLIT_OUTCOMES)[number];
+
+/** One owner whose money is at more than one configured provider. Amounts in minor units (NGN). */
+export interface OpsSplitAccount {
+  owner: { profileId?: string; businessId?: string; handle: string | null };
+  ledgerMinor: string;
+  /** In drain order: withdraw-only first, the active one last. */
+  providers: {
+    provider: string;
+    role: 'active' | 'withdraw_only';
+    queuedMinor: string;
+  }[];
+  lastCheck: { checkedAt: string; outcome: OpsSplitOutcome } | null;
+  /** The open `provider_split_short` issue, if any; `short` with none was not confirmed. */
+  openIssueId: string | null;
+}
+
+/** `GET /v1/ops/split-accounts` */
+export interface OpsSplitAccounts {
+  items: OpsSplitAccount[];
+  nextCursor: string | null;
+}
+
+export const opsSplitAccountsQuerySchema = z
+  .object({
+    cursor: z.uuid().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(50),
+  })
+  .strict();
+
+/** `POST /v1/ops/split-accounts/read`: one owner, a person's or a business's. */
+export const opsSplitAccountReadSchema = z.union([
+  z.object({ profileId: z.uuid() }).strict(),
+  z.object({ businessId: z.uuid() }).strict(),
+]);
+export type OpsSplitAccountReadRequest = z.infer<
+  typeof opsSplitAccountReadSchema
+>;
+
+/** Each provider's balance of the owner's account now; null when it couldn't be read. */
+export interface OpsSplitAccountReading {
+  provider: string;
+  availableMinor: string | null;
+}
+
+/** One withdraw-only provider's retire state (spec §4). */
+export interface OpsProviderRetireRow {
+  provider: string;
+  ownersWithMoney: number;
+  openPayouts: number;
+  openRefunds: number;
+  openDisputes: number;
+  lastActivityAt: string | null;
+  canRetire: boolean;
+}
+
+/** `GET /v1/ops/providers/payments/retire` */
+export interface OpsProviderRetire {
+  /** Nothing may have moved through a provider for this many days before it can retire. */
+  retireAfterDays: number;
+  providers: OpsProviderRetireRow[];
 }

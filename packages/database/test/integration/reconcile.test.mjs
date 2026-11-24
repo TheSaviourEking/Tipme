@@ -352,4 +352,211 @@ test('reconciliation', async (t) => {
       assert.equal(alerts.length, 1);
     },
   );
+  await t.test(
+    'parked payout events are rechecked through their own provider',
+    async () => {
+      await database.fresh();
+      // Three payouts already with their providers, each with a signed event that arrived before
+      // its reference was recorded (parked). Created just now, so only the parked sweep reads them.
+      const parkedFor = async (provider, reference) => {
+        const payoutId = randomUUID();
+        await q(
+          `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                                request_fingerprint, provider, provider_reference, account_reference)
+           VALUES ($1, $2, 'NGN', 100000, 'PROCESSING', $3, 'f', $4, $5, 'acct_1')`,
+          [payoutId, ADA, randomUUID(), provider, reference],
+        );
+        const unmatchedId = randomUUID();
+        await q(
+          `INSERT INTO unmatched_provider_events
+             (id, provider, provider_event_id, event_type, payload_hash, payload, reason)
+           VALUES ($1, $2, $3, 'payout.paid', 'h', $4, 'unknown_payout')`,
+          [
+            unmatchedId,
+            provider,
+            `evt_${reference}`,
+            JSON.stringify({
+              providerReference: reference,
+              accountReference: 'acct_1',
+              status: 'paid',
+              // A contradicted event is applied only on a read: that read shows which provider.
+              contradicted: true,
+            }),
+          ],
+        );
+        return { payoutId, unmatchedId };
+      };
+      const alt = await parkedFor('mock_alt', 'mock_alt_out_1');
+      const bachs = await parkedFor('bachs', 'bachs_ref_1');
+      const unlisted = await parkedFor('mock', 'mock_out_1');
+      const asked = { mock_alt: [], bachs: [], mock: [] };
+      const readerFor = (name) => ({
+        fetchPayoutStatus: async (reference) => {
+          asked[name].push(reference);
+          return { status: 'paid' };
+        },
+      });
+      const resolver = (name) => {
+        if (!(name in asked))
+          throw new Error('Unsupported persisted payment provider');
+        return readerFor(name);
+      };
+      await reconcilePayouts({
+        db: database.db,
+        provider: resolver,
+        parkedProviders: ['mock_alt', 'bachs'],
+        now: new Date(),
+        minAgeMs: 3_600_000,
+      });
+      assert.deepEqual(asked, {
+        mock_alt: ['mock_alt_out_1'],
+        bachs: ['bachs_ref_1'],
+        mock: [],
+      });
+      const payout = async (id) =>
+        (
+          await q('SELECT status, provider FROM payouts WHERE id = $1', [id])
+        )[0];
+      // Each recorded under its own name: never re-labelled as another provider's.
+      assert.deepEqual(await payout(alt.payoutId), {
+        status: 'PAID',
+        provider: 'mock_alt',
+      });
+      assert.deepEqual(await payout(bachs.payoutId), {
+        status: 'PAID',
+        provider: 'bachs',
+      });
+      assert.deepEqual(await payout(unlisted.payoutId), {
+        status: 'PROCESSING',
+        provider: 'mock',
+      });
+      assert.deepEqual(
+        (
+          await q(
+            `SELECT provider, provider_event_id FROM provider_events
+              WHERE event_type = 'payout.paid' ORDER BY provider`,
+          )
+        ).map((r) => `${r.provider}:${r.provider_event_id}`),
+        ['bachs:evt_bachs_ref_1', 'mock_alt:evt_mock_alt_out_1'],
+      );
+      // The unlisted provider's row is left alone: not even stamped as checked.
+      assert.deepEqual(
+        (await q('SELECT unmatched_id FROM parked_payout_checks ORDER BY 1'))
+          .map((r) => r.unmatched_id)
+          .sort(),
+        [alt.unmatchedId, bachs.unmatchedId].sort(),
+      );
+    },
+  );
+
+  await t.test(
+    'a parked event never adopts a payout at another provider',
+    async () => {
+      await database.fresh();
+      // A mock_alt event whose signed reference names a payout that is Bachs's, on the same
+      // account reference: never adopted or read through either provider.
+      const payoutId = randomUUID();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, account_reference, start_uncertain_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', 'acct_1', now())`,
+        [payoutId, ADA, randomUUID()],
+      );
+      await q(
+        `INSERT INTO unmatched_provider_events
+           (id, provider, provider_event_id, event_type, payload_hash, payload, reason)
+         VALUES ($1, 'mock_alt', 'evt_cross', 'payout.paid', 'h', $2, 'unknown_payout')`,
+        [
+          randomUUID(),
+          JSON.stringify({
+            providerReference: 'mock_alt_out_x',
+            accountReference: 'acct_1',
+            status: 'paid',
+            operationReference: payoutId,
+          }),
+        ],
+      );
+      const asked = [];
+      await reconcilePayouts({
+        db: database.db,
+        provider: (name) => ({
+          fetchPayoutStatus: async (reference) => {
+            asked.push(`${name}:${reference}`);
+            return { status: 'paid' };
+          },
+          findPayoutByReference: async () => null,
+        }),
+        parkedProviders: ['mock_alt'],
+        now: new Date(),
+        minAgeMs: 3_600_000,
+      });
+      assert.deepEqual(asked, []);
+      assert.deepEqual(
+        (
+          await q(
+            'SELECT status, provider, provider_reference FROM payouts WHERE id = $1',
+            [payoutId],
+          )
+        )[0],
+        { status: 'REQUESTED', provider: 'bachs', provider_reference: null },
+      );
+    },
+  );
+  await t.test(
+    'parked Bachs events reach staff on a copy with no Bachs adapter',
+    async () => {
+      await database.fresh();
+      // A copy back on mock with no Bachs keys: every Bachs read fails. The read-free checks still
+      // run, so a parked row never sits unseen (issues.ts leaves parked Bachs rows to this sweep).
+      await q(
+        `INSERT INTO payment_accounts
+           (id, profile_id, provider, environment, provider_account_reference, status,
+            charges_enabled, payouts_enabled, fee_collector)
+         VALUES ($1, $2, 'bachs', 'sandbox', 'acct_gone', 'ACTIVE', true, true, 'platform')`,
+        [randomUUID(), ADA],
+      );
+      const named = randomUUID();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, account_reference, start_uncertain_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', 'acct_gone', now())`,
+        [named, ADA, randomUUID()],
+      );
+      const park = (eventId, payload) =>
+        q(
+          `INSERT INTO unmatched_provider_events
+             (id, provider, provider_event_id, event_type, payload_hash, payload, reason)
+           VALUES ($1, 'bachs', $2, 'payout.paid', 'h', $3, 'unknown_payout')`,
+          [randomUUID(), eventId, JSON.stringify(payload)],
+        );
+      // Nobody asked for this one.
+      await park('evt_stranger', {
+        providerReference: 'bachs_ref_stranger',
+        accountReference: 'acct_gone',
+        status: 'paid',
+      });
+      // This one names our payout: it needs a read, which cannot happen here.
+      await park('evt_ours', {
+        providerReference: 'bachs_ref_ours',
+        accountReference: 'acct_gone',
+        status: 'paid',
+        operationReference: named,
+      });
+      const result = await reconcilePayouts({
+        db: database.db,
+        provider: (name) => {
+          throw new Error(`Unsupported persisted payment provider (${name})`);
+        },
+        parkedProviders: ['bachs'],
+        now: later(3 * 24 * 60),
+        minAgeMs: 30 * 24 * 3_600_000,
+      });
+      assert.ok(result.errors >= 1, 'the missing reader counts as an error');
+      const kinds = (
+        await q(`SELECT kind, dedupe_key FROM issues ORDER BY kind`)
+      ).map((i) => `${i.kind}:${i.dedupe_key.split('.')[0]}`);
+      assert.ok(kinds.includes('payout_unexpected:payout_unexpected'), kinds);
+      assert.ok(kinds.includes('payout_unresolved:payout_parked'), kinds);
+    },
+  );
 });

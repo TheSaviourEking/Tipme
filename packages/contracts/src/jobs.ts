@@ -11,6 +11,8 @@ export const WITHDRAWALS_SWITCH_EVENT = 'withdrawals.switch_changed';
 export const WITHDRAWAL_FREEZE_OPENED_EVENT = 'withdrawals.freeze_opened';
 /** The provider refused TipMe itself (empty reserve, or a bad key): the worker tells the alert route. */
 export const PLATFORM_REFUSAL_EVENT = 'payouts.platform_refused';
+/** You collect (Task 9): a dispute holds part of a recipient's balance; the worker emails them. */
+export const DISPUTE_HOLD_EVENT = 'collect.dispute_hold';
 
 /** W3C trace context carried inside job payloads so worker spans join the producer's trace. */
 export const traceCarrierSchema = z

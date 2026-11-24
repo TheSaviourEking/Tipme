@@ -25,8 +25,8 @@ export const MAIL_PROVIDER_LABELS: Record<MailProviderName, string> = {
   mock: 'Pretend provider',
   zeptomail: 'ZeptoMail',
   ses: 'Amazon SES',
-  // Announcements only; never offered as the active provider.
-  brevo: 'Brevo (announcements)',
+  // Offered for codes and receipts only with BREVO_TRANSACTIONAL=on (owner, 23 Nov 2026).
+  brevo: 'Brevo',
 };
 
 const sha256 = (value: string) =>
@@ -372,6 +372,8 @@ function testStatus(
 
 export interface MailProviderOverview {
   active: MailProviderName;
+  /** Staff fixed the active provider: no automatic failover. */
+  fixed: boolean;
   changedAt: string | null;
   reason: string | null;
   providers: Array<{
@@ -498,6 +500,8 @@ export async function mailProviderOverview(
     .orderBy(desc(providerOverrides.createdAt));
   return {
     active,
+    fixed:
+      (settings?.detail as { fixed?: unknown } | undefined)?.fixed === true,
     changedAt: settings?.changedAt.toISOString() ?? null,
     reason: settings?.reason ?? null,
     providers,

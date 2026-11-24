@@ -1,6 +1,12 @@
 import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
-import { allocateHoldbacks, refundMoves, type LedgerLine } from '@tipme/domain';
-import { and, asc, eq, gt, inArray, lte, or, sql } from 'drizzle-orm';
+import {
+  allocateHoldbacks,
+  buildCollectReturnPosting,
+  buildCollectTransferPosting,
+  refundMoves,
+  type LedgerLine,
+} from '@tipme/domain';
+import { and, asc, eq, gt, inArray, lte, or, sql, type SQL } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
   businesses,
@@ -14,6 +20,13 @@ import { businessManagerUsers } from './business-ops.js';
 import { guarded } from './errors.js';
 import { newId } from './ids.js';
 import { openIssue } from './issues.js';
+import { postLedgerTransaction } from './ledger.js';
+import {
+  reportOwnMoneyWait,
+  reportProviderKeyRefused,
+} from './payout-start.js';
+import { ownMoneyRefusal } from './collect-reserve.js';
+import { unsettledDisputeSql } from './dispute-state.js';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). A shared tip is a direct charge on the staff
@@ -31,11 +44,19 @@ import { openIssue } from './issues.js';
  * worker at a time: every move from a sendable state is a conditional update that only one wins.
  *
  * Nothing here posts to the ledger: it already says who is owed what, and these transfers only make
- * each partner balance match it.
+ * each partner balance match it. The one exception is You collect's `collect_sweep` (R3): a business's
+ * share of a collect tip is held on TipMe's own account (`held_for_recipients`), so only the leg in
+ * runs, and once it is paid the money has changed place: `provider_clearing` <- `held_for_recipients`.
  */
 
 export type ShareTransferKind =
-  'sweep' | 'recover' | 'fee_return' | 'holdback_repay';
+  | 'sweep'
+  | 'recover'
+  | 'fee_return'
+  | 'holdback_repay'
+  | 'collect_sweep'
+  | 'collect_recover'
+  | 'collect_return';
 export type ShareTransferStatus =
   | 'waiting'
   | 'out_sent'
@@ -114,12 +135,21 @@ const SOURCE: Record<ShareTransferKind, 'staff' | 'business' | null> = {
   recover: 'business',
   fee_return: null,
   holdback_repay: null,
+  collect_sweep: null,
+  // Task 9 (P29): a lost dispute pulls a swept collect share back from the business, out leg only.
+  collect_recover: 'business',
+  // Task 11 (RI2): what a failed refund pulled back goes back to the business, leg in only.
+  collect_return: null,
 };
 const DESTINATION: Record<ShareTransferKind, 'staff' | 'business'> = {
   sweep: 'business',
   recover: 'staff',
   fee_return: 'staff',
   holdback_repay: 'staff',
+  collect_sweep: 'business',
+  // Never used: a collect recovery ends in TipMe's own balance (confirmOut finishes it).
+  collect_recover: 'business',
+  collect_return: 'business',
 };
 
 type Row = typeof shareTransfers.$inferSelect;
@@ -159,6 +189,122 @@ export async function scheduleShareSweep(
       provider: input.provider,
     })
     .onConflictDoNothing();
+}
+
+/**
+ * You collect (R3): called with a collect tip's payment posting, in its transaction, when the tip has
+ * a business share. The share is already in TipMe's balance (held for the business), so only the leg
+ * into the business runs (`out_paid` from the start), once the tip has settled (`runShareTransfers`).
+ * Once per tip: the one-sweep index covers both kinds.
+ */
+export async function scheduleCollectSweep(
+  tx: Tx,
+  input: {
+    tipId: string;
+    profileId: string;
+    businessId: string;
+    amountMinor: bigint;
+    currency: string;
+    provider: string;
+  },
+): Promise<void> {
+  await tx
+    .insert(shareTransfers)
+    .values({
+      id: newId(),
+      tipId: input.tipId,
+      kind: 'collect_sweep',
+      businessId: input.businessId,
+      profileId: input.profileId,
+      currency: input.currency,
+      amountMinor: input.amountMinor,
+      deliverMinor: input.amountMinor,
+      status: 'out_paid',
+      provider: input.provider,
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * You collect (Task 9, ruling P29): a lost dispute on a collect tip whose business share already
+ * reached the business's account. As option B's `recover`, the share is pulled back from that
+ * account to TipMe's, out leg only, key `tipme-share-out-<id>`. Once paid, the money is held for the
+ * business again (`buildCollectReturnPosting`) and the dispute's loss takes it from there. Refused
+ * (the business has withdrawn it), it ends in `gap` and TipMe absorbs it. Once per dispute. If the
+ * business has withdrawn part of it, what is left is pulled back and TipMe absorbs only the rest:
+ * option B's hold-back can't be reused, because it repays the staff member, not TipMe. Task 10: a
+ * refund of a collect tip pulls it back the same way (once per refund), before TipMe refunds.
+ */
+export async function scheduleCollectRecover(
+  tx: Tx,
+  input: {
+    tipId: string;
+    businessId: string;
+    profileId: string;
+    amountMinor: bigint;
+    currency: string;
+    provider: string;
+    now: Date;
+  } & ({ disputeId: string } | { tipRefundId: string }),
+): Promise<void> {
+  await tx
+    .insert(shareTransfers)
+    .values({
+      id: newId(),
+      tipId: input.tipId,
+      ...('disputeId' in input
+        ? { disputeId: input.disputeId }
+        : { tipRefundId: input.tipRefundId }),
+      kind: 'collect_recover',
+      businessId: input.businessId,
+      profileId: input.profileId,
+      currency: input.currency,
+      amountMinor: input.amountMinor,
+      status: 'waiting',
+      provider: input.provider,
+      nextAttemptAt: input.now,
+    })
+    .onConflictDoNothing();
+}
+
+/**
+ * The leg in is confirmed paid. For a collect share (R3), the held money is booked as moved in the
+ * same transaction, keyed by the leg's own key, so it is booked once however often it is confirmed.
+ */
+async function finishIn(
+  db: Database,
+  row: Row,
+  transferRef: string,
+): Promise<void> {
+  // Held money that left TipMe's balance for the business: a collect share, or a return (RI2).
+  if (row.kind !== 'collect_sweep' && row.kind !== 'collect_return') {
+    await claim(db, row, 'in_sent', {
+      status: 'done',
+      inReference: transferRef,
+    });
+    return;
+  }
+  await db.transaction(async (tx) => {
+    if (
+      !(await claim(tx, row, 'in_sent', {
+        status: 'done',
+        inReference: transferRef,
+      }))
+    )
+      return;
+    const amountMinor = row.deliverMinor ?? row.amountMinor;
+    await postLedgerTransaction(tx, {
+      operationType: 'collect_transfer',
+      operationKey: shareInKey(row.id),
+      currency: row.currency,
+      tipId: row.tipId,
+      traceId: null,
+      lines: buildCollectTransferPosting({
+        amountMinor,
+        businessId: businessOf(row),
+      }),
+    });
+  });
 }
 
 /**
@@ -353,11 +499,18 @@ async function claim(
   row: Row,
   from: ShareTransferStatus,
   set: Partial<typeof shareTransfers.$inferInsert>,
+  also?: SQL,
 ): Promise<boolean> {
   const moved = await db
     .update(shareTransfers)
     .set({ ...set, updatedAt: sql`now()` })
-    .where(and(eq(shareTransfers.id, row.id), eq(shareTransfers.status, from)))
+    .where(
+      and(
+        eq(shareTransfers.id, row.id),
+        eq(shareTransfers.status, from),
+        ...(also ? [also] : []),
+      ),
+    )
     .returning({ id: shareTransfers.id });
   return moved.length === 1;
 }
@@ -371,6 +524,17 @@ async function lockRow(tx: Tx, id: string): Promise<Row> {
   if (!row) throw new Error('share transfer vanished');
   return row;
 }
+
+/**
+ * You collect (Task 9, §6.2): a business's share of a collect tip is held in TipMe's balance while a
+ * dispute on the tip is open (or lost and still being recovered, or closed with its hold kept): a
+ * lost dispute takes it back from there before TipMe absorbs anything. Task 10: and while a refund of
+ * the tip is open, which takes it from there when it is paid (or lets it go on when it fails).
+ */
+const undisputed = sql`NOT ${unsettledDisputeSql(sql`${shareTransfers.tipId}`, { closed: 'unsettled' })}
+  AND NOT EXISTS (
+  SELECT 1 FROM tip_refunds r
+   WHERE r.tip_id = ${shareTransfers.tipId} AND r.status IN ('REQUESTED', 'PROCESSING', 'UNKNOWN'))`;
 
 /** A person needs to look: TipMe may hold money it could not send on. Nothing is sent again. */
 async function toReview(
@@ -410,6 +574,30 @@ async function confirmOut(
   await db.transaction(async (tx) => {
     const current = await lockRow(tx, row.id);
     if (current.status !== 'out_sent') return;
+    if (current.kind === 'collect_recover') {
+      // Back in TipMe's balance: held for the business again, until the dispute's loss takes it.
+      await tx
+        .update(shareTransfers)
+        .set({
+          status: 'done',
+          deliverMinor: 0n,
+          outReference: transferRef,
+          updatedAt: now,
+        })
+        .where(eq(shareTransfers.id, row.id));
+      await postLedgerTransaction(tx, {
+        operationType: 'collect_transfer',
+        operationKey: shareOutKey(row.id),
+        currency: current.currency,
+        tipId: current.tipId,
+        traceId: null,
+        lines: buildCollectReturnPosting({
+          amountMinor: current.amountMinor,
+          businessId: businessOf(current),
+        }),
+      });
+      return;
+    }
     let deliver = current.amountMinor;
     if (current.kind === 'sweep') {
       const open = await tx
@@ -531,12 +719,20 @@ async function step(
     return readBack(db, row, kind, provider, now);
 }
 
-async function postpone(db: Database, row: Row, now: Date): Promise<void> {
+async function postpone(
+  db: Database,
+  row: Row,
+  now: Date,
+  { countAttempt = true }: { countAttempt?: boolean } = {},
+): Promise<void> {
   await db
     .update(shareTransfers)
     .set({
-      attempts: row.attempts + 1,
-      nextAttemptAt: backoff(row.attempts + 1, now),
+      ...(countAttempt ? { attempts: row.attempts + 1 } : {}),
+      // A wait that isn't a try still backs off (m6): on how long this row has waited, not tries.
+      nextAttemptAt: countAttempt
+        ? backoff(row.attempts + 1, now)
+        : new Date(now.getTime() + 15 * 60_000),
       updatedAt: now,
     })
     .where(
@@ -546,15 +742,16 @@ async function postpone(db: Database, row: Row, now: Date): Promise<void> {
 
 async function sendOut(
   db: Database,
-  row: Row,
+  given: Row,
   kind: ShareTransferKind,
   provider: ShareTransferProvider,
   now: Date,
 ): Promise<void> {
+  let row = given;
   const collect = provider.collectToPlatform;
   const source = SOURCE[kind];
   if (!collect || !source) return;
-  if (kind === 'recover') {
+  if (kind === 'recover' || kind === 'collect_recover') {
     // The business holds the share only once the sweep has finished delivering it.
     const [sweep] = await db
       .select({ status: shareTransfers.status })
@@ -562,13 +759,38 @@ async function sendOut(
       .where(
         and(
           eq(shareTransfers.tipId, row.tipId),
-          eq(shareTransfers.kind, 'sweep'),
+          eq(
+            shareTransfers.kind,
+            kind === 'recover' ? 'sweep' : 'collect_sweep',
+          ),
         ),
       );
     if (sweep?.status !== 'done') return postpone(db, row, now);
   }
   const accountRef = await accountOf(db, sideOf(row, source), provider);
   if (!accountRef) return postpone(db, row, now);
+  if (kind === 'collect_recover') {
+    // Task 9: what the business still has. All of it comes back; part of it, that part (TipMe
+    // absorbs the rest); none, a gap. A failed read waits.
+    let available: bigint;
+    try {
+      ({ availableMinor: available } = await provider.payoutBalance(
+        accountRef,
+        'NGN',
+      ));
+    } catch {
+      return postpone(db, row, now);
+    }
+    if (available <= 0n) {
+      await claim(db, row, 'waiting', { status: 'gap' });
+      return;
+    }
+    if (available < row.amountMinor) {
+      if (!(await claim(db, row, 'waiting', { amountMinor: available })))
+        return;
+      row = { ...row, amountMinor: available };
+    }
+  }
   if (kind === 'sweep') {
     // Transfers draw only on the available balance: until the tip has settled there, wait.
     try {
@@ -596,11 +818,35 @@ async function sendOut(
       amountMinor: row.amountMinor,
       currency: 'NGN',
       idempotencyKey: shareOutKey(row.id),
-      description: DESCRIPTION,
+      description:
+        kind === 'collect_recover'
+          ? row.tipRefundId
+            ? 'TipMe refund'
+            : 'TipMe dispute'
+          : DESCRIPTION,
     });
   } catch (error) {
     if (!definitelyNotMoved(error)) return; // It may have moved: read back, never re-sent now.
     if (kind === 'recover') return recordGap(db, row, now);
+    if (
+      kind === 'collect_recover' &&
+      error instanceof Error &&
+      error.name === 'PlatformRefusalError' &&
+      (error as { refusal?: unknown }).refusal === 'provider_key'
+    ) {
+      // TipMe's own key, not the business's money: staff are told once, and it is asked again.
+      await claim(db, row, 'out_sent', {
+        status: 'waiting',
+        nextAttemptAt: backoff(row.attempts + 1, now),
+      });
+      await reportProviderKeyRefused(db, { now });
+      return;
+    }
+    // Task 9: the business no longer has it. Nothing moved; the dispute's loss absorbs it.
+    if (kind === 'collect_recover') {
+      await claim(db, row, 'out_sent', { status: 'gap' });
+      return;
+    }
     // Not there yet (pending settlement, or the account is in debt): wait and ask again.
     await claim(db, row, 'out_sent', {
       status: 'waiting',
@@ -631,13 +877,62 @@ async function sendIn(
     sideOf(row, DESTINATION[kind]),
     provider,
   );
-  if (!accountRef) return postpone(db, row, now);
+  if (!accountRef) {
+    // Task 15 follow-up (re-review 2, n1): waiting for another reason than own money, so its mark
+    // goes, and the own-money issue can close (it re-alerted every 6 hours otherwise).
+    if (row.ownMoneyWaitSince)
+      await db
+        .update(shareTransfers)
+        .set({ ownMoneyWaitSince: null })
+        .where(eq(shareTransfers.id, row.id));
+    return postpone(db, row, now);
+  }
+  // You collect (Task 11, R5, P10): a fee TipMe returns comes from its own money, never what it holds
+  // for recipients. Owed (non-voluntary); with nothing held it never refuses. It waits, nothing asked
+  // of the partner, staff are told why (m5), and the wait is not counted as a try (m6).
+  if (kind === 'fee_return') {
+    const ownMoney = await ownMoneyRefusal(db, {
+      amountMinor: row.deliverMinor,
+      currency: row.currency,
+      voluntary: false,
+      // n2: the run's own time, as every other read in this run.
+      now,
+    });
+    if (ownMoney) {
+      if (!row.ownMoneyWaitSince)
+        await db
+          .update(shareTransfers)
+          .set({ ownMoneyWaitSince: now })
+          .where(
+            and(
+              eq(shareTransfers.id, row.id),
+              eq(shareTransfers.status, 'out_paid'),
+            ),
+          );
+      await reportOwnMoneyWait(db, { refusal: ownMoney, now });
+      return postpone(db, row, now, { countAttempt: false });
+    }
+    if (row.ownMoneyWaitSince)
+      await db
+        .update(shareTransfers)
+        .set({ ownMoneyWaitSince: null })
+        .where(eq(shareTransfers.id, row.id));
+  }
   if (
-    !(await claim(db, row, 'out_paid', {
-      status: 'in_sent',
-      sentAt: now,
-      attempts: row.attempts + 1,
-    }))
+    !(await claim(
+      db,
+      row,
+      'out_paid',
+      {
+        status: 'in_sent',
+        sentAt: now,
+        attempts: row.attempts + 1,
+      },
+      // Checked again at the claim: a dispute opened since the row was read holds it.
+      kind === 'collect_sweep' || kind === 'collect_return'
+        ? undisputed
+        : undefined,
+    ))
   )
     return;
   let answer: Transfer;
@@ -653,29 +948,50 @@ async function sendIn(
     if (!definitelyNotMoved(error)) return;
     // TipMe is holding the money: the same key is asked again later, and a person is told if it
     // keeps being refused.
-    if (row.attempts + 1 >= IN_ATTEMPTS_BEFORE_REVIEW) {
-      await claim(db, row, 'in_sent', { status: 'out_paid' });
-      return toReview(
-        db,
-        row,
-        now,
-        'Our partner refused TipMe’s transfer on, again and again.',
-      );
-    }
+    if (row.attempts + 1 >= IN_ATTEMPTS_BEFORE_REVIEW)
+      return refusedToReview(db, row, now);
     await claim(db, row, 'in_sent', {
       status: 'out_paid',
       nextAttemptAt: backoff(row.attempts + 1, now),
     });
     return;
   }
-  await claim(
-    db,
-    row,
-    'in_sent',
-    answer.status === 'paid'
-      ? { status: 'done', inReference: answer.transferRef }
-      : { inReference: answer.transferRef },
-  );
+  if (answer.status === 'paid') return finishIn(db, row, answer.transferRef);
+  await claim(db, row, 'in_sent', { inReference: answer.transferRef });
+}
+
+/**
+ * TipMe's leg in was definitely refused again and again: held for a person, and marked refused
+ * (Task 9: proven unmoved, so a lost dispute may take it). One conditional update from this
+ * runner's own claim (`in_sent` at its attempt), so the mark can never land on a row another runner
+ * has claimed since.
+ */
+async function refusedToReview(
+  db: Database,
+  row: Row,
+  now: Date,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [held] = await tx
+      .update(shareTransfers)
+      .set({ status: 'review', refusedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(shareTransfers.id, row.id),
+          eq(shareTransfers.status, 'in_sent'),
+          eq(shareTransfers.attempts, row.attempts + 1),
+        ),
+      )
+      .returning({ id: shareTransfers.id });
+    if (!held) return;
+    await openIssue(tx, {
+      dedupeKey: `share_transfer_stuck.${row.id}`,
+      kind: 'share_transfer_stuck',
+      subject: { tipId: row.tipId, profileId: row.profileId },
+      note: `Our partner refused TipMe’s transfer on, again and again. Share transfer ${row.id}, keys ${shareOutKey(row.id)} and ${shareInKey(row.id)}.`,
+      now,
+    });
+  });
 }
 
 /** A leg whose answer was lost or pending: looked for by its key, never sent again blindly. */
@@ -711,11 +1027,7 @@ async function readBack(
     );
   if (found?.status === 'paid') {
     if (out) return confirmOut(db, row, found.transferRef, now);
-    await claim(db, row, 'in_sent', {
-      status: 'done',
-      inReference: found.transferRef,
-    });
-    return;
+    return finishIn(db, row, found.transferRef);
   }
   if (found) {
     // Still pending at the partner: look again later.
@@ -777,6 +1089,19 @@ export async function runShareTransfers(
             and(
               eq(shareTransfers.status, 'out_paid'),
               lte(shareTransfers.nextAttemptAt, now),
+              // A collect share waits for the tip to settle in TipMe's own balance, as a sweep does
+              // on the staff member's account.
+              or(
+                sql`${shareTransfers.kind} NOT IN ('collect_sweep', 'collect_return')`,
+                and(
+                  eq(shareTransfers.kind, 'collect_sweep'),
+                  lte(shareTransfers.createdAt, settledBefore),
+                  undisputed,
+                ),
+                // RI2: a return waits for no settlement (the money is in TipMe's balance), only
+                // for no refund or dispute on the tip to need it.
+                and(eq(shareTransfers.kind, 'collect_return'), undisputed),
+              ),
             ),
             and(
               inArray(shareTransfers.status, ['out_sent', 'in_sent']),
@@ -815,7 +1140,7 @@ export function businessShareMoney(
     const result = await db.execute<{ on_way: string; held: string }>(sql`
       SELECT
         (SELECT COALESCE(SUM(COALESCE(deliver_minor, amount_minor)), 0) FROM share_transfers
-          WHERE business_id = ${businessId} AND kind = 'sweep'
+          WHERE business_id = ${businessId} AND kind IN ('sweep', 'collect_sweep', 'collect_return')
             AND status IN ('waiting', 'out_sent', 'out_paid', 'in_sent'))::text AS on_way,
         (SELECT COALESCE(SUM(remaining_minor), 0) FROM share_holdbacks
           WHERE business_id = ${businessId} AND remaining_minor > 0)::text AS held`);

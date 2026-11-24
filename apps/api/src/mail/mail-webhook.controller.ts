@@ -56,15 +56,15 @@ export class MailWebhookController {
     @Param('provider') name: string,
     @Req() request: Pick<RawBodyRequest<Request>, 'rawBody' | 'headers'>,
   ): Promise<ApiDataResponse<{ received: number }>> {
-    // Brevo sends announcements only, so it is never in the providers map.
-    const provider =
-      name === 'brevo'
-        ? this.announcements?.name === 'brevo'
-          ? this.announcements
-          : undefined
-        : MAIL_PROVIDER_NAMES.includes(name as MailProviderName)
-          ? this.providers.get(name as MailProviderName)
-          : undefined;
+    // Brevo has one webhook for the account. Its codes-and-receipts instance (in the map when
+    // BREVO_TRANSACTIONAL=on) and its announcement one check the same token and parse the same
+    // events, and an event finds its message by our reference, so either serves both.
+    const announcementBrevo =
+      this.announcements?.name === 'brevo' ? this.announcements : undefined;
+    const provider = MAIL_PROVIDER_NAMES.includes(name as MailProviderName)
+      ? (this.providers.get(name as MailProviderName) ??
+        (name === 'brevo' ? announcementBrevo : undefined))
+      : undefined;
     if (!provider) throw new NotFoundException();
     const rawBody = request.rawBody ?? Buffer.alloc(0);
     try {

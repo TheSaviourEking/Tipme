@@ -1,0 +1,6 @@
+{
+  "_source": "Live-only shape, from https://docs.bachs.io/connect/transfers.md (Errors: 'FORBIDDEN (403), the account's transfers capability is not active ...') and the standard error envelope (detail, error_code) in https://docs.bachs.io/api-reference/transfers/list-transfers.md. Not recorded: the sandbox grants capabilities at once.",
+  "_status": 403,
+  "detail": "The account's transfers capability is not active",
+  "error_code": "FORBIDDEN"
+}

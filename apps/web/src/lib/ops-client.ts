@@ -86,6 +86,21 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   pro_refund_failed: 'A Pro refund failed at the partner',
   share_transfer_stuck: 'A business share movement needs checking',
   tip_refund_failed: 'A tip refund didn’t happen at the partner',
+  collect_transfer_stuck: 'Held money not transferring',
+  collect_transfer_review: 'A held-money transfer needs checking',
+  collect_in_debt: 'TipMe’s own account in debt',
+  collect_invariant_broken: 'Held money not covered',
+  collect_reserve_low: 'TipMe’s own money low',
+  collect_auto_payout_on: 'Automatic payouts on for TipMe',
+  collect_recon_mismatch: 'Held-money records don’t match',
+  collect_same_bank: 'Bank account shared by two recipients',
+  dispute_opened: 'Dispute opened on a collected tip',
+  dispute_deadline: 'Dispute deadline near',
+  dispute_fee_unposted: 'Dispute fee not booked',
+  collect_refund_gap: 'Refund on a collected tip fell short',
+  collect_own_money_wait: 'Waiting on TipMe’s own money',
+  provider_split_short: 'Providers hold less than owed',
+  provider_unconnected_money: 'Money at a disconnected provider',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',
@@ -96,6 +111,19 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   message_reported: 'Reported message',
   profile_reported: 'Reported page',
 };
+/** Split accounts (spec §7): a daily check's result, in staff words. */
+export const SPLIT_OUTCOME_LABELS: Record<string, string> = {
+  ok: 'Matches',
+  short: 'Short',
+  over: 'Providers hold more',
+  partial: 'A read failed',
+};
+/** A payment provider's role (spec §4). Staff screens may name providers; users never see this. */
+export const PROVIDER_ROLE_LABELS: Record<string, string> = {
+  active: 'Active',
+  withdraw_only: 'Withdraw-only',
+};
+
 export const SEVERITY_LABELS: Record<string, string> = {
   money: 'Money',
   account: 'Account',

@@ -1,11 +1,28 @@
 import type { LiveMessage } from '@tipme/contracts';
-import { relayOutboxOnce, type Database } from '@tipme/database';
+import {
+  relayOutboxOnce,
+  withdrawalSignalDue,
+  type Database,
+} from '@tipme/database';
 import type { Logger } from '@tipme/observability';
 import type { Queue } from 'bullmq';
 import { databaseFailureFields, RELAY_JOB_RETRIES } from './job-retry.js';
-import { liveSignalFor } from './live-signals.js';
+import {
+  liveSignalFor,
+  requestGate,
+  whenRequestMoved,
+} from './live-signals.js';
 
 const RETENTION_SECONDS = 7 * 24 * 60 * 60;
+
+/**
+ * Finished relay jobs are kept for 7 days so a re-published row is deduped by job ID. Exported so
+ * the scheduled-run retention test can check that the schedulers never cut this short.
+ */
+export const RELAY_JOB_RETENTION = {
+  removeOnComplete: { age: RETENTION_SECONDS },
+  removeOnFail: { age: RETENTION_SECONDS },
+} as const;
 
 export interface OutboxRelay {
   stop(): Promise<void>;
@@ -40,7 +57,10 @@ export function startOutboxRelay(options: {
   const tick = async (): Promise<void> => {
     // Collected inside the claim, published only once it has committed: a rolled-back claim
     // (a failed queue add) signals nothing, and no publish ever waits inside the transaction.
-    const signals: LiveMessage[] = [];
+    const signals: {
+      messages: LiveMessage[];
+      gate: ReturnType<typeof requestGate>;
+    }[] = [];
     try {
       await relayOutboxOnce(db, async (row) => {
         await queue.add(
@@ -48,17 +68,31 @@ export function startOutboxRelay(options: {
           { ...row.payload, _trace: row.trace },
           {
             jobId: row.dedupeKey,
-            // Keep finished relay jobs for 7 days so a re-published row is deduped by job ID.
-            removeOnComplete: { age: RETENTION_SECONDS },
-            removeOnFail: { age: RETENTION_SECONDS },
+            ...RELAY_JOB_RETENTION,
             ...RELAY_JOB_RETRIES,
           },
         );
-        signals.push(...liveSignalFor(row.eventType, row.payload));
+        signals.push({
+          messages: liveSignalFor(row.eventType, row.payload),
+          gate: requestGate(row.eventType, null, row.payload),
+        });
       });
       delay = intervalMs;
-      if (signals.length > 0 && options.publishLive)
-        void options.publishLive(signals).catch(() => undefined);
+      const publish = options.publishLive;
+      if (signals.length > 0 && publish)
+        // A split request's paid part waits for its request (Task 9): asked after the commit, so
+        // the check reads every part this claim relayed. Never awaited by the loop.
+        void (async () => {
+          const due = (input: Parameters<typeof withdrawalSignalDue>[1]) =>
+            withdrawalSignalDue(db, input);
+          const ready = await Promise.all(
+            signals.map(({ messages, gate }) =>
+              whenRequestMoved(messages, gate, due),
+            ),
+          );
+          const messages = ready.flat();
+          if (messages.length > 0) await publish(messages);
+        })().catch(() => undefined);
     } catch (error) {
       logger.warn({
         event: 'outbox.relay_failed',

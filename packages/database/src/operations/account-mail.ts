@@ -1,4 +1,8 @@
-import { SERIOUS_ACTION_WORDS, type SeriousAction } from '@tipme/contracts';
+import {
+  DISPUTE_HOLD_EVENT,
+  SERIOUS_ACTION_WORDS,
+  type SeriousAction,
+} from '@tipme/contracts';
 import { eq, and, inArray, isNotNull, isNull } from 'drizzle-orm';
 import {
   approvalRequests,
@@ -288,12 +292,59 @@ export function mailForDomainEvent(
           profileId: payouts.profileId,
           businessId: payouts.businessId,
           amount: payouts.amountMinor,
+          groupId: payouts.withdrawalGroupId,
         })
         .from(payouts)
         .where(eq(payouts.id, payoutId));
       if (!payout) return;
-      const type =
-        name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed';
+      // What to tell, and the key that keeps it to once: this payout's outcome, or for a request paid
+      // as parts (per-provider balances, Task 9) the request's, once every part has settled. Each
+      // part's event asks; the last to settle finds them all settled, and an earlier one that also
+      // does is the same email by its key. A request with paid and failed parts gets one of each.
+      const outcomes: {
+        type: 'withdrawal_paid' | 'withdrawal_failed';
+        amountMinor: bigint;
+        key: string;
+      }[] = [];
+      if (payout.groupId === null)
+        outcomes.push({
+          type:
+            name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed',
+          amountMinor: payout.amount,
+          key: payoutId,
+        });
+      else {
+        const parts = await db
+          .select({ status: payouts.status, amount: payouts.amountMinor })
+          .from(payouts)
+          .where(eq(payouts.withdrawalGroupId, payout.groupId));
+        // Still on its way: REQUESTED or PROCESSING. A reversed part has settled (and is not paid).
+        if (
+          parts.some(
+            (part) =>
+              part.status === 'REQUESTED' || part.status === 'PROCESSING',
+          )
+        )
+          return;
+        const sum = (status: 'PAID' | 'FAILED') =>
+          parts
+            .filter((part) => part.status === status)
+            .reduce((total, part) => total + part.amount, 0n);
+        const paidMinor = sum('PAID');
+        const failedMinor = sum('FAILED');
+        if (paidMinor > 0n)
+          outcomes.push({
+            type: 'withdrawal_paid',
+            amountMinor: paidMinor,
+            key: `group.${payout.groupId}`,
+          });
+        if (failedMinor > 0n)
+          outcomes.push({
+            type: 'withdrawal_failed',
+            amountMinor: failedMinor,
+            key: `group.${payout.groupId}`,
+          });
+      }
       if (payout.businessId !== null) {
         // A business's own withdrawal (R2-B): each of its owners is told, as only they can withdraw.
         const owners = await db
@@ -307,23 +358,45 @@ export function mailForDomainEvent(
               isNull(businessManagers.removedAt),
             ),
           );
-        for (const owner of owners)
-          await mailOwner(db, sealing, {
-            userId: owner.userId,
-            type,
-            data: {
-              amountMinor: payout.amount.toString(),
-              businessName: owner.name,
-            },
-            dedupeKey: `${type}.${payoutId}.${owner.userId}`,
-          });
+        for (const outcome of outcomes)
+          for (const owner of owners)
+            await mailOwner(db, sealing, {
+              userId: owner.userId,
+              type: outcome.type,
+              data: {
+                amountMinor: outcome.amountMinor.toString(),
+                businessName: owner.name,
+              },
+              dedupeKey: `${outcome.type}.${outcome.key}.${owner.userId}`,
+            });
         return;
       }
+      for (const outcome of outcomes)
+        await mailOwner(db, sealing, {
+          profileId: personOf(payout.profileId),
+          type: outcome.type,
+          data: { amountMinor: outcome.amountMinor.toString() },
+          dedupeKey: `${outcome.type}.${outcome.key}`,
+        });
+      return;
+    }
+    // You collect (Task 9): the in-app notice went with the hold; this is its email.
+    if (name === DISPUTE_HOLD_EVENT) {
+      const disputeId = idOf(payload['disputeId']);
+      const profileId = idOf(payload['profileId']);
+      const heldMinor = payload['heldMinor'];
+      if (
+        !disputeId ||
+        !profileId ||
+        typeof heldMinor !== 'string' ||
+        !/^[1-9][0-9]{0,14}$/.test(heldMinor)
+      )
+        return;
       await mailOwner(db, sealing, {
-        profileId: personOf(payout.profileId),
-        type,
-        data: { amountMinor: payout.amount.toString() },
-        dedupeKey: `${type}.${payoutId}`,
+        profileId,
+        type: 'dispute_hold',
+        data: { heldMinor },
+        dedupeKey: `dispute_hold.${disputeId}`,
       });
       return;
     }
@@ -345,5 +418,32 @@ export function mailForDomainEvent(
         dedupeKey: `tip_reversed.${tip.id}.${suffix}`,
       });
     }
+  });
+}
+
+/**
+ * You collect (plan Task 11, spec §6.3): every TipMe owner is emailed the reserve alert staff are
+ * paged with (critical, a negative balance, or the rule broken). `spell` keys it, so a repeat for the
+ * same spell queues nothing twice. Returns how many were queued.
+ */
+export function mailOwnersCollectReserve(
+  db: Database,
+  sealing: MailSealing,
+  input: { alert: string; spell: string },
+): Promise<number> {
+  return guarded(async () => {
+    let queued = 0;
+    for (const owner of await verifiedOwners(db))
+      if (owner.email) {
+        await enqueueMail(db, sealing, {
+          type: 'collect_reserve_alert',
+          to: owner.email,
+          userId: owner.userId,
+          data: { alert: input.alert.slice(0, 600) },
+          dedupeKey: `collect_reserve_alert.${input.spell}.${owner.userId}`,
+        });
+        queued += 1;
+      }
+    return queued;
   });
 }

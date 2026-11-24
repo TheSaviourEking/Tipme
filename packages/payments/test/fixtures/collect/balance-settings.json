@@ -1,0 +1,31 @@
+{
+  "_source": "From https://docs.bachs.io/api-reference/payouts/get-payout-schedule.md (GET /v1/balance_settings, PayoutSettingsResponse example); NGN set to manual and USD to daily to show one interval per currency. Not recorded live.",
+  "schedule_by_currency": {
+    "NGN": {
+      "currency": "NGN",
+      "payout_currency": "NGN",
+      "interval": "manual",
+      "weekly_payout_days": null,
+      "monthly_payout_days": null,
+      "anchor_hour_utc": 9,
+      "minimum_amount": null,
+      "next_run_at": null,
+      "last_run_at": null,
+      "last_withdrawal_id": null,
+      "disabled_reason": null
+    },
+    "USD": {
+      "currency": "USD",
+      "payout_currency": "USD",
+      "interval": "daily",
+      "weekly_payout_days": null,
+      "monthly_payout_days": null,
+      "anchor_hour_utc": 9,
+      "minimum_amount": null,
+      "next_run_at": "2026-11-20T09:00:00.000Z",
+      "last_run_at": null,
+      "last_withdrawal_id": null,
+      "disabled_reason": null
+    }
+  }
+}

@@ -12,6 +12,8 @@ import type { Logger } from '@tipme/observability';
 import { databaseFailureFields } from './job-retry.js';
 
 const HOUSEKEEPING_MS = 60_000;
+/** How often the unused-codes signal of automatic failover is checked. */
+const CODE_CHECK_MS = 30_000;
 
 export interface MailDelivery {
   stop(): Promise<void>;
@@ -24,18 +26,21 @@ export interface MailDelivery {
  * pass is logged by name and tried again next tick; mail waits safely in Postgres.
  */
 export function startMailDelivery(options: {
-  deps: Omit<MailDeliveryDeps, 'log'>;
+  deps: Omit<MailDeliveryDeps, 'log' | 'warn'>;
   logger: Logger;
   intervalMs?: number;
   limit?: number;
   /** A finished email recovery ended the account's sessions: close their live streams. */
   publishLive?: (messages: LiveMessage[]) => Promise<void>;
+  /** Automatic failover's unused-codes check (checkCodeDelivery), when a fallback is set up. */
+  checkCodes?: (now: Date) => Promise<void>;
 }): MailDelivery {
   const { deps, logger, intervalMs = 500, limit = 20 } = options;
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   let running: Promise<void> = Promise.resolve();
   let lastHousekeeping = 0;
+  let lastCodeCheck = 0;
 
   const tick = async (): Promise<void> => {
     const now = new Date();
@@ -51,8 +56,26 @@ export function startMailDelivery(options: {
         });
         await purgeEmailCodes(deps.db, now);
       }
+      if (
+        options.checkCodes &&
+        now.getTime() - lastCodeCheck >= CODE_CHECK_MS
+      ) {
+        lastCodeCheck = now.getTime();
+        // Its own failure never holds back delivery.
+        await options.checkCodes(now).catch((error: unknown) =>
+          logger.warn({
+            event: 'mail.code_check_failed',
+            error: error instanceof Error ? error.name : 'unknown',
+            ...databaseFailureFields(error),
+          }),
+        );
+      }
       await deliverDueMail(
-        { ...deps, log: (entry) => logger.info(entry) },
+        {
+          ...deps,
+          log: (entry) => logger.info(entry),
+          warn: (entry) => logger.warn(entry),
+        },
         { now, limit },
       );
     } catch (error) {

@@ -112,9 +112,12 @@ export class MeProfileController {
     body: z.infer<typeof claimHandleSchema>,
     @Headers('x-tipme-rehearsal') rehearsal: string | undefined,
   ): Promise<ApiDataResponse<MyProfile>> {
+    // You collect (R7): with the switch on, a new page takes tips through TipMe from the start.
+    const youCollectOn = await featureOn(this.database.db, 'you_collect');
     const { profileId } = await claimHandle(this.database.db, {
       userId: auth.userId,
       handle: body.handle,
+      ...(youCollectOn ? { youCollectOn: true } : {}),
       // The release check's page (PR-010): only on test copies, only for an open run.
       ...(this.config.RELEASE_KIND === 'test' && rehearsal
         ? { rehearsalRunId: rehearsal }

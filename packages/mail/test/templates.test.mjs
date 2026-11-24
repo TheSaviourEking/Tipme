@@ -646,6 +646,22 @@ test('confirm and recovery links say how long they work, in a quiet line', () =>
  * before a deploy carries data like this and is rendered by the new templates.
  */
 const PREVIOUS_SAMPLES = {
+  // You collect (plan Task 11): new in this release, so its first sample.
+  collect_reserve_alert: {
+    alert:
+      "You collect reserve critical: TipMe's NGN balance at our payment partner: ₦2,400,000 available, ₦2,200,000 held for recipients, ₦200,000 TipMe's own, below the ₦250,000 critical level.",
+  },
+  // You collect (plan Task 13): new in this release, so its first sample.
+  collect_verified: { firstName: 'Ada' },
+  // You collect (Task 15 fix round 1, I3): new in this release, so its first sample.
+  collect_name_recheck: { firstName: 'Ada' },
+  // You collect (plan Task 12): new in this release, so its first sample.
+  collect_reminder: {
+    firstName: 'Ada',
+    kind: 'last',
+    heldMinor: '950000',
+    byDate: '20 December',
+  },
   tip_received: {
     firstName: 'Ada',
     netMinor: '450000',
@@ -720,6 +736,8 @@ const PREVIOUS_SAMPLES = {
   username_take_back_reminder: MAIL_TYPES.username_take_back_reminder.sample,
   username_take_back_done: MAIL_TYPES.username_take_back_done.sample,
   username_take_back_cancelled: MAIL_TYPES.username_take_back_cancelled.sample,
+  // Handover (18 Nov 2026): a new type, so its own sample.
+  username_assigned: MAIL_TYPES.username_assigned.sample,
   // TipMe for businesses (merge train 2): new types that no earlier release queued, so the only
   // data they can meet is their own sample's shape.
   business_invitation: MAIL_TYPES.business_invitation.sample,
@@ -737,6 +755,8 @@ const PREVIOUS_SAMPLES = {
   // Staff announcements: a new type.
   announcement: MAIL_TYPES.announcement.sample,
   service_notice: MAIL_TYPES.service_notice.sample,
+  // You collect (plan Task 9): a new type.
+  dispute_hold: MAIL_TYPES.dispute_hold.sample,
 };
 
 const settingsCtx = {
@@ -1366,4 +1386,51 @@ test('the owner-change email tells every owner what happened, in plain words, fr
       ctx,
     ),
   );
+});
+
+test('a username given by TipMe says so in fixed words, with no reason field', () => {
+  const changed = renderMail(
+    'username_assigned',
+    { new: 'mtn', old: 'kemi' },
+    ctx,
+  );
+  assert.equal(changed.subject, 'Your TipMe username has changed');
+  assert.ok(
+    changed.text.includes(
+      'TipMe changed your username to @mtn. Your old link @kemi still leads to your page.',
+    ),
+  );
+  const made = renderMail('username_assigned', { new: 'mtn', old: null }, ctx);
+  assert.ok(made.text.includes('TipMe gave your account the username @mtn.'));
+  // Its own words (the shared footer is checked elsewhere).
+  for (const text of [changed.subject, changed.text, made.text]) {
+    const own = text
+      .split('\n')
+      .filter((line) => /username/i.test(line))
+      .join(' ');
+    assert.equal(/[\u2013\u2014]/.test(own), false, own);
+    assert.equal(/bachs|regulat|licen[cs]e/i.test(own), false, own);
+  }
+  assert.throws(() =>
+    renderMail(
+      'username_assigned',
+      { new: 'mtn', old: 'kemi', reason: 'x' },
+      ctx,
+    ),
+  );
+});
+
+test('the dispute hold email says the spec’s words with the amount, and nothing in the preview names it (You collect, Task 9)', () => {
+  const out = renderMail('dispute_hold', { heldMinor: '950000' }, ctx);
+  assert.ok(
+    out.text.includes(
+      'A payment to you is being questioned. We’ve held ₦9,500 until it’s settled.',
+    ),
+  );
+  assert.doesNotMatch(out.subject, /₦|9,500/);
+  assert.doesNotMatch(
+    `${out.subject} ${out.text} ${out.html}`,
+    /bachs|wallet|insured|protected/i,
+  );
+  assert.throws(() => renderMail('dispute_hold', { heldMinor: '0' }, ctx));
 });

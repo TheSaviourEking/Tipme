@@ -22,7 +22,7 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 /*
  * Business release 2 on option B (owner, 11 Nov 2026). The tip is collected on the staff member's
@@ -164,7 +164,7 @@ function pretendPartner() {
 }
 
 test('option B: shares and their money', async (t) => {
-  const database = await useDatabase(t);
+  const database = await useDatabase(t, AT_12_NOV_PLAN_FEES);
   const { db } = database;
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);
@@ -527,7 +527,7 @@ test('option B: shares and their money', async (t) => {
           userId: OWNER,
           amountMinor,
           idempotencyKey: randomUUID(),
-          provider: partner.provider,
+          providers: { active: partner.provider, withdrawOnly: [] },
         });
       assert.equal(await codeOf(withdraw(185999n)), 'WITHDRAWAL_TOO_SMALL');
       const all = await withdraw(186000n);

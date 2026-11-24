@@ -58,10 +58,18 @@ const reader = () => ({
   fetchPayoutStatus: async () => ({ status: 'not_found' }),
 });
 
+/** What the partner lists per account, for a transfer's read-back (Task 15). */
+const partnerLists = new Map();
 const services = () => ({
   sealing,
   authCodeSecret: 'test-auth-code-secret-of-enough-length',
   payoutReader: reader,
+  collectReader: () => ({
+    listAccountTransfers: async (ref) => {
+      reads.lockHeldDuringRead.push(await lockHeld());
+      return partnerLists.get(ref) ?? [];
+    },
+  }),
   mail: {
     production: false,
     configured: new Set(['mock']),
@@ -247,15 +255,21 @@ async function unresolvedPayoutIssue() {
     profileId: id,
     amountMinor: 200000n,
     idempotencyKey: randomUUID(),
-    provider: {
-      name: 'mock',
-      capabilities: { connectedAccounts: false },
-      payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
-      payoutBalance: async () => ({ availableMinor: 200000000n }),
-      quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
-      coverPayoutFee: async () => ({ transferRef: 'transfer' }),
-      findPayoutByReference: async () => null,
-      fetchPayoutStatus: async () => ({ status: 'not_found' }),
+    providers: {
+      active: {
+        name: 'mock',
+        capabilities: { connectedAccounts: false },
+        payoutCapability: async () => ({
+          status: 'active',
+          requirementsDue: [],
+        }),
+        payoutBalance: async () => ({ availableMinor: 200000000n }),
+        quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
+        coverPayoutFee: async () => ({ transferRef: 'transfer' }),
+        findPayoutByReference: async () => null,
+        fetchPayoutStatus: async () => ({ status: 'not_found' }),
+      },
+      withdrawOnly: [],
     },
   });
   // Old enough that the provider's silence counts as absence.
@@ -290,7 +304,195 @@ async function priceFixture(plan) {
   };
 }
 
+/** A page of its own on You collect with one paid tip: its share waits (Task 7). */
+async function collectTip(prefix) {
+  const [{ id: userId }] = await q(
+    `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+  );
+  const handle = `${prefix}_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+  const [{ id: profileId }] = await q(
+    `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode, created_at)
+     VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect', now() - interval '60 days') RETURNING id`,
+    [userId, handle],
+  );
+  const quote = await ops.createQuote(database.db, {
+    handle,
+    tipMinor: 1_000_000n,
+    currency: 'NGN',
+  });
+  const intent = await ops.createPaymentIntent(database.db, {
+    quoteId: quote.quoteId,
+    idempotencyKey: randomUUID(),
+  });
+  await ops.markAttemptInitiated(database.db, {
+    attemptId: intent.attemptId,
+    provider: 'bachs',
+    providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+  });
+  await q(
+    `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+    [intent.attemptId],
+  );
+  const settled = await ops.reconcileAttempts({
+    db: database.db,
+    provider: {
+      environment: 'sandbox',
+      async verifyTransaction() {
+        return {
+          status: 'succeeded',
+          amountMinor: 1_000_000n,
+          currency: 'NGN',
+          feeMinor: 20_000n,
+          feePaidBy: 'platform',
+          method: 'NGN_CARD',
+          chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+        };
+      },
+    },
+    now: new Date(),
+    minAgeMs: 0,
+    attemptId: intent.attemptId,
+  });
+  assert.equal(settled.applied, 1);
+  const [row] = await q(
+    `SELECT id, idempotency_key FROM collect_transfers WHERE tip_id = $1 AND kind = 'share'`,
+    [intent.tipId],
+  );
+  return {
+    tipId: intent.tipId,
+    rowId: row.id,
+    group: row.idempotency_key,
+    profileId,
+    userId,
+  };
+}
+const shareStatus = async (rowId) =>
+  (await q(`SELECT status FROM collect_transfers WHERE id = $1`, [rowId]))[0]
+    .status;
+const newDispute = async (tipId, status, extra = '') => {
+  const id = randomUUID();
+  await q(
+    `INSERT INTO disputes (id, provider, partner_dispute_id, tip_id, amount_minor, currency, status, respond_by,
+                           share_step, decided_at, last_event_at)
+     VALUES ($1, 'mock', $2, $3, 950000, 'NGN', $4, now() + interval '5 days', $5,
+             CASE WHEN $4 = 'open' THEN NULL ELSE now() END, now())`,
+    [
+      id,
+      `dsp_${id.slice(0, 8)}${extra}`,
+      tipId,
+      status,
+      status === 'open' ? null : 'held',
+    ],
+  );
+  return id;
+};
+
 const wired = {
+  // You collect staff screens (plan Task 15): a transfer the partner's answer put in review.
+  'collect_transfer.retry': async () => {
+    const { rowId } = await collectTip('retry');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'provider' WHERE id = $1`,
+      [rowId],
+    );
+    return {
+      payload: { transferId: rowId },
+      happened: async () => (await shareStatus(rowId)) !== 'review',
+    };
+  },
+  // The partner's read-back by group shows it paid, for its amount: booked as moved.
+  'collect_transfer.record_paid': async () => {
+    const { rowId, group } = await collectTip('rpaid');
+    const account = `acct_${rowId.slice(0, 8)}`;
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'provider', sent_at = now(),
+              account_reference = $2, attempts = 1 WHERE id = $1`,
+      [rowId, account],
+    );
+    partnerLists.set(account, [
+      {
+        transferRef: 'tr_gate',
+        status: 'paid',
+        amountMinor: 950000n,
+        currency: 'NGN',
+        group,
+      },
+    ]);
+    return {
+      payload: { transferId: rowId },
+      happened: async () => (await shareStatus(rowId)) === 'paid',
+    };
+  },
+  // A dispute closed without a ruling, its share held for a refund that never came (P28).
+  'collect_dispute.release_hold': async () => {
+    const { tipId, rowId } = await collectTip('hold');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'refund' WHERE id = $1`,
+      [rowId],
+    );
+    const disputeId = await newDispute(tipId, 'closed');
+    return {
+      payload: { disputeId },
+      happened: async () =>
+        (
+          await q(`SELECT settled_at FROM disputes WHERE id = $1`, [disputeId])
+        )[0].settled_at !== null,
+    };
+  },
+  'collect_dispute.evidence': async () => {
+    const { tipId } = await collectTip('evid');
+    const disputeId = await newDispute(tipId, 'open');
+    return {
+      payload: {
+        disputeId,
+        text: 'The supporter tipped in person at the event and was given a receipt.',
+      },
+      happened: async () =>
+        (
+          await q(`SELECT evidence_state FROM disputes WHERE id = $1`, [
+            disputeId,
+          ])
+        )[0].evidence_state === 'sending',
+    };
+  },
+  'collect_same_bank.clear': async () => {
+    const { rowId, profileId } = await collectTip('same');
+    await q(
+      `UPDATE collect_transfers SET status = 'review', review_reason = 'same_bank' WHERE id = $1`,
+      [rowId],
+    );
+    await ops.openIssue(database.db, {
+      dedupeKey: `collect_same_bank.${profileId}.${randomUUID()}`,
+      kind: 'collect_same_bank',
+      subject: { profileId },
+      now: new Date(),
+    });
+    return {
+      payload: { profileId },
+      happened: async () => (await shareStatus(rowId)) === 'waiting',
+    };
+  },
+  // Task 10 RI3: the partner paid a refund TipMe had failed; nothing was booked.
+  'tip_refund.record_paid': async () => {
+    const { tipId, userId } = await collectTip('unbk');
+    const [{ id: refundId }] = await q(
+      `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider, provider_reference,
+              failure, requested_by, reason, collect_plan, held_minor, refunded_minor)
+       VALUES (gen_random_uuid(), $1, 'FAILED', 950000, 'NGN', 'bachs', 'platform:cs_gate', 'balance', $2,
+               'A refund the partner refused', 'cancel_held', 0, 950000) RETURNING id`,
+      [tipId, userId],
+    );
+    return {
+      payload: { tipId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM ledger_transactions WHERE operation_key = $1`,
+            [`collect_refund.${refundId}`],
+          )
+        ).length === 1,
+    };
+  },
   'email_recovery.start': async () => {
     const userId = await ownerOf();
     await q(
@@ -347,6 +549,106 @@ const wired = {
   'pro_price.change': async () => priceFixture('personal'),
   // Business Pro (plan Task A5): its own price, changed the same way.
   'business_pro_price.change': async () => priceFixture('business'),
+  // TipMe's fee per plan (owner, 18 Nov 2026): one basis point below the rates in force.
+  'plan_fees.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT free_bps, pro_bps FROM plan_fee_rates
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? [row.free_bps, row.pro_bps] : [500, 300];
+    };
+    const [free, pro] = await latest();
+    const next = [free - 1, Math.min(pro, free - 1)];
+    return {
+      payload: { freeBps: String(next[0]), proBps: String(next[1]) },
+      happened: async () =>
+        JSON.stringify(await latest()) === JSON.stringify(next),
+    };
+  },
+  // You collect (plan Task 12): one day more on the holding cap than the settings in force.
+  'collect_settings.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT cap_days FROM collect_settings ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? row.cap_days : 30;
+    };
+    const capDays = (await latest()) === 90 ? 89 : (await latest()) + 1;
+    return {
+      payload: {
+        capMinor: '5000000',
+        capDays,
+        reminderDays: [7, 21, 28],
+        delayHours: 24,
+        delayForDays: 7,
+        firstWithdrawalCapMinor: '5000000',
+        newDailyLimitMinor: '20000000',
+        newDailyLimitDays: 30,
+        reserveWarningMinor: '50000000',
+        reserveCriticalMinor: '25000000',
+      },
+      happened: async () => (await latest()) === capDays,
+    };
+  },
+  // You collect (plan Task 13): a verified name, changed by support. The name is never in the log.
+  'collect_name.change': async () => {
+    // A page of its own, so no other action's fixture meets a collect recipient.
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `named_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: page }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state,
+                             collection_mode, collect_verified_at, collect_legal_name)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect', now(),
+               '{"first":"Tobi","last":"Adeyemi"}') RETURNING id`,
+      [userId, handle],
+    );
+    const last = `Bello${'x'.repeat(Math.floor(Math.random() * 5))}`;
+    return {
+      payload: { profileId: page, first: 'Tobi', last },
+      happened: async () =>
+        JSON.parse(
+          (
+            await q(`SELECT collect_legal_name FROM profiles WHERE id = $1`, [
+              page,
+            ])
+          )[0].collect_legal_name,
+        ).last === last,
+    };
+  },
+  // R11: staff's pause of every collect transfer, and its resume from a pause set here. The set-up
+  // row takes the app's clock, as the action's own row does (milliseconds): a row at the database's
+  // now() (microseconds) could land later in the same millisecond and stay in force after it.
+  'collect_transfers.pause': async () => {
+    const paused = async () =>
+      (await ops.collectSettingsInForce(database.db)).paused;
+    if (await paused())
+      await q(
+        `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+           first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+           reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
+         VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
+           50000000, 25000000, false, $1, 'Running for the test')`,
+        [new Date()],
+      );
+    return { payload: {}, happened: paused };
+  },
+  'collect_transfers.resume': async () => {
+    const paused = async () =>
+      (await ops.collectSettingsInForce(database.db)).paused;
+    if (!(await paused()))
+      await q(
+        `INSERT INTO collect_settings (id, cap_minor, cap_days, reminder_days, delay_hours, delay_for_days,
+           first_withdrawal_cap_minor, new_daily_limit_minor, new_daily_limit_days,
+           reserve_warning_minor, reserve_critical_minor, paused, effective_from, reason)
+         VALUES (gen_random_uuid(), 5000000, 30, '{7,21,28}', 24, 7, 5000000, 20000000, 30,
+           50000000, 25000000, true, $1, 'Paused for the test')`,
+        [new Date()],
+      );
+    return { payload: {}, happened: async () => !(await paused()) };
+  },
   // Paid Pro, plan Task 9: a card month paid just now, on a page of its own.
   'pro.refund': async () => {
     const [{ id: userId }] = await q(
@@ -427,6 +729,168 @@ const wired = {
       happened: async () =>
         (await q(`SELECT 1 FROM tip_refunds WHERE tip_id = $1`, [intent.tipId]))
           .length === 1,
+    };
+  },
+  // You collect (plan Task 10): a collect tip whose recipient already withdrew their share, so
+  // TipMe absorbs it; the refund is recorded only.
+  'tip_refund.absorb_gap': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `tipgap_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: profileId }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect') RETURNING id`,
+      [userId, handle],
+    );
+    const quote = await ops.createQuote(database.db, {
+      handle,
+      tipMinor: 1_000_000n,
+      currency: 'NGN',
+    });
+    const intent = await ops.createPaymentIntent(database.db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: intent.attemptId,
+      provider: 'bachs',
+      providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+    });
+    await q(
+      `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+      [intent.attemptId],
+    );
+    const settled = await ops.reconcileAttempts({
+      db: database.db,
+      provider: {
+        environment: 'sandbox',
+        async verifyTransaction() {
+          return {
+            status: 'succeeded',
+            amountMinor: 1_000_000n,
+            currency: 'NGN',
+            feeMinor: 20_000n,
+            feePaidBy: 'platform',
+            method: 'NGN_CARD',
+            chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+          };
+        },
+      },
+      now: new Date(),
+      minAgeMs: 0,
+      attemptId: intent.attemptId,
+    });
+    assert.equal(settled.applied, 1);
+    // Its share moved to their account, and all of it is on its way to their bank.
+    await q(
+      `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
+              account_reference = 'acct_gate' WHERE tip_id = $1 AND kind = 'share'`,
+      [intent.tipId],
+    );
+    await q(
+      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key, request_fingerprint)
+       VALUES (gen_random_uuid(), $1, 'NGN', 950000, 'REQUESTED', $2, 'test')`,
+      [profileId, randomUUID()],
+    );
+    // Task 11 (M2): TipMe absorbing the gap needs a fresh reading with enough of its own money.
+    await q(
+      `INSERT INTO collect_reserve_readings (id, provider, currency, available_minor, held_minor,
+         own_minor, warning_minor, critical_minor, level, read_at)
+       VALUES (gen_random_uuid(), 'bachs-sandbox', 'NGN', 100000000000, 0, 100000000000,
+               50000000, 25000000, 'ok', now())`,
+    );
+    return {
+      payload: { tipId: intent.tipId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM tip_refunds WHERE tip_id = $1 AND collect_plan = 'absorb'`,
+            [intent.tipId],
+          )
+        ).length === 1,
+    };
+  },
+  // Task 10 fix round 2 (RI1): money a failed collect refund took back goes back to the recipient.
+  'tip_refund.return': async () => {
+    const [{ id: userId }] = await q(
+      `INSERT INTO users (id) VALUES (gen_random_uuid()) RETURNING id`,
+    );
+    const handle = `tipret_${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+    const [{ id: profileId }] = await q(
+      `INSERT INTO profiles (id, user_id, handle, handle_lower, display_name, page_state, collection_mode)
+       VALUES (gen_random_uuid(), $1, $2, $2, 'Page', 'live', 'collect') RETURNING id`,
+      [userId, handle],
+    );
+    const quote = await ops.createQuote(database.db, {
+      handle,
+      tipMinor: 1_000_000n,
+      currency: 'NGN',
+    });
+    const intent = await ops.createPaymentIntent(database.db, {
+      quoteId: quote.quoteId,
+      idempotencyKey: randomUUID(),
+    });
+    await ops.markAttemptInitiated(database.db, {
+      attemptId: intent.attemptId,
+      provider: 'bachs',
+      providerReference: `platform:cs_${randomUUID().slice(0, 8)}`,
+    });
+    await q(
+      `UPDATE payment_attempts SET created_at = now() - interval '1 minute' WHERE id = $1`,
+      [intent.attemptId],
+    );
+    const settled = await ops.reconcileAttempts({
+      db: database.db,
+      provider: {
+        environment: 'sandbox',
+        async verifyTransaction() {
+          return {
+            status: 'succeeded',
+            amountMinor: 1_000_000n,
+            currency: 'NGN',
+            feeMinor: 20_000n,
+            feePaidBy: 'platform',
+            method: 'NGN_CARD',
+            chargeReference: `ch_${randomUUID().slice(0, 8)}`,
+          };
+        },
+      },
+      now: new Date(),
+      minAgeMs: 0,
+      attemptId: intent.attemptId,
+    });
+    assert.equal(settled.applied, 1);
+    // Its share moved to their account, and all of it is on its way to their bank.
+    await q(
+      `UPDATE collect_transfers SET status = 'paid', paid_at = now(), sent_at = now(),
+              account_reference = 'acct_gate' WHERE tip_id = $1 AND kind = 'share'`,
+      [intent.tipId],
+    );
+    // A refund that failed after the recipient's part came back: TipMe holds it for the tip.
+    const [{ id: refundId }] = await q(
+      `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider, provider_reference,
+              failure, requested_by, reason, collect_plan, held_minor, recovered_at)
+       VALUES (gen_random_uuid(), $1, 'FAILED', 950000, 'NGN', 'bachs', 'platform:cs_gate', 'balance', $2,
+               'A refund the partner refused', 'take_back', 950000, now()) RETURNING id`,
+      [intent.tipId, userId],
+    );
+    await q(
+      `INSERT INTO collect_transfers (id, kind, tip_id, profile_id, refund_id, account_reference, provider,
+              environment, amount_minor, currency, status, idempotency_key, sent_at, paid_at)
+       VALUES (gen_random_uuid(), 'back', $1, $2, $3, 'acct_gate', 'bachs', 'sandbox', 950000, 'NGN', 'paid',
+               $4, now(), now())`,
+      [intent.tipId, profileId, refundId, `tipme-collect-back-${refundId}`],
+    );
+    return {
+      payload: { tipId: intent.tipId },
+      happened: async () =>
+        (
+          await q(
+            `SELECT 1 FROM collect_transfers WHERE tip_id = $1 AND kind = 'return'`,
+            [intent.tipId],
+          )
+        ).length === 1,
     };
   },
   'username.take_back': async () => {

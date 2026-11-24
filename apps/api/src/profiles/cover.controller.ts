@@ -20,6 +20,7 @@ import {
 } from '@tipme/contracts';
 import {
   coverFor,
+  coverRenditionFor,
   myCover,
   removeCover,
   setCover,
@@ -39,18 +40,26 @@ import { DatabaseProvider } from '../infra/database.js';
 import {
   imageVersion,
   readUpload,
-  reencodeTo,
   sendImage,
   sendPrivateImage,
   withSlot,
 } from './image-upload.js';
+import type { Logger } from '@tipme/observability';
+import { LOGGER } from '../tokens.js';
+import {
+  COVER_RENDITIONS,
+  coverRenditionsOf,
+  renditionFile,
+  toCover,
+  type CoverRendition,
+} from './cover-renditions.js';
 import { PHOTO_STORE } from './photo-store.provider.js';
 import { ProfileRevalidator } from './revalidate.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 
-// Page covers: 2240×600, twice the widest the page shows. The safeguards every upload gets are in
-// image-upload.ts, and uploads share the photo upload's rate limit and re-encoding slots.
-const toCover = reencodeTo(2240, 600);
+// Page covers: 2240×600, twice the widest the page shows, and smaller copies and a tall crop of it
+// for the Studio styles' srcset (cover-renditions.ts). The safeguards every upload gets are in image-upload.ts,
+// and uploads share the photo upload's rate limit and re-encoding slots.
 
 @Controller('v1')
 export class CoverController {
@@ -64,6 +73,14 @@ export class CoverController {
     @Optional()
     @Inject(LIVE_PUBLISHER)
     private readonly publishLive: PublishLive = async () => undefined,
+    @Optional()
+    @Inject(LOGGER)
+    private readonly logger: Pick<Logger, 'warn'> | null = null,
+    @Optional()
+    @Inject(COVER_RENDITIONS)
+    private readonly renditionsOf: (
+      cover: Buffer,
+    ) => Promise<CoverRendition[]> = coverRenditionsOf,
   ) {}
 
   /** The owner's preview, which has to work before the page is live and while it's paused. */
@@ -88,13 +105,26 @@ export class CoverController {
     @Req() request: Request,
   ): Promise<ApiDataResponse<MyProfile>> {
     const upload = await readUpload(request);
-    const webp = await withSlot(() => toCover(upload));
+    const { webp, renditions } = await withSlot(async () => {
+      const full = await toCover(upload);
+      // The smaller copies are a speed-up, never a reason to refuse a good photo (a timeout under
+      // load, say): the cover is saved without them, and the backfill or the next upload fills in.
+      const sized = await this.renditionsOf(full).catch(() => null);
+      return { webp: full, renditions: sized };
+    });
     const updated = await setCover(
       this.database.db,
       auth.userId,
       webp,
       this.photos ?? undefined,
+      renditions ?? [],
     );
+    if (!renditions && updated.cover?.kind === 'photo')
+      // The page id only (from the cover's address): no handle, name or error text.
+      this.logger?.warn({
+        event: 'cover.renditions_failed',
+        profileId: updated.cover.path.split('/')[3],
+      });
     this.revalidator.revalidate(updated.handle);
     void this.publishLive({
       to: { user: auth.userId },
@@ -146,7 +176,11 @@ export class CoverController {
     return { data: profile };
   }
 
-  /** Public, but only for live pages. */
+  /**
+   * Public, but only for live pages: the cover (`<n>.webp`), one of its renditions
+   * (`<n>-640.webp`) or its tall crop (`<n>-tall-480.webp`), under the same rules and headers. Any
+   * other width is not found.
+   */
   @Get('covers/:profileId/:file')
   @Header('X-Content-Type-Options', 'nosniff')
   async serve(
@@ -154,6 +188,18 @@ export class CoverController {
     @Param('file') file: string,
     @Res() response: Response,
   ): Promise<void> {
+    const rendition = renditionFile(profileId, file);
+    if (rendition) {
+      sendImage(
+        response,
+        await coverRenditionFor(
+          this.database.db,
+          { profileId, ...rendition },
+          this.photos ?? undefined,
+        ),
+      );
+      return;
+    }
     const version = imageVersion(profileId, file);
     sendImage(
       response,

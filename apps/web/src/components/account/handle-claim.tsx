@@ -10,7 +10,7 @@ import { useSiteHost } from '@/lib/site-host';
 const describe: Record<HandleStatus, string> = {
   available: '',
   taken: 'That username is taken. Try another.',
-  reserved: 'That username is reserved. Try another.',
+  reserved: 'That username isn’t available. Try another.',
   invalid: 'Use 3–30 letters, numbers or underscores.',
 };
 

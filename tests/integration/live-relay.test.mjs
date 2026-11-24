@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { after, before, test } from 'node:test';
 import { startOutboxRelay } from '../../apps/worker/dist/outbox-relay-loop.js';
-import { enqueueOutbox } from '../../packages/database/dist/index.js';
+import {
+  DEMO_PROFILES,
+  enqueueOutbox,
+  seedDemoProfiles,
+} from '../../packages/database/dist/index.js';
 import { openTestDatabase } from '../../packages/database/dist/test-support.js';
 
 // It resets its database and runs a relay that claims every unpublished row: never run it beside
@@ -131,4 +135,58 @@ test('the relay publishes after the claim commits, never inside it', async () =>
     await relay.stop();
   }
   assert.notEqual(seenAtPublish, null);
+});
+
+// Per-provider balances, Task 9: a request paid as parts is one withdrawal on the person's page. Its
+// paid parts signal once, when the last of them settles, not once each.
+test('a split request signals once, when its last part settles', async () => {
+  await database.reset();
+  await seedDemoProfiles(database.db);
+  const profileId = DEMO_PROFILES[1].id;
+  const group = randomUUID();
+  const ids = [randomUUID(), randomUUID()];
+  const insert = (id, n, status) =>
+    database.pool.query(
+      `INSERT INTO payouts (id, profile_id, amount_minor, currency, status, idempotency_key,
+                            request_fingerprint, withdrawal_group_id, group_part)
+       VALUES ($1, $2, 300000, 'NGN', $3, $4, $4, $5, $6)`,
+      [id, profileId, status, randomUUID(), group, n],
+    );
+  await insert(ids[0], 1, 'PAID');
+  await insert(ids[1], 2, 'PROCESSING');
+  const paid = (payoutId) =>
+    database.db.transaction((tx) =>
+      enqueueOutbox(tx, {
+        eventType: 'payout.paid',
+        aggregateId: payoutId,
+        payload: { payoutId, profileId },
+      }),
+    );
+  const published = [];
+  const added = [];
+  const relay = startOutboxRelay({
+    db: database.db,
+    logger,
+    intervalMs: 20,
+    queue: { add: async (name) => void added.push(name) },
+    publishLive: async (messages) => void published.push(...messages),
+  });
+  try {
+    await paid(ids[0]);
+    assert.equal(await until(() => added.length === 1), true);
+    // Part 2 still on its way: the request hasn't moved yet.
+    await sleep(150);
+    assert.deepEqual(published, []);
+    await database.pool.query(
+      `UPDATE payouts SET status = 'PAID' WHERE id = $1`,
+      [ids[1]],
+    );
+    await paid(ids[1]);
+    assert.equal(await until(() => published.length > 0), true);
+  } finally {
+    await relay.stop();
+  }
+  assert.deepEqual(published, [
+    { to: { profile: profileId }, type: 'withdrawals.changed' },
+  ]);
 });

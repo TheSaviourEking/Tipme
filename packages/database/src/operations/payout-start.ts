@@ -1,4 +1,8 @@
-import { PAYOUT_START_EVENT, PLATFORM_REFUSAL_EVENT } from '@tipme/contracts';
+import {
+  PAYOUT_START_EVENT,
+  PLATFORM_REFUSAL_EVENT,
+  recordedProviderName,
+} from '@tipme/contracts';
 import { and, asc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -16,6 +20,12 @@ import { guarded, safeError } from './errors.js';
 import { newId } from './ids.js';
 import { enqueueOutbox } from './outbox.js';
 import { withdrawalsSwitchState } from './withdrawals-switch.js';
+import { RESERVE_REALERT_MS } from './payment-reserve.js';
+import {
+  ownMoneyRefusal,
+  ownMoneyRefusalWords,
+  type OwnMoneyRefusal,
+} from './collect-reserve.js';
 import { openIssue } from './issues.js';
 import {
   holdsOf,
@@ -206,8 +216,20 @@ function refusal(error: unknown): { failureReason: PayoutFailure } | null {
     : null;
 }
 
+/**
+ * Task 11: TipMe's own money can't be shown to cover the fee without spending what it holds for
+ * recipients. It carries why (m5): short, unconfirmed, or a negative unlisted balance.
+ */
+class OwnMoneyShortError extends Error {
+  override readonly name = 'OwnMoneyShortError';
+  constructor(readonly refusal: OwnMoneyRefusal) {
+    super('own money');
+  }
+}
+
 // PlatformRefusalError lives there too. Only that error says so: a timeout is never one.
 function platformRefusal(error: unknown): PlatformRefusal | null {
+  if (error instanceof OwnMoneyShortError) return 'own_money';
   return error instanceof Error &&
     error.name === 'PlatformRefusalError' &&
     'refusal' in error
@@ -215,7 +237,16 @@ function platformRefusal(error: unknown): PlatformRefusal | null {
     : null;
 }
 
-type PlatformRefusal = 'reserve_empty' | 'provider_key';
+type PlatformRefusal = 'reserve_empty' | 'provider_key' | 'own_money';
+
+/** How often a wait on TipMe's own money is told again (the reserve alerts' rule). */
+const OWN_MONEY_REALERT_MS = RESERVE_REALERT_MS;
+
+const REFUSAL_KIND = {
+  reserve_empty: 'reserve_empty',
+  provider_key: 'provider_key_refused',
+  own_money: 'collect_own_money_wait',
+} as const;
 
 /**
  * One open issue and one alert per spell, however many withdrawals run into it. Each spell gets its
@@ -225,24 +256,47 @@ async function openPlatformRefusalIssue(
   tx: Tx,
   refusal: PlatformRefusal,
   now: Date,
+  /** Plain words after the summary (the own-money wait's real cause, m5). */
+  note?: string,
 ): Promise<void> {
-  const kind =
-    refusal === 'reserve_empty' ? 'reserve_empty' : 'provider_key_refused';
+  const kind = REFUSAL_KIND[refusal];
   await tx.execute(
     sql`SELECT pg_advisory_xact_lock(hashtext(${`platform_refusal:${kind}`}::text))`,
   );
   const [open] = await tx
-    .select({ id: issues.id })
+    .select({
+      id: issues.id,
+      dedupeKey: issues.dedupeKey,
+      openedAt: issues.openedAt,
+    })
     .from(issues)
     .where(and(eq(issues.kind, kind), eq(issues.status, 'open')))
     .limit(1);
-  if (open) return;
+  if (open) {
+    // Task 11 (N2): a wait on own money that lasts is told again every 6 hours, as the reserve
+    // alerts are; once per 6-hour window of the spell, whatever runs into it meanwhile.
+    if (refusal === 'own_money') {
+      const window = Math.floor(
+        (now.getTime() - open.openedAt.getTime()) / OWN_MONEY_REALERT_MS,
+      );
+      const spell = open.dedupeKey.slice(kind.length + 1);
+      if (window >= 1 && /^[0-9a-f-]{36}$/.test(spell))
+        await enqueueOutbox(tx, {
+          eventType: PLATFORM_REFUSAL_EVENT,
+          aggregateId: spell,
+          dedupeSuffix: `again.${window}`,
+          payload: { cause: refusal },
+        });
+    }
+    return;
+  }
   const spell = newId();
   await openIssue(tx, {
     dedupeKey: `${kind}.${spell}`,
     kind,
     subject: {},
     now,
+    ...(note ? { note } : {}),
   });
   // The cause only: the alert route is a chat room.
   await enqueueOutbox(tx, {
@@ -265,6 +319,26 @@ export function reportProviderKeyRefused(
 }
 
 /**
+ * Task 11 (m5, m6): a move of TipMe's own money (a fee return) waits on it: staff hear why, once per
+ * spell, the same way a payout fee's wait is told.
+ */
+export function reportOwnMoneyWait(
+  db: Database,
+  input: { refusal: OwnMoneyRefusal; now?: Date },
+): Promise<void> {
+  return guarded(() =>
+    db.transaction((tx) =>
+      openPlatformRefusalIssue(
+        tx,
+        'own_money',
+        input.now ?? new Date(),
+        ownMoneyRefusalWords(input.refusal),
+      ),
+    ),
+  );
+}
+
+/**
  * A definite refusal of TipMe itself: nothing moved, so the mark and step come off (nothing is in
  * doubt, and the money stays reserved) and the recipient hears nothing, since it isn't theirs to fix.
  */
@@ -273,6 +347,7 @@ function waitOnPlatform(
   payout: Payout,
   refusal: PlatformRefusal,
   now: Date,
+  note?: string,
 ): Promise<'waiting_on_platform'> {
   return guarded(() =>
     db.transaction(async (tx) => {
@@ -284,7 +359,7 @@ function waitOnPlatform(
           platformWaitSince: now,
         })
         .where(and(eq(payouts.id, payout.id), eq(payouts.status, 'REQUESTED')));
-      await openPlatformRefusalIssue(tx, refusal, now);
+      await openPlatformRefusalIssue(tx, refusal, now, note);
       return 'waiting_on_platform' as const;
     }),
   );
@@ -435,7 +510,9 @@ async function claimStart(
   if (!payout || !payout.provider) return { kind: 'done', outcome: 'already' };
   if (payout.status !== 'REQUESTED' || payout.providerReference !== null)
     return { kind: 'done', outcome: 'already' };
-  // Before the mark: a provider this copy cannot reach retries the job with nothing recorded.
+  // Before the mark: a provider this copy does not hold throws with nothing recorded. The job fails
+  // once (UnrecoverableError, never retried into another provider) and the payout stays REQUESTED;
+  // reconciliation's payout_unresolved takes it to staff.
   const starter =
     typeof input.provider === 'function'
       ? input.provider(payout.provider)
@@ -671,7 +748,7 @@ export async function startPayout(
   const answer = await sendPayout(db, payout, starter, route, input.log);
   if (answer.kind === 'uncertain') return 'uncertain';
   if (answer.kind === 'platform')
-    return waitOnPlatform(db, payout, answer.refusal, now);
+    return waitOnPlatform(db, payout, answer.refusal, now, answer.note);
   if (answer.kind === 'refused')
     return failStart(db, payout, answer.failureReason, now);
 
@@ -729,7 +806,7 @@ async function sendPayout(
       started: Awaited<ReturnType<PayoutStarter['initiatePayout']>>;
     }
   | { kind: 'refused'; failureReason: PayoutFailure }
-  | { kind: 'platform'; refusal: PlatformRefusal }
+  | { kind: 'platform'; refusal: PlatformRefusal; note?: string }
   | { kind: 'uncertain' }
 > {
   let step: 'fee' | 'payout' = 'fee';
@@ -747,7 +824,14 @@ async function sendPayout(
     return { kind: 'sent', started };
   } catch (error) {
     const platform = platformRefusal(error);
-    if (platform) return { kind: 'platform', refusal: platform };
+    if (platform)
+      return {
+        kind: 'platform',
+        refusal: platform,
+        ...(error instanceof OwnMoneyShortError
+          ? { note: ownMoneyRefusalWords(error.refusal) }
+          : {}),
+      };
     const refused = refusal(error);
     if (refused) return { kind: 'refused', ...refused };
     // Anything else, even an error of our own, may have followed a request that left.
@@ -768,12 +852,22 @@ async function coverFee(
   accountRef: string,
   log?: PayoutStartLog,
 ): Promise<void> {
-  // Users pay their own fee, from the amount (owner, 12 Nov 2026): TipMe sends no top-up for it.
-  // Payouts requested before that rule, or paid by an unused top-up, keep TipMe paying.
+  // A payout the user pays for (a business's, or a person's asked for between 12 and 18 Nov 2026)
+  // gets no top-up. Every other one is TipMe's to pay (owner, 18 Nov 2026, for a person's page): the
+  // fee moves from the platform payment reserve to the account before the payout.
   if (payout.feePayer === 'user') return;
   const feeMinor = payout.feeMinor ?? 0n;
   if (payout.feeTransferReference || feeMinor <= 0n) return;
   if (await claimFeeCredit(db, payout, accountRef, feeMinor)) return;
+  // You collect (Task 11, R5, P10): the fee comes from TipMe's own money, never what it holds for
+  // recipients. An owed move (non-voluntary); with nothing held it never refuses. Refused, nothing is
+  // asked of the partner and the withdrawal waits exactly as on an empty reserve.
+  const ownMoney = await ownMoneyRefusal(db, {
+    amountMinor: feeMinor,
+    currency: 'NGN',
+    voluntary: false,
+  });
+  if (ownMoney) throw new OwnMoneyShortError(ownMoney);
   await noteStep(db, payout.id, 'fee');
   const { transferRef } = await starter.coverPayoutFee({
     accountRef,
@@ -809,6 +903,8 @@ export async function applyPayoutSignal(
   db: Database,
   input: {
     payoutId: string;
+    /** The provider the event came from, as recorded: the outcome is booked under its name. */
+    provider: string;
     providerReference: string;
     eventId: string;
     status: 'paid' | 'failed';
@@ -885,7 +981,7 @@ export async function applyPayoutSignal(
   }
   const result = await recordPayoutOutcome(db, {
     payoutId: input.payoutId,
-    provider: 'bachs',
+    provider: input.provider,
     providerEventId: input.eventId,
     providerReference: input.providerReference,
     outcome,
@@ -937,6 +1033,8 @@ export function openUnexpectedPayout(
   db: Database,
   input: {
     unmatchedId: string;
+    /** The provider the event came from: only its accounts can be the event's. */
+    provider: string;
     accountReference: string;
     providerReference: string;
     /** The reference signed into the event, which may name a payout of ours. */
@@ -954,7 +1052,7 @@ export function openUnexpectedPayout(
         .from(paymentAccounts)
         .where(
           and(
-            eq(paymentAccounts.provider, 'bachs'),
+            eq(paymentAccounts.provider, recordedProviderName(input.provider)),
             eq(
               paymentAccounts.providerAccountReference,
               input.accountReference,

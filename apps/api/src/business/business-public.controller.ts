@@ -26,7 +26,8 @@ import {
   searchBusinessPeople,
   type PublicReadOptions,
 } from '@tipme/database';
-import { bachsEnvironment, liveCheckoutOpenFor } from '@tipme/payments';
+import { liveCheckoutOpenFor } from '@tipme/payments';
+import { tipReadiness } from '../checkout/collection-mode.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -47,15 +48,15 @@ export class BusinessPublicController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
   ) {}
 
-  /** The same rule as the person's own page: tips through Bachs need their own ready account. */
+  /**
+   * The same rule as the person's own page: direct tips through Bachs need their own ready account,
+   * and a staff member on You collect needs none (spec §11: option B's single leg).
+   */
   private async options(): Promise<PublicReadOptions> {
-    const environment = bachsEnvironment(this.config.PAYMENT_PROVIDER);
     // Behind BusinessEnabledGuard, so only the shares switch is left to read.
     const sharesOn = await featureOn(this.database.db, 'business_shares');
     return {
-      ...(environment
-        ? { requiredAccount: { provider: 'bachs', environment } }
-        : {}),
+      ...tipReadiness(this.database.db, this.config.PAYMENT_PROVIDER),
       ...(sharesOn ? { sharesOn } : {}),
     };
   }

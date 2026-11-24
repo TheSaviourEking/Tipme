@@ -64,6 +64,7 @@ import {
 } from '../profiles/image-upload.js';
 import { PHOTO_STORE } from '../profiles/photo-store.provider.js';
 import { ProfileRevalidator } from '../profiles/revalidate.js';
+import { StudioPhotoAccent } from './photo-accent.js';
 import { masterOf, renditionsOf } from './studio-crops.js';
 import { StudioEnabledGuard } from './studio-switch.js';
 import {
@@ -72,9 +73,11 @@ import {
   type VideoStatus,
 } from './video-verify.js';
 
-// Page Studio (plan 2026-11-12-page-studio, Task 7). Off: every route here answers 404. A Pro
-// page saves drafts freely and publishes only past the design check, run here with the server's
-// own facts; Free pages read an in-memory preview and can't write; a lapsed page reads only.
+// Page Studio (plan 2026-11-12-page-studio, Task 7; styles plan Task 10). Off: every route here
+// answers 404. Drafts save without a passing check; publishing runs the design check with the
+// server's own facts and the page's real plan, so Free publishes the free styles and a Pro design
+// needs Pro (§11). The draft rules for Free, the plan read under the page lock and the write that
+// requires Pro live in the database operations; a client claim never decides any of it.
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const fileOf = (imageId: string, version: string, file: string) => {
@@ -92,6 +95,8 @@ export class StudioController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(ProfileRevalidator)
     private readonly revalidator: ProfileRevalidator,
+    @Inject(StudioPhotoAccent)
+    private readonly photoAccent: StudioPhotoAccent,
     @Optional()
     @Inject(PHOTO_STORE)
     private readonly photos: PhotoStore | null = null,
@@ -139,7 +144,18 @@ export class StudioController {
     @CurrentUser() auth: AuthContext,
     @Body(new ZodValidationPipe(studioDraftSchema)) body: StudioDraftRequest,
   ): Promise<ApiDataResponse<MyStudio>> {
-    const studio = await saveStudioDraft(this.database.db, auth.userId, body);
+    let studio = await saveStudioDraft(this.database.db, auth.userId, body);
+    // "From your photo" (§6): computed when a save picks it and nothing is stored for the current
+    // photo (`photoAccent` is null for a value, or a fallback, made from an older photo), so the
+    // editor's answer and the page have it. With no photo there is nothing to sample.
+    if (
+      studio.draft.accent === 'photo' &&
+      studio.photoAccent === null &&
+      studio.context.hasAvatar
+    ) {
+      await this.photoAccent.refresh(auth.userId);
+      studio = await getMyStudio(this.database.db, auth.userId);
+    }
     // Best effort, in the background: the next save or the publish sees the answer.
     void this.checkVideos(studioVideoUrls(studio.draft)).catch(() => undefined);
     return { data: studio };
@@ -155,9 +171,8 @@ export class StudioController {
     @Body(new ZodValidationPipe(studioPublishSchema))
     body: StudioPublishRequest,
   ): Promise<ApiDataResponse<MyStudio>> {
+    // Any plan may publish; the check (with the plan read under the lock) refuses Pro on Free.
     const current = await getMyStudio(this.database.db, auth.userId);
-    if (current.access !== 'edit')
-      throw new CodedHttpException(403, 'STUDIO_PRO_REQUIRED');
     // Awaited here (each site has 3 seconds), so a gone video can't be published.
     await this.checkVideos(studioVideoUrls(current.draft));
     const result = await publishStudio(
@@ -175,9 +190,13 @@ export class StudioController {
     return { data: result.studio };
   }
 
-  /** Back to the published version (or nothing); the draft's own photos go with it. */
+  /**
+   * Back to the published version (or nothing); the draft's own photos go with it. Same allowance
+   * as saving: each discard locks the page and may remove photos.
+   */
   @Delete('me/studio/draft')
   @UseGuards(SessionGuard, CsrfGuard)
+  @RateLimit('studio_drafts')
   async discard(
     @CurrentUser() auth: AuthContext,
   ): Promise<ApiDataResponse<MyStudio>> {

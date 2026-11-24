@@ -42,7 +42,9 @@ type RateLimitedRoute =
   | 'business_public'
   | 'business_note'
   | 'business_apply'
-  | 'changelog_ingest';
+  | 'changelog_ingest'
+  | 'username_claims'
+  | 'plan_fees';
 
 // Looking up a bank account reveals a stranger's name, so one person gets few, on any address.
 const BANK_RESOLVES_PER_USER_PER_DAY = 10;
@@ -170,6 +172,11 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_BUSINESS_NOTE_PER_HOUR,
         windowMs: 3_600_000,
       },
+      // Claim links (handover): previews and claims share one allowance per address.
+      username_claims: {
+        limit: this.config.RATE_LIMIT_USERNAME_CLAIMS_PER_HOUR,
+        windowMs: 3_600_000,
+      },
       // Reporting a page (PR-013): a few an hour from one address is plenty for a real visitor.
       reports: {
         limit: this.config.RATE_LIMIT_REPORTS_PER_HOUR,
@@ -181,9 +188,12 @@ export class RateLimitGuard implements CanActivate {
         limit: this.config.RATE_LIMIT_UNSUBSCRIBE_PER_MIN,
         windowMs: 60_000,
       },
-      // Page Studio saves: the editor saves as the person works (debounced). A fixed allowance
-      // (no setting of its own): generous for a person, and it still stops a script.
-      studio_drafts: { limit: 60, windowMs: 60_000 },
+      // Page Studio saves, publishes and discards: the editor saves as the person works
+      // (debounced). 60 a minute by default: generous for a person, and it still stops a script.
+      studio_drafts: {
+        limit: this.config.RATE_LIMIT_STUDIO_DRAFTS_PER_MIN,
+        windowMs: 60_000,
+      },
       // Photo and cover uploads (PR-013): each one is a full decode and re-encode.
       avatars: {
         limit: this.config.RATE_LIMIT_AVATARS_PER_HOUR,
@@ -227,6 +237,9 @@ export class RateLimitGuard implements CanActivate {
         limit: CHANGELOG_INGEST_PER_MIN,
         windowMs: 60_000,
       },
+      // The public fee rates: the web app reads them for copy (cached a minute), so a real visitor
+      // never asks often; a fixed allowance that still stops a script.
+      plan_fees: { limit: 120, windowMs: 60_000 },
       auth_code: {
         limit: this.config.RATE_LIMIT_AUTH_PER_HOUR,
         windowMs: 3_600_000,

@@ -12,6 +12,7 @@ import {
 import { guarded } from './errors.js';
 import {
   lockLivePage,
+  moveRenditionsToStore,
   moveRowsToStore,
   myPageId,
   removeObjects,
@@ -155,6 +156,8 @@ export function movePhotosToStore(
     async () =>
       (await moveRowsToStore(db, store, profileAvatars, 'avatars')) +
       (await moveRowsToStore(db, store, profileCovers, 'covers')) +
+      // After the covers: each rendition goes beside its cover's new key.
+      (await moveRenditionsToStore(db, store)) +
       (await moveRowsToStore(db, store, businessLogos, 'logos')),
   );
 }

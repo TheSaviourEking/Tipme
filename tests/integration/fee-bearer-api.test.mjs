@@ -101,13 +101,13 @@ async function collectedTip(t, { collected = true, settlementCurrency } = {}) {
 }
 
 /** Bachs' answer for the collected payment, with the fee bearer and TipMe fee as given. */
-const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 35000n } = {}) => ({
+const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 25000n } = {}) => ({
   asked: 0,
   async verifyTransaction(reference, expectation) {
     this.asked += 1;
     assert.equal(reference, REFERENCE);
-    // ₦5,000 tip on Free: TipMe's whole share is ₦350 (₦275 platform + ₦75 processing).
-    assert.deepEqual(expectation, { platformFeeMinor: 35000n });
+    // ₦5,000 tip on Free (5%): TipMe's whole share is ₦250 (₦175 platform + ₦75 processing).
+    assert.deepEqual(expectation, { platformFeeMinor: 25000n });
     return {
       status: feePaidBy === 'platform' ? 'succeeded' : 'pending',
       amountMinor: 500000n,
@@ -115,7 +115,7 @@ const bachs = ({ feePaidBy = 'unknown', platformFeeMinor = 35000n } = {}) => ({
       feeMinor: 7500n,
       feePaidBy,
       platformFeeMinor,
-      ...(feePaidBy === 'platform' && platformFeeMinor === 35000n
+      ...(feePaidBy === 'platform' && platformFeeMinor === 25000n
         ? {}
         : { collected: true }),
     };
@@ -199,4 +199,22 @@ test('a tip Bachs settled in USD can be confirmed from its settlement issue', as
   const result = await confirm(db, bachs(), issue.id);
   assert.equal(result.data.outcome, 'confirmed');
   assert.equal(await tipStatus(), 'SUCCEEDED');
+});
+
+test('a You collect payment is not confirmed with this tool (Task 7 → Task 11)', async (t) => {
+  const { db, q, issueId, tipStatus } = await collectedTip(t);
+  // Its fee is TipMe's own account's, never a recipient's to have borne: the tool doesn't apply.
+  await q(
+    `UPDATE tip_quotes SET collection_mode = 'collect'
+      WHERE id = (SELECT i.quote_id FROM payment_intents i JOIN tips t ON t.intent_id = i.id
+                   JOIN issues s ON s.subject->>'tipId' = t.id::text WHERE s.id = $1)`,
+    [issueId],
+  );
+  const provider = bachs();
+  await assert.rejects(confirm(db, provider, issueId), (error) => {
+    assert.equal(error.getStatus?.(), 404);
+    return true;
+  });
+  assert.equal(provider.asked, 0);
+  assert.notEqual(await tipStatus(), 'SUCCEEDED');
 });

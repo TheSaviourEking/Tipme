@@ -1,7 +1,6 @@
 'use client';
 import { useId, useState, type ReactNode } from 'react';
 import {
-  STUDIO_BLOCK_VARIANTS,
   STUDIO_LIMITS as L,
   parseVideoLink,
   type StudioBlock,
@@ -15,14 +14,13 @@ import {
 } from '@/components/image-picker/image-picker';
 import { apiUrl } from '@/lib/session-client';
 import {
-  VARIANT_LABEL,
   counter,
   fitText,
   koboToNaira,
   nairaToKobo,
   textVariant,
 } from './blocks-model';
-import { Choice } from './style-tab';
+import { Choice } from './segmented';
 
 /*
  * The Blocks tab's forms (plan Task 9b): one per block kind. Each field writes a typed value the
@@ -48,7 +46,6 @@ export interface BlockFormProps<B extends StudioBlock> {
   savePhoto: SavePhoto;
   /** Room for more photos on the page (24), or why not. */
   photoReason: string | null;
-  profile: { bio: boolean; links: number };
 }
 
 export const PHOTO_LIMITS =
@@ -135,31 +132,6 @@ export function WordsField({
   );
 }
 
-function Variants<B extends StudioBlock>({
-  block,
-  onChange,
-}: {
-  block: B;
-  onChange(next: StudioBlock): void;
-}) {
-  const options = STUDIO_BLOCK_VARIANTS[block.kind] as readonly string[];
-  if (options.length < 2) return null;
-  return (
-    <Choice
-      label="Style"
-      options={options.map((v) => ({ value: v, label: VARIANT_LABEL[v] ?? v }))}
-      value={block.variant as string}
-      onChange={(variant) =>
-        onChange(
-          block.kind === 'text'
-            ? textVariant(block, variant as Block<'text'>['variant'])
-            : ({ ...block, variant } as StudioBlock),
-        )
-      }
-    />
-  );
-}
-
 function Check({
   label,
   checked,
@@ -191,28 +163,20 @@ const without = <T extends object>(o: T, key: keyof T): T => {
 };
 
 function TextForm({ block, onChange }: BlockFormProps<Block<'text'>>) {
-  const max =
-    block.variant === 'heading'
-      ? L.headingText
-      : block.variant === 'lead'
-        ? L.leadText
-        : L.paragraphText;
+  const max = block.variant === 'heading' ? L.headingText : L.paragraphText;
   return (
     <>
-      <Variants block={block} onChange={onChange} />
-      {block.variant === 'heading' && (
-        <Choice
-          label="Heading size"
-          options={[
-            { value: '2', label: 'Main heading' },
-            { value: '3', label: 'Smaller heading' },
-          ]}
-          value={String(block.level ?? 2)}
-          onChange={(v) => onChange({ ...block, level: v === '3' ? 3 : 2 })}
-        />
-      )}
+      <Choice
+        label="Kind of text"
+        options={[
+          { value: 'heading', label: 'Heading' },
+          { value: 'paragraph', label: 'Paragraph' },
+        ]}
+        value={block.variant}
+        onChange={(variant) => onChange(textVariant(block, variant))}
+      />
       <WordsField
-        label={VARIANT_LABEL[block.variant] ?? 'Words'}
+        label={block.variant === 'heading' ? 'Heading' : 'Paragraph'}
         value={block.text}
         max={max}
         paragraph={block.variant === 'paragraph'}
@@ -231,7 +195,6 @@ function TextForm({ block, onChange }: BlockFormProps<Block<'text'>>) {
 function QuoteForm({ block, onChange }: BlockFormProps<Block<'quote'>>) {
   return (
     <>
-      <Variants block={block} onChange={onChange} />
       <WordsField
         label="Quote"
         value={block.text}
@@ -287,7 +250,6 @@ function PhotoForm({
 }: BlockFormProps<Block<'photo'>>) {
   return (
     <>
-      <Variants block={block} onChange={onChange} />
       <div data-field="photo" className="pst-picker">
         <ImagePicker
           kind="photo"
@@ -314,7 +276,6 @@ function PhotoForm({
         label="Caption (optional)"
         value={block.caption ?? ''}
         max={L.caption}
-        hint="Shown on the photo, with a shade behind it so it stays readable."
         onChange={(caption) =>
           onChange(caption ? { ...block, caption } : without(block, 'caption'))
         }
@@ -343,7 +304,6 @@ function GalleryForm({
     });
   return (
     <>
-      <Variants block={block} onChange={onChange} />
       <ol className="pst-gallery">
         {block.images.map((image, i) => (
           <li key={`${image.imageId}-${i}`}>
@@ -665,7 +625,6 @@ function ServicesForm({ block, onChange }: BlockFormProps<Block<'services'>>) {
   const items = block.items;
   return (
     <>
-      <Variants block={block} onChange={onChange} />
       <p className="pst-hint">
         Prices are for information. Tips here are a gift, not a payment for a
         service. Your page always says so under the list.
@@ -752,7 +711,6 @@ function EventsForm({ block, onChange }: BlockFormProps<Block<'events'>>) {
   const items = block.items;
   return (
     <>
-      <Variants block={block} onChange={onChange} />
       <p className="pst-hint">
         Events hide by themselves once their date has passed.
       </p>
@@ -793,33 +751,6 @@ function EventsForm({ block, onChange }: BlockFormProps<Block<'events'>>) {
   );
 }
 
-function LinksForm({
-  block,
-  onChange,
-  profile,
-}: BlockFormProps<Block<'links'>>) {
-  return (
-    <>
-      <Variants block={block} onChange={onChange} />
-      <p className="pst-hint">
-        {profile.links > 0
-          ? 'Shows the links you added in My page. Change them there.'
-          : 'You have no links yet. Add them in My page, and they show here.'}
-      </p>
-    </>
-  );
-}
-
-function AboutForm({ profile }: BlockFormProps<Block<'about'>>) {
-  return (
-    <p className="pst-hint">
-      {profile.bio
-        ? 'Shows your bio from My page. Change the words there.'
-        : 'You have no bio yet. Add one in My page, and it shows here.'}
-    </p>
-  );
-}
-
 /** The form for one block, by kind. */
 export function BlockForm(props: BlockFormProps<StudioBlock>) {
   const { block } = props;
@@ -838,10 +769,6 @@ export function BlockForm(props: BlockFormProps<StudioBlock>) {
       return <ServicesForm {...props} block={block} />;
     case 'events':
       return <EventsForm {...props} block={block} />;
-    case 'links':
-      return <LinksForm {...props} block={block} />;
-    case 'about':
-      return <AboutForm {...props} block={block} />;
     case 'supporters':
       return null;
   }

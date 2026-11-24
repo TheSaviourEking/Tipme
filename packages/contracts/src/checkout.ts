@@ -34,6 +34,11 @@ export interface TipQuote {
    * paying. Only with the `business_shares` switch on, and only for a tip made at that business.
    */
   share?: ShareDisclosure;
+  /**
+   * You collect (ADR-0016, proposed): present (true) only when TipMe collects this tip on its own
+   * account and passes the recipient's share on. The card statement then shows TipMe.
+   */
+  collectedByTipMe?: true;
 }
 
 /** Why the supporter is tipping. A closed list: it is stored, filtered and shown to the recipient. */
@@ -179,4 +184,9 @@ export interface TipStatusView {
    * TipMe's fee (which TipMe keeps). Only once our payment partner has confirmed the refund.
    */
   refund?: { refundedMinor: string };
+  /**
+   * You collect (ADR-0016, proposed): present (true) only for a tip TipMe collects on its own account,
+   * so the receipt can say who was paid. Older APIs send nothing.
+   */
+  collectedByTipMe?: true;
 }

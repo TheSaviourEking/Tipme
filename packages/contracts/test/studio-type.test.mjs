@@ -1,26 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  STUDIO_DEFAULT_FONTS,
   STUDIO_FONTS,
   STUDIO_REQUIRED_CODEPOINTS,
-  STUDIO_SPACING,
-  fontsOk,
-  studioTypeScale,
+  STUDIO_STYLES,
+  STUDIO_STYLE_IDS,
 } from '../dist/index.js';
-
-const STEPS = ['compact', 'standard', 'roomy'];
-const ROLES = ['small', 'body', 'h3', 'h2', 'display'];
-const px = (css, viewport) => {
-  // clamp(MINpx, calc(Arem + Bvw), MAXpx) or clamp(MINpx, Arem + Bvw, MAXpx)
-  const m =
-    /^clamp\(([\d.]+)px, (?:calc\()?([\d.]+)rem \+ ([\d.]+)vw\)?, ([\d.]+)px\)$/.exec(
-      css,
-    );
-  assert.ok(m, css);
-  const [min, rem, vw, max] = m.slice(1).map(Number);
-  return Math.min(max, Math.max(min, rem * 16 + (vw * viewport) / 100));
-};
 
 test('display fonts are heading-only', () => {
   for (const f of STUDIO_FONTS)
@@ -43,9 +28,28 @@ test('a body font draws every required letter, so it never needs the word fallba
     }
 });
 
+test('the registry is the faces the styles use (the v1 editor’s other fonts were retired in PR 4b)', () => {
+  // Inter sets every UI, body and money face; each style adds at most its own display face.
+  const used = new Set([
+    'inter',
+    ...STUDIO_STYLE_IDS.map((s) => STUDIO_STYLES[s].displayFont).filter(
+      Boolean,
+    ),
+  ]);
+  assert.deepEqual(STUDIO_FONTS.map((f) => f.id).sort(), [...used].sort());
+  assert.deepEqual(STUDIO_FONTS.map((f) => f.id).sort(), [
+    'anton',
+    'dm-serif-display',
+    'inter',
+    'linen-serif',
+    'source-serif-4',
+    'unbounded',
+  ]);
+});
+
 test('each family is at most two files and each file carries its weights', () => {
   for (const f of STUDIO_FONTS) {
-    assert.ok(f.files.length >= 1 && f.files.length <= 2, f.id);
+    assert.ok(f.files.length >= 1 && f.files.length <= 3, f.id);
     const weights = f.files.flatMap((file) => {
       const [lo, hi = lo] = file.weight.split(' ').map(Number);
       return [[lo, hi]];
@@ -89,68 +93,28 @@ test('the required characters cover Yoruba and Igbo letters, tone marks and the 
   );
 });
 
-test('type scale: body ≥ 16, small ≥ 13, display at 320px ≤ 40, steps strictly increase', () => {
-  for (const step of STEPS) {
-    const s = studioTypeScale(step);
-    assert.deepEqual(Object.keys(s).sort(), [...ROLES].sort());
-    assert.equal(s.body.min, 16);
-    assert.ok(s.small.min >= 13, `${step} small ${s.small.min}`);
-    assert.ok(px(s.display.css, 320) <= 40, `${step} display at 320`);
-    for (const viewport of [320, 390, 768, 1024, 1440]) {
-      const sizes = ROLES.map((r) => px(s[r].css, viewport));
-      for (let i = 1; i < sizes.length; i += 1)
-        assert.ok(
-          sizes[i] > sizes[i - 1],
-          `${step} ${ROLES[i]} at ${viewport}`,
-        );
-      assert.ok(px(s.body.css, viewport) >= 16);
-      assert.ok(px(s.small.css, viewport) >= 13);
-    }
-    for (const r of ROLES) {
-      assert.ok(s[r].min <= s[r].max, `${step} ${r}`);
-      assert.ok(
-        Math.abs(px(s[r].css, 320) - s[r].min) < 0.02,
-        `${step} ${r} at 320`,
-      );
-      assert.ok(
-        Math.abs(px(s[r].css, 1440) - s[r].max) < 0.02,
-        `${step} ${r} at 1440`,
-      );
-    }
-    assert.equal(s.body.measure, '68ch');
-    assert.equal(s.body.lineHeight, 1.6);
-    assert.equal(s.display.lineHeight, 1.1);
-  }
-  assert.equal(
-    studioTypeScale('standard').body.css,
-    'clamp(16px, 0.95rem + 0.25vw, 18px)',
+test('the required characters cover the Hausa hooked letters', () => {
+  for (const c of [0x253, 0x257, 0x199, 0x1b4, 0x181, 0x18a, 0x198, 0x1b3])
+    assert.ok(
+      STUDIO_REQUIRED_CODEPOINTS.includes(c),
+      `U+${c.toString(16).toUpperCase().padStart(4, '0')}`,
+    );
+});
+
+test('the style faces are registered with their files', () => {
+  const font = (id) => STUDIO_FONTS.find((f) => f.id === id);
+  for (const id of ['unbounded', 'anton', 'linen-serif'])
+    assert.ok(font(id), id);
+  const linen = font('linen-serif');
+  assert.equal(linen.files.length, 3);
+  assert.ok(linen.files.some((file) => file.style === 'italic'));
+  assert.deepEqual(
+    linen.files.map((file) => `${file.weight} ${file.style}`).sort(),
+    ['400 italic', '400 normal', '700 normal'],
   );
-});
-
-test('larger steps make larger headings', () => {
-  const at = (step) => px(studioTypeScale(step).h2.css, 1440);
-  assert.ok(at('compact') < at('standard') && at('standard') < at('roomy'));
-});
-
-test('spacing steps are fixed', () => {
-  assert.deepEqual(STUDIO_SPACING, {
-    s: { min: 16, max: 24 },
-    m: { min: 24, max: 48 },
-    l: { min: 40, max: 80 },
-  });
-});
-
-test('fontsOk refuses a display font as body and allows one family for both', () => {
-  const display = STUDIO_FONTS.find((f) => f.category === 'display');
-  const both = STUDIO_FONTS.find((f) => f.roles.includes('body'));
-  assert.equal(fontsOk(display.id, display.id), false);
-  assert.equal(fontsOk(both.id, display.id), false);
-  assert.equal(fontsOk(display.id, both.id), true);
-  assert.equal(fontsOk(both.id, both.id), true);
-  assert.equal(fontsOk('comic-sans', both.id), false);
-  assert.equal(
-    fontsOk(STUDIO_DEFAULT_FONTS.heading, STUDIO_DEFAULT_FONTS.body),
-    true,
-  );
-  assert.equal(STUDIO_DEFAULT_FONTS.heading, 'manrope');
+  const serif = font('source-serif-4');
+  assert.ok(serif.files.some((file) => file.style === 'italic'));
+  assert.equal(serif.wordFallback, true);
+  const [lo, hi] = font('inter').files[0].weight.split(' ').map(Number);
+  assert.ok(lo <= 400 && hi >= 800, 'Inter spans 400 to 800');
 });

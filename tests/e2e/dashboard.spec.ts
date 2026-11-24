@@ -29,7 +29,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
     message: 'Lovely braids, thank you',
   });
   await page.reload();
-  await expect(page.getByTestId('balance')).toHaveText('₦1,860');
+  await expect(page.getByTestId('balance')).toHaveText('₦1,900');
   const row = page.getByRole('link', { name: /Tip from Ada M\./ });
   await expect(row).toContainText('Paid');
   await expect(page.getByText('Today')).toBeVisible();
@@ -38,7 +38,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
 
   await row.click();
   await expect(
-    page.getByRole('heading', { name: '₦1,860 from Ada M.' }),
+    page.getByRole('heading', { name: '₦1,900 from Ada M.' }),
   ).toBeVisible();
   await expect(page.getByText('Lovely braids, thank you')).toBeVisible();
   const receipt = page.locator('.receipt');
@@ -47,7 +47,7 @@ test('a new recipient sees the first-day screen, then their tip and its proof', 
   ).toContainText('₦2,000');
   await expect(
     receipt.locator('div', { hasText: 'You received' }),
-  ).toContainText('₦1,860');
+  ).toContainText('₦1,900');
   await expect(receipt.getByText('In your balance')).toBeVisible();
   await expect(
     receipt.getByText(/Confirmed by our payment partner/),
@@ -63,15 +63,15 @@ test('a recipient withdraws a tip and sees it sent, and the dashboard fits a nar
   const { handle } = await signUpRecipient(page, testInfo);
   await tipAsVisitor(browser, handle, { name: 'Ada M.' });
   await page.goto('/dashboard');
-  await expect(page.getByTestId('balance')).toHaveText('₦1,860', {
+  await expect(page.getByTestId('balance')).toHaveText('₦1,900', {
     timeout: 15_000,
   });
 
   // A withdrawal records the bank it went to, if one was saved.
   await saveBank(handle, 'GTBank', '6789');
   await page.goto('/dashboard/withdraw');
-  await page.getByLabel('Amount (NGN)').fill('1860');
-  await page.getByRole('button', { name: 'Withdraw ₦1,860' }).click();
+  await page.getByLabel('Amount (NGN)').fill('1900');
+  await page.getByRole('button', { name: 'Withdraw ₦1,900' }).click();
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
   await expectAccessible(page);
   await page.goto('/dashboard');
@@ -149,7 +149,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
         data: {
           ...body.data,
           availableMinor: '4860000',
-          confirmingMinor: '186000',
+          confirmingMinor: '190000',
         },
       },
     });
@@ -165,7 +165,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
             kind: 'tip',
             id: '11111111-1111-4111-8111-111111111111',
             at: new Date().toISOString(),
-            amountMinor: '186000',
+            amountMinor: '190000',
             state: 'confirming',
             supporterLabel: 'Amaka',
           },
@@ -186,7 +186,7 @@ test('the balance comes first, with what is still being confirmed under it', asy
   // The quote allows nothing on a page with no tips behind it, so none of the balance is called
   // ready to withdraw (the ledger figure is not what can go).
   await expect(page.getByText('Ready to withdraw')).toHaveCount(0);
-  await expect(main.getByText('₦1,860 still being confirmed')).toBeVisible();
+  await expect(main.getByText('₦1,900 still being confirmed')).toBeVisible();
   // Pending money is never counted as available.
   await expect(page.getByTestId('balance')).not.toContainText('50,400');
   await expectAccessible(page);

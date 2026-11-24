@@ -26,7 +26,7 @@ test('Bachs confirmation and expiry', async (t) => {
       )
     ).rows[0];
 
-  /** A ₦1,000 tip to Ada started at Bachs: TipMe's share is ₦100, processing included. */
+  /** A ₦2,000 tip to Ada started at Bachs: TipMe’s share is ₦100 (Free 5%), processing included. */
   const started = async (quotedAt) => {
     await database.fresh();
     const quote = await createQuote(db, {
@@ -67,7 +67,7 @@ test('Bachs confirmation and expiry', async (t) => {
     async () => {
       await started();
       const bachs = verifier((expectation) =>
-        expectation?.platformFeeMinor === 14000n
+        expectation?.platformFeeMinor === 10000n
           ? {
               status: 'succeeded',
               amountMinor: 200000n,
@@ -87,7 +87,7 @@ test('Bachs confirmation and expiry', async (t) => {
         now: new Date(),
         minAgeMs: 0,
       });
-      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 14000n }]);
+      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 10000n }]);
       assert.deepEqual(await status(), {
         attempt: 'VERIFIED_SUCCEEDED',
         tip: 'SUCCEEDED',
@@ -116,7 +116,7 @@ test('Bachs confirmation and expiry', async (t) => {
         now: afterExpiry,
       });
       assert.equal(result.expired, 0);
-      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 14000n }]);
+      assert.deepEqual(bachs.expectations, [{ platformFeeMinor: 10000n }]);
       // Out of expiry's reach, still unbooked: reconciliation and the issue inbox take over.
       assert.deepEqual(await status(), {
         attempt: 'PENDING',

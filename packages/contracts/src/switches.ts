@@ -29,6 +29,13 @@ export const FEATURE_SWITCHES = [
   'campaign_pages',
   // Staff "Refund tip", PR #221 (feat/tip-refund): moves money, so a money switch.
   'tip_refunds',
+  // Owner, 18 Nov 2026 ("the admin should be able to set business fees too"): whether TipMe pays a
+  // business's payout fee. Off keeps today's rule (the business pays it from the amount).
+  'business_payout_fee_absorbed',
+  // You collect (ADR-0016, PROPOSED; owner's design, 19 Nov 2026): TipMe takes a new recipient's tips
+  // on its own account and transfers them on. Built (plan Task 16) and off everywhere: production
+  // stays off until the owner turns it on.
+  'you_collect',
 ] as const;
 export type FeatureSwitch = (typeof FEATURE_SWITCHES)[number];
 
@@ -194,6 +201,26 @@ export const FEATURE_SWITCH_CATALOGUE: Record<
     money: true,
     default: false,
     env: onOff('TIP_REFUNDS'),
+  },
+  business_payout_fee_absorbed: {
+    label: 'TipMe pays business payout fees',
+    description:
+      'TipMe pays our payment partner’s transfer fee on a business’s withdrawals from the payment reserve, so the business receives the whole amount. Off, the business pays it from the amount, as today. A withdrawal keeps the rule it was asked under.',
+    money: true,
+    default: false,
+    env: onOff('BUSINESS_PAYOUT_FEE_ABSORBED'),
+  },
+  you_collect: {
+    label: 'You collect for new recipients',
+    description:
+      'New sign-ups take tips through TipMe and add bank details when they first withdraw. Off, nobody new is put on it; recipients already on it keep it.',
+    money: true,
+    default: false,
+    env: onOff('YOU_COLLECT'),
+    // Plan Task 16 removed `notBuilt` (Task 3's mark, ruling R12): the flow is built, so staff can turn
+    // it on with a second person. It stays off by default, and turning it on is the owner's decision
+    // once ADR-0016 is accepted and the payment partner has confirmed P1 in writing; D-04, D-06 and
+    // D-07 stay open (docs/runbooks/live-activation.md).
   },
 };
 

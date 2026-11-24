@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { permanentRedirect } from 'next/navigation';
 import { resolveCover, type PublicProfile } from '@tipme/contracts';
-import { AppreciationForm } from '@/components/appreciation-form';
+import { AppreciationForm, type TipSkin } from '@/components/appreciation-form';
 import { PilotNotice } from '@/components/pilot-notice';
 import {
   PILOT_NOTICE_SUPPORT_EMAIL,
@@ -14,6 +14,7 @@ import { PageRetry } from '@/components/profile/page-retry';
 import { ProfileCover } from '@/components/profile/cover';
 import { CoverFreeze } from '@/components/profile/cover-freeze';
 import { RecipientIdentity } from '@/components/profile/recipient-card';
+import { StandardProfile } from '@/components/profile/standard-profile';
 import { ProfileViewTracker } from '@/components/profile-view-tracker';
 import { ReportPage } from '@/components/report-page';
 import { movedProfilePath } from '@/lib/handle-redirect';
@@ -25,7 +26,7 @@ import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { CampaignTop } from '@/components/profile/campaign-top';
 import { getPublicCampaignPage, loadPublicProfile } from '@/lib/profiles-api';
 import { API_ORIGIN as BROWSER_API_ORIGIN } from '@/lib/avatar-source';
-import { identityFor, studioFor } from '@/lib/public-studio';
+import { studioFor } from '@/lib/public-studio';
 import { studioLabOpen } from '@/app/dev/studio-lab/lab-gate';
 import ProfileUnavailable from './not-found';
 
@@ -114,112 +115,122 @@ export default async function ProfilePage({ params, searchParams }: Props) {
       ) : null}
     </>
   );
-  // Page Studio (plan Task 8): a published design, sent by the API only while the `page_studio`
-  // switch is on. Its renderer and stylesheet are loaded only here, so a standard page carries
-  // neither. TipMe's cover, identity, tip block and footer go in unchanged.
+  // Page Studio (styles spec §13): a published design, sent by the API only while the
+  // `page_studio` switch is on, as the page's plan shows it. Null (no design, a campaign link,
+  // Classic with every default, or whatever the plan hides) renders today's page below, unchanged.
   const studio = studioFor(profile, {
     apiOrigin: BROWSER_API_ORIGIN,
     labImages: studioLabOpen(),
     ...(campaign ? { campaign } : {}),
   });
   if (studio) {
-    const { StudioPage } = await import('@/components/studio/studio-page');
-    return (
-      <main
-        id="main"
-        tabIndex={-1}
-        className="profile-page profile-page--studio"
-      >
-        <ProfileViewTracker handle={profile.handle} />
-        <StudioPage
-          studio={studio}
+    // Loaded only here, so a page without a design carries none of it.
+    const { renderStyled } =
+      await import('@/components/studio-styles/style-page');
+    const style = studio.document.style;
+    const tracker = <ProfileViewTracker handle={profile.handle} />;
+    const styled = renderStyled({
+      studio,
+      profile,
+      coverArt: coverView,
+      // Classic keeps TipMe's identity block, links and bio where today's page has them.
+      identity: (
+        <RecipientIdentity
           profile={profile}
-          cover={coverView}
-          identity={
-            <RecipientIdentity
-              profile={identityFor(profile, studio.document)}
-              firstName={firstName}
-              celebrationLabel={
-                takesTips ? (profile.celebration?.label ?? null) : null
-              }
-            />
-          }
-          tipBlock={
-            <TipBlock
-              profile={profile}
-              firstName={firstName}
-              mode={mode}
-              opensSoon={opensSoon}
-              pilotShown={pilotShown}
-            />
-          }
-          footer={
-            <ProfileFoot
-              profile={profile}
-              firstName={firstName}
-              campaign={false}
-              previewPages={copy.previewPages}
-            />
+          firstName={firstName}
+          celebrationLabel={
+            takesTips ? (profile.celebration?.label ?? null) : null
           }
         />
+      ),
+      lead: tracker,
+      tipBlock: (
+        <TipBlock
+          profile={profile}
+          firstName={firstName}
+          mode={mode}
+          opensSoon={opensSoon}
+          pilotShown={pilotShown}
+          // Classic's tip form is today's: no skin.
+          {...(style === 'classic' ? {} : { skin: style })}
+        />
+      ),
+      footer: (
+        <ProfileFoot
+          profile={profile}
+          firstName={firstName}
+          campaign={false}
+          previewPages={copy.previewPages}
+        />
+      ),
+    });
+    // Classic renders today's page, whose root is its own <main>. A new style sits in a plain
+    // <main>: not `.profile-page`, so the site's header and footer show, blended into the page
+    // (frame.css, chromeCss), and the standard page's Tip-bar padding stays off it (the frame
+    // keeps its own room for its bar).
+    if (style === 'classic') return styled;
+    return (
+      <main id="main" tabIndex={-1} className="studio-main">
+        {tracker}
+        {styled}
       </main>
     );
   }
   return (
-    <main id="main" tabIndex={-1} className="profile-page">
-      <ProfileViewTracker handle={profile.handle} />
-      <div className="profile-sheet">
-        {coverView}
-        <div className="profile-columns">
-          <RecipientIdentity
-            profile={profile}
-            firstName={firstName}
-            // Only beside a form that can add to it.
-            celebrationLabel={
-              takesTips ? (profile.celebration?.label ?? null) : null
-            }
-            {...(campaignPage
-              ? { after: <CampaignTop page={campaignPage} /> }
-              : {})}
-          />
-          <aside
-            className="profile-composer tip-instrument"
-            aria-label={`Tip ${firstName}`}
-            data-tip-panel
-          >
-            <TipBlock
-              profile={profile}
-              firstName={firstName}
-              mode={mode}
-              opensSoon={opensSoon}
-              pilotShown={pilotShown}
-            />
-          </aside>
-        </div>
+    <StandardProfile
+      firstName={firstName}
+      lead={<ProfileViewTracker handle={profile.handle} />}
+      cover={coverView}
+      identity={
+        <RecipientIdentity
+          profile={profile}
+          firstName={firstName}
+          // Only beside a form that can add to it.
+          celebrationLabel={
+            takesTips ? (profile.celebration?.label ?? null) : null
+          }
+          {...(campaignPage
+            ? { after: <CampaignTop page={campaignPage} /> }
+            : {})}
+        />
+      }
+      tipBlock={
+        <TipBlock
+          profile={profile}
+          firstName={firstName}
+          mode={mode}
+          opensSoon={opensSoon}
+          pilotShown={pilotShown}
+        />
+      }
+      footer={
         <ProfileFoot
           profile={profile}
           firstName={firstName}
           campaign={Boolean(campaignPage)}
           previewPages={copy.previewPages}
         />
-      </div>
-    </main>
+      }
+    />
   );
 }
 
-/** TipMe's tip block: the same on the standard page and beside a Studio design (locked). */
+/** TipMe's tip block: the same form on every page; a style changes only its skin (§13). */
 function TipBlock({
   profile,
   firstName,
   mode,
   opensSoon,
   pilotShown,
+  skin,
 }: {
   profile: PublicProfile;
   firstName: string;
   mode: PaymentMode;
   opensSoon: boolean;
   pilotShown: boolean;
+  /** A styled page's form skin (class names and tokens only, §13). */
+  skin?: TipSkin;
 }) {
   return (
     <>
@@ -246,6 +257,7 @@ function TipBlock({
             : {})}
           recipient={firstName}
           handle={profile.handle}
+          {...(skin ? { skin } : {})}
           recognition={profile.recognition === true}
           {...(profile.tipAmounts ? { tipAmounts: profile.tipAmounts } : {})}
           {...(profile.celebration ? { celebration: profile.celebration } : {})}

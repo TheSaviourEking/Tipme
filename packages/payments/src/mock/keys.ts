@@ -9,3 +9,27 @@ export const payoutIdKey = (prefix: string, payoutId: string) =>
 /** Which payment an attempt started (TipMe's attempt id is the merchant reference). */
 export const attemptKey = (prefix: string, attemptId: string) =>
   `mockprovider:${prefix}:attempt:${attemptId}`;
+/** A You collect scenario's one answer, by the key it was set for (markCollectAnswer). */
+export const collectAnswerKey = (prefix: string, key: string) =>
+  `mockprovider:${prefix}:collect-answer:${key}`;
+/** One You collect transfer, by its idempotency key (= its transfer_group). */
+export const collectTransferKey = (prefix: string, key: string) =>
+  `mockprovider:${prefix}:collect-transfer:${key}`;
+/** The keys of every You collect transfer to one account, oldest first. */
+export const accountTransfersKey = (prefix: string, accountRef: string) =>
+  `mockprovider:${prefix}:account-transfers:${accountRef}`;
+/** A pretend destination's review status (usable unless set). */
+export const destinationKey = (prefix: string, destinationRef: string) =>
+  `mockprovider:${prefix}:destination:${destinationRef}`;
+/** TipMe's pretend balances, as set by markPlatformBalances. */
+export const platformBalancesKey = (prefix: string) =>
+  `mockprovider:${prefix}:platform-balances`;
+/** You collect (plan Task 5): one pretend dispute on TipMe's own account. */
+export const disputeKey = (prefix: string, disputeId: string) =>
+  `mockprovider:${prefix}:dispute:${disputeId}`;
+/** Every pretend dispute, scored by when it was raised (ms). */
+export const disputesKey = (prefix: string) =>
+  `mockprovider:${prefix}:disputes`;
+/** Which dispute an evidence key submitted. */
+export const disputeEvidenceKey = (prefix: string, key: string) =>
+  `mockprovider:${prefix}:dispute-evidence:${key}`;

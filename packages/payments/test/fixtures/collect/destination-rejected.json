@@ -1,0 +1,6 @@
+{
+  "_source": "Live-only shape, from https://docs.bachs.io/connect/payouts.md (DESTINATION_REJECTED: 'the destination was rejected in review and never becomes usable') and the rejected destination in packages/payments/test/bachs-payouts.test.mjs. Never recorded: the sandbox does not run the bank-name check.",
+  "id": "pd_collect_rejected",
+  "status": "rejected",
+  "is_usable": false
+}

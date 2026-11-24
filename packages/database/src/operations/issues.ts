@@ -118,6 +118,22 @@ const SEVERITY: Record<IssueKind, IssueSeverity> = {
   pro_refund_failed: 'money',
   share_transfer_stuck: 'money',
   tip_refund_failed: 'money',
+  // You collect (ADR-0016, proposed). Nothing opens these until the later You collect PRs.
+  collect_transfer_stuck: 'money',
+  collect_transfer_review: 'money',
+  collect_in_debt: 'money',
+  collect_invariant_broken: 'money',
+  collect_reserve_low: 'money',
+  collect_auto_payout_on: 'money',
+  collect_recon_mismatch: 'money',
+  collect_same_bank: 'account',
+  dispute_opened: 'money',
+  dispute_deadline: 'money',
+  dispute_fee_unposted: 'money',
+  collect_refund_gap: 'money',
+  collect_own_money_wait: 'money',
+  provider_split_short: 'money',
+  provider_unconnected_money: 'money',
 };
 
 /** Plain words for the inbox. Ids and the public handle only: never names, messages or numbers. */
@@ -208,6 +224,36 @@ function summaryOf(kind: IssueKind, handle: string | null): string {
       return `A business share movement for ${page} needs checking: TipMe's partner refused to send it on, or answered with another amount. TipMe may be holding the money. Check the partner dashboard for the transfers in its group before doing anything; nothing is sent again until then.`;
     case 'tip_refund_failed':
       return `A tip refund staff approved for ${page} didn't happen at the partner: nothing moved and nothing was booked. A tip paid by bank transfer can't be refunded there; otherwise check the reason on the tip, and a failed refund can be asked again.`;
+    case 'collect_transfer_stuck':
+      return `Money TipMe holds for ${page} has been ready to transfer for over an hour and hasn't moved. Check TipMe's own balance at the partner; nothing is sent twice.`;
+    case 'collect_transfer_review':
+      return `A transfer of money TipMe holds for ${page} needs checking: the partner's answer didn't match, or it found no such transfer. Look for it in the partner dashboard before retrying.`;
+    case 'collect_in_debt':
+      return 'The partner reports TipMe’s own account is in debt. Every You collect transfer has stopped until this is resolved. Top up TipMe’s balance first.';
+    case 'collect_invariant_broken':
+      return 'TipMe’s balance at the partner is below what it holds for recipients. Money that belongs to recipients is short: top up TipMe’s balance now, and withdraw none of TipMe’s own money.';
+    case 'collect_reserve_low':
+      return 'TipMe’s own money in its partner balance, above what it holds for recipients, is below an alert level. It pays refunds, dispute fees and payout fees: top it up.';
+    case 'collect_auto_payout_on':
+      return 'Automatic payouts are on for TipMe’s own partner balance. Turn them off in the partner dashboard: held money could leave with TipMe’s earnings.';
+    case 'collect_recon_mismatch':
+      return `The partner's record of You collect transfers or disputes doesn't match TipMe's${handle ? ` for ${page}` : ''}. Check the partner dashboard; nothing was changed.`;
+    case 'collect_same_bank':
+      return `${page} added a bank account another recipient already uses. Their transfers wait in review until staff check it.`;
+    case 'dispute_opened':
+      return `A supporter disputed a tip to ${page} that TipMe collected. Its amount is held from their balance while it is open. Add evidence before the deadline.`;
+    case 'dispute_deadline':
+      return `A dispute on a tip to ${page} must be answered within 48 hours, and no evidence has been sent yet.`;
+    case 'dispute_fee_unposted':
+      return `The partner charged a dispute fee on a tip to ${page} without saying in which currency, so nothing was booked. Check the fee in the partner dashboard.`;
+    case 'collect_refund_gap':
+      return `A refund on a tip to ${page} that TipMe collected couldn't take back everything it should have. Check what TipMe absorbed against the partner's record.`;
+    case 'collect_own_money_wait':
+      return 'A payout fee or fee return TipMe pays is waiting: paying it now would use money TipMe holds for recipients, or TipMe’s own money couldn’t be confirmed. Nothing failed and nobody was told. The note says why; they start again once a reserve reading allows it, and this closes itself.';
+    case 'provider_split_short':
+      return `The daily split check found that the payment providers hold less for ${handle ? page : 'a recipient or a business'} than TipMe's ledger owes them, by more than ₦100. Withdrawals stay capped by the ledger, so nothing is overpaid: find where the difference went (a refund or dispute after a withdrawal, for example) and cover it at that provider.`;
+    case 'provider_unconnected_money':
+      return 'A payment provider that is no longer connected still holds money owed to recipients or businesses, so they can’t withdraw it. Connect it again as withdraw-only to let it drain, or settle it with the provider. Nothing is sent through another provider.';
     case 'support_request':
       return `A support request from ${page}. Reveal it to read their words and how to reach them.`;
   }
@@ -776,7 +822,12 @@ export function autoResolveIssues(
       -- A payout with its own open issue is a person's now, and no longer the reserve's to answer for.
       SELECT i.id, 'No withdrawal is waiting on the reserve any more.'
         FROM issues i
-       WHERE i.status = 'open' AND i.kind = 'reserve_empty'
+       WHERE i.status = 'open' AND i.kind IN ('reserve_empty', 'collect_own_money_wait')
+         -- Task 11 (N2): a fee return waiting on TipMe's own money keeps its wait open too.
+         AND (i.kind <> 'collect_own_money_wait' OR NOT EXISTS (
+           SELECT 1 FROM share_transfers st
+            WHERE st.kind = 'fee_return' AND st.status = 'out_paid'
+              AND st.own_money_wait_since IS NOT NULL))
          AND NOT EXISTS (
            SELECT 1 FROM payouts p
             WHERE p.status = 'REQUESTED'

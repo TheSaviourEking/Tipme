@@ -108,22 +108,34 @@ test('the whole story works together, and leaves nothing visible behind', async 
     await expect(recipient.getByText('Your page is live')).toBeVisible();
 
     if (env.paymentProvider === 'bachs-sandbox') {
-      // On the Bachs sandbox a new page cannot take tips until its owner completes Bachs' own
-      // identity form, so the new page says so before a supporter starts, and its owner is told.
+      // With You collect on (ADR-0016), a new page takes tips at once: TipMe collects and the
+      // owner adds a bank later. /v1/me/collect answers only for a collecting recipient (404 for
+      // everyone else), so the check follows whichever mode this copy gives a new sign-up.
+      const collecting =
+        (await apiCall(recipient.request, 'GET', '/v1/me/collect')).status() ===
+        200;
       await visitor.goto(`/@${handle}`);
-      await expect(
-        visitor.getByRole('heading', { name: /can’t receive tips just yet/ }),
-      ).toBeVisible();
-      await expect(visitor.getByRole('button', { name: /^Tip ₦/ })).toHaveCount(
-        0,
-      );
-      await recipient.goto('/dashboard');
-      await expect(
-        recipient
-          .getByRole('region', { name: 'Needs your attention' })
-          .getByText(/set up payments/i)
-          .first(),
-      ).toBeVisible();
+      if (collecting) {
+        await expect(
+          visitor.getByRole('button', { name: /^Tip ₦/ }).first(),
+        ).toBeVisible();
+      } else {
+        // Without it, a new page cannot take tips until its owner completes Bachs' own identity
+        // form, so the new page says so before a supporter starts, and its owner is told.
+        await expect(
+          visitor.getByRole('heading', { name: /can’t receive tips just yet/ }),
+        ).toBeVisible();
+        await expect(
+          visitor.getByRole('button', { name: /^Tip ₦/ }),
+        ).toHaveCount(0);
+        await recipient.goto('/dashboard');
+        await expect(
+          recipient
+            .getByRole('region', { name: 'Needs your attention' })
+            .getByText(/set up payments/i)
+            .first(),
+        ).toBeVisible();
+      }
       // A tip to the standing test page opens Bachs' sandbox checkout. It is never paid: that
       // would depend on Bachs' own page. The unpaid checkout expires; paid totals do not move.
       await visitor.goto(`/@${env.bachsHandle}?src=qr`);
