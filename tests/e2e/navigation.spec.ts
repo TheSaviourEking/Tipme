@@ -1,10 +1,10 @@
 import { expect, test, type Locator } from '@playwright/test';
 
 // Owner, 24 Nov 2026: the header asks "Who it's for" and answers with three rows, each with a line
-// icon, a bold title and a description: Individual, Business and Giving. Giving is not open yet, so
-// it says "Coming soon" and has no page to go to; there is no Infrastructure row. Business follows
-// BUSINESS_ENABLED (PR B1): the e2e stack has it on, so it keeps those words; "Businesses (coming
-// soon)" while it is off is tested on a stand-in stack in business-setup.spec.ts.
+// icon, a bold title and a description: Individual, Business and Giving (and Infrastructure). Giving is not open yet, so
+// it says "Coming soon" and has no page to go to; Infrastructure follows it, also coming soon. Business follows
+// BUSINESS_ENABLED (PR B1): the e2e stack has it on, so it keeps those words; "Business" with a
+// "Coming soon" pill while it is off is tested on a stand-in stack in business-setup.spec.ts.
 
 async function expectThreeRows(nav: Locator) {
   const individual = nav.getByRole('link', { name: /^Individual\s*Receive/ });
@@ -14,12 +14,17 @@ async function expectThreeRows(nav: Locator) {
     nav.getByText('Receive tips as an individual.', { exact: true }),
   ).toBeVisible();
   await expect(
-    nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
+    nav.getByRole('link', { name: /^Business\s*Receive and manage tips/ }),
   ).toHaveAttribute('href', '/for-businesses');
   // Giving is words only: nothing to click until there is somewhere to go.
   const giving = nav.locator('[data-who-item]').filter({ hasText: 'Giving' });
   await expect(giving.locator('strong')).toHaveText('Giving');
   await expect(giving).toContainText('Coming soon');
+  // The pill sits beside the title, on its line; only Giving has one while Business is on.
+  const title = await giving.locator('strong').boundingBox();
+  const pill = await giving.locator('.who__soon').boundingBox();
+  expect(Math.abs((pill?.y ?? 0) - (title?.y ?? 99)) + 0).toBeLessThan(8);
+  await expect(nav.getByText('Coming soon', { exact: true })).toHaveCount(2);
   await expect(
     nav.getByText(
       'Receive and manage contributions for churches, organisations and causes.',
@@ -28,14 +33,24 @@ async function expectThreeRows(nav: Locator) {
   ).toBeVisible();
   await expect(nav.getByRole('link', { name: /Giving/ })).toHaveCount(0);
   await expect(giving.locator('a')).toHaveCount(0);
+  // Infrastructure is words only too, with its own pill beside the title.
+  const infra = nav
+    .locator('[data-who-item]')
+    .filter({ hasText: 'Infrastructure' });
+  await expect(infra.locator('strong')).toHaveText('Infrastructure');
+  await expect(infra).toContainText('Coming soon');
+  await expect(infra.locator('a')).toHaveCount(0);
+  await expect(nav.getByRole('link', { name: /Infrastructure/ })).toHaveCount(
+    0,
+  );
+  await expect(
+    nav.getByText('Consume the Tipme APIs.', { exact: true }),
+  ).toBeVisible();
   // Each row has an icon beside its words, hidden from screen readers.
   await expect(
     nav.locator('[data-who-item] svg[aria-hidden="true"]'),
-  ).toHaveCount(3);
-  // The reference shows these three only.
-  await expect(nav.locator('[data-who-item]')).toHaveCount(3);
-  await expect(nav.getByText(/Infrastructure/)).toHaveCount(0);
-  await expect(nav.getByText('Consume the Tipme APIs.')).toHaveCount(0);
+  ).toHaveCount(4);
+  await expect(nav.locator('[data-who-item]')).toHaveCount(4);
 }
 
 test("Who it's for opens a menu of Individual, Business and Giving (coming soon)", async ({
@@ -67,8 +82,8 @@ test(
     await expectThreeRows(nav);
     const items = [
       nav.getByRole('link', { name: /^Individual\s*Receive/ }),
-      nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
-      nav.getByText('Coming soon', { exact: true }),
+      nav.getByRole('link', { name: /^Business\s*Receive and manage tips/ }),
+      nav.getByText('Coming soon', { exact: true }).first(),
     ];
     for (const item of items) {
       await expect(item).toBeVisible();

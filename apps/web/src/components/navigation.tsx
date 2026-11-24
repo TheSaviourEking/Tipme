@@ -6,6 +6,7 @@ import { Button, Container, Surface } from '@tipme/ui';
 import { Brand } from './brand';
 import { GuestActions, NavAccount } from './nav-account';
 import { NavLink, onProfilePage } from './nav-link';
+import { WhoWords } from './who-words';
 import { WHO } from '@/lib/who-choices';
 
 function MenuIcon({ path, className }: { path: string; className?: string }) {
@@ -216,10 +217,7 @@ export function Navigation({
                           {'flagged' in choice && businesses ? (
                             businesses
                           ) : (
-                            <>
-                              <strong>{choice.title}</strong>
-                              <span>{choice.text}</span>
-                            </>
+                            <WhoWords title={choice.title} text={choice.text} />
                           )}
                         </div>
                       </NavLink>
@@ -227,11 +225,11 @@ export function Navigation({
                       <div className="who__item" data-who-item>
                         <MenuIcon path={choice.icon} className="who__icon" />
                         <div className="who__words">
-                          <strong>{choice.title}</strong>
-                          {'comingSoon' in choice && (
-                            <em className="who__soon">Coming soon</em>
-                          )}
-                          <span>{choice.text}</span>
+                          <WhoWords
+                            title={choice.title}
+                            text={choice.text}
+                            comingSoon={'comingSoon' in choice}
+                          />
                         </div>
                       </div>
                     )}

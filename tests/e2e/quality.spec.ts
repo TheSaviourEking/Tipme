@@ -309,7 +309,9 @@ test('legal pages say they are coming soon, linked from every page', async ({
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(title);
-    await expect(page.getByText('Coming soon', { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole('main').getByText('Coming soon', { exact: true }),
+    ).toBeVisible();
     await expect(page).toHaveTitle(new RegExp(title));
   }
   await page.goto('/');
@@ -389,10 +391,9 @@ test('main navigation points to the marketing pages', async ({
   await expect(
     nav.getByRole('link', { name: /^Individual\s*Receive/ }),
   ).toHaveAttribute('href', '/for-creators');
-  await expect(nav.getByRole('link', { name: /^Businesses/ })).toHaveAttribute(
-    'href',
-    '/for-businesses',
-  );
+  await expect(
+    nav.getByRole('link', { name: /^Business\s*Receive/ }),
+  ).toHaveAttribute('href', '/for-businesses');
 });
 
 test('How it works in the header glides down Home to the steps', async ({

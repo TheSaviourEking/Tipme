@@ -1,17 +1,14 @@
+import { WhoWords } from '../who-words';
 import { BusinessAvailableSlot } from './business-available-slot';
 
-/** The header's "Businesses" choice, in words for each state of the business flag (PR B1). */
+/** The header's "Business" choice: the same words either way; with business sign-up off it says "Coming soon". */
 export function BusinessesWhoText({ on }: { on: boolean }) {
-  return on ? (
-    <>
-      <strong>Businesses</strong>
-      <span>Create your business and let customers tip your team.</span>
-    </>
-  ) : (
-    <>
-      <strong>Businesses (coming soon)</strong>
-      <span>Tell us you’re interested, and we’ll let you know.</span>
-    </>
+  return (
+    <WhoWords
+      title="Business"
+      text="Receive and manage tips for businesses and their employees."
+      comingSoon={!on}
+    />
   );
 }
 

@@ -1,5 +1,5 @@
 /**
- * The header's "Who it's for" menu: three rows (owner's reference, 24 Nov 2026). Giving is not
+ * The header's "Who it's for" menu: four rows (owner's reference, 24 Nov 2026). Giving and Infrastructure are not
  * open yet, so it says so and is not a link. `icon` is the 24x24 line-icon path data.
  */
 export const WHO = [
@@ -25,6 +25,14 @@ export const WHO = [
     text: 'Receive and manage contributions for churches, organisations and causes.',
     // An open hand holding a heart.
     icon: 'M12 11.5C9.2 9.2 8.5 7.6 8.5 6.4A2.2 2.2 0 0 1 12 4.7a2.2 2.2 0 0 1 3.5 1.7c0 1.2-.7 2.8-3.5 5.1ZM3 15.5h3l3 1.5h4.5a1.5 1.5 0 0 1 0 3H9.5M13.5 18l6-2.2a1.7 1.7 0 0 1 1.5 3l-6.5 2.7H8l-2-1.5H3',
+    comingSoon: true,
+  },
+  {
+    title: 'Infrastructure',
+    href: undefined,
+    text: 'Consume the Tipme APIs.',
+    // Code brackets: </>.
+    icon: 'M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5M13.5 5l-3 14',
     comingSoon: true,
   },
 ] as const;

@@ -381,9 +381,15 @@ body:has(
 }
 
 /* "Coming soon", quiet, on the title's line; read aloud with the title. */
+.who__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .who__soon {
   display: inline-block;
-  margin-top: 2px;
   padding: 0.0625rem 0.5rem;
   border: 1px solid var(--edge-hairline);
   border-radius: 999px;
