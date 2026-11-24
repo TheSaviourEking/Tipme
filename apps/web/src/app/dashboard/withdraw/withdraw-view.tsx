@@ -5,12 +5,14 @@ import type { FormEvent, ReactNode } from 'react';
 import type {
   DashboardSummary,
   PayoutBank,
+  WithdrawalRequestResult,
   WithdrawalRow,
   WithdrawalsPage,
 } from '@tipme/contracts';
 import {
   COLLECT_COPY,
   COLLECT_NAME_RECHECK_NOTICE,
+  WITHDRAW_SPLIT_COPY,
 } from '@tipme/contracts/copy';
 import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
 import {
@@ -52,11 +54,15 @@ import {
   withdrawFee,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
+  partsView,
+  requestParts,
   withdrawLamp,
   withdrawRefusal,
   withdrawState,
   withdrawUnsure,
 } from '@/lib/withdraw-state';
+import type { PartView } from '@/lib/withdraw-state';
+import { ExtraNotices, PartList } from '@/components/dashboard/withdraw-parts';
 import { Money } from '@/components/money';
 import { CollectBankForm } from './collect-bank-form';
 
@@ -163,6 +169,7 @@ function History({
         <ol className="withdraw__rows">
           {rows.map((row) => {
             const view = describe(row);
+            const split = partsView(row.parts);
             const open = view.steps > 0 && view.steps < 3;
             const bank = bankLine(row.bank);
             // History, not news: a row has no live role, so nothing here is announced.
@@ -171,7 +178,7 @@ function History({
                 <span className="withdraw__amount">
                   <Money minor={row.amountMinor} />
                 </span>
-                <Stamp tone={view.stamp}>{view.label}</Stamp>
+                <Stamp tone={view.stamp}>{split?.label ?? view.label}</Stamp>
                 {open && (
                   <Steps
                     className="withdraw__steps"
@@ -180,6 +187,7 @@ function History({
                   />
                 )}
                 <p className="withdraw__note">{view.note}</p>
+                {split && <PartList parts={split.parts} />}
                 {/* Proven: a failed payout is released and its amount no longer reserved
                     (withdraw-and-audit plan, money-safety proofs). Only on a row the API reports failed. */}
                 {row.state === 'failed' && (
@@ -239,7 +247,11 @@ export default function WithdrawPage({
   const [unsure, setUnsure] = useState<{ title: string; body: string } | null>(
     null,
   );
-  const [done, setDone] = useState<string | null>(null);
+  // What was asked for, and its payments when it arrives as more than one.
+  const [done, setDone] = useState<{
+    amount: string;
+    parts: PartView[] | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   // One key per request, so a double tap never withdraws twice.
   const key = useRef<string | null>(null);
@@ -476,11 +488,14 @@ export default function WithdrawPage({
     setUnsure(null);
     key.current ??= crypto.randomUUID();
     const sent = key.current;
-    const result = await apiFetch<{ payoutId: string }>('/v1/me/withdrawals', {
-      method: 'POST',
-      body: { amountMinor: String(amount) },
-      headers: { 'idempotency-key': sent },
-    });
+    const result = await apiFetch<WithdrawalRequestResult>(
+      '/v1/me/withdrawals',
+      {
+        method: 'POST',
+        body: { amountMinor: String(amount) },
+        headers: { 'idempotency-key': sent },
+      },
+    );
     setBusy(false);
     // The amount changed while this was on its way (typing clears the key): a refusal belongs to
     // the old amount, so it doesn't bring back a slip or an error over the new one. A success still
@@ -488,7 +503,10 @@ export default function WithdrawPage({
     const stale = key.current !== sent;
     if (result.ok) {
       // What arrives: the amount less the fee when the user pays it (owner, 12 Nov 2026).
-      setDone(formatNaira(figures ? Number(figures.receiveMinor) : amount));
+      setDone({
+        amount: formatNaira(figures ? Number(figures.receiveMinor) : amount),
+        parts: partsView(requestParts(result.data.parts ?? []))?.parts ?? null,
+      });
       setRaw('');
       setChecked(false);
       key.current = null;
@@ -559,9 +577,20 @@ export default function WithdrawPage({
           title="Withdrawal requested"
           className="withdraw__done"
         >
-          <span className="money">{done}</span>
+          <span className="money">{done.amount}</span>
           {copy.withdrawDoneSuffix}{' '}
           <Link href="/dashboard">Back to your dashboard</Link>
+          {done.parts && (
+            <>
+              <span
+                className="withdraw__split"
+                data-testid="withdraw-split-done"
+              >
+                {WITHDRAW_SPLIT_COPY.mayArrive(done.parts.length)}
+              </span>
+              <PartList parts={done.parts} />
+            </>
+          )}
         </Slip>
       )}
       <div className="withdraw__layout">
@@ -659,6 +688,7 @@ export default function WithdrawPage({
               {notice.body}
             </Slip>
           )}
+          <ExtraNotices notices={state.extraNotices} />
           {unsure && (
             <Slip tone="unsure" stamp={'Not\nconfirmed'} title={unsure.title}>
               {unsure.body}
@@ -745,6 +775,11 @@ export default function WithdrawPage({
                       </dd>
                     </dl>
                   </section>
+                )}
+                {figures && chosen !== null && state.partsFor(chosen) > 1 && (
+                  <p className="tm-hint" data-testid="withdraw-split-hint">
+                    {WITHDRAW_SPLIT_COPY.mayArrive(state.partsFor(chosen))}
+                  </p>
                 )}
                 {dayNote && (
                   <p className="tm-hint" data-testid="withdrawal-day-note">

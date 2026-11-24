@@ -292,12 +292,59 @@ export function mailForDomainEvent(
           profileId: payouts.profileId,
           businessId: payouts.businessId,
           amount: payouts.amountMinor,
+          groupId: payouts.withdrawalGroupId,
         })
         .from(payouts)
         .where(eq(payouts.id, payoutId));
       if (!payout) return;
-      const type =
-        name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed';
+      // What to tell, and the key that keeps it to once: this payout's outcome, or for a request paid
+      // as parts (per-provider balances, Task 9) the request's, once every part has settled. Each
+      // part's event asks; the last to settle finds them all settled, and an earlier one that also
+      // does is the same email by its key. A request with paid and failed parts gets one of each.
+      const outcomes: {
+        type: 'withdrawal_paid' | 'withdrawal_failed';
+        amountMinor: bigint;
+        key: string;
+      }[] = [];
+      if (payout.groupId === null)
+        outcomes.push({
+          type:
+            name === 'payout.paid' ? 'withdrawal_paid' : 'withdrawal_failed',
+          amountMinor: payout.amount,
+          key: payoutId,
+        });
+      else {
+        const parts = await db
+          .select({ status: payouts.status, amount: payouts.amountMinor })
+          .from(payouts)
+          .where(eq(payouts.withdrawalGroupId, payout.groupId));
+        // Still on its way: REQUESTED or PROCESSING. A reversed part has settled (and is not paid).
+        if (
+          parts.some(
+            (part) =>
+              part.status === 'REQUESTED' || part.status === 'PROCESSING',
+          )
+        )
+          return;
+        const sum = (status: 'PAID' | 'FAILED') =>
+          parts
+            .filter((part) => part.status === status)
+            .reduce((total, part) => total + part.amount, 0n);
+        const paidMinor = sum('PAID');
+        const failedMinor = sum('FAILED');
+        if (paidMinor > 0n)
+          outcomes.push({
+            type: 'withdrawal_paid',
+            amountMinor: paidMinor,
+            key: `group.${payout.groupId}`,
+          });
+        if (failedMinor > 0n)
+          outcomes.push({
+            type: 'withdrawal_failed',
+            amountMinor: failedMinor,
+            key: `group.${payout.groupId}`,
+          });
+      }
       if (payout.businessId !== null) {
         // A business's own withdrawal (R2-B): each of its owners is told, as only they can withdraw.
         const owners = await db
@@ -311,24 +358,26 @@ export function mailForDomainEvent(
               isNull(businessManagers.removedAt),
             ),
           );
-        for (const owner of owners)
-          await mailOwner(db, sealing, {
-            userId: owner.userId,
-            type,
-            data: {
-              amountMinor: payout.amount.toString(),
-              businessName: owner.name,
-            },
-            dedupeKey: `${type}.${payoutId}.${owner.userId}`,
-          });
+        for (const outcome of outcomes)
+          for (const owner of owners)
+            await mailOwner(db, sealing, {
+              userId: owner.userId,
+              type: outcome.type,
+              data: {
+                amountMinor: outcome.amountMinor.toString(),
+                businessName: owner.name,
+              },
+              dedupeKey: `${outcome.type}.${outcome.key}.${owner.userId}`,
+            });
         return;
       }
-      await mailOwner(db, sealing, {
-        profileId: personOf(payout.profileId),
-        type,
-        data: { amountMinor: payout.amount.toString() },
-        dedupeKey: `${type}.${payoutId}`,
-      });
+      for (const outcome of outcomes)
+        await mailOwner(db, sealing, {
+          profileId: personOf(payout.profileId),
+          type: outcome.type,
+          data: { amountMinor: outcome.amountMinor.toString() },
+          dedupeKey: `${outcome.type}.${outcome.key}`,
+        });
       return;
     }
     // You collect (Task 9): the in-app notice went with the hold; this is its email.

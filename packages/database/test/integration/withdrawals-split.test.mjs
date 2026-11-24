@@ -13,6 +13,7 @@ import {
   failPayoutByStaff,
   listMyWithdrawals,
   markAttemptInitiated,
+  recentActivity,
   recordProviderEvent,
   requestBusinessWithdrawal,
   requestWithdrawal,
@@ -20,6 +21,7 @@ import {
   setFeatureSwitch,
   withdrawalQuote,
   withdrawalsAvailable,
+  withdrawalSignalDue,
 } from '../../dist/index.js';
 import {
   seedAgreement,
@@ -1320,6 +1322,86 @@ test('per-provider withdrawal quote', async (t) => {
         failed.parts.map((part) => part.state),
         ['failed', 'failed'],
       );
+    },
+  );
+
+  // Task 9: Home's recent activity lists a request once, like the withdrawals list (P6).
+  await t.test(
+    'recent activity shows a split request as one row with its total',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const providers = set(
+        reader('mock', { balance: 500000n }),
+        reader('mock_alt', { balance: 372000n }),
+      );
+      const split = await ask(providers, 600000n);
+      assert.equal(split.parts.length, 2);
+      const withdrawalsOf = async () =>
+        (await recentActivity(db, TOBI.id, 10)).filter(
+          (row) => row.kind === 'withdrawal',
+        );
+      const [only, ...more] = await withdrawalsOf();
+      assert.equal(more.length, 0);
+      assert.equal(only.id, split.payoutId);
+      assert.equal(only.amountMinor, '600000');
+      assert.equal(only.state, 'requested');
+      // One part failed: what is still coming, as the withdrawals list says.
+      await db.transaction((tx) =>
+        failPayoutByStaff(tx, {
+          id: split.parts[1].payoutId,
+          profileId: TOBI.id,
+          businessId: null,
+          status: 'REQUESTED',
+        }),
+      );
+      const [partly] = await withdrawalsOf();
+      assert.equal(partly.amountMinor, '372000');
+      assert.equal(partly.state, 'requested');
+      await q(
+        `UPDATE payouts SET status = 'PAID', paid_at = now() WHERE id = $1`,
+        [split.parts[0].payoutId],
+      );
+      const [sent] = await withdrawalsOf();
+      assert.equal(sent.state, 'sent');
+      assert.equal(sent.amountMinor, '372000');
+    },
+  );
+
+  // Task 9: a split request's live signal goes out when the request moves, not for every part.
+  await t.test(
+    'a part signals only when its request has moved as a whole',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const providers = set(
+        reader('mock', { balance: 500000n }),
+        reader('mock_alt', { balance: 372000n }),
+      );
+      const split = await ask(providers, 600000n);
+      const [part1, part2] = split.parts.map((part) => part.payoutId);
+      const due = (payoutId, after) =>
+        withdrawalSignalDue(db, { payoutId, after });
+      const status = (id, value) =>
+        q(`UPDATE payouts SET status = $2 WHERE id = $1`, [id, value]);
+      // Part 1 started, part 2 still waiting: the request is still "requested".
+      await status(part1, 'PROCESSING');
+      assert.equal(await due(part1, 'started'), false);
+      await status(part2, 'PROCESSING');
+      assert.equal(await due(part2, 'started'), true);
+      // Part 1 paid, part 2 on its way: nothing to say yet.
+      await status(part1, 'PAID');
+      assert.equal(await due(part1, 'settled'), false);
+      await status(part2, 'PAID');
+      assert.equal(await due(part2, 'settled'), true);
+      // A request one payout carries signals as before; so does an unknown id.
+      const single = await ask(providers, 250000n);
+      assert.equal(single.groupId, null);
+      assert.equal(await due(single.payoutId, 'started'), true);
+      assert.equal(await due(single.payoutId, 'settled'), true);
+      assert.equal(await due(randomUUID(), 'settled'), true);
     },
   );
 });

@@ -14,6 +14,8 @@ import {
   businessTipSignals,
   jobSignalsFor,
   liveSignalFor,
+  requestGate,
+  whenRequestMoved,
 } from '../dist/live-signals.js';
 
 const PROFILE = '22222222-2222-4222-8222-222222222222';
@@ -280,4 +282,54 @@ test('a tip with no valid id, or a lookup that fails, signals nothing', async ()
   assert.deepEqual(await businessTipSignals({ tipId: 'nope' }, audience), []);
   assert.equal(asked, 0);
   assert.deepEqual(await businessTipSignals({ tipId: TIP }, audience), []);
+});
+
+// Per-provider balances, Task 9: a request paid as parts is one withdrawal on the person's page, so
+// a part's paid event or start signals only once its request has moved as a whole.
+test('a paid part and a started part wait for their request; a failure never does', () => {
+  const data = { payoutId: TIP, profileId: PROFILE };
+  assert.deepEqual(requestGate('payout.paid', null, data), {
+    payoutId: TIP,
+    after: 'settled',
+  });
+  for (const outcome of ['started', 'uncertain'])
+    assert.deepEqual(requestGate(PAYOUT_START_EVENT, outcome, data), {
+      payoutId: TIP,
+      after: 'started',
+    });
+  // A failed part puts its money back in the balance: the page always re-reads.
+  assert.equal(requestGate('payout.failed', null, data), null);
+  assert.equal(requestGate(PAYOUT_START_EVENT, 'failed', data), null);
+  assert.equal(requestGate('tip.succeeded', null, data), null);
+  assert.equal(requestGate('payout.paid', null, {}), null);
+  assert.equal(requestGate('payout.paid', null, { payoutId: 'x' }), null);
+});
+
+test('whenRequestMoved keeps the signals only when the request moved', async () => {
+  const messages = [{ to: { profile: PROFILE }, type: 'withdrawals.changed' }];
+  const gate = { payoutId: TIP, after: 'settled' };
+  const asked = [];
+  const due = (answer) => async (input) => {
+    asked.push(input);
+    return answer;
+  };
+  assert.deepEqual(await whenRequestMoved(messages, gate, due(true)), messages);
+  assert.deepEqual(await whenRequestMoved(messages, gate, due(false)), []);
+  assert.deepEqual(asked, [gate, gate]);
+  // No gate: as before, without asking.
+  assert.deepEqual(
+    await whenRequestMoved(messages, null, due(false)),
+    messages,
+  );
+  assert.equal(asked.length, 2);
+  // Nothing to send: nothing asked.
+  assert.deepEqual(await whenRequestMoved([], gate, due(true)), []);
+  assert.equal(asked.length, 2);
+  // A check that fails sends the signal: it is only a prompt to re-read.
+  assert.deepEqual(
+    await whenRequestMoved(messages, gate, async () => {
+      throw new Error('down');
+    }),
+    messages,
+  );
 });

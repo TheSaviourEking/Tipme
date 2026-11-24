@@ -277,6 +277,42 @@ test('withdrawal_paid and withdrawal_failed are queued once per payout', async (
   assert.equal((await sent('withdrawal_failed')).length, 1);
 });
 
+// Task 9 (per-provider balances): a request paid as parts is one withdrawal to the person, so it is
+// told once, when every part has settled: one email for what was paid, one for what failed.
+test('a split request is mailed once, when all its parts have settled', async (t) => {
+  const { db, sent, rows } = await fresh(t);
+  const group = randomUUID();
+  const part = async (id, n, amount, status) =>
+    rows(
+      `INSERT INTO payouts (id, profile_id, amount_minor, currency, status, idempotency_key,
+                            request_fingerprint, withdrawal_group_id, group_part)
+       VALUES ($1, $2, $3, 'NGN', $4, $5, $5, $6, $7)`,
+      [id, ADA, amount, status, randomUUID(), group, n],
+    );
+  const ids = [randomUUID(), randomUUID(), randomUUID()];
+  await part(ids[0], 1, 300000, 'PAID');
+  await part(ids[1], 2, 200000, 'PROCESSING');
+  await part(ids[2], 3, 100000, 'PAID');
+  const event = (name, payoutId) =>
+    mailForDomainEvent(db, sealing, name, { payoutId, profileId: ADA });
+  // Part 2 is still on its way: nothing yet, however often the paid parts are replayed.
+  await event('payout.paid', ids[0]);
+  await event('payout.paid', ids[2]);
+  assert.equal((await sent('withdrawal_paid')).length, 0);
+  await rows(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [ids[1]]);
+  for (let i = 0; i < 2; i += 1) {
+    await event('payout.failed', ids[1]);
+    await event('payout.paid', ids[0]);
+    await event('payout.paid', ids[2]);
+  }
+  const paid = await sent('withdrawal_paid');
+  assert.equal(paid.length, 1);
+  assert.equal(paid[0].data.amountMinor, '400000');
+  const failed = await sent('withdrawal_failed');
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].data.amountMinor, '200000');
+});
+
 test('events the mail doesn’t know, or bad payloads, queue nothing', async (t) => {
   const { db, rows } = await fresh(t);
   await mailForDomainEvent(db, sealing, 'payout.conflict', { payoutId: 'x' });

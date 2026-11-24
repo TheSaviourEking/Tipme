@@ -87,3 +87,27 @@ export const COLLECT_NAME_RECHECK_NOTICE = {
   formLine:
     'Your name was updated. Add your bank details again so we can check it.',
 } as const;
+
+/**
+ * One balance across providers (per-provider balances, spec §6): the words beside a usable
+ * withdrawal form when part of the balance can't go now, and for a request paid as more than one
+ * payment. Amounts and states only: never a provider's name, never the payment partner's.
+ */
+export const WITHDRAW_SPLIT_COPY = {
+  partialTitle: 'Some of your balance is waiting',
+  partial:
+    'Some of your balance can’t be withdrawn right now. Try again later.',
+  bankTitle: 'Add your bank details again',
+  bank: 'Add your bank details again to withdraw all of your balance.',
+  bankLink: 'Go to Get paid',
+  heldTitle: 'Some of your tips can’t be withdrawn yet',
+  held: 'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
+  mayArrive: (n: number) => `This may arrive as ${n} payments.`,
+  partlySent: 'Partly sent',
+  part: {
+    sent: 'sent',
+    onItsWay: 'on its way',
+    failed: 'failed',
+    reversed: 'reversed',
+  },
+} as const;

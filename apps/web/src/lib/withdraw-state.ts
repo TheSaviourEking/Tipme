@@ -1,21 +1,40 @@
 import type {
   CollectStatusView,
   WithdrawalQuoteResponse,
+  WithdrawalRequestResult,
+  WithdrawalRow,
 } from '@tipme/contracts';
 import {
   COLLECT_COPY,
   COLLECT_HELD_NOTE,
   COLLECT_WITHDRAW_WORDS,
+  WITHDRAW_SPLIT_COPY,
 } from '@tipme/contracts/copy';
-import { belowWithdrawalMinimum, withdrawalMinimumMinor } from '@tipme/domain';
+import {
+  belowWithdrawalMinimum,
+  withdrawalMinimumMinor,
+  withdrawalPartCount,
+} from '@tipme/domain';
 import type { LampTone } from '@tipme/ui';
 import { formatNaira } from './demo-amount.ts';
 
 const SETTINGS = '/dashboard/settings';
 
+/** A notice beside a usable form: part of the balance can't go now (spec §6). */
+export interface ExtraNotice {
+  title: string;
+  body: string;
+  href?: string;
+  linkLabel?: string;
+}
+
 export interface WithdrawState {
-  kind:
-    WithdrawalQuoteResponse['state'] | 'collected_elsewhere' | 'needs_check';
+  /**
+   * `held_elsewhere`: the person's money is only where withdrawals can't reach it, and the quote
+   * isn't ready. A ready quote is never blocked by money held elsewhere (spec §6): it says so in
+   * `extraNotices` instead.
+   */
+  kind: WithdrawalQuoteResponse['state'] | 'held_elsewhere' | 'needs_check';
   canWithdraw: boolean;
   /** Keep the form in view, disabled: the balance is fine, only the check is not. */
   showForm: boolean;
@@ -35,6 +54,53 @@ export interface WithdrawState {
   place: 'instrument' | 'slip' | 'warning';
   /** The ink stamp on the slip, when there is one. */
   stamp?: string;
+  /** Beside a ready quote: what part of the balance can't go now, and why. Empty otherwise. */
+  extraNotices: ExtraNotice[];
+  /**
+   * How many payments an amount would arrive as, split as the request would split it
+   * (withdrawalPartCount on the quote's caps), so never more than the amount needs. 1 when there
+   * is nothing to split by.
+   */
+  partsFor(amountMinor: bigint): number;
+}
+
+const onePayment = () => 1;
+
+/** The ready quote's notices (spec §6), in order: what can't be read, what to fix, what is elsewhere. */
+export function quoteNotices(
+  quote: WithdrawalQuoteResponse | null,
+  bankHref: string = `${SETTINGS}#get-paid`,
+): ExtraNotice[] {
+  if (quote?.state !== 'ready') return [];
+  const notices: ExtraNotice[] = [];
+  if (quote.partial)
+    notices.push({
+      title: WITHDRAW_SPLIT_COPY.partialTitle,
+      body: WITHDRAW_SPLIT_COPY.partial,
+    });
+  if (quote.bankDetailsNeeded)
+    notices.push({
+      title: WITHDRAW_SPLIT_COPY.bankTitle,
+      body: WITHDRAW_SPLIT_COPY.bank,
+      href: bankHref,
+      linkLabel: WITHDRAW_SPLIT_COPY.bankLink,
+    });
+  if (quote.heldElsewhere)
+    notices.push({
+      title: WITHDRAW_SPLIT_COPY.heldTitle,
+      body: WITHDRAW_SPLIT_COPY.held,
+    });
+  return notices;
+}
+
+/** partsFor for a quote: the caps say how the request would split an amount. */
+export function quoteParts(
+  quote: WithdrawalQuoteResponse | null,
+): (amountMinor: bigint) => number {
+  if (quote?.state !== 'ready' || !quote.capsMinor?.length) return onePayment;
+  const caps = quote.capsMinor.map((minor) => BigInt(minor));
+  return (amountMinor) =>
+    amountMinor > BigInt(0) ? (withdrawalPartCount(amountMinor, caps) ?? 1) : 1;
 }
 
 const NOTHING_NOW = 'Nothing to withdraw right now';
@@ -47,9 +113,10 @@ const unavailable = {
 } as const;
 
 /**
- * What the Withdraw page says and allows. Money collected through another provider comes first:
- * the quote has no word for it, and it must not read as a balance we couldn't check. No quote at
- * all is treated as one we couldn't get, never as a yes.
+ * What the Withdraw page says and allows. A ready quote decides (spec §6): money held where
+ * withdrawals can't reach it is a notice beside the form, never a block. Without a ready quote,
+ * money collected only elsewhere comes first: it must not read as a balance we couldn't check. No
+ * quote at all is treated as one we couldn't get, never as a yes.
  */
 export function withdrawState(input: {
   withdrawalsAvailable: boolean;
@@ -58,13 +125,25 @@ export function withdrawState(input: {
   needsCheck?: boolean;
 }): WithdrawState {
   const { quote } = input;
+  const extraNotices = quoteNotices(quote);
+  const partsFor = quoteParts(quote);
+  return { ...decide(input), extraNotices, partsFor };
+}
+
+function decide(input: {
+  withdrawalsAvailable: boolean;
+  quote: WithdrawalQuoteResponse | null;
+  needsCheck?: boolean;
+}): Omit<WithdrawState, 'extraNotices' | 'partsFor'> {
+  type Decided = Omit<WithdrawState, 'extraNotices' | 'partsFor'>;
+  const { quote } = input;
   // The same words as an open row in the ledger (WithdrawRedesign, "Copy to settle").
   const review = quote?.inReview ? 'Our payment partner is checking it.' : null;
   const blocked = (
     kind: WithdrawState['kind'],
     notice: WithdrawState['notice'],
     place: WithdrawState['place'] = 'instrument',
-  ): WithdrawState => ({
+  ): Decided => ({
     kind,
     canWithdraw: false,
     showForm: false,
@@ -72,10 +151,10 @@ export function withdrawState(input: {
     review,
     place,
   });
-  if (!input.withdrawalsAvailable)
-    return blocked('collected_elsewhere', {
+  if (!input.withdrawalsAvailable && quote?.state !== 'ready')
+    return blocked('held_elsewhere', {
       title: 'Withdrawals aren’t available yet',
-      body: 'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
+      body: WITHDRAW_SPLIT_COPY.held,
       tone: 'neutral',
     });
   if (input.needsCheck)
@@ -386,7 +465,7 @@ export function withdrawLamp(
     case 'paused':
       return { tone: 'amber', text: 'Paused for now' };
     case 'setup_needed':
-    case 'collected_elsewhere':
+    case 'held_elsewhere':
       return { tone: 'off', text: state.notice.title };
   }
 }
@@ -398,7 +477,6 @@ const SHOWN_BY_PAGE: ReadonlySet<string> = new Set([
   'PAYOUT_SETUP_NEEDED',
   'PAYOUT_DESTINATION_NEEDED',
   'PAYOUT_PROVIDER_UNAVAILABLE',
-  'WITHDRAWAL_UNAVAILABLE',
 ]);
 
 /**
@@ -505,4 +583,80 @@ export function belowMinimum(
     chosen > BigInt(0) &&
     belowWithdrawalMinimum(chosen, withdrawable)
   );
+}
+
+/** One part of a request paid as more than one payment, as its row says it. */
+export interface PartView {
+  amountMinor: string;
+  words: string;
+  tone: LampTone;
+}
+
+/**
+ * A request paid as parts (spec §5–§6): each part's amount and state, and "Partly sent" while some
+ * parts are sent and others not. Null for a single payout. A failed part says "failed" and no
+ * more: the one line about money returned stays the failed row's (withdraw-money-lines.test.mjs).
+ */
+export function partsView(parts: WithdrawalRow['parts']): {
+  label: string | null;
+  parts: PartView[];
+} | null {
+  if (!parts || parts.length < 2) return null;
+  const words = WITHDRAW_SPLIT_COPY.part;
+  const view = parts.map((part): PartView => {
+    switch (part.state) {
+      case 'sent':
+        return {
+          amountMinor: part.amountMinor,
+          words: words.sent,
+          tone: 'green',
+        };
+      case 'failed':
+        return {
+          amountMinor: part.amountMinor,
+          words: words.failed,
+          tone: 'red',
+        };
+      case 'reversed':
+        return {
+          amountMinor: part.amountMinor,
+          words: words.reversed,
+          tone: 'red',
+        };
+      default:
+        return {
+          amountMinor: part.amountMinor,
+          words: words.onItsWay,
+          tone: 'amber',
+        };
+    }
+  });
+  const sent = parts.filter((part) => part.state === 'sent').length;
+  return {
+    label:
+      sent > 0 && sent < parts.length ? WITHDRAW_SPLIT_COPY.partlySent : null,
+    parts: view,
+  };
+}
+
+const REQUEST_STATE: Record<
+  string,
+  NonNullable<WithdrawalRow['parts']>[number]['state']
+> = {
+  REQUESTED: 'requested',
+  PROCESSING: 'processing',
+  PAID: 'sent',
+  FAILED: 'failed',
+  REVERSED: 'reversed',
+};
+
+/** A withdrawal request's answer, as a row's parts; null for a request one payment carries. */
+export function requestParts(
+  parts: WithdrawalRequestResult['parts'],
+): WithdrawalRow['parts'] {
+  if (parts.length < 2) return null;
+  return parts.map((part) => ({
+    amountMinor: part.amountMinor,
+    state: REQUEST_STATE[part.status] ?? 'requested',
+  }));
 }

@@ -66,6 +66,7 @@ import {
   featureOn,
   onFeatureSwitchReadError,
   seedFeatureSwitches,
+  withdrawalSignalDue,
 } from '@tipme/database';
 import {
   bachsEnvironment,
@@ -114,6 +115,8 @@ import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
   jobSignalsFor,
+  requestGate,
+  whenRequestMoved,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
   businessTipSignals,
@@ -1243,8 +1246,15 @@ export async function startJobWorker(
               log: (entry) => logger.warn({ ...entry, ...fields }),
             });
             logger.info({ event: 'payout.start', outcome, ...fields });
-            // After startPayout's own commits; never awaited, never thrown.
-            void publishLive(jobSignalsFor(job.name, outcome, job.data));
+            // After startPayout's own commits; never awaited, never thrown. A split request's part
+            // signals once no part of its request is still waiting to be sent (Task 9).
+            void whenRequestMoved(
+              jobSignalsFor(job.name, outcome, job.data),
+              requestGate(job.name, outcome, job.data),
+              (input) => withdrawalSignalDue(database.db, input),
+            ).then((messages) =>
+              messages.length > 0 ? publishLive(messages) : undefined,
+            );
             processed.add(1, { outcome: `payout_${outcome}` });
             return outcome;
           }

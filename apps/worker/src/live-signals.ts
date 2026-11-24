@@ -92,6 +92,51 @@ export function liveSignalFor(
   return (OUTBOX_SIGNALS[eventType] ?? none)(payload);
 }
 
+/**
+ * The request-level check a payout's signal waits for (per-provider balances, Task 9). A request
+ * paid as parts is one withdrawal on the person's page, so a part that was paid, or sent, signals
+ * only once its request has moved as a whole (withdrawalSignalDue). A failed part never waits: its
+ * money is back in the balance. Null: signal as before.
+ */
+export function requestGate(
+  name: string,
+  outcome: string | null,
+  payload: unknown,
+): { payoutId: string; after: 'started' | 'settled' } | null {
+  const payoutId =
+    payload && typeof payload === 'object'
+      ? (payload as { payoutId?: unknown }).payoutId
+      : undefined;
+  if (typeof payoutId !== 'string' || !UUID.test(payoutId)) return null;
+  if (name === 'payout.paid') return { payoutId, after: 'settled' };
+  if (
+    name === PAYOUT_START_EVENT &&
+    (outcome === 'started' || outcome === 'uncertain')
+  )
+    return { payoutId, after: 'started' };
+  return null;
+}
+
+/**
+ * The signals, once the gate says the request moved; all of them without a gate. A check that
+ * fails sends them: a signal is only a prompt to re-read, and a lost one waits for a refresh.
+ */
+export async function whenRequestMoved(
+  messages: LiveMessage[],
+  gate: ReturnType<typeof requestGate>,
+  due: (input: {
+    payoutId: string;
+    after: 'started' | 'settled';
+  }) => Promise<boolean>,
+): Promise<LiveMessage[]> {
+  if (!gate || messages.length === 0) return messages;
+  try {
+    return (await due(gate)) ? messages : [];
+  } catch {
+    return messages;
+  }
+}
+
 /** A payout start that moved the payout (sent, refused or left uncertain); the rest changed nothing. */
 const PAYOUT_START_CHANGED: ReadonlySet<string> = new Set([
   'started',
