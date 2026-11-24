@@ -1,21 +1,10 @@
-import { WhoWords } from '../who-words';
 import { BusinessAvailableSlot } from './business-available-slot';
+import { BusinessesWhoPending, BusinessesWhoText } from './business-who-text';
 
-/** The header's "Business" choice: the same words either way; with business sign-up off it says "Coming soon". */
-export function BusinessesWhoText({ on }: { on: boolean }) {
-  return (
-    <WhoWords
-      title="Business"
-      text="Receive and manage tips for businesses and their employees."
-      comingSoon={!on}
-    />
-  );
-}
-
-/** Read per request; the coming-soon words until it is known. */
+/** Read per request; the words without a pill until it is known (no flash of "Coming soon"). */
 export function BusinessesWho() {
   return (
-    <BusinessAvailableSlot fallback={<BusinessesWhoText on={false} />}>
+    <BusinessAvailableSlot fallback={<BusinessesWhoPending />}>
       {(on) => <BusinessesWhoText on={on} />}
     </BusinessAvailableSlot>
   );

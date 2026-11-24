@@ -1,12 +1,12 @@
 import { expect, test, type Locator } from '@playwright/test';
 
-// Owner, 24 Nov 2026: the header asks "Who it's for" and answers with three rows, each with a line
-// icon, a bold title and a description: Individual, Business and Giving (and Infrastructure). Giving is not open yet, so
+// Owner, 24 Nov 2026: the header asks "Who it's for" and answers with four rows, each with a line
+// icon, a bold title and a description: Individual, Business, Giving and Infrastructure. Giving is not open yet, so
 // it says "Coming soon" and has no page to go to; Infrastructure follows it, also coming soon. Business follows
 // BUSINESS_ENABLED (PR B1): the e2e stack has it on, so it keeps those words; "Business" with a
 // "Coming soon" pill while it is off is tested on a stand-in stack in business-setup.spec.ts.
 
-async function expectThreeRows(nav: Locator) {
+async function expectFourRows(nav: Locator) {
   const individual = nav.getByRole('link', { name: /^Individual\s*Receive/ });
   await expect(individual).toHaveAttribute('href', '/for-creators');
   await expect(individual.locator('strong')).toHaveText('Individual');
@@ -20,10 +20,14 @@ async function expectThreeRows(nav: Locator) {
   const giving = nav.locator('[data-who-item]').filter({ hasText: 'Giving' });
   await expect(giving.locator('strong')).toHaveText('Giving');
   await expect(giving).toContainText('Coming soon');
-  // The pill sits beside the title, on its line; only Giving has one while Business is on.
+  // The pill sits beside the title, on its line; Business has none while it is on.
   const title = await giving.locator('strong').boundingBox();
   const pill = await giving.locator('.who__soon').boundingBox();
-  expect(Math.abs((pill?.y ?? 0) - (title?.y ?? 99)) + 0).toBeLessThan(8);
+  expect(title).not.toBeNull();
+  expect(pill).not.toBeNull();
+  const centre = (box: { y: number; height: number } | null) =>
+    (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  expect(Math.abs(centre(pill) - centre(title))).toBeLessThan(4);
   await expect(nav.getByText('Coming soon', { exact: true })).toHaveCount(2);
   await expect(
     nav.getByText(
@@ -53,7 +57,7 @@ async function expectThreeRows(nav: Locator) {
   await expect(nav.locator('[data-who-item]')).toHaveCount(4);
 }
 
-test("Who it's for opens a menu of Individual, Business and Giving (coming soon)", async ({
+test("Who it's for opens a menu of Individual, Business, Giving and Infrastructure (coming soon)", async ({
   page,
 }) => {
   await page.goto('/');
@@ -62,7 +66,7 @@ test("Who it's for opens a menu of Individual, Business and Giving (coming soon)
   await expect(who).toHaveAttribute('aria-expanded', 'false');
   await who.click();
   await expect(who).toHaveAttribute('aria-expanded', 'true');
-  await expectThreeRows(nav);
+  await expectFourRows(nav);
   await page.keyboard.press('Escape');
   await expect(who).toHaveAttribute('aria-expanded', 'false');
   await expect(who).toBeFocused();
@@ -79,7 +83,7 @@ test(
     await page.goto('/');
     await page.getByRole('button', { name: 'Open menu' }).click();
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
-    await expectThreeRows(nav);
+    await expectFourRows(nav);
     const items = [
       nav.getByRole('link', { name: /^Individual\s*Receive/ }),
       nav.getByRole('link', { name: /^Business\s*Receive and manage tips/ }),

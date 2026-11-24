@@ -12,7 +12,7 @@ export function WhoWords({
     <>
       <div className="who__head">
         <strong>{title}</strong>
-        {comingSoon && <em className="who__soon">Coming soon</em>}
+        {comingSoon && <span className="who__soon">Coming soon</span>}
       </div>
       <span>{text}</span>
     </>
