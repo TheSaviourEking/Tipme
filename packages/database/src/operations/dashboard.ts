@@ -377,9 +377,11 @@ const ADVANCE: Record<WithdrawalState, number> = {
   failed: 5,
 };
 
-/** A request's state from its parts: sent or failed only when every part is. */
+/**
+ * A request's state from its parts that have not failed: sent only when every one of those is sent,
+ * otherwise the least advanced of them. Failed only when every part failed.
+ */
 function requestState(states: WithdrawalState[]): WithdrawalState {
-  if (states.every((state) => state === 'sent')) return 'sent';
   const going = states.filter((state) => state !== 'failed');
   if (going.length === 0) return 'failed';
   return going.reduce((least, state) =>
@@ -475,15 +477,19 @@ export function listMyWithdrawals(
           parts: null,
         };
       const state = requestState(parts.map((part) => part.state));
+      // A failed part's money is back in the balance: the row is what is still coming or came.
+      // When every part failed, what was asked for, as a single failed payout shows.
+      const standing = parts.filter((part) => part.state !== 'failed');
+      const counted = standing.length > 0 ? standing : parts;
       // Every part went to the same bank (P5); a pretend part records none, so the first that did.
       const banked = parts.find((part) => bankOf(part.bank_name, part.last4));
       return {
         payoutId: row.id,
         requestedAt: row.requested_at,
-        // Paid when the last part was; ISO strings of one format compare as times.
+        // Paid when the last part still standing was; ISO strings of one format compare as times.
         paidAt:
           state === 'sent'
-            ? parts.reduce<string | null>(
+            ? standing.reduce<string | null>(
                 (latest, part) =>
                   part.paid_at && (!latest || part.paid_at > latest)
                     ? part.paid_at
@@ -492,7 +498,7 @@ export function listMyWithdrawals(
               )
             : null,
         currency: row.currency,
-        amountMinor: parts
+        amountMinor: counted
           .reduce((sum, part) => sum + BigInt(part.amount), 0n)
           .toString(),
         state,

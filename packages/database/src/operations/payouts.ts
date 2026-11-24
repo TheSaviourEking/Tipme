@@ -1854,11 +1854,12 @@ async function personsWithdrawalsToday(
   const start = lagosDayStart(now);
   const end = new Date(start.getTime() + 86_400_000);
   // P7: a request is one withdrawal however many parts it has. It counts until every part failed,
-  // and it is free when none of its parts has the person paying the fee.
+  // and it is free when none of its parts still standing has the person paying the fee.
   const result = await db.execute<{ counted: number; free: number }>(sql`
     SELECT count(*)::int AS counted, (count(*) FILTER (WHERE NOT r.paid))::int AS free
       FROM (
-        SELECT bool_or(${payouts.feePayer} = 'user') AS paid
+        SELECT COALESCE(bool_or(${payouts.feePayer} = 'user')
+                          FILTER (WHERE ${payouts.status} <> 'FAILED'), false) AS paid
           FROM ${payouts}
          WHERE ${payouts.profileId} = ${profileId}
            AND ${payouts.createdAt} >= ${start.toISOString()}::timestamptz
@@ -2163,10 +2164,11 @@ async function requestFor(
         );
       const providersMinor = capsMinor.reduce((sum, cap) => sum + cap, 0n);
       const withdrawable = lower(availableMinor, providersMinor);
+      // P9 (T6-R2): more than the ledger holds is too little money, whatever could be read. Within
+      // the ledger, an unread provider might have covered it, so it is an outage.
       if (input.amountMinor > withdrawable)
-        // P9: an unread provider might have covered it, so it is an outage, not too little money.
         throw new OperationError(
-          read.unreadable
+          input.amountMinor <= availableMinor && read.unreadable
             ? 'PAYOUT_PROVIDER_UNAVAILABLE'
             : 'INSUFFICIENT_BALANCE',
         );

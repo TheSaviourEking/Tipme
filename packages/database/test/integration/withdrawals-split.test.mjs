@@ -867,6 +867,27 @@ test('per-provider withdrawal quote', async (t) => {
         [['mock', '300000']],
       );
       assert.deepEqual(failures, ['mock_alt', 'mock_alt']);
+      // More than the ledger holds is too little money, whatever could be read (T6-R2).
+      await assert.rejects(ask(set(active, old), 500000n), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+    },
+  );
+
+  await t.test(
+    'an outage at the only provider is unavailable up to the ledger, and too little above it',
+    async () => {
+      await database.fresh();
+      await tip('mock');
+      const active = reader('mock');
+      active.fail = true;
+      await assert.rejects(ask(set(active), 372000n), {
+        code: 'PAYOUT_PROVIDER_UNAVAILABLE',
+      });
+      await assert.rejects(ask(set(active), 372001n), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+      assert.equal(await count('payouts'), 0);
     },
   );
 
@@ -896,6 +917,52 @@ test('per-provider withdrawal quote', async (t) => {
         ['mock'],
       );
       assert.deepEqual(old.reads, []);
+    },
+  );
+
+  await t.test(
+    'a request whose only user-paid part failed is free again (P7)',
+    async () => {
+      await database.fresh();
+      for (let i = 0; i < 3; i += 1) {
+        await tip('mock_alt');
+        await tip('mock');
+      }
+      const providers = () =>
+        set(
+          reader('mock', { balance: 1_000_000n }),
+          reader('mock_alt', { balance: 1_000_000n }),
+        );
+      const feePaidBy = async () => (await quoteOf(providers())).feePaidBy;
+      const failOne = (id) =>
+        db.transaction((tx) =>
+          failPayoutByStaff(tx, {
+            id,
+            profileId: TOBI.id,
+            businessId: null,
+            status: 'REQUESTED',
+          }),
+        );
+      // Two free requests, then a split whose largest part pays the fee.
+      assert.equal((await ask(providers(), 1_100_000n)).parts.length, 2);
+      const single = await ask(providers(), 200000n);
+      assert.equal(single.groupId, null);
+      const paid = await ask(providers(), 650000n);
+      assert.deepEqual(
+        (await rows())
+          .filter((row) => row.withdrawal_group_id === paid.groupId)
+          .map((row) => [row.amount, row.fee_payer]),
+        [
+          ['100000', 'tipme'],
+          ['545000', 'user'],
+        ],
+      );
+      // One free request failed: a free slot is open again.
+      await failOne(single.payoutId);
+      assert.equal(await feePaidBy(), 'tipme');
+      // The user-paid part failed too: that request paid nothing, so it is a free one.
+      await failOne(paid.parts[1].payoutId);
+      assert.equal(await feePaidBy(), 'user');
     },
   );
 
@@ -1208,17 +1275,27 @@ test('per-provider withdrawal quote', async (t) => {
       );
       const stateOf = async () =>
         (await listMyWithdrawals(db, TOBI.id, {})).items[1];
-      assert.equal((await stateOf()).state, 'requested');
-      assert.deepEqual(
-        (await stateOf()).parts.map((part) => part.state),
-        ['requested', 'failed'],
-      );
+      // The failed part's money is back in the balance: the row is what is still coming.
+      const partly = await stateOf();
+      assert.equal(partly.state, 'requested');
+      assert.equal(partly.amountMinor, '372000');
+      assert.deepEqual(partly.parts, [
+        { amountMinor: '372000', state: 'requested' },
+        { amountMinor: '228000', state: 'failed' },
+      ]);
       await q(
         `UPDATE payouts SET status = 'PAID', paid_at = now() WHERE id = $1`,
         [part1],
       );
-      // Not all sent, not all failed: the least advanced part that has not failed.
-      assert.equal((await stateOf()).state, 'sent');
+      // Sent and failed: sent, for what was sent, paid when that part was.
+      const sentAndFailed = await stateOf();
+      assert.equal(sentAndFailed.state, 'sent');
+      assert.equal(sentAndFailed.amountMinor, '372000');
+      assert.ok(sentAndFailed.paidAt);
+      assert.deepEqual(
+        sentAndFailed.parts.map((part) => part.state),
+        ['sent', 'failed'],
+      );
       // Failed only when every part failed.
       const again = await ask(providers(), 600000n);
       assert.equal(again.parts.length, 2);
@@ -1235,6 +1312,10 @@ test('per-provider withdrawal quote', async (t) => {
         (row) => row.payoutId === again.payoutId,
       );
       assert.equal(failed.state, 'failed');
+      // Every part failed: the row says what was to be sent, as a single failed payout does (this
+      // 3rd request of the day paid its ₦50 fee off the largest part).
+      assert.equal(failed.amountMinor, '595000');
+      assert.equal(failed.paidAt, null);
       assert.deepEqual(
         failed.parts.map((part) => part.state),
         ['failed', 'failed'],

@@ -104,10 +104,13 @@ export interface WithdrawalRow {
   /** Null for a payout recorded without a destination (before banks were kept, or pretend). */
   bank: WithdrawalBank | null;
   /**
-   * A request paid as parts across providers: each part's amount and state, in order. Null when one
-   * payout paid it; then `amountMinor` and `state` are that payout's. For parts, `amountMinor` is the
-   * request's total and `state` is derived from them: `sent` or `failed` only when every part is,
-   * otherwise the least advanced part that has not failed. Never names a provider.
+   * A request paid as parts across providers: every part's amount and state, in order, failed ones
+   * included. Null when one payout paid it; then `amountMinor` and `state` are that payout's. For
+   * parts, `amountMinor` is the sum of the parts that have not failed (a failed part's money is back
+   * in the balance), or of all of them when every part failed. `state` comes from the parts that
+   * have not failed: `sent` only when all of those are sent, otherwise the least advanced of them;
+   * `failed` only when every part failed. `paidAt` is set only when every part not failed is sent.
+   * Never names a provider.
    */
   parts: { amountMinor: string; state: WithdrawalState }[] | null;
 }
