@@ -343,11 +343,26 @@ body:has(
 }
 
 .who__item {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
   padding: 0.75rem 0.875rem;
   border-radius: 0.75rem;
   color: var(--text-primary);
   text-decoration: none;
+}
+
+.who__icon {
+  flex: none;
+  margin-top: 1px;
+  color: var(--text-primary);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.who__words {
+  display: block;
+  min-width: 0;
 }
 
 .who__item strong {
@@ -363,6 +378,19 @@ body:has(
   font-size: var(--text-sm);
   font-weight: 500;
   line-height: 1.4;
+}
+
+/* "Coming soon", quiet, on the title's line; read aloud with the title. */
+.who__soon {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0.0625rem 0.5rem;
+  border: 1px solid var(--edge-hairline);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs, 0.75rem);
+  font-style: normal;
+  font-weight: 600;
 }
 
 a.who__item:hover {

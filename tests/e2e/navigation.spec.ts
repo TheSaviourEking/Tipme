@@ -1,11 +1,44 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
-// Owner, 2 Nov 2026: the header asks "Who it's for" and answers with three choices. Infrastructure
-// is not open yet, so it says so and has no page to go to. Businesses follows BUSINESS_ENABLED
-// (PR B1): the e2e stack has it on, so it reads "Businesses"; "Businesses (coming soon)" while it is
-// off is tested on a stand-in stack in business-setup.spec.ts.
+// Owner, 24 Nov 2026: the header asks "Who it's for" and answers with three rows, each with a line
+// icon, a bold title and a description: Individual, Business and Giving. Giving is not open yet, so
+// it says "Coming soon" and has no page to go to; there is no Infrastructure row. Business follows
+// BUSINESS_ENABLED (PR B1): the e2e stack has it on, so it keeps those words; "Businesses (coming
+// soon)" while it is off is tested on a stand-in stack in business-setup.spec.ts.
 
-test("Who it's for opens a menu of individuals, businesses and infrastructure", async ({
+async function expectThreeRows(nav: Locator) {
+  const individual = nav.getByRole('link', { name: /^Individual\s*Receive/ });
+  await expect(individual).toHaveAttribute('href', '/for-creators');
+  await expect(individual.locator('strong')).toHaveText('Individual');
+  await expect(
+    nav.getByText('Receive tips as an individual.', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
+  ).toHaveAttribute('href', '/for-businesses');
+  // Giving is words only: nothing to click until there is somewhere to go.
+  const giving = nav.locator('[data-who-item]').filter({ hasText: 'Giving' });
+  await expect(giving.locator('strong')).toHaveText('Giving');
+  await expect(giving).toContainText('Coming soon');
+  await expect(
+    nav.getByText(
+      'Receive and manage contributions for churches, organisations and causes.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(nav.getByRole('link', { name: /Giving/ })).toHaveCount(0);
+  await expect(giving.locator('a')).toHaveCount(0);
+  // Each row has an icon beside its words, hidden from screen readers.
+  await expect(
+    nav.locator('[data-who-item] svg[aria-hidden="true"]'),
+  ).toHaveCount(3);
+  // The reference shows these three only.
+  await expect(nav.locator('[data-who-item]')).toHaveCount(3);
+  await expect(nav.getByText(/Infrastructure/)).toHaveCount(0);
+  await expect(nav.getByText('Consume the Tipme APIs.')).toHaveCount(0);
+}
+
+test("Who it's for opens a menu of Individual, Business and Giving (coming soon)", async ({
   page,
 }) => {
   await page.goto('/');
@@ -14,23 +47,13 @@ test("Who it's for opens a menu of individuals, businesses and infrastructure", 
   await expect(who).toHaveAttribute('aria-expanded', 'false');
   await who.click();
   await expect(who).toHaveAttribute('aria-expanded', 'true');
-  await expect(nav.getByRole('link', { name: /^Individuals/ })).toHaveAttribute(
-    'href',
-    '/for-creators',
-  );
-  await expect(
-    nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
-  ).toHaveAttribute('href', '/for-businesses');
-  // Infrastructure is words only: nothing to click until there is somewhere to go.
-  await expect(nav.getByText('Infrastructure (coming soon)')).toBeVisible();
-  await expect(nav.getByText('Consume the Tipme APIs.')).toBeVisible();
-  await expect(nav.getByRole('link', { name: /Infrastructure/ })).toHaveCount(
-    0,
-  );
+  await expectThreeRows(nav);
   await page.keyboard.press('Escape');
   await expect(who).toHaveAttribute('aria-expanded', 'false');
   await expect(who).toBeFocused();
-  await expect(nav.getByRole('link', { name: /^Individuals/ })).toBeHidden();
+  await expect(
+    nav.getByRole('link', { name: /^Individual\s*Receive/ }),
+  ).toBeHidden();
 });
 
 test(
@@ -41,10 +64,11 @@ test(
     await page.goto('/');
     await page.getByRole('button', { name: 'Open menu' }).click();
     const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    await expectThreeRows(nav);
     const items = [
-      nav.getByRole('link', { name: /^Individuals/ }),
+      nav.getByRole('link', { name: /^Individual\s*Receive/ }),
       nav.getByRole('link', { name: /^Businesses\s*Create your business/ }),
-      nav.getByText('Infrastructure (coming soon)'),
+      nav.getByText('Coming soon', { exact: true }),
     ];
     for (const item of items) {
       await expect(item).toBeVisible();
@@ -53,10 +77,6 @@ test(
       const height = (await card.boundingBox())?.height ?? 0;
       expect(height).toBeGreaterThanOrEqual(44);
     }
-    await expect(nav.getByText('Consume the Tipme APIs.')).toBeVisible();
-    await expect(nav.getByRole('link', { name: /Infrastructure/ })).toHaveCount(
-      0,
-    );
   },
 );
 
