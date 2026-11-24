@@ -15,6 +15,8 @@ export const SHOTS_DIR = process.env['SPLIT_SHOTS_DIR'];
 
 const STYLE =
   '.skip-link{display:none!important}' +
+  // A tip's toast (notification-bell.tsx), for shots that keep the live stream.
+  '.toast-region .toast{display:none!important}' +
   '.dashboard-page .dashboard-nav[aria-label=Dashboard]{position:static!important}';
 
 export async function shoot(
@@ -52,4 +54,26 @@ export async function shoot(
   if (size) await page.setViewportSize(size);
   await page.reload();
   await prepare();
+}
+
+/**
+ * One shot of the page as it is now, at the width the test already loaded it at: for a state that
+ * only a real action reaches (a receipt after a real withdrawal), so it can't be loaded again. The
+ * live stream is left alone, so the page shows what it refreshed to.
+ */
+export async function snap(page: Page, name: string) {
+  if (!SHOTS_DIR) return;
+  mkdirSync(SHOTS_DIR, { recursive: true });
+  const width = page.viewportSize()?.width ?? 0;
+  const label = width < 600 ? 'phone' : 'desktop';
+  await page.evaluate(() =>
+    (document.activeElement as HTMLElement | null)?.blur(),
+  );
+  await page.screenshot({
+    path: join(SHOTS_DIR, `${name}-${label}-${width}.png`),
+    fullPage: true,
+    caret: 'hide',
+    animations: 'disabled',
+    style: STYLE,
+  });
 }

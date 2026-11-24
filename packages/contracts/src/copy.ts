@@ -94,13 +94,13 @@ export const COLLECT_NAME_RECHECK_NOTICE = {
  * payment. Amounts and states only: never a provider's name, never the payment partner's.
  */
 export const WITHDRAW_SPLIT_COPY = {
-  partialTitle: 'Some of your balance is waiting',
+  partialTitle: 'Some of your balance is on hold',
   partial:
     'Some of your balance can’t be withdrawn right now. Try again later.',
-  bankTitle: 'Add your bank details again',
+  bankTitle: 'Bank details needed',
   bank: 'Add your bank details again to withdraw all of your balance.',
   bankLink: 'Go to Get paid',
-  heldTitle: 'Some of your tips can’t be withdrawn yet',
+  heldTitle: 'Some tips can’t be paid out yet',
   held: 'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
   mayArrive: (n: number) => `This may arrive as ${n} payments.`,
   partlySent: 'Partly sent',
@@ -116,12 +116,12 @@ export const WITHDRAW_SPLIT_COPY = {
  * Never a provider's name, never the payment partner's.
  */
 export const BUSINESS_SPLIT_COPY = {
-  partialTitle: 'Some of the business’s balance is waiting',
+  partialTitle: 'Some of the business’s balance is on hold',
   partial:
     'Some of the business’s balance can’t be withdrawn right now. Try again later.',
-  bankTitle: 'Add the business’s bank details again',
+  bankTitle: 'Bank details needed',
   bank: 'Add the business’s bank details again to withdraw all of its balance.',
   bankLink: 'Add bank details again',
-  heldTitle: 'Some of the business’s tips can’t be withdrawn yet',
+  heldTitle: 'Some tips can’t be paid out yet',
   held: 'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
 } as const;

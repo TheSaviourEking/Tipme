@@ -156,7 +156,17 @@ test('each flag on a ready quote adds its own notice, and none adds nothing', ()
   assert.ok(bank.linkLabel);
   const [held] = of(ready({ heldElsewhere: true })).extraNotices;
   assert.equal(held.body, HELD_ELSEWHERE);
-  for (const notice of [partial, bank, held]) assert.ok(notice.title);
+  // Short titles that never repeat their body (review, fix round 2).
+  assert.deepEqual(
+    [partial.title, bank.title, held.title],
+    [
+      'Some of your balance is on hold',
+      'Bank details needed',
+      'Some tips can’t be paid out yet',
+    ],
+  );
+  for (const notice of [partial, bank, held])
+    assert.ok(!notice.body.startsWith(notice.title), notice.title);
   // All three at once, in this order: what can't be read, what the person can fix, what is elsewhere.
   assert.deepEqual(
     of(

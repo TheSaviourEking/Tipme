@@ -155,8 +155,16 @@ test('a ready business quote adds its notices in the business’s words', () => 
   const bank = all.extraNotices[1];
   assert.equal(bank.href, '#business-bank');
   assert.equal(bank.linkLabel, 'Add bank details again');
+  assert.deepEqual(
+    all.extraNotices.map((notice) => notice.title),
+    [
+      'Some of the business’s balance is on hold',
+      'Bank details needed',
+      'Some tips can’t be paid out yet',
+    ],
+  );
   for (const notice of all.extraNotices) {
-    assert.ok(notice.title);
+    assert.ok(!notice.body.startsWith(notice.title), notice.title);
     assert.doesNotMatch(JSON.stringify(notice), /\byour\b|mock|bachs/i);
   }
   // A quote that isn't ready, or none: its own notice says it.
