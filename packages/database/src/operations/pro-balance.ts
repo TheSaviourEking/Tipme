@@ -1,13 +1,8 @@
 import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
 import { buildProBalancePosting, lagosDateWords } from '@tipme/domain';
-import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import {
-  paymentAccounts,
-  payouts,
-  proPurchases,
-  withdrawalHolds,
-} from '../schema.js';
+import { paymentAccounts, proPurchases, withdrawalHolds } from '../schema.js';
 import { mailOwner } from './account-mail.js';
 import { balanceIn } from './balance.js';
 import { personOf } from './owner.js';
@@ -16,7 +11,7 @@ import { activeTraceId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
-import { holdsOf } from './payouts.js';
+import { committedAtProvider, holdsOf } from './payouts.js';
 import { startPaidPeriod } from './pro-periods.js';
 import {
   lockPurchase,
@@ -106,29 +101,6 @@ async function accountOf(
   return account?.reference ?? null;
 }
 
-/**
- * Withdrawals queued for the worker at `provider` (as rows record it) but not yet sent: that
- * provider's figure still includes them. Another provider's queue is its own (spec §5, `queued_P`).
- */
-async function queuedNotSent(
-  tx: Database | Tx,
-  profileId: string,
-  provider: string,
-): Promise<bigint> {
-  const [row] = await tx
-    .select({ total: sql<string>`COALESCE(SUM(${payouts.amountMinor}), 0)` })
-    .from(payouts)
-    .where(
-      and(
-        eq(payouts.profileId, profileId),
-        eq(payouts.provider, provider),
-        eq(payouts.status, 'REQUESTED'),
-        isNull(payouts.providerReference),
-      ),
-    );
-  return BigInt(row?.total ?? 0);
-}
-
 /** One provider read for a balance payment: what it holds for the person, or why it can't pay. */
 type ProviderRead =
   | {
@@ -167,17 +139,18 @@ async function readForPro(
 
 /**
  * Picks the one provider a balance payment comes from (spec §8, P10): the first in drain order
- * whose own money (what it holds less what is queued there) covers the price. Never a split. None:
- * INSUFFICIENT_BALANCE when what could be read falls short; a provider that couldn't be read makes it
- * PAYOUT_PROVIDER_UNAVAILABLE (it might have covered it); with nothing readable at all, the active
- * (last) provider's own refusal, as when there was only one.
+ * whose own money (what it holds less what is promised out of it there, `committedAtProvider`)
+ * covers the price. Never a split. None covers it: `null` when what could be read falls short (the
+ * caller then refuses as the main path would, INSUFFICIENT_BALANCE last); a provider that couldn't be
+ * read makes it PAYOUT_PROVIDER_UNAVAILABLE (it might have covered it); with nothing readable at
+ * all, the active (last) provider's own refusal, as when there was only one.
  */
 async function pickProvider(
   db: Database,
   profileId: string,
   readers: readonly ProBalanceReader[],
   priceMinor: bigint,
-): Promise<Extract<ProviderRead, { reader: ProBalanceReader }>> {
+): Promise<Extract<ProviderRead, { reader: ProBalanceReader }> | null> {
   if (readers.length === 0) throw new OperationError('PAYOUT_SETUP_NEEDED');
   let readable = false;
   let unavailable = false;
@@ -190,14 +163,13 @@ async function pickProvider(
       continue;
     }
     readable = true;
-    const queued = await guarded(() =>
-      queuedNotSent(db, profileId, recordedProviderName(reader.name)),
+    const committed = await guarded(() =>
+      committedAtProvider(db, { profileId }, recordedProviderName(reader.name)),
     );
-    if (read.partnerMinor - queued >= priceMinor) return read;
+    if (read.partnerMinor - committed >= priceMinor) return read;
   }
   if (unavailable) throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
-  if (readable || !last || !('refusal' in last))
-    throw new OperationError('INSUFFICIENT_BALANCE');
+  if (readable || !last || !('refusal' in last)) return null;
   throw new OperationError(last.refusal);
 }
 
@@ -416,6 +388,31 @@ export async function buyProFromBalance(
     });
     return { ...view(purchase), replayed: true };
   }
+  /** Under the purchase's lock: a paused account, or a ledger below zero, spends nothing. */
+  const accountGuard = async (tx: Tx): Promise<bigint> => {
+    const [hold] = await tx
+      .select({ id: withdrawalHolds.id })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          holdsOf({ profileId: input.profileId }),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      )
+      .limit(1);
+    if (hold) throw new OperationError('WITHDRAWALS_PAUSED');
+    const ledger = (await balanceIn(tx, input.profileId)).availableMinor;
+    if (ledger < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
+    return ledger;
+  };
+  const request = {
+    subject: { profileId: input.profileId },
+    method: 'balance' as const,
+    expectedAmountMinor: input.expectedAmountMinor,
+    idempotencyKey: input.idempotencyKey,
+    status: 'COLLECTING' as const,
+    now,
+  };
   // Read outside the transaction (the partner is slow); re-checked for that provider under the lock.
   const chosen = await pickProvider(
     db,
@@ -423,32 +420,34 @@ export async function buyProFromBalance(
     input.providers.map((p) => p.reader),
     input.expectedAmountMinor,
   );
+  if (!chosen) {
+    // No provider covers it alone. The same checks as a purchase, in the same order (price, open
+    // purchase, hold, below zero), so their own refusals come first; then too little money. The
+    // guard always throws, so nothing is opened or reserved. A same-key purchase that committed
+    // meanwhile is returned as the replay it is.
+    const raced = await requestProPurchase(db, {
+      ...request,
+      guard: async (tx) => {
+        await accountGuard(tx);
+        throw new OperationError('INSUFFICIENT_BALANCE');
+      },
+    });
+    return { ...view(raced.purchase), replayed: true };
+  }
   const { reader, collect, accountRef, partnerMinor } = chosen;
   const recorded = recordedProviderName(reader.name);
   const { purchase, replayed } = await requestProPurchase(db, {
-    subject: { profileId: input.profileId },
-    method: 'balance',
-    expectedAmountMinor: input.expectedAmountMinor,
-    idempotencyKey: input.idempotencyKey,
-    status: 'COLLECTING',
+    ...request,
     extra: { accountReference: accountRef, provider: recorded },
-    now,
     guard: async (tx, price) => {
-      const [hold] = await tx
-        .select({ id: withdrawalHolds.id })
-        .from(withdrawalHolds)
-        .where(
-          and(
-            holdsOf({ profileId: input.profileId }),
-            isNull(withdrawalHolds.releasedAt),
-          ),
-        )
-        .limit(1);
-      if (hold) throw new OperationError('WITHDRAWALS_PAUSED');
-      const ledger = (await balanceIn(tx, input.profileId)).availableMinor;
-      if (ledger < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
+      const ledger = await accountGuard(tx);
       const partner =
-        partnerMinor - (await queuedNotSent(tx, input.profileId, recorded));
+        partnerMinor -
+        (await committedAtProvider(
+          tx,
+          { profileId: input.profileId },
+          recorded,
+        ));
       const spendable = ledger < partner ? ledger : partner;
       if (price.amountMinor > spendable)
         throw new OperationError('INSUFFICIENT_BALANCE');

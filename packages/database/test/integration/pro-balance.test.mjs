@@ -11,6 +11,7 @@ import {
   openIssueFromEvent,
   reconcileProCollections,
   requestWithdrawal,
+  withdrawalQuote,
 } from '../../dist/index.js';
 import {
   PayoutRejectedError,
@@ -499,4 +500,116 @@ test('a withdrawal queued at a provider counts only against that provider', asyn
   assert.equal(active.collects.length, 0);
   assert.equal(alt.collects.length, 1);
   assert.equal((await purchaseRow(db, bought.purchaseId)).provider, 'mock_alt');
+});
+
+// Fix round 1: Pro and withdrawals reserve each other's money at each provider.
+
+/** A plain payout reader with a fixed balance, accountless like the pretend provider. */
+const payoutReader = (name, balance) => ({
+  name,
+  capabilities: { connectedAccounts: false },
+  async payoutCapability() {
+    return { status: 'active', requirementsDue: [] };
+  },
+  async payoutBalance() {
+    return { availableMinor: balance };
+  },
+  async quotePayoutFee() {
+    return { feeMinor: 0n, exact: false };
+  },
+});
+
+test('a queued withdrawal counts its user fee against its provider: Pro goes to the next one', async (t) => {
+  const db = await setup(t, 1_500_000n);
+  // P (mock_alt, drawn first) holds ₦7,500 with ₦5,000 queued there plus a ₦50 fee the user pays
+  // from it: ₦2,450 of room, short of ₦2,500 by the fee alone. Q (mock) holds ₦20,000.
+  await requestWithdrawal(db.db, {
+    profileId: ADA,
+    amountMinor: 500000n,
+    idempotencyKey: randomUUID(),
+    providers: { active: payoutReader('mock_alt', 750000n), withdrawOnly: [] },
+  });
+  await q(
+    db,
+    `UPDATE payouts SET fee_payer = 'user', user_fee_minor = 5000 WHERE provider = 'mock_alt'`,
+  );
+  const p = partner({ name: 'mock_alt', available: 750000n });
+  const qq = partner({ available: 2_000_000n });
+  const bought = await buyThrough(db, [p, qq]);
+  assert.equal(bought.status, 'PAID');
+  assert.equal(p.collects.length, 0);
+  assert.equal(qq.collects.length, 1);
+  assert.equal((await purchaseRow(db, bought.purchaseId)).provider, 'mock');
+});
+
+test("while a Pro payment at a provider is UNKNOWN, a withdrawal cannot take that provider's room", async (t) => {
+  const db = await setup(t);
+  const alt = partner({ name: 'mock_alt', available: 300000n });
+  alt.next = 'lost';
+  const bought = await buyThrough(db, [alt]);
+  assert.equal(bought.status, 'UNKNOWN');
+  // mock_alt still shows ₦3,000, but ₦2,500 of it is the open Pro payment: ₦500 of room.
+  const providers = {
+    active: payoutReader('mock_alt', 300000n),
+    withdrawOnly: [],
+  };
+  const quote = await withdrawalQuote(db.db, { profileId: ADA, providers });
+  assert.equal(quote.state, 'ready');
+  assert.equal(quote.withdrawableMinor, 50000n);
+  assert.equal(
+    await codeOf(
+      requestWithdrawal(db.db, {
+        profileId: ADA,
+        amountMinor: 100000n,
+        idempotencyKey: randomUUID(),
+        providers,
+      }),
+    ),
+    'INSUFFICIENT_BALANCE',
+  );
+  assert.equal((await q(db, `SELECT 1 FROM payouts`)).length, 0);
+});
+
+test('a changed price with no provider covering it still refuses PRO_PRICE_CHANGED', async (t) => {
+  const db = await setup(t);
+  const fake = partner({ available: 100000n });
+  assert.equal(
+    await codeOf(buy(db, fake, { expectedAmountMinor: 200000n })),
+    'PRO_PRICE_CHANGED',
+  );
+  assert.equal(fake.collects.length, 0);
+  assert.equal((await q(db, `SELECT 1 FROM pro_purchases`)).length, 0);
+});
+
+test('an open Pro payment with no provider covering another still refuses PRO_PURCHASE_OPEN', async (t) => {
+  const db = await setup(t);
+  const fake = partner({ available: 300000n });
+  fake.next = 'lost';
+  assert.equal((await buy(db, fake)).status, 'UNKNOWN');
+  // The open payment holds ₦2,500 of the ₦3,000 there: no provider covers a second one.
+  assert.equal(await codeOf(buy(db, fake)), 'PRO_PURCHASE_OPEN');
+  assert.equal(fake.collects.length, 1);
+});
+
+test('a paused account with no provider covering it still refuses WITHDRAWALS_PAUSED', async (t) => {
+  const db = await setup(t);
+  await openIssueFromEvent(db.db, {
+    eventType: 'pro.reversed',
+    dedupeKey: `hold.${randomUUID()}`,
+    payload: { purchaseId: randomUUID(), profileId: ADA },
+  });
+  const [issue] = await q(
+    db,
+    `SELECT id FROM issues WHERE kind = 'pro_reversed'`,
+  );
+  await db.db.transaction((tx) =>
+    holdWithdrawals(tx, {
+      profileId: ADA,
+      reason: 'reversal',
+      issueId: issue.id,
+    }),
+  );
+  const fake = partner({ available: 100000n });
+  assert.equal(await codeOf(buy(db, fake)), 'WITHDRAWALS_PAUSED');
+  assert.equal(fake.collects.length, 0);
 });

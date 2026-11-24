@@ -325,6 +325,40 @@ export function workerProviderFor(
   };
 }
 
+/** A balance purchase the read-back booked: its page may need refreshing. */
+export interface ProCollectionPaid {
+  profileId: string | null;
+  handleLower: string | null;
+  planChanged: boolean;
+}
+
+/**
+ * The read-back for Pro paid from the balance (plan Task 8), for every adapter the worker holds,
+ * each under the name its rows record. Its own loop: a balance payment can go through any provider
+ * in either role (per-provider balances, spec §8), not only one that also sells Pro by card. Read
+ * back, never re-sent.
+ */
+export async function readBackProCollections<A>(
+  providers: readonly (readonly [string, A])[],
+  readBack: (
+    providerName: string,
+    provider: A,
+  ) => Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }>,
+): Promise<{ checked: number; failed: number; paid: ProCollectionPaid[] }> {
+  const totals = {
+    checked: 0,
+    failed: 0,
+    paid: [] as ProCollectionPaid[],
+  };
+  for (const [providerName, provider] of providers) {
+    const result = await readBack(providerName, provider);
+    totals.checked += result.checked;
+    totals.failed += result.failed;
+    totals.paid.push(...result.paid);
+  }
+  return totals;
+}
+
 /** One platform reserve check: which schedule runs it, and for which adapter. */
 export interface ReserveCheck {
   id: string;
@@ -534,6 +568,18 @@ export async function startJobWorker(
     name ? providerFor(name) : defaultProvider;
   const parkedProviders = parkedPayoutProviders(paymentProviders);
   /** Pro purchases per provider this copy can read, each under the name its rows record. */
+  /** A page whose plan changed: refresh it and tell open screens. */
+  const announce = (pages: readonly ProCollectionPaid[]) => {
+    for (const page of pages.filter((p) => p.planChanged)) {
+      // A business's month (Business Pro) changes no page; its signals come with Phase B.
+      if (page.profileId === null) continue;
+      void publishLive([
+        { to: { profile: page.profileId }, type: 'profile.changed' },
+      ]);
+      if (page.handleLower && takeBackRevalidate)
+        void takeBackRevalidate(page.handleLower);
+    }
+  };
   const reconcileProEverywhere = async (now: Date) => {
     const totals = { checked: 0, paid: 0, failed: 0 };
     // Staff tip refunds (owner, 14 Nov 2026): approved ones are sent once, as the recipient's
@@ -567,17 +613,6 @@ export async function startJobWorker(
       totals.checked += result.checked;
       totals.paid += result.paid.length;
       totals.failed += result.failed;
-      // Pro paid from the balance (plan Task 8): read back, never re-sent.
-      const collected = await reconcileProCollections(database.db, {
-        provider,
-        providerName,
-        now,
-        sealing,
-        minAgeMs: config.RECONCILE_MIN_AGE_MS,
-      });
-      totals.checked += collected.checked;
-      totals.paid += collected.paid.length;
-      totals.failed += collected.failed;
       // Approved Pro refunds (plan Task 9): sent once; refund.paid settles them.
       const refunds = await sendProRefunds(database.db, {
         provider,
@@ -585,18 +620,24 @@ export async function startJobWorker(
         now,
       });
       totals.failed += refunds.failed;
-      for (const page of [...result.paid, ...collected.paid].filter(
-        (p) => p.planChanged,
-      )) {
-        // A business's month (Business Pro) changes no page; its signals come with Phase B.
-        if (page.profileId === null) continue;
-        void publishLive([
-          { to: { profile: page.profileId }, type: 'profile.changed' },
-        ]);
-        if (page.handleLower && takeBackRevalidate)
-          void takeBackRevalidate(page.handleLower);
-      }
+      announce(result.paid);
     }
+    // Pro paid from the balance (plan Task 8): read back at every adapter, never re-sent.
+    const collected = await readBackProCollections(
+      providers,
+      (providerName, provider) =>
+        reconcileProCollections(database.db, {
+          provider,
+          providerName,
+          now,
+          sealing,
+          minAgeMs: config.RECONCILE_MIN_AGE_MS,
+        }),
+    );
+    totals.checked += collected.checked;
+    totals.paid += collected.paid.length;
+    totals.failed += collected.failed;
+    announce(collected.paid);
     return totals;
   };
   const schedule = ensureSchedule({

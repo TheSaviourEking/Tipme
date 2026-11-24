@@ -42,6 +42,7 @@ import {
   payoutItems,
   payouts,
   profiles,
+  proPurchases,
   providerEvents,
   providerFeeCredits,
   tipQuotes,
@@ -104,7 +105,11 @@ export function holdsOf(owner: MoneyOwner, ownersSince?: Date): SQL {
 
 /** Rows of `table` that belong to the owner. */
 const ownedBy = (
-  table: typeof payouts | typeof payoutDestinations | typeof paymentAccounts,
+  table:
+    | typeof payouts
+    | typeof payoutDestinations
+    | typeof paymentAccounts
+    | typeof proPurchases,
   owner: MoneyOwner,
 ): SQL =>
   'businessId' in owner
@@ -1544,6 +1549,36 @@ export async function queuedNotStarted(
   return BigInt(row?.total ?? 0);
 }
 
+/**
+ * What is promised out of the owner's account at `provider` (a recorded name) that its balance still
+ * shows: withdrawals queued there and not yet started (amount plus the user's fee), and Pro paid from
+ * the balance there that is still open (COLLECTING or UNKNOWN). An UNKNOWN one may already have
+ * moved and so be counted twice until it is read back; that only ever refuses, never overspends.
+ * The one figure the withdrawal quote, the withdrawal request and Pro from the balance all take off
+ * a provider's balance, so neither can spend what the other has reserved there (spec §5, §8).
+ */
+export async function committedAtProvider(
+  db: Pick<Database, 'select'>,
+  owner: MoneyOwner,
+  provider: string,
+): Promise<bigint> {
+  const queued = await queuedNotStarted(db, owner, provider);
+  const [pro] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${proPurchases.amountMinor}), 0)`,
+    })
+    .from(proPurchases)
+    .where(
+      and(
+        ownedBy(proPurchases, owner),
+        eq(proPurchases.method, 'balance'),
+        inArray(proPurchases.status, ['COLLECTING', 'UNKNOWN']),
+        eq(proPurchases.provider, provider),
+      ),
+    );
+  return queued + BigInt(pro?.total ?? 0);
+}
+
 const lower = (a: bigint, b: bigint) => (a < b ? a : b);
 const notNegative = (a: bigint) => (a < 0n ? 0n : a);
 
@@ -1731,7 +1766,7 @@ async function quoteFor(
       if (state !== 'ok') continue;
     }
     const queuedMinor = await guarded(() =>
-      queuedNotStarted(db, owner, recordedProviderName(provider.name)),
+      committedAtProvider(db, owner, recordedProviderName(provider.name)),
     );
     const entries = cache
       ? await safely(() => cache.open({ provider: provider.name, ...owner }))
@@ -2147,15 +2182,15 @@ async function requestFor(
       // Q8: a reversal after the money left can take the balance below zero. Nothing more leaves
       // until it is back; nothing is collected automatically. Under the lock reverseTip also takes.
       if (availableMinor < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
-      // Each provider's own balance, less what is queued there and not yet started (`queued_P`).
-      // Under the lock, so a request that committed meanwhile is seen: two at once never spend the
+      // Each provider's own balance, less what is promised out of it there and not yet gone
+      // (`queued_P` plus open Pro balance payments, `committedAtProvider`). Under the lock, so a request that committed meanwhile is seen: two at once never spend the
       // same provider's money (Review Focus 2).
       const capsMinor: bigint[] = [];
       for (const part of read.parts)
         capsMinor.push(
           notNegative(
             part.availableMinor -
-              (await queuedNotStarted(
+              (await committedAtProvider(
                 tx,
                 owner,
                 recordedProviderName(part.provider.name),
