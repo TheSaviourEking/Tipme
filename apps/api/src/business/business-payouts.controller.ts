@@ -433,7 +433,7 @@ export class BusinessPayoutsController {
       callActive: (step, call) => this.calling(step, call),
       onActiveUnread: (error) => this.logFailure('read', error),
       log: (entry) => this.logger.warn(entry),
-      save: (provider, added, status) =>
+      save: (provider, added, status, changeId) =>
         this.ownerOnly(async () => {
           await setPayoutDestination(this.database.db, {
             sealing: this.sealing,
@@ -445,6 +445,7 @@ export class BusinessPayoutsController {
             bankName: bank.name,
             last4: body.accountNumber.slice(-4),
             status,
+            changeId,
           });
         }),
     });

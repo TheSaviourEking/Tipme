@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { recordedProviderName } from '@tipme/contracts';
 import {
+  getPayoutDestination,
   ownerProviderSet,
   safeError,
   type Database,
@@ -47,8 +49,13 @@ export function activeFirst<P>(
  * - Each other connected-account provider follows. A refusal or error there is logged for staff
  *   (`withdrawal.bank_register_failed`, with the recorded provider name) and leaves only that
  *   provider's part needing action: the quote never pays a part whose bank differs (P5).
- * - Accountless providers (the pretend ones) have no bank to register and are skipped (P5), as is
- *   any provider recorded under the active one's name, whose rows the active registration owns.
+ * - An accountless provider (the pretend ones) with no bank row counts as the same bank (P5) and is
+ *   skipped. One that still holds a bank row, from when it was active, gets the new bank with the
+ *   owner standing in for the account, as the active pretend provider does, so adding the bank
+ *   again clears it. A provider recorded under the active one's name is skipped: the active
+ *   registration owns its rows.
+ * - Every save of the request shares one `changeId`, so the person gets one security email for
+ *   the change, however many providers it reaches.
  *
  * The caller spends the email code once, before this. Each `save` runs `setPayoutDestination`, with
  * its own checks (cooling-off, freezes, the name lock, You collect's same-bank review), so a check
@@ -61,13 +68,18 @@ export async function registerBankEverywhere<
   owner: MoneyOwner;
   /** The configured providers, active first; only those in the owner's set are registered. */
   providers: readonly P[];
-  /** The account a provider's destinations hang from; null when the owner has none there. */
+  /**
+   * The account a connected-account provider's destinations hang from; null when the owner has
+   * none there. Accountless providers other than the active one use the owner's id instead.
+   */
   accountRefFor(provider: P): Promise<string | null>;
   bank: BankToRegister;
+  /** Saves one provider's destination; `changeId` goes to `setPayoutDestination` as is. */
   save(
     provider: P,
     added: AddedDestination,
     status: PayoutDestinationStatus,
+    changeId: string,
   ): Promise<void>;
   /** Staff log lines for the providers after the active one. */
   log(entry: Record<string, unknown>): void;
@@ -82,16 +94,27 @@ export async function registerBankEverywhere<
   if (!active)
     throw new Error('registerBankEverywhere needs the active provider');
   const activeName = recordedProviderName(active.name);
-  const { providers: reach } = await ownerProviderSet(input.db, input.owner, {
-    active,
-    withdrawOnly: rest,
-  });
+  // A copy with one provider asks nothing more than it always has.
+  const reach =
+    rest.length === 0
+      ? []
+      : (
+          await ownerProviderSet(input.db, input.owner, {
+            active,
+            withdrawOnly: rest,
+          })
+        ).providers;
   const others = reach.filter(
     (provider) =>
-      provider !== active &&
-      provider.capabilities?.connectedAccounts !== false &&
-      recordedProviderName(provider.name) !== activeName,
+      provider !== active && recordedProviderName(provider.name) !== activeName,
   );
+  const changeId = randomUUID();
+  const ownerId =
+    'businessId' in input.owner
+      ? input.owner.businessId
+      : input.owner.profileId;
+  const accountless = (provider: P) =>
+    provider.capabilities?.connectedAccounts === false;
 
   const register = async (
     provider: P,
@@ -99,7 +122,10 @@ export async function registerBankEverywhere<
     step: { now: string },
   ): Promise<void> => {
     step.now = 'account';
-    const reference = await input.accountRefFor(provider);
+    const reference =
+      !isActive && accountless(provider)
+        ? ownerId
+        : await input.accountRefFor(provider);
     if (!reference) throw new Error('no account reference');
     const { bank } = input;
     step.now = 'add';
@@ -131,7 +157,7 @@ export async function registerBankEverywhere<
       status = input.unreadStatus?.(added) ?? 'pending_review';
     }
     step.now = 'save';
-    await input.save(provider, added, status);
+    await input.save(provider, added, status, changeId);
   };
 
   await register(active, true, { now: 'account' });
@@ -141,6 +167,15 @@ export async function registerBankEverywhere<
     const name = recordedProviderName(provider.name);
     const step = { now: 'account' };
     try {
+      // P5: no bank row at a pretend provider is the same bank already; nothing to register.
+      if (
+        accountless(provider) &&
+        !(await getPayoutDestination(input.db, {
+          ...input.owner,
+          provider: name,
+        }))
+      )
+        continue;
       await register(provider, false, step);
       registered.push(name);
     } catch (error) {

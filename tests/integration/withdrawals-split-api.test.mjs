@@ -234,8 +234,8 @@ const activeBanks = () =>
     [ADA.id],
   );
 
-/** A bank-account code sent to Ada's own address, read from the dev inbox. */
-async function adaCode() {
+/** A bank-account code sent to the signed-in person's own address, read from the dev inbox. */
+async function codeFor(session) {
   await q(`DELETE FROM email_codes`);
   const inbox = async () =>
     (await (await fetch(`${stack.api}/v1/dev/inbox`)).json()).data.filter(
@@ -244,7 +244,7 @@ async function adaCode() {
   const seen = new Set((await inbox()).map((mail) => mail.body));
   const asked = await fetch(`${stack.api}/v1/me/payout-destination/code`, {
     method: 'POST',
-    headers: browserHeaders(ada.cookie),
+    headers: browserHeaders(session.cookie),
   });
   assert.equal(asked.status, 202);
   for (let i = 0; i < 100; i++) {
@@ -258,17 +258,29 @@ async function adaCode() {
   throw new Error('no code arrived');
 }
 
-const changeBank = async (bankCode, accountNumber) =>
+const changeBankAs = async (session, bankCode, accountNumber) =>
   fetch(`${stack.api}/v1/me/payout-destination`, {
     method: 'PUT',
-    headers: browserHeaders(ada.cookie),
+    headers: browserHeaders(session.cookie),
     body: JSON.stringify({
       bankCode,
       accountNumber,
       accountName: 'ADA OKAFOR',
-      emailCode: await adaCode(),
+      emailCode: await codeFor(session),
     }),
   });
+const changeBank = (bankCode, accountNumber) =>
+  changeBankAs(ada, bankCode, accountNumber);
+
+/** The "your bank changed" security emails queued for a person so far. */
+const changeMails = async (profile) =>
+  (
+    await q(
+      `SELECT count(*)::int AS n FROM mail_messages
+        WHERE type = 'payout_destination_changed' AND user_id = $1`,
+      [profile.userId],
+    )
+  )[0].n;
 
 const adaQuote = async () =>
   (
@@ -353,6 +365,7 @@ test('a provider that refuses the new bank leaves only its part needing action',
 
 test('re-entering the current bank fixes a part that needed action', async () => {
   standIn.state.refuse = false;
+  const mailsBefore = await changeMails(ADA);
   const response = await changeBank('101', '0123456782');
   assert.equal(response.status, 200);
   assert.deepEqual(await activeBanks(), [
@@ -362,4 +375,90 @@ test('re-entering the current bank fixes a part that needed action', async () =>
   const quote = await adaQuote();
   assert.equal(quote.bankDetailsNeeded, false);
   assert.equal(quote.withdrawableMinor, adaLedger.toString());
+  // Only the stand-in's row moved: one security email.
+  assert.equal((await changeMails(ADA)) - mailsBefore, 1);
+});
+
+test('one bank change sends one security email, however many providers it changes', async () => {
+  const before = await changeMails(ADA);
+  const response = await changeBank('058', '0123456783');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await activeBanks(), [
+    { provider: 'bachs', bank_code: '058', account_last4: '6783' },
+    { provider: 'mock', bank_code: '058', account_last4: '6783' },
+  ]);
+  assert.equal((await changeMails(ADA)) - before, 1);
+});
+
+test('an accountless provider holding an old bank row gets the new bank too', async () => {
+  // Tobi's money at the withdraw-only pretend provider (the tests above), and a bank row left there
+  // from when it was active: a different bank, so its part needs action until the bank is re-added.
+  await q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code,
+       bank_name, account_last4, status)
+     VALUES ($1, $2, 'mock_alt', 'mock_dest_old', '058', 'Pretend Guaranty Bank', '1111', 'usable')`,
+    [randomUUID(), TOBI.id],
+  );
+  await q(
+    'UPDATE users SET email = $1, email_verified_at = now() WHERE id = $2',
+    [`tobi@${uniquePrefix()}.example`, TOBI.userId],
+  );
+  const tobi = await signIn(stack.api, TOBI.phone);
+  const response = await changeBankAs(tobi, '101', '0123456799');
+  assert.equal(response.status, 200);
+  const rows = await q(
+    `SELECT provider, bank_code, account_last4, destination_reference FROM payout_destinations
+      WHERE profile_id = $1 AND replaced_at IS NULL ORDER BY provider`,
+    [TOBI.id],
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.provider, row.bank_code, row.account_last4]),
+    [
+      ['mock', '101', '6799'],
+      ['mock_alt', '101', '6799'],
+    ],
+  );
+  // The owner stands in for the account, as for the active pretend provider.
+  assert.match(
+    rows[1].destination_reference,
+    new RegExp(`^mock_dest_${TOBI.id}_`),
+  );
+});
+
+test('a refusal at the active provider fails the request and asks no other provider', async () => {
+  const { registerBankEverywhere } =
+    await import('../../apps/api/dist/profiles/register-bank-everywhere.js');
+  const other = connectedStandIn();
+  const active = {
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+    async addPayoutDestination() {
+      throw new Error('refused');
+    },
+    async payoutDestinationStatus() {
+      return 'usable';
+    },
+  };
+  const saved = [];
+  await assert.rejects(
+    registerBankEverywhere({
+      db: database.db,
+      owner: { profileId: ADA.id },
+      providers: [active, other.provider],
+      accountRefFor: async () => STAND_IN_ACCOUNT,
+      bank: {
+        accountNumber: '0123456784',
+        accountName: 'ADA OKAFOR',
+        bankCode: '058',
+        bankName: 'Pretend Guaranty Bank',
+      },
+      callActive: (_step, call) => call(),
+      onActiveUnread() {},
+      log() {},
+      save: async (provider) => saved.push(provider.name),
+    }),
+    /refused/,
+  );
+  assert.deepEqual(other.state.adds, []);
+  assert.deepEqual(saved, []);
 });

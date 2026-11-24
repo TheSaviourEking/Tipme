@@ -104,6 +104,7 @@ export class PayoutDestinationController {
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: RedisPartnerQuoteCache,
     /** Every configured provider: a bank change is registered at each one holding the owner's money. */
+    // Optional only for tests that build the controller by hand; Nest always injects it.
     @Inject(PAYOUT_PROVIDERS_TOKEN)
     private readonly providers?: {
       active: DestinationProvider;
@@ -249,7 +250,7 @@ export class PayoutDestinationController {
       callActive: (step, call) => this.calling(step, call),
       onActiveUnread: (error) => this.logFailure('read', error),
       log: (entry) => this.logger.warn(entry),
-      save: async (provider, added, status) => {
+      save: async (provider, added, status, changeId) => {
         await setPayoutDestination(this.database.db, {
           sealing: this.sealing,
           profileId,
@@ -259,6 +260,7 @@ export class PayoutDestinationController {
           bankName: bank.name,
           last4: body.accountNumber.slice(-4),
           status,
+          changeId,
         });
       },
     });

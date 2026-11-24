@@ -156,6 +156,11 @@ type DestinationInput = {
    * the same destination never moves it to another name.
    */
   nameDigest?: string;
+  /**
+   * One bank change saved at several providers (spec §6) is one change to the person: every save
+   * of it passes the same id, and only the first that replaces a bank sends the security email.
+   */
+  changeId?: string;
   now?: Date;
 };
 
@@ -342,7 +347,7 @@ export function setPayoutDestination(
               userId: each.userId,
               type: 'payout_destination_changed',
               data: { ...data, businessName: each.name },
-              dedupeKey: `payout_destination_changed.${id}.${each.userId}`,
+              dedupeKey: `payout_destination_changed.${input.changeId ?? id}.${each.userId}`,
               now,
             });
         } else
@@ -350,7 +355,7 @@ export function setPayoutDestination(
             profileId: owner.profileId,
             type: 'payout_destination_changed',
             data,
-            dedupeKey: `payout_destination_changed.${id}`,
+            dedupeKey: `payout_destination_changed.${input.changeId ?? id}`,
             now,
           });
       }

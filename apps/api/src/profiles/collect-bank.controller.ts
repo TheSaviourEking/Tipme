@@ -137,6 +137,7 @@ export class CollectBankController {
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: Pick<RedisPartnerQuoteCache, 'invalidate'>,
     /** Every configured provider: the bank is registered at each one holding the owner's money. */
+    // Optional only for tests that build the controller by hand; Nest always injects it.
     @Inject(PAYOUT_PROVIDERS_TOKEN)
     private readonly providers?: {
       active: DestinationProvider;
@@ -296,7 +297,7 @@ export class CollectBankController {
         unreadStatus: (added) =>
           added.status === 'rejected' ? 'rejected' : 'pending_review',
         log: (entry) => this.logger.warn(entry),
-        save: async (provider, added, status) => {
+        save: async (provider, added, status, changeId) => {
           const isActive = provider === this.provider;
           if (status === 'rejected') {
             // Nothing is saved: not the bank, and not the refused name.
@@ -331,6 +332,7 @@ export class CollectBankController {
             bankName: bank.name,
             last4: body.accountNumber.slice(-4),
             status,
+            changeId,
             accountHash,
             nameDigest: digest,
             now,
