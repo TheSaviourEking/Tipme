@@ -30,6 +30,7 @@ import {
   myProPurchase,
   myProState,
   ownerProviderSet,
+  providerRoleIn,
   pageHandleLower,
   type PayoutProviderSet,
   type ProPurchaseView,
@@ -195,14 +196,18 @@ export class ProController {
       if (!(await this.switchOn('pro_pay_from_balance')) || body.autoRenew)
         throw new CodedHttpException(400, 'VALIDATION_FAILED');
       // Every provider that may hold this person's money, in drain order; exactly one pays (§8).
-      const { providers } = await guarded(() =>
+      const reach = await guarded(() =>
         ownerProviderSet(this.database.db, { profileId }, this.payoutProviders),
       );
       const bought = await buyProFromBalance(this.database.db, {
         profileId,
         expectedAmountMinor,
         idempotencyKey: key,
-        providers: providers.map((reader) => ({ reader })),
+        // Each with its role, by comparing the adapter with the active one (as a withdrawal does).
+        providers: reach.providers.map((reader) => ({
+          reader,
+          role: providerRoleIn(reach, reader, this.payoutProviders.active),
+        })),
         sealing: this.sealing,
         now: new Date(),
       });

@@ -130,7 +130,7 @@ const buy = (db, provider, over = {}) =>
     profileId: ADA,
     expectedAmountMinor: 250000n,
     idempotencyKey: randomUUID(),
-    providers: [{ reader: provider }],
+    providers: [{ reader: provider, role: 'only' }],
     sealing,
     now: NOW,
     ...over,
@@ -138,7 +138,11 @@ const buy = (db, provider, over = {}) =>
 /** Buys through several providers, given in drain order. */
 const buyThrough = (db, readers, over = {}) =>
   buy(db, null, {
-    providers: readers.map((reader) => ({ reader })),
+    // Drain order: the last is the active provider.
+    providers: readers.map((reader, index) => ({
+      reader,
+      role: index === readers.length - 1 ? 'active' : 'withdraw_only',
+    })),
     ...over,
   });
 const reconcile = (db, provider, now, providerName = 'mock') =>

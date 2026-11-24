@@ -27,6 +27,7 @@ import {
   type OpsMailProviders,
   type OpsMailSwitchRequest,
   type OpsMailTestRequest,
+  type OpsProviderRetire,
   type OpsSeriousPending,
   type OpsProviderTestConfirmRequest,
   type OpsSuppressionLookupRequest,
@@ -44,6 +45,8 @@ import {
   removeProviderOverride,
   setMailFailoverFixed,
   removeSuppression,
+  RETIRE_AFTER_MS,
+  retireCheck,
   setProviderOverride,
   startMailProviderTest,
   requestSeriousAction,
@@ -61,6 +64,10 @@ import {
   type MailProviderStatus,
 } from '@tipme/mail';
 import { API_CONFIG, type ApiConfig } from '../config.js';
+import {
+  PAYOUT_PROVIDERS_TOKEN,
+  type PayoutProviderSet,
+} from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { pendingOr, SERIOUS_SERVICES } from './serious-services.js';
 import { CodedHttpException } from '../http/coded.exception.js';
@@ -89,6 +96,8 @@ export class OpsProvidersController {
     @Inject(MAIL_PROVIDERS) readonly providers: MailProviders,
     @Inject(SERIOUS_SERVICES) private readonly services: SeriousActionServices,
     @Inject(MAIL_HEALTH) private readonly health: MailHealth,
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly payoutProviders: PayoutProviderSet,
   ) {}
 
   /** The providers that stand in for each other; empty or one: no automatic failover. */
@@ -200,6 +209,30 @@ export class OpsProvidersController {
           live: live as Name,
           backup: (chain[1] ?? null) as Name | null,
         },
+      },
+    };
+  }
+
+  /**
+   * Payment providers (per-provider balances, spec §4, §7): each withdraw-only provider's retire
+   * check, from TipMe's own records. "Can retire" only at zero, after 30 days quiet.
+   */
+  @Get('payments/retire')
+  @RateLimit('ops_read')
+  @OpsPermission('providers.manage')
+  async retire(): Promise<ApiDataResponse<OpsProviderRetire>> {
+    const rows = await retireCheck(
+      this.database.db,
+      this.payoutProviders,
+      new Date(),
+    );
+    return {
+      data: {
+        retireAfterDays: RETIRE_AFTER_MS / 86_400_000,
+        providers: rows.map((row) => ({
+          ...row,
+          lastActivityAt: row.lastActivityAt?.toISOString() ?? null,
+        })),
       },
     };
   }

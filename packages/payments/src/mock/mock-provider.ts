@@ -221,6 +221,8 @@ export function createMockProvider(options: {
   const prefix = name === 'mock' ? basePrefix : `${basePrefix}:mock_alt`;
   const balanceKey = (accountRef: string) =>
     `mockprovider:${prefix}:payout-balance:${accountRef}`;
+  // Every Redis key expires (the 21 Nov full-Redis incident): a marked balance outlives any test.
+  const MARKED_BALANCE_TTL_MS = 7 * 24 * 3_600_000;
 
   const readPayout: PayoutPort['fetchPayoutStatus'] = async (
     providerReference,
@@ -566,7 +568,13 @@ export function createMockProvider(options: {
 
     async markPayoutBalance(accountRef, availableMinor) {
       if (availableMinor === null) await redis.del(balanceKey(accountRef));
-      else await redis.set(balanceKey(accountRef), availableMinor.toString());
+      else
+        await redis.set(
+          balanceKey(accountRef),
+          availableMinor.toString(),
+          'PX',
+          MARKED_BALANCE_TTL_MS,
+        );
     },
 
     async platformBalance() {

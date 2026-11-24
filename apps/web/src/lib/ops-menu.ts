@@ -82,6 +82,13 @@ const LINKS: {
     needs: ['collect.view'],
   },
   {
+    // Per-provider balances (spec §7): owners whose money is at more than one payment provider.
+    href: '/ops/split-accounts',
+    label: 'Split accounts',
+    group: 'Work',
+    needs: ['issues.view'],
+  },
+  {
     href: '/ops/businesses',
     label: 'Businesses',
     group: 'Work',

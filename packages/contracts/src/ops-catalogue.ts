@@ -281,6 +281,13 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'Every account with masked emails; private.view adds tip totals only: amounts, no contact, card or bank details. The full email is a reveal that asks for a code.',
   },
+  // Per-provider balances (spec §7): the Providers page's retire check, read on every visit.
+  'OpsProvidersController.retire': {
+    verb: 'GET',
+    permission: 'providers.manage',
+    reason:
+      'Counts per withdraw-only payment provider and a last-activity time, for deciding a retire; no owner, amount or account details; changes nothing.',
+  },
   'OpsProPriceController.state': {
     verb: 'GET',
     permission: 'pro.price',

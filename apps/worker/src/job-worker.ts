@@ -67,6 +67,7 @@ import {
   onFeatureSwitchReadError,
   seedFeatureSwitches,
   withdrawalSignalDue,
+  type PayoutProviderSet,
 } from '@tipme/database';
 import {
   bachsEnvironment,
@@ -93,6 +94,11 @@ import {
   warnIfNoAlertRoute,
 } from './handlers/payment-reserve.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
+import {
+  ensureSplitCheckSchedule,
+  runProviderSplitCheck,
+  SPLIT_CHECK_JOB,
+} from './handlers/provider-split.js';
 import {
   collectTransferProviders,
   handleDisputeSteps,
@@ -394,6 +400,28 @@ export function reserveChecks(
       },
     ];
   });
+}
+
+/**
+ * The configured withdrawal roles as the database's provider set (spec §4): the active adapter and
+ * the withdraw-only ones, in the order the setting lists them. Legacy readers in no role (P11) are
+ * left out: the split check reads only providers a withdrawal may be paid through.
+ */
+export function workerPayoutProviderSet(
+  providers: WorkerPaymentProviders,
+): PayoutProviderSet {
+  const adapterFor = (name: string) => {
+    const adapter = providers.byRecordedName.get(recordedProviderName(name));
+    // workerPaymentProviders already refuses a role with no adapter; this only keeps that true.
+    if (!adapter)
+      throw new Error(`${name} is configured but has no matching adapter`);
+    return adapter;
+  };
+  const { active, withdrawOnly } = providers.withdrawalRoles;
+  return {
+    active: adapterFor(active),
+    withdrawOnly: withdrawOnly.map(adapterFor),
+  };
 }
 
 /** One schedule per reserve check, every 15 minutes, each with SCHEDULED_RUN_RETENTION. */
@@ -756,6 +784,11 @@ export async function startJobWorker(
         logger,
       })
     : null;
+  // Per-provider balances (spec §7, P12): the daily split check, always scheduled. With no
+  // withdraw-only provider nobody is split, but money at a provider no longer connected is still
+  // flagged once a day.
+  const splitCheckProviders = workerPayoutProviderSet(paymentProviders);
+  const splitCheckSchedule = ensureSplitCheckSchedule({ queue, logger });
   const collectTransfersSchedule = ensureSchedule({
     queue,
     id: COLLECT_TRANSFERS_JOB,
@@ -1135,6 +1168,37 @@ export async function startJobWorker(
             processed.add(1, { outcome: `reserve_${result.value}` });
             return result.value;
           }
+          if (job.name === SPLIT_CHECK_JOB) {
+            const result = await runProviderSplitCheck(
+              markers,
+              `${config.QUEUE_PREFIX}:lock:${SPLIT_CHECK_JOB}`,
+              {
+                db: database.db,
+                providers: splitCheckProviders,
+                // Staff logs only: the provider's name and the failure, never an owner or account.
+                log: (entry) => logger.warn({ ...entry, ...fields }),
+                onReadFailure: (failure, provider) =>
+                  logger.warn({
+                    event: 'split_check.read_failed',
+                    provider,
+                    ...failure,
+                    ...fields,
+                  }),
+              },
+            );
+            if (!result.ran) {
+              logger.info({ event: 'split_check.skipped_running', ...fields });
+              processed.add(1, { outcome: 'split_check_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'split_check.completed',
+              ...result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'split_check' });
+            return 'checked';
+          }
           if (job.name === COLLECT_RECON_JOB) {
             if (!collectRecon) return 'skipped';
             const result = await runUnlessRunning(
@@ -1489,6 +1553,7 @@ export async function startJobWorker(
       for (const reserveSchedule of reserveSchedules)
         await reserveSchedule.stop();
       await collectTransfersSchedule.stop();
+      await splitCheckSchedule.stop();
       await collectReconSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();

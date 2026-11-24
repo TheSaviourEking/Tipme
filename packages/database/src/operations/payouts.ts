@@ -27,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  or,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -45,9 +46,11 @@ import {
   proPurchases,
   providerEvents,
   providerFeeCredits,
+  shareTransfers,
   tipQuotes,
   teamTipSplits,
   tipBusinessShares,
+  tipRefunds,
   tips,
   withdrawalHolds,
   type IssueSubject,
@@ -79,8 +82,10 @@ import { ownerColumns, ownerOf, type MoneyOwner } from './owner.js';
 import {
   ownerProviderReach,
   ownerProviderSet,
+  providerRoleIn,
   sameBank,
   type PayoutProviderSet,
+  type ProviderRole,
 } from './payout-providers.js';
 
 export type { MoneyOwner } from './owner.js';
@@ -1554,13 +1559,23 @@ export async function queuedNotStarted(
  * shows: withdrawals queued there and not yet started (amount plus the user's fee), and Pro paid from
  * the balance there that is still open (COLLECTING or UNKNOWN). An UNKNOWN one may already have
  * moved and so be counted twice until it is read back; that only ever refuses, never overspends.
- * The one figure the withdrawal quote, the withdrawal request and Pro from the balance all take off
- * a provider's balance, so neither can spend what the other has reserved there (spec §5, §8).
+ * The one figure the withdrawal quote, the withdrawal request, Pro from the balance and the split
+ * check all take off a provider's balance, so none can spend what another has reserved (spec §5, §8).
+ *
+ * Also, at every provider but a plain single-provider owner's only one (`role` 'only'), the money
+ * there that is someone else's and still has to leave this account: `owedToOthersAt` (rulings
+ * F-R1, F-R2). A single provider's share may be of a tip not yet settled, so not yet in its
+ * available balance, and taking it off would lower the withdrawable below the truth; the ledger,
+ * which already leaves the share out, caps that owner. Any other owner may reach the active
+ * provider with more of the ledger left than their own money there (an earlier part passed over:
+ * bank details, unread, not set up, money held elsewhere), so there the share is left out too: that
+ * only refuses, for a share not yet settled, during its settle window.
  */
 export async function committedAtProvider(
   db: Pick<Database, 'select'>,
   owner: MoneyOwner,
   provider: string,
+  role: ProviderRole,
 ): Promise<bigint> {
   const queued = await queuedNotStarted(db, owner, provider);
   const [pro] = await db
@@ -1576,7 +1591,90 @@ export async function committedAtProvider(
         eq(proPurchases.provider, provider),
       ),
     );
-  return queued + BigInt(pro?.total ?? 0);
+  const others =
+    role === 'only' ? 0n : await owedToOthersAt(db, owner, provider);
+  return queued + BigInt(pro?.total ?? 0) + others;
+}
+
+/**
+ * Money in the owner's account at `provider` that is owed to someone else and hasn't left it yet:
+ *
+ * - a share transfer whose `out` leg takes from this owner there and hasn't been confirmed: a
+ *   staff member's `sweep`, a business's `recover` or `collect_recover`, `waiting` or `out_sent`,
+ *   or in `review` before its out leg was confirmed (`deliver_minor` unset; it may not have moved,
+ *   so it is counted: that only refuses). A recover `waiting` counts only once its tip's sweep is
+ *   `done`: until then the share isn't in the business's account to take (`sendOut` waits too);
+ * - a person's refund of a direct tip there still open (REQUESTED, PROCESSING, UNKNOWN): our partner
+ *   takes it from the recipient's account, and only refund.paid books it in the ledger. A collect
+ *   tip's refund (`collect_plan` set) comes from TipMe's own balance, so it isn't counted.
+ */
+async function owedToOthersAt(
+  db: Pick<Database, 'select'>,
+  owner: MoneyOwner,
+  provider: string,
+): Promise<bigint> {
+  const outLegOpen = or(
+    eq(shareTransfers.status, 'out_sent'),
+    and(
+      eq(shareTransfers.status, 'review'),
+      isNull(shareTransfers.deliverMinor),
+    ),
+  );
+  if ('businessId' in owner) {
+    const [shares] = await db
+      .select({
+        total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+      })
+      .from(shareTransfers)
+      .where(
+        and(
+          eq(shareTransfers.businessId, owner.businessId),
+          eq(shareTransfers.provider, provider),
+          inArray(shareTransfers.kind, ['recover', 'collect_recover']),
+          or(
+            outLegOpen,
+            and(
+              eq(shareTransfers.status, 'waiting'),
+              sql`EXISTS (
+                SELECT 1 FROM share_transfers s
+                 WHERE s.tip_id = ${shareTransfers.tipId}
+                   AND s.kind = CASE ${shareTransfers.kind}
+                                  WHEN 'recover' THEN 'sweep' ELSE 'collect_sweep' END
+                   AND s.status = 'done')`,
+            ),
+          ),
+        ),
+      );
+    return BigInt(shares?.total ?? 0);
+  }
+  const [shares] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+    })
+    .from(shareTransfers)
+    .where(
+      and(
+        eq(shareTransfers.profileId, owner.profileId),
+        eq(shareTransfers.provider, provider),
+        eq(shareTransfers.kind, 'sweep'),
+        or(eq(shareTransfers.status, 'waiting'), outLegOpen),
+      ),
+    );
+  const [refunds] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${tipRefunds.amountMinor}), 0)`,
+    })
+    .from(tipRefunds)
+    .innerJoin(tips, eq(tips.id, tipRefunds.tipId))
+    .where(
+      and(
+        eq(tips.profileId, owner.profileId),
+        eq(tipRefunds.provider, provider),
+        isNull(tipRefunds.collectPlan),
+        inArray(tipRefunds.status, ['REQUESTED', 'PROCESSING', 'UNKNOWN']),
+      ),
+    );
+  return BigInt(shares?.total ?? 0) + BigInt(refunds?.total ?? 0);
 }
 
 const lower = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -1766,7 +1864,12 @@ async function quoteFor(
       if (state !== 'ok') continue;
     }
     const queuedMinor = await guarded(() =>
-      committedAtProvider(db, owner, recordedProviderName(provider.name)),
+      committedAtProvider(
+        db,
+        owner,
+        recordedProviderName(provider.name),
+        providerRoleIn(reach, provider, active),
+      ),
     );
     const entries = cache
       ? await safely(() => cache.open({ provider: provider.name, ...owner }))
@@ -1948,6 +2051,59 @@ async function feePayerFor(
 const ownerReference = (owner: MoneyOwner) =>
   'businessId' in owner ? owner.businessId : owner.profileId;
 
+/**
+ * The reference the owner's balance at `provider` is read under, as the quote reads it: their
+ * account reference there, or the owner's own id at an accountless (pretend) provider. Null when
+ * they have no account there, so that provider holds nothing of theirs. Never asks the provider.
+ */
+export async function balanceReferenceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+): Promise<string | null> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  return route.accountless ? ownerReference(owner) : route.accountReference;
+}
+
+/**
+ * What `provider` holds of the owner's now, for staff (Split accounts, spec §7): read under the
+ * reference the quote uses, and through the quote's own cache entries when `cache` is given, so a
+ * staff look shares the provider's rate limit with quotes instead of adding to it. No account
+ * there: 0, and the provider is not asked. A failed read throws; the caller says which provider.
+ */
+export async function providerBalanceAt(
+  db: Database,
+  owner: MoneyOwner,
+  provider: PayoutReader,
+  input: { cache?: PartnerQuoteCache } = {},
+): Promise<bigint> {
+  const route = await guarded(() => payoutRoute(db, { owner, provider }));
+  const reference = route.accountless
+    ? ownerReference(owner)
+    : route.accountReference;
+  if (reference === null) return 0n;
+  const { cache } = input;
+  const entries = cache
+    ? await safely(() => cache.open({ provider: provider.name, ...owner }))
+    : null;
+  if (!entries)
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  const { availableMinor: ledgerMinor } = await guarded(() =>
+    ownerBalance(db, owner),
+  );
+  const reader = cachedReader(
+    provider,
+    entries,
+    await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
+  );
+  // The cache keeps a balance only for an account that can pay out; any other is asked directly.
+  if ((await reader.payoutCapability(reference)).status !== 'active')
+    return (await provider.payoutBalance(reference, BASE_CURRENCY))
+      .availableMinor;
+  return (await reader.payoutBalance(reference, BASE_CURRENCY)).availableMinor;
+}
+
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;
@@ -2019,6 +2175,8 @@ function drainTakes(
 /** One provider the request may draw from: read, usable, and on the bank the screen shows. */
 type ReadPart = {
   provider: PayoutReader;
+  /** For what is reserved out of it (`committedAtProvider`). */
+  role: ProviderRole;
   route: Route;
   availableMinor: bigint;
   feeMinor: bigint;
@@ -2069,6 +2227,7 @@ async function readRequestParts(
     }
     parts.push({
       provider,
+      role: providerRoleIn(reach, provider, active),
       route,
       availableMinor: read.availableMinor,
       feeMinor: read.feeMinor,
@@ -2195,6 +2354,7 @@ async function requestFor(
                 tx,
                 owner,
                 recordedProviderName(part.provider.name),
+                part.role,
               )),
           ),
         );

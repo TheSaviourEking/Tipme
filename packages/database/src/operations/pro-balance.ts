@@ -12,6 +12,7 @@ import { postLedgerTransaction } from './ledger.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
 import { committedAtProvider, holdsOf } from './payouts.js';
+import type { ProviderRole } from './payout-providers.js';
 import { startPaidPeriod } from './pro-periods.js';
 import {
   lockPurchase,
@@ -137,6 +138,9 @@ async function readForPro(
   }
 }
 
+/** A provider a balance payment may come from, with its role in the owner's set. */
+type ProProvider = { reader: ProBalanceReader; role: ProviderRole };
+
 /**
  * Picks the one provider a balance payment comes from (spec §8, P10): the first in drain order
  * whose own money (what it holds less what is promised out of it there, `committedAtProvider`)
@@ -148,14 +152,14 @@ async function readForPro(
 async function pickProvider(
   db: Database,
   profileId: string,
-  readers: readonly ProBalanceReader[],
+  providers: readonly ProProvider[],
   priceMinor: bigint,
 ): Promise<Extract<ProviderRead, { reader: ProBalanceReader }> | null> {
-  if (readers.length === 0) throw new OperationError('PAYOUT_SETUP_NEEDED');
+  if (providers.length === 0) throw new OperationError('PAYOUT_SETUP_NEEDED');
   let readable = false;
   let unavailable = false;
   let last: ProviderRead | null = null;
-  for (const reader of readers) {
+  for (const { reader, role } of providers) {
     const read = await readForPro(db, profileId, reader);
     last = read;
     if ('refusal' in read) {
@@ -164,7 +168,12 @@ async function pickProvider(
     }
     readable = true;
     const committed = await guarded(() =>
-      committedAtProvider(db, { profileId }, recordedProviderName(reader.name)),
+      committedAtProvider(
+        db,
+        { profileId },
+        recordedProviderName(reader.name),
+        role,
+      ),
     );
     if (read.partnerMinor - committed >= priceMinor) return read;
   }
@@ -358,9 +367,11 @@ export async function buyProFromBalance(
     idempotencyKey: string;
     /**
      * The providers that may hold the person's money, in drain order (the owner's provider set).
-     * Exactly one pays: the first whose own money covers the price.
+     * Exactly one pays: the first whose own money covers the price. Each with its role there
+     * (`providerRoleIn`, by comparing the adapter with the active one), for what is reserved out
+     * of it.
      */
-    providers: readonly { reader: ProBalanceReader }[];
+    providers: readonly ProProvider[];
     sealing: MailSealing;
     now: Date;
   },
@@ -417,7 +428,7 @@ export async function buyProFromBalance(
   const chosen = await pickProvider(
     db,
     input.profileId,
-    input.providers.map((p) => p.reader),
+    input.providers,
     input.expectedAmountMinor,
   );
   if (!chosen) {
@@ -435,6 +446,8 @@ export async function buyProFromBalance(
     return { ...view(raced.purchase), replayed: true };
   }
   const { reader, collect, accountRef, partnerMinor } = chosen;
+  // The role of the provider chosen, by the adapter itself, as the request does.
+  const role = input.providers.find((p) => p.reader === reader)!.role;
   const recorded = recordedProviderName(reader.name);
   const { purchase, replayed } = await requestProPurchase(db, {
     ...request,
@@ -447,6 +460,7 @@ export async function buyProFromBalance(
           tx,
           { profileId: input.profileId },
           recorded,
+          role,
         ));
       const spendable = ledger < partner ? ledger : partner;
       if (price.amountMinor > spendable)

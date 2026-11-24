@@ -1,7 +1,12 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import type { OpsMailProviderCard, OpsMailProviders } from '@tipme/contracts';
+import type {
+  OpsMailProviderCard,
+  OpsMailProviders,
+  OpsProviderRetire,
+} from '@tipme/contracts';
 import {
+  Badge,
   Button,
   Card,
   InputField,
@@ -520,6 +525,89 @@ function Suppressions({ canManage }: { canManage: boolean }) {
   );
 }
 
+/**
+ * Payment providers (per-provider balances, spec §4, §7): each withdraw-only provider's retire
+ * check. "Can retire" only once no owner has money there, nothing is open through it, and nothing
+ * has moved there for 30 days. Removing it from the list is a configuration change, not a button.
+ */
+function PaymentProviders() {
+  const [data, setData] = useState<OpsProviderRetire | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    void opsFetch<OpsProviderRetire>('/v1/ops/providers/payments/retire').then(
+      (result) => {
+        if (result.ok) setData(result.data);
+        else setFailed(true);
+      },
+    );
+  }, []);
+  return (
+    <Card className="settings-section" data-testid="payment-providers">
+      <h2>Payment providers</h2>
+      <p>
+        A withdraw-only provider takes no new tips, but people can still
+        withdraw what it holds. It can be retired once nobody has money there,
+        nothing is open through it
+        {data
+          ? `, and nothing has moved there for ${data.retireAfterDays} days`
+          : ''}
+        .
+      </p>
+      {failed && (
+        <Slip dense tone="error" title="Couldn’t load payment providers">
+          Please refresh the page.
+        </Slip>
+      )}
+      {!data && !failed && <Skeleton label="Loading payment providers" />}
+      {data?.providers.length === 0 && (
+        <p>No provider is withdraw-only: there is nothing to retire.</p>
+      )}
+      {data && data.providers.length > 0 && (
+        <ul className="ops-list" aria-label="Withdraw-only providers">
+          {data.providers.map((row) => (
+            <li
+              key={row.provider}
+              className="ops-row"
+              data-testid={`retire-${row.provider}`}
+            >
+              <span className="ops-row__head">
+                <strong className="ops-mono">{row.provider}</strong>
+                <Badge>{row.canRetire ? 'Can retire' : 'Not yet'}</Badge>
+              </span>
+              <dl className="ops-retire-facts">
+                <div>
+                  <dt>Owners with money</dt>
+                  <dd>{row.ownersWithMoney}</dd>
+                </div>
+                <div>
+                  <dt>Open payouts</dt>
+                  <dd>{row.openPayouts}</dd>
+                </div>
+                <div>
+                  <dt>Open refunds</dt>
+                  <dd>{row.openRefunds}</dd>
+                </div>
+                <div>
+                  <dt>Open disputes</dt>
+                  <dd>{row.openDisputes}</dd>
+                </div>
+              </dl>
+              <span className="tm-hint">
+                {row.lastActivityAt
+                  ? `Last money movement ${when(row.lastActivityAt)}.`
+                  : 'No money has moved through it.'}{' '}
+                {row.canRetire
+                  ? 'It can be taken off the withdraw-only list.'
+                  : 'Keep it on the withdraw-only list for now.'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 export default function ProvidersPage() {
   const access = useOpsAccess();
   const [data, setData] = useState<OpsMailProviders | null>(null);
@@ -581,6 +669,7 @@ export default function ProvidersPage() {
           )}
         </>
       )}
+      {canManage && <PaymentProviders />}
     </div>
   );
 }

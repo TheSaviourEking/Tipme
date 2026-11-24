@@ -99,6 +99,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   dispute_fee_unposted: 'Dispute fee not booked',
   collect_refund_gap: 'Refund on a collected tip fell short',
   collect_own_money_wait: 'Waiting on TipMe’s own money',
+  provider_split_short: 'Providers hold less than owed',
+  provider_unconnected_money: 'Money at a disconnected provider',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',
@@ -109,6 +111,19 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   message_reported: 'Reported message',
   profile_reported: 'Reported page',
 };
+/** Split accounts (spec §7): a daily check's result, in staff words. */
+export const SPLIT_OUTCOME_LABELS: Record<string, string> = {
+  ok: 'Matches',
+  short: 'Short',
+  over: 'Providers hold more',
+  partial: 'A read failed',
+};
+/** A payment provider's role (spec §4). Staff screens may name providers; users never see this. */
+export const PROVIDER_ROLE_LABELS: Record<string, string> = {
+  active: 'Active',
+  withdraw_only: 'Withdraw-only',
+};
+
 export const SEVERITY_LABELS: Record<string, string> = {
   money: 'Money',
   account: 'Account',
