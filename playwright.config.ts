@@ -150,6 +150,9 @@ export default defineConfig({
         // The Get paid card now checks a name on its own, so many tests check from 127.0.0.1.
         // The 10-a-day limit per person still applies (every test is a new person).
         RATE_LIMIT_BANK_RESOLVE_PER_HOUR: '10000',
+        // Per-provider balances: a second, test-only pretend provider that only pays out, so a
+        // balance held in two places can be withdrawn (tests/e2e/withdraw-split.spec.ts).
+        PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
       }),
     },
     {
@@ -168,6 +171,8 @@ export default defineConfig({
         WEB_REVALIDATE_SECRET: E2E_REVALIDATE_SECRET,
         RECONCILE_INTERVAL_MS: '500',
         RECONCILE_MIN_AGE_MS: '0',
+        // The same providers as the API (per-provider balances): mock_alt pays out its parts.
+        PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
       }),
     },
   ],

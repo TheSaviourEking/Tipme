@@ -26,6 +26,7 @@ export * from './operations/business-live.js';
 export * from './operations/share-agreements.js';
 export * from './operations/provider-events.js';
 export * from './operations/payouts.js';
+export * from './operations/payout-providers.js';
 export * from './operations/payout-start.js';
 export * from './operations/payout-staff.js';
 export * from './operations/proof.js';

@@ -103,6 +103,28 @@ export interface WithdrawalRow {
   state: WithdrawalState;
   /** Null for a payout recorded without a destination (before banks were kept, or pretend). */
   bank: WithdrawalBank | null;
+  /**
+   * A request paid as parts across providers: every part's amount and state, in order, failed ones
+   * included. Null when one payout paid it; then `amountMinor` and `state` are that payout's. For
+   * parts, `amountMinor` is the sum of the parts that have not failed (a failed part's money is back
+   * in the balance), or of all of them when every part failed. `state` comes from the parts that
+   * have not failed: `sent` only when all of those are sent, otherwise the least advanced of them;
+   * `failed` only when every part failed. `paidAt` is set only when every part not failed is sent.
+   * Never names a provider.
+   */
+  parts: { amountMinor: string; state: WithdrawalState }[] | null;
+}
+
+/**
+ * What `POST /v1/me/withdrawals` (and a business's) answers: the request's payouts, in order.
+ * `payoutId` is part 1, or the only payout; `groupId` is null when one payout carries it all.
+ * Amounts are minor units of NGN; never names a provider.
+ */
+export interface WithdrawalRequestResult {
+  payoutId: string;
+  status: string;
+  groupId: string | null;
+  parts: { payoutId: string; amountMinor: string; status: string }[];
 }
 
 export interface WithdrawalsPage {
@@ -142,6 +164,18 @@ export type WithdrawalQuote =
       providerMinor: string;
       /** The transfer fee the user pays on a withdrawal: '0' when TipMe pays it. */
       feeMinor: string;
+      /**
+       * What each part of a full withdrawal would be, in the order they are paid, when the balance
+       * is held in more than one place: more than one entry means it may arrive as that many
+       * payments. Amounts only.
+       */
+      capsMinor: string[];
+      /** Some of the balance can't be withdrawn right now; the rest can. Try again later. */
+      partial: boolean;
+      /** Adding the bank details again would make all of the balance withdrawable. */
+      bankDetailsNeeded: boolean;
+      /** Some money is held where withdrawals can't reach it now; it isn't in this quote. */
+      heldElsewhere: boolean;
       /**
        * Who pays the partner's fee. 'tipme' for every new withdrawal from a person's page (owner, 18
        * Nov 2026: withdrawals are free), and for a business while the `business_payout_fee_absorbed`

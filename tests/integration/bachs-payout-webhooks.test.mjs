@@ -162,7 +162,7 @@ async function fixture(t) {
       profileId: TOBI,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider: scripted(),
+      providers: { active: scripted(), withdrawOnly: [] },
     });
     await q(
       `UPDATE payouts SET fee_payer = 'tipme', amount_minor = amount_minor + user_fee_minor,
@@ -449,7 +449,7 @@ test('in debt opens provider_in_debt and pauses withdrawals', async (t) => {
       profileId: TOBI,
       amountMinor: 400000n,
       idempotencyKey: randomUUID(),
-      provider: scripted(),
+      providers: { active: scripted(), withdrawOnly: [] },
     }),
     { code: 'WITHDRAWALS_PAUSED' },
   );
@@ -798,7 +798,7 @@ test('a payout TipMe never started opens payout_unexpected and pauses withdrawal
       profileId: TOBI,
       amountMinor: 400000n,
       idempotencyKey: randomUUID(),
-      provider: scripted(),
+      providers: { active: scripted(), withdrawOnly: [] },
     }),
     { code: 'WITHDRAWALS_PAUSED' },
   );

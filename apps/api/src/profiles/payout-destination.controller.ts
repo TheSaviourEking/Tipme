@@ -24,6 +24,7 @@ import {
   recordedProviderName,
 } from '@tipme/contracts';
 import {
+  bankAccountAt,
   collectionModeOf,
   getBachsAccountRecoveryTarget,
   getPaymentAccountRecipient,
@@ -49,7 +50,10 @@ import {
   SessionGuard,
   type AuthContext,
 } from '../auth/session.guard.js';
-import { WITHDRAWAL_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import {
+  PAYOUT_PROVIDERS_TOKEN,
+  WITHDRAWAL_PROVIDER_TOKEN,
+} from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
@@ -61,6 +65,10 @@ import {
 } from '../infra/partner-quote-cache.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
+import {
+  activeFirst,
+  registerBankEverywhere,
+} from './register-bank-everywhere.js';
 
 // Banks rarely change, and each read of the list is a provider call that shares a rate limit with
 // payouts. A refused or new bank code is the provider's to answer, so a day's staleness is harmless.
@@ -95,6 +103,13 @@ export class PayoutDestinationController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: RedisPartnerQuoteCache,
+    /** Every configured provider: a bank change is registered at each one holding the owner's money. */
+    // Optional only for tests that build the controller by hand; Nest always injects it.
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly providers?: {
+      active: DestinationProvider;
+      withdrawOnly: readonly DestinationProvider[];
+    },
   ) {}
 
   @Get('payout-banks')
@@ -214,40 +229,48 @@ export class PayoutDestinationController {
       throw new CodedHttpException(409, 'BANK_CHANGE_HELD');
     if (checked !== 'ok') throw new CodedHttpException(400, 'CODE_INVALID');
 
-    const added = await this.calling('add', () =>
-      this.provider.addPayoutDestination(reference, {
+    // Spec §6: the active provider decides the answer, as before; every other provider holding
+    // the person's money gets the same bank, and one that refuses leaves only its part to fix.
+    const owner = { profileId };
+    const providers = activeFirst(this.provider, this.providers);
+    await registerBankEverywhere({
+      db: this.database.db,
+      owner,
+      providers,
+      accountRefFor: (provider) =>
+        provider === this.provider
+          ? Promise.resolve(reference)
+          : bankAccountAt(this.database.db, owner, provider),
+      bank: {
         accountNumber: body.accountNumber,
         accountName: body.accountName,
         bankCode: body.bankCode,
-      }),
+        bankName: bank.name,
+      },
+      callActive: (step, call) => this.calling(step, call),
+      onActiveUnread: (error) => this.logFailure('read', error),
+      log: (entry) => this.logger.warn(entry),
+      save: async (provider, added, status, changeId) => {
+        await setPayoutDestination(this.database.db, {
+          sealing: this.sealing,
+          profileId,
+          provider: recordedProviderName(provider.name),
+          destinationRef: added.destinationRef,
+          bankCode: bank.code,
+          bankName: bank.name,
+          last4: body.accountNumber.slice(-4),
+          status,
+          changeId,
+        });
+      },
+    });
+    // The quote's provider figures belong to the old bank, at every provider. The new destination
+    // rows change the cache keys anyway, so a failed invalidation still never shows the old answer.
+    await Promise.all(
+      providers.map((provider) =>
+        this.partnerCache.invalidate({ provider: provider.name, profileId }),
+      ),
     );
-    // The add's key is fixed per account number, so its answer can be an old one replayed: it
-    // never decides. Unread means under review, and the sweep or the next visit reads it again.
-    let status: PayoutDestinationView['status'] = 'pending_review';
-    try {
-      status = await this.provider.payoutDestinationStatus(
-        reference,
-        added.destinationRef,
-      );
-    } catch (error) {
-      this.logFailure('read', error);
-    }
-    await setPayoutDestination(this.database.db, {
-      sealing: this.sealing,
-      profileId,
-      provider: recordedProviderName(this.provider.name),
-      destinationRef: added.destinationRef,
-      bankCode: bank.code,
-      bankName: bank.name,
-      last4: body.accountNumber.slice(-4),
-      status,
-    });
-    // The quote's provider figures belong to the old bank. The new destination row changes the
-    // cache key anyway, so a failed invalidation here still never shows the old answer.
-    await this.partnerCache.invalidate({
-      provider: this.provider.name,
-      profileId,
-    });
     return { data: await this.view(profileId) };
   }
 

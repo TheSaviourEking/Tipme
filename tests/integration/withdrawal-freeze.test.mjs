@@ -106,7 +106,10 @@ test('staff freeze a reported takeover: a held reason, a money issue, an audit l
 test('the recipient sees only the usual pause: the reason never reaches them', async () => {
   await freeze();
   assert.deepEqual(
-    await withdrawalQuote(database.db, { profileId: TOBI, provider: reader }),
+    await withdrawalQuote(database.db, {
+      profileId: TOBI,
+      providers: { active: reader, withdrawOnly: [] },
+    }),
     { state: 'paused', reason: 'review' },
   );
 });

@@ -704,7 +704,7 @@ test('reversals and the business share', async (t) => {
         profileId: TOBI.id,
         amountMinor: NET,
         idempotencyKey: randomUUID(),
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.equal(withdrawn.status, 'REQUESTED');
       // The money has gone (reserved for the withdrawal); the refund is booked anyway (Q8).
@@ -721,7 +721,7 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: 1n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'INSUFFICIENT_BALANCE',
@@ -744,7 +744,7 @@ test('reversals and the business share', async (t) => {
         profileId: TOBI.id,
         amountMinor: NET,
         idempotencyKey: randomUUID(),
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       await reverse(first);
       // A smaller tip later: the payable is positive, but the balance is still below zero.
@@ -782,14 +782,14 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: 100000n,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
         ),
         'BALANCE_BELOW_ZERO',
       );
       const quoted = await withdrawalQuote(db, {
         profileId: TOBI.id,
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.deepEqual(quoted, { state: 'paused', reason: 'reversal' });
       assert.equal((await belowZeroIssues()).length, 1);
@@ -811,7 +811,7 @@ test('reversals and the business share', async (t) => {
             profileId: TOBI.id,
             amountMinor: mine,
             idempotencyKey: randomUUID(),
-            provider,
+            providers: { active: provider, withdrawOnly: [] },
           }),
           reverse(tipId),
         ]);

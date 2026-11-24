@@ -6,7 +6,9 @@ import type {
   BusinessDetail,
   BusinessPayoutAccountStart,
   WithdrawalQuoteResponse,
+  WithdrawalRequestResult,
 } from '@tipme/contracts';
+import { WITHDRAW_SPLIT_COPY } from '@tipme/contracts/copy';
 import { withdrawalMinimumMinor } from '@tipme/domain';
 import { Button, InputField, Skeleton, Slip } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
@@ -17,7 +19,15 @@ import {
 import { formatNaira } from '@/lib/demo-amount';
 import { parseNaira } from '@/lib/money';
 import { apiFetch } from '@/lib/session-client';
-import { withdrawRefusal, withdrawSummary } from '@/lib/withdraw-state';
+import {
+  partsView,
+  quoteParts,
+  requestParts,
+  withdrawRefusal,
+  withdrawSummary,
+} from '@/lib/withdraw-state';
+import type { PartView } from '@/lib/withdraw-state';
+import { ExtraNotices, PartList } from '@/components/dashboard/withdraw-parts';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { Money } from '@/components/money';
 
@@ -43,7 +53,11 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
   const [loaded, setLoaded] = useState<Loaded>({ kind: 'loading' });
   const [raw, setRaw] = useState('');
   const [error, setError] = useState('');
-  const [done, setDone] = useState<string | null>(null);
+  // What was asked for, and its payments when it arrives as more than one (per-provider balances).
+  const [done, setDone] = useState<{
+    amount: string;
+    parts: PartView[] | null;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
   const [setupError, setSetupError] = useState('');
@@ -105,6 +119,8 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     chosen !== null && businessCanSend(chosen, withdrawable, userFee);
   const summary =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
+  // How many payments the amount would arrive as, split as the request would split it.
+  const payments = summary && chosen !== null ? quoteParts(quote)(chosen) : 1;
   const onTheWay = BigInt(balance.onTheWayMinor);
   const heldBack = BigInt(balance.heldBackMinor);
   const needsAccount =
@@ -145,14 +161,20 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
     setError('');
     setDone(null);
     key.current ??= crypto.randomUUID();
-    const result = await apiFetch<{ payoutId: string }>(`${base}/withdrawals`, {
-      method: 'POST',
-      body: { amountMinor: String(amount) },
-      headers: { 'idempotency-key': key.current },
-    });
+    const result = await apiFetch<WithdrawalRequestResult>(
+      `${base}/withdrawals`,
+      {
+        method: 'POST',
+        body: { amountMinor: String(amount) },
+        headers: { 'idempotency-key': key.current },
+      },
+    );
     setBusy(false);
     if (result.ok) {
-      setDone(formatNaira(summary ? Number(summary.receiveMinor) : amount));
+      setDone({
+        amount: formatNaira(summary ? Number(summary.receiveMinor) : amount),
+        parts: partsView(requestParts(result.data.parts ?? []))?.parts ?? null,
+      });
       setRaw('');
       key.current = null;
       await load();
@@ -242,6 +264,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
           </>
         )}
       </Slip>
+      <ExtraNotices notices={state.extraNotices} />
       {quote?.inReview && (
         <Slip title="Being checked">
           A withdrawal is being checked by our payment partner.
@@ -249,8 +272,16 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       )}
       {done && (
         <Slip tone="done" title="Withdrawal requested">
-          <span className="money">{done}</span> is on its way to the business’s
-          bank.
+          <span className="money">{done.amount}</span> is on its way to the
+          business’s bank.
+          {done.parts && (
+            <>
+              <span className="withdraw__split">
+                {WITHDRAW_SPLIT_COPY.mayArrive(done.parts.length)}
+              </span>
+              <PartList parts={done.parts} />
+            </>
+          )}
         </Slip>
       )}
       <form className="withdraw__form" onSubmit={submit} noValidate>
@@ -312,6 +343,11 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
                 <Money minor={summary.receiveMinor} />.
               </>
             )}
+          </p>
+        )}
+        {payments > 1 && (
+          <p className="tm-hint" data-testid="business-split-hint">
+            {WITHDRAW_SPLIT_COPY.mayArrive(payments)}
           </p>
         )}
         <p className="tm-hint">

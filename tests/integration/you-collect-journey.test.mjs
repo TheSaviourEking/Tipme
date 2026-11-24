@@ -532,7 +532,7 @@ test('sign up → tip → held → reminder day 7 → add bank details → trans
     profileId: page.id,
     amountMinor: WITHDRAW,
     idempotencyKey: randomUUID(),
-    provider: partner.provider,
+    providers: { active: partner.provider, withdrawOnly: [] },
     now: new Date(),
   });
   assert.equal(withdrawal.status, 'REQUESTED');

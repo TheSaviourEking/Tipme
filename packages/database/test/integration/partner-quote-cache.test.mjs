@@ -21,7 +21,11 @@ const [ADA, TOBI] = DEMO_PROFILES;
  * The pretend provider's shape, counting every call, with a balance the test can move. `perAccount`
  * answers each account its own balance; `bachs` is a provider with connected accounts.
  */
-function countingProvider({ bachs = false, perAccount = null } = {}) {
+function countingProvider({
+  bachs = false,
+  perAccount = null,
+  name = bachs ? 'bachs-sandbox' : 'mock',
+} = {}) {
   const state = {
     calls: 0,
     availableMinor: 100_000_000n,
@@ -34,7 +38,7 @@ function countingProvider({ bachs = false, perAccount = null } = {}) {
   };
   return {
     state,
-    name: bachs ? 'bachs-sandbox' : 'mock',
+    name,
     capabilities: { connectedAccounts: bachs },
     async payoutCapability() {
       touch();
@@ -85,7 +89,7 @@ test('partner quote cache', async (t) => {
   const q = (sql, params) =>
     database.pool.query(sql, params).then((r) => r.rows);
   /** Tobi gets one confirmed ₦2,000 tip: NGN 1,800.00 net. */
-  const paidTip = async () => {
+  const paidTip = async (provider = 'mock') => {
     const quote = await createQuote(db, {
       handle: 'tobi',
       tipMinor: 400000n,
@@ -95,14 +99,14 @@ test('partner quote cache', async (t) => {
       quoteId: quote.quoteId,
       idempotencyKey: randomUUID(),
     });
-    const reference = `mock_pay_${randomUUID()}`;
+    const reference = `${provider}_pay_${randomUUID()}`;
     await markAttemptInitiated(db, {
       attemptId: intent.attemptId,
-      provider: 'mock',
+      provider,
       providerReference: reference,
     });
     await recordProviderEvent(db, {
-      provider: 'mock',
+      provider,
       providerEventId: `evt_${randomUUID()}`,
       eventType: 'payment.succeeded',
       attemptId: intent.attemptId,
@@ -120,13 +124,17 @@ test('partner quote cache', async (t) => {
     return { provider: countingProvider(), cache: memoryCache() };
   };
   const quote = (provider, cache) =>
-    withdrawalQuote(db, { profileId: TOBI.id, provider, cache });
+    withdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: provider, withdrawOnly: [] },
+      cache,
+    });
   const withdraw = (provider, amountMinor, extra = {}) =>
     requestWithdrawal(db, {
       profileId: TOBI.id,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
       ...extra,
     });
   const started = async (payoutId) => {
@@ -351,6 +359,57 @@ test('partner quote cache', async (t) => {
     },
   );
 
+  await t.test(
+    'two providers never share a figure, and a new payout re-reads both',
+    async () => {
+      await database.fresh();
+      await paidTip('mock_alt');
+      await paidTip('mock');
+      const cache = memoryCache();
+      const active = countingProvider();
+      const old = countingProvider({ name: 'mock_alt' });
+      active.state.availableMinor = 200000n;
+      old.state.availableMinor = 100000n;
+      const both = () =>
+        withdrawalQuote(db, {
+          profileId: TOBI.id,
+          providers: { active, withdrawOnly: [old] },
+          cache,
+        });
+      const first = await both();
+      assert.deepEqual(first.capsMinor, [100000n, 200000n]);
+      assert.equal(first.providerMinor, 300000n);
+      // Each provider's answer is stored under its own scope, never the other's.
+      const baseOf = (provider) => {
+        const key = [...cache.entries.keys()].find(
+          (k) =>
+            k.startsWith(`${provider}:${TOBI.id}:`) && k.includes(':base:'),
+        );
+        return JSON.parse(cache.entries.get(key)).availableMinor;
+      };
+      assert.equal(baseOf('mock'), '200000');
+      assert.equal(baseOf('mock_alt'), '100000');
+      // Warm: neither provider is asked again, and each keeps its own figure.
+      const calls = [active.state.calls, old.state.calls];
+      active.state.availableMinor = 250000n;
+      old.state.availableMinor = 150000n;
+      assert.deepEqual((await both()).capsMinor, [100000n, 200000n]);
+      assert.deepEqual([active.state.calls, old.state.calls], calls);
+      // What a request records (a queued payout, here at the active provider) changes both stamps.
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, provider,
+                              idempotency_key, request_fingerprint, fee_minor)
+         VALUES ($1, $2, 'NGN', 10000, 'REQUESTED', 'mock', $3, 'test', 5000)`,
+        [randomUUID(), TOBI.id, randomUUID()],
+      );
+      const after = await both();
+      assert.ok(active.state.calls > calls[0]);
+      assert.ok(old.state.calls > calls[1]);
+      // The queued 10,000 still sits at the active provider only.
+      assert.deepEqual(after.capsMinor, [150000n, 240000n]);
+    },
+  );
+
   await t.test('two recipients never share an answer', async () => {
     await database.fresh();
     await paidTip();
@@ -361,7 +420,7 @@ test('partner quote cache', async (t) => {
     const tobi = await quote(provider, cache);
     const ada = await withdrawalQuote(db, {
       profileId: ADA.id,
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
       cache,
     });
     assert.equal(provider.state.calls, 6, 'Ada made her own partner calls');
@@ -430,7 +489,10 @@ test('a local quote never calls the partner', async (t) => {
   const mock = countingProvider();
   mock.state.fail = true;
   assert.deepEqual(
-    await localWithdrawalQuote(db, { profileId: TOBI.id, provider: mock }),
+    await localWithdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: mock, withdrawOnly: [] },
+    }),
     { state: 'unchecked' },
   );
   // A provider with connected accounts and no account yet: the route blocks, from TipMe's rows.
@@ -438,12 +500,15 @@ test('a local quote never calls the partner', async (t) => {
   bachs.state.fail = true;
   const local = await localWithdrawalQuote(db, {
     profileId: TOBI.id,
-    provider: bachs,
+    providers: { active: bachs, withdrawOnly: [] },
   });
   assert.equal(local.state, 'setup_needed');
   assert.deepEqual(
     local,
-    await withdrawalQuote(db, { profileId: TOBI.id, provider: bachs }),
+    await withdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: bachs, withdrawOnly: [] },
+    }),
     "the same answer a full quote gives when TipMe's side blocks",
   );
   assert.equal(mock.state.calls, 0);

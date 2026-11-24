@@ -23,6 +23,7 @@ import type {
   PayoutDestinationUpdateRequest,
   PayoutDestinationView,
   WithdrawalQuoteResponse,
+  WithdrawalRequestResult,
 } from '@tipme/contracts';
 import {
   payoutBankResolveSchema,
@@ -31,6 +32,7 @@ import {
   withdrawalRequestSchema,
 } from '@tipme/contracts';
 import {
+  bankAccountAt,
   businessBalanceOf,
   businessPaymentAccount,
   businessShareMoney,
@@ -48,6 +50,7 @@ import {
   spendPayoutDestinationCode,
   withdrawalInReview,
   type MailSealing,
+  type PayoutProviderSet,
   type PayoutReader,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
@@ -66,6 +69,7 @@ import {
 } from '../auth/session.guard.js';
 import {
   BACHS_PROVIDER_TOKEN,
+  PAYOUT_PROVIDERS_TOKEN,
   WITHDRAWAL_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
@@ -79,6 +83,11 @@ import {
 } from '../infra/partner-quote-cache.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
+import { withdrawalRequestResult } from '../dashboard/withdrawal-request-result.js';
+import {
+  activeFirst,
+  registerBankEverywhere,
+} from '../profiles/register-bank-everywhere.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { SharesEnabledGuard } from './release2-flags.guard.js';
 
@@ -121,6 +130,9 @@ export class BusinessPayoutsController {
     private readonly partnerCache: RedisPartnerQuoteCache,
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly bachs: BachsProvider | null,
+    /** Every provider in either role: the quote reads each, and a bank change goes to each. */
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly providers: PayoutProviderSet<WithdrawalProvider>,
   ) {}
 
   @Get('balance')
@@ -240,7 +252,7 @@ export class BusinessPayoutsController {
     const [quote, inReview] = await Promise.all([
       businessWithdrawalQuote(this.database.db, {
         businessId,
-        provider: this.provider,
+        providers: this.providers,
         onReadFailure: this.logReadFailure('quote'),
         cache: this.partnerCache,
       }),
@@ -255,6 +267,7 @@ export class BusinessPayoutsController {
               withdrawableMinor: quote.withdrawableMinor.toString(),
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
+              capsMinor: quote.capsMinor.map((minor) => minor.toString()),
               feeMinor: quote.feeMinor.toString(),
               feePaidBy: quote.feePaidBy,
             }
@@ -270,14 +283,24 @@ export class BusinessPayoutsController {
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(withdrawalRequestSchema))
     body: z.infer<typeof withdrawalRequestSchema>,
-  ): Promise<ApiDataResponse<{ payoutId: string; status: string }>> {
+  ): Promise<ApiDataResponse<WithdrawalRequestResult>> {
     const key = idempotencyKeyPipe.transform(idempotencyKey, {
       type: 'custom',
       data: 'idempotency-key',
     });
     await this.owner(auth, businessId);
-    const scope = { provider: this.provider.name, businessId };
-    await this.partnerCache.invalidate(scope);
+    // Every provider's cached figures: a request may change any of them.
+    const invalidate = () =>
+      Promise.all(
+        [this.providers.active, ...this.providers.withdrawOnly].map(
+          (provider) =>
+            this.partnerCache.invalidate({
+              provider: provider.name,
+              businessId,
+            }),
+        ),
+      );
+    await invalidate();
     try {
       const result = await this.ownerOnly(() =>
         requestBusinessWithdrawal(this.database.db, {
@@ -285,13 +308,13 @@ export class BusinessPayoutsController {
           userId: auth.userId,
           amountMinor: BigInt(body.amountMinor),
           idempotencyKey: key,
-          provider: this.provider,
+          providers: this.providers,
           onReadFailure: this.logReadFailure('request'),
         }),
       );
-      return { data: { payoutId: result.payoutId, status: result.status } };
+      return { data: withdrawalRequestResult(result) };
     } finally {
-      await this.partnerCache.invalidate(scope);
+      await invalidate();
     }
   }
 
@@ -389,40 +412,48 @@ export class BusinessPayoutsController {
       throw new CodedHttpException(409, 'BANK_CHANGE_HELD');
     if (checked !== 'ok') throw new CodedHttpException(400, 'CODE_INVALID');
 
-    const added = await this.calling('add', () =>
-      this.provider.addPayoutDestination(reference, {
+    // As the person's (spec §6): the active provider decides the answer; every other provider
+    // holding the business's money gets the same bank, and a refusal there needs action only there.
+    const owner = { businessId };
+    const providers = activeFirst(this.provider, this.providers);
+    await registerBankEverywhere({
+      db: this.database.db,
+      owner,
+      providers,
+      accountRefFor: (provider) =>
+        provider === this.provider
+          ? Promise.resolve(reference)
+          : bankAccountAt(this.database.db, owner, provider),
+      bank: {
         accountNumber: body.accountNumber,
         accountName: body.accountName,
         bankCode: body.bankCode,
-      }),
-    );
-    // As the person's: the add's answer may be a replay, so only a status read decides.
-    let status: PayoutDestinationView['status'] = 'pending_review';
-    try {
-      status = await this.provider.payoutDestinationStatus(
-        reference,
-        added.destinationRef,
-      );
-    } catch (error) {
-      this.logFailure('read', error);
-    }
-    await this.ownerOnly(() =>
-      setPayoutDestination(this.database.db, {
-        sealing: this.sealing,
-        businessId,
-        userId: auth.userId,
-        provider: recordedProviderName(this.provider.name),
-        destinationRef: added.destinationRef,
-        bankCode: bank.code,
         bankName: bank.name,
-        last4: body.accountNumber.slice(-4),
-        status,
-      }),
-    );
-    await this.partnerCache.invalidate({
-      provider: this.provider.name,
-      businessId,
+      },
+      callActive: (step, call) => this.calling(step, call),
+      onActiveUnread: (error) => this.logFailure('read', error),
+      log: (entry) => this.logger.warn(entry),
+      save: (provider, added, status, changeId) =>
+        this.ownerOnly(async () => {
+          await setPayoutDestination(this.database.db, {
+            sealing: this.sealing,
+            businessId,
+            userId: auth.userId,
+            provider: recordedProviderName(provider.name),
+            destinationRef: added.destinationRef,
+            bankCode: bank.code,
+            bankName: bank.name,
+            last4: body.accountNumber.slice(-4),
+            status,
+            changeId,
+          });
+        }),
     });
+    await Promise.all(
+      providers.map((provider) =>
+        this.partnerCache.invalidate({ provider: provider.name, businessId }),
+      ),
+    );
     // A bank in the business's name is what live asks for: the account may now be ready.
     if (this.liveAccounts())
       await this.syncAccount(businessId, reference, false).catch(
@@ -587,12 +618,13 @@ export class BusinessPayoutsController {
     }
   }
 
+  /** Names the provider in staff logs only, never in what the owner is sent. */
   private logReadFailure(during: 'quote' | 'request') {
-    return (failure: ReturnType<typeof safeError>) =>
+    return (failure: ReturnType<typeof safeError>, provider: string) =>
       this.logger.warn({
         event: 'business_withdrawal.provider_read_failed',
         during,
-        provider: this.provider.name,
+        provider,
         ...failure,
       });
   }

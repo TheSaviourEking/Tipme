@@ -6599,6 +6599,36 @@ body > .coming-soon-page {
   text-transform: uppercase;
 }
 
+/* A request paid as more than one payment (per-provider balances §6): each part is a lamp and its
+   words, as the step lamps are, one part to a line. No box. */
+.withdraw__parts {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.withdraw__row > .withdraw__parts {
+  grid-column: 1 / -1;
+}
+
+.withdraw__parts > li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.withdraw__split {
+  display: block;
+  margin-top: 0.5rem;
+}
+
 /* Compact step lamps: no wells, and the three labels read as one line, joined by dots. */
 .withdraw__row > .withdraw__steps {
   grid-column: 1 / -1;

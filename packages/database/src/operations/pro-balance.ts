@@ -1,13 +1,8 @@
 import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
 import { buildProBalancePosting, lagosDateWords } from '@tipme/domain';
-import { and, asc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lte, or } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import {
-  paymentAccounts,
-  payouts,
-  proPurchases,
-  withdrawalHolds,
-} from '../schema.js';
+import { paymentAccounts, proPurchases, withdrawalHolds } from '../schema.js';
 import { mailOwner } from './account-mail.js';
 import { balanceIn } from './balance.js';
 import { personOf } from './owner.js';
@@ -16,7 +11,7 @@ import { activeTraceId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
-import { holdsOf } from './payouts.js';
+import { committedAtProvider, holdsOf } from './payouts.js';
 import { startPaidPeriod } from './pro-periods.js';
 import {
   lockPurchase,
@@ -38,6 +33,11 @@ import {
  * a business's share is never theirs) and what the partner holds on their account (less
  * withdrawals queued but not yet sent). The amount is reserved from the moment the purchase opens
  * (`balanceQuery` counts open balance purchases), under the profile lock withdrawals also take.
+ *
+ * With several providers (per-provider balances, spec §8, P10), exactly one pays: the first in drain
+ * order whose own money covers the price. A month is never split across providers; when none covers
+ * it alone, INSUFFICIENT_BALANCE (the card stays). The purchase records that provider's own name and
+ * account, so its read-back asks only that provider.
  */
 
 /** The partner calls a balance payment needs (the payout port's). */
@@ -68,40 +68,109 @@ export interface ProCollectProvider {
 const GIVE_UP_AFTER_MS = 30 * 60_000;
 const STALE_AFTER_MS = 2 * 60_000;
 
-/** The account the money comes from: the person's connected account, or (pretend) their page. */
+/** A provider a balance payment may come from, as the payout set holds it. */
+export type ProBalanceReader = ProCollectProvider & {
+  /** The adapter's own name ('mock', 'mock_alt', 'bachs-sandbox', 'bachs-live'). */
+  name: string;
+  /** `connectedAccounts: false`: a pretend provider, with no account to reach (the page stands in). */
+  capabilities?: { connectedAccounts: boolean };
+};
+
+/**
+ * The account the money comes from: the person's connected account at that provider, or, at an
+ * accountless (pretend) provider, their page.
+ */
 async function accountOf(
   db: Database,
   profileId: string,
-  adapterName: string,
+  reader: ProBalanceReader,
 ): Promise<string | null> {
-  const environment = bachsEnvironment(adapterName);
-  if (!environment) return adapterName === 'mock' ? profileId : null;
+  if (reader.capabilities?.connectedAccounts === false) return profileId;
+  const environment = bachsEnvironment(reader.name);
+  if (!environment) return null;
   const [account] = await db
     .select({ reference: paymentAccounts.providerAccountReference })
     .from(paymentAccounts)
     .where(
       and(
         eq(paymentAccounts.profileId, profileId),
-        eq(paymentAccounts.provider, recordedProviderName(adapterName)),
+        eq(paymentAccounts.provider, recordedProviderName(reader.name)),
         eq(paymentAccounts.environment, environment),
       ),
     );
   return account?.reference ?? null;
 }
 
-/** Withdrawals queued for the worker but not yet sent: the partner's figure still includes them. */
-async function queuedNotSent(tx: Tx, profileId: string): Promise<bigint> {
-  const [row] = await tx
-    .select({ total: sql<string>`COALESCE(SUM(${payouts.amountMinor}), 0)` })
-    .from(payouts)
-    .where(
-      and(
-        eq(payouts.profileId, profileId),
-        eq(payouts.status, 'REQUESTED'),
-        isNull(payouts.providerReference),
-      ),
+/** One provider read for a balance payment: what it holds for the person, or why it can't pay. */
+type ProviderRead =
+  | {
+      reader: ProBalanceReader;
+      collect: NonNullable<ProCollectProvider['collectToPlatform']>;
+      accountRef: string;
+      partnerMinor: bigint;
+    }
+  | {
+      refusal:
+        | 'PRO_CHECKOUT_UNAVAILABLE'
+        | 'PAYOUT_SETUP_NEEDED'
+        | 'PAYOUT_PROVIDER_UNAVAILABLE';
+    };
+
+async function readForPro(
+  db: Database,
+  profileId: string,
+  reader: ProBalanceReader,
+): Promise<ProviderRead> {
+  const collect = reader.collectToPlatform;
+  if (!collect) return { refusal: 'PRO_CHECKOUT_UNAVAILABLE' };
+  const accountRef = await guarded(() => accountOf(db, profileId, reader));
+  if (!accountRef) return { refusal: 'PAYOUT_SETUP_NEEDED' };
+  try {
+    const capability = await reader.payoutCapability(accountRef);
+    if (capability.status !== 'active')
+      return { refusal: 'PAYOUT_SETUP_NEEDED' };
+    const partnerMinor = (await reader.payoutBalance(accountRef, 'NGN'))
+      .availableMinor;
+    return { reader, collect, accountRef, partnerMinor };
+  } catch {
+    return { refusal: 'PAYOUT_PROVIDER_UNAVAILABLE' };
+  }
+}
+
+/**
+ * Picks the one provider a balance payment comes from (spec §8, P10): the first in drain order
+ * whose own money (what it holds less what is promised out of it there, `committedAtProvider`)
+ * covers the price. Never a split. None covers it: `null` when what could be read falls short (the
+ * caller then refuses as the main path would, INSUFFICIENT_BALANCE last); a provider that couldn't be
+ * read makes it PAYOUT_PROVIDER_UNAVAILABLE (it might have covered it); with nothing readable at
+ * all, the active (last) provider's own refusal, as when there was only one.
+ */
+async function pickProvider(
+  db: Database,
+  profileId: string,
+  readers: readonly ProBalanceReader[],
+  priceMinor: bigint,
+): Promise<Extract<ProviderRead, { reader: ProBalanceReader }> | null> {
+  if (readers.length === 0) throw new OperationError('PAYOUT_SETUP_NEEDED');
+  let readable = false;
+  let unavailable = false;
+  let last: ProviderRead | null = null;
+  for (const reader of readers) {
+    const read = await readForPro(db, profileId, reader);
+    last = read;
+    if ('refusal' in read) {
+      if (read.refusal === 'PAYOUT_PROVIDER_UNAVAILABLE') unavailable = true;
+      continue;
+    }
+    readable = true;
+    const committed = await guarded(() =>
+      committedAtProvider(db, { profileId }, recordedProviderName(reader.name)),
     );
-  return BigInt(row?.total ?? 0);
+    if (read.partnerMinor - committed >= priceMinor) return read;
+  }
+  if (unavailable) throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
+  if (readable || !last || !('refusal' in last)) return null;
+  throw new OperationError(last.refusal);
 }
 
 /** A refusal that proves no money moved. */
@@ -287,15 +356,16 @@ export async function buyProFromBalance(
     profileId: string;
     expectedAmountMinor: bigint;
     idempotencyKey: string;
-    provider: ProCollectProvider;
-    /** The adapter's name ('mock', 'bachs-sandbox', 'bachs-live'); rows record 'mock' or 'bachs'. */
-    providerName: string;
+    /**
+     * The providers that may hold the person's money, in drain order (the owner's provider set).
+     * Exactly one pays: the first whose own money covers the price.
+     */
+    providers: readonly { reader: ProBalanceReader }[];
     sealing: MailSealing;
     now: Date;
   },
 ): Promise<ProPurchaseView & { replayed: boolean }> {
   const { now } = input;
-  const recorded = recordedProviderName(input.providerName);
   // A retry gets its purchase even when the partner is down.
   const [earlier] = await guarded(() =>
     db
@@ -318,46 +388,66 @@ export async function buyProFromBalance(
     });
     return { ...view(purchase), replayed: true };
   }
-  const collect = input.provider.collectToPlatform;
-  if (!collect) throw new OperationError('PRO_CHECKOUT_UNAVAILABLE');
-  const accountRef = await guarded(() =>
-    accountOf(db, input.profileId, input.providerName),
-  );
-  if (!accountRef) throw new OperationError('PAYOUT_SETUP_NEEDED');
-  let partnerMinor: bigint;
-  try {
-    const capability = await input.provider.payoutCapability(accountRef);
-    if (capability.status !== 'active')
-      throw new OperationError('PAYOUT_SETUP_NEEDED');
-    partnerMinor = (await input.provider.payoutBalance(accountRef, 'NGN'))
-      .availableMinor;
-  } catch (error) {
-    if (error instanceof OperationError) throw error;
-    throw new OperationError('PAYOUT_PROVIDER_UNAVAILABLE');
-  }
-  const { purchase, replayed } = await requestProPurchase(db, {
+  /** Under the purchase's lock: a paused account, or a ledger below zero, spends nothing. */
+  const accountGuard = async (tx: Tx): Promise<bigint> => {
+    const [hold] = await tx
+      .select({ id: withdrawalHolds.id })
+      .from(withdrawalHolds)
+      .where(
+        and(
+          holdsOf({ profileId: input.profileId }),
+          isNull(withdrawalHolds.releasedAt),
+        ),
+      )
+      .limit(1);
+    if (hold) throw new OperationError('WITHDRAWALS_PAUSED');
+    const ledger = (await balanceIn(tx, input.profileId)).availableMinor;
+    if (ledger < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
+    return ledger;
+  };
+  const request = {
     subject: { profileId: input.profileId },
-    method: 'balance',
+    method: 'balance' as const,
     expectedAmountMinor: input.expectedAmountMinor,
     idempotencyKey: input.idempotencyKey,
-    status: 'COLLECTING',
-    extra: { accountReference: accountRef, provider: recorded },
+    status: 'COLLECTING' as const,
     now,
+  };
+  // Read outside the transaction (the partner is slow); re-checked for that provider under the lock.
+  const chosen = await pickProvider(
+    db,
+    input.profileId,
+    input.providers.map((p) => p.reader),
+    input.expectedAmountMinor,
+  );
+  if (!chosen) {
+    // No provider covers it alone. The same checks as a purchase, in the same order (price, open
+    // purchase, hold, below zero), so their own refusals come first; then too little money. The
+    // guard always throws, so nothing is opened or reserved. A same-key purchase that committed
+    // meanwhile is returned as the replay it is.
+    const raced = await requestProPurchase(db, {
+      ...request,
+      guard: async (tx) => {
+        await accountGuard(tx);
+        throw new OperationError('INSUFFICIENT_BALANCE');
+      },
+    });
+    return { ...view(raced.purchase), replayed: true };
+  }
+  const { reader, collect, accountRef, partnerMinor } = chosen;
+  const recorded = recordedProviderName(reader.name);
+  const { purchase, replayed } = await requestProPurchase(db, {
+    ...request,
+    extra: { accountReference: accountRef, provider: recorded },
     guard: async (tx, price) => {
-      const [hold] = await tx
-        .select({ id: withdrawalHolds.id })
-        .from(withdrawalHolds)
-        .where(
-          and(
-            holdsOf({ profileId: input.profileId }),
-            isNull(withdrawalHolds.releasedAt),
-          ),
-        )
-        .limit(1);
-      if (hold) throw new OperationError('WITHDRAWALS_PAUSED');
-      const ledger = (await balanceIn(tx, input.profileId)).availableMinor;
-      if (ledger < 0n) throw new OperationError('BALANCE_BELOW_ZERO');
-      const partner = partnerMinor - (await queuedNotSent(tx, input.profileId));
+      const ledger = await accountGuard(tx);
+      const partner =
+        partnerMinor -
+        (await committedAtProvider(
+          tx,
+          { profileId: input.profileId },
+          recorded,
+        ));
       const spendable = ledger < partner ? ledger : partner;
       if (price.amountMinor > spendable)
         throw new OperationError('INSUFFICIENT_BALANCE');
@@ -366,7 +456,7 @@ export async function buyProFromBalance(
   if (replayed) return { ...view(purchase), replayed: true };
   let answer: { transferRef: string; status: 'paid' | 'pending' };
   try {
-    answer = await collect.call(input.provider, {
+    answer = await collect.call(reader, {
       accountRef,
       amountMinor: purchase.amountMinor,
       currency: 'NGN',

@@ -87,3 +87,41 @@ export const COLLECT_NAME_RECHECK_NOTICE = {
   formLine:
     'Your name was updated. Add your bank details again so we can check it.',
 } as const;
+
+/**
+ * One balance across providers (per-provider balances, spec §6): the words beside a usable
+ * withdrawal form when part of the balance can't go now, and for a request paid as more than one
+ * payment. Amounts and states only: never a provider's name, never the payment partner's.
+ */
+export const WITHDRAW_SPLIT_COPY = {
+  partialTitle: 'Some of your balance is on hold',
+  partial:
+    'Some of your balance can’t be withdrawn right now. Try again later.',
+  bankTitle: 'Bank details needed',
+  bank: 'Add your bank details again to withdraw all of your balance.',
+  bankLink: 'Go to Get paid',
+  heldTitle: 'Some tips can’t be paid out yet',
+  held: 'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.',
+  mayArrive: (n: number) => `This may arrive as ${n} payments.`,
+  partlySent: 'Partly sent',
+  part: {
+    sent: 'sent',
+    onItsWay: 'on its way',
+    reversed: 'reversed',
+  },
+} as const;
+
+/**
+ * The same notices on a business's Money section (Task 9 fix round 1), in the business's words.
+ * Never a provider's name, never the payment partner's.
+ */
+export const BUSINESS_SPLIT_COPY = {
+  partialTitle: 'Some of the business’s balance is on hold',
+  partial:
+    'Some of the business’s balance can’t be withdrawn right now. Try again later.',
+  bankTitle: 'Bank details needed',
+  bank: 'Add the business’s bank details again to withdraw all of its balance.',
+  bankLink: 'Add bank details again',
+  heldTitle: 'Some tips can’t be paid out yet',
+  held: 'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
+} as const;

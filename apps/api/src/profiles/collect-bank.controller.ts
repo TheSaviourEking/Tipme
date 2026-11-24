@@ -26,6 +26,7 @@ import {
   recordedProviderName,
 } from '@tipme/contracts';
 import {
+  bankAccountAt,
   bankAccountHash,
   bankCheckedForAnotherName,
   beginPaymentAccountCreation,
@@ -70,7 +71,10 @@ import {
   SessionGuard,
   type AuthContext,
 } from '../auth/session.guard.js';
-import { WITHDRAWAL_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import {
+  PAYOUT_PROVIDERS_TOKEN,
+  WITHDRAWAL_PROVIDER_TOKEN,
+} from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
 import { API_CONFIG, type ApiConfig } from '../config.js';
 import { CodedHttpException } from '../http/coded.exception.js';
@@ -82,6 +86,11 @@ import {
 } from '../infra/partner-quote-cache.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
+import {
+  activeFirst,
+  registerBankEverywhere,
+  type DestinationProvider,
+} from './register-bank-everywhere.js';
 
 // As the payout-destination routes: banks rarely change, and each read is a partner call.
 const BANK_LIST_TTL_MS = 24 * 60 * 60 * 1000;
@@ -127,6 +136,13 @@ export class CollectBankController {
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
     @Inject(PARTNER_QUOTE_CACHE)
     private readonly partnerCache: Pick<RedisPartnerQuoteCache, 'invalidate'>,
+    /** Every configured provider: the bank is registered at each one holding the owner's money. */
+    // Optional only for tests that build the controller by hand; Nest always injects it.
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly providers?: {
+      active: DestinationProvider;
+      withdrawOnly: readonly DestinationProvider[];
+    },
   ) {}
 
   /** Their You collect state (Task 12) and their bank; a check that has ended is finished here. */
@@ -247,71 +263,88 @@ export class CollectBankController {
     let reference: string | null = null;
     let sharedBank = false;
     const now = new Date();
+    const owner = { profileId };
+    const providers = activeFirst(this.provider, this.providers);
     try {
       reference = await this.personAccount(collector, body.legalName, facts);
       const account = reference;
-      const added = await this.calling('add', () =>
-        this.provider.addPayoutDestination(account, {
-          accountNumber: body.accountNumber,
-          accountName: `${body.legalName.first} ${body.legalName.last}`,
-          bankCode: body.bankCode,
-          nameDigest: digest,
-        }),
-      );
-      // The add's key is fixed per account number, so its answer can be an old one replayed: the
-      // read decides. Unread means under review, and the next read finishes it.
-      let status = added.status;
-      try {
-        status = await this.provider.payoutDestinationStatus(
-          account,
-          added.destinationRef,
-        );
-      } catch (error) {
-        this.logFailure('read', error);
-        if (status !== 'rejected') status = 'pending_review';
-      }
-      if (status === 'rejected') {
-        // Nothing is saved: not the bank, and not the refused name.
-        this.logger.warn({ event: 'collect_bank.name_mismatch' });
-        throw new CodedHttpException(422, 'NAME_MISMATCH');
-      }
-      // C1b: an answer for a destination already checked under another name (current or replaced)
-      // may be a replay decided against that name, and proves nothing about this one.
-      if (
-        await bankCheckedForAnotherName(db, {
-          profileId,
-          provider: this.provider.name,
-          destinationRef: added.destinationRef,
-          nameDigest: digest,
-        })
-      ) {
-        this.logger.warn({ event: 'collect_bank.replayed_for_another_name' });
-        throw new CodedHttpException(409, 'BANK_RECHECK_LATER');
-      }
       const accountHash = bankAccountHash(
         this.sealing,
         body.bankCode,
         body.accountNumber,
       );
-      // Final review M5: a shared account holds the second recipient's waiting shares in the same
-      // transaction that saves the bank, before verification can release anything.
-      ({ sharedBank } = await setPayoutDestination(db, {
-        sealing: this.sealing,
-        profileId,
-        provider: recordedProviderName(this.provider.name),
-        destinationRef: added.destinationRef,
-        bankCode: bank.code,
-        bankName: bank.name,
-        last4: body.accountNumber.slice(-4),
-        status,
-        accountHash,
-        nameDigest: digest,
-        now,
-      }));
-      // The name TipMe holds is the one its current bank was checked against: only now (C1).
-      await recordCollectLegalName(db, {
-        profileId,
-        legalName: body.legalName,
+      // Spec §6: the active provider decides the answer, as before. Every other provider holding
+      // the recipient's money gets the same bank through the same checks (the partner's name check,
+      // C1b, the same-bank review); one that refuses leaves only its part to fix.
+      await registerBankEverywhere({
+        db,
+        owner,
+        providers,
+        accountRefFor: (provider) =>
+          provider === this.provider
+            ? Promise.resolve(account)
+            : bankAccountAt(db, owner, provider),
+        bank: {
+          accountNumber: body.accountNumber,
+          accountName: `${body.legalName.first} ${body.legalName.last}`,
+          bankCode: body.bankCode,
+          bankName: bank.name,
+          nameDigest: digest,
+        },
+        callActive: (step, call) => this.calling(step, call),
+        onActiveUnread: (error) => this.logFailure('read', error),
+        // The add's own answer stands only for a refusal: unread otherwise means under review.
+        unreadStatus: (added) =>
+          added.status === 'rejected' ? 'rejected' : 'pending_review',
+        log: (entry) => this.logger.warn(entry),
+        save: async (provider, added, status, changeId) => {
+          const isActive = provider === this.provider;
+          if (status === 'rejected') {
+            // Nothing is saved: not the bank, and not the refused name.
+            if (isActive)
+              this.logger.warn({ event: 'collect_bank.name_mismatch' });
+            throw new CodedHttpException(422, 'NAME_MISMATCH');
+          }
+          // C1b: an answer for a destination already checked under another name (current or
+          // replaced) may be a replay decided against that name, and proves nothing about this one.
+          if (
+            await bankCheckedForAnotherName(db, {
+              profileId,
+              provider: provider.name,
+              destinationRef: added.destinationRef,
+              nameDigest: digest,
+            })
+          ) {
+            if (isActive)
+              this.logger.warn({
+                event: 'collect_bank.replayed_for_another_name',
+              });
+            throw new CodedHttpException(409, 'BANK_RECHECK_LATER');
+          }
+          // Final review M5: a shared account holds the second recipient's waiting shares in the
+          // same transaction that saves the bank, before verification can release anything.
+          const saved = await setPayoutDestination(db, {
+            sealing: this.sealing,
+            profileId,
+            provider: recordedProviderName(provider.name),
+            destinationRef: added.destinationRef,
+            bankCode: bank.code,
+            bankName: bank.name,
+            last4: body.accountNumber.slice(-4),
+            status,
+            changeId,
+            accountHash,
+            nameDigest: digest,
+            now,
+          });
+          sharedBank ||= saved.sharedBank;
+          // The name TipMe holds is the one its current bank was checked against: only now (C1).
+          if (isActive)
+            await recordCollectLegalName(db, {
+              profileId,
+              legalName: body.legalName,
+            });
+        },
       });
     } catch (error) {
       // I2: whatever failed after the partner was given this name, it goes back to the one TipMe
@@ -320,10 +353,11 @@ export class CollectBankController {
       throw error;
     }
     if (sharedBank) this.logger.warn({ event: 'collect_bank.same_bank' });
-    await this.partnerCache.invalidate({
-      provider: this.provider.name,
-      profileId,
-    });
+    await Promise.all(
+      providers.map((provider) =>
+        this.partnerCache.invalidate({ provider: provider.name, profileId }),
+      ),
+    );
     const state: CollectBankState =
       (await settleCollectVerification(db, {
         profileId,

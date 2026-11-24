@@ -87,7 +87,7 @@ async function setup(t) {
         profileId: TOBI,
         amountMinor: 200000n,
         idempotencyKey: randomUUID(),
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       })
     ).payoutId;
   const pause = (paused) =>
@@ -113,7 +113,10 @@ test('while off a request is refused with its own code, and the quote says so be
   await s.pause(true);
   await assert.rejects(s.withdraw(), { code: 'WITHDRAWALS_SWITCHED_OFF' });
   assert.deepEqual(
-    await withdrawalQuote(s.db, { profileId: TOBI, provider: provider() }),
+    await withdrawalQuote(s.db, {
+      profileId: TOBI,
+      providers: { active: provider(), withdrawOnly: [] },
+    }),
     { state: 'paused', reason: 'switched_off' },
   );
   assert.equal((await s.q('SELECT id FROM payouts')).length, 0);
@@ -129,7 +132,7 @@ test('a retry of a request made before the switch still gets its payout', async 
       profileId: TOBI,
       amountMinor: 200000n,
       idempotencyKey: key,
-      provider: provider(),
+      providers: { active: provider(), withdrawOnly: [] },
     });
   const first = await ask();
   await s.pause(true);
@@ -245,7 +248,10 @@ test('if the switch cannot be read nothing starts and nothing is requested', asy
     assert.equal(fake.calls.creates, 0);
     await assert.rejects(s.withdraw());
     assert.deepEqual(
-      await withdrawalQuote(s.db, { profileId: TOBI, provider: provider() }),
+      await withdrawalQuote(s.db, {
+        profileId: TOBI,
+        providers: { active: provider(), withdrawOnly: [] },
+      }),
       { state: 'paused', reason: 'switched_off' },
     );
   } finally {

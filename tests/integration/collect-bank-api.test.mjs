@@ -1695,3 +1695,113 @@ test('the status says the new-account delay while it applies, from the settings 
     until: new Date(created.getTime() + 7 * DAY).toISOString(),
   });
 });
+
+// Per-provider balances, Task 8 (spec §6): a You collect recipient's bank is registered at every
+// provider in their set, each with its own checks (the partner's name check, the same-bank review).
+// The active provider here is accountless; a connected-account fake holds an account of Tobi's.
+test("changing bank registers it at every connected provider in the owner's set (You collect)", async () => {
+  await collect(TOBI);
+  const active = partner('unused');
+  Object.assign(active.provider, {
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+  });
+  const other = partner('acct_other');
+  await q(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, provider_account_reference,
+       status, manual_payouts_at)
+     VALUES ($1, $2, 'bachs', 'sandbox', 'acct_other_seeded', 'ONBOARDING', now())`,
+    [randomUUID(), TOBI.id],
+  );
+  const controller = new CollectBankController(
+    { ...config, PAYMENT_PROVIDER: 'mock' },
+    { db: database.db },
+    active.provider,
+    { info() {}, warn() {}, error() {} },
+    sealing,
+    partnerCache,
+    { active: active.provider, withdrawOnly: [other.provider] },
+  );
+  await addBank(controller, TOBI);
+  const rows = await q(
+    `SELECT provider, bank_code, account_last4, account_hash FROM payout_destinations
+      WHERE profile_id = $1 AND replaced_at IS NULL ORDER BY provider`,
+    [TOBI.id],
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.provider, row.bank_code, row.account_last4]),
+    [
+      ['bachs', '058', '7701'],
+      ['mock', '058', '7701'],
+    ],
+  );
+  assert.ok(rows[0].account_hash);
+  assert.equal(rows[0].account_hash, rows[1].account_hash);
+  assert.deepEqual(other.state.of('add'), [
+    ['add', 'acct_other_seeded', '058'],
+  ]);
+});
+
+test('a C1b refusal at another provider leaves only that part needing action (You collect)', async () => {
+  await collect(TOBI);
+  const active = partner('unused');
+  Object.assign(active.provider, {
+    name: 'mock',
+    capabilities: { connectedAccounts: false },
+  });
+  const other = partner('acct_other');
+  await q(
+    `INSERT INTO payment_accounts (id, profile_id, provider, environment, provider_account_reference,
+       status, manual_payouts_at)
+     VALUES ($1, $2, 'bachs', 'sandbox', 'acct_other_seeded', 'ONBOARDING', now())`,
+    [randomUUID(), TOBI.id],
+  );
+  // The destination the other provider will answer was checked once under another name: its
+  // answer may be a replay of that check and proves nothing about this one.
+  await q(
+    `INSERT INTO payout_destinations (id, profile_id, provider, destination_reference, bank_code,
+       bank_name, account_last4, status, name_digest, replaced_at)
+     VALUES ($1, $2, 'bachs', $3, '058', 'Pretend Guaranty Bank', '7701', 'usable', $4, now())`,
+    [
+      randomUUID(),
+      TOBI.id,
+      `dest_acct_other_seeded_058_${accountNumber(1).slice(-4)}`,
+      'f'.repeat(64),
+    ],
+  );
+  const logs = [];
+  const controller = new CollectBankController(
+    { ...config, PAYMENT_PROVIDER: 'mock' },
+    { db: database.db },
+    active.provider,
+    { info() {}, warn: (entry) => logs.push(entry), error() {} },
+    sealing,
+    partnerCache,
+    { active: active.provider, withdrawOnly: [other.provider] },
+  );
+  // The active provider's answer stands: the request succeeds.
+  await addBank(controller, TOBI);
+  const rows = await q(
+    `SELECT provider, bank_code, account_last4 FROM payout_destinations
+      WHERE profile_id = $1 AND replaced_at IS NULL ORDER BY provider`,
+    [TOBI.id],
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.provider, row.bank_code, row.account_last4]),
+    [['mock', '058', '7701']],
+  );
+  const failed = logs.filter(
+    (entry) => entry.event === 'withdrawal.bank_register_failed',
+  );
+  assert.deepEqual(
+    failed.map((entry) => [entry.provider, entry.step]),
+    [['bachs', 'save']],
+  );
+  // The active provider's own C1b log line is not repeated for the other provider.
+  assert.equal(
+    logs.filter(
+      (entry) => entry.event === 'collect_bank.replayed_for_another_name',
+    ).length,
+    0,
+  );
+});

@@ -104,7 +104,7 @@ async function setup(t) {
       profileId: TOBI.id,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
     });
   const payout = async (id) =>
     (await q('SELECT * FROM payouts WHERE id = $1', [id]))[0];
@@ -170,7 +170,7 @@ test('withdraw ₦5,000: the quote shows no fee for Tobi, ₦5,000 arrives, and 
   const provider = partner();
   const quote = await withdrawalQuote(s.database.db, {
     profileId: TOBI.id,
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   // The partner's fee is known to TipMe; Tobi pays none of it.
   assert.equal(quote.feeMinor, 5000n);
@@ -208,7 +208,7 @@ test('Everything sends the whole balance and leaves nothing', async (t) => {
   const provider = partner();
   const quote = await withdrawalQuote(s.database.db, {
     profileId: TOBI.id,
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   assert.equal(quote.withdrawableMinor, 950_000n);
   const { payoutId } = await s.withdraw(provider, quote.withdrawableMinor);

@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { withdrawalPartCount } from '@tipme/domain';
 import {
   TOO_SMALL,
   belowMinimum,
+  partsView,
+  requestParts,
   collectDelayLine,
   collectWithdrawView,
   withdrawableNow,
@@ -103,11 +106,142 @@ test('a payout in review is said in any state, without stopping another', () => 
   assert.equal(of(ready()).review, null);
 });
 
+const HELD_ELSEWHERE =
+  'Some of your tips were paid in a way TipMe can’t pay out from yet. Your tips are safe, and your balance stays here until withdrawals open.';
+
 test('tips collected elsewhere are never read as a balance we cannot check', () => {
   const view = of({ state: 'provider_unavailable', inReview: false }, false);
-  assert.equal(view.kind, 'collected_elsewhere');
+  assert.equal(view.kind, 'held_elsewhere');
   assert.equal(view.canWithdraw, false);
+  assert.equal(view.notice.body, HELD_ELSEWHERE);
   assert.doesNotMatch(view.notice.body, /can’t check your balance/);
+  assert.equal(of(null, false).kind, 'held_elsewhere');
+});
+
+// Per-provider balances, Task 9 (spec §6): money held where withdrawals can't reach it no longer
+// blocks the rest. A ready quote decides; its flags add notices beside a usable form.
+test('a ready quote is usable even when some money is held elsewhere', () => {
+  const view = of(ready({ heldElsewhere: true }), false);
+  assert.equal(view.kind, 'ready');
+  assert.equal(view.canWithdraw, true);
+  assert.equal(view.showForm, true);
+  assert.deepEqual(
+    view.extraNotices.map((notice) => notice.body),
+    [HELD_ELSEWHERE],
+  );
+  assert.doesNotMatch(JSON.stringify(view.extraNotices), /mock|bachs/i);
+});
+
+test('each flag on a ready quote adds its own notice, and none adds nothing', () => {
+  assert.deepEqual(of(ready()).extraNotices, []);
+  assert.deepEqual(
+    of(
+      ready({ partial: false, bankDetailsNeeded: false, heldElsewhere: false }),
+    ).extraNotices,
+    [],
+  );
+  const [partial, ...noMore] = of(ready({ partial: true })).extraNotices;
+  assert.equal(noMore.length, 0);
+  assert.equal(
+    partial.body,
+    'Some of your balance can’t be withdrawn right now. Try again later.',
+  );
+  assert.equal(partial.href, undefined);
+  const [bank] = of(ready({ bankDetailsNeeded: true })).extraNotices;
+  assert.equal(
+    bank.body,
+    'Add your bank details again to withdraw all of your balance.',
+  );
+  assert.equal(bank.href, '/dashboard/settings#get-paid');
+  assert.ok(bank.linkLabel);
+  const [held] = of(ready({ heldElsewhere: true })).extraNotices;
+  assert.equal(held.body, HELD_ELSEWHERE);
+  // Short titles that never repeat their body (review, fix round 2).
+  assert.deepEqual(
+    [partial.title, bank.title, held.title],
+    [
+      'Some of your balance is on hold',
+      'Bank details needed',
+      'Some tips can’t be paid out yet',
+    ],
+  );
+  for (const notice of [partial, bank, held])
+    assert.ok(!notice.body.startsWith(notice.title), notice.title);
+  // All three at once, in this order: what can't be read, what the person can fix, what is elsewhere.
+  assert.deepEqual(
+    of(
+      ready({ partial: true, bankDetailsNeeded: true, heldElsewhere: true }),
+    ).extraNotices.map((notice) => notice.body),
+    [partial.body, bank.body, held.body],
+  );
+  // A state that isn't ready has none: its own notice says it.
+  assert.deepEqual(
+    of({ state: 'no_destination', inReview: false }).extraNotices,
+    [],
+  );
+  assert.deepEqual(of(null).extraNotices, []);
+});
+
+test('partsFor counts the payments an amount takes, as the request would split it', () => {
+  const caps = ['372000', '228000'];
+  const view = of(ready({ withdrawableMinor: '600000', capsMinor: caps }));
+  for (const amount of [100000n, 200000n, 372000n, 400000n, 600000n])
+    assert.equal(
+      view.partsFor(amount),
+      withdrawalPartCount(amount, caps.map(BigInt)) ?? 1,
+      String(amount),
+    );
+  assert.equal(view.partsFor(300000n), 1);
+  assert.equal(view.partsFor(600000n), 2);
+  // Not capsMinor.length: one provider covering the amount is one payment.
+  assert.equal(view.partsFor(372000n), 1);
+  // Nothing to split by: one payment.
+  assert.equal(of(ready()).partsFor(100000n), 1);
+  assert.equal(of(null).partsFor(100000n), 1);
+  assert.equal(view.partsFor(0n), 1);
+});
+
+test('a split request’s parts say each one’s state, and "Partly sent" while some are sent and others not', () => {
+  assert.equal(partsView(null), null);
+  assert.equal(partsView([{ amountMinor: '100000', state: 'sent' }]), null);
+  const going = partsView([
+    { amountMinor: '372000', state: 'requested' },
+    { amountMinor: '228000', state: 'processing' },
+  ]);
+  assert.equal(going.label, null);
+  assert.deepEqual(
+    going.parts.map((part) => part.words),
+    ['on its way', 'on its way'],
+  );
+  const partly = partsView([
+    { amountMinor: '372000', state: 'sent' },
+    { amountMinor: '228000', state: 'in_review' },
+  ]);
+  assert.equal(partly.label, 'Partly sent');
+  assert.deepEqual(
+    partly.parts.map((part) => [part.amountMinor, part.words, part.tone]),
+    [
+      ['372000', 'sent', 'green'],
+      ['228000', 'on its way', 'amber'],
+    ],
+  );
+  const sentAndFailed = partsView([
+    { amountMinor: '372000', state: 'sent' },
+    { amountMinor: '228000', state: 'failed' },
+  ]);
+  assert.equal(sentAndFailed.label, 'Partly sent');
+  // Each part is released on its own (releaseFailedPayout), so its money is back in the balance.
+  assert.equal(sentAndFailed.parts[1].words, 'failed · back in your balance');
+  const allSent = partsView([
+    { amountMinor: '372000', state: 'sent' },
+    { amountMinor: '228000', state: 'sent' },
+  ]);
+  assert.equal(allSent.label, null);
+  const allFailed = partsView([
+    { amountMinor: '372000', state: 'failed' },
+    { amountMinor: '228000', state: 'failed' },
+  ]);
+  assert.equal(allFailed.label, null);
 });
 
 test('a quote that could not be fetched never allows a withdrawal', () => {
@@ -155,7 +289,6 @@ test('a refusal the page itself explains reloads with no message', () => {
     'PAYOUT_SETUP_NEEDED',
     'PAYOUT_DESTINATION_NEEDED',
     'PAYOUT_PROVIDER_UNAVAILABLE',
-    'WITHDRAWAL_UNAVAILABLE',
   ])
     assert.deepEqual(withdrawRefusal(code), { message: null, reload: true });
 });
@@ -196,7 +329,9 @@ test('withdrawableNow is zero for a balance the quote refuses', () => {
   ])
     assert.equal(now({ state, inReview: false }), BigInt(0), state);
   assert.equal(now(null), BigInt(0));
-  assert.equal(now(ready(), '1000000', false), BigInt(0));
+  // Money held elsewhere no longer blocks a ready quote (spec §6): only a quote that isn't ready.
+  assert.equal(now(ready(), '1000000', false), BigInt(180000));
+  assert.equal(now(null, '1000000', false), BigInt(0));
 });
 
 test('after a live change TipMe could not size, the page asks the person to check, and withdraws nothing', () => {
@@ -225,7 +360,7 @@ test('after a live change TipMe could not size, the page asks the person to chec
       quote: null,
       needsCheck: true,
     }).kind,
-    'collected_elsewhere',
+    'held_elsewhere',
   );
 });
 
@@ -348,7 +483,6 @@ test('only the answers that may have followed a request are unsure, and they say
     'PAYOUT_SETUP_NEEDED',
     'PAYOUT_DESTINATION_NEEDED',
     'PAYOUT_PROVIDER_UNAVAILABLE',
-    'WITHDRAWAL_UNAVAILABLE',
   ])
     assert.equal(withdrawUnsure(code), null);
   for (const code of ['IDEMPOTENCY_CONFLICT', 'INTERNAL_ERROR']) {
@@ -636,4 +770,22 @@ test('collect words never name the payment partner', () => {
   });
   for (const text of [view.lamp.text, ...view.lines, view.bank])
     assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
+});
+
+test('a request’s answer reads as its parts: just asked for is on its way', () => {
+  assert.equal(
+    requestParts([{ payoutId: 'a', amountMinor: '1', status: 'REQUESTED' }]),
+    null,
+  );
+  const parts = requestParts([
+    { payoutId: 'a', amountMinor: '372000', status: 'REQUESTED' },
+    { payoutId: 'b', amountMinor: '228000', status: 'PROCESSING' },
+    { payoutId: 'c', amountMinor: '1000', status: 'PAID' },
+    { payoutId: 'd', amountMinor: '1000', status: 'FAILED' },
+  ]);
+  assert.deepEqual(
+    parts.map((part) => part.state),
+    ['requested', 'processing', 'sent', 'failed'],
+  );
+  assert.equal(partsView(parts.slice(0, 2)).parts[0].words, 'on its way');
 });
