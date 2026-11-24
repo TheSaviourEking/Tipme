@@ -55,7 +55,7 @@ import {
   withdrawalQuote,
   withdrawalsAvailable,
   visitsToday,
-  type PayoutReader,
+  type PayoutProviderSet,
 } from '@tipme/database';
 import { z } from 'zod';
 import { CsrfGuard } from '../auth/csrf.guard.js';
@@ -64,7 +64,7 @@ import {
   SessionGuard,
   type AuthContext,
 } from '../auth/session.guard.js';
-import { WITHDRAWAL_PROVIDER_TOKEN } from '../checkout/payment-provider.provider.js';
+import { PAYOUT_PROVIDERS_TOKEN } from '../checkout/payment-provider.provider.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ServerEvents } from '../analytics/server-events.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
@@ -84,7 +84,9 @@ const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 export class DashboardController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-    @Inject(WITHDRAWAL_PROVIDER_TOKEN) private readonly provider: PayoutReader,
+    /** Every provider in either role; a withdrawal is still requested through the active one. */
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly providers: PayoutProviderSet,
     @Inject(ServerEvents) private readonly events: ServerEvents,
     @Inject(LOGGER) private readonly logger: Logger,
     @Inject(PARTNER_QUOTE_CACHE)
@@ -94,15 +96,27 @@ export class DashboardController {
     private readonly publishLive: PublishLive = async () => undefined,
   ) {}
 
-  /** A wrong key looks like an outage to the recipient; this is how staff tell them apart. */
+  /**
+   * A wrong key looks like an outage to the recipient; this is how staff tell them apart. The
+   * provider is named here, in staff logs only, never in what the person is sent.
+   */
   private logReadFailure(during: 'quote' | 'request') {
-    return (failure: ReturnType<typeof safeError>) =>
+    return (failure: ReturnType<typeof safeError>, provider: string) =>
       this.logger.warn({
         event: 'withdrawal.provider_read_failed',
         during,
-        provider: this.provider.name,
+        provider,
         ...failure,
       });
+  }
+
+  /** Every provider's cached figures for this person: a request may change any of them. */
+  private async invalidateQuotes(profileId: string): Promise<void> {
+    await Promise.all(
+      [this.providers.active, ...this.providers.withdrawOnly].map((provider) =>
+        this.partnerCache.invalidate({ provider: provider.name, profileId }),
+      ),
+    );
   }
 
   private profile(auth: AuthContext): Promise<string> {
@@ -119,7 +133,7 @@ export class DashboardController {
       dashboardSummary(this.database.db, profileId, new Date()),
       withdrawalsAvailable(this.database.db, {
         profileId,
-        provider: this.provider.name,
+        providers: this.providers,
       }),
     ]);
     return { data: { ...summary, withdrawalsAvailable: available } };
@@ -303,7 +317,7 @@ export class DashboardController {
       const [local, inReview] = await Promise.all([
         localWithdrawalQuote(this.database.db, {
           profileId,
-          provider: this.provider,
+          providers: this.providers,
         }),
         withdrawalInReview(this.database.db, profileId),
       ]);
@@ -312,7 +326,7 @@ export class DashboardController {
     const [quote, inReview] = await Promise.all([
       withdrawalQuote(this.database.db, {
         profileId,
-        provider: this.provider,
+        providers: this.providers,
         onReadFailure: this.logReadFailure('quote'),
         // Only the provider's side, briefly; TipMe's ledger is read fresh on every quote.
         cache: this.partnerCache,
@@ -328,6 +342,7 @@ export class DashboardController {
               withdrawableMinor: quote.withdrawableMinor.toString(),
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
+              capsMinor: quote.capsMinor.map((minor) => minor.toString()),
               // What the person pays: nothing when TipMe pays the partner's fee, as it does for
               // every new withdrawal from a person's page (owner, 18 Nov 2026).
               feeMinor:
@@ -374,19 +389,18 @@ export class DashboardController {
     // Before and after: the request itself always asks the provider (it takes no cache), and a
     // quote shown meanwhile or next must too. A failed invalidation is covered by the stamp of
     // TipMe's records in every key, which the new payout changes.
-    const scope = { provider: this.provider.name, profileId };
-    await this.partnerCache.invalidate(scope);
+    await this.invalidateQuotes(profileId);
     let result: Awaited<ReturnType<typeof requestWithdrawal>>;
     try {
       result = await requestWithdrawal(this.database.db, {
         profileId,
         amountMinor: BigInt(body.amountMinor),
         idempotencyKey: key,
-        provider: this.provider,
+        provider: this.providers.active,
         onReadFailure: this.logReadFailure('request'),
       });
     } finally {
-      await this.partnerCache.invalidate(scope);
+      await this.invalidateQuotes(profileId);
     }
     // The request committed: the person's other open tabs show it (this tab reloads itself).
     void this.publishLive({

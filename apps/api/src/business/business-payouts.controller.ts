@@ -48,6 +48,7 @@ import {
   spendPayoutDestinationCode,
   withdrawalInReview,
   type MailSealing,
+  type PayoutProviderSet,
   type PayoutReader,
 } from '@tipme/database';
 import type { Logger } from '@tipme/observability';
@@ -66,6 +67,7 @@ import {
 } from '../auth/session.guard.js';
 import {
   BACHS_PROVIDER_TOKEN,
+  PAYOUT_PROVIDERS_TOKEN,
   WITHDRAWAL_PROVIDER_TOKEN,
 } from '../checkout/payment-provider.provider.js';
 import { RateLimit } from '../checkout/rate-limit.guard.js';
@@ -121,6 +123,9 @@ export class BusinessPayoutsController {
     private readonly partnerCache: RedisPartnerQuoteCache,
     @Inject(BACHS_PROVIDER_TOKEN)
     private readonly bachs: BachsProvider | null,
+    /** Every provider in either role, for the quote; bank changes stay on the active one. */
+    @Inject(PAYOUT_PROVIDERS_TOKEN)
+    private readonly providers: PayoutProviderSet,
   ) {}
 
   @Get('balance')
@@ -240,7 +245,7 @@ export class BusinessPayoutsController {
     const [quote, inReview] = await Promise.all([
       businessWithdrawalQuote(this.database.db, {
         businessId,
-        provider: this.provider,
+        providers: this.providers,
         onReadFailure: this.logReadFailure('quote'),
         cache: this.partnerCache,
       }),
@@ -255,6 +260,7 @@ export class BusinessPayoutsController {
               withdrawableMinor: quote.withdrawableMinor.toString(),
               ledgerMinor: quote.ledgerMinor.toString(),
               providerMinor: quote.providerMinor.toString(),
+              capsMinor: quote.capsMinor.map((minor) => minor.toString()),
               feeMinor: quote.feeMinor.toString(),
               feePaidBy: quote.feePaidBy,
             }
@@ -276,8 +282,18 @@ export class BusinessPayoutsController {
       data: 'idempotency-key',
     });
     await this.owner(auth, businessId);
-    const scope = { provider: this.provider.name, businessId };
-    await this.partnerCache.invalidate(scope);
+    // Every provider's cached figures: a request may change any of them.
+    const invalidate = () =>
+      Promise.all(
+        [this.providers.active, ...this.providers.withdrawOnly].map(
+          (provider) =>
+            this.partnerCache.invalidate({
+              provider: provider.name,
+              businessId,
+            }),
+        ),
+      );
+    await invalidate();
     try {
       const result = await this.ownerOnly(() =>
         requestBusinessWithdrawal(this.database.db, {
@@ -291,7 +307,7 @@ export class BusinessPayoutsController {
       );
       return { data: { payoutId: result.payoutId, status: result.status } };
     } finally {
-      await this.partnerCache.invalidate(scope);
+      await invalidate();
     }
   }
 
@@ -587,12 +603,13 @@ export class BusinessPayoutsController {
     }
   }
 
+  /** Names the provider in staff logs only, never in what the owner is sent. */
   private logReadFailure(during: 'quote' | 'request') {
-    return (failure: ReturnType<typeof safeError>) =>
+    return (failure: ReturnType<typeof safeError>, provider: string) =>
       this.logger.warn({
         event: 'business_withdrawal.provider_read_failed',
         during,
-        provider: this.provider.name,
+        provider,
         ...failure,
       });
   }

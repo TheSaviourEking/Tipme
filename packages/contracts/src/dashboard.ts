@@ -143,6 +143,18 @@ export type WithdrawalQuote =
       /** The transfer fee the user pays on a withdrawal: '0' when TipMe pays it. */
       feeMinor: string;
       /**
+       * What each part of a full withdrawal would be, in the order they are paid, when the balance
+       * is held in more than one place: more than one entry means it may arrive as that many
+       * payments. Amounts only.
+       */
+      capsMinor: string[];
+      /** Some of the balance can't be withdrawn right now; the rest can. Try again later. */
+      partial: boolean;
+      /** Adding the bank details again would make all of the balance withdrawable. */
+      bankDetailsNeeded: boolean;
+      /** Some money is held where withdrawals can't reach it now; it isn't in this quote. */
+      heldElsewhere: boolean;
+      /**
        * Who pays the partner's fee. 'tipme' for every new withdrawal from a person's page (owner, 18
        * Nov 2026: withdrawals are free), and for a business while the `business_payout_fee_absorbed`
        * switch is on or an unused top-up can pay it. Otherwise 'user', a business's rule since 12 Nov

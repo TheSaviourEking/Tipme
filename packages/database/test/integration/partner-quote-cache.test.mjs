@@ -120,7 +120,11 @@ test('partner quote cache', async (t) => {
     return { provider: countingProvider(), cache: memoryCache() };
   };
   const quote = (provider, cache) =>
-    withdrawalQuote(db, { profileId: TOBI.id, provider, cache });
+    withdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: provider, withdrawOnly: [] },
+      cache,
+    });
   const withdraw = (provider, amountMinor, extra = {}) =>
     requestWithdrawal(db, {
       profileId: TOBI.id,
@@ -361,7 +365,7 @@ test('partner quote cache', async (t) => {
     const tobi = await quote(provider, cache);
     const ada = await withdrawalQuote(db, {
       profileId: ADA.id,
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
       cache,
     });
     assert.equal(provider.state.calls, 6, 'Ada made her own partner calls');
@@ -430,7 +434,10 @@ test('a local quote never calls the partner', async (t) => {
   const mock = countingProvider();
   mock.state.fail = true;
   assert.deepEqual(
-    await localWithdrawalQuote(db, { profileId: TOBI.id, provider: mock }),
+    await localWithdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: mock, withdrawOnly: [] },
+    }),
     { state: 'unchecked' },
   );
   // A provider with connected accounts and no account yet: the route blocks, from TipMe's rows.
@@ -438,12 +445,15 @@ test('a local quote never calls the partner', async (t) => {
   bachs.state.fail = true;
   const local = await localWithdrawalQuote(db, {
     profileId: TOBI.id,
-    provider: bachs,
+    providers: { active: bachs, withdrawOnly: [] },
   });
   assert.equal(local.state, 'setup_needed');
   assert.deepEqual(
     local,
-    await withdrawalQuote(db, { profileId: TOBI.id, provider: bachs }),
+    await withdrawalQuote(db, {
+      profileId: TOBI.id,
+      providers: { active: bachs, withdrawOnly: [] },
+    }),
     "the same answer a full quote gives when TipMe's side blocks",
   );
   assert.equal(mock.state.calls, 0);

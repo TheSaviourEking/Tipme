@@ -77,6 +77,12 @@ import { enqueueOutbox } from './outbox.js';
 import { jsonSafe } from './provider-events.js';
 import { recordTransition } from './transitions.js';
 import { ownerColumns, ownerOf, type MoneyOwner } from './owner.js';
+import {
+  ownerProviderReach,
+  ownerProviderSet,
+  sameBank,
+  type PayoutProviderSet,
+} from './payout-providers.js';
 
 export type { MoneyOwner } from './owner.js';
 
@@ -1129,7 +1135,23 @@ export type WithdrawalQuoteResult =
       withdrawableMinor: bigint;
       ledgerMinor: bigint;
       providerMinor: bigint;
+      /**
+       * The fee quoted by the provider that would carry the largest part of a full withdrawal: the
+       * one fee the person (or a business) may pay (P8).
+       */
       feeMinor: bigint;
+      /**
+       * What each provider in the owner's set would carry of a full withdrawal, in drain order, with
+       * the providers that carry nothing left out. Before You collect's limits, which only lower the
+       * total. Amounts only: a provider is never named to the person.
+       */
+      capsMinor: bigint[];
+      /** Some of the balance can't be read or paid right now (a failed read, an account issue). */
+      partial: boolean;
+      /** Money at a provider whose bank isn't the one shown: "add your bank details again". */
+      bankDetailsNeeded: boolean;
+      /** A tip went through a provider that is no longer connected; its money isn't counted. */
+      heldElsewhere: boolean;
       /**
        * Who pays `feeMinor` on a withdrawal asked for now: 'tipme' for a person's page (owner, 18 Nov
        * 2026: withdrawals are free, covered by the plan fee), and for a business while the
@@ -1163,6 +1185,8 @@ export type WithdrawalQuoteResult =
 // Money can only leave through the provider that collected it. A paid tip collected by any other
 // provider sits where this one cannot reach it, so it blocks the withdrawal rather than paying it
 // out twice. Attempts record the stored name ('bachs'), so the adapter's name is converted first.
+// Only the request still asks this; the quote reads every provider in the owner's set (spec §5),
+// and the request follows when it splits across providers (per-provider balances, Task 6).
 async function collectedElsewhere(
   db: Pick<Database, 'execute'>,
   input: { owner: MoneyOwner; provider: string },
@@ -1185,18 +1209,23 @@ async function collectedElsewhere(
   return Boolean(foreign.rows[0]?.found);
 }
 
-/** Whether a withdrawal through `provider` can be requested at all, before an amount is chosen. */
+/**
+ * Whether a withdrawal can be requested at all, before an amount is chosen (spec §8): false only
+ * when the person's money is at providers that are no longer connected and no configured provider
+ * holds an account or a successful tip of theirs.
+ */
 export function withdrawalsAvailable(
   db: Database,
-  input: { profileId: string; provider: string },
+  input: { profileId: string; providers: PayoutProviderSet },
 ): Promise<boolean> {
-  return guarded(
-    async () =>
-      !(await collectedElsewhere(db, {
-        owner: { profileId: input.profileId },
-        provider: input.provider,
-      })),
-  );
+  return guarded(async () => {
+    const reach = await ownerProviderReach(
+      db,
+      { profileId: input.profileId },
+      input.providers,
+    );
+    return !reach.heldElsewhere || reach.anyConfigured;
+  });
 }
 
 /** Where a withdrawal would go, from TipMe's own records; the provider is not asked here. */
@@ -1213,8 +1242,10 @@ async function payoutRoute(
   accountChangedAt: string | null;
   destination: {
     id: string;
+    bankCode: string;
     bankName: string;
     last4: string;
+    accountHash: string | null;
     status: string;
   } | null;
 }> {
@@ -1241,8 +1272,10 @@ async function payoutRoute(
   const [destination] = await db
     .select({
       id: payoutDestinations.id,
+      bankCode: payoutDestinations.bankCode,
       bankName: payoutDestinations.bankName,
       last4: payoutDestinations.accountLast4,
+      accountHash: payoutDestinations.accountHash,
       status: payoutDestinations.status,
     })
     .from(payoutDestinations)
@@ -1284,9 +1317,13 @@ function routeBlock(
   return null;
 }
 
-/** Told why a read failed, so wrong keys don't pass as an outage. Never carries account data. */
+/**
+ * Told why a read failed, and at which provider (for staff logs only), so wrong keys don't pass as
+ * an outage. Never carries account data.
+ */
 export type ProviderReadFailureLog = (
   failure: ReturnType<typeof safeError>,
+  provider: string,
 ) => void;
 
 /**
@@ -1503,7 +1540,7 @@ async function readProvider(
     );
     return { state: 'ok', availableMinor, feeMinor };
   } catch (error) {
-    onReadFailure?.(safeError(error));
+    onReadFailure?.(safeError(error), provider.name);
     return { state: 'unavailable' };
   }
 }
@@ -1511,10 +1548,13 @@ async function readProvider(
 /**
  * Money queued for the worker has left the ledger's available balance but not yet the provider's,
  * so the provider's figure still includes it. Counting it again would promise the same money twice.
+ * With `provider` (a recorded name, such as `'bachs'`), only what is queued at that provider: its
+ * own balance is the only one still holding it (`queued_P`, spec §5).
  */
-async function queuedNotStarted(
+export async function queuedNotStarted(
   db: Pick<Database, 'select'>,
   owner: MoneyOwner,
+  provider?: string,
 ): Promise<bigint> {
   const [row] = await db
     .select({
@@ -1527,6 +1567,7 @@ async function queuedNotStarted(
         ownedBy(payouts, owner),
         eq(payouts.status, 'REQUESTED'),
         isNull(payouts.providerReference),
+        provider === undefined ? undefined : eq(payouts.provider, provider),
       ),
     );
   return BigInt(row?.total ?? 0);
@@ -1581,34 +1622,30 @@ export type WithdrawalQuoteBlock = Exclude<
 
 /**
  * Everything a quote decides from TipMe's own records, before the payment partner: the switch,
- * holds, below zero, money collected elsewhere and the payout route. `route` when nothing blocks.
- * For a person or a business (R2-B), the same checks.
+ * holds, below zero and the active provider's payout route. `route` when nothing blocks. Money at
+ * another provider no longer blocks (spec §8): the quote counts it, or says why it can't. For a
+ * person or a business (R2-B), the same checks.
  */
 async function quoteGate(
   db: Database,
   owner: MoneyOwner,
-  provider: PayoutReader,
+  active: PayoutReader,
 ): Promise<
   | { block: WithdrawalQuoteBlock }
   | { route: Awaited<ReturnType<typeof payoutRoute>> }
 > {
   if (await withdrawalsSwitchedOff(db))
     return { block: { state: 'paused', reason: 'switched_off' } };
-  const { hold, route, foreign } = await guarded(async () => ({
+  const { hold, route } = await guarded(async () => ({
     hold: await activeHold(db, owner),
-    route: await payoutRoute(db, { owner, provider }),
-    foreign: await collectedElsewhere(db, {
-      owner,
-      provider: provider.name,
-    }),
+    route: await payoutRoute(db, { owner, provider: active }),
   }));
   if (hold) return { block: { state: 'paused', reason: hold } };
   // Q8 (R2-A): below zero after a reversal, withdrawals wait until it is back above zero.
   if ((await guarded(() => ownerAvailable(db, owner))) < 0n)
     return { block: { state: 'paused', reason: 'reversal' } };
-  // A request would be refused, so the quote must not say otherwise. The states have no word for
-  // money collected by another provider; the dashboard explains it from `withdrawalsAvailable`.
-  if (foreign) return { block: { state: 'provider_unavailable' } };
+  // P3: the active route decides the setup and bank states. The screen's one bank is the active
+  // provider's, so without it no other provider's part can be checked as the same bank.
   const block = routeBlock(route);
   if (block) return { block };
   return { route };
@@ -1621,18 +1658,19 @@ async function quoteGate(
  */
 export async function localWithdrawalQuote(
   db: Database,
-  input: { profileId: string; provider: PayoutReader },
+  input: { profileId: string; providers: PayoutProviderSet },
 ): Promise<WithdrawalQuoteBlock | { state: 'unchecked' }> {
   const gate = await quoteGate(
     db,
     { profileId: input.profileId },
-    input.provider,
+    input.providers.active,
   );
   return 'block' in gate ? gate.block : { state: 'unchecked' };
 }
 
 type QuoteInput = {
-  provider: PayoutReader;
+  /** Every configured provider; the quote reads those in the owner's set (spec §5). */
+  providers: PayoutProviderSet;
   onReadFailure?: ProviderReadFailureLog;
   /** Only for showing the quote; a request takes none and always asks the provider. */
   cache?: PartnerQuoteCache;
@@ -1660,44 +1698,134 @@ export function businessWithdrawalQuote(
   return quoteFor(db, { businessId: input.businessId }, input);
 }
 
+type Route = Awaited<ReturnType<typeof payoutRoute>>;
+
+/**
+ * Whether a withdraw-only provider's part can be paid to the bank the screen shows (the active
+ * provider's), P4 and P5. 'bank': a missing, pending, rejected or different bank there, which the
+ * person fixes by adding their bank details again. 'partial': what the person can't fix (no account
+ * reference, or the provider would pay the account out by itself). Neither is ever paid.
+ */
+function partRoute(route: Route, active: Route): 'ok' | 'bank' | 'partial' {
+  if (!route.accountless && (!route.accountReference || !route.manualPayouts))
+    return 'partial';
+  const there = route.destination;
+  // An accountless provider with no bank row pays the pretend bank, as today's quote does.
+  if (!there) return route.accountless && !active.destination ? 'ok' : 'bank';
+  if (there.status !== 'usable' || !active.destination) return 'bank';
+  return sameBank(active.destination, there) ? 'ok' : 'bank';
+}
+
+/** What one provider in the owner's set carries of a full withdrawal. */
+type QuotedPart = {
+  provider: PayoutReader;
+  route: Route;
+  /** max(0, balance − queued at this provider) */
+  availMinor: bigint;
+  /** What it carries, after the providers before it in drain order and the ledger cap. */
+  takeMinor: bigint;
+  feeMinor: bigint;
+};
+
 async function quoteFor(
   db: Database,
   owner: MoneyOwner,
   input: QuoteInput,
 ): Promise<WithdrawalQuoteResult> {
-  const gate = await quoteGate(db, owner, input.provider);
+  const { active } = input.providers;
+  const gate = await quoteGate(db, owner, active);
   if ('block' in gate) return gate.block;
-  const { route } = gate;
-  const { ledger, queuedMinor } = await guarded(async () => ({
+  const activeRoute = gate.route;
+  const { ledger, reach } = await guarded(async () => ({
     ledger: await ownerBalance(db, owner),
-    queuedMinor: await queuedNotStarted(db, owner),
+    reach: await ownerProviderSet(db, owner, input.providers),
   }));
   const ledgerMinor = ledger.availableMinor;
   const { cache } = input;
-  const entries = cache
-    ? await safely(() =>
-        cache.open({ provider: input.provider.name, ...owner }),
-      )
-    : null;
-  const reader = entries
-    ? cachedReader(
-        input.provider,
-        entries,
-        await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
-      )
-    : input.provider;
-  const read = await readProvider(
-    reader,
-    route.accountReference ?? ownerReference(owner),
-    (available) => notNegative(lower(ledgerMinor, available - queuedMinor)),
-    input.onReadFailure,
+  // Spec §5: each provider in drain order takes what it can, until the ledger total is reached.
+  let remaining = notNegative(ledgerMinor);
+  let partial = false;
+  let bankDetailsNeeded = false;
+  const parts: QuotedPart[] = [];
+  for (const provider of reach.providers) {
+    const isActive = provider === active;
+    const route = isActive
+      ? activeRoute
+      : await guarded(() => payoutRoute(db, { owner, provider }));
+    if (!isActive) {
+      const state = partRoute(route, activeRoute);
+      // Never read, so never counted: this money can't go to the bank the screen shows.
+      if (state === 'bank') bankDetailsNeeded = true;
+      if (state === 'partial') partial = true;
+      if (state !== 'ok') continue;
+    }
+    const queuedMinor = await guarded(() =>
+      queuedNotStarted(db, owner, recordedProviderName(provider.name)),
+    );
+    const entries = cache
+      ? await safely(() => cache.open({ provider: provider.name, ...owner }))
+      : null;
+    const reader = entries
+      ? cachedReader(
+          provider,
+          entries,
+          await guarded(() => partnerStamp(db, { owner, route, ledgerMinor })),
+        )
+      : provider;
+    const take = (available: bigint) =>
+      lower(remaining, notNegative(available - queuedMinor));
+    const read = await readProvider(
+      reader,
+      route.accountReference ?? ownerReference(owner),
+      take,
+      input.onReadFailure,
+    );
+    if (read.state === 'setup_needed') {
+      // The active provider's account is the person's to finish, as today (P3).
+      if (isActive) return read;
+      partial = true;
+      continue;
+    }
+    if (read.state === 'unavailable') {
+      partial = true;
+      continue;
+    }
+    const takeMinor = take(read.availableMinor);
+    remaining -= takeMinor;
+    parts.push({
+      provider,
+      route,
+      availMinor: notNegative(read.availableMinor - queuedMinor),
+      takeMinor,
+      feeMinor: read.feeMinor,
+    });
+  }
+  // Nothing could be read at all: today's outage, not a ready quote of nothing.
+  const [first, ...others] = parts;
+  if (!first) return { state: 'provider_unavailable' };
+  // P8: the fee is the one the provider carrying the largest part quotes (the active one when
+  // nothing can be carried), as that is the part a fee the person pays comes off.
+  const carrier = others.reduce(
+    (best, part) =>
+      part.takeMinor > best.takeMinor ||
+      (best.takeMinor === 0n &&
+        part.takeMinor === 0n &&
+        part.provider === active)
+        ? part
+        : best,
+    first,
   );
-  if (read.state === 'unavailable') return { state: 'provider_unavailable' };
-  if (read.state === 'setup_needed') return read;
-  const providerMinor = notNegative(read.availableMinor - queuedMinor);
+  const providerMinor = parts.reduce((sum, part) => sum + part.availMinor, 0n);
   const now = input.now ?? new Date();
   const feePaidBy = await guarded(() =>
-    feePayerFor(db, owner, route, input.provider.name, read.feeMinor, now),
+    feePayerFor(
+      db,
+      owner,
+      carrier.route,
+      carrier.provider.name,
+      carrier.feeMinor,
+      now,
+    ),
   );
   const ordinalToday =
     'businessId' in owner
@@ -1710,7 +1838,7 @@ async function quoteFor(
     'businessId' in owner || !ledger.collecting
       ? null
       : await guarded(() => collectWithdrawalRoom(db, owner.profileId, now));
-  const withdrawable = notNegative(lower(ledgerMinor, providerMinor));
+  const withdrawable = parts.reduce((sum, part) => sum + part.takeMinor, 0n);
   return {
     state: 'ready',
     withdrawableMinor: room
@@ -1718,12 +1846,21 @@ async function quoteFor(
       : withdrawable,
     ledgerMinor,
     providerMinor,
-    feeMinor: read.feeMinor,
+    feeMinor: carrier.feeMinor,
+    capsMinor: parts
+      .map((part) => part.takeMinor)
+      .filter((minor) => minor > 0n),
+    partial,
+    bankDetailsNeeded,
+    heldElsewhere: reach.heldElsewhere,
     feePaidBy,
     ordinalToday,
     freePerDay: 'businessId' in owner ? 0 : FREE_WITHDRAWALS_PER_DAY,
-    destination: route.destination
-      ? { bankName: route.destination.bankName, last4: route.destination.last4 }
+    destination: activeRoute.destination
+      ? {
+          bankName: activeRoute.destination.bankName,
+          last4: activeRoute.destination.last4,
+        }
       : { bankName: 'Pretend bank', last4: '0000' },
   };
 }

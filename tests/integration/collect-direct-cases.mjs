@@ -680,7 +680,7 @@ export const DIRECT_CASES = [
       );
       const quote = await ops.withdrawalQuote(database.db, {
         profileId: TOBI.id,
-        provider: partner(),
+        providers: { active: partner(), withdrawOnly: [] },
         now: NOW,
       });
       assert.equal(quote.withdrawableMinor, 38_000_000n);
@@ -689,7 +689,7 @@ export const DIRECT_CASES = [
       const seen = await statements(async () => {
         await ops.withdrawalQuote(database.db, {
           profileId: TOBI.id,
-          provider: partner(),
+          providers: { active: partner(), withdrawOnly: [] },
           now: NOW,
         });
         assert.equal(

@@ -224,12 +224,12 @@ test('a business balance and its withdrawals', async (t) => {
       );
       const quote = await withdrawalQuote(db, {
         profileId: TOBI.id,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.equal(quote.ledgerMinor, await personBalance());
       const business = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.equal(business.state, 'ready');
       assert.equal(business.ledgerMinor, first.share * 2n);
@@ -656,7 +656,7 @@ test('a business balance and its withdrawals', async (t) => {
       assert.deepEqual(
         await businessWithdrawalQuote(db, {
           businessId: shared.businessId,
-          provider: provider(),
+          providers: { active: provider(), withdrawOnly: [] },
         }),
         { state: 'paused', reason: 'switched_off' },
       );
@@ -683,7 +683,7 @@ test('a business balance and its withdrawals', async (t) => {
       assert.deepEqual(
         await businessWithdrawalQuote(db, {
           businessId: shared.businessId,
-          provider: provider(),
+          providers: { active: provider(), withdrawOnly: [] },
         }),
         { state: 'paused', reason: 'review' },
       );
@@ -753,7 +753,7 @@ test('a business balance and its withdrawals', async (t) => {
       assert.deepEqual(
         await businessWithdrawalQuote(db, {
           businessId: shared.businessId,
-          provider: provider(),
+          providers: { active: provider(), withdrawOnly: [] },
         }),
         { state: 'paused', reason: 'reversal' },
       );
@@ -771,7 +771,7 @@ test('a business balance and its withdrawals', async (t) => {
       assert.equal(await businessBalance(shared.businessId), 0n);
       const atZero = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.equal(atZero.state, 'ready');
       assert.equal(atZero.withdrawableMinor, 0n);
@@ -860,7 +860,7 @@ test('a business balance and its withdrawals', async (t) => {
       });
       const quote = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.deepEqual(quote.destination, {
         bankName: 'Pretend Guaranty Bank',
@@ -920,7 +920,7 @@ test('a business balance and its withdrawals', async (t) => {
       const before = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
         userId: OWNER,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.equal(before.feePaidBy, 'user');
       const paysItself = await withdraw(shared.businessId, 500000n);
@@ -932,7 +932,7 @@ test('a business balance and its withdrawals', async (t) => {
       const after = await businessWithdrawalQuote(db, {
         businessId: shared.businessId,
         userId: OWNER,
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       });
       assert.equal(after.feePaidBy, 'tipme');
       const absorbed = await withdraw(shared.businessId, 500000n);

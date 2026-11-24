@@ -874,7 +874,7 @@ test('the first withdrawal is capped at ₦50,000', async () => {
   assert.equal(status.dailyLimitMinor, 20_000_000n);
   const quote = await ops.withdrawalQuote(database.db, {
     profileId: TOBI.id,
-    provider: partner(),
+    providers: { active: partner(), withdrawOnly: [] },
     now: NOW,
   });
   assert.equal(quote.state, 'ready');
@@ -930,7 +930,7 @@ test('the daily limit for new accounts counts the Lagos day', async () => {
   );
   const quote = await ops.withdrawalQuote(database.db, {
     profileId: TOBI.id,
-    provider: partner(),
+    providers: { active: partner(), withdrawOnly: [] },
     now: later,
   });
   assert.equal(quote.withdrawableMinor, 5_000_000n);
@@ -998,7 +998,7 @@ test('money on its way is shown and never withdrawable', async () => {
   assert.equal(summary.availableMinor, String(9_500_000n - 1_000_000n));
   const quote = await ops.withdrawalQuote(database.db, {
     profileId: TOBI.id,
-    provider: partner(),
+    providers: { active: partner(), withdrawOnly: [] },
     now: NOW,
   });
   assert.equal(quote.withdrawableMinor, 8_500_000n);

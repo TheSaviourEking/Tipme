@@ -789,7 +789,7 @@ test('reversals and the business share', async (t) => {
       );
       const quoted = await withdrawalQuote(db, {
         profileId: TOBI.id,
-        provider,
+        providers: { active: provider, withdrawOnly: [] },
       });
       assert.deepEqual(quoted, { state: 'paused', reason: 'reversal' });
       assert.equal((await belowZeroIssues()).length, 1);

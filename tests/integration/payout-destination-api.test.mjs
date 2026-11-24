@@ -373,7 +373,7 @@ test('withdrawals wait until manual payouts are set', async (t) => {
   });
   const quote = await withdrawalQuote(database.db, {
     profileId: TOBI,
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   assert.deepEqual(quote, { state: 'setup_needed', requirementsDue: [] });
   await assert.rejects(
@@ -388,7 +388,7 @@ test('withdrawals wait until manual payouts are set', async (t) => {
   await sweepPayoutSetup(database.db, { provider });
   const after = await withdrawalQuote(database.db, {
     profileId: TOBI,
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   assert.equal(after.state, 'ready');
 });
@@ -713,7 +713,12 @@ test('a rejected destination shows as rejected and can be replaced', async (t) =
     'rejected',
   );
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'no_destination',
   );
   const fixed = await addBank(database, controller, {
@@ -721,7 +726,12 @@ test('a rejected destination shows as rejected and can be replaced', async (t) =
   });
   assert.equal(fixed.data.status, 'usable');
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'ready',
   );
 });
@@ -757,7 +767,12 @@ test('a destination under review becomes usable when the provider says so, by an
     'pending_review',
   );
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'destination_pending',
   );
   // A failed read changes nothing.
@@ -775,7 +790,12 @@ test('a destination under review becomes usable when the provider says so, by an
   answer = 'usable';
   await sweepPayoutSetup(database.db, { provider });
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'ready',
   );
 });
@@ -818,7 +838,12 @@ test("a bank added on the provider's hosted page is not usable: only this card m
     0,
   );
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'no_destination',
   );
   await assert.rejects(
@@ -1263,7 +1288,12 @@ test('a rejected replacement is refused and the usable account stays current, wi
   );
   assert.equal((await notices(database)).length, 0);
   assert.equal(
-    (await withdrawalQuote(database.db, { profileId: TOBI, provider })).state,
+    (
+      await withdrawalQuote(database.db, {
+        profileId: TOBI,
+        providers: { active: provider, withdrawOnly: [] },
+      })
+    ).state,
     'ready',
   );
 });

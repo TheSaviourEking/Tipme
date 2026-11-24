@@ -104,7 +104,7 @@ test('withdrawals per day: 2 free, then the partner fee comes off', async (t) =>
   const quote = (now) =>
     withdrawalQuote(db, {
       profileId: TOBI.id,
-      provider: bachsLike(),
+      providers: { active: bachsLike(), withdrawOnly: [] },
       ...(now ? { now } : {}),
     });
   const payers = async () =>
