@@ -150,33 +150,33 @@ test('shape: valid and refused combinations', () => {
     null,
   );
   assert.equal(
-    typeof feeWaiverShapeProblem({ ...ok, payer: 'inherit' }),
-    'string',
+    feeWaiverShapeProblem({ ...ok, payer: 'inherit' }),
+    'Only an account rule can inherit.',
   ); // inherit on a kind rule
   assert.equal(
-    typeof feeWaiverShapeProblem({ ...ok, kind: 'business' }),
-    'string',
+    feeWaiverShapeProblem({ ...ok, kind: 'business' }),
+    'Businesses have no tip fee.',
   ); // tip for business
   assert.equal(
-    typeof feeWaiverShapeProblem({
+    feeWaiverShapeProblem({
       ...ok,
       kind: 'giving',
       scope: 'account',
       hasAccount: true,
     }),
-    'string',
+    'Giving has no accounts yet, so it can only have a kind-wide rule.',
   ); // giving account scope
   assert.equal(
-    typeof feeWaiverShapeProblem({
+    feeWaiverShapeProblem({
       ...ok,
       scope: 'account',
       hasAccount: false,
     }),
-    'string',
+    'An account rule needs an account.',
   ); // account scope without an account
   assert.equal(
-    typeof feeWaiverShapeProblem({ ...ok, scope: 'kind', hasAccount: true }),
-    'string',
+    feeWaiverShapeProblem({ ...ok, scope: 'kind', hasAccount: true }),
+    'A kind-wide rule has no account.',
   );
 });
 
@@ -340,4 +340,30 @@ test('lagosMonthStart is the first instant of the Lagos month', () => {
   assert.equal(iso('2026-10-31T22:59:59.999Z'), '2026-09-30T23:00:00.000Z');
   assert.equal(iso('2026-10-31T23:00:00Z'), '2026-10-31T23:00:00.000Z');
   assert.equal(iso('2026-12-31T23:30:00Z'), '2026-12-31T23:00:00.000Z');
+});
+
+test('an ended account tipme rule falls through to a live kind tipme rule', () => {
+  const a = acct({ payer: 'tipme', endsAt: d('2026-11-20T00:00:00Z') });
+  const k = rule({ payer: 'tipme' });
+  assert.deepEqual(
+    resolveFeeWaiver({ accountRows: [a], kindRows: [k], now: NOW }),
+    { payer: 'tipme', ruleId: k.id, endsAt: null },
+  );
+});
+
+test('an account inherit row replaces an older account tipme row', () => {
+  const older = acct({ payer: 'tipme', startsAt: d('2026-11-01T00:00:00Z') });
+  const newer = acct({ payer: 'inherit', startsAt: d('2026-11-10T00:00:00Z') });
+  const k = rule({ payer: 'account' });
+  assert.equal(
+    resolveFeeWaiver({ accountRows: [older, newer], kindRows: [k], now: NOW })
+      .payer,
+    'default',
+  );
+  const k2 = rule({ payer: 'tipme' });
+  assert.equal(
+    resolveFeeWaiver({ accountRows: [older, newer], kindRows: [k2], now: NOW })
+      .ruleId,
+    k2.id,
+  );
 });

@@ -119,6 +119,7 @@ export function feeWaiverShapeProblem(r: {
   return null;
 }
 
+// UTC month maths is intentional (W4); it can only be stricter than Lagos-calendar maths.
 /** `date` plus `months` calendar months in UTC, the day clamped to the target month's length. */
 function addUtcMonths(date: Date, months: number): Date {
   const total = date.getUTCMonth() + months;
