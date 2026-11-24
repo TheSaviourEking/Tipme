@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 import { Redis } from 'ioredis';
-import { createMockProvider } from '../dist/index.js';
+import { createMockProvider } from '../../dist/index.js';
 
 // The second test adapter: the same pretend provider under another name and its own keys, so
 // integration tests can hold money at two providers. Local Redis, as the integration tests use.
