@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import {
   balanceOf,
+  businessBalanceOf,
   checkProviderSplit,
   createPaymentIntent,
   createQuote,
@@ -16,6 +17,11 @@ import {
   SPLIT_SHORT_THRESHOLD_MINOR,
   splitOwnersDue,
 } from '../../dist/index.js';
+import {
+  seedAgreement,
+  seedBusiness,
+  seedMember,
+} from './business-fixtures.mjs';
 import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
 
 // Per-provider balances, Task 10 (spec §5a, §7, P12): the daily check of split accounts. Each split
@@ -96,6 +102,13 @@ test('daily split check', async (t) => {
     );
   const issuesOf = (kind) =>
     q(`SELECT * FROM issues WHERE kind = $1 ORDER BY dedupe_key`, [kind]);
+  /** Staff settle an issue: the next spell of the same cause must open a new one. */
+  const resolve = (id) =>
+    q(
+      `UPDATE issues SET status = 'resolved', resolved_at = now(), resolved_by = 'system'
+        WHERE id = $1`,
+      [id],
+    );
   const now = new Date('2026-11-24T09:00:00Z');
 
   await t.test('the threshold and batch are the plan figures', () => {
@@ -121,6 +134,8 @@ test('daily split check', async (t) => {
       });
       assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 544000n);
       // 544,000 − ((372,000 − 200,000) + 352,000) = 20,000: ₦200 short.
+      old.reads.length = 0;
+      active.reads.length = 0;
       const result = await checkProviderSplit(
         db,
         { profileId: TOBI.id },
@@ -142,7 +157,16 @@ test('daily split check', async (t) => {
         { provider: 'mock', availableMinor: '352000', queuedMinor: '0' },
       ]);
       const [issue] = await issuesOf('provider_split_short');
-      assert.equal(issue.dedupe_key, `provider_split_short.${TOBI.id}`);
+      // One key per spell, so a resolved issue never swallows the next shortfall.
+      assert.ok(
+        issue.dedupe_key.startsWith(`provider_split_short.${TOBI.id}.`),
+      );
+      // Short is read again before the issue is opened: each provider was asked twice.
+      assert.equal(old.reads.filter((r) => r.startsWith('balance:')).length, 2);
+      assert.equal(
+        active.reads.filter((r) => r.startsWith('balance:')).length,
+        2,
+      );
       assert.equal(issue.severity, 'money');
       assert.equal(issue.subject.profileId, TOBI.id);
       // Staff see each provider's figures under its recorded name.
@@ -156,6 +180,145 @@ test('daily split check', async (t) => {
       });
       assert.equal((await checks()).length, 2);
       assert.equal((await issuesOf('provider_split_short')).length, 1);
+      // Resolved, then short again: a new issue for the new spell.
+      await resolve(issue.id);
+      await checkProviderSplit(db, { profileId: TOBI.id }, providers, {
+        now: new Date(now.getTime() + 2 * DAY + 2),
+      });
+      const after = await issuesOf('provider_split_short');
+      assert.equal(after.length, 2);
+      const reopened = after.find((row) => row.id !== issue.id);
+      assert.equal(reopened.status, 'open');
+      assert.ok(
+        reopened.dedupe_key.startsWith(`provider_split_short.${TOBI.id}.`),
+      );
+    },
+  );
+
+  await t.test(
+    'a one-off dip at a provider that recovers on the re-read opens nothing',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const old = reader('mock_alt', { balance: 372000n });
+      // The first read shows ₦3,720 missing; the second has it back.
+      const answers = [0n, 372000n];
+      const dipping = {
+        ...reader('mock'),
+        async payoutBalance() {
+          return { availableMinor: answers.shift() ?? 372000n };
+        },
+      };
+      const result = await checkProviderSplit(
+        db,
+        { profileId: TOBI.id },
+        set(dipping, old),
+        { now },
+      );
+      // The row keeps what the first read saw.
+      assert.deepEqual(result, { outcome: 'short' });
+      const [row] = await checks();
+      assert.equal(row.outcome, 'short');
+      assert.deepEqual(row.providers[1], {
+        provider: 'mock',
+        availableMinor: '0',
+        queuedMinor: '0',
+      });
+      assert.equal(answers.length, 0);
+      assert.equal((await issuesOf('provider_split_short')).length, 0);
+    },
+  );
+
+  await t.test(
+    'a business owner is checked on its own balance and shared tips',
+    async () => {
+      await database.fresh();
+      const { businessId, locations } = await seedBusiness(database);
+      const { memberId } = await seedMember(database, {
+        locationId: locations[0].id,
+        profileId: TOBI.id,
+      });
+      const { agreementId } = await seedAgreement(database, {
+        memberId,
+        businessBps: 5000,
+      });
+      /** A ₦4,000 tip to Tobi at the business through `provider`; the business takes half. */
+      const sharedTip = async (provider) => {
+        const quote = await createQuote(db, {
+          handle: 'tobi',
+          tipMinor: 400000n,
+          currency: 'NGN',
+        });
+        const intent = await createPaymentIntent(db, {
+          quoteId: quote.quoteId,
+          idempotencyKey: randomUUID(),
+          businessMemberId: memberId,
+        });
+        const [{ net }] = await q(
+          `SELECT q.recipient_net_minor::text AS net FROM payment_intents i
+             JOIN tip_quotes q ON q.id = i.quote_id
+            WHERE i.id = (SELECT intent_id FROM tips WHERE id = $1)`,
+          [intent.tipId],
+        );
+        const share = BigInt(net) / 2n;
+        await q(
+          `INSERT INTO tip_business_shares (tip_id, agreement_id, business_id, business_bps, share_minor)
+           VALUES ($1, $2, $3, 5000, $4)`,
+          [intent.tipId, agreementId, businessId, share.toString()],
+        );
+        const reference = `${provider}_pay_${randomUUID()}`;
+        await markAttemptInitiated(db, {
+          attemptId: intent.attemptId,
+          provider,
+          providerReference: reference,
+        });
+        await recordProviderEvent(db, {
+          provider,
+          providerEventId: `evt_${randomUUID()}`,
+          eventType: 'payment.succeeded',
+          attemptId: intent.attemptId,
+          providerReference: reference,
+          amountMinor: 400000n,
+          currency: 'NGN',
+          providerFeeMinor: 3000n,
+          signatureVerified: true,
+          payload: {},
+        });
+        return share;
+      };
+      const share = await sharedTip('mock_alt');
+      await sharedTip('mock');
+      const ledger = (await businessBalanceOf(db, businessId)).availableMinor;
+      assert.equal(ledger, share * 2n);
+      const old = reader('mock_alt', { balance: 0n });
+      const active = reader('mock', { balance: share });
+      const providers = set(active, old);
+      // The business is due through its shared tip at mock_alt (and so is Tobi, through the tip).
+      const due = await splitOwnersDue(db, providers, { now, limit: 20 });
+      assert.ok(due.some((owner) => owner.businessId === businessId));
+      const result = await checkProviderSplit(db, { businessId }, providers, {
+        now,
+      });
+      assert.deepEqual(result, { outcome: 'short' });
+      // Read at the business's own account (its id, while accountless).
+      assert.ok(old.reads.includes(`balance:${businessId}`));
+      const [row] = await checks(businessId);
+      assert.equal(row.profile_id, null);
+      assert.equal(row.business_id, businessId);
+      assert.equal(row.ledger_minor, ledger.toString());
+      const [issue] = await issuesOf('provider_split_short');
+      assert.ok(
+        issue.dedupe_key.startsWith(`provider_split_short.${businessId}.`),
+      );
+      assert.equal(issue.subject.businessId, businessId);
+      assert.match(issue.summary, new RegExp(`business ${businessId}`));
+      // Checked now, so no longer due; Tobi still is.
+      const later = await splitOwnersDue(db, providers, { now, limit: 20 });
+      assert.equal(
+        later.some((owner) => owner.businessId === businessId),
+        false,
+      );
     },
   );
 
@@ -334,12 +497,17 @@ test('daily split check', async (t) => {
       assert.equal(await flagUnconnectedMoney(db, withoutAlt, now), 2);
       const opened = await issuesOf('provider_unconnected_money');
       assert.deepEqual(
-        opened.map((issue) => issue.dedupe_key),
+        opened.map((issue) =>
+          issue.dedupe_key.split('.').slice(0, 2).join('.'),
+        ),
         [
           'provider_unconnected_money.gone_pay',
           'provider_unconnected_money.mock_alt',
         ],
       );
+      // One key per spell: `<prefix><id>`.
+      for (const issue of opened)
+        assert.equal(issue.dedupe_key.split('.').length, 3);
       for (const issue of opened) assert.equal(issue.severity, 'money');
       const [gone, alt] = opened;
       assert.match(gone.summary, /gone_pay/);
@@ -350,12 +518,26 @@ test('daily split check', async (t) => {
       assert.match(alt.summary, new RegExp(payout.id));
       // The connected provider holds money too, but it is reachable: no issue for it.
       assert.equal(
-        opened.some((issue) => issue.dedupe_key.endsWith('.mock')),
+        opened.some((issue) =>
+          issue.dedupe_key.startsWith('provider_unconnected_money.mock.'),
+        ),
         false,
       );
       // The next run opens nothing new.
       assert.equal(await flagUnconnectedMoney(db, withoutAlt, now), 0);
       assert.equal((await issuesOf('provider_unconnected_money')).length, 2);
+      // Resolved while the money is still there: the next run opens a new issue for that provider.
+      await resolve(gone.id);
+      assert.equal(await flagUnconnectedMoney(db, withoutAlt, now), 1);
+      const now3 = await issuesOf('provider_unconnected_money');
+      assert.equal(now3.length, 3);
+      const fresh = now3.find(
+        (issue) => issue.id !== gone.id && issue.id !== alt.id,
+      );
+      assert.equal(fresh.status, 'open');
+      assert.ok(
+        fresh.dedupe_key.startsWith('provider_unconnected_money.gone_pay.'),
+      );
       // While mock_alt is connected, only gone_pay would be flagged (already open).
       await database.fresh();
       await tip('mock_alt');

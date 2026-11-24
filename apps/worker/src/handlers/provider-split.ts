@@ -52,6 +52,8 @@ export interface SplitCheckSummary {
   short: number;
   over: number;
   partial: number;
+  /** Owners whose check threw; logged by id, and the run carried on. */
+  failed: number;
   /** Partner reads made. */
   reads: number;
   /** Owners were left for the next run because the read budget could be passed. */
@@ -108,6 +110,8 @@ export function runProviderSplitCheck(
     now?: Date;
     ops?: SplitCheckOps;
     onReadFailure?: ProviderReadFailureLog;
+    /** Staff logs: an owner's check that threw, by the owner's id only. */
+    log?: (entry: { event: string; owner: string }) => void;
   },
 ): Promise<{ ran: true; value: SplitCheckSummary } | { ran: false }> {
   return runUnlessRunning(
@@ -127,14 +131,15 @@ export function runProviderSplitCheck(
           counting(provider, count),
         ),
       };
-      // An owner reads at most every provider once.
-      const mostPerOwner = drainOrder(providers).length;
+      // An owner reads every provider once, and once more when short (the re-read before an issue).
+      const mostPerOwner = 2 * drainOrder(providers).length;
       const summary: SplitCheckSummary = {
         checked: 0,
         ok: 0,
         short: 0,
         over: 0,
         partial: 0,
+        failed: 0,
         reads: 0,
         stoppedEarly: false,
         unconnected: null,
@@ -149,19 +154,30 @@ export function runProviderSplitCheck(
           summary.stoppedEarly = true;
           break;
         }
-        const { outcome } = await ops.checkProviderSplit(
-          deps.db,
-          owner,
-          providers,
-          {
-            now,
-            ...(deps.onReadFailure
-              ? { onReadFailure: deps.onReadFailure }
-              : {}),
-          },
-        );
-        summary.checked += 1;
-        summary[outcome] += 1;
+        try {
+          const { outcome } = await ops.checkProviderSplit(
+            deps.db,
+            owner,
+            providers,
+            {
+              now,
+              ...(deps.onReadFailure
+                ? { onReadFailure: deps.onReadFailure }
+                : {}),
+            },
+          );
+          summary.checked += 1;
+          summary[outcome] += 1;
+        } catch {
+          // One owner that always throws must not block the rest, the sweep or the purge. It stays
+          // due (no row), so it is tried again next run; the error itself is not logged, as its text
+          // could carry anything.
+          summary.failed += 1;
+          deps.log?.({
+            event: 'split_check.owner_failed',
+            owner: 'businessId' in owner ? owner.businessId : owner.profileId,
+          });
+        }
       }
       summary.reads = reads;
       const dailyKey = `${lockKey}:daily`;

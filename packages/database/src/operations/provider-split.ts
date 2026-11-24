@@ -1,7 +1,12 @@
 import { bachsEnvironment, recordedProviderName } from '@tipme/contracts';
-import { lt, sql, type SQL } from 'drizzle-orm';
-import type { Database } from '../client.js';
-import { providerSplitChecks, type ProviderSplitReading } from '../schema.js';
+import { and, eq, lt, sql, type SQL } from 'drizzle-orm';
+import type { Database, Tx } from '../client.js';
+import {
+  issues,
+  providerSplitChecks,
+  type IssueSubject,
+  type ProviderSplitReading,
+} from '../schema.js';
 import { balanceIn, businessBalanceIn } from './balance.js';
 import { guarded, safeError } from './errors.js';
 import { newId } from './ids.js';
@@ -137,22 +142,26 @@ async function ledgerAvailable(
     : (await balanceIn(db, owner.profileId)).availableMinor;
 }
 
+/** One reading of an owner's providers and ledger, and what it says. */
+type SplitMeasure = {
+  ledgerMinor: bigint;
+  readings: (ProviderSplitReading & { held: bigint | null; queued: bigint })[];
+  outcome: SplitOutcome;
+  /** Σ (held − queued) and ledger − that; both 0 when a read failed. */
+  heldMinor: bigint;
+  gapMinor: bigint;
+};
+
 /**
- * One owner's check (spec §7): reads each provider in their set once, records one row, and opens
- * `provider_split_short` when the providers hold less than the ledger by more than ₦100. Holding
- * more is `over` (informational: common while a reversal is in flight). A failed read is
- * `partial`, with no issue: a figure missing one provider says nothing either way.
- *
- * The providers are read before TipMe's own figures, so a payout started in between shows as over
- * (harmless), never short. A tip confirmed in between can still show as short by that tip once.
+ * Reads each provider in the owner's set once, then TipMe's own figures. The providers come first,
+ * so a payout started in between shows as over (harmless), never short.
  */
-export async function checkProviderSplit(
+async function measureSplit(
   db: Database,
   owner: MoneyOwner,
-  set: PayoutProviderSet,
-  input: { now: Date; onReadFailure?: ProviderReadFailureLog },
-): Promise<{ outcome: SplitOutcome }> {
-  const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+  providers: readonly PayoutReader[],
+  onReadFailure?: ProviderReadFailureLog,
+): Promise<SplitMeasure> {
   const read: { provider: PayoutReader; availableMinor: bigint | null }[] = [];
   for (const provider of providers) {
     const reference = await balanceReferenceAt(db, owner, provider);
@@ -165,15 +174,12 @@ export async function checkProviderSplit(
       const { availableMinor } = await provider.payoutBalance(reference, 'NGN');
       read.push({ provider, availableMinor });
     } catch (error) {
-      input.onReadFailure?.(safeError(error), provider.name);
+      onReadFailure?.(safeError(error), provider.name);
       read.push({ provider, availableMinor: null });
     }
   }
   const ledgerMinor = await guarded(() => ledgerAvailable(db, owner));
-  const readings: (ProviderSplitReading & {
-    held: bigint | null;
-    queued: bigint;
-  })[] = [];
+  const readings: SplitMeasure['readings'] = [];
   for (const { provider, availableMinor } of read) {
     const stored = recordedProviderName(provider.name);
     const queued = await guarded(() => committedAtProvider(db, owner, stored));
@@ -186,23 +192,94 @@ export async function checkProviderSplit(
       queued,
     });
   }
-  let outcome: SplitOutcome;
-  let gapMinor = 0n;
-  let heldMinor = 0n;
-  if (readings.some((reading) => reading.held === null)) outcome = 'partial';
-  else {
-    heldMinor = readings.reduce(
-      (sum, reading) => sum + reading.held! - reading.queued,
-      0n,
-    );
-    gapMinor = ledgerMinor - heldMinor;
-    outcome =
+  if (readings.some((reading) => reading.held === null))
+    return {
+      ledgerMinor,
+      readings,
+      outcome: 'partial',
+      heldMinor: 0n,
+      gapMinor: 0n,
+    };
+  const heldMinor = readings.reduce(
+    (sum, reading) => sum + reading.held! - reading.queued,
+    0n,
+  );
+  const gapMinor = ledgerMinor - heldMinor;
+  return {
+    ledgerMinor,
+    readings,
+    outcome:
       gapMinor > SPLIT_SHORT_THRESHOLD_MINOR
         ? 'short'
         : gapMinor < 0n
           ? 'over'
-          : 'ok';
-  }
+          : 'ok',
+    heldMinor,
+    gapMinor,
+  };
+}
+
+/**
+ * One open issue per cause at a time, each spell under its own key (`<prefix><id>`), so an issue
+ * staff resolved never swallows the next spell (as `openOnce` in collect-transfers.ts). The
+ * advisory lock keeps two runs from opening the same spell twice. True when it opened one.
+ */
+async function openSpell(
+  tx: Tx,
+  input: {
+    prefix: string;
+    kind: 'provider_split_short' | 'provider_unconnected_money';
+    subject: IssueSubject;
+    note: string;
+    now: Date;
+  },
+): Promise<boolean> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(hashtext(${`provider_split_issue:${input.prefix}`}::text))`,
+  );
+  const [open] = await tx
+    .select({ id: issues.id })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.status, 'open'),
+        sql`starts_with(${issues.dedupeKey}, ${input.prefix})`,
+      ),
+    )
+    .limit(1);
+  if (open) return false;
+  const { opened } = await openIssue(tx, {
+    dedupeKey: `${input.prefix}${newId()}`,
+    kind: input.kind,
+    subject: input.subject,
+    note: input.note,
+    now: input.now,
+  });
+  return opened;
+}
+
+/**
+ * One owner's check (spec §7): reads each provider in their set, records one row, and opens
+ * `provider_split_short` when the providers hold less than the ledger by more than ₦100. Holding
+ * more is `over` (informational: common while a reversal is in flight). A failed read is
+ * `partial`, with no issue: a figure missing one provider says nothing either way.
+ *
+ * Short is read once more (providers and ledger) before an issue is opened, so a one-off dip at a
+ * provider, or a tip confirmed between the two reads, opens nothing. The row keeps the first
+ * reading; the issue's note gives the second. A short owner can so read each provider twice.
+ */
+export async function checkProviderSplit(
+  db: Database,
+  owner: MoneyOwner,
+  set: PayoutProviderSet,
+  input: { now: Date; onReadFailure?: ProviderReadFailureLog },
+): Promise<{ outcome: SplitOutcome }> {
+  const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+  const first = await measureSplit(db, owner, providers, input.onReadFailure);
+  const confirmed =
+    first.outcome === 'short'
+      ? await measureSplit(db, owner, providers, input.onReadFailure)
+      : null;
   await guarded(() =>
     db.transaction(async (tx) => {
       await tx.insert(providerSplitChecks).values({
@@ -210,46 +287,46 @@ export async function checkProviderSplit(
         profileId: 'profileId' in owner ? owner.profileId : null,
         businessId: 'businessId' in owner ? owner.businessId : null,
         checkedAt: input.now,
-        ledgerMinor,
-        providers: readings.map(
+        ledgerMinor: first.ledgerMinor,
+        providers: first.readings.map(
           ({ provider, availableMinor, queuedMinor }) => ({
             provider,
             availableMinor,
             queuedMinor,
           }),
         ),
-        outcome,
+        outcome: first.outcome,
       });
-      if (outcome !== 'short') return;
-      // Once per owner: a later short check adds its row, not a second issue.
-      await openIssue(tx, {
-        dedupeKey: `provider_split_short.${ownerId(owner)}`,
+      if (confirmed?.outcome !== 'short') return;
+      // One open issue per owner: a later short check adds its row, not a second issue.
+      await openSpell(tx, {
+        prefix: `provider_split_short.${ownerId(owner)}.`,
         kind: 'provider_split_short',
         subject:
           'businessId' in owner
             ? { businessId: owner.businessId }
             : { profileId: owner.profileId },
         now: input.now,
-        note: `Owner: ${ownerWords(owner)}. Ledger available ${naira(ledgerMinor)}. ${readings
+        note: `Owner: ${ownerWords(owner)}. Ledger available ${naira(confirmed.ledgerMinor)}. ${confirmed.readings
           .map(
             (reading) =>
               `${reading.provider}: ${naira(reading.held!)} held, ${naira(reading.queued)} queued.`,
           )
           .join(
             ' ',
-          )} Together they hold ${naira(heldMinor)} after what is queued: ${naira(gapMinor)} short.`,
+          )} Together they hold ${naira(confirmed.heldMinor)} after what is queued: ${naira(confirmed.gapMinor)} short.`,
       });
     }),
   );
-  return { outcome };
+  return { outcome: first.outcome };
 }
 
 /**
  * A provider no longer configured that still holds owners' money (spec §7): one
  * `provider_unconnected_money` issue per provider, listing the owners whose ledger still has money
  * and who were tipped through it, and any withdrawal still REQUESTED there (Review Focus 5: the
- * worker never starts it through another provider). A provider whose issue was already opened is
- * not looked at again. Returns how many issues it opened.
+ * worker never starts it through another provider). A provider with an open issue is not looked at
+ * again; once staff resolve it, money still there opens a new one. Returns how many it opened.
  */
 export async function flagUnconnectedMoney(
   db: Database,
@@ -273,7 +350,8 @@ export async function flagUnconnectedMoney(
          WHERE status = 'REQUESTED' AND provider IS NOT NULL AND provider NOT IN (${configured})
       ) p
        WHERE NOT EXISTS (SELECT 1 FROM issues i
-                          WHERE i.dedupe_key = 'provider_unconnected_money.' || p.provider)
+                          WHERE i.status = 'open'
+                            AND starts_with(i.dedupe_key, 'provider_unconnected_money.' || p.provider || '.'))
        ORDER BY p.provider`),
   );
   let opened = 0;
@@ -326,15 +404,17 @@ export async function flagUnconnectedMoney(
         : ids.join(', ');
     const payoutIds = requested.rows.map((row) => row.id);
     const result = await guarded(() =>
-      openIssue(db, {
-        dedupeKey: `provider_unconnected_money.${provider}`,
-        kind: 'provider_unconnected_money',
-        subject: {},
-        now,
-        note: `Provider: ${provider}. Owners (${owners.size}): ${listed([...owners.keys()])}. Withdrawals still requested there: ${payoutIds.length ? listed(payoutIds) : 'none'}.`,
-      }),
+      db.transaction((tx) =>
+        openSpell(tx, {
+          prefix: `provider_unconnected_money.${provider}.`,
+          kind: 'provider_unconnected_money',
+          subject: {},
+          now,
+          note: `Provider: ${provider}. Owners (${owners.size}): ${listed([...owners.keys()])}. Withdrawals still requested there: ${payoutIds.length ? listed(payoutIds) : 'none'}.`,
+        }),
+      ),
     );
-    if (result.opened) opened += 1;
+    if (result) opened += 1;
   }
   return opened;
 }

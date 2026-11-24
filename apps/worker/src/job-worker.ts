@@ -1176,6 +1176,7 @@ export async function startJobWorker(
                 db: database.db,
                 providers: splitCheckProviders,
                 // Staff logs only: the provider's name and the failure, never an owner or account.
+                log: (entry) => logger.warn({ ...entry, ...fields }),
                 onReadFailure: (failure, provider) =>
                   logger.warn({
                     event: 'split_check.read_failed',

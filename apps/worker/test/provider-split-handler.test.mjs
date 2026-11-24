@@ -97,18 +97,20 @@ test('the split check runs one owner at a time, stops at the read budget, and ke
   // One owner at a time.
   assert.equal(mostAtOnce, 1);
   assert.deepEqual(calls.due, [{ now, limit: 20 }]);
-  // Three reads an owner: 13 owners make 39, and a 14th could pass 40, so the run stops there.
+  // Three providers, and a short owner is read twice: up to 6 reads an owner. These read 3 each,
+  // so 12 owners make 36, and a 13th could pass 40: the run stops there.
   assert.equal(SPLIT_CHECK_READ_BUDGET, 40);
-  assert.equal(calls.checked.length, 13);
-  assert.deepEqual(calls.checked, due.slice(0, 13));
-  assert.equal(reads.length, 39);
+  assert.equal(calls.checked.length, 12);
+  assert.deepEqual(calls.checked, due.slice(0, 12));
+  assert.equal(reads.length, 36);
   assert.deepEqual(result.value, {
-    checked: 13,
-    ok: 13,
+    checked: 12,
+    ok: 12,
     short: 0,
     over: 0,
     partial: 0,
-    reads: 39,
+    failed: 0,
+    reads: 36,
     stoppedEarly: true,
     unconnected: 1,
     purged: 3,
@@ -126,7 +128,7 @@ test('the split check runs one owner at a time, stops at the read budget, and ke
     ops,
   });
   assert.equal(again.ran, true);
-  assert.equal(again.value.checked, 13);
+  assert.equal(again.value.checked, 12);
   assert.equal(again.value.unconnected, null);
   assert.equal(again.value.purged, null);
   assert.equal(calls.flagged, 1);
@@ -191,4 +193,57 @@ test('with no withdraw-only provider nothing is due and nothing is read', async 
   assert.equal(result.value.checked, 0);
   assert.equal(result.value.stoppedEarly, false);
   assert.deepEqual(reads, []);
+});
+
+test('one owner that always fails is logged by id and never stops the others, the sweep or the purge', async () => {
+  const reads = [];
+  const providers = {
+    active: counted('mock', reads),
+    withdrawOnly: [counted('mock_alt', reads)],
+  };
+  const bad = { profileId: '00000000-0000-4000-8000-000000000bad' };
+  const good = [
+    { profileId: '00000000-0000-4000-8000-000000000001' },
+    { businessId: '00000000-0000-4000-8000-000000000002' },
+  ];
+  const checked = [];
+  const entries = [];
+  let flagged = 0;
+  let purged = 0;
+  const result = await runProviderSplitCheck(fakeLock(), 'k', {
+    db: {},
+    providers,
+    now: new Date(),
+    log: (entry) => entries.push(entry),
+    ops: {
+      splitOwnersDue: async () => [good[0], bad, good[1]],
+      async checkProviderSplit(_db, owner) {
+        if (owner === bad)
+          throw new Error(
+            'broken row for 00000000-0000-4000-8000-000000000bad',
+          );
+        checked.push(owner);
+        return { outcome: 'short' };
+      },
+      flagUnconnectedMoney: async () => {
+        flagged += 1;
+        return 0;
+      },
+      purgeSplitChecks: async () => {
+        purged += 1;
+        return 0;
+      },
+    },
+  });
+  assert.equal(result.ran, true);
+  assert.deepEqual(checked, good);
+  assert.equal(result.value.checked, 2);
+  assert.equal(result.value.short, 2);
+  assert.equal(result.value.failed, 1);
+  assert.equal(flagged, 1);
+  assert.equal(purged, 1);
+  // The owner's id only: never the error's text, which could carry anything.
+  assert.deepEqual(entries, [
+    { event: 'split_check.owner_failed', owner: bad.profileId },
+  ]);
 });
