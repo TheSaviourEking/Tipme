@@ -96,3 +96,15 @@ test('markPayoutBalance sets and clears the figure for one account only', async 
     pretend,
   );
 });
+
+test('a marked balance expires: its key has a TTL', async () => {
+  const shared = prefix();
+  const alt = createMockProvider({ redis, prefix: shared, name: 'mock_alt' });
+  await alt.markPayoutBalance('acct_ttl', 5_000n);
+  const keys = await redis.keys(`*${shared}*`);
+  assert.equal(keys.length, 1);
+  const ttl = await redis.pttl(keys[0]);
+  // -1 is a key with no expiry; every key the mock writes must expire.
+  assert.ok(ttl > 0, `expected a TTL, got ${ttl}`);
+  assert.ok(ttl <= 7 * 24 * 3_600_000);
+});
