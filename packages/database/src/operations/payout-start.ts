@@ -1,4 +1,8 @@
-import { PAYOUT_START_EVENT, PLATFORM_REFUSAL_EVENT } from '@tipme/contracts';
+import {
+  PAYOUT_START_EVENT,
+  PLATFORM_REFUSAL_EVENT,
+  recordedProviderName,
+} from '@tipme/contracts';
 import { and, asc, eq, gte, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
@@ -506,7 +510,9 @@ async function claimStart(
   if (!payout || !payout.provider) return { kind: 'done', outcome: 'already' };
   if (payout.status !== 'REQUESTED' || payout.providerReference !== null)
     return { kind: 'done', outcome: 'already' };
-  // Before the mark: a provider this copy cannot reach retries the job with nothing recorded.
+  // Before the mark: a provider this copy does not hold throws with nothing recorded. The job fails
+  // once (UnrecoverableError, never retried into another provider) and the payout stays REQUESTED;
+  // reconciliation's payout_unresolved takes it to staff.
   const starter =
     typeof input.provider === 'function'
       ? input.provider(payout.provider)
@@ -897,6 +903,8 @@ export async function applyPayoutSignal(
   db: Database,
   input: {
     payoutId: string;
+    /** The provider the event came from, as recorded: the outcome is booked under its name. */
+    provider: string;
     providerReference: string;
     eventId: string;
     status: 'paid' | 'failed';
@@ -973,7 +981,7 @@ export async function applyPayoutSignal(
   }
   const result = await recordPayoutOutcome(db, {
     payoutId: input.payoutId,
-    provider: 'bachs',
+    provider: input.provider,
     providerEventId: input.eventId,
     providerReference: input.providerReference,
     outcome,
@@ -1025,6 +1033,8 @@ export function openUnexpectedPayout(
   db: Database,
   input: {
     unmatchedId: string;
+    /** The provider the event came from: only its accounts can be the event's. */
+    provider: string;
     accountReference: string;
     providerReference: string;
     /** The reference signed into the event, which may name a payout of ours. */
@@ -1042,7 +1052,7 @@ export function openUnexpectedPayout(
         .from(paymentAccounts)
         .where(
           and(
-            eq(paymentAccounts.provider, 'bachs'),
+            eq(paymentAccounts.provider, recordedProviderName(input.provider)),
             eq(
               paymentAccounts.providerAccountReference,
               input.accountReference,

@@ -124,6 +124,11 @@ export interface MockProvider
   extends
     Omit<PaymentProvider<MockWebhook>, keyof PayoutPort>,
     Omit<PayoutPort, 'initiatePayout'> {
+  /** Test control: what `payoutBalance` answers for one account; null brings the pretend figure back. */
+  markPayoutBalance(
+    accountRef: string,
+    availableMinor: bigint | null,
+  ): Promise<void>;
   /** Pretend money is never live: a collect tip's transfer records `sandbox` (plan Task 7). */
   readonly environment: 'sandbox';
   initializePayment(input: {
@@ -205,10 +210,17 @@ export function createMockProvider(options: {
   redis: Redis;
   secret?: string;
   prefix?: string;
+  /** `mock_alt` is a second, test-only instance: its own name and its own keys. */
+  name?: 'mock' | 'mock_alt';
 }): MockProvider {
   const { redis } = options;
   const secret = options.secret ?? '';
-  const prefix = options.prefix ?? 'default';
+  const name = options.name ?? 'mock';
+  const basePrefix = options.prefix ?? 'default';
+  // `mock` keeps today's keys; `mock_alt` can never read or write them.
+  const prefix = name === 'mock' ? basePrefix : `${basePrefix}:mock_alt`;
+  const balanceKey = (accountRef: string) =>
+    `mockprovider:${prefix}:payout-balance:${accountRef}`;
 
   const readPayout: PayoutPort['fetchPayoutStatus'] = async (
     providerReference,
@@ -227,7 +239,7 @@ export function createMockProvider(options: {
   };
 
   return {
-    name: 'mock',
+    name,
     environment: 'sandbox',
     capabilities: {
       hostedCheckout: true,
@@ -413,7 +425,7 @@ export function createMockProvider(options: {
       currency,
       scenario,
     }) {
-      const reference = `mock_out_${idempotencyKey}`;
+      const reference = `${name}_out_${idempotencyKey}`;
       const chosen = scenario ?? 'payout-paid';
       const status = chosen === 'payout-review' ? 'review' : 'pending';
       const result = await redis.eval(
@@ -544,8 +556,17 @@ export function createMockProvider(options: {
         : 'usable';
     },
 
-    async payoutBalance() {
-      return { availableMinor: PRETEND_BALANCE_MINOR };
+    async payoutBalance(accountRef) {
+      const marked = await redis.get(balanceKey(accountRef));
+      return {
+        availableMinor:
+          marked === null ? PRETEND_BALANCE_MINOR : BigInt(marked),
+      };
+    },
+
+    async markPayoutBalance(accountRef, availableMinor) {
+      if (availableMinor === null) await redis.del(balanceKey(accountRef));
+      else await redis.set(balanceKey(accountRef), availableMinor.toString());
     },
 
     async platformBalance() {

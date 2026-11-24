@@ -499,6 +499,7 @@ export class WebhookService {
     }
     return applyPayoutSignal(db, {
       payoutId,
+      provider: 'bachs',
       providerReference: event.providerReference,
       eventId: event.eventId,
       status: event.status,

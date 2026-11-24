@@ -557,3 +557,16 @@ test('production may default to Brevo only with BREVO_TRANSACTIONAL=on and its k
   assert.equal(productionIssues({ ...brevo, BREVO_TRANSACTIONAL: 'on' }), '');
   assert.ok(!productionIssues(brevo).includes('brevo-test-key'));
 });
+
+test('withdraw-only providers: mock_alt loads under NODE_ENV=test and is refused in production', () => {
+  const config = loadApiConfig({
+    ...valid,
+    NODE_ENV: 'test',
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt',
+  });
+  assert.deepEqual(config.PAYMENT_WITHDRAW_ONLY_PROVIDERS, ['mock_alt']);
+  assert.match(
+    productionIssues({ PAYMENT_WITHDRAW_ONLY_PROVIDERS: 'mock_alt' }),
+    /PAYMENT_WITHDRAW_ONLY_PROVIDERS/,
+  );
+});

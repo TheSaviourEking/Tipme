@@ -68,8 +68,11 @@ import {
   seedFeatureSwitches,
 } from '@tipme/database';
 import {
+  bachsEnvironment,
+  configuredPaymentProviders,
   createBachsProvider,
   createMockProvider,
+  recordedProviderName,
   type BachsProvider,
   type MockProvider,
   wiredPaymentProvider,
@@ -199,44 +202,219 @@ const knownReasons = new Set([
 ]);
 
 /**
- * The worker's Bachs reader for the configured provider: that environment's key only, and no
- * webhook secret, so it can ask for statuses but never accept a webhook. Fails startup for a
- * provider this build cannot run (never a silent mock).
+ * The worker's Bachs reader: that environment's key only, and no webhook secret, so it can ask for
+ * statuses but never accept a webhook. The active Bachs, else a withdraw-only one (config keeps
+ * sandbox and live apart, so at most one exists per copy), else on a mock copy the sandbox reader
+ * for tips it took earlier (P11). Fails startup for a provider this build cannot run (never a
+ * silent mock).
  */
 export function workerBachsProvider(
   config: Pick<
     WorkerConfig,
     'PAYMENT_PROVIDER' | 'BACHS_SANDBOX_API_KEY' | 'BACHS_LIVE_API_KEY'
-  >,
+  > &
+    Partial<Pick<WorkerConfig, 'PAYMENT_WITHDRAW_ONLY_PROVIDERS'>>,
 ): BachsProvider | null {
+  const bachsFor = (environment: 'sandbox' | 'live'): BachsProvider => {
+    const apiKey =
+      environment === 'live'
+        ? config.BACHS_LIVE_API_KEY
+        : config.BACHS_SANDBOX_API_KEY;
+    if (!apiKey)
+      throw new Error(
+        environment === 'live'
+          ? 'BACHS_LIVE_API_KEY is required for Bachs live'
+          : 'BACHS_SANDBOX_API_KEY is required for Bachs sandbox',
+      );
+    return createBachsProvider({ apiKey, environment });
+  };
   const name = wiredPaymentProvider(config.PAYMENT_PROVIDER);
   switch (name) {
     case 'bachs-live':
-      if (!config.BACHS_LIVE_API_KEY)
-        throw new Error('BACHS_LIVE_API_KEY is required for Bachs live');
-      return createBachsProvider({
-        apiKey: config.BACHS_LIVE_API_KEY,
-        environment: 'live',
-      });
+      return bachsFor('live');
     case 'bachs-sandbox':
-      if (!config.BACHS_SANDBOX_API_KEY)
-        throw new Error('BACHS_SANDBOX_API_KEY is required for Bachs sandbox');
-      return createBachsProvider({
-        apiKey: config.BACHS_SANDBOX_API_KEY,
-        environment: 'sandbox',
-      });
-    case 'mock':
+      return bachsFor('sandbox');
+    case 'mock': {
+      const withdrawOnly = (config.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? [])
+        .map((n) => bachsEnvironment(n))
+        .find((environment) => environment !== null);
+      if (withdrawOnly) return bachsFor(withdrawOnly);
       // A test or preview copy back on mock still checks the sandbox tips it took earlier.
-      return config.BACHS_SANDBOX_API_KEY
-        ? createBachsProvider({
-            apiKey: config.BACHS_SANDBOX_API_KEY,
-            environment: 'sandbox',
-          })
-        : null;
+      return config.BACHS_SANDBOX_API_KEY ? bachsFor('sandbox') : null;
+    }
     default: {
       const unreachable: never = name;
       throw new Error(`PAYMENT_PROVIDER=${String(unreachable)} is not wired`);
     }
+  }
+}
+
+export type WorkerPaymentAdapter = MockProvider | BachsProvider;
+
+/**
+ * Every payment adapter the worker holds, by the name rows record ('mock', 'mock_alt', 'bachs'),
+ * and the configured withdrawal roles (configured names, e.g. 'bachs-sandbox').
+ */
+export interface WorkerPaymentProviders {
+  byRecordedName: Map<string, WorkerPaymentAdapter>;
+  withdrawalRoles: { active: string; withdrawOnly: string[] };
+}
+
+/**
+ * One adapter per provider in either role, as the API builds them (PAYOUT_PROVIDERS_TOKEN), plus
+ * the legacy readers (P11): mock always, and the sandbox reader on a mock copy with sandbox keys.
+ * mock_alt shares the worker's Redis and QUEUE_PREFIX, as in the API. A role with no adapter stops
+ * startup.
+ */
+export function workerPaymentProviders(
+  config: Pick<
+    WorkerConfig,
+    | 'PAYMENT_PROVIDER'
+    | 'BACHS_SANDBOX_API_KEY'
+    | 'BACHS_LIVE_API_KEY'
+    | 'QUEUE_PREFIX'
+  > &
+    Partial<Pick<WorkerConfig, 'PAYMENT_WITHDRAW_ONLY_PROVIDERS'>>,
+  redis: Redis,
+): WorkerPaymentProviders {
+  const { active, withdrawOnly } = configuredPaymentProviders({
+    PAYMENT_PROVIDER: config.PAYMENT_PROVIDER,
+    PAYMENT_WITHDRAW_ONLY_PROVIDERS:
+      config.PAYMENT_WITHDRAW_ONLY_PROVIDERS ?? [],
+  });
+  const byRecordedName = new Map<string, WorkerPaymentAdapter>();
+  // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
+  // a secret the worker can never accept webhooks.
+  byRecordedName.set(
+    'mock',
+    createMockProvider({ redis, prefix: config.QUEUE_PREFIX }),
+  );
+  if (withdrawOnly.includes('mock_alt'))
+    byRecordedName.set(
+      'mock_alt',
+      createMockProvider({
+        redis,
+        prefix: config.QUEUE_PREFIX,
+        name: 'mock_alt',
+      }),
+    );
+  const bachs = workerBachsProvider(config);
+  if (bachs) byRecordedName.set(recordedProviderName(bachs.name), bachs);
+  for (const name of [active, ...withdrawOnly]) {
+    const adapter = byRecordedName.get(recordedProviderName(name));
+    if (!adapter || (bachsEnvironment(name) && adapter.name !== name))
+      throw new Error(`${name} is configured but has no matching adapter`);
+  }
+  return {
+    byRecordedName,
+    withdrawalRoles: { active, withdrawOnly: [...withdrawOnly] },
+  };
+}
+
+/**
+ * The adapter for a recorded provider name. Anything else throws, so a row at a provider this copy
+ * no longer holds is never started or read through another one.
+ */
+export function workerProviderFor(
+  providers: Pick<WorkerPaymentProviders, 'byRecordedName'>,
+): (name: string) => WorkerPaymentAdapter {
+  return (name) => {
+    const adapter = providers.byRecordedName.get(name);
+    if (!adapter) throw new Error('Unsupported persisted payment provider');
+    return adapter;
+  };
+}
+
+/** One platform reserve check: which schedule runs it, and for which adapter. */
+export interface ReserveCheck {
+  id: string;
+  provider: WorkerPaymentAdapter;
+  /** The active provider's: only it also checks TipMe's own money (collect reserve). */
+  active: boolean;
+}
+
+/**
+ * A reserve check for every connected-account adapter in either role: `payments.reserve` for the
+ * active one, `payments.reserve.<recordedName>.<environment>` otherwise. A legacy reader that is in
+ * no role (P11) gets none: it answers old tips only.
+ */
+export function reserveChecks(
+  providers: WorkerPaymentProviders,
+): ReserveCheck[] {
+  const { active, withdrawOnly } = providers.withdrawalRoles;
+  return [active, ...withdrawOnly].flatMap((name) => {
+    const recorded = recordedProviderName(name);
+    const adapter = providers.byRecordedName.get(recorded);
+    if (adapter?.capabilities?.connectedAccounts !== true) return [];
+    const isActive = name === active;
+    return [
+      {
+        id: isActive
+          ? PAYMENT_RESERVE_JOB
+          : `${PAYMENT_RESERVE_JOB}.${recorded}.${adapter.environment}`,
+        provider: adapter,
+        active: isActive,
+      },
+    ];
+  });
+}
+
+/** One schedule per reserve check, every 15 minutes, each with SCHEDULED_RUN_RETENTION. */
+export function ensureReserveSchedules(
+  deps: Pick<Parameters<typeof ensureSchedule>[0], 'queue' | 'logger'>,
+  checks: readonly ReserveCheck[],
+): ReturnType<typeof ensureSchedule>[] {
+  return checks.map((check) =>
+    ensureSchedule({
+      ...deps,
+      id: check.id,
+      every: PAYMENT_RESERVE_INTERVAL_MS,
+    }),
+  );
+}
+
+/**
+ * The providers whose parked payout events reconciliation rechecks: always 'bachs', plus any other
+ * connected-account adapter held. Bachs is swept even on a copy with no Bachs adapter, since
+ * issues.ts leaves parked Bachs rows to this sweep: its read-free checks (payout_unexpected,
+ * conflicts, the age cap) still open staff issues, and a read fails as an error. The pretend
+ * providers' unmatched events go to staff as unmatched_event instead.
+ */
+export function parkedPayoutProviders(
+  providers: Pick<WorkerPaymentProviders, 'byRecordedName'>,
+): string[] {
+  const names = new Set(['bachs']);
+  for (const [name, adapter] of providers.byRecordedName)
+    if (adapter.capabilities?.connectedAccounts === true) names.add(name);
+  return [...names];
+}
+
+/**
+ * Removes reserve schedules that no check owns now (a provider left its role, or a Bachs moved
+ * environment), so they stop firing. A failure is logged and never stops startup: a leftover run
+ * finds no check and is skipped.
+ */
+export async function removeLeftoverReserveSchedules(
+  deps: {
+    queue: Pick<Queue, 'getJobSchedulers' | 'removeJobScheduler'>;
+    logger: { warn(fields: object): void };
+  },
+  keep: ReadonlySet<string>,
+): Promise<number> {
+  try {
+    const leftovers = (await deps.queue.getJobSchedulers())
+      .map((scheduler) => scheduler.key)
+      .filter(
+        (id) =>
+          (id === PAYMENT_RESERVE_JOB ||
+            id.startsWith(`${PAYMENT_RESERVE_JOB}.`)) &&
+          !keep.has(id),
+      );
+    for (const id of leftovers) await deps.queue.removeJobScheduler(id);
+    return leftovers.length;
+  } catch {
+    deps.logger.warn({ event: 'reserve.schedule_cleanup_failed' });
+    return 0;
   }
 }
 
@@ -341,34 +519,28 @@ export async function startJobWorker(
       error: error instanceof Error ? error.name : 'unknown',
     });
   }
-  // Reconciliation only asks the provider; `payouts.start` is the one job that moves money. Without
-  // a secret the worker can never accept webhooks. It shares the fail-fast Redis client.
-  const mockProvider = createMockProvider({
-    redis: markers,
-    prefix: config.QUEUE_PREFIX,
-  });
-  // The worker never holds a webhook secret.
-  const bachsProvider = workerBachsProvider(config);
+  // Every adapter in either role plus the legacy readers, on the fail-fast Redis client. The worker
+  // never holds a webhook secret.
+  const paymentProviders = workerPaymentProviders(config, markers);
+  const mockProvider = paymentProviders.byRecordedName.get('mock')!;
+  const bachsProvider =
+    (paymentProviders.byRecordedName.get('bachs') as
+      BachsProvider | undefined) ?? null;
+  /** [recorded name, adapter] for every provider held: the loops below cover each, by its own name. */
+  const providers = [...paymentProviders.byRecordedName];
   const defaultProvider = mockProvider;
-  const providerFor = (name: string): BachsProvider | MockProvider => {
-    if (name === 'mock') return mockProvider;
-    if (name === 'bachs' && bachsProvider) return bachsProvider;
-    throw new Error('Unsupported persisted payment provider');
-  };
+  const providerFor = workerProviderFor(paymentProviders);
   const providerForExpiry = (name: string | null) =>
     name ? providerFor(name) : defaultProvider;
-  /** Pro purchases per provider this copy can read (rows record 'mock' or 'bachs'). */
+  const parkedProviders = parkedPayoutProviders(paymentProviders);
+  /** Pro purchases per provider this copy can read, each under the name its rows record. */
   const reconcileProEverywhere = async (now: Date) => {
     const totals = { checked: 0, paid: 0, failed: 0 };
-    const providers: [string, MockProvider | BachsProvider | null][] = [
-      ['mock', mockProvider],
-      ['bachs', bachsProvider],
-    ];
     // Staff tip refunds (owner, 14 Nov 2026): approved ones are sent once, as the recipient's
     // account; refund.paid settles them. Only the `tip_refunds` switch lets anyone ask or approve one,
     // as with Pro refunds: one already approved is still sent.
     for (const [providerName, provider] of providers) {
-      if (!provider?.refundAccountCharge) continue;
+      if (!provider.refundAccountCharge) continue;
       const tipRefunds = await sendTipRefunds(database.db, {
         provider,
         providerName,
@@ -377,7 +549,7 @@ export async function startJobWorker(
       totals.failed += tipRefunds.failed;
     }
     for (const [providerName, provider] of providers) {
-      if (!provider?.initializePlatformCheckout) continue;
+      if (!provider.initializePlatformCheckout) continue;
       const result = await reconcileProPurchases(database.db, {
         provider: {
           initializePlatformCheckout: (input) =>
@@ -514,18 +686,18 @@ export async function startJobWorker(
         logger,
       })
     : null;
-  // The platform reserve is read for the same provider only. A run still going when the next one
-  // fires makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
-  if (payoutSetupProvider)
+  // The platform reserve is read for every connected-account provider in either role, each on its
+  // own schedule (`payments.reserve` for the active one). A run still going when the next one fires
+  // makes it skip (see runUnlessRunning), so a slow provider never stacks up reads.
+  const reserves = reserveChecks(paymentProviders);
+  const reserveById = new Map(reserves.map((check) => [check.id, check]));
+  if (reserves.length)
     warnIfNoAlertRoute(config.ALERT_WEBHOOK_URL, (entry) => logger.warn(entry));
-  const reserveSchedule = payoutSetupProvider
-    ? ensureSchedule({
-        queue,
-        id: PAYMENT_RESERVE_JOB,
-        every: PAYMENT_RESERVE_INTERVAL_MS,
-        logger,
-      })
-    : null;
+  const reserveSchedules = ensureReserveSchedules({ queue, logger }, reserves);
+  void removeLeftoverReserveSchedules(
+    { queue, logger },
+    new Set(reserveById.keys()),
+  );
   // The same provider as the reserve check: TipMe's own account there is what is reconciled.
   const collectReserve = payoutSetupProvider
     ? collectReserveReader(payoutSetupProvider)
@@ -547,6 +719,8 @@ export async function startJobWorker(
     every: COLLECT_TRANSFERS_INTERVAL_MS,
     logger,
   });
+  // mock and Bachs only, as before: collect transfers follow tips, and mock_alt never takes one (its
+  // pretend account rule in collect-transfers.ts is still mock's alone).
   const collectProviders = collectTransferProviders([
     mockProvider,
     bachsProvider,
@@ -618,6 +792,7 @@ export async function startJobWorker(
             const payoutResult = await reconcilePayouts({
               db: database.db,
               provider: providerFor,
+              parkedProviders,
               now,
               minAgeMs: config.RECONCILE_MIN_AGE_MS,
             });
@@ -636,8 +811,8 @@ export async function startJobWorker(
             const kinds = shareTransferKinds({
               sharesOn: businessOn && sharesSwitchOn,
             });
-            for (const provider of [mockProvider, bachsProvider]) {
-              if (!provider?.collectToPlatform || !provider.transferToAccount)
+            for (const [, provider] of providers) {
+              if (!provider.collectToPlatform || !provider.transferToAccount)
                 continue;
               const result = await runShareTransfers(database.db, {
                 provider,
@@ -779,11 +954,8 @@ export async function startJobWorker(
             if (!(await featureOn(database.db, 'pro_auto_renew')))
               return 'skipped';
             const totals = { charged: 0, retried: 0 };
-            for (const [providerName, provider] of [
-              ['mock', mockProvider],
-              ['bachs', bachsProvider],
-            ] as const) {
-              if (!provider?.chargeSavedCard) continue;
+            for (const [providerName, provider] of providers) {
+              if (!provider.chargeSavedCard) continue;
               const result = await renewProAutomatically(database.db, {
                 provider,
                 providerName,
@@ -873,24 +1045,30 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'payout_setup' });
             return 'swept';
           }
-          if (job.name === PAYMENT_RESERVE_JOB) {
-            if (!payoutSetupProvider) return 'skipped';
+          if (
+            job.name === PAYMENT_RESERVE_JOB ||
+            job.name.startsWith(`${PAYMENT_RESERVE_JOB}.`)
+          ) {
+            // A schedule left from an earlier configuration reads nothing.
+            const check = reserveById.get(job.name);
+            if (!check) return 'skipped';
             const result = await runUnlessRunning(
               markers,
               {
-                key: `${config.QUEUE_PREFIX}:lock:${PAYMENT_RESERVE_JOB}`,
+                key: `${config.QUEUE_PREFIX}:lock:${check.id}`,
                 ttlMs: PAYMENT_RESERVE_LOCK_TTL_MS,
               },
               async () => {
                 const outcome = await handlePaymentReserve({
                   db: database.db,
-                  provider: payoutSetupProvider,
+                  provider: check.provider,
                   thresholdMinor: config.BACHS_RESERVE_ALERT_MINOR,
                   alertWebhookUrl: config.ALERT_WEBHOOK_URL,
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
-                // You collect (Task 11): TipMe's own money against what it holds, per currency.
-                if (collectReserve)
+                // You collect (Task 11): TipMe's own money against what it holds, per currency. The
+                // active provider's check only.
+                if (check.active && collectReserve)
                   await handleCollectReserve({
                     db: database.db,
                     provider: collectReserve,
@@ -963,10 +1141,10 @@ export async function startJobWorker(
                 // Task 15: evidence staff approved is submitted, once per attempt.
                 const evidence = await handleDisputeEvidence({
                   db: database.db,
-                  providers: [
-                    { name: 'mock', provider: mockProvider },
-                    { name: 'bachs', provider: bachsProvider },
-                  ],
+                  providers: providers.map(([name, provider]) => ({
+                    name,
+                    provider,
+                  })),
                   log: (entry) => logger.warn({ ...entry, ...fields }),
                 });
                 return {
@@ -1258,7 +1436,8 @@ export async function startJobWorker(
       await monthlySchedule.stop();
       await analyticsSchedule.stop();
       await payoutSetupSchedule?.stop();
-      await reserveSchedule?.stop();
+      for (const reserveSchedule of reserveSchedules)
+        await reserveSchedule.stop();
       await collectTransfersSchedule.stop();
       await collectReconSchedule?.stop();
       await rehearsalSchedule?.stop();
