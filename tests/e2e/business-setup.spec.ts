@@ -351,7 +351,9 @@ test.describe('with TipMe for businesses off', () => {
     if (await who.isVisible()) await who.click();
     else await page.getByRole('button', { name: 'Open menu' }).click();
     await expect(
-      nav.getByRole('link', { name: /^Businesses \(coming soon\)/ }),
+      nav.getByRole('link', {
+        name: /^Business\s*Coming soon\s*Receive and manage tips/,
+      }),
     ).toHaveAttribute('href', '/for-businesses');
     await expectAccessible(page);
   });
