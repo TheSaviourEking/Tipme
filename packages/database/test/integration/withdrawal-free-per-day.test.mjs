@@ -98,7 +98,7 @@ test('withdrawals per day: 2 free, then the partner fee comes off', async (t) =>
       profileId: TOBI.id,
       amountMinor: 200000n,
       idempotencyKey: randomUUID(),
-      provider: bachsLike(),
+      providers: { active: bachsLike(), withdrawOnly: [] },
       ...extra,
     });
   const quote = (now) =>
@@ -207,5 +207,108 @@ test('withdrawals per day: 2 free, then the partner fee comes off', async (t) =>
     assert.equal(rows.filter(([payer]) => payer === 'user').length, 3);
     for (const [payer, sent, fee] of rows)
       if (payer === 'user') assert.deepEqual([sent, fee], ['195000', '5000']);
+  });
+  await t.test('a split counts as one withdrawal of the day', async () => {
+    await database.fresh();
+    /** A ₦4,000 tip through the accountless `provider`: 372,000 to withdraw. */
+    const tipVia = async (provider) => {
+      const tipQuote = await createQuote(db, {
+        handle: 'tobi',
+        tipMinor: 400000n,
+        currency: 'NGN',
+      });
+      const intent = await createPaymentIntent(db, {
+        quoteId: tipQuote.quoteId,
+        idempotencyKey: randomUUID(),
+      });
+      const reference = `${provider}_pay_${randomUUID()}`;
+      await markAttemptInitiated(db, {
+        attemptId: intent.attemptId,
+        provider,
+        providerReference: reference,
+      });
+      await recordProviderEvent(db, {
+        provider,
+        providerEventId: `evt_${randomUUID()}`,
+        eventType: 'payment.succeeded',
+        attemptId: intent.attemptId,
+        providerReference: reference,
+        amountMinor: 400000n,
+        currency: 'NGN',
+        providerFeeMinor: 3000n,
+        signatureVerified: true,
+        payload: {},
+      });
+    };
+    for (let i = 0; i < 3; i += 1) {
+      await tipVia('mock_alt');
+      await tipVia('mock');
+    }
+    /** Each provider holds 300,000 now: every 500,000 request splits in two. */
+    const pretend = (name) => ({
+      name,
+      capabilities: { connectedAccounts: false },
+      async payoutCapability() {
+        return { status: 'active', requirementsDue: [] };
+      },
+      async payoutBalance() {
+        return { availableMinor: 300000n };
+      },
+      async quotePayoutFee() {
+        return { feeMinor: 5000n, exact: false };
+      },
+    });
+    const providers = () => ({
+      active: pretend('mock'),
+      withdrawOnly: [pretend('mock_alt')],
+    });
+    const split = async () => {
+      const result = await requestWithdrawal(db, {
+        profileId: TOBI.id,
+        amountMinor: 500000n,
+        idempotencyKey: randomUUID(),
+        providers: providers(),
+      });
+      assert.equal(result.parts.length, 2);
+      // The worker started both parts: the providers' figures already exclude them.
+      await q(
+        `UPDATE payouts SET status = 'PROCESSING', provider_reference = 'po_' || id
+          WHERE withdrawal_group_id = $1`,
+        [result.groupId],
+      );
+      return result;
+    };
+    const ordinal = async () =>
+      (
+        await withdrawalQuote(db, {
+          profileId: TOBI.id,
+          providers: providers(),
+        })
+      ).ordinalToday;
+    await split();
+    assert.equal(await ordinal(), 2);
+    await split();
+    assert.equal(await ordinal(), 3);
+    // Both splits were free: every part's fee is TipMe's.
+    assert.deepEqual(
+      (await payers()).map(([payer]) => payer),
+      ['tipme', 'tipme', 'tipme', 'tipme'],
+    );
+    // The 3rd request pays one fee, off its largest part only.
+    const third = await split();
+    const rows = await q(
+      `SELECT fee_payer, user_fee_minor::text AS fee, amount_minor::text AS sent
+         FROM payouts WHERE withdrawal_group_id = $1 ORDER BY group_part`,
+      [third.groupId],
+    );
+    assert.deepEqual(rows, [
+      { fee_payer: 'user', fee: '5000', sent: '295000' },
+      { fee_payer: 'tipme', fee: '0', sent: '200000' },
+    ]);
+    assert.equal(
+      (await q(`SELECT 1 FROM payouts WHERE user_fee_minor > 0`)).length,
+      1,
+    );
+    assert.equal(await ordinal(), 4);
   });
 });

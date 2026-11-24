@@ -134,7 +134,7 @@ test('partner quote cache', async (t) => {
       profileId: TOBI.id,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
       ...extra,
     });
   const started = async (payoutId) => {

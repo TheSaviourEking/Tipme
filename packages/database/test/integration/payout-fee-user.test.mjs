@@ -104,7 +104,7 @@ async function setup(t) {
       profileId: TOBI.id,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
     });
   const payout = async (id) =>
     (await q('SELECT * FROM payouts WHERE id = $1', [id]))[0];

@@ -363,7 +363,34 @@ const bankOf = (
 ): { bankName: string; last4: string } | null =>
   bankName && last4 ? { bankName, last4 } : null;
 
-/** The recipient's withdrawals, newest request first, each with the bank it went to. */
+/**
+ * How far along a part is, for a request's one state: the least advanced part that has not failed
+ * speaks for the request. Reversed ranks below sent, so a part sent and then returned is never shown
+ * as sent.
+ */
+const ADVANCE: Record<WithdrawalState, number> = {
+  requested: 0,
+  in_review: 1,
+  processing: 2,
+  reversed: 3,
+  sent: 4,
+  failed: 5,
+};
+
+/** A request's state from its parts: sent or failed only when every part is. */
+function requestState(states: WithdrawalState[]): WithdrawalState {
+  if (states.every((state) => state === 'sent')) return 'sent';
+  const going = states.filter((state) => state !== 'failed');
+  if (going.length === 0) return 'failed';
+  return going.reduce((least, state) =>
+    ADVANCE[state] < ADVANCE[least] ? state : least,
+  );
+}
+
+/**
+ * The recipient's withdrawals, newest request first, each with the bank it went to. A request paid
+ * as parts is one row (P6): listed and paged by part 1, with its total and its parts.
+ */
 export function listMyWithdrawals(
   db: Database,
   profileId: string,
@@ -374,6 +401,7 @@ export function listMyWithdrawals(
   return guarded(async () => {
     const rows = await db.execute<{
       id: string;
+      group_id: string | null;
       requested_at: string;
       paid_at: string | null;
       currency: string;
@@ -382,26 +410,99 @@ export function listMyWithdrawals(
       bank_name: string | null;
       last4: string | null;
     }>(sql`
-      SELECT p.id, ${microsSql(sql.raw('p.created_at'))} AS requested_at,
+      SELECT p.id, p.withdrawal_group_id AS group_id,
+             ${microsSql(sql.raw('p.created_at'))} AS requested_at,
              ${microsSql(sql.raw('p.paid_at'))} AS paid_at,
              p.currency, p.amount_minor::text AS amount, ${payoutStateSql} AS state,
              d.bank_name, d.account_last4 AS last4
         FROM payouts p
         ${payoutBankJoin}
        WHERE p.profile_id = ${profileId}
+         AND (p.withdrawal_group_id IS NULL OR p.group_part = 1)
          ${after ? sql`AND (p.created_at, p.id) < (${after.at}::timestamptz, ${after.id}::uuid)` : sql``}
        -- NULLS LAST spells the index's order (drizzle writes it); both columns are NOT NULL.
        ORDER BY p.created_at DESC NULLS LAST, p.id DESC NULLS LAST
        LIMIT ${limit + 1}`);
-    const items: WithdrawalRow[] = rows.rows.slice(0, limit).map((row) => ({
-      payoutId: row.id,
-      requestedAt: row.requested_at,
-      paidAt: row.paid_at,
-      currency: row.currency,
-      amountMinor: row.amount,
-      state: row.state,
-      bank: bankOf(row.bank_name, row.last4),
-    }));
+    const page = rows.rows.slice(0, limit);
+    const groups = page.flatMap((row) => (row.group_id ? [row.group_id] : []));
+    const partsOf = new Map<
+      string,
+      {
+        amount: string;
+        state: WithdrawalState;
+        paid_at: string | null;
+        bank_name: string | null;
+        last4: string | null;
+      }[]
+    >();
+    if (groups.length > 0) {
+      const parts = await db.execute<{
+        group_id: string;
+        amount: string;
+        state: WithdrawalState;
+        paid_at: string | null;
+        bank_name: string | null;
+        last4: string | null;
+      }>(sql`
+        SELECT p.withdrawal_group_id AS group_id, p.amount_minor::text AS amount,
+               ${payoutStateSql} AS state, ${microsSql(sql.raw('p.paid_at'))} AS paid_at,
+               d.bank_name, d.account_last4 AS last4
+          FROM payouts p
+          ${payoutBankJoin}
+         WHERE p.profile_id = ${profileId}
+           AND p.withdrawal_group_id IN (${sql.join(
+             groups.map((id) => sql`${id}::uuid`),
+             sql`, `,
+           )})
+         ORDER BY p.withdrawal_group_id, p.group_part`);
+      for (const part of parts.rows)
+        partsOf.set(part.group_id, [
+          ...(partsOf.get(part.group_id) ?? []),
+          part,
+        ]);
+    }
+    const items: WithdrawalRow[] = page.map((row) => {
+      const parts = row.group_id ? partsOf.get(row.group_id) : undefined;
+      if (!parts)
+        return {
+          payoutId: row.id,
+          requestedAt: row.requested_at,
+          paidAt: row.paid_at,
+          currency: row.currency,
+          amountMinor: row.amount,
+          state: row.state,
+          bank: bankOf(row.bank_name, row.last4),
+          parts: null,
+        };
+      const state = requestState(parts.map((part) => part.state));
+      // Every part went to the same bank (P5); a pretend part records none, so the first that did.
+      const banked = parts.find((part) => bankOf(part.bank_name, part.last4));
+      return {
+        payoutId: row.id,
+        requestedAt: row.requested_at,
+        // Paid when the last part was; ISO strings of one format compare as times.
+        paidAt:
+          state === 'sent'
+            ? parts.reduce<string | null>(
+                (latest, part) =>
+                  part.paid_at && (!latest || part.paid_at > latest)
+                    ? part.paid_at
+                    : latest,
+                null,
+              )
+            : null,
+        currency: row.currency,
+        amountMinor: parts
+          .reduce((sum, part) => sum + BigInt(part.amount), 0n)
+          .toString(),
+        state,
+        bank: banked ? bankOf(banked.bank_name, banked.last4) : null,
+        parts: parts.map((part) => ({
+          amountMinor: part.amount,
+          state: part.state,
+        })),
+      };
+    });
     const last = items[items.length - 1];
     return {
       items,

@@ -168,7 +168,7 @@ export function directHelpers(getDatabase) {
       profileId: profile.id,
       amountMinor,
       idempotencyKey: randomUUID(),
-      provider: partner(),
+      providers: { active: partner(), withdrawOnly: [] },
       now: at,
     });
     await q(`UPDATE payouts SET created_at = $2 WHERE id = $1`, [

@@ -381,7 +381,7 @@ test('withdrawals wait until manual payouts are set', async (t) => {
       profileId: TOBI,
       amountMinor: 100000n,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
     }),
     { code: 'PAYOUT_SETUP_NEEDED' },
   );
@@ -668,7 +668,7 @@ test('a payout in flight keeps the destination it recorded', async (t) => {
     profileId: TOBI,
     amountMinor: 200000n,
     idempotencyKey: randomUUID(),
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   await addBank(database, controller, { accountNumber: '1111111234' });
 
@@ -851,7 +851,7 @@ test("a bank added on the provider's hosted page is not usable: only this card m
       profileId: TOBI,
       amountMinor: 100000n,
       idempotencyKey: randomUUID(),
-      provider,
+      providers: { active: provider, withdrawOnly: [] },
     }),
     { code: 'PAYOUT_DESTINATION_NEEDED' },
   );
@@ -1112,7 +1112,7 @@ test('a stolen session: after an email change no code, no bank, and the old bank
     profileId: TOBI,
     amountMinor: 200000n,
     idempotencyKey: randomUUID(),
-    provider,
+    providers: { active: provider, withdrawOnly: [] },
   });
   const [row] = await database.rows(
     `SELECT d.account_last4 AS last4 FROM payouts p

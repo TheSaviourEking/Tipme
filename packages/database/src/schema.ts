@@ -38,6 +38,7 @@ import {
   pgEnum,
   pgTable,
   primaryKey,
+  smallint,
   text,
   timestamp,
   unique,
@@ -1447,10 +1448,22 @@ export const payouts = pgTable(
     providerReviewAt: timestamp('provider_review_at', { withTimezone: true }),
     // The provider's connected account the payout was requested on, recorded at request time.
     accountReference: text('account_reference'),
+    // One request paid as parts across providers (per-provider balances, P6): every part shares the
+    // group, numbered from 1 in drain order. Both NULL for a request one provider paid alone.
+    withdrawalGroupId: uuid('withdrawal_group_id'),
+    groupPart: smallint('group_part'),
     createdAt: createdAt(),
   },
   (table) => [
     currencyCheck('payouts'),
+    check(
+      'payouts_group_part',
+      sql`(withdrawal_group_id IS NULL) = (group_part IS NULL)`,
+    ),
+    // A request's parts, found from any one of them (P13).
+    index('payouts_withdrawal_group')
+      .on(table.withdrawalGroupId)
+      .where(sql`withdrawal_group_id IS NOT NULL`),
     check('payouts_amount_positive', sql`amount_minor > 0`),
     check('payouts_owner', sql`(profile_id IS NULL) <> (business_id IS NULL)`),
     index('payouts_business_created')

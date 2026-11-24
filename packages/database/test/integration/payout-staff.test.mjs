@@ -88,7 +88,7 @@ async function setup(t) {
         profileId: TOBI,
         amountMinor: 200000n,
         idempotencyKey: randomUUID(),
-        provider: fakeProvider(),
+        providers: { active: fakeProvider(), withdrawOnly: [] },
       })
     ).payoutId;
   const available = async () => (await balanceOf(db, TOBI)).availableMinor;

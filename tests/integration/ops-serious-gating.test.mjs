@@ -255,15 +255,21 @@ async function unresolvedPayoutIssue() {
     profileId: id,
     amountMinor: 200000n,
     idempotencyKey: randomUUID(),
-    provider: {
-      name: 'mock',
-      capabilities: { connectedAccounts: false },
-      payoutCapability: async () => ({ status: 'active', requirementsDue: [] }),
-      payoutBalance: async () => ({ availableMinor: 200000000n }),
-      quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
-      coverPayoutFee: async () => ({ transferRef: 'transfer' }),
-      findPayoutByReference: async () => null,
-      fetchPayoutStatus: async () => ({ status: 'not_found' }),
+    providers: {
+      active: {
+        name: 'mock',
+        capabilities: { connectedAccounts: false },
+        payoutCapability: async () => ({
+          status: 'active',
+          requirementsDue: [],
+        }),
+        payoutBalance: async () => ({ availableMinor: 200000000n }),
+        quotePayoutFee: async () => ({ feeMinor: 5000n, exact: false }),
+        coverPayoutFee: async () => ({ transferRef: 'transfer' }),
+        findPayoutByReference: async () => null,
+        fetchPayoutStatus: async () => ({ status: 'not_found' }),
+      },
+      withdrawOnly: [],
     },
   });
   // Old enough that the provider's silence counts as absence.

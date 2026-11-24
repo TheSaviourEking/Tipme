@@ -527,7 +527,7 @@ test('option B: shares and their money', async (t) => {
           userId: OWNER,
           amountMinor,
           idempotencyKey: randomUUID(),
-          provider: partner.provider,
+          providers: { active: partner.provider, withdrawOnly: [] },
         });
       assert.equal(await codeOf(withdraw(185999n)), 'WITHDRAWAL_TOO_SMALL');
       const all = await withdraw(186000n);

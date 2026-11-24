@@ -31,6 +31,7 @@ import {
   type WeeklyReportData,
   type WithdrawalQuoteLocalResponse,
   type WithdrawalQuoteResponse,
+  type WithdrawalRequestResult,
   withdrawalQuoteQuerySchema,
   type WithdrawalsPage,
 } from '@tipme/contracts';
@@ -75,6 +76,7 @@ import {
 } from '../infra/partner-quote-cache.js';
 import { LOGGER } from '../tokens.js';
 import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
+import { withdrawalRequestResult } from './withdrawal-request-result.js';
 
 const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 
@@ -84,7 +86,7 @@ const idempotencyKeyPipe = new ZodValidationPipe(z.uuid());
 export class DashboardController {
   constructor(
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
-    /** Every provider in either role; a withdrawal is still requested through the active one. */
+    /** Every provider in either role: a quote reads, and a withdrawal may be paid through, each. */
     @Inject(PAYOUT_PROVIDERS_TOKEN)
     private readonly providers: PayoutProviderSet,
     @Inject(ServerEvents) private readonly events: ServerEvents,
@@ -380,7 +382,7 @@ export class DashboardController {
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(withdrawalRequestSchema))
     body: z.infer<typeof withdrawalRequestSchema>,
-  ): Promise<ApiDataResponse<{ payoutId: string; status: string }>> {
+  ): Promise<ApiDataResponse<WithdrawalRequestResult>> {
     const key = idempotencyKeyPipe.transform(idempotencyKey, {
       type: 'custom',
       data: 'idempotency-key',
@@ -396,7 +398,7 @@ export class DashboardController {
         profileId,
         amountMinor: BigInt(body.amountMinor),
         idempotencyKey: key,
-        provider: this.providers.active,
+        providers: this.providers,
         onReadFailure: this.logReadFailure('request'),
       });
     } finally {
@@ -412,7 +414,7 @@ export class DashboardController {
       `payout_requested.${result.payoutId}`,
       profileId,
     );
-    return { data: { payoutId: result.payoutId, status: result.status } };
+    return { data: withdrawalRequestResult(result) };
   }
 
   @Get('reports')

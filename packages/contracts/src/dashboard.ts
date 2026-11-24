@@ -103,6 +103,25 @@ export interface WithdrawalRow {
   state: WithdrawalState;
   /** Null for a payout recorded without a destination (before banks were kept, or pretend). */
   bank: WithdrawalBank | null;
+  /**
+   * A request paid as parts across providers: each part's amount and state, in order. Null when one
+   * payout paid it; then `amountMinor` and `state` are that payout's. For parts, `amountMinor` is the
+   * request's total and `state` is derived from them: `sent` or `failed` only when every part is,
+   * otherwise the least advanced part that has not failed. Never names a provider.
+   */
+  parts: { amountMinor: string; state: WithdrawalState }[] | null;
+}
+
+/**
+ * What `POST /v1/me/withdrawals` (and a business's) answers: the request's payouts, in order.
+ * `payoutId` is part 1, or the only payout; `groupId` is null when one payout carries it all.
+ * Amounts are minor units of NGN; never names a provider.
+ */
+export interface WithdrawalRequestResult {
+  payoutId: string;
+  status: string;
+  groupId: string | null;
+  parts: { payoutId: string; amountMinor: string; status: string }[];
 }
 
 export interface WithdrawalsPage {

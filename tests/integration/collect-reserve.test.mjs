@@ -639,7 +639,7 @@ async function directWithdrawal() {
     profileId: ADA.id,
     amountMinor: 400_000n,
     idempotencyKey: randomUUID(),
-    provider: payer(),
+    providers: { active: payer(), withdrawOnly: [] },
   });
   await q(
     `UPDATE payouts SET fee_payer = 'tipme', amount_minor = amount_minor + user_fee_minor,

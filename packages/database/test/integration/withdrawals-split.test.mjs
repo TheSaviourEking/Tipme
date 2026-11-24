@@ -5,13 +5,19 @@ import {
   balanceOf,
   businessBalanceOf,
   businessWithdrawalQuote,
+  collectStatus,
   createPaymentIntent,
   createQuote,
   DEMO_PROFILES,
   drainOrder,
+  failPayoutByStaff,
+  listMyWithdrawals,
   markAttemptInitiated,
   recordProviderEvent,
+  requestBusinessWithdrawal,
+  requestWithdrawal,
   sameBank,
+  setFeatureSwitch,
   withdrawalQuote,
   withdrawalsAvailable,
 } from '../../dist/index.js';
@@ -39,6 +45,8 @@ const reader = (
   balance,
   fee,
   fail: false,
+  /** When set, every balance read waits for it: two requests can be held at the same point. */
+  gate: null,
   reads: [],
   async payoutCapability(accountRef) {
     this.reads.push(`capability:${accountRef}`);
@@ -46,6 +54,7 @@ const reader = (
   },
   async payoutBalance(accountRef) {
     this.reads.push(`balance:${accountRef}`);
+    if (this.gate) await this.gate();
     if (this.fail) throw new Error('provider down');
     return { availableMinor: this.balance };
   },
@@ -64,10 +73,15 @@ test('per-provider withdrawal quote', async (t) => {
     database.pool.query(sql, params).then((r) => r.rows);
 
   /** One ₦4,000 tip collected through `provider`: ₦3,720 net (372,000 minor). */
-  const tip = async (provider, handle = 'tobi', extra = {}) => {
+  const tip = async (
+    provider,
+    handle = 'tobi',
+    extra = {},
+    tipMinor = 400000n,
+  ) => {
     const quote = await createQuote(db, {
       handle,
-      tipMinor: 400000n,
+      tipMinor,
       currency: 'NGN',
     });
     const intent = await createPaymentIntent(db, {
@@ -87,7 +101,7 @@ test('per-provider withdrawal quote', async (t) => {
       eventType: 'payment.succeeded',
       attemptId: intent.attemptId,
       providerReference: reference,
-      amountMinor: 400000n,
+      amountMinor: tipMinor,
       currency: 'NGN',
       providerFeeMinor: 3000n,
       signatureVerified: true,
@@ -113,7 +127,7 @@ test('per-provider withdrawal quote', async (t) => {
           account_last4, status)
        VALUES ($1, $2, $3, $4, '058', 'Guaranty Trust Bank', $5, $6)`,
       [id, TOBI.id, provider, `ba_${id.slice(0, 8)}`, last4, status],
-    );
+    ).then(() => id);
   };
 
   await t.test(
@@ -566,4 +580,665 @@ test('per-provider withdrawal quote', async (t) => {
       (await balanceOf(db, TOBI.id)).availableMinor,
     );
   });
+
+  // Task 6 (spec §5, P6, P7, P9): one request paid as parts across providers.
+
+  const ask = (providers, amountMinor, extra = {}) =>
+    requestWithdrawal(db, {
+      profileId: TOBI.id,
+      amountMinor,
+      idempotencyKey: randomUUID(),
+      providers,
+      ...extra,
+    });
+  const rows = () =>
+    q(
+      `SELECT id, provider, account_reference, destination_id, withdrawal_group_id, group_part,
+              idempotency_key, amount_minor::text AS amount, fee_payer,
+              user_fee_minor::text AS user_fee, fee_minor::text AS fee, status
+         FROM payouts ORDER BY created_at, group_part NULLS FIRST, id`,
+    );
+  const starts = () =>
+    q(
+      `SELECT aggregate_id FROM outbox_events WHERE event_type = 'payouts.start'
+        ORDER BY created_at, id`,
+    );
+  const count = async (table) =>
+    (await q(`SELECT count(*)::int AS n FROM ${table}`))[0].n;
+  /** Two withdrawals already asked for today, so the next one is the 3rd (P7). */
+  const twoToday = async () => {
+    for (let i = 0; i < 2; i += 1)
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, provider,
+                              provider_reference, idempotency_key, request_fingerprint,
+                              fee_minor, paid_at)
+         VALUES ($1, $2, 'NGN', 1000, 'PAID', 'mock', $3, $4, 'test', 5000, now())`,
+        [randomUUID(), TOBI.id, `mock_po_${randomUUID()}`, randomUUID()],
+      );
+  };
+  /** The old provider connected-account, on the same bank as the active (pretend) one. */
+  const sameBankAtBoth = async () => {
+    await tip('bachs');
+    await tip('mock');
+    await seedAccount();
+    const active = await seedDestination('mock', '4321');
+    const old = await seedDestination('bachs', '4321');
+    return { active, old };
+  };
+
+  await t.test(
+    'a request larger than any one provider is paid as two parts in drain order',
+    async () => {
+      await database.fresh();
+      const destinations = await sameBankAtBoth();
+      const active = reader('mock', { balance: 372000n, fee: 5000n });
+      const old = reader('bachs-sandbox', {
+        connected: true,
+        balance: 372000n,
+        fee: 4000n,
+      });
+      const key = randomUUID();
+      const result = await ask(set(active, old), 600000n, {
+        idempotencyKey: key,
+      });
+      const [first, second, ...more] = await rows();
+      assert.equal(more.length, 0);
+      // Drain order: the withdraw-only provider first, emptied; the active one the rest.
+      assert.equal(first.provider, 'bachs');
+      assert.equal(first.account_reference, 'acct_tobi');
+      assert.equal(first.destination_id, destinations.old);
+      assert.equal(first.amount, '372000');
+      assert.equal(first.fee, '4000');
+      assert.equal(second.provider, 'mock');
+      assert.equal(second.account_reference, null);
+      assert.equal(second.destination_id, destinations.active);
+      assert.equal(second.amount, '228000');
+      assert.equal(second.fee, '5000');
+      // One group (P6): part 1 carries the client's key, part 2 `<key>:2`.
+      assert.ok(first.withdrawal_group_id);
+      assert.equal(second.withdrawal_group_id, first.withdrawal_group_id);
+      assert.deepEqual([first.group_part, second.group_part], [1, 2]);
+      assert.equal(first.idempotency_key, key);
+      assert.equal(second.idempotency_key, `${key}:2`);
+      // The first withdrawal of the day: TipMe pays every part's fee.
+      assert.deepEqual(
+        [first.fee_payer, second.fee_payer, first.user_fee, second.user_fee],
+        ['tipme', 'tipme', '0', '0'],
+      );
+      assert.deepEqual(
+        (await starts()).map((row) => row.aggregate_id).sort(),
+        [first.id, second.id].sort(),
+      );
+      assert.deepEqual(result, {
+        payoutId: first.id,
+        status: 'REQUESTED',
+        replayed: false,
+        groupId: first.withdrawal_group_id,
+        parts: [
+          { payoutId: first.id, amountMinor: 372000n, status: 'REQUESTED' },
+          { payoutId: second.id, amountMinor: 228000n, status: 'REQUESTED' },
+        ],
+      });
+    },
+  );
+
+  await t.test(
+    'a request one provider covers is a single payout with no group',
+    async () => {
+      await database.fresh();
+      await sameBankAtBoth();
+      const active = reader('mock', { balance: 372000n });
+      const old = reader('bachs-sandbox', {
+        connected: true,
+        balance: 372000n,
+      });
+      const key = randomUUID();
+      const result = await ask(set(active, old), 300000n, {
+        idempotencyKey: key,
+      });
+      const [only, ...more] = await rows();
+      assert.equal(more.length, 0);
+      // The first in drain order that covers it alone.
+      assert.equal(only.provider, 'bachs');
+      assert.equal(only.amount, '300000');
+      assert.equal(only.withdrawal_group_id, null);
+      assert.equal(only.group_part, null);
+      assert.equal(only.idempotency_key, key);
+      assert.deepEqual(result, {
+        payoutId: only.id,
+        status: 'REQUESTED',
+        replayed: false,
+        groupId: null,
+        parts: [
+          { payoutId: only.id, amountMinor: 300000n, status: 'REQUESTED' },
+        ],
+      });
+    },
+  );
+
+  await t.test('the replay of a split returns the same group', async () => {
+    await database.fresh();
+    await tip('mock_alt');
+    await tip('mock');
+    const active = reader('mock', { balance: 372000n });
+    const old = reader('mock_alt', { balance: 372000n });
+    const key = randomUUID();
+    const first = await ask(set(active, old), 500000n, { idempotencyKey: key });
+    const again = await ask(set(active, old), 500000n, { idempotencyKey: key });
+    assert.equal(again.replayed, true);
+    assert.equal(again.groupId, first.groupId);
+    assert.equal(again.payoutId, first.payoutId);
+    assert.deepEqual(again.parts, first.parts);
+    assert.equal(await count('payouts'), 2);
+    assert.equal((await starts()).length, 2);
+    // The same key for another amount is still a conflict.
+    await assert.rejects(
+      ask(set(active, old), 400000n, { idempotencyKey: key }),
+      { code: 'IDEMPOTENCY_CONFLICT' },
+    );
+  });
+
+  await t.test(
+    'a replay after one part failed returns the same group and writes nothing',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const active = reader('mock', { balance: 372000n });
+      const old = reader('mock_alt', { balance: 372000n });
+      const key = randomUUID();
+      const first = await ask(set(active, old), 500000n, {
+        idempotencyKey: key,
+      });
+      const part2 = first.parts[1].payoutId;
+      await db.transaction((tx) =>
+        failPayoutByStaff(tx, {
+          id: part2,
+          profileId: TOBI.id,
+          businessId: null,
+          status: 'REQUESTED',
+        }),
+      );
+      const before = {
+        payouts: await count('payouts'),
+        outbox: await count('outbox_events'),
+        transitions: await count('status_transitions'),
+        reads: active.reads.length + old.reads.length,
+      };
+      const again = await ask(set(active, old), 500000n, {
+        idempotencyKey: key,
+      });
+      assert.equal(again.replayed, true);
+      assert.equal(again.groupId, first.groupId);
+      assert.deepEqual(
+        again.parts.map((part) => [part.payoutId, part.status]),
+        [
+          [first.parts[0].payoutId, 'REQUESTED'],
+          [part2, 'FAILED'],
+        ],
+      );
+      // Nothing new: no part, no start job, no transition, and no provider asked.
+      assert.deepEqual(
+        {
+          payouts: await count('payouts'),
+          outbox: await count('outbox_events'),
+          transitions: await count('status_transitions'),
+          reads: active.reads.length + old.reads.length,
+        },
+        before,
+      );
+    },
+  );
+
+  await t.test(
+    'two requests at once never spend the same provider’s money',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const ledger = (await balanceOf(db, TOBI.id)).availableMinor;
+      assert.equal(ledger, 744000n);
+      const BALANCE = { mock: 372000n, mock_alt: 372000n };
+      const active = reader('mock', { balance: BALANCE.mock });
+      const old = reader('mock_alt', { balance: BALANCE.mock_alt });
+      // Both requests read the old provider's full balance before either takes the lock.
+      let arrived = 0;
+      let open;
+      const bothRead = new Promise((resolve) => {
+        open = resolve;
+      });
+      old.gate = () => {
+        arrived += 1;
+        if (arrived === 2) open();
+        return bothRead;
+      };
+      const results = await Promise.allSettled([
+        ask(set(active, old), 400000n),
+        ask(set(active, old), 344000n),
+      ]);
+      assert.equal(arrived, 2);
+      for (const result of results)
+        if (result.status === 'rejected')
+          assert.equal(result.reason.code, 'INSUFFICIENT_BALANCE');
+      assert.ok(results.some((result) => result.status === 'fulfilled'));
+      const spent = await q(
+        `SELECT provider, SUM(amount_minor + user_fee_minor)::text AS total
+           FROM payouts WHERE status <> 'FAILED' GROUP BY provider`,
+      );
+      let total = 0n;
+      for (const row of spent) {
+        assert.ok(
+          BigInt(row.total) <= BALANCE[row.provider],
+          `${row.provider} spent ${row.total}`,
+        );
+        total += BigInt(row.total);
+      }
+      assert.ok(total <= ledger);
+      // The two allocations are distinct payouts, never the same money twice.
+      const ids = results
+        .filter((result) => result.status === 'fulfilled')
+        .flatMap((result) => result.value.parts.map((part) => part.payoutId));
+      assert.equal(new Set(ids).size, ids.length);
+      assert.equal(ids.length, await count('payouts'));
+    },
+  );
+
+  await t.test(
+    'a request with one provider unreadable uses only the others, or refuses unavailable',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      const active = reader('mock', { balance: 372000n });
+      const old = reader('mock_alt', { balance: 372000n });
+      old.fail = true;
+      const failures = [];
+      const onReadFailure = (_failure, provider) => failures.push(provider);
+      // More than the readable provider holds: never sent to the unread one (P9).
+      await assert.rejects(ask(set(active, old), 500000n, { onReadFailure }), {
+        code: 'PAYOUT_PROVIDER_UNAVAILABLE',
+      });
+      assert.equal(await count('payouts'), 0);
+      // What the readable provider covers goes through it alone.
+      const result = await ask(set(active, old), 300000n, { onReadFailure });
+      assert.equal(result.groupId, null);
+      assert.deepEqual(
+        (await rows()).map((row) => [row.provider, row.amount]),
+        [['mock', '300000']],
+      );
+      assert.deepEqual(failures, ['mock_alt', 'mock_alt']);
+    },
+  );
+
+  await t.test(
+    'a part whose provider holds a different bank is never quoted or sent',
+    async () => {
+      await database.fresh();
+      await tip('bachs');
+      await tip('mock');
+      await seedAccount();
+      await seedDestination('mock', '4321');
+      await seedDestination('bachs', '9999');
+      const active = reader('mock', { balance: 372000n });
+      const old = reader('bachs-sandbox', {
+        connected: true,
+        balance: 372000n,
+      });
+      // The amount needs the old provider's money, which can't go to the bank the screen shows.
+      await assert.rejects(ask(set(active, old), 500000n), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+      assert.deepEqual(old.reads, []);
+      assert.equal(await count('payouts'), 0);
+      await ask(set(active, old), 300000n);
+      assert.deepEqual(
+        (await rows()).map((row) => row.provider),
+        ['mock'],
+      );
+      assert.deepEqual(old.reads, []);
+    },
+  );
+
+  await t.test('a user-paid fee comes off the largest part once', async () => {
+    await database.fresh();
+    await tip('mock_alt');
+    await tip('mock');
+    await twoToday();
+    const active = reader('mock', { balance: 372000n, fee: 5000n });
+    const old = reader('mock_alt', { balance: 372000n, fee: 1000n });
+    const result = await ask(set(active, old), 600000n);
+    const parts = (await rows()).filter((row) => row.withdrawal_group_id);
+    // The largest part (the old provider's 372,000) carries its provider's fee, once.
+    assert.deepEqual(
+      parts.map((row) => [
+        row.provider,
+        row.amount,
+        row.fee_payer,
+        row.user_fee,
+      ]),
+      [
+        ['mock_alt', '371000', 'user', '1000'],
+        ['mock', '228000', 'tipme', '0'],
+      ],
+    );
+    assert.equal(result.parts[0].amountMinor, 371000n);
+    // Exactly the amount chosen leaves the balance.
+    assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 144000n);
+
+    // Nothing can be sent when the largest part is not more than its fee.
+    await database.fresh();
+    await tip('mock_alt');
+    await tip('mock');
+    await twoToday();
+    const costly = reader('mock_alt', { balance: 372000n, fee: 372000n });
+    await assert.rejects(
+      ask(set(reader('mock', { balance: 372000n }), costly), 600000n),
+      { code: 'WITHDRAWAL_BELOW_FEE' },
+    );
+    assert.equal(await count('payouts'), 2);
+  });
+
+  await t.test('a business split pays at most one fee', async () => {
+    const switchTo = (on) =>
+      db.transaction((tx) =>
+        setFeatureSwitch(tx, {
+          key: 'business_payout_fee_absorbed',
+          on,
+          staffUserId: ADA.userId,
+          approvedBy: null,
+          reason: 'Switched for the split fee test',
+          now: new Date(),
+        }),
+      );
+    /** A ₦10,000 tip to Tobi at the business through `provider`; the business takes half. */
+    const sharedTip = async (
+      provider,
+      { memberId, agreementId, businessId },
+    ) => {
+      const quote = await createQuote(db, {
+        handle: 'tobi',
+        tipMinor: 1_000_000n,
+        currency: 'NGN',
+      });
+      const intent = await createPaymentIntent(db, {
+        quoteId: quote.quoteId,
+        idempotencyKey: randomUUID(),
+        businessMemberId: memberId,
+      });
+      const [{ net }] = await q(
+        `SELECT q.recipient_net_minor::text AS net FROM payment_intents i
+           JOIN tip_quotes q ON q.id = i.quote_id
+          WHERE i.id = (SELECT intent_id FROM tips WHERE id = $1)`,
+        [intent.tipId],
+      );
+      const share = BigInt(net) / 2n;
+      await q(
+        `INSERT INTO tip_business_shares (tip_id, agreement_id, business_id, business_bps, share_minor)
+         VALUES ($1, $2, $3, 5000, $4)`,
+        [intent.tipId, agreementId, businessId, share.toString()],
+      );
+      const reference = `${provider}_pay_${randomUUID()}`;
+      await markAttemptInitiated(db, {
+        attemptId: intent.attemptId,
+        provider,
+        providerReference: reference,
+      });
+      await recordProviderEvent(db, {
+        provider,
+        providerEventId: `evt_${randomUUID()}`,
+        eventType: 'payment.succeeded',
+        attemptId: intent.attemptId,
+        providerReference: reference,
+        amountMinor: 1_000_000n,
+        currency: 'NGN',
+        providerFeeMinor: 3000n,
+        signatureVerified: true,
+        payload: {},
+      });
+      return share;
+    };
+    const atBusiness = async () => {
+      await database.fresh();
+      const { businessId, locations } = await seedBusiness(database);
+      const { memberId } = await seedMember(database, {
+        locationId: locations[0].id,
+        profileId: TOBI.id,
+      });
+      const { agreementId } = await seedAgreement(database, {
+        memberId,
+        businessBps: 5000,
+      });
+      const at = { memberId, agreementId, businessId };
+      const share = await sharedTip('mock_alt', at);
+      assert.equal(await sharedTip('mock', at), share);
+      return { businessId, share };
+    };
+    /** More than either provider holds: the old one's share, and the minimum from the active. */
+    const split = ({ businessId, share }) =>
+      requestBusinessWithdrawal(db, {
+        businessId,
+        userId: ADA.userId,
+        amountMinor: share + 200000n,
+        idempotencyKey: randomUUID(),
+        providers: set(
+          reader('mock', { balance: share }),
+          reader('mock_alt', { balance: share }),
+        ),
+      });
+    const payers = () =>
+      q(
+        `SELECT amount_minor::text AS amount, fee_payer, user_fee_minor::text AS user_fee
+           FROM payouts ORDER BY group_part`,
+      );
+
+    const business = await atBusiness();
+    assert.equal(
+      (await businessBalanceOf(db, business.businessId)).availableMinor,
+      business.share * 2n,
+    );
+    const { share } = business;
+    const result = await split(business);
+    assert.equal(result.parts.length, 2);
+    // The business pays one fee, off the largest part; TipMe pays the other part's.
+    assert.deepEqual(await payers(), [
+      {
+        amount: (share - 5000n).toString(),
+        fee_payer: 'user',
+        user_fee: '5000',
+      },
+      { amount: '200000', fee_payer: 'tipme', user_fee: '0' },
+    ]);
+    // With TipMe paying businesses' fees, none does.
+    const absorbed = await atBusiness();
+    await switchTo(true);
+    try {
+      await split(absorbed);
+      assert.deepEqual(await payers(), [
+        { amount: share.toString(), fee_payer: 'tipme', user_fee: '0' },
+        { amount: '200000', fee_payer: 'tipme', user_fee: '0' },
+      ]);
+    } finally {
+      await switchTo(false);
+    }
+  });
+
+  await t.test('You collect limits apply to the request total', async () => {
+    await database.fresh();
+    await tip('mock_alt', 'tobi', {}, 10_000_000n);
+    await tip('mock', 'tobi', {}, 10_000_000n);
+    await q(
+      `UPDATE profiles SET collection_mode = 'collect', collect_verified_at = now() WHERE id = $1`,
+      [TOBI.id],
+    );
+    const status = await collectStatus(db, TOBI.id, new Date());
+    assert.equal(status.firstWithdrawalCapMinor, 5_000_000n);
+    const providers = () =>
+      set(
+        reader('mock', { balance: 3_000_000n }),
+        reader('mock_alt', { balance: 3_000_000n }),
+      );
+    // Both providers together could pay more, but the first withdrawal's cap is on the total.
+    await assert.rejects(ask(providers(), 5_000_001n), {
+      code: 'WITHDRAWAL_FIRST_CAP',
+    });
+    assert.equal(await count('payouts'), 0);
+    const result = await ask(providers(), 5_000_000n);
+    assert.deepEqual(
+      result.parts.map((part) => part.amountMinor),
+      [3_000_000n, 2_000_000n],
+    );
+    // One request is one first withdrawal: the cap is behind them now.
+    assert.equal(
+      (await collectStatus(db, TOBI.id, new Date())).firstWithdrawalCapMinor,
+      null,
+    );
+  });
+
+  await t.test(
+    'taking everything is allowed when the ledger runs out before the providers',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      // Money already on its way elsewhere leaves 250,000 in the ledger.
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, provider,
+                              idempotency_key, request_fingerprint, fee_minor)
+         VALUES ($1, $2, 'NGN', 494000, 'REQUESTED', 'other', $3, 'test', 5000)`,
+        [randomUUID(), TOBI.id, randomUUID()],
+      );
+      assert.equal((await balanceOf(db, TOBI.id)).availableMinor, 250000n);
+      const providers = () =>
+        set(
+          reader('mock', { balance: 200000n }),
+          reader('mock_alt', { balance: 100000n }),
+        );
+      const quote = await quoteOf(providers());
+      assert.deepEqual(quote.capsMinor, [100000n, 150000n]);
+      // No split of 250,000 keeps every part at the minimum or emptying its provider, but it is
+      // everything: each provider carries what the quote said.
+      const result = await ask(providers(), 250000n);
+      assert.deepEqual(
+        result.parts.map((part) => part.amountMinor),
+        [100000n, 150000n],
+      );
+    },
+  );
+
+  await t.test('a failed part releases only its own reservation', async () => {
+    await database.fresh();
+    await tip('mock_alt');
+    await tip('mock');
+    const providers = () =>
+      set(
+        reader('mock', { balance: 372000n }),
+        reader('mock_alt', { balance: 372000n }),
+      );
+    const result = await ask(providers(), 600000n);
+    const before = await quoteOf(providers());
+    assert.equal(before.withdrawableMinor, 144000n);
+    await db.transaction((tx) =>
+      failPayoutByStaff(tx, {
+        id: result.parts[1].payoutId,
+        profileId: TOBI.id,
+        businessId: null,
+        status: 'REQUESTED',
+      }),
+    );
+    const after = await quoteOf(providers());
+    assert.equal(after.withdrawableMinor, 144000n + 228000n);
+    // Part 1 still holds its money at the old provider.
+    assert.deepEqual(after.capsMinor, [372000n]);
+  });
+
+  await t.test(
+    'the withdrawals list shows one row per request with its parts',
+    async () => {
+      await database.fresh();
+      await tip('mock_alt');
+      await tip('mock');
+      await tip('mock');
+      const providers = () =>
+        set(
+          reader('mock', { balance: 500000n }),
+          reader('mock_alt', { balance: 372000n }),
+        );
+      const split = await ask(providers(), 600000n);
+      await q(`UPDATE payouts SET created_at = now() - interval '1 minute'`);
+      const single = await ask(providers(), 250000n);
+      assert.equal(single.groupId, null);
+      const page = await listMyWithdrawals(db, TOBI.id, {});
+      assert.equal(page.items.length, 2);
+      const [newest, older] = page.items;
+      assert.equal(newest.payoutId, single.payoutId);
+      assert.equal(newest.amountMinor, '250000');
+      assert.equal(newest.parts, null);
+      assert.equal(older.payoutId, split.payoutId);
+      assert.equal(older.amountMinor, '600000');
+      assert.equal(older.state, 'requested');
+      assert.deepEqual(older.parts, [
+        { amountMinor: '372000', state: 'requested' },
+        { amountMinor: '228000', state: 'requested' },
+      ]);
+      assert.doesNotMatch(JSON.stringify(page), /mock/);
+      // One row per request across pages too: the cursor is part 1's.
+      const first = await listMyWithdrawals(db, TOBI.id, { limit: 1 });
+      assert.deepEqual(
+        first.items.map((row) => row.payoutId),
+        [single.payoutId],
+      );
+      const next = await listMyWithdrawals(db, TOBI.id, {
+        limit: 1,
+        cursor: first.nextCursor,
+      });
+      assert.deepEqual(
+        next.items.map((row) => row.payoutId),
+        [split.payoutId],
+      );
+      assert.equal(next.nextCursor, null);
+      // The row's state from its parts: one failed, one still asked for.
+      const [part1, part2] = split.parts.map((part) => part.payoutId);
+      await db.transaction((tx) =>
+        failPayoutByStaff(tx, {
+          id: part2,
+          profileId: TOBI.id,
+          businessId: null,
+          status: 'REQUESTED',
+        }),
+      );
+      const stateOf = async () =>
+        (await listMyWithdrawals(db, TOBI.id, {})).items[1];
+      assert.equal((await stateOf()).state, 'requested');
+      assert.deepEqual(
+        (await stateOf()).parts.map((part) => part.state),
+        ['requested', 'failed'],
+      );
+      await q(
+        `UPDATE payouts SET status = 'PAID', paid_at = now() WHERE id = $1`,
+        [part1],
+      );
+      // Not all sent, not all failed: the least advanced part that has not failed.
+      assert.equal((await stateOf()).state, 'sent');
+      // Failed only when every part failed.
+      const again = await ask(providers(), 600000n);
+      assert.equal(again.parts.length, 2);
+      for (const part of again.parts)
+        await db.transaction((tx) =>
+          failPayoutByStaff(tx, {
+            id: part.payoutId,
+            profileId: TOBI.id,
+            businessId: null,
+            status: 'REQUESTED',
+          }),
+        );
+      const failed = (await listMyWithdrawals(db, TOBI.id, {})).items.find(
+        (row) => row.payoutId === again.payoutId,
+      );
+      assert.equal(failed.state, 'failed');
+      assert.deepEqual(
+        failed.parts.map((part) => part.state),
+        ['failed', 'failed'],
+      );
+    },
+  );
 });

@@ -23,6 +23,7 @@ import type {
   PayoutDestinationUpdateRequest,
   PayoutDestinationView,
   WithdrawalQuoteResponse,
+  WithdrawalRequestResult,
 } from '@tipme/contracts';
 import {
   payoutBankResolveSchema,
@@ -81,6 +82,7 @@ import {
 } from '../infra/partner-quote-cache.js';
 import { MAIL_SEALING } from '../mail/mail-providers.provider.js';
 import { LOGGER } from '../tokens.js';
+import { withdrawalRequestResult } from '../dashboard/withdrawal-request-result.js';
 import { BusinessEnabledGuard } from './business-enabled.guard.js';
 import { SharesEnabledGuard } from './release2-flags.guard.js';
 
@@ -276,7 +278,7 @@ export class BusinessPayoutsController {
     @Headers('idempotency-key') idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(withdrawalRequestSchema))
     body: z.infer<typeof withdrawalRequestSchema>,
-  ): Promise<ApiDataResponse<{ payoutId: string; status: string }>> {
+  ): Promise<ApiDataResponse<WithdrawalRequestResult>> {
     const key = idempotencyKeyPipe.transform(idempotencyKey, {
       type: 'custom',
       data: 'idempotency-key',
@@ -301,11 +303,11 @@ export class BusinessPayoutsController {
           userId: auth.userId,
           amountMinor: BigInt(body.amountMinor),
           idempotencyKey: key,
-          provider: this.provider,
+          providers: this.providers,
           onReadFailure: this.logReadFailure('request'),
         }),
       );
-      return { data: { payoutId: result.payoutId, status: result.status } };
+      return { data: withdrawalRequestResult(result) };
     } finally {
       await invalidate();
     }

@@ -231,7 +231,7 @@ test('a withdrawal in flight is not spendable: ₦6,000 owed, ₦5,000 being wit
     profileId: ADA,
     amountMinor: 500000n,
     idempotencyKey: randomUUID(),
-    provider: mock,
+    providers: { active: mock, withdrawOnly: [] },
   });
   const fake = partner();
   assert.equal(await codeOf(buy(db, fake)), 'INSUFFICIENT_BALANCE');
@@ -251,7 +251,7 @@ test('a withdrawal and a Pro payment at once, with ₦6,000: exactly one goes th
       profileId: ADA,
       amountMinor: 500000n,
       idempotencyKey: randomUUID(),
-      provider: mock,
+      providers: { active: mock, withdrawOnly: [] },
     }),
     buy(db, partner()),
   ]);

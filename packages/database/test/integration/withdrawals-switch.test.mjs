@@ -87,7 +87,7 @@ async function setup(t) {
         profileId: TOBI,
         amountMinor: 200000n,
         idempotencyKey: randomUUID(),
-        provider: provider(),
+        providers: { active: provider(), withdrawOnly: [] },
       })
     ).payoutId;
   const pause = (paused) =>
@@ -132,7 +132,7 @@ test('a retry of a request made before the switch still gets its payout', async 
       profileId: TOBI,
       amountMinor: 200000n,
       idempotencyKey: key,
-      provider: provider(),
+      providers: { active: provider(), withdrawOnly: [] },
     });
   const first = await ask();
   await s.pause(true);
