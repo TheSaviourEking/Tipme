@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { UnrecoverableError } from 'bullmq';
 import { handlePayoutStart } from '../dist/handlers/payout-start.js';
 import {
+  parkedPayoutProviders,
   workerPaymentProviders,
   workerProviderFor,
 } from '../dist/job-worker.js';
@@ -169,4 +170,17 @@ test('mock_alt keeps its own keys beside mock, on the worker queue prefix', asyn
   assert.equal(keys.length, 2);
   assert.match(keys[0], /tipme-test:mock_alt/);
   assert.doesNotMatch(keys[1], /mock_alt/);
+});
+
+test('parked Bachs events are always swept, even on a copy with no Bachs adapter', () => {
+  const providers = workerPaymentProviders(workerConfig([]), fakeRedis);
+  assert.equal(providers.byRecordedName.has('bachs'), false);
+  // Swept for the read-free checks (unexpected, conflicts, the age cap); a read fails as an error.
+  assert.deepEqual(parkedPayoutProviders(providers), ['bachs']);
+  assert.throws(
+    () => workerProviderFor(providers)('bachs'),
+    /Unsupported persisted payment provider/,
+  );
+  const withAlt = workerPaymentProviders(workerConfig(['mock_alt']), fakeRedis);
+  assert.deepEqual(parkedPayoutProviders(withAlt), ['bachs']);
 });

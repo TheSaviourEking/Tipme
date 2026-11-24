@@ -6,6 +6,7 @@ import {
 } from '../dist/handlers/payment-reserve.js';
 import {
   ensureReserveSchedules,
+  removeLeftoverReserveSchedules,
   reserveChecks,
   workerPaymentProviders,
 } from '../dist/job-worker.js';
@@ -169,4 +170,54 @@ test('the active Bachs keeps the payments.reserve schedule; a mock-only copy has
     ),
     [],
   );
+});
+
+test('reserve schedules left from an earlier configuration are removed at startup', async () => {
+  const removed = [];
+  const queue = {
+    getJobSchedulers: async () => [
+      { key: 'payments.reserve', name: 'payments.reserve' },
+      {
+        key: 'payments.reserve.bachs.sandbox',
+        name: 'payments.reserve.bachs.sandbox',
+      },
+      {
+        key: 'payments.reserve.bachs.live',
+        name: 'payments.reserve.bachs.live',
+      },
+      { key: 'reconcile.payments', name: 'reconcile.payments' },
+      { key: 'payments.reserved-words', name: 'payments.reserved-words' },
+    ],
+    removeJobScheduler: async (id) => {
+      removed.push(id);
+      return true;
+    },
+  };
+  const kept = await removeLeftoverReserveSchedules(
+    { queue, logger: quiet },
+    new Set(['payments.reserve.bachs.sandbox']),
+  );
+  assert.deepEqual(removed.sort(), [
+    'payments.reserve',
+    'payments.reserve.bachs.live',
+  ]);
+  assert.equal(kept, 2);
+});
+
+test('a failed clean-up is logged, never fatal', async () => {
+  const warnings = [];
+  const removed = await removeLeftoverReserveSchedules(
+    {
+      queue: {
+        getJobSchedulers: async () => {
+          throw new Error('redis down');
+        },
+        removeJobScheduler: async () => true,
+      },
+      logger: { warn: (entry) => warnings.push(entry) },
+    },
+    new Set(),
+  );
+  assert.equal(removed, 0);
+  assert.deepEqual(warnings, [{ event: 'reserve.schedule_cleanup_failed' }]);
 });

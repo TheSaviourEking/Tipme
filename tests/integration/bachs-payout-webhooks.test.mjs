@@ -1591,15 +1591,15 @@ test('a parked payout.failed naming a failed payout is no alarm, and leaves the 
   );
 });
 
-test('a parked event naming a payout that already has its reference is that payout', async (t) => {
+test('a parked event that arrived before its reference was recorded is applied once it is', async (t) => {
   const { db, withdraw, row, issues, q, paidEvent, webhooks, reconcile } =
     await fixture(t);
   const payoutId = await withdraw();
   const provider = scripted();
   await startPayout(db, { payoutId, provider });
   const event = paidEvent(payoutId, { operationReference: payoutId });
-  // Parked as if it arrived just before the reference was recorded; recorded by the sweep. (Not by
-  // renaming the payout's provider: a parked event never adopts a payout at another provider.)
+  // Parked as if it arrived just before the reference was recorded; recorded by the time of the
+  // sweep, whose lookup by reference finds it.
   const [{ provider_reference: reference }] = await q(
     `SELECT provider_reference FROM payouts WHERE id = $1`,
     [payoutId],
@@ -1613,6 +1613,87 @@ test('a parked event naming a payout that already has its reference is that payo
     reference,
   ]);
   await reconcile(provider);
+  assert.equal((await issues('payout_conflict')).length, 0);
+  assert.equal((await row(payoutId)).status, 'PAID');
+});
+
+/**
+ * The database seen through a lens that runs `onMiss` right after the first lookup of a payout id
+ * that finds nothing: a reference recorded between the sweep's two lookups.
+ */
+function racingLookup(db, onMiss) {
+  let fired = false;
+  const lens = (target, idOnly) =>
+    new Proxy(target, {
+      get(object, prop) {
+        const value = Reflect.get(object, prop, object);
+        if (prop === 'then' && idOnly && !fired)
+          return (resolve, reject) =>
+            object
+              .then(async (rows) => {
+                if (!fired && rows.length === 0) {
+                  fired = true;
+                  await onMiss();
+                }
+                return rows;
+              })
+              .then(resolve, reject);
+        if (typeof value !== 'function') return value;
+        return (...args) => {
+          const result = value.apply(object, args);
+          return result && typeof result === 'object' && result !== object
+            ? lens(result, idOnly)
+            : result === object
+              ? lens(object, idOnly)
+              : result;
+        };
+      },
+    });
+  return new Proxy(db, {
+    get(object, prop) {
+      if (prop === 'select')
+        return (fields) =>
+          lens(
+            object.select(fields),
+            fields !== undefined && Object.keys(fields).join() === 'id',
+          );
+      const value = Reflect.get(object, prop, object);
+      return typeof value === 'function' ? value.bind(object) : value;
+    },
+  });
+}
+
+test('a parked event naming our payout, whose reference was recorded meanwhile, is that payout', async (t) => {
+  const { db, withdraw, row, issues, q, paidEvent, webhooks } =
+    await fixture(t);
+  const payoutId = await withdraw();
+  const provider = scripted();
+  await startPayout(db, { payoutId, provider });
+  const event = paidEvent(payoutId, { operationReference: payoutId });
+  const [{ provider_reference: reference }] = await q(
+    `SELECT provider_reference FROM payouts WHERE id = $1`,
+    [payoutId],
+  );
+  await q(`UPDATE payouts SET provider_reference = NULL WHERE id = $1`, [
+    payoutId,
+  ]);
+  assert.equal(await webhooks.applyBachs(event, provider), 'parked');
+  // The sweep's lookup by reference misses; the reference lands before its lookup by our id.
+  let raced = false;
+  await reconcilePayouts({
+    db: racingLookup(db, async () => {
+      raced = true;
+      await q(`UPDATE payouts SET provider_reference = $2 WHERE id = $1`, [
+        payoutId,
+        reference,
+      ]);
+    }),
+    provider,
+    parkedProviders: ['bachs'],
+    now: new Date(),
+    minAgeMs: 0,
+  });
+  assert.equal(raced, true, 'the first lookup missed');
   assert.equal((await issues('payout_conflict')).length, 0);
   assert.equal((await row(payoutId)).status, 'PAID');
 });

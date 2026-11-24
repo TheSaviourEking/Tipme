@@ -374,16 +374,48 @@ export function ensureReserveSchedules(
 }
 
 /**
- * The providers whose parked payout events reconciliation rechecks: the connected-account ones held
- * here. Their webhooks park events in the shape the sweep reads; the pretend providers' unmatched
- * events go to staff instead (unmatched_event).
+ * The providers whose parked payout events reconciliation rechecks: always 'bachs', plus any other
+ * connected-account adapter held. Bachs is swept even on a copy with no Bachs adapter, since
+ * issues.ts leaves parked Bachs rows to this sweep: its read-free checks (payout_unexpected,
+ * conflicts, the age cap) still open staff issues, and a read fails as an error. The pretend
+ * providers' unmatched events go to staff as unmatched_event instead.
  */
 export function parkedPayoutProviders(
   providers: Pick<WorkerPaymentProviders, 'byRecordedName'>,
 ): string[] {
-  return [...providers.byRecordedName]
-    .filter(([, adapter]) => adapter.capabilities?.connectedAccounts === true)
-    .map(([name]) => name);
+  const names = new Set(['bachs']);
+  for (const [name, adapter] of providers.byRecordedName)
+    if (adapter.capabilities?.connectedAccounts === true) names.add(name);
+  return [...names];
+}
+
+/**
+ * Removes reserve schedules that no check owns now (a provider left its role, or a Bachs moved
+ * environment), so they stop firing. A failure is logged and never stops startup: a leftover run
+ * finds no check and is skipped.
+ */
+export async function removeLeftoverReserveSchedules(
+  deps: {
+    queue: Pick<Queue, 'getJobSchedulers' | 'removeJobScheduler'>;
+    logger: { warn(fields: object): void };
+  },
+  keep: ReadonlySet<string>,
+): Promise<number> {
+  try {
+    const leftovers = (await deps.queue.getJobSchedulers())
+      .map((scheduler) => scheduler.key)
+      .filter(
+        (id) =>
+          (id === PAYMENT_RESERVE_JOB ||
+            id.startsWith(`${PAYMENT_RESERVE_JOB}.`)) &&
+          !keep.has(id),
+      );
+    for (const id of leftovers) await deps.queue.removeJobScheduler(id);
+    return leftovers.length;
+  } catch {
+    deps.logger.warn({ event: 'reserve.schedule_cleanup_failed' });
+    return 0;
+  }
 }
 
 export interface JobWorker {
@@ -662,6 +694,10 @@ export async function startJobWorker(
   if (reserves.length)
     warnIfNoAlertRoute(config.ALERT_WEBHOOK_URL, (entry) => logger.warn(entry));
   const reserveSchedules = ensureReserveSchedules({ queue, logger }, reserves);
+  void removeLeftoverReserveSchedules(
+    { queue, logger },
+    new Set(reserveById.keys()),
+  );
   // The same provider as the reserve check: TipMe's own account there is what is reconciled.
   const collectReserve = payoutSetupProvider
     ? collectReserveReader(payoutSetupProvider)

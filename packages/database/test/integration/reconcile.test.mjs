@@ -502,4 +502,61 @@ test('reconciliation', async (t) => {
       );
     },
   );
+  await t.test(
+    'parked Bachs events reach staff on a copy with no Bachs adapter',
+    async () => {
+      await database.fresh();
+      // A copy back on mock with no Bachs keys: every Bachs read fails. The read-free checks still
+      // run, so a parked row never sits unseen (issues.ts leaves parked Bachs rows to this sweep).
+      await q(
+        `INSERT INTO payment_accounts
+           (id, profile_id, provider, environment, provider_account_reference, status,
+            charges_enabled, payouts_enabled, fee_collector)
+         VALUES ($1, $2, 'bachs', 'sandbox', 'acct_gone', 'ACTIVE', true, true, 'platform')`,
+        [randomUUID(), ADA],
+      );
+      const named = randomUUID();
+      await q(
+        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                              request_fingerprint, provider, account_reference, start_uncertain_at)
+         VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'f', 'bachs', 'acct_gone', now())`,
+        [named, ADA, randomUUID()],
+      );
+      const park = (eventId, payload) =>
+        q(
+          `INSERT INTO unmatched_provider_events
+             (id, provider, provider_event_id, event_type, payload_hash, payload, reason)
+           VALUES ($1, 'bachs', $2, 'payout.paid', 'h', $3, 'unknown_payout')`,
+          [randomUUID(), eventId, JSON.stringify(payload)],
+        );
+      // Nobody asked for this one.
+      await park('evt_stranger', {
+        providerReference: 'bachs_ref_stranger',
+        accountReference: 'acct_gone',
+        status: 'paid',
+      });
+      // This one names our payout: it needs a read, which cannot happen here.
+      await park('evt_ours', {
+        providerReference: 'bachs_ref_ours',
+        accountReference: 'acct_gone',
+        status: 'paid',
+        operationReference: named,
+      });
+      const result = await reconcilePayouts({
+        db: database.db,
+        provider: (name) => {
+          throw new Error(`Unsupported persisted payment provider (${name})`);
+        },
+        parkedProviders: ['bachs'],
+        now: later(3 * 24 * 60),
+        minAgeMs: 30 * 24 * 3_600_000,
+      });
+      assert.ok(result.errors >= 1, 'the missing reader counts as an error');
+      const kinds = (
+        await q(`SELECT kind, dedupe_key FROM issues ORDER BY kind`)
+      ).map((i) => `${i.kind}:${i.dedupe_key.split('.')[0]}`);
+      assert.ok(kinds.includes('payout_unexpected:payout_unexpected'), kinds);
+      assert.ok(kinds.includes('payout_unresolved:payout_parked'), kinds);
+    },
+  );
 });

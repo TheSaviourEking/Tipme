@@ -510,7 +510,9 @@ async function claimStart(
   if (!payout || !payout.provider) return { kind: 'done', outcome: 'already' };
   if (payout.status !== 'REQUESTED' || payout.providerReference !== null)
     return { kind: 'done', outcome: 'already' };
-  // Before the mark: a provider this copy cannot reach retries the job with nothing recorded.
+  // Before the mark: a provider this copy does not hold throws with nothing recorded. The job fails
+  // once (UnrecoverableError, never retried into another provider) and the payout stays REQUESTED;
+  // reconciliation's payout_unresolved takes it to staff.
   const starter =
     typeof input.provider === 'function'
       ? input.provider(payout.provider)
