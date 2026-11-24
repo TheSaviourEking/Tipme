@@ -52,8 +52,8 @@ export async function shoot(
     );
     const options = {
       path: join(SHOTS_DIR, `${name}-${label}-${width}.png`),
-      caret: 'hide',
-      animations: 'disabled',
+      caret: 'hide' as const,
+      animations: 'disabled' as const,
       style: styleFor(width),
     };
     if (target) {

@@ -58,7 +58,7 @@ async function tipThroughAlt(handle: string, profileId: string) {
       payload: {},
     });
     const after = (await ops.balanceOf(db, profileId)).availableMinor;
-    return (after - before) as bigint;
+    return BigInt(after) - BigInt(before);
   });
 }
 
