@@ -82,8 +82,10 @@ import { ownerColumns, ownerOf, type MoneyOwner } from './owner.js';
 import {
   ownerProviderReach,
   ownerProviderSet,
+  providerRoleIn,
   sameBank,
   type PayoutProviderSet,
+  type ProviderRole,
 } from './payout-providers.js';
 
 export type { MoneyOwner } from './owner.js';
@@ -1552,9 +1554,6 @@ export async function queuedNotStarted(
   return BigInt(row?.total ?? 0);
 }
 
-/** A provider's place in the owner's set: the active one takes new tips, the others don't. */
-export type ProviderRole = 'active' | 'withdraw_only';
-
 /**
  * What is promised out of the owner's account at `provider` (a recorded name) that its balance still
  * shows: withdrawals queued there and not yet started (amount plus the user's fee), and Pro paid from
@@ -1563,12 +1562,14 @@ export type ProviderRole = 'active' | 'withdraw_only';
  * The one figure the withdrawal quote, the withdrawal request, Pro from the balance and the split
  * check all take off a provider's balance, so none can spend what another has reserved (spec §5, §8).
  *
- * At a withdraw-only provider (ruling F-R1), also the money there that is someone else's and still
- * has to leave this account: `owedToOthersAt`. Never at the active provider: a share there may be
- * of a tip not yet settled, so not yet in its available balance, and taking it off would lower a
- * single provider's withdrawable below the truth. A withdraw-only provider takes no new tips, so
- * what is owed from it there has long settled. The active one is drained last under the ledger
- * cap, so the owner's own money there covers the rest.
+ * Also, at every provider but a plain single-provider owner's only one (`role` 'only'), the money
+ * there that is someone else's and still has to leave this account: `owedToOthersAt` (rulings
+ * F-R1, F-R2). A single provider's share may be of a tip not yet settled, so not yet in its
+ * available balance, and taking it off would lower the withdrawable below the truth; the ledger,
+ * which already leaves the share out, caps that owner. Any other owner may reach the active
+ * provider with more of the ledger left than their own money there (an earlier part passed over:
+ * bank details, unread, not set up, money held elsewhere), so there the share is left out too: that
+ * only refuses, for a share not yet settled, during its settle window.
  */
 export async function committedAtProvider(
   db: Pick<Database, 'select'>,
@@ -1591,7 +1592,7 @@ export async function committedAtProvider(
       ),
     );
   const others =
-    role === 'withdraw_only' ? await owedToOthersAt(db, owner, provider) : 0n;
+    role === 'only' ? 0n : await owedToOthersAt(db, owner, provider);
   return queued + BigInt(pro?.total ?? 0) + others;
 }
 
@@ -1867,7 +1868,7 @@ async function quoteFor(
         db,
         owner,
         recordedProviderName(provider.name),
-        isActive ? 'active' : 'withdraw_only',
+        providerRoleIn(reach, provider, active),
       ),
     );
     const entries = cache
@@ -2174,6 +2175,8 @@ function drainTakes(
 /** One provider the request may draw from: read, usable, and on the bank the screen shows. */
 type ReadPart = {
   provider: PayoutReader;
+  /** For what is reserved out of it (`committedAtProvider`). */
+  role: ProviderRole;
   route: Route;
   availableMinor: bigint;
   feeMinor: bigint;
@@ -2224,6 +2227,7 @@ async function readRequestParts(
     }
     parts.push({
       provider,
+      role: providerRoleIn(reach, provider, active),
       route,
       availableMinor: read.availableMinor,
       feeMinor: read.feeMinor,
@@ -2350,9 +2354,7 @@ async function requestFor(
                 tx,
                 owner,
                 recordedProviderName(part.provider.name),
-                part.provider === input.providers.active
-                  ? 'active'
-                  : 'withdraw_only',
+                part.role,
               )),
           ),
         );

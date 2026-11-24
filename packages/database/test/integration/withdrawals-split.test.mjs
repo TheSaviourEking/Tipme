@@ -5,6 +5,7 @@ import {
   balanceOf,
   businessBalanceOf,
   businessWithdrawalQuote,
+  buyProFromBalance,
   collectStatus,
   createPaymentIntent,
   createQuote,
@@ -12,6 +13,7 @@ import {
   drainOrder,
   failPayoutByStaff,
   listMyWithdrawals,
+  mailSealing,
   markAttemptInitiated,
   recentActivity,
   recordProviderEvent,
@@ -28,7 +30,11 @@ import {
   seedBusiness,
   seedMember,
 } from './business-fixtures.mjs';
-import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
+import {
+  AT_12_NOV_PLAN_FEES,
+  atLaunchProPrice,
+  useDatabase,
+} from './helpers.mjs';
 
 // Per-provider balances, Task 5 (spec §5, §6, §8): one quote across every configured provider that
 // holds the owner's money. Each provider's balance is its own truth, the ledger total is the cap,
@@ -1545,6 +1551,15 @@ test('per-provider withdrawal quote', async (t) => {
       assert.deepEqual(quote.capsMinor, [372000n]);
       const result = await ask(providers, 372000n);
       assert.equal(result.status, 'REQUESTED');
+      // Settled now (the share is in the available balance, its sweep still waiting): still
+      // exactly the ledger, as today.
+      await q(`UPDATE payouts SET status = 'FAILED'`);
+      const ledger = (await balanceOf(db, TOBI.id)).availableMinor;
+      const settled = await quoteOf(
+        set(reader('mock', { balance: 372000n + 372000n })),
+      );
+      assert.equal(settled.withdrawableMinor, ledger);
+      assert.deepEqual(settled.capsMinor, [ledger]);
     },
   );
 
@@ -1646,6 +1661,112 @@ test('per-provider withdrawal quote', async (t) => {
         [tipId],
       );
       assert.equal(await capAtOld(), share);
+    },
+  );
+
+  // Ruling F-R2: an owner who isn't plain single-provider (more than one provider in their set, or
+  // money held elsewhere) may reach the active provider with more of the ledger left than their own
+  // money there, when an earlier part was passed over. The share owed to the business there is
+  // left out then too.
+  await t.test(
+    'a split owner whose old part needs bank details never takes the share at the active provider',
+    async () => {
+      await database.fresh();
+      const { sharedTip } = await shareSetup();
+      await tip('bachs');
+      await tip('mock');
+      const { share, net } = await sharedTip('mock');
+      await seedAccount();
+      await seedDestination('mock', '4321');
+      await seedDestination('bachs', '9999');
+      // The shared tip has settled at the active provider: its whole net is there, sweep waiting.
+      const providers = () =>
+        set(
+          reader('mock', { balance: 372000n + net }),
+          reader('bachs-sandbox', { connected: true, balance: 372000n }),
+        );
+      const quote = await quoteOf(providers());
+      assert.equal(quote.bankDetailsNeeded, true);
+      assert.deepEqual(quote.capsMinor, [372000n + net - share]);
+      assert.equal(quote.withdrawableMinor, 372000n + net - share);
+      await assert.rejects(ask(providers(), 372000n + net - share + 1n), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+      const result = await ask(providers(), 372000n + net - share);
+      assert.equal(result.status, 'REQUESTED');
+    },
+  );
+
+  await t.test(
+    'an owner with money held elsewhere never takes the share at the active provider',
+    async () => {
+      await database.fresh();
+      const { sharedTip } = await shareSetup();
+      await tip('bachs');
+      await tip('mock');
+      const { share, net } = await sharedTip('mock');
+      const providers = () =>
+        set(reader('mock', { balance: 372000n + net }), reader('mock_alt'));
+      const quote = await quoteOf(providers());
+      assert.equal(quote.heldElsewhere, true);
+      assert.deepEqual(quote.capsMinor, [372000n + net - share]);
+      await assert.rejects(ask(providers(), 372000n + net - share + 1n), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+    },
+  );
+
+  await t.test(
+    'Pro is never paid from a share owed at a withdraw-only provider (an explicit role)',
+    async () => {
+      await database.fresh();
+      await atLaunchProPrice(database);
+      await q(
+        `UPDATE users SET email = 'tobi@example.com', email_verified_at = now()
+           WHERE id = (SELECT user_id FROM profiles WHERE id = $1)`,
+        [TOBI.id],
+      );
+      const { sharedTip } = await shareSetup();
+      const { net, share } = await sharedTip('mock_alt');
+      await tip('mock');
+      /** A partner for the balance that records each collect. */
+      const partner = (name, available) => ({
+        ...reader(name, { balance: available }),
+        collects: [],
+        async collectToPlatform(input) {
+          this.collects.push(input);
+          return { transferRef: `tr_${randomUUID()}`, status: 'paid' };
+        },
+        async findPlatformCollection() {
+          return null;
+        },
+      });
+      const buy = (providers) =>
+        buyProFromBalance(db, {
+          profileId: TOBI.id,
+          expectedAmountMinor: 250000n,
+          idempotencyKey: randomUUID(),
+          providers,
+          sealing: mailSealing(Buffer.alloc(32, 9)),
+          now: new Date(Date.now() + 60_000),
+        });
+      // mock_alt holds the whole net, but half of it is the business's: ₦1,860 of Tobi's own there
+      // doesn't cover ₦2,500, even as the only provider named.
+      assert.ok(net - share < 250000n && net >= 250000n);
+      const alt = partner('mock_alt', net);
+      await assert.rejects(buy([{ reader: alt, role: 'withdraw_only' }]), {
+        code: 'INSUFFICIENT_BALANCE',
+      });
+      assert.equal(alt.collects.length, 0);
+      // With the active provider named too, it pays instead.
+      const active = partner('mock', 372000n);
+      const bought = await buy([
+        { reader: alt, role: 'withdraw_only' },
+        { reader: active, role: 'active' },
+      ]);
+      assert.equal(bought.status, 'PAID');
+      assert.equal(alt.collects.length, 0);
+      assert.equal(active.collects.length, 1);
     },
   );
 });

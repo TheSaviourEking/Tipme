@@ -15,6 +15,7 @@ import type { MoneyOwner } from './owner.js';
 import {
   drainOrder,
   ownerProviderSet,
+  providerRoleIn,
   type NamedProvider,
   type PayoutProviderSet,
 } from './payout-providers.js';
@@ -225,16 +226,20 @@ export async function listSplitAccounts(
   const items: SplitAccount[] = [];
   for (const row of rows) {
     const owner = ownerOfRow(row);
-    const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+    const reach = await guarded(() => ownerProviderSet(db, owner, set));
     const listed: SplitAccount['providers'] = [];
-    for (const provider of providers) {
+    for (const provider of reach.providers) {
       const stored = recordedProviderName(provider.name);
-      const role = provider === set.active ? 'active' : 'withdraw_only';
       listed.push({
         provider: stored,
-        role,
+        role: provider === set.active ? 'active' : 'withdraw_only',
         queuedMinor: await guarded(() =>
-          committedAtProvider(db, owner, stored, role),
+          committedAtProvider(
+            db,
+            owner,
+            stored,
+            providerRoleIn(reach, provider, set.active),
+          ),
         ),
       });
     }
@@ -453,10 +458,11 @@ type SplitMeasure = {
 async function measureSplit(
   db: Database,
   owner: MoneyOwner,
-  providers: readonly PayoutReader[],
+  reach: { providers: readonly PayoutReader[]; heldElsewhere: boolean },
   active: PayoutReader,
   onReadFailure?: ProviderReadFailureLog,
 ): Promise<SplitMeasure> {
+  const { providers } = reach;
   const read: { provider: PayoutReader; availableMinor: bigint | null }[] = [];
   for (const provider of providers) {
     const reference = await balanceReferenceAt(db, owner, provider);
@@ -482,7 +488,7 @@ async function measureSplit(
         db,
         owner,
         stored,
-        provider === active ? 'active' : 'withdraw_only',
+        providerRoleIn(reach, provider, active),
       ),
     );
     readings.push({
@@ -576,23 +582,17 @@ export async function checkProviderSplit(
   set: PayoutProviderSet,
   input: { now: Date; onReadFailure?: ProviderReadFailureLog },
 ): Promise<{ outcome: SplitOutcome }> {
-  const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
+  const reach = await guarded(() => ownerProviderSet(db, owner, set));
   const first = await measureSplit(
     db,
     owner,
-    providers,
+    reach,
     set.active,
     input.onReadFailure,
   );
   const confirmed =
     first.outcome === 'short'
-      ? await measureSplit(
-          db,
-          owner,
-          providers,
-          set.active,
-          input.onReadFailure,
-        )
+      ? await measureSplit(db, owner, reach, set.active, input.onReadFailure)
       : null;
   await guarded(() =>
     db.transaction(async (tx) => {

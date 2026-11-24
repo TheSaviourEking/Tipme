@@ -26,6 +26,25 @@ export function drainOrder<P extends NamedProvider>(
   return [...set.withdrawOnly, set.active];
 }
 
+/**
+ * A provider's place in the owner's set, for what is reserved out of it (`committedAtProvider`):
+ * - `only`: the active provider of a plain single-provider owner (nothing in their set besides it,
+ *   nothing held elsewhere), exactly as before per-provider balances;
+ * - `active`: the active provider of any other owner;
+ * - `withdraw_only`: any other provider in the set.
+ */
+export type ProviderRole = 'only' | 'active' | 'withdraw_only';
+
+/** The role of `provider` in an owner's set (`ownerProviderSet`'s answer) with this active one. */
+export function providerRoleIn<P extends NamedProvider>(
+  reach: { providers: readonly P[]; heldElsewhere: boolean },
+  provider: P,
+  active: P,
+): ProviderRole {
+  if (provider !== active) return 'withdraw_only';
+  return reach.providers.length > 1 || reach.heldElsewhere ? 'active' : 'only';
+}
+
 /** The bank account a payout destination names, as far as TipMe records it. */
 export interface DestinationRow {
   bankCode: string;
