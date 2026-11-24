@@ -250,7 +250,7 @@ test('an accent replaces the purple only on the selected key, links, focus, the 
     uses.sort(),
     [
       // The four: the focus ring and links (as tokens), the selected key, the wordmark.
-      `:root:has(${S}) .brand__mark path[fill="#7A32F9"] | fill`,
+      `:root:has(${S}) .brand__mark | --logo-accent`,
       `:root:has(${S}) | --brand-ink`,
       `:root:has(${S}) | --brand-primary`,
       `${S} .tip-remember input:checked | background`,

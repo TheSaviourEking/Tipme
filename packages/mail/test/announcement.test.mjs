@@ -111,8 +111,8 @@ test('every announcement carries the reason and the email settings link', () => 
   assert.deepEqual(
     [...out.html.matchAll(/src="([^"]*)"/g)].map((m) => m[1]),
     [
-      'https://usetipme.xyz/email/tipme-logo-light-2x.png',
-      'https://usetipme.xyz/email/tipme-logo-dark-2x.png',
+      'https://usetipme.xyz/email/tipme-logo-2026-light-2x.png',
+      'https://usetipme.xyz/email/tipme-logo-2026-dark-2x.png',
     ],
   );
 });

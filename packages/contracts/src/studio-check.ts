@@ -79,9 +79,12 @@ export const STUDIO_WEIGHT = {
    * What the public page loads before the design's own fonts and photos: HTML, CSS, script,
    * TipMe's two fonts, the cover and the tip block. Measured on the built page (plan Task 8,
    * 15 Nov 2026: about 463 KB compressed for the board's examples); tests/e2e/studio-page.spec.ts
-   * keeps the whole estimate within 15% of the measured first load.
+   * keeps the whole estimate within 15% of the measured first load. Plus the TipMe logo's two
+   * masks every page loads since 24 Nov 2026 (apps/web/public/brand/tipme-wordmark-{ink,accent}.png,
+   * about 15 kB with headers; it was inline SVG before). apps/web/test/brand-logo.test.mjs
+   * keeps this in step with the files.
    */
-  base: 460_000,
+  base: 477_000,
   phone: 390,
   screen: 844,
   screens: 1.5,

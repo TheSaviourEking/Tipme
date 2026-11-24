@@ -41,19 +41,17 @@ test('TipMe assigns local build-time fonts to distinct type roles', () => {
   assert.match(tokens, /font-variant-numeric:\s*var\(--numeric-variant\)/);
 });
 
-test('the wordmark renders from the master SVG file', () => {
+test('the wordmark is drawn from the owner’s files, not a copy of old paths', () => {
   const brand = readFileSync(
-    new URL('../src/lib/wordmark.ts', import.meta.url),
+    new URL('../src/components/brand.tsx', import.meta.url),
     'utf8',
   );
-  const master = readFileSync(
-    new URL('../public/brand/tipme-wordmark.svg', import.meta.url),
-    'utf8',
+  // brand-logo.test.mjs checks the files and the masks themselves.
+  assert.doesNotMatch(brand, /WORDMARK_PATHS|0 0 778 293/);
+  assert.match(
+    brand,
+    /className=\{className \? `wordmark \$\{className\}` : 'wordmark'\}/,
   );
-  const paths = [...master.matchAll(/<path d="([^"]+)"/g)].map((m) => m[1]);
-  assert.equal(paths.length, 7);
-  for (const d of paths)
-    assert.ok(brand.includes(d), 'path missing from the wordmark module');
 });
 
 test('fictional demo portraits are optimized repository assets', () => {

@@ -1,4 +1,6 @@
 import { writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 import {
   expect,
   test,
@@ -28,6 +30,73 @@ async function card(request: APIRequestContext, path: string) {
   expect(pngSize(bytes), path).toEqual({ width: 1200, height: 630 });
   return bytes;
 }
+
+// sharp is the API's dependency (resolved from there), as in photos-not-initials.spec.ts.
+const sharp = createRequire(resolve('apps/api/package.json'))('sharp') as (
+  input: Buffer,
+) => {
+  extract(region: {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  }): {
+    raw(): { toBuffer(): Promise<Buffer> };
+  };
+};
+
+/** How many pixels in a region are the logo's black, and how many its purple. */
+async function logoInks(
+  png: Buffer,
+  region: { left: number; top: number; width: number; height: number },
+) {
+  const data = await sharp(png).extract(region).raw().toBuffer();
+  let black = 0;
+  let purple = 0;
+  // next/og writes RGBA.
+  for (let i = 0; i < data.length; i += 4) {
+    const [r = 0, g = 0, b = 0] = data.subarray(i, i + 3);
+    if (r < 40 && g < 40 && b < 40) black += 1;
+    if (Math.abs(r - 0x7a) < 24 && Math.abs(g - 0x32) < 24 && b > 220)
+      purple += 1;
+  }
+  return { black, purple };
+}
+
+test('the cards draw the TipMe logo in its black and purple', async ({
+  request,
+}) => {
+  const general = await card(request, '/opengraph-image');
+  // The wordmark, top left (232 x 64 at 72, 72).
+  const wordmark = await logoInks(general, {
+    left: 72,
+    top: 72,
+    width: 232,
+    height: 64,
+  });
+  expect(wordmark.black).toBeGreaterThan(400);
+  expect(wordmark.purple).toBeGreaterThan(400);
+  // The heart on its white key, right of centre (232 px key, centred in the card's height).
+  const key = await logoInks(general, {
+    left: 896,
+    top: 199,
+    width: 232,
+    height: 232,
+  });
+  expect(key.black).toBeGreaterThan(1000);
+  expect(key.purple).toBeGreaterThan(1000);
+
+  // A person's card: the heart on its small white key at the foot, right (80 px, 72 and 48 in).
+  const person = await card(request, '/people/ada/share-card');
+  const small = await logoInks(person, {
+    left: 1048,
+    top: 502,
+    width: 80,
+    height: 80,
+  });
+  expect(small.black).toBeGreaterThan(200);
+  expect(small.purple).toBeGreaterThan(200);
+});
 
 async function advertised(page: Page) {
   const og = await page

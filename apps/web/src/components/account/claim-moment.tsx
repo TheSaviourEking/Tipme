@@ -4,22 +4,10 @@ import { Button } from '@tipme/ui';
 import { STANDARD_TIP_PRESETS_MINOR } from '@tipme/domain';
 import { claimBuzz, endsClaimMoment } from '@/lib/claim-moment';
 import { Money } from '@/components/money';
+import { BrandMark } from '@/components/brand';
 
 /** When the card touches down, for the buzz (the timeline is in globals.css, `.claim-moment`). */
 const LAND_MS = 350;
-
-/** The heart from the master wordmark, as `icon.svg` draws it. */
-function Heart({ className }: { className: string }) {
-  return (
-    <svg className={className} viewBox="668 -13 120 120" focusable="false">
-      <path
-        d="M701.259 76.9553L701.236 77.167C737.151 92.0868 770.727 77.7807 769.62 56.2653C768.512 34.7487 741.619 36.1332 741.619 36.1332L741.525 36.0404C741.525 36.0404 742.479 9.12833 720.948 8.36497C699.419 7.60052 685.767 41.2835 701.259 76.9553Z"
-        transform="translate(728 47) scale(0.78) translate(-732.13 -45.83)"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
 
 const prefersStill = () =>
   typeof window !== 'undefined' &&
@@ -27,7 +15,7 @@ const prefersStill = () =>
 
 /**
  * "@username is yours.": shown once, over the hello step, after the server confirmed the claim.
- * The page card falls and lands, the stamp presses, purple hearts rise and the words arrive. It
+ * The page card falls and lands, the stamp presses, TipMe hearts (the logo's mark) rise and the words arrive. It
  * stays until the person moves on: Continue, Escape, Enter, or a tap once the card is down (the
  * claim tap itself never counts) hands over (`onDone`). Tab goes round inside it. Reduced motion
  * gets the still scene and no vibration. The scene is a picture: screen readers hear the heading
@@ -150,7 +138,7 @@ export function ClaimMoment({
           </span>
         </div>
         {Array.from({ length: hearts }, (_, index) => (
-          <Heart
+          <BrandMark
             key={index}
             className={`claim-moment__heart claim-moment__heart--${index + 1}`}
           />

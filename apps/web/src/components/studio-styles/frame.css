@@ -512,8 +512,7 @@ html:has(
       )
   )
   .site-header
-  .brand__mark
-  path[fill='#000000'],
+  .brand__mark,
 html:has(
     .studio[data-style]:not(
         [style*='display: none'],
@@ -523,9 +522,8 @@ html:has(
       )
   )
   .site-footer
-  .brand__mark
-  path[fill='#000000'] {
-  fill: var(--studio-fg);
+  .brand__mark {
+  --logo-ink: var(--studio-fg);
 }
 
 html:has(
@@ -744,9 +742,9 @@ html:has(
     .site-header
     .nav-shell
     > .brand
-    .brand__mark
-    path {
-    fill: currentColor;
+    .brand__mark {
+    --logo-ink: currentColor;
+    --logo-accent: currentColor;
   }
 
   html:has(
@@ -760,9 +758,8 @@ html:has(
     .site-header
     .nav-shell
     > .brand
-    .brand__mark
-    path[fill='#7A32F9'] {
-    fill: var(--studio-head-me, currentColor);
+    .brand__mark {
+    --logo-accent: var(--studio-head-me, currentColor);
   }
 
   /* Focus follows the ink, so the ring shows over the cover and on bg. */

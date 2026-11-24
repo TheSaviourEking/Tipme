@@ -5,7 +5,7 @@ import {
   type PublicProfile,
   type ResolvedCover,
 } from '@tipme/contracts';
-import { HEART_MARK, WORDMARK_PATHS, WORDMARK_VIEWBOX } from '@/lib/wordmark';
+import { MARK, WORDMARK } from '@/lib/wordmark';
 import { characterMap, setsIn } from '@/lib/font-cmap';
 import { avatarSource } from '@/lib/avatar-source';
 
@@ -85,16 +85,17 @@ function inkOn(hex: string): string {
   return 1.05 / (luminance(hex) + 0.05) >= 3 ? '#ffffff' : INK;
 }
 
-function Heart({ size, fill }: { size: number; fill: string }) {
-  return (
-    <svg width={size} height={size} viewBox={HEART_MARK.viewBox}>
-      <path d={HEART_MARK.d} transform={HEART_MARK.transform} fill={fill} />
-    </svg>
-  );
+/** The logo files as data for next/og (`shareArt`). */
+export interface ShareArt {
+  /** The light wordmark (black and purple). */
+  wordmark: string;
+  /** The heart of two figures alone. */
+  mark: string;
 }
 
-/** A raised key with the heart: purple on the general card, black on a person's. */
-function HeartKey({ size, colour }: { size: number; colour: string }) {
+/** A raised white key with the heart of two figures, as the app icon draws it. */
+function HeartKey({ size, mark }: { size: number; mark: string }) {
+  const width = Math.round(size * 0.7);
   return (
     <div
       style={{
@@ -104,29 +105,35 @@ function HeartKey({ size, colour }: { size: number; colour: string }) {
         width: size,
         height: size,
         borderRadius: size * 0.27,
-        backgroundColor: colour,
-        backgroundImage:
-          'linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 42%)',
+        backgroundColor: '#ffffff',
         boxShadow:
-          '0 2px 0 rgba(20,18,16,0.18), 0 18px 36px rgba(20,18,16,0.18)',
+          '0 2px 0 rgba(20,18,16,0.12), 0 18px 36px rgba(20,18,16,0.16)',
       }}
     >
-      <Heart size={size * 0.86} fill="#ffffff" />
+      {/* eslint-disable-next-line @next/next/no-img-element -- next/og draws plain img only */}
+      <img
+        src={mark}
+        width={width}
+        height={Math.round((width * MARK.height) / MARK.width)}
+        alt=""
+      />
     </div>
   );
 }
 
-function Wordmark({ width }: { width: number }) {
+function Wordmark({ width, src }: { width: number; src: string }) {
   return (
-    <svg width={width} height={(width * 293) / 778} viewBox={WORDMARK_VIEWBOX}>
-      {WORDMARK_PATHS.map((path) => (
-        <path key={path.d.slice(0, 24)} d={path.d} fill={path.fill} />
-      ))}
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element -- next/og draws plain img only
+    <img
+      src={src}
+      width={width}
+      height={Math.round((width * WORDMARK.height) / WORDMARK.width)}
+      alt="TipMe"
+    />
   );
 }
 
-export function GeneralCard() {
+export function GeneralCard({ art }: { art: ShareArt }) {
   return (
     <div
       style={{
@@ -147,7 +154,7 @@ export function GeneralCard() {
           justifyContent: 'space-between',
         }}
       >
-        <Wordmark width={170} />
+        <Wordmark width={232} src={art.wordmark} />
         <div
           style={{
             display: 'flex',
@@ -173,7 +180,7 @@ export function GeneralCard() {
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center' }}>
-        <HeartKey size={232} colour={BRAND} />
+        <HeartKey size={232} mark={art.mark} />
       </div>
     </div>
   );
@@ -194,6 +201,8 @@ export function PersonCard(
     serif?: ReadonlySet<number>;
     /** The photo as a data URL (`shareCardPhoto`); without it, the initials. */
     photo?: string | null;
+    /** The heart of two figures (`shareArt().mark`), on the key at the foot. */
+    mark: string;
   },
 ) {
   const initials = initialsOf(p.name);
@@ -320,11 +329,31 @@ export function PersonCard(
           >
             {`${p.host}/@${p.handle}`}
           </span>
-          <HeartKey size={80} colour={INK} />
+          <HeartKey size={80} mark={p.mark} />
         </div>
       </div>
     </div>
   );
+}
+
+let art: Promise<ShareArt> | undefined;
+
+/** The owner's logo files (public/brand) as data URLs, read once per process. */
+export function shareArt(): Promise<ShareArt> {
+  const png = (data: Buffer) =>
+    `data:image/png;base64,${data.toString('base64')}`;
+  // Literal paths, one per file: the bundler maps a templated path to the wrong file in the folder.
+  art ??= Promise.all([
+    readFile(
+      new URL('../../public/brand/tipme-wordmark-light.png', import.meta.url),
+    ),
+    readFile(new URL('../../public/brand/tipme-mark.png', import.meta.url)),
+  ]).then(([wordmark, mark]) => ({ wordmark: png(wordmark), mark: png(mark) }));
+  // A failed read must not stay cached: the next card tries again.
+  art.catch(() => {
+    art = undefined;
+  });
+  return art;
 }
 
 let serifMap: ReadonlySet<number> | undefined;

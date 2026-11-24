@@ -262,7 +262,63 @@ body:has(
   text-decoration: none;
 }
 
-/* Height drives the wordmark's size; its width follows the master file's proportions. */
+/* The TipMe logo (the owner's files, 24 Nov 2026; brand.tsx): two masks cut from the light file,
+   its black and its purple (scripts/design/brand-assets.mjs), each filled with a colour. By
+   default that is the light file itself; with `--logo-ink: #fff` it is the dark file. A page sets
+   the two on the logo it means (the purple receipt page, Studio styles). Height sets the size; the
+   width follows the artwork. Forced colours: the system's ink, as a picture of text would be. */
+.wordmark,
+.brandmark {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  forced-color-adjust: none;
+  print-color-adjust: exact;
+}
+
+.wordmark {
+  aspect-ratio: 1383 / 380;
+}
+
+.brandmark {
+  aspect-ratio: 400 / 380;
+}
+
+.wordmark::before,
+.wordmark::after,
+.brandmark::before,
+.brandmark::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--logo-ink, #000);
+  mask: url('/brand/tipme-wordmark-ink.png') center / contain no-repeat;
+}
+
+.wordmark::after {
+  background-color: var(--logo-accent, #7a32f9);
+  mask-image: url('/brand/tipme-wordmark-accent.png');
+}
+
+.brandmark::before {
+  mask-image: url('/brand/tipme-mark-ink.png');
+}
+
+.brandmark::after {
+  background-color: var(--logo-accent, #7a32f9);
+  mask-image: url('/brand/tipme-mark-accent.png');
+}
+
+@media (forced-colors: active) {
+  .wordmark::before,
+  .wordmark::after,
+  .brandmark::before,
+  .brandmark::after {
+    background-color: CanvasText;
+  }
+}
+
+/* Height drives the wordmark's size; its width follows the artwork's proportions. */
 .brand__mark {
   display: block;
   width: auto;
@@ -4012,9 +4068,12 @@ html:has(
     background: transparent;
   }
 
-  /* The header's own logo and menu key; the open menu draws its own, which keep their colours. */
-  .nav-shell > .brand .brand__mark path {
-    fill: var(--surface-base);
+  /* The header's own logo and menu key; the open menu draws its own, which keep their colours.
+     The logo all white: the dark file's white "tip", and white for its purple, which would vanish
+     on the purple. */
+  .nav-shell > .brand .brand__mark {
+    --logo-ink: var(--surface-base);
+    --logo-accent: var(--surface-base);
   }
 
   .nav-shell > .menu-toggle {
@@ -4089,8 +4148,9 @@ html:has(
     box-shadow: none;
   }
 
-  .footer-brand .brand__mark path {
-    fill: var(--surface-base);
+  .footer-brand .brand__mark {
+    --logo-ink: var(--surface-base);
+    --logo-accent: var(--surface-base);
   }
 
   .footer-brand p,
@@ -4101,13 +4161,8 @@ html:has(
     color: var(--surface-base);
   }
 
-  /* Forced colours: the white logo would vanish on a light system canvas; the system's ink. */
-  @media (forced-colors: active) {
-    .nav-shell > .brand .brand__mark path,
-    .footer-brand .brand__mark path {
-      fill: CanvasText;
-    }
-  }
+  /* Forced colours: the white logo would vanish on a light system canvas; it takes the system's
+     ink, as every logo does (.wordmark). */
 
   /* Reduced transparency or more contrast asked for: a solid card, the deep brand purple. */
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
@@ -5426,11 +5481,13 @@ body > .coming-soon-page {
   justify-content: center;
   border: 4px solid var(--surface-raised);
   border-radius: 50%;
-  background: var(--brand-primary);
+  background: var(--surface-base);
+  box-shadow: inset 0 0 0 1px var(--edge-hairline);
 }
 
-.coming-soon__card-avatar svg {
-  fill: #fff;
+/* The heart of two figures in its own colours, on white (its purple would vanish on purple). */
+.coming-soon__card-avatar .brandmark {
+  height: 1.625rem;
 }
 
 .coming-soon__card-title {
