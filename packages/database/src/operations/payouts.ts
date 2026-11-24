@@ -27,6 +27,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  or,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -45,9 +46,11 @@ import {
   proPurchases,
   providerEvents,
   providerFeeCredits,
+  shareTransfers,
   tipQuotes,
   teamTipSplits,
   tipBusinessShares,
+  tipRefunds,
   tips,
   withdrawalHolds,
   type IssueSubject,
@@ -1549,18 +1552,29 @@ export async function queuedNotStarted(
   return BigInt(row?.total ?? 0);
 }
 
+/** A provider's place in the owner's set: the active one takes new tips, the others don't. */
+export type ProviderRole = 'active' | 'withdraw_only';
+
 /**
  * What is promised out of the owner's account at `provider` (a recorded name) that its balance still
  * shows: withdrawals queued there and not yet started (amount plus the user's fee), and Pro paid from
  * the balance there that is still open (COLLECTING or UNKNOWN). An UNKNOWN one may already have
  * moved and so be counted twice until it is read back; that only ever refuses, never overspends.
- * The one figure the withdrawal quote, the withdrawal request and Pro from the balance all take off
- * a provider's balance, so neither can spend what the other has reserved there (spec §5, §8).
+ * The one figure the withdrawal quote, the withdrawal request, Pro from the balance and the split
+ * check all take off a provider's balance, so none can spend what another has reserved (spec §5, §8).
+ *
+ * At a withdraw-only provider (ruling F-R1), also the money there that is someone else's and still
+ * has to leave this account: `owedToOthersAt`. Never at the active provider: a share there may be
+ * of a tip not yet settled, so not yet in its available balance, and taking it off would lower a
+ * single provider's withdrawable below the truth. A withdraw-only provider takes no new tips, so
+ * what is owed from it there has long settled. The active one is drained last under the ledger
+ * cap, so the owner's own money there covers the rest.
  */
 export async function committedAtProvider(
   db: Pick<Database, 'select'>,
   owner: MoneyOwner,
   provider: string,
+  role: ProviderRole,
 ): Promise<bigint> {
   const queued = await queuedNotStarted(db, owner, provider);
   const [pro] = await db
@@ -1576,7 +1590,90 @@ export async function committedAtProvider(
         eq(proPurchases.provider, provider),
       ),
     );
-  return queued + BigInt(pro?.total ?? 0);
+  const others =
+    role === 'withdraw_only' ? await owedToOthersAt(db, owner, provider) : 0n;
+  return queued + BigInt(pro?.total ?? 0) + others;
+}
+
+/**
+ * Money in the owner's account at `provider` that is owed to someone else and hasn't left it yet:
+ *
+ * - a share transfer whose `out` leg takes from this owner there and hasn't been confirmed: a
+ *   staff member's `sweep`, a business's `recover` or `collect_recover`, `waiting` or `out_sent`,
+ *   or in `review` before its out leg was confirmed (`deliver_minor` unset; it may not have moved,
+ *   so it is counted: that only refuses). A recover `waiting` counts only once its tip's sweep is
+ *   `done`: until then the share isn't in the business's account to take (`sendOut` waits too);
+ * - a person's refund of a direct tip there still open (REQUESTED, PROCESSING, UNKNOWN): our partner
+ *   takes it from the recipient's account, and only refund.paid books it in the ledger. A collect
+ *   tip's refund (`collect_plan` set) comes from TipMe's own balance, so it isn't counted.
+ */
+async function owedToOthersAt(
+  db: Pick<Database, 'select'>,
+  owner: MoneyOwner,
+  provider: string,
+): Promise<bigint> {
+  const outLegOpen = or(
+    eq(shareTransfers.status, 'out_sent'),
+    and(
+      eq(shareTransfers.status, 'review'),
+      isNull(shareTransfers.deliverMinor),
+    ),
+  );
+  if ('businessId' in owner) {
+    const [shares] = await db
+      .select({
+        total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+      })
+      .from(shareTransfers)
+      .where(
+        and(
+          eq(shareTransfers.businessId, owner.businessId),
+          eq(shareTransfers.provider, provider),
+          inArray(shareTransfers.kind, ['recover', 'collect_recover']),
+          or(
+            outLegOpen,
+            and(
+              eq(shareTransfers.status, 'waiting'),
+              sql`EXISTS (
+                SELECT 1 FROM share_transfers s
+                 WHERE s.tip_id = ${shareTransfers.tipId}
+                   AND s.kind = CASE ${shareTransfers.kind}
+                                  WHEN 'recover' THEN 'sweep' ELSE 'collect_sweep' END
+                   AND s.status = 'done')`,
+            ),
+          ),
+        ),
+      );
+    return BigInt(shares?.total ?? 0);
+  }
+  const [shares] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${shareTransfers.amountMinor}), 0)`,
+    })
+    .from(shareTransfers)
+    .where(
+      and(
+        eq(shareTransfers.profileId, owner.profileId),
+        eq(shareTransfers.provider, provider),
+        eq(shareTransfers.kind, 'sweep'),
+        or(eq(shareTransfers.status, 'waiting'), outLegOpen),
+      ),
+    );
+  const [refunds] = await db
+    .select({
+      total: sql<string>`COALESCE(SUM(${tipRefunds.amountMinor}), 0)`,
+    })
+    .from(tipRefunds)
+    .innerJoin(tips, eq(tips.id, tipRefunds.tipId))
+    .where(
+      and(
+        eq(tips.profileId, owner.profileId),
+        eq(tipRefunds.provider, provider),
+        isNull(tipRefunds.collectPlan),
+        inArray(tipRefunds.status, ['REQUESTED', 'PROCESSING', 'UNKNOWN']),
+      ),
+    );
+  return BigInt(shares?.total ?? 0) + BigInt(refunds?.total ?? 0);
 }
 
 const lower = (a: bigint, b: bigint) => (a < b ? a : b);
@@ -1766,7 +1863,12 @@ async function quoteFor(
       if (state !== 'ok') continue;
     }
     const queuedMinor = await guarded(() =>
-      committedAtProvider(db, owner, recordedProviderName(provider.name)),
+      committedAtProvider(
+        db,
+        owner,
+        recordedProviderName(provider.name),
+        isActive ? 'active' : 'withdraw_only',
+      ),
     );
     const entries = cache
       ? await safely(() => cache.open({ provider: provider.name, ...owner }))
@@ -2248,6 +2350,9 @@ async function requestFor(
                 tx,
                 owner,
                 recordedProviderName(part.provider.name),
+                part.provider === input.providers.active
+                  ? 'active'
+                  : 'withdraw_only',
               )),
           ),
         );

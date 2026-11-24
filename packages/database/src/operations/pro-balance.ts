@@ -11,7 +11,7 @@ import { activeTraceId } from './ids.js';
 import { postLedgerTransaction } from './ledger.js';
 import type { MailSealing } from './mail-queue.js';
 import { enqueueOutbox } from './outbox.js';
-import { committedAtProvider, holdsOf } from './payouts.js';
+import { committedAtProvider, holdsOf, type ProviderRole } from './payouts.js';
 import { startPaidPeriod } from './pro-periods.js';
 import {
   lockPurchase,
@@ -138,6 +138,13 @@ async function readForPro(
 }
 
 /**
+ * The readers come in drain order (`ownerProviderSet`): the withdraw-only providers first, the
+ * active one last, always.
+ */
+const roleAt = (readers: readonly unknown[], index: number): ProviderRole =>
+  index === readers.length - 1 ? 'active' : 'withdraw_only';
+
+/**
  * Picks the one provider a balance payment comes from (spec §8, P10): the first in drain order
  * whose own money (what it holds less what is promised out of it there, `committedAtProvider`)
  * covers the price. Never a split. None covers it: `null` when what could be read falls short (the
@@ -155,7 +162,7 @@ async function pickProvider(
   let readable = false;
   let unavailable = false;
   let last: ProviderRead | null = null;
-  for (const reader of readers) {
+  for (const [index, reader] of readers.entries()) {
     const read = await readForPro(db, profileId, reader);
     last = read;
     if ('refusal' in read) {
@@ -164,7 +171,12 @@ async function pickProvider(
     }
     readable = true;
     const committed = await guarded(() =>
-      committedAtProvider(db, { profileId }, recordedProviderName(reader.name)),
+      committedAtProvider(
+        db,
+        { profileId },
+        recordedProviderName(reader.name),
+        roleAt(readers, index),
+      ),
     );
     if (read.partnerMinor - committed >= priceMinor) return read;
   }
@@ -435,6 +447,8 @@ export async function buyProFromBalance(
     return { ...view(raced.purchase), replayed: true };
   }
   const { reader, collect, accountRef, partnerMinor } = chosen;
+  const readers = input.providers.map((p) => p.reader);
+  const role = roleAt(readers, readers.indexOf(reader));
   const recorded = recordedProviderName(reader.name);
   const { purchase, replayed } = await requestProPurchase(db, {
     ...request,
@@ -447,6 +461,7 @@ export async function buyProFromBalance(
           tx,
           { profileId: input.profileId },
           recorded,
+          role,
         ));
       const spendable = ledger < partner ? ledger : partner;
       if (price.amountMinor > spendable)

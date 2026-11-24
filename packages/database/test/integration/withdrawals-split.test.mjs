@@ -1404,4 +1404,248 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(await due(randomUUID(), 'settled'), true);
     },
   );
+
+  // Final fix I1 (ruling F-R1): at a withdraw-only provider, money still owed to someone else there
+  // (an unswept business share, a business's recover, an open refund) is never the owner's to take.
+  // The active provider stays as it always was.
+  const shareSetup = async () => {
+    const { businessId, locations } = await seedBusiness(database);
+    const { memberId } = await seedMember(database, {
+      locationId: locations[0].id,
+      profileId: TOBI.id,
+    });
+    const { agreementId } = await seedAgreement(database, {
+      memberId,
+      businessBps: 5000,
+    });
+    /** A tip to Tobi at the business through `provider`; half the net is the business's share. */
+    const sharedTip = async (provider) => {
+      const quote = await createQuote(db, {
+        handle: 'tobi',
+        tipMinor: 400000n,
+        currency: 'NGN',
+      });
+      const intent = await createPaymentIntent(db, {
+        quoteId: quote.quoteId,
+        idempotencyKey: randomUUID(),
+        businessMemberId: memberId,
+      });
+      const [{ net }] = await q(
+        `SELECT q.recipient_net_minor::text AS net FROM payment_intents i
+           JOIN tip_quotes q ON q.id = i.quote_id
+          WHERE i.id = (SELECT intent_id FROM tips WHERE id = $1)`,
+        [intent.tipId],
+      );
+      const share = BigInt(net) / 2n;
+      await q(
+        `INSERT INTO tip_business_shares (tip_id, agreement_id, business_id, business_bps, share_minor)
+         VALUES ($1, $2, $3, 5000, $4)`,
+        [intent.tipId, agreementId, businessId, share.toString()],
+      );
+      const reference = `${provider}_pay_${randomUUID()}`;
+      await markAttemptInitiated(db, {
+        attemptId: intent.attemptId,
+        provider,
+        providerReference: reference,
+      });
+      await recordProviderEvent(db, {
+        provider,
+        providerEventId: `evt_${randomUUID()}`,
+        eventType: 'payment.succeeded',
+        attemptId: intent.attemptId,
+        providerReference: reference,
+        amountMinor: 400000n,
+        currency: 'NGN',
+        providerFeeMinor: 3000n,
+        signatureVerified: true,
+        payload: {},
+      });
+      return { tipId: intent.tipId, share, net: BigInt(net) };
+    };
+    return { businessId, sharedTip };
+  };
+
+  await t.test(
+    'a pending sweep at a withdraw-only provider is never drawn by a split withdrawal',
+    async () => {
+      await database.fresh();
+      const { sharedTip } = await shareSetup();
+      const { tipId, share, net } = await sharedTip('mock_alt');
+      await tip('mock');
+      const [sweep] = await q(
+        `SELECT status, provider FROM share_transfers WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      assert.deepEqual(sweep, { status: 'waiting', provider: 'mock_alt' });
+      const ledger = (await balanceOf(db, TOBI.id)).availableMinor;
+      assert.equal(ledger, net - share + 372000n);
+      // The old provider still holds the whole net: Tobi's half and the business's.
+      const providers = () =>
+        set(
+          reader('mock', { balance: 372000n }),
+          reader('mock_alt', { balance: net }),
+        );
+      for (const status of ['waiting', 'out_sent', 'review']) {
+        await q(
+          `UPDATE share_transfers SET status = $2 WHERE tip_id = $1 AND kind = 'sweep'`,
+          [tipId, status],
+        );
+        const quote = await quoteOf(providers());
+        assert.deepEqual(quote.capsMinor, [net - share, 372000n], status);
+        assert.equal(quote.withdrawableMinor, ledger, status);
+      }
+      // The request draws the same: never the business's share at the old provider.
+      await q(
+        `UPDATE share_transfers SET status = 'waiting' WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      await ask(providers(), ledger);
+      const parts = await rows();
+      assert.deepEqual(
+        parts.map((row) => [row.provider, row.amount]),
+        [
+          ['mock_alt', (net - share).toString()],
+          ['mock', '372000'],
+        ],
+      );
+      // Once the sweep has taken it (its leg in still to go), nothing is held back for it.
+      await q(
+        `UPDATE share_transfers SET status = 'out_paid', deliver_minor = amount_minor
+          WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      await q(`UPDATE payouts SET status = 'FAILED'`);
+      const after = await quoteOf(
+        set(
+          reader('mock', { balance: 372000n }),
+          reader('mock_alt', { balance: net - share }),
+        ),
+      );
+      assert.equal(after.capsMinor[0], net - share);
+    },
+  );
+
+  await t.test(
+    'a single-provider owner with a waiting, unsettled sweep keeps today’s withdrawable',
+    async () => {
+      await database.fresh();
+      const { sharedTip } = await shareSetup();
+      await tip('mock');
+      const { tipId } = await sharedTip('mock');
+      const [sweep] = await q(
+        `SELECT status FROM share_transfers WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      assert.equal(sweep.status, 'waiting');
+      // The shared tip hasn't settled: the partner's available balance is the older tip alone.
+      const providers = set(reader('mock', { balance: 372000n }));
+      const quote = await quoteOf(providers);
+      assert.equal(quote.state, 'ready');
+      assert.equal(quote.withdrawableMinor, 372000n);
+      assert.deepEqual(quote.capsMinor, [372000n]);
+      const result = await ask(providers, 372000n);
+      assert.equal(result.status, 'REQUESTED');
+    },
+  );
+
+  await t.test(
+    'an in-flight refund at a withdraw-only provider lowers the owner’s room there',
+    async () => {
+      await database.fresh();
+      const intent = await tip('mock_alt');
+      await tip('mock');
+      const providers = () =>
+        set(
+          reader('mock', { balance: 372000n }),
+          reader('mock_alt', { balance: 372000n }),
+        );
+      assert.deepEqual((await quoteOf(providers())).capsMinor, [
+        372000n,
+        372000n,
+      ]);
+      const [{ id: refundId }] = await q(
+        `INSERT INTO tip_refunds (id, tip_id, status, amount_minor, currency, provider,
+                                  provider_reference, requested_by, reason)
+         VALUES (gen_random_uuid(), $1, 'REQUESTED', 300000, 'NGN', 'mock_alt', 'ref', $2, 'asked')
+         RETURNING id`,
+        [intent.tipId, ADA.userId],
+      );
+      for (const status of ['REQUESTED', 'PROCESSING', 'UNKNOWN']) {
+        await q(`UPDATE tip_refunds SET status = $2 WHERE id = $1`, [
+          refundId,
+          status,
+        ]);
+        const quote = await quoteOf(providers());
+        assert.deepEqual(quote.capsMinor, [72000n, 372000n], status);
+        await assert.rejects(ask(providers(), 444001n), {
+          code: 'INSUFFICIENT_BALANCE',
+        });
+      }
+      // Settled one way or the other: it no longer holds anything there.
+      await q(`UPDATE tip_refunds SET status = 'FAILED' WHERE id = $1`, [
+        refundId,
+      ]);
+      assert.deepEqual((await quoteOf(providers())).capsMinor, [
+        372000n,
+        372000n,
+      ]);
+    },
+  );
+
+  await t.test(
+    'a business recover at a withdraw-only provider lowers its room there once its sweep is done',
+    async () => {
+      await database.fresh();
+      const { businessId, sharedTip } = await shareSetup();
+      const { tipId, share } = await sharedTip('mock_alt');
+      await sharedTip('mock');
+      const [{ id: ledgerTx }] = await q(
+        `SELECT id FROM ledger_transactions WHERE tip_id = $1 LIMIT 1`,
+        [tipId],
+      );
+      const back = share / 2n;
+      await q(
+        `INSERT INTO share_transfers (id, tip_id, kind, business_id, profile_id, currency,
+                                      amount_minor, status, provider, reversal_transaction_id)
+         VALUES (gen_random_uuid(), $1, 'recover', $2, $3, 'NGN', $4, 'waiting', 'mock_alt', $5)`,
+        [tipId, businessId, TOBI.id, back.toString(), ledgerTx],
+      );
+      const capAtOld = async () =>
+        (
+          await businessWithdrawalQuote(db, {
+            businessId,
+            providers: set(
+              reader('mock'),
+              reader('mock_alt', { balance: share }),
+            ),
+          })
+        ).capsMinor[0];
+      // The sweep hasn't delivered: the business doesn't hold the share there yet, so the recover
+      // can't take it from what it does hold.
+      await q(
+        `UPDATE share_transfers SET status = 'in_sent', deliver_minor = amount_minor
+          WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      assert.equal(await capAtOld(), share);
+      await q(
+        `UPDATE share_transfers SET status = 'done' WHERE tip_id = $1 AND kind = 'sweep'`,
+        [tipId],
+      );
+      assert.equal(await capAtOld(), share - back);
+      for (const status of ['out_sent', 'review']) {
+        await q(
+          `UPDATE share_transfers SET status = $2 WHERE tip_id = $1 AND kind = 'recover'`,
+          [tipId, status],
+        );
+        assert.equal(await capAtOld(), share - back, status);
+      }
+      // Gone (or a gap, where nothing moves): nothing held back for it.
+      await q(
+        `UPDATE share_transfers SET status = 'gap' WHERE tip_id = $1 AND kind = 'recover'`,
+        [tipId],
+      );
+      assert.equal(await capAtOld(), share);
+    },
+  );
 });

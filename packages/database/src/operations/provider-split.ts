@@ -229,11 +229,12 @@ export async function listSplitAccounts(
     const listed: SplitAccount['providers'] = [];
     for (const provider of providers) {
       const stored = recordedProviderName(provider.name);
+      const role = provider === set.active ? 'active' : 'withdraw_only';
       listed.push({
         provider: stored,
-        role: provider === set.active ? 'active' : 'withdraw_only',
+        role,
         queuedMinor: await guarded(() =>
-          committedAtProvider(db, owner, stored),
+          committedAtProvider(db, owner, stored, role),
         ),
       });
     }
@@ -453,6 +454,7 @@ async function measureSplit(
   db: Database,
   owner: MoneyOwner,
   providers: readonly PayoutReader[],
+  active: PayoutReader,
   onReadFailure?: ProviderReadFailureLog,
 ): Promise<SplitMeasure> {
   const read: { provider: PayoutReader; availableMinor: bigint | null }[] = [];
@@ -475,7 +477,14 @@ async function measureSplit(
   const readings: SplitMeasure['readings'] = [];
   for (const { provider, availableMinor } of read) {
     const stored = recordedProviderName(provider.name);
-    const queued = await guarded(() => committedAtProvider(db, owner, stored));
+    const queued = await guarded(() =>
+      committedAtProvider(
+        db,
+        owner,
+        stored,
+        provider === active ? 'active' : 'withdraw_only',
+      ),
+    );
     readings.push({
       provider: stored,
       availableMinor:
@@ -568,10 +577,22 @@ export async function checkProviderSplit(
   input: { now: Date; onReadFailure?: ProviderReadFailureLog },
 ): Promise<{ outcome: SplitOutcome }> {
   const { providers } = await guarded(() => ownerProviderSet(db, owner, set));
-  const first = await measureSplit(db, owner, providers, input.onReadFailure);
+  const first = await measureSplit(
+    db,
+    owner,
+    providers,
+    set.active,
+    input.onReadFailure,
+  );
   const confirmed =
     first.outcome === 'short'
-      ? await measureSplit(db, owner, providers, input.onReadFailure)
+      ? await measureSplit(
+          db,
+          owner,
+          providers,
+          set.active,
+          input.onReadFailure,
+        )
       : null;
   await guarded(() =>
     db.transaction(async (tx) => {
