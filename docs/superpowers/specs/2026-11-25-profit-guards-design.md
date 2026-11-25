@@ -11,6 +11,7 @@ The owner wants TipMe's earnings intact: TipMe must not lose money on an ordinar
 2. **Small Pro card tips.** The partner charges 2% for a Nigerian card plus $0.03 (about ₦45) for 3D Secure. On Pro (3%), a card tip under about ₦4,500 earns less than it costs.
 
 Partner fees used here are from docs.bachs.io/for-you/fees, read 25 Nov 2026 (and pasted by the owner from the dashboard the same day):
+
 - Nigerian card: 2%, no cap. 3D Secure: $0.03 per payment that uses it.
 - Checkout bank transfer: 1.5%, capped at ₦2,000. No 3D Secure.
 - NGN withdrawal to a bank: ₦50 flat, added on top of the amount sent.
@@ -49,6 +50,7 @@ Not decided (listed in the profitability package, waiting for the owner): Pro fr
 **New rule:** every personal withdrawal requested from the release is `fee_payer = 'user'`: the ₦50 (`NGN_PAYOUT_FEE_MINOR`) comes off the amount, as between 12 and 18 Nov 2026 (withdraw ₦10,000, receive ₦9,950). This covers You collect recipients.
 
 What stays:
+
 - The fee is shown before confirming ("Transfer fee: ₦50, charged by our payment partner").
 - A higher or lower actual fee is settled as today (`payout-fee-extra` / `payout-fee-credit`).
 - A balance of ₦50 or less can't be withdrawn; the screen says why.
@@ -76,6 +78,7 @@ offer card  ⇔  tipmeShare ≥ cardRate × amount + threeDsCost + margin
 - A tip TipMe takes nothing from (fee-free credit, waiver) offers bank transfer only, since a card would cost TipMe 2% + ₦45 on money it didn't keep. **Design call; flag to the owner.**
 
 What this gives today:
+
 - **Free (5%):** card is offered on every tip from the ₦2,000 minimum (₦100 share ≥ ₦40 + ₦45 + ₦15).
 - **Pro (3%):** card from ₦6,000 (₦180 ≥ ₦120 + ₦45 + ₦15). Below that, bank transfer only.
 - **Design call:** margin ₦15 keeps card on every Free tip, as told to the owner. A larger margin (₦50) would move Pro's line to ₦9,500 and Free's to ₦3,167; the owner can raise it later in the setting.
@@ -89,6 +92,7 @@ The supporter sees only what the partner's checkout shows. TipMe's tip page says
 ### Pre-build check (blocking)
 
 **Result (25 Nov 2026, owner approved the run): PASSED for what a person sees.** Two sandbox checkouts of ₦2,000 on TipMe's own sandbox account, created with a throwaway script (not in the repo):
+
 - `chk_oNPmHnT0MVd8uyb3`, `payment_method_types: ['NGN_BANK_TRANSFER']`: HTTP 201. After the email step the page goes straight to "Get account details" (bank transfer); no card option.
 - `chk_qccJ1tKTgONaNDMS`, both methods: the page shows "Bank transfer" (open by default) and "Card" to choose from.
 
