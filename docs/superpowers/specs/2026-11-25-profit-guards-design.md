@@ -88,7 +88,13 @@ The supporter sees only what the partner's checkout shows. TipMe's tip page says
 
 ### Pre-build check (blocking)
 
-One sandbox test through the Task 16 manual script, approved by the owner before it runs: a checkout created with `payment_method_types: ['NGN_BANK_TRANSFER']` shows only bank transfer, and completes. If the partner ignores or rejects a single-method list, Part 2 stops and the owner picks between the ₦100 minimum fee and Pro at 4%.
+**Result (25 Nov 2026, owner approved the run): PASSED for what a person sees.** Two sandbox checkouts of ₦2,000 on TipMe's own sandbox account, created with a throwaway script (not in the repo):
+- `chk_oNPmHnT0MVd8uyb3`, `payment_method_types: ['NGN_BANK_TRANSFER']`: HTTP 201. After the email step the page goes straight to "Get account details" (bank transfer); no card option.
+- `chk_qccJ1tKTgONaNDMS`, both methods: the page shows "Bank transfer" (open by default) and "Card" to choose from.
+
+Not checked: paying the transfer-only checkout to the end (needs the partner's sandbox transfer flow), and a checkout on a connected account (`X-Account-Id`, a person's page). The build's first sandbox step covers both before release. The read-back of a checkout doesn't echo the method list, so TipMe can't confirm it from the API; the rule relies on what TipMe sends.
+
+Original check, kept for the record: One sandbox test through the Task 16 manual script, approved by the owner before it runs: a checkout created with `payment_method_types: ['NGN_BANK_TRANSFER']` shows only bank transfer, and completes. If the partner ignores or rejects a single-method list, Part 2 stops and the owner picks between the ₦100 minimum fee and Pro at 4%.
 
 ## Part 3: rate floor
 
