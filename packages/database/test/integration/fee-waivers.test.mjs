@@ -70,15 +70,21 @@ const refusal = async (promise, pattern) => {
 test('the rules table is history: rows cannot be updated, deleted or truncated', async (t) => {
   const db = await setup(t);
   const id = await insertRule(db);
-  await assert.rejects(
+  // The triggers' own messages (tipme_forbid_mutation, tipme_forbid_truncate), not any error.
+  await refusal(
     db.pool.query(`UPDATE fee_waivers SET reason = 'changed' WHERE id = $1`, [
       id,
     ]),
+    /append-only table fee_waivers: UPDATE is not allowed/,
   );
-  await assert.rejects(
+  await refusal(
     db.pool.query(`DELETE FROM fee_waivers WHERE id = $1`, [id]),
+    /append-only table fee_waivers: DELETE is not allowed/,
   );
-  await assert.rejects(db.pool.query(`TRUNCATE fee_waivers CASCADE`));
+  await refusal(
+    db.pool.query(`TRUNCATE fee_waivers CASCADE`),
+    /append-only table fee_waivers: TRUNCATE is not allowed/,
+  );
   assert.equal(await db.count('fee_waivers'), 1);
 });
 
