@@ -111,6 +111,7 @@ export * from './operations/supporters.js';
 export * from './operations/business-shifts.js';
 export * from './operations/pro-price.js';
 export * from './operations/plan-fee-rates.js';
+export * from './operations/card-cost-settings.js';
 export * from './operations/collect-settings.js';
 export * from './operations/collection-mode.js';
 export * from './operations/collect-reserve.js';

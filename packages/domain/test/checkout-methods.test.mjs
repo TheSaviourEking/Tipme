@@ -50,3 +50,8 @@ test('cardFromMinor', () => {
   assert.equal(cardFromMinor(200n, card), null);
   assert.equal(cardFromMinor(150n, card), null);
 });
+
+test('cardFromMinor rounds up to the next kobo', () => {
+  // 60,000,000 / 70 = 857,142.86: the first amount that covers the card cost is 857,143.
+  assert.equal(cardFromMinor(270n, card), 857143n);
+});

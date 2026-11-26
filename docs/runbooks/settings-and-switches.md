@@ -286,3 +286,19 @@ up, Pro 300 and up), one `fee.capped` audit row each. A per-page fee staff set
 (`fee.change`, ADR-0014) still wins below the plan's rate. Each personal withdrawal pays the partner's ₦50 from the amount,
 unless an unused top-up or a fee waiver covers it (owner, 25 Nov 2026). Business tips use the staff member's own plan rate:
 there is no separate business per-tip rate.
+
+## Card costs: when card is offered (owner, 26 Nov 2026)
+
+Not a switch: three figures on the Plan fees page (`/ops/plan-fees`, section "Card costs"; `GET`/`POST
+/v1/ops/card-costs`), stored in `card_cost_settings` (append-only history, migration `0129_card_cost_settings`,
+no seed). With no row the coded defaults apply (`DEFAULT_CARD_COST`): card fee 2% (200 bps), 3D Secure fixed
+cost ₦45 and margin ₦15. A tip checkout offers card only when TipMe's share of that tip covers card fee × amount +
+fixed cost + margin; bank transfer is always offered, and Pro subscription checkouts keep both. The screen shows,
+from the plan rates in force, the tip amount from which each plan offers card, rounded up to the next whole naira
+(the quote rounds its share to the kobo, so the exact boundary can sit up to a kobo higher). With the defaults:
+Free from ₦2,000, Pro from ₦6,000. A change is the serious action `card_costs.change` (permission `fees.manage`,
+a reason, a fresh code and a second person when one exists; a lone admin acts alone with the alert to owners),
+audited as `card_costs.changed` with from, to and approver. Bounds: rate 0 to 10000 bps, amounts 0 or more, in
+kobo; the cost already in force is refused. Checkouts read it as it was when the tip was quoted
+(`cardCostAt(db, quote.createdAt)`, never cached), so a change applies to tips quoted after it. Change it when the
+partner's card price or the exchange rate moves.

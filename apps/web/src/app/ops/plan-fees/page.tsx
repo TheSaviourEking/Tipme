@@ -21,6 +21,7 @@ import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
 import { refusalWords } from '@/lib/ops-answers';
 import { when } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import { CardCosts } from './card-costs';
 
 const PATH = '/v1/ops/plan-fees';
 // Matches PLAN_FEE_LARGE_CHANGE_BPS (contracts): the API refuses a bigger move without the flag.
@@ -258,8 +259,11 @@ export default function PlanFeesPage() {
         </section>
       </div>
 
+      {/* Owner, 26 Nov 2026: card is offered only where the plan rate above covers the card cost. */}
+      <CardCosts rates={{ freeBps: current.freeBps, proBps: current.proBps }} />
+
       <Card className="settings-section">
-        <h2 id={`${id}-history`}>History</h2>
+        <h2 id={`${id}-history`}>Plan fee history</h2>
         {state.history.length === 0 ? (
           <EmptyWell title="No changes yet" headingLevel={3}>
             <p>Fees appear here once set.</p>

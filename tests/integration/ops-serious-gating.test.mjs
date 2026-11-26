@@ -566,6 +566,25 @@ const wired = {
         JSON.stringify(await latest()) === JSON.stringify(next),
     };
   },
+  // The card cost (owner, 26 Nov 2026): one kobo more margin than the cost in force.
+  'card_costs.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT margin_minor FROM card_cost_settings
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? BigInt(row.margin_minor) : 1500n;
+    };
+    const next = (await latest()) + 1n;
+    return {
+      payload: {
+        rateBps: 200,
+        fixedMinor: '4500',
+        marginMinor: String(next),
+      },
+      happened: async () => (await latest()) === next,
+    };
+  },
   // You collect (plan Task 12): one day more on the holding cap than the settings in force.
   'collect_settings.change': async () => {
     const latest = async () => {

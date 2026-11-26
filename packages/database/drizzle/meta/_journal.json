@@ -904,6 +904,13 @@
       "when": 1795505428828,
       "tag": "0128_provider_split_checks",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1795675411313,
+      "tag": "0129_card_cost_settings",
+      "breakpoints": true
     }
   ]
 }
