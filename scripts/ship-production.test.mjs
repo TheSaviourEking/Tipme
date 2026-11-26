@@ -45,7 +45,10 @@ bash -c "$cmd"`,
   load) cat >> "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
   image) echo "docker $*" >> "$FAKE_LOG"; [[ "$3" != "$FAKE_MISSING_IMAGE" ]] ;;
   run) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_CADDY_VALID" == "1" ]] ;;
-  compose) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_RELOAD_FAIL" != "1" ]] ;;
+  compose) echo "docker $*" >> "$FAKE_LOG"
+    # The running edge's own environment (it read edge.env when it was created).
+    if [[ " $* " == *" printenv "* ]]; then [[ " $FAKE_EDGE_ENV_MISSING " != *" \${!#} "* ]]; exit $?; fi
+    [[ " $* " != *" reload "* || "$FAKE_RELOAD_FAIL" != "1" ]] ;;
   *) echo "docker $*" >> "$FAKE_LOG" ;;
 esac`,
   );
@@ -195,4 +198,35 @@ test('ship-production without the web image stops before the edge or production 
   );
   assert.doesNotMatch(log(), /ssh /);
   assert.equal(existsSync(join(production, 'releases')), false);
+});
+
+// Review C1: the edge reads edge.env only when its container is created. A Caddyfile naming a
+// setting the running container lacks would reload with it empty, so the ship stops first and says
+// to recreate the edge.
+test('a Caddyfile naming a setting the running edge lacks stops the ship before anything changes', () => {
+  const { run, edge, production, log } = stage();
+  const result = run(['abcdef123456'], {
+    FAKE_EDGE_ENV_MISSING: 'PRODUCTION_WEB_HOST STAGING_WEB_HOST',
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PRODUCTION_WEB_HOST/);
+  assert.match(result.stderr, /STAGING_WEB_HOST/);
+  assert.match(result.stderr, /up -d/);
+  assert.equal(
+    readFileSync(join(edge, 'Caddyfile'), 'utf8'),
+    'old caddyfile\n',
+  );
+  assert.doesNotMatch(log(), /caddy reload/);
+  assert.equal(existsSync(join(production, 'releases')), false);
+});
+
+test('the ship asks the running edge for every setting the new Caddyfile reads', () => {
+  const { run, log } = stage();
+  assert.equal(run(['abcdef123456']).status, 0);
+  const caddyfile = readFileSync(resolve('deploy/edge/Caddyfile'), 'utf8');
+  const keys = new Set(
+    [...caddyfile.matchAll(/\{\$([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]),
+  );
+  for (const key of keys)
+    assert.match(log(), new RegExp(`exec -T caddy printenv ${key}\\b`), key);
 });

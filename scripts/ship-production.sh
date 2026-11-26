@@ -46,6 +46,17 @@ echo "==> Checking the new Caddyfile on the server"
 ssh "${ssh_opts[@]}" "$target" "set -e
 docker run --rm --env-file '$edge/edge.env' -v '$edge/incoming:/etc/caddy:ro' caddy:2.10.2-alpine \
   caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+# The edge reads edge.env only when its container is created; a reload sees the old environment.
+# Every setting the new Caddyfile reads must be in the running container, or the reload would load
+# it empty (validate above used edge.env itself, so it cannot tell).
+missing=''
+for key in \$(grep -oE '[{][\$][A-Z][A-Z0-9_]*' '$edge/incoming/Caddyfile' | cut -c3- | sort -u); do
+  docker compose -p tipme-edge -f '$edge/compose.edge.yml' exec -T caddy printenv \"\$key\" >/dev/null 2>&1 || missing=\"\$missing \$key\"
+done
+if [ -n \"\$missing\" ]; then
+  echo \"ERROR: the running edge lacks\$missing (edge.env is read only when the container is created). Recreate it first, as the edge's owner: docker compose -p tipme-edge -f '$edge/compose.edge.yml' up -d. Production was not deployed.\" >&2
+  exit 1
+fi
 if ! cmp -s '$edge/incoming/Caddyfile' '$edge/Caddyfile'; then
   # Kept so a failed reload can put the running config's file back; otherwise the next run
   # would find the disk and the incoming file equal and call it unchanged while the edge still
