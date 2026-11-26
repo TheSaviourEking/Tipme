@@ -170,6 +170,12 @@ export type WebhookVerification<TEvent = NormalizedProviderEvent> =
  * What every payment provider adapter must offer (subset of PRD 6.5). Provider-specific formats
  * (signatures, status names, references) stay inside each adapter.
  */
+/**
+ * The ways a checkout can be paid. Declared here, identical to the domain's union, so this package
+ * keeps its boundary (no @tipme/domain dependency).
+ */
+export type CheckoutMethod = 'card' | 'bank_transfer';
+
 export interface PaymentProvider<
   TWebhookEvent = NormalizedProviderEvent,
 > extends Partial<PayoutPort> {
@@ -188,6 +194,8 @@ export interface PaymentProvider<
     successUrl?: string;
     cancelUrl?: string;
     idempotencyKey?: string;
+    /** Methods to offer, in order. Omitted: card and bank transfer. Empty or unknown is refused. */
+    paymentMethods?: readonly CheckoutMethod[];
   }): Promise<{ providerReference: string; checkoutUrl?: string }>;
   /** Returns null only for a definite absence; unsupported lookup must fail as uncertain. */
   findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
@@ -225,6 +233,8 @@ export interface PaymentProvider<
     successUrl: string;
     cancelUrl: string;
     idempotencyKey: string;
+    /** Methods to offer, in order. Omitted: card and bank transfer. Empty or unknown is refused. */
+    paymentMethods?: readonly CheckoutMethod[];
   }): Promise<{
     providerReference: `platform:${string}`;
     checkoutUrl: string;

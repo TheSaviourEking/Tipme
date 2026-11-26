@@ -237,3 +237,12 @@ test('a short or over payment is reported as it was paid, for TipMe to hold', as
   assert.equal(verified.status, 'succeeded');
   assert.equal(verified.amountMinor, 200000n);
 });
+
+test('Pro checkout always sends both methods', async () => {
+  const { provider, requests } = recording([jsonResponse(OPEN, 201)]);
+  await provider.initializePlatformCheckout(input);
+  assert.deepEqual(JSON.parse(requests[0].init.body).payment_method_types, [
+    'NGN_CARD',
+    'NGN_BANK_TRANSFER',
+  ]);
+});
