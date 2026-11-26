@@ -52,7 +52,7 @@ The worker posts payment reserve alerts to the same kind of webhook: set `ALERT_
 ## 3. The edge (once, then only through deploys)
 
 - **The move** (one-off, about a minute of staging downtime): `staging-setup.md` → "Move an existing staging server to the edge Caddy". After it, staging and production share the edge.
-- **Hand the edge folder to production's user:** only `ship-production.sh` updates the edge (spec §6.1), over `tipme-prod`'s SSH, so `sudo chown -R tipme-prod: /srv/tipme-edge` (keep `edge.env` mode 600). `edge.env` needs `PRODUCTION_API_HOST=api.usetipme.xyz`, `PRODUCTION_WEB_HOST=www.usetipme.xyz` and `PRODUCTION_APEX_HOST=usetipme.xyz` (and staging's `STAGING_WEB_HOST`; the Caddyfile refuses to load without any of them, which stops a ship before anything changes).
+- **Hand the edge folder to production's user:** only `ship-production.sh` updates the edge (spec §6.1), over `tipme-prod`'s SSH, so `sudo chown -R tipme-prod: /srv/tipme-edge` (keep `edge.env` mode 600). `edge.env` needs `PRODUCTION_API_HOST=api.usetipme.xyz`, `PRODUCTION_WEB_HOST=www.usetipme.xyz` and `PRODUCTION_APEX_HOST=usetipme.xyz` (and staging's `STAGING_WEB_HOST`; the Caddyfile refuses to load without any of them, which stops a ship before anything changes). The edge reads `edge.env` only when its container is created: after changing `edge.env`, recreate it (`docker compose -p tipme-edge -f /srv/tipme-edge/compose.edge.yml up -d`, a few seconds of both environments down); a ship refuses to reload an edge that lacks a setting the new Caddyfile reads.
 - **Every production ship** checks the new Caddyfile on the server (`caddy validate` with the server's `edge.env`) and reloads it only if valid; an invalid one stops the ship before production changes, and a failed reload puts the previous file back.
 - **A changed `compose.edge.yml` is never applied by a ship** (it would restart the edge, and with it staging). The ship prints a NOTICE. Apply it by hand in a quiet moment, as `tipme-prod`:
 
@@ -103,7 +103,7 @@ Besides the watcher, an outside service pings `https://api.usetipme.xyz/health/l
 
 1. `gate`: refuses a commit whose file tree has no full staging pass (`release/staging-full`), unless `override_reason` is filled in;
 2. builds `tipme-app:<12-char sha>` and `tipme-web-production:<12-char sha>` once, ships the edge (validated, reloaded), both images and the files to `/srv/tipme-production/releases/<version>/`;
-3. runs `deploy-production.sh` on the server: Redis (never restarted), `db-roles`, **pauses the running workers** (`docker compose stop worker-a worker-b`; the API colours keep serving), migrations as the migrator, `db-roles` again, the idle colour on the new version (API ×3 and its website), wait until `/health/release` and the website's `https://www.usetipme.xyz/api/version` show it, record, stop the old colour (its API fails readiness, drains, closes; its website stops taking connections, which the edge retries on the new one, and finishes its requests), replace `worker-a` then `worker-b` (`up` recreates the paused containers on the new version);
+3. runs `deploy-production.sh` on the server: Redis (never restarted), `db-roles`, **pauses the running workers** (`docker compose stop worker-a worker-b`; the API colours keep serving), migrations as the migrator, `db-roles` again, the idle colour on the new version (API ×3 and its website), wait until `/health/release` and the website's `https://www.usetipme.xyz/api/version` show it, record, drain the old colour's website for 8 s (its `/api/version` answers 503, so the edge moves page traffic to the new colour, while it still serves the assets of pages it sent; the edge keeps each browser on one colour with a `tipme_web` cookie), stop the old colour (its API fails readiness, drains, closes; its website stops taking connections and finishes its requests), replace `worker-a` then `worker-b` (`up` recreates the paused containers on the new version);
 4. runs the release check, read-only, expecting the version and `bachs-live`, with `--speed report`; then marks the changelog entries live (this runs whenever the deploy step succeeded, even if the release check failed); posts to Slack.
 
 **The speed check is report-only on production.** The release check's Largest Contentful Paint budget (2000 ms, median of three cold visits on a throttled phone) is noise-dominated against production: throttling stacks on the real internet path to the edge, and one warm page measured 1968/2240/1140 ms in one sitting and 3484/2624/1632 ms in the deploy run. Production deploys pass `--speed report`: the three loads and the median per page are printed and written to the job summary (over 2000 ms shows as a warning), and never fail the run. Accessibility, version, provider, CORS and the other checks still fail it. Staging and any manual run keep the hard budget (`--speed enforce`, the default). Read the reported numbers: a median that stays over 2000 ms across several deploys is a real regression.
@@ -335,44 +335,70 @@ Add and remove staff in the dashboard: `docs/runbooks/admin-roles.md`. `pnpm ops
 
 ## 13. Website on this server: the move from Vercel (owner, once)
 
-Vercel paused the project (compute limit, free plan), so `www.usetipme.xyz` and `staging.usetipme.xyz` answered `402 Payment required`. The website now runs on this server: `web-blue` / `web-green` (one copy each, 768 MB limit, read-only), built per environment in GitHub Actions (`deploy/web.Dockerfile`), switched and rolled back with the API's colours. `apps/web/DEPLOYMENT.md` has the settings tables. Names only below; type values on the server or in GitHub.
+Vercel paused the project (compute limit, free plan), so `www.usetipme.xyz` and `staging.usetipme.xyz` answered `402 Payment required`. The website now runs on this server as `web-blue` / `web-green` (one copy each, 768 MB limit, read-only). Each is built per environment in GitHub Actions (`deploy/web.Dockerfile`) and is switched and rolled back with the API's colours. During a switch the edge keeps each browser on one colour (a `tipme_web` cookie), and the deploy drains the old colour's website for 8 s before stopping it, so no page gets another build's assets. `apps/web/DEPLOYMENT.md` has the settings tables. Names only below; type values on the server or in GitHub.
 
-**Before:** staging's move is done (`staging-setup.md`, "Website on this server: the move from Vercel"): DNS for all three names (`staging.`, `www.` and the bare domain) points at the server, `edge.env` has the three website hosts, the new Caddyfile is installed and the edge holds the three certificates. Staging's full release check passed on the self-hosted site, so the commit has its staging pass.
+**Before:** staging's move is done (`staging-setup.md`, "Website on this server: the move from Vercel"). DNS for all three names (`staging.`, `www.` and the bare domain) points at the server, `edge.env` has the three website hosts, the edge was recreated with them, and it holds the three certificates. Staging's full release check passed on the self-hosted site, so the commit has its staging pass. **From staging's DNS step until this deploy, `www` and the bare domain answer `502`: do this as soon as staging passes.**
 
 1. **Merge to `main`** (the release train, as usual).
 2. **GitHub repository variables** (Settings → Secrets and variables → Actions → Variables → Repository):
    - add `PRODUCTION_SITE_URL` = `https://www.usetipme.xyz` (required);
-   - add `PRODUCTION_NEXT_PUBLIC_SENTRY_DSN` with the `tipme-web` DSN Vercel's production had as `NEXT_PUBLIC_SENTRY_DSN` (optional; blank sends nothing);
-   - optional: `PRODUCTION_NEXT_PUBLIC_SENTRY_ENVIRONMENT` (blank is `production`), `PRODUCTION_SITE_INDEXING` (set `on` only if Vercel's production had `SITE_INDEXING=on`; the pilot keeps it unset);
-   - check `PRODUCTION_API_URL` is `https://api.usetipme.xyz` (it becomes the browser's API address). No new secrets.
+   - add `PRODUCTION_NEXT_PUBLIC_SENTRY_DSN`, the `tipme-web` DSN that Vercel's production had as `NEXT_PUBLIC_SENTRY_DSN` (optional; blank sends nothing);
+   - optional: `PRODUCTION_NEXT_PUBLIC_SENTRY_ENVIRONMENT` (blank means `production`) and `PRODUCTION_SITE_INDEXING` (set `on` only if Vercel's production had `SITE_INDEXING=on`; the pilot keeps it unset);
+   - check that `PRODUCTION_API_URL` is `https://api.usetipme.xyz` (it becomes the browser's API address).
+
+   No new secrets.
+
 3. **`/srv/tipme-production/production.env`** (as `tipme-prod`): the website reads `WEB_REVALIDATE_SECRET` (already there for the API) and, optionally, `PILOT_NOTICE`. Check by name:
 
    ```sh
    cd /srv/tipme-production
-   for n in WEB_ORIGIN WEB_REVALIDATE_SECRET; do printf '%s %s
+   for n in WEB_ORIGIN WEB_REVALIDATE_SECRET; do
+     echo "$n $(grep -c "^$n=.\+" production.env)"
+   done
+   grep -c '^WEB_ORIGIN=https://www\.usetipme\.xyz$' production.env
+   grep -c '^WEB_REVALIDATE_URL=.\+' production.env
    ```
 
-' "$n" "$(grep -c "^$n=.\+" production.env)"; done # each 1
-grep -c '^WEB_ORIGIN=https://www\.usetipme\.xyz$' production.env # 1: the deploy checks the website here
-grep -c '^WEB_REVALIDATE_URL=.\+' production.env # 0: blank means WEB_ORIGIN/api/revalidate
+   Expect `1` for each name, `1` for the exact `WEB_ORIGIN` (the deploy checks the website there), and `0` for `WEB_REVALIDATE_URL` (blank means `WEB_ORIGIN/api/revalidate`). If Vercel's production had `PILOT_NOTICE=on` and `/ops/switches` has not set the pilot notice, add `PILOT_NOTICE=on`. If it had `PRODUCTION_LAUNCH_AT` and admin has no launch time, add the same line. Otherwise leave both out.
 
-````
-
-If Vercel's production had `PILOT_NOTICE=on` and `/ops/switches` has not set the pilot notice, add `PILOT_NOTICE=on`; if it had `PRODUCTION_LAUNCH_AT` and admin has no launch time, add the same line. Otherwise leave both out.
-4. **Edge:** nothing more. `edge.env` already has `PRODUCTION_WEB_HOST=www.usetipme.xyz` and `PRODUCTION_APEX_HOST=usetipme.xyz` (staging's move), and the ship below finds the Caddyfile unchanged.
-5. **Deploy:** Actions → **Deploy production** → Run workflow (branch `main`), approve. The first deploy with the website starts `api-<idle>` and `web-<idle>`, waits until `https://www.usetipme.xyz/api/version` shows the version, then stops the old colour's API (it had no website). If the website check fails (for example a certificate still missing), the new colour is stopped and the old API keeps serving: fix the cause and run it again.
+4. **Edge:** nothing more. Staging's move added `PRODUCTION_WEB_HOST=www.usetipme.xyz` and `PRODUCTION_APEX_HOST=usetipme.xyz` and recreated the edge, so the ship below finds the Caddyfile unchanged. If it stops with "the running edge lacks …", the edge was not recreated after `edge.env` changed: run `docker compose -p tipme-edge -f /srv/tipme-edge/compose.edge.yml up -d` (a few seconds of both APIs down) and deploy again.
+5. **Deploy:** Actions → **Deploy production** → Run workflow (branch `main`), and approve. The first deploy with the website starts `api-<idle>` and `web-<idle>`, waits until `https://www.usetipme.xyz/api/version` shows the version, then stops the old colour's API (it had no website to drain). If the website check fails (for example, a certificate is still missing), the new colour is stopped and the old API keeps serving: fix the cause and run it again.
 6. **Verify** (from your machine):
 
-```sh
-curl -sI 'https://usetipme.xyz/@ada?x=1' | grep -iE '^HTTP|^location'          # 308, location https://www.usetipme.xyz/@ada?x=1
-curl -sI https://www.usetipme.xyz/ | grep -iE '^HTTP|^strict-transport|^content-security|^x-frame'   # 200, HSTS, CSP, DENY
-curl -s https://www.usetipme.xyz/api/version                                  # {"version":"<12-char sha>"}
-curl -s https://api.usetipme.xyz/health/release | grep -o '"version":"[^"]*"' # the same sha
-curl -s https://www.usetipme.xyz/robots.txt                                   # Disallow: / while indexing is off
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://www.usetipme.xyz/api/revalidate \
-  -H 'content-type: application/json' -d '{"handle":"nobody","secret":"wrong"}'  # 401: reachable, secret checked
-````
+   ```sh
+   curl -sI 'https://usetipme.xyz/@ada?x=1' | grep -iE '^HTTP|^location'
+   curl -sI https://www.usetipme.xyz/ | grep -iE '^HTTP|^strict-transport|^content-security|^x-frame|^set-cookie'
+   curl -s https://www.usetipme.xyz/api/version
+   curl -s https://api.usetipme.xyz/health/release | grep -o '"version":"[^"]*"'
+   curl -s https://www.usetipme.xyz/robots.txt
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://www.usetipme.xyz/api/revalidate \
+     -H 'content-type: application/json' -d '{"handle":"nobody","secret":"wrong"}'
+   ```
 
-In a browser: open `https://www.usetipme.xyz`, sign in, open a real tip page (`/@<handle>`) with its pictures, change something on your own page and see the public page show it within seconds. On the server: `TIPME_STACK=production /srv/tipme-production/live/scripts/compose.sh ps` shows the serving colour's `web` `healthy`; `docker stats --no-stream` shows it well under 768 MB (about 100 MB idle locally); `TIPME_STACK=production /srv/tipme-production/live/scripts/compose.sh logs api-<colour> | grep -c revalidate_failed` stays 0 after the page change. The watcher (`PRODUCTION_WEB_URL`) goes green again. 7. **Rolling back:** `rollback-production.sh` moves the API and website together, once there is an earlier version with the website (it refuses one from before). Until then, a broken website is fixed forward. Taking the website hosts off the edge entirely (the names then fail as they did under Vercel's pause, the APIs keep serving): as `tipme-prod`, put back the Caddyfile from before the move (`/srv/tipme-edge/Caddyfile.previous`, while it is still that one) with `cat … > /srv/tipme-edge/Caddyfile` and `docker compose -p tipme-edge -f /srv/tipme-edge/compose.edge.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile`. 8. **Later, separately:** delete the Vercel project (keep it paused until the self-hosted site has run for a while) and `apps/web/vercel.json`, and the old Vercel lines from `settings-and-switches.md`.
+   Expect, in order:
+   - `308`, with `location: https://www.usetipme.xyz/@ada?x=1`;
+   - `200`, with HSTS, CSP, `X-Frame-Options: DENY` and a `tipme_web` cookie (the edge's colour pin);
+   - `{"version":"<12-character sha>"}`;
+   - the same sha from the API;
+   - `Disallow: /` while indexing is off;
+   - `401` (the route is reachable and checks its secret).
 
-**Memory:** each website copy is limited to 768 MB (about 100 MB idle, 155 MB after a burst of 200 page loads, locally). Outside a deploy one copy runs per environment; during a production switch both colours' copies run for a few seconds.
+   In a browser: open `https://www.usetipme.xyz`, sign in, open a real tip page (`/@<handle>`) with its pictures, then change something on your own page and see the public page show it within seconds. On the server:
+   - `TIPME_STACK=production /srv/tipme-production/live/scripts/compose.sh ps` shows the serving colour's `web` as `healthy`;
+   - `docker stats --no-stream` shows it well under 768 MB (about 100 MB idle locally);
+   - `TIPME_STACK=production /srv/tipme-production/live/scripts/compose.sh logs api-<colour> | grep -c revalidate_failed` stays `0` after the page change;
+   - the watcher (`PRODUCTION_WEB_URL`) goes green again.
+
+7. **Rolling back:** `rollback-production.sh` moves the API and the website together once there is an earlier version with the website (it refuses one from before). Until then, a broken website is fixed forward. To take the website hosts off the edge entirely (the names then fail as they did under Vercel's pause; the APIs keep serving), as `tipme-prod`, put back the Caddyfile from before the move while `Caddyfile.previous` is still that one:
+
+   ```sh
+   cd /srv/tipme-edge
+   cat Caddyfile.previous > Caddyfile
+   docker compose -p tipme-edge -f compose.edge.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
+   ```
+
+   A reload is enough for that: the old file needs none of the new settings.
+
+8. **Later, separately:** delete the Vercel project (keep it paused until the self-hosted site has run for a while), `apps/web/vercel.json`, and the old Vercel lines in `settings-and-switches.md`.
+
+**Memory:** each website copy is limited to 768 MB (about 100 MB idle, and 155 MB after a burst of 200 page loads, locally). Outside a deploy, one copy runs per environment; during a production switch both colours' copies run for about 10 seconds (the 8 s drain included).

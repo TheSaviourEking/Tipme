@@ -232,56 +232,78 @@ Staging turns live updates on first: `LIVE_UPDATES_ENABLED=true` in `staging.env
 
 ## Website on this server: the move from Vercel (one-off, 26 Nov 2026)
 
-**When:** once, on a staging server whose website was on Vercel (Vercel paused the project: `402 Payment required`). Do this before production's move (`production.md`, "Website on this server"): it installs the edge's new Caddyfile, which production's deploys keep after that. Names only below; type values on the server or in GitHub, never in chat.
+**When:** once, on a staging server whose website was on Vercel (Vercel paused the project: `402 Payment required`). Do this before production's move (`production.md`, section 13): it gives the edge its new settings and Caddyfile, which production's deploys keep after that. Names only below; type values on the server or in GitHub, never in chat.
 
-1. **Merge this change to `dev`**, but leave staging's auto-deploy off for now (`STAGING_AUTO_DEPLOY` not `true`), so nothing deploys before step 6 (a deploy before the edge has the site fails its website check and puts the previous version back).
-2. **GitHub variables** (Settings → Environments → `staging`, or repository variables): check `STAGING_WEB_URL` (`https://staging.<domain>`) and `STAGING_API_URL` are set. Optionally add `STAGING_NEXT_PUBLIC_SENTRY_DSN` (the `tipme-web` DSN Vercel had as `NEXT_PUBLIC_SENTRY_DSN`); the other three `STAGING_NEXT_PUBLIC_*` default to Vercel's staging values. No new secrets.
-3. **`/srv/tipme/staging.env`** (as `deploy`): these lines must be present, each counted by name:
+**Plan the production deploy for soon after.** Step 4 points `www.<domain>` and the bare domain at the server too. From then until production's first deploy with the website (section 13), both answer `502` (they answered `402` under Vercel's pause). Schedule production's move for right after staging's full release check passes, so the gap is hours, not days.
+
+1. **Merge this change to `dev`**, but leave staging's auto-deploy off for now (`STAGING_AUTO_DEPLOY` not `true`), so nothing deploys before step 6. A deploy before the edge has the site fails its website check and puts the previous version back.
+2. **GitHub variables** (Settings → Environments → `staging`, or repository variables): check that `STAGING_WEB_URL` (`https://staging.<domain>`) and `STAGING_API_URL` are set. Optionally add `STAGING_NEXT_PUBLIC_SENTRY_DSN` (the `tipme-web` DSN that Vercel had as `NEXT_PUBLIC_SENTRY_DSN`). The other three `STAGING_NEXT_PUBLIC_*` default to Vercel's staging values. No new secrets.
+3. **`/srv/tipme/staging.env`** (as `deploy`): these lines must be present. Count each by name:
 
    ```sh
    cd /srv/tipme
-   for n in WEB_ORIGIN WEB_REVALIDATE_URL WEB_REVALIDATE_SECRET PREVIEW_PASSWORD PREVIEW_COOKIE_DOMAIN; do printf '%s %s
+   for n in WEB_ORIGIN WEB_REVALIDATE_URL WEB_REVALIDATE_SECRET PREVIEW_PASSWORD PREVIEW_COOKIE_DOMAIN; do
+     echo "$n $(grep -c "^$n=.\+" staging.env)"
+   done
    ```
 
-' "$n" "$(grep -c "^$n=.\+" staging.env)"; done
+   Each must print `1`. They already exist for the API, and the website's deploy now stops if `PREVIEW_PASSWORD` is missing. `WEB_REVALIDATE_URL` stays `https://staging.<domain>/api/revalidate`. If Vercel's staging project had `PILOT_NOTICE` or `PRODUCTION_LAUNCH_AT` and `/ops/switches` has not set them, add the same line here; otherwise leave them out.
 
-````
+4. **DNS, for all three website names at once.** Move staging's and production's names together, so the edge never asks for a certificate while a name still points at Vercel (a failed challenge makes Caddy back off for hours and counts against Let's Encrypt's limits). At your DNS provider, for each of `staging.<domain>`, `www.<domain>` and the bare `<domain>`:
+   - remove Vercel's record (a CNAME to Vercel, or Vercel's A/AAAA on the bare domain);
+   - add an A record (and AAAA if the server has IPv6) for the server's address.
 
-Each must print `1`. They already exist for the API. `WEB_REVALIDATE_URL` stays `https://staging.<domain>/api/revalidate`. If Vercel's staging project had `PILOT_NOTICE` or `PRODUCTION_LAUNCH_AT` and `/ops/switches` has not set them, add the same line here; otherwise leave them out.
+   Touch nothing else: the bare domain's MX, SPF, DKIM and DMARC records stay. If the domain has a CAA record, it must allow `letsencrypt.org`. Wait until each `dig +short <name>` shows the server's address. Until the edge has these sites (step 5), the names fail to connect, as they failed under Vercel's pause.
 
-4. **DNS, for all three website names at once** (staging's and production's, so the edge never asks for a certificate while a name still points at Vercel; a failed challenge makes Caddy back off for hours and counts against Let's Encrypt's limits). At your DNS provider, for each of `staging.<domain>`, `www.<domain>` and the bare `<domain>`: remove Vercel's record (a CNAME to Vercel, or Vercel's A/AAAA on the bare domain) and add an A record (and AAAA if the server has IPv6) for the server's address. Touch nothing else: the bare domain's MX, SPF, DKIM and DMARC records stay. If the domain has a CAA record, it must allow `letsencrypt.org`. Wait until each `dig +short <name>` shows the server's address. Until the edge has these sites (next step) the names fail to connect, as they failed under Vercel's pause.
-5. **The edge** (as `tipme-prod`, which owns `/srv/tipme-edge`):
-1. Add three lines to `/srv/tipme-edge/edge.env` (names from `deploy/edge/edge.env.example`): `STAGING_WEB_HOST=staging.<domain>`, `PRODUCTION_WEB_HOST=www.<domain>`, `PRODUCTION_APEX_HOST=<domain>`. All three now: the new Caddyfile refuses to load without any of them. Until production's website runs, its hosts answer 502.
-2. Install the new Caddyfile by hand, the way `ship-production.sh` does (a ship would do this, but production's next deploy comes after staging's):
+5. **The edge** (as `tipme-prod`, which owns `/srv/tipme-edge`). The edge container reads `edge.env` only when it is created, so this step **recreates** it; `caddy reload` alone would load the new hosts empty.
 
-   ```sh
-   # From your machine, at the merged commit:
-   scp deploy/edge/Caddyfile tipme-prod@<server>:/srv/tipme-edge/incoming/Caddyfile
-   # On the server, as tipme-prod:
-   cd /srv/tipme-edge
-   docker run --rm --env-file edge.env -v /srv/tipme-edge/incoming:/etc/caddy:ro caddy:2.10.2-alpine \
-     caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile      # must print "Valid configuration"
-   cp Caddyfile Caddyfile.previous
-   cat incoming/Caddyfile > Caddyfile                                      # in place: the container mounts this file
-   docker compose -p tipme-edge -f compose.edge.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile
-   curl -sf https://api.staging.<domain>/health/ready && curl -sf https://api.usetipme.xyz/health/ready && echo APIs-ok
-   ```
+   1. Add three lines to `/srv/tipme-edge/edge.env` (names from `deploy/edge/edge.env.example`): `STAGING_WEB_HOST=staging.<domain>`, `PRODUCTION_WEB_HOST=www.<domain>` and `PRODUCTION_APEX_HOST=<domain>`. Add all three now: the new Caddyfile refuses to load without any of them.
+   2. Copy the new Caddyfile over and check it with the new `edge.env`:
 
-   If the reload fails: `cat Caddyfile.previous > Caddyfile` and reload again.
+      ```sh
+      # From your machine, at the merged commit:
+      scp deploy/edge/Caddyfile tipme-prod@<server>:/srv/tipme-edge/incoming/Caddyfile
+      # On the server, as tipme-prod:
+      cd /srv/tipme-edge
+      docker run --rm --env-file edge.env -v /srv/tipme-edge/incoming:/etc/caddy:ro caddy:2.10.2-alpine \
+        caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+      ```
 
-3. The edge now asks for the three certificates: `docker compose -p tipme-edge logs caddy | grep -iE 'certificate obtained|error'` within a minute or two. If one failed (DNS had not reached every resolver yet), ask again once `dig` agrees: `docker compose -p tipme-edge exec -T caddy caddy reload --force --config /etc/caddy/Caddyfile`.
+      It must print `Valid configuration`. If not, stop here: nothing has changed yet.
+
+   3. Put it in place and recreate the edge. **Both APIs (staging and production) are unreachable for the few seconds the container takes to restart**, so do it in a quiet moment:
+
+      ```sh
+      cd /srv/tipme-edge
+      cp Caddyfile Caddyfile.previous
+      cat incoming/Caddyfile > Caddyfile
+      docker compose -p tipme-edge -f compose.edge.yml up -d
+      docker compose -p tipme-edge -f compose.edge.yml exec -T caddy printenv STAGING_WEB_HOST
+      curl -sf https://api.staging.<domain>/health/ready && curl -sf https://api.usetipme.xyz/health/ready && echo APIs-ok
+      ```
+
+      `cat … > Caddyfile` writes the file in place, because the container mounts this one file. `printenv` must print the staging host: the recreated edge has the new settings. The certificates stay in the edge's volume.
+
+   4. The edge now asks for the three new certificates. Within a minute or two, check `docker compose -p tipme-edge -f compose.edge.yml logs caddy | grep -iE 'certificate obtained|error'`. If one failed (DNS had not reached every resolver yet), ask again once `dig` agrees: `docker compose -p tipme-edge -f compose.edge.yml exec -T caddy caddy reload --force --config /etc/caddy/Caddyfile`. A reload is enough here: the settings are already in the container.
+
+   If anything in this step goes wrong, go back to the old file with `cat Caddyfile.previous > Caddyfile` and `docker compose -p tipme-edge -f compose.edge.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile`. A reload is enough for that: the old file needs none of the new settings.
 
 6. **Deploy:** Actions → **Deploy staging** → Run workflow (branch `dev`). It builds and ships both images, starts `web`, waits until `https://staging.<domain>/api/version` shows the version, then runs the full release check against the self-hosted site. Turn `STAGING_AUTO_DEPLOY` back on afterwards if it was on.
 7. **Verify** (from your machine):
 
-```sh
-curl -sI https://staging.<domain>/ | grep -iE '^HTTP|^location|^strict-transport|^content-security'  # 303 to /preview-login, HSTS, CSP
-curl -s https://staging.<domain>/api/version                                                      # {"version":"<12-char sha>"}
-curl -s https://api.staging.<domain>/health/release | grep -o '"version":"[^"]*"'                   # the same sha
-curl -s -o /dev/null -w '%{http_code}\n' -X POST https://staging.<domain>/api/revalidate \
-  -H 'content-type: application/json' -d '{"handle":"nobody","secret":"wrong"}'                    # 401: reachable, secret checked
-````
+   ```sh
+   curl -sI https://staging.<domain>/ | grep -iE '^HTTP|^location|^strict-transport|^content-security'
+   curl -s https://staging.<domain>/api/version
+   curl -s https://api.staging.<domain>/health/release | grep -o '"version":"[^"]*"'
+   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://staging.<domain>/api/revalidate \
+     -H 'content-type: application/json' -d '{"handle":"nobody","secret":"wrong"}'
+   ```
 
-In a browser: enter the preview password, sign in (codes at `/dev/inbox`), open a tip page (`/@<a handle>`) and its pictures, change something on that page in the dashboard and see the public page show it within seconds (the revalidate call). On the server: `TIPME_STACK=staging /srv/tipme/live/scripts/compose.sh ps web` is `healthy`, `docker stats --no-stream` shows `tipme-staging-web-1` well under 768 MB, and `TIPME_STACK=staging /srv/tipme/live/scripts/compose.sh logs api | grep -c revalidate_failed` stays 0 after the page change.
+   Expect, in order: a `303` to `/preview-login` with HSTS and CSP; `{"version":"<12-character sha>"}`; the same sha from the API; `401` (the route is reachable and checks its secret).
 
-8. **Rolling back:** `rollback.sh` moves the website with the API, but refuses a version from before the website ran here (that version's compose file has no website, so going back to it would stop the site). Until two versions with the website have been deployed, the way back from a broken website is a fix deployed forward. To take the website hosts off the edge entirely (they then fail as they did under Vercel's pause), as `tipme-prod`: `cat /srv/tipme-edge/Caddyfile.previous > /srv/tipme-edge/Caddyfile` and the reload command above.
+   In a browser: enter the preview password, sign in (codes at `/dev/inbox`), open a tip page (`/@<a handle>`) and its pictures, then change something on that page in the dashboard and see the public page show it within seconds (the revalidate call). On the server:
+   - `TIPME_STACK=staging /srv/tipme/live/scripts/compose.sh ps web` shows `healthy`;
+   - `docker stats --no-stream` shows `tipme-staging-web-1` well under 768 MB;
+   - `TIPME_STACK=staging /srv/tipme/live/scripts/compose.sh logs api | grep -c revalidate_failed` stays `0` after the page change.
+
+8. **Rolling back:** `rollback.sh` moves the website with the API, but refuses a version from before the website ran here (that version's compose file has no website, so going back to it would stop the site). Until two versions with the website have been deployed, a broken website is fixed forward. To take the website hosts off the edge entirely (they then fail as they did under Vercel's pause; the APIs keep serving), put the old Caddyfile back and reload, as at the end of step 5.

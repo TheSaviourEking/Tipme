@@ -20,6 +20,11 @@ on this server".
    API and website together. The deploy waits until the website's public address answers
    `/api/version` with the new sha, then (production) stops the old colour.
 4. A rollback moves the website with the API: each version's website is that version's image.
+5. While both production colours run, the edge pins each browser to one of them (a `tipme_web`
+   cookie: a hash of the copy's address, nothing about the visitor), because a page needs its own
+   build's `/_next/static` chunks. Before stopping the old colour the deploy drains it for 8 s
+   (`/api/version` answers 503 while `/tmp/tipme-draining` exists), so page traffic moves to the new
+   colour while the old copy still serves the assets of the pages it sent.
 
 The image is Next.js `output: 'standalone'` (`node apps/web/server.js`, port 3000), run as `node`
 with code owned by root, a read-only root filesystem and two bounded tmpfs mounts (the image cache,
