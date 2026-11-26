@@ -14,6 +14,7 @@ import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
 import {
   INITIAL_ISSUES_LIST,
+  createFirstPageReads,
   issuesListReducer,
   type FirstPageMode,
 } from '@/lib/issues-list';
@@ -55,17 +56,24 @@ export default function IssuesPage() {
   useEffect(() => {
     filtersNow.current = filters;
   });
-  const asked = useRef(0);
+  const [reads] = useState(createFirstPageReads);
 
-  /** The first page with the current filters; an older answer never replaces a newer one. */
-  const firstPage = useCallback(async (mode: FirstPageMode) => {
-    const mine = ++asked.current;
-    const result = await opsFetch<OpsIssue[]>(query(filtersNow.current));
-    if (mine !== asked.current) return;
-    setNow(Date.now());
-    if (!result.ok) dispatch({ type: 'firstFailed' });
-    else dispatch({ type: 'first', rows: result.data, mode });
-  }, []);
+  /**
+   * The first page with the current filters. An older answer never replaces a newer one, and a
+   * pending replace (filters, "New changes: show") is never downgraded by a later signal read.
+   */
+  const firstPage = useCallback(
+    async (mode: FirstPageMode) => {
+      const ticket = reads.start(mode);
+      const result = await opsFetch<OpsIssue[]>(query(filtersNow.current));
+      const apply = reads.land(ticket, result.ok);
+      if (!apply) return;
+      setNow(Date.now());
+      if (!result.ok) dispatch({ type: 'firstFailed' });
+      else dispatch({ type: 'first', rows: result.data, mode: apply });
+    },
+    [reads],
+  );
 
   // A signal means something changed; with more pages showing it offers the change instead of
   // replacing rows under the reader (the base design's Tips-page rule).
@@ -93,8 +101,10 @@ export default function IssuesPage() {
     if (!last) return;
     const generation = list.generation;
     const result = await opsFetch<OpsIssue[]>(query(filters, last.id));
-    // Dropped by the reducer if a newer first page replaced the list meanwhile.
-    if (result.ok) dispatch({ type: 'more', rows: result.data, generation });
+    // Dropped by the reducer if a newer first page replaced the list meanwhile, or if this row is
+    // no longer last (a double-click already added the page).
+    if (result.ok)
+      dispatch({ type: 'more', rows: result.data, generation, after: last.id });
   };
 
   return (

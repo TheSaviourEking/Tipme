@@ -1,6 +1,6 @@
 'use client';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { OpsMe } from '@tipme/contracts';
 import { Button, Container, Skeleton, Slip } from '@tipme/ui';
 import {
@@ -25,7 +25,7 @@ import {
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { opsLiveEnabled } from '@/lib/live-enabled';
-import { keepsGrantedView } from '@/lib/ops-stream-end';
+import { afterStreamEnd } from '@/lib/ops-stream-end';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -143,11 +143,20 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
     void opsState().then(apply);
   }, [apply]);
   const reload = () => void opsState().then(apply);
-  // The staff stream ended with 404: ask where this person stands, but a passing failure of that
-  // question keeps the admin area (and the page's filters and pages) showing.
-  const streamEnded = () =>
+  // The staff stream ended (401/404): ask where this person stands. A passing failure of that
+  // question keeps the admin area (and the page's filters and pages) showing and asks again with
+  // backoff, so a later real answer (signed out, not staff) still takes effect.
+  const recheck = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(recheck.current), []);
+  const streamEnded = (attempt = 0) =>
     void opsState().then((next) => {
-      if (!keepsGrantedView(next)) apply(next);
+      const what = afterStreamEnd(next, attempt);
+      if ('apply' in what) apply(next);
+      else if ('recheckInMs' in what)
+        recheck.current = window.setTimeout(
+          () => streamEnded(attempt + 1),
+          what.recheckInMs,
+        );
     });
 
   const signOut = async () => {
@@ -167,7 +176,7 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
         stream="ops"
         timing={OPS_LIVE_TIMING}
         enabled={opsLiveEnabled(state.access)}
-        onSignedOut={streamEnded}
+        onSignedOut={() => streamEnded()}
       >
         <OpsGranted
           access={state.access}

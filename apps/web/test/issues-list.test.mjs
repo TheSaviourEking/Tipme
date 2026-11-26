@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   INITIAL_ISSUES_LIST,
+  createFirstPageReads,
   issuesListReducer,
 } from '../src/lib/issues-list.ts';
 
@@ -34,6 +35,7 @@ test('show more appends to the list it was asked from', () => {
     type: 'more',
     rows: PAGE2,
     generation: one.generation,
+    after: 'a49',
   });
   assert.deepEqual(two.issues, [...PAGE1, ...PAGE2]);
   assert.equal(two.extraPages, true);
@@ -47,6 +49,7 @@ test('a signal’s first page that lands after show more offers the change, keep
     type: 'more',
     rows: PAGE2,
     generation: one.generation,
+    after: 'a49',
   });
   const after = issuesListReducer(two, {
     type: 'first',
@@ -71,6 +74,7 @@ test('show more that lands after a newer first page is dropped, never mixing old
     type: 'more',
     rows: PAGE2,
     generation: askedFrom,
+    after: 'a49',
   });
   assert.equal(after, fresh);
   assert.equal(after.extraPages, false);
@@ -82,6 +86,7 @@ test('with more pages showing, a resync offers the change only if the first page
     type: 'more',
     rows: PAGE2,
     generation: one.generation,
+    after: 'a49',
   });
   const same = issuesListReducer(two, {
     type: 'first',
@@ -105,6 +110,7 @@ test('showing the changes replaces the pages with the fresh first page', () => {
     type: 'more',
     rows: PAGE2,
     generation: one.generation,
+    after: 'a49',
   });
   const offered = issuesListReducer(two, {
     type: 'first',
@@ -133,4 +139,67 @@ test('a failed first page keeps the rows and says so; the next success clears it
       .failed,
     false,
   );
+});
+
+test('a second Show more asked from the same last row is dropped: no rows twice', () => {
+  const one = shown();
+  const more = {
+    type: 'more',
+    rows: PAGE2,
+    generation: one.generation,
+    after: 'a49',
+  };
+  const two = issuesListReducer(one, more);
+  // A double-click: the second answer was asked after the same row, which is no longer last.
+  const again = issuesListReducer(two, more);
+  assert.equal(again, two);
+  assert.equal(
+    new Set(again.issues.map((r) => r.id)).size,
+    again.issues.length,
+  );
+});
+
+// The reads in flight (page.tsx asks through these): the newest answer wins, but a pending
+// replace (a filter change, "New changes: show") survives a newer signal or resync read.
+const RESOLVED1 = rows('r', 50);
+
+test('a filter change survives a signal read that starts before it lands', () => {
+  const reads = createFirstPageReads();
+  const one = shown();
+  const withPage2 = issuesListReducer(one, {
+    type: 'more',
+    rows: PAGE2,
+    generation: one.generation,
+    after: 'a49',
+  });
+  const replace = reads.start('replace'); // the person picks "Resolved"
+  const signal = reads.start('signal'); // a signal arrives before that answer
+  assert.equal(reads.land(replace, true), null, 'the older answer is dropped');
+  const mode = reads.land(signal, true);
+  assert.equal(mode, 'replace', 'the newer read inherits the pending replace');
+  const after = issuesListReducer(withPage2, {
+    type: 'first',
+    rows: RESOLVED1,
+    mode,
+  });
+  assert.deepEqual(after.issues, RESOLVED1);
+  assert.equal(after.extraPages, false);
+  assert.equal(after.newChanges, false);
+});
+
+test('"New changes: show" survives a resync read that starts before it lands', () => {
+  const reads = createFirstPageReads();
+  const show = reads.start('replace');
+  const check = reads.start('check');
+  assert.equal(reads.land(show, true), null);
+  assert.equal(reads.land(check, true), 'replace');
+  // Once a replace has landed, later reads keep their own mode.
+  assert.equal(reads.land(reads.start('signal'), true), 'signal');
+});
+
+test('a failed read keeps a pending replace for the next one', () => {
+  const reads = createFirstPageReads();
+  assert.equal(reads.land(reads.start('replace'), false), 'replace');
+  assert.equal(reads.land(reads.start('check'), true), 'replace');
+  assert.equal(reads.land(reads.start('check'), true), 'check');
 });

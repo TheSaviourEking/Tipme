@@ -37,7 +37,8 @@ export type FirstPageMode = 'replace' | 'signal' | 'check';
 export type IssuesListAction<T extends Row = OpsIssue> =
   | { type: 'first'; rows: T[]; mode: FirstPageMode }
   | { type: 'firstFailed' }
-  | { type: 'more'; rows: T[]; generation: number };
+  /** `after`: the id of the last row the page was asked after (its cursor). */
+  | { type: 'more'; rows: T[]; generation: number; after: string };
 
 const PAGE = 50;
 
@@ -53,7 +54,14 @@ export function issuesListReducer<T extends Row>(
     case 'firstFailed':
       return { ...state, failed: true };
     case 'more':
-      if (action.generation !== state.generation || !state.issues) return state;
+      // Asked of an older list, or after a row that is no longer last (a double-click, or an
+      // earlier "Show more" answered later): dropped, so no row shows twice.
+      if (
+        action.generation !== state.generation ||
+        !state.issues ||
+        state.issues.at(-1)?.id !== action.after
+      )
+        return state;
       return {
         ...state,
         issues: [...state.issues, ...action.rows],
@@ -81,4 +89,35 @@ export function issuesListReducer<T extends Row>(
       };
     }
   }
+}
+
+const STRENGTH: Record<FirstPageMode, number> = {
+  check: 0,
+  signal: 1,
+  replace: 2,
+};
+
+/**
+ * The first-page reads in flight. The newest answer wins (an older one is dropped), but it takes
+ * the strongest mode asked since a read last landed: a filter change or "New changes: show" (a
+ * replace) is never cancelled by a signal or resync read that starts before it lands. A failed
+ * read keeps the pending mode for the next one.
+ */
+export function createFirstPageReads() {
+  let asked = 0;
+  let pending: FirstPageMode | null = null;
+  return {
+    start(mode: FirstPageMode): number {
+      if (pending === null || STRENGTH[mode] > STRENGTH[pending])
+        pending = mode;
+      return ++asked;
+    },
+    /** The mode to apply the answer with, or null when a newer read is in flight. */
+    land(ticket: number, ok: boolean): FirstPageMode | null {
+      if (ticket !== asked || pending === null) return null;
+      const mode = pending;
+      if (ok) pending = null;
+      return mode;
+    },
+  };
 }
