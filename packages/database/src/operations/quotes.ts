@@ -91,6 +91,8 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
   } catch {
     throw new OperationError('AMOUNT_OUT_OF_RANGE');
   }
+  // One instant for the whole quote: the rates, the waiver, the cap check and the expiry.
+  const now = input.now ?? new Date();
   const [profile] = await db
     .select({
       id: profiles.id,
@@ -117,7 +119,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
   // stored. The quote records the rate in its version and amounts, so a later plan or rate change
   // never alters this price. A share staff set for this account (ADR-0014) applies only below it.
   const plan = profile.plan === 'pro' ? 'pro' : 'free';
-  const rates = await planFeeRatesInForce(db, input.now ?? new Date());
+  const rates = await planFeeRatesInForce(db, now);
   const policy = feePolicyForPlan(plan, rates);
   const { bps: shareBps, custom } = planShareBps(
     plan,
@@ -135,9 +137,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
       throw new OperationError('AMOUNT_OUT_OF_RANGE');
     throw error;
   }
-  const expiresAt = new Date(
-    (input.now ?? new Date()).getTime() + QUOTE_TTL_MS,
-  );
+  const expiresAt = new Date(now.getTime() + QUOTE_TTL_MS);
   const quoteId = newId();
   const priced = breakdown;
   // Fee-free tips are granted by staff (ADR-0014) and honoured while credits last. Open
@@ -161,7 +161,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     const waiver = await feeWaiverFor(tx, {
       owner: { profileId: profile.id },
       fee: 'tip',
-      now: input.now ?? new Date(),
+      now,
     });
     if (
       waiver.payer === 'tipme' &&
@@ -220,7 +220,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     if (collectionMode === 'collect')
       await refuseOverHoldingCap(tx, {
         profileId: profile.id,
-        now: input.now ?? new Date(),
+        now,
         addMinor: chosen.recipientNetMinor,
         binding: false,
       });

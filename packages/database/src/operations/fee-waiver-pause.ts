@@ -1,6 +1,5 @@
-import { and, asc, desc, eq, gt, isNotNull, lte } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
-import { collectReserveReadings, paymentReserveReadings } from '../schema.js';
 
 /*
  * Fee waivers (spec 2026-11-23 §5, W6): tip waivers pause while TipMe's own balance at the active
@@ -26,7 +25,6 @@ export interface FeeWaiverPause {
 
 /** The readings are of the NGN balance: the only currency the partner pays fees in (W6). */
 const CURRENCY = 'NGN';
-const COLLECT_PAUSING = ['critical', 'breach'] as const;
 const NOT_PAUSED: FeeWaiverPause = {
   paused: false,
   signals: [],
@@ -39,88 +37,107 @@ interface Known {
   signal: boolean;
 }
 
-/** One table's known readings for the adapter, read the same way for both. */
+/** One table's known readings for the adapter, read the same way for both (indexed point reads). */
 interface Source {
   signal: FeeWaiverPauseSignal;
   /** The newest known reading at or before `at` (or of all, with no `at`). */
   latest(at?: Date): Promise<Known | null>;
-  /** Known readings after `after`, oldest first. */
-  since(after: Date): Promise<Known[]>;
+  /** The newest known reading at or before `at` that is not a signal. */
+  latestClear(at: Date): Promise<Known | null>;
+  /** The oldest known reading. */
+  earliest(): Promise<Known | null>;
+  /** The oldest signalling reading after `after`. */
+  firstSignalAfter(after: Date): Promise<Known | null>;
+  /**
+   * The readings after `after` whose signal differs from the reading before them (the first one
+   * always): the only rows a replay needs. The database walks the rows; only changes come back.
+   */
+  changesAfter(after: Date): Promise<Known[]>;
 }
 
-function paymentSource(db: Database | Tx, provider: string): Source {
-  const t = paymentReserveReadings;
-  const columns = { id: t.id, readAt: t.readAt, low: t.low };
-  const own = and(
-    eq(t.provider, provider),
-    eq(t.currency, CURRENCY),
-    isNotNull(t.low),
-  );
-  const known = (r: { id: string; readAt: Date; low: boolean | null }) => ({
-    id: r.id,
-    readAt: r.readAt,
-    signal: r.low === true,
-  });
+type Row = { id: string; read_at: Date | string; signal: boolean };
+const toKnown = (r: Row): Known => ({
+  id: r.id,
+  readAt: r.read_at instanceof Date ? r.read_at : new Date(r.read_at),
+  signal: r.signal,
+});
+
+/**
+ * `table` and `signal` are constants of this file, never input. Both tables have the index
+ * `(provider, currency, read_at DESC)`.
+ */
+function source(
+  db: Database | Tx,
+  provider: string,
+  table: 'payment_reserve_readings' | 'collect_reserve_readings',
+  known: string,
+  signal: string,
+  name: FeeWaiverPauseSignal,
+): Source {
+  const from = sql.raw(table);
+  const isKnown = sql.raw(known);
+  const isSignal = sql.raw(signal);
+  const own = sql`provider = ${provider} AND currency = ${CURRENCY} AND ${isKnown}`;
+  const one = async (where: SQL, order: 'ASC' | 'DESC') => {
+    const dir = sql.raw(order);
+    const { rows } = await db.execute<Row>(sql`
+      SELECT id, read_at, (${isSignal}) AS signal FROM ${from}
+       WHERE ${own} AND ${where}
+       ORDER BY read_at ${dir}, id ${dir} LIMIT 1`);
+    return rows[0] ? toKnown(rows[0]) : null;
+  };
   return {
-    signal: 'payment_reserve_low',
-    async latest(at) {
-      const [row] = await db
-        .select(columns)
-        .from(t)
-        .where(at ? and(own, lte(t.readAt, at)) : own)
-        .orderBy(desc(t.readAt), desc(t.id))
-        .limit(1);
-      return row ? known(row) : null;
-    },
-    async since(after) {
-      const rows = await db
-        .select(columns)
-        .from(t)
-        .where(and(own, gt(t.readAt, after)))
-        .orderBy(asc(t.readAt), asc(t.id));
-      return rows.map(known);
+    signal: name,
+    latest: (at) =>
+      one(at ? sql`read_at <= ${at.toISOString()}` : sql`TRUE`, 'DESC'),
+    latestClear: (at) =>
+      one(sql`read_at <= ${at.toISOString()} AND NOT (${isSignal})`, 'DESC'),
+    earliest: () => one(sql`TRUE`, 'ASC'),
+    firstSignalAfter: (after) =>
+      one(sql`read_at > ${after.toISOString()} AND (${isSignal})`, 'ASC'),
+    async changesAfter(after) {
+      const { rows } = await db.execute<Row>(sql`
+        SELECT id, read_at, signal FROM (
+          SELECT id, read_at, (${isSignal}) AS signal,
+                 lag(${isSignal}) OVER (ORDER BY read_at, id) AS before
+            FROM ${from}
+           WHERE ${own} AND read_at > ${after.toISOString()}
+        ) r
+         WHERE before IS DISTINCT FROM signal
+         ORDER BY read_at, id`);
+      return rows.map(toKnown);
     },
   };
 }
 
-function collectSource(db: Database | Tx, provider: string): Source {
-  const t = collectReserveReadings;
-  const columns = { id: t.id, readAt: t.readAt, level: t.level };
-  const own = and(
-    eq(t.provider, provider),
-    eq(t.currency, CURRENCY),
-    isNotNull(t.level),
+const paymentSource = (db: Database | Tx, provider: string) =>
+  source(
+    db,
+    provider,
+    'payment_reserve_readings',
+    'low IS NOT NULL',
+    'low',
+    'payment_reserve_low',
   );
-  const known = (r: { id: string; readAt: Date; level: string | null }) => ({
-    id: r.id,
-    readAt: r.readAt,
-    signal: (COLLECT_PAUSING as readonly (string | null)[]).includes(r.level),
-  });
-  return {
-    signal: 'collect_reserve_critical',
-    async latest(at) {
-      const [row] = await db
-        .select(columns)
-        .from(t)
-        .where(at ? and(own, lte(t.readAt, at)) : own)
-        .orderBy(desc(t.readAt), desc(t.id))
-        .limit(1);
-      return row ? known(row) : null;
-    },
-    async since(after) {
-      const rows = await db
-        .select(columns)
-        .from(t)
-        .where(and(own, gt(t.readAt, after)))
-        .orderBy(asc(t.readAt), asc(t.id));
-      return rows.map(known);
-    },
-  };
-}
+
+const collectSource = (db: Database | Tx, provider: string) =>
+  source(
+    db,
+    provider,
+    'collect_reserve_readings',
+    'level IS NOT NULL',
+    `level IN ('critical', 'breach')`,
+    'collect_reserve_critical',
+  );
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-/** Before the first reading any copy can hold (the reserve checks began in 2026). */
-const EPOCH_BEFORE_READINGS = Date.UTC(2000, 0, 1);
+/**
+ * How far back a spell's start is looked for. A spell longer than this reports its first
+ * signalling reading inside the window: the alert stays one issue, and the work stays bounded.
+ */
+export const FEE_WAIVER_SPELL_LOOKBACK_DAYS = 400;
+/** Steps of the walk back; each crosses one hand-over between the tables, so few are ever taken. */
+const MAX_WALK_STEPS = 50;
 
 /**
  * Whether tip waivers are paused for the active adapter (`PAYMENT_PROVIDER`), and since which
@@ -172,44 +189,67 @@ async function currentSignals(
 }
 
 /**
- * The first signalling reading of the current spell: replays both tables' known readings in time
- * order from a window's start, with each table's state at that start, and keeps the reading that
- * last turned "neither set" into "one set". A window still paused at its start is widened until
- * it is not (or holds every reading), so the cost follows the spell, not the history.
+ * The first signalling reading of the current spell (W14), in bounded work:
+ * 1. Walk back from the newest reading to a moment when neither signal was set, by point reads:
+ *    from each signalling table's last clear reading (or from before its first reading), checking
+ *    the other table there. It stops at the look-back cap.
+ * 2. From that moment, replay only the readings where a table's signal changed, both tables in
+ *    time order, and keep the reading that last turned "neither set" into "one set".
+ * Readings timestamped anywhere (a clock fault included) end it: the cap and the step limit are
+ * relative to the newest reading, never to an absolute date.
  */
 async function spellStart(sources: Source[], newest: Date): Promise<string> {
-  for (let days = 1; ; days *= 8) {
-    // Past every possible reading, the window starts with neither set, so the loop ends.
-    const from = new Date(
-      Math.max(newest.getTime() - days * DAY_MS, EPOCH_BEFORE_READINGS),
-    );
-    const state: boolean[] = [];
-    const events: (Known & { source: number })[] = [];
-    for (const [i, source] of sources.entries()) {
-      state.push((await source.latest(from))?.signal === true);
-      for (const r of await source.since(from))
-        events.push({ ...r, source: i });
+  const cap = new Date(
+    newest.getTime() - FEE_WAIVER_SPELL_LOOKBACK_DAYS * DAY_MS,
+  );
+  let at = newest;
+  let from: Date | null = null;
+  for (let step = 0; step < MAX_WALK_STEPS && from === null; step += 1) {
+    const back: number[] = [];
+    for (const s of sources) {
+      if ((await s.latest(at))?.signal !== true) continue;
+      const clear = await s.latestClear(at);
+      // Signalling since its first reading: just before that, it had none (not set).
+      const first = clear ? null : await s.earliest();
+      back.push(clear ? clear.readAt.getTime() : first!.readAt.getTime() - 1);
     }
-    // Ties in time keep table order, then id: the same order on every call.
-    events.sort(
-      (a, b) =>
-        a.readAt.getTime() - b.readAt.getTime() ||
-        a.source - b.source ||
-        a.id.localeCompare(b.id),
-    );
-    let start: string | null = null;
-    for (const event of events) {
-      const before = state.some(Boolean);
-      state[event.source] = event.signal;
-      const after = state.some(Boolean);
-      if (!before && after) start = event.id;
-    }
-    if (start !== null) return start;
-    // Paused all through the window: the spell began earlier, so look further back.
-    // (A window from before any reading starts with neither set; this is only a backstop.)
-    if (from.getTime() === EPOCH_BEFORE_READINGS) {
-      const first = events.find((e) => e.signal);
-      if (first) return first.id;
-    }
+    if (back.length === 0) from = at;
+    else if (Math.min(...back) <= cap.getTime()) break;
+    else at = new Date(Math.min(...back));
   }
+  const start = from ?? cap;
+  const state: boolean[] = [];
+  const events: (Known & { source: number })[] = [];
+  for (const [i, s] of sources.entries()) {
+    state.push((await s.latest(start))?.signal === true);
+    for (const r of await s.changesAfter(start))
+      events.push({ ...r, source: i });
+  }
+  // Ties in time keep table order, then id: the same order on every call.
+  events.sort(
+    (a, b) =>
+      a.readAt.getTime() - b.readAt.getTime() ||
+      a.source - b.source ||
+      a.id.localeCompare(b.id),
+  );
+  let found: string | null = null;
+  for (const event of events) {
+    const before = state.some(Boolean);
+    state[event.source] = event.signal;
+    if (!before && state.some(Boolean)) found = event.id;
+  }
+  if (found !== null) return found;
+  // Paused all through the look-back: the first signalling reading inside it stands for the start.
+  let earliest: Known | null = null;
+  for (const s of sources) {
+    const r = await s.firstSignalAfter(start);
+    if (r && (earliest === null || r.readAt < earliest.readAt)) earliest = r;
+  }
+  if (earliest) return earliest.id;
+  // Nothing after the window's start (the newest reading is at it): the newest signalling one.
+  for (const s of sources) {
+    const r = await s.latest();
+    if (r?.signal) return r.id;
+  }
+  throw new Error('fee waiver pause: paused with no signalling reading');
 }

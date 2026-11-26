@@ -517,3 +517,188 @@ test('a business staff member follows individual tip rules', async (t) => {
   });
   assertWaived(quote, await storedQuote(database, quote.quoteId), ruleId);
 });
+
+test('a waived You collect tip: the whole tip is held for the recipient and TipMe pays processing', async (t) => {
+  const database = await setup(t);
+  const ruleId = await insertRule(database);
+  await database.pool.query(
+    `UPDATE profiles SET collection_mode = 'collect', collect_verified_at = now() WHERE id = $1`,
+    [TOBI],
+  );
+  const quote = await quoteFor(database, 'tobi');
+  const row = await storedQuote(database, quote.quoteId);
+  assert.equal(row.collection_mode, 'collect');
+  assertWaived(quote, row, ruleId);
+  const { tipId, outcome } = await pay(database, quote, {
+    providerFeeMinor: 7500n,
+  });
+  assert.equal(outcome, 'applied');
+  const lines = await ledgerOfTip(database, tipId);
+  // TipMe's own money (platform_clearing) pays the partner's real fee; no fee revenue is booked.
+  assert.deepEqual(lines, [
+    { code: 'held_for_recipients', side: 'debit', amount: '500000' },
+    { code: 'platform_clearing', side: 'credit', amount: '7500' },
+    { code: 'provider_fee_expense', side: 'debit', amount: '7500' },
+    { code: 'recipient_payable', side: 'credit', amount: '500000' },
+  ]);
+  const sum = (side) =>
+    lines
+      .filter((l) => l.side === side)
+      .reduce((a, l) => a + BigInt(l.amount), 0n);
+  assert.equal(sum('debit'), sum('credit'));
+});
+
+/** Fails the test instead of hanging it when the pause read never returns. */
+const within = (promise, ms = 10_000) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`no answer in ${ms} ms`)), ms).unref(),
+    ),
+  ]);
+
+test('a signalling reading stamped before 2000 (a clock fault) still gives a start, in bounded time', async (t) => {
+  const database = await setup(t);
+  await paymentReading(database, {
+    low: false,
+    readAt: new Date('1999-12-30T12:00:00Z'),
+  });
+  const low = await paymentReading(database, {
+    low: true,
+    readAt: new Date('1999-12-31T12:00:00Z'),
+  });
+  assert.deepEqual(
+    await within(feeWaiversPaused(database.db, { activeProvider: ACTIVE })),
+    {
+      paused: true,
+      signals: ['payment_reserve_low'],
+      spellStartReadingId: low,
+    },
+  );
+  // With no clear reading before it either.
+  await database.pool.query(
+    `DELETE FROM payment_reserve_readings WHERE low = false`,
+  );
+  assert.equal(
+    (await within(feeWaiversPaused(database.db, { activeProvider: ACTIVE })))
+      .spellStartReadingId,
+    low,
+  );
+});
+
+/** Readings every `step` from `fromDays` to `toDays` ago (in SQL: thousands of rows at once). */
+async function manyReadings(
+  database,
+  { table, fromDays, toDays, step, signal },
+) {
+  const values =
+    table === 'payment_reserve_readings'
+      ? signal
+        ? `1000, 5000000, true`
+        : `9000000, 5000000, false`
+      : signal
+        ? `100000, 0, 100000, 1000000, 500000, 'critical'`
+        : `9000000, 0, 9000000, 1000000, 500000, 'ok'`;
+  const columns =
+    table === 'payment_reserve_readings'
+      ? 'available_minor, threshold_minor, low'
+      : 'available_minor, held_minor, own_minor, warning_minor, critical_minor, level';
+  await database.pool.query(
+    `INSERT INTO ${table} (id, provider, currency, ${columns}, read_at)
+     SELECT gen_random_uuid(), $1, 'NGN', ${values}, at
+       FROM generate_series(now() - $2::numeric * interval '1 day', now() - $3::numeric * interval '1 day',
+                            $4::interval) AS at`,
+    [ACTIVE, fromDays, toDays, step],
+  );
+}
+
+const firstSignal = async (database, table, signal, afterSql = 'TRUE') =>
+  (
+    await database.pool.query(
+      `SELECT id FROM ${table} WHERE ${signal} AND ${afterSql} ORDER BY read_at, id LIMIT 1`,
+    )
+  ).rows[0].id;
+
+test('a long spell handed between the tables gives its first reading', async (t) => {
+  const database = await setup(t);
+  // The collect reserve is critical from 130 to 110 days ago; the payments reserve, clear 121 days
+  // ago, reads low every 15 minutes from 120 days ago until now. One spell, begun 130 days ago.
+  await manyReadings(database, {
+    table: 'collect_reserve_readings',
+    fromDays: 131,
+    toDays: 131,
+    step: '1 hour',
+    signal: false,
+  });
+  await manyReadings(database, {
+    table: 'collect_reserve_readings',
+    fromDays: 130,
+    toDays: 110,
+    step: '1 hour',
+    signal: true,
+  });
+  await manyReadings(database, {
+    table: 'collect_reserve_readings',
+    fromDays: 105,
+    toDays: 105,
+    step: '1 hour',
+    signal: false,
+  });
+  await manyReadings(database, {
+    table: 'payment_reserve_readings',
+    fromDays: 121,
+    toDays: 121,
+    step: '1 hour',
+    signal: false,
+  });
+  await manyReadings(database, {
+    table: 'payment_reserve_readings',
+    fromDays: 120,
+    toDays: 0.001,
+    step: '15 minutes',
+    signal: true,
+  });
+  const expected = await firstSignal(
+    database,
+    'collect_reserve_readings',
+    `level = 'critical'`,
+  );
+  assert.deepEqual(
+    await within(feeWaiversPaused(database.db, { activeProvider: ACTIVE })),
+    {
+      paused: true,
+      signals: ['payment_reserve_low'],
+      spellStartReadingId: expected,
+    },
+  );
+});
+
+test('a spell longer than the look-back reports its first reading inside it', async (t) => {
+  const database = await setup(t);
+  await manyReadings(database, {
+    table: 'payment_reserve_readings',
+    fromDays: 501,
+    toDays: 501,
+    step: '1 hour',
+    signal: false,
+  });
+  await manyReadings(database, {
+    table: 'payment_reserve_readings',
+    fromDays: 500,
+    toDays: 0.001,
+    // Not a divisor of 400 days, so no reading sits exactly on the look-back's edge.
+    step: '7 hours',
+    signal: true,
+  });
+  const expected = await firstSignal(
+    database,
+    'payment_reserve_readings',
+    'low',
+    `read_at > (SELECT max(read_at) FROM payment_reserve_readings) - interval '400 days'`,
+  );
+  assert.equal(
+    (await within(feeWaiversPaused(database.db, { activeProvider: ACTIVE })))
+      .spellStartReadingId,
+    expected,
+  );
+});
