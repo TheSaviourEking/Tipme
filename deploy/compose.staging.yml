@@ -152,7 +152,8 @@ services:
       - /app/apps/web/.next/server/route-cache:size=64m,uid=1000,gid=1000
     environment:
       # The same password gate as the API; the web's server proves itself to the API with it.
-      PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:-}
+      # Required: this build opens the pretend inbox, so staging's website is never served ungated.
+      PREVIEW_PASSWORD: ${PREVIEW_PASSWORD:?set PREVIEW_PASSWORD (staging's website is always gated)}
       PREVIEW_COOKIE_DOMAIN: ${PREVIEW_COOKIE_DOMAIN:-}
       WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
       API_INTERNAL_ORIGIN: http://staging-api:4000

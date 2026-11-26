@@ -728,3 +728,18 @@ test('mail failover: the fallback list is a deploy setting, its tunables are not
       );
   }
 });
+
+// Review M2: staging's website always sits behind the preview password (its build opens the
+// pretend inbox), so a missing line must stop the deploy rather than open the site.
+test('staging requires PREVIEW_PASSWORD for its website', () => {
+  const text = readFileSync(
+    new URL('../deploy/compose.staging.yml', import.meta.url),
+    'utf8',
+  );
+  const web = text.slice(
+    text.indexOf('\n  web:\n'),
+    text.indexOf('\n  worker:\n'),
+  );
+  assert.match(web, /PREVIEW_PASSWORD: \$\{PREVIEW_PASSWORD:\?/);
+  assert.doesNotMatch(web, /PREVIEW_PASSWORD: \$\{PREVIEW_PASSWORD:-/);
+});
