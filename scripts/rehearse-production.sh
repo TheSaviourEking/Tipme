@@ -264,8 +264,10 @@ all_answer() {
 }
 
 # The website under load of its own while the colours switch: every answer's status, 10 a second.
+# A page (robots.txt), not /api/version: a draining copy answers that with 503 by design (the drain's
+# signal to the edge, as the API's readiness answers 503 draining).
 # Browsers during the switches (review I1): a fresh cookie jar each time, the page, then every
-# /_next/static asset it names. A page from one build needs that build's chunks; any status but 200
+# /_next/static asset it names (the HTML's flight data quotes them as \"…\": the backslash ends one). A page from one build needs that build's chunks; any status but 200
 # (or a page that names no asset) is a failure, logged with the page.
 web_pages() {
   local n=0 jar page asset code
@@ -277,7 +279,7 @@ web_pages() {
       code=$(curl -s -c "$jar" -b "$jar" -o "$TIPME_HOME/page.html" -w '%{http_code}' --max-time 10 "$web_base$page" || echo 000)
       echo "page $page $code" >>"$LOGS/web-pages.log"
       [[ "$code" == 200 ]] || continue
-      grep -oE '/_next/static/[^"?]+' "$TIPME_HOME/page.html" | sort -u >"$TIPME_HOME/assets" || true
+      grep -oE '/_next/static/[^"?\\]+' "$TIPME_HOME/page.html" | sort -u >"$TIPME_HOME/assets" || true
       [[ -s "$TIPME_HOME/assets" ]] || echo "page $page names-no-asset" >>"$LOGS/web-pages.log"
       while read -r asset; do
         code=$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' --max-time 10 "$web_base$asset" || echo 000)
@@ -289,7 +291,7 @@ web_pages() {
 
 web_load() {
   while [[ ! -f "$TIPME_HOME/web-load.stop" ]]; do
-    curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 "$web_base/api/version" >>"$LOGS/web-load.log" || true
+    curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 "$web_base/robots.txt" >>"$LOGS/web-load.log" || true
     sleep 0.1
   done
 }
