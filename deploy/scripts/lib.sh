@@ -434,6 +434,21 @@ start_idle_colour() {
   exit 1
 }
 
+# The old colour's website, before it stops (review I1, 26 Nov 2026). Both builds run during a
+# switch, and a page from one needs that build's own /_next/static chunks. The edge pins each browser
+# to one colour; this flag makes the old copy's /api/version answer 503, so within two failed edge
+# checks (2 s apart, 3 s timeout) page requests move to the new colour, while the old copy still serves
+# the assets of the pages it already sent. Then it stops. A colour with no website running (the first
+# move here) has nothing to drain.
+WEB_DRAIN_SECONDS=${WEB_DRAIN_SECONDS:-8}
+drain_web() {
+  local version=$1 colour=$2
+  if compose_for "$version" exec -T "web-$colour" touch /tmp/tipme-draining 2>/dev/null; then
+    echo "==> Draining web-$colour for ${WEB_DRAIN_SECONDS} s"
+    sleep "$WEB_DRAIN_SECONDS"
+  fi
+}
+
 # The new colour serves: record it first (if anything later fails, the state names the colour that
 # is serving), then stop the old colour (the edge stops sending its API traffic as it fails
 # readiness, and its website refuses new connections, which the edge retries on the new one; 20 s
@@ -448,6 +463,7 @@ switch_to_idle() {
     # The old colour's website too (named in this version's file; a colour from before the website
     # moved here has none, and stopping a service with no container does nothing).
     read -r -a services <<<"$(colour_services "$version" "$old")"
+    has_web "$version" && drain_web "$version" "$old"
     echo "==> Stopping ${services[*]}"
     compose_for "$version" stop -t 20 "${services[@]}"
   fi

@@ -92,26 +92,45 @@
 	}
 }
 
-# One copy per colour, only one colour at a time outside a deploy (as the API's above). A deploy
-# starts the idle colour, waits until it serves, then stops the old one: on SIGTERM Next stops
-# taking connections and finishes its requests, and a refused connection is retried on the other.
+# One copy per colour, only one colour at a time outside a deploy (as the API's above). During a
+# switch both builds run, and a page from one needs its own build's /_next/static chunks (the other
+# build lacks them: 404). So a browser is pinned to one colour by a cookie (tipme_web: a hash of the
+# copy's address, nothing about the visitor). The deploy then drains the old colour before stopping
+# it (lib.sh, drain_web): its /api/version answers 503, page requests move to the new colour (a new
+# cookie), and its own assets stay reachable on the static route below until it stops.
 {$PRODUCTION_WEB_HOST} {
 	import website
-	reverse_proxy {
-		to tipme-production-web-blue-1:3000 tipme-production-web-green-1:3000
-		lb_policy round_robin
-		lb_try_duration 5s
-		# A request sent to a stopping copy is refused at once and tried on the other after this,
-		# until two active checks take the stopping copy out. No passive fail_duration: outside a
-		# deploy only one colour runs, and one refused connection would take the only copy out.
-		lb_try_interval 50ms
-		# The build id (no API call, open on every copy): the same check the deploy waits for.
-		health_uri /api/version
-		health_interval 2s
-		health_timeout 3s
-		health_fails 2
-		health_status 200
-		import website_transport
+	# Assets: the pinned copy, with no active check, so a draining copy still serves the chunks of the
+	# pages it sent. Passive: a copy refusing connections (stopped) is left out after 3 tries for 2 s.
+	@static path /_next/static/*
+	handle @static {
+		reverse_proxy {
+			to tipme-production-web-blue-1:3000 tipme-production-web-green-1:3000
+			lb_policy cookie tipme_web
+			lb_try_duration 5s
+			lb_try_interval 50ms
+			max_fails 3
+			fail_duration 2s
+			import website_transport
+		}
+	}
+	handle {
+		reverse_proxy {
+			to tipme-production-web-blue-1:3000 tipme-production-web-green-1:3000
+			lb_policy cookie tipme_web
+			# A visitor pinned to a copy that stopped without draining waits here until two active
+			# checks take it out (up to about 6 s), then moves; no passive fail_duration: outside a
+			# deploy only one colour runs, and one refused connection would take the only copy out.
+			lb_try_duration 10s
+			lb_try_interval 50ms
+			# The build id (no API call, open on every copy): the same check the deploy waits for.
+			health_uri /api/version
+			health_interval 2s
+			health_timeout 3s
+			health_fails 2
+			health_status 200
+			import website_transport
+		}
 	}
 }
 

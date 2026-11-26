@@ -24,7 +24,8 @@
 # Passes only if k6 made (nearly) every request it was asked to, no served read failed, readiness
 # answered nothing but 503 `draining` (the drain's signal to Caddy), /health/release shows B
 # after the deploy and A after the rollback (every answer, not just one), and the website (polled
-# 10 times a second through the edge for the whole run) answered every request, B then A likewise.
+# 10 times a second through the edge for the whole run) answered every request, B then A likewise,
+# and browsers with cookie jars loading pages and every /_next/static asset they name saw no failure.
 #
 # NOT proven here: production-mode boot. Production's config refuses every payment provider
 # until the payments plan adds bachs-live, so the API and workers run in password-protected
@@ -92,6 +93,7 @@ export TIPME_HOME
 built=()
 made_edge_network=0
 web_load_pid=""
+web_pages_pid=""
 
 compose() {
   TIPME_VERSION="$A" TIPME_BLUE_VERSION=none TIPME_GREEN_VERSION=none \
@@ -107,6 +109,7 @@ cleanup() {
     docker logs "$EDGE" >"$LOGS/edge.log" 2>&1 || true
   fi
   [[ -z "$web_load_pid" ]] || kill "$web_load_pid" 2>/dev/null || true
+  [[ -z "$web_pages_pid" ]] || kill "$web_pages_pid" 2>/dev/null || true
   docker rm -f "$K6" "$EDGE" >/dev/null 2>&1 || true
   if [[ -f "$RELEASES/$A/compose.production.yml" ]]; then
     compose --profile tools down -v --remove-orphans -t 20 >/dev/null 2>&1 || true
@@ -261,6 +264,29 @@ all_answer() {
 }
 
 # The website under load of its own while the colours switch: every answer's status, 10 a second.
+# Browsers during the switches (review I1): a fresh cookie jar each time, the page, then every
+# /_next/static asset it names. A page from one build needs that build's chunks; any status but 200
+# (or a page that names no asset) is a failure, logged with the page.
+web_pages() {
+  local n=0 jar page asset code
+  while [[ ! -f "$TIPME_HOME/web-load.stop" ]]; do
+    n=$((n + 1))
+    jar="$TIPME_HOME/jar.$((n % 4))"
+    rm -f "$jar"
+    for page in / /legal/privacy; do
+      code=$(curl -s -c "$jar" -b "$jar" -o "$TIPME_HOME/page.html" -w '%{http_code}' --max-time 10 "$web_base$page" || echo 000)
+      echo "page $page $code" >>"$LOGS/web-pages.log"
+      [[ "$code" == 200 ]] || continue
+      grep -oE '/_next/static/[^"?]+' "$TIPME_HOME/page.html" | sort -u >"$TIPME_HOME/assets" || true
+      [[ -s "$TIPME_HOME/assets" ]] || echo "page $page names-no-asset" >>"$LOGS/web-pages.log"
+      while read -r asset; do
+        code=$(curl -s -b "$jar" -o /dev/null -w '%{http_code}' --max-time 10 "$web_base$asset" || echo 000)
+        echo "asset $code $asset (page $page)" >>"$LOGS/web-pages.log"
+      done <"$TIPME_HOME/assets"
+    done
+  done
+}
+
 web_load() {
   while [[ ! -f "$TIPME_HOME/web-load.stop" ]]; do
     curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 "$web_base/api/version" >>"$LOGS/web-load.log" || true
@@ -279,6 +305,8 @@ docker run -d --name "$K6" --network "container:$EDGE" \
   "$K6_IMAGE" run /scripts/no-downtime.k6.js >/dev/null
 web_load &
 web_load_pid=$!
+web_pages &
+web_pages_pid=$!
 sleep 10
 
 switches=ok
@@ -310,6 +338,12 @@ fi
 k6_status=$(docker wait "$K6")
 touch "$TIPME_HOME/web-load.stop"
 wait "$web_load_pid" || true
+wait "$web_pages_pid" || true
+pages_made=$(grep -c '^page ' "$LOGS/web-pages.log" || true)
+assets_made=$(grep -c '^asset ' "$LOGS/web-pages.log" || true)
+pages_failed=$(grep -vcE '^(page [^ ]+ 200|asset 200 )' "$LOGS/web-pages.log" || true)
+echo "==> Website pages: $pages_made pages and $assets_made /_next/static assets with a cookie jar, $pages_failed not 200"
+((pages_made > 20 && assets_made > 20 && pages_failed == 0)) || switches=failed
 web_made=$(wc -l <"$LOGS/web-load.log" | tr -d ' ')
 web_failed=$(grep -vc '^200$' "$LOGS/web-load.log" || true)
 echo "==> Website: $web_made requests through the edge, $web_failed not 200"

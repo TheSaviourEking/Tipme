@@ -255,6 +255,11 @@ if [[ " $* " == *" stop "* || " $* " == *" start "* ]]; then
   done
   exit 0
 fi
+# exec into a colour's website: works only while it runs (the drain flag).
+if [[ " $* " == *" exec "* ]]; then
+  for name in "$@"; do [[ "$name" == web-* ]] && { [[ -f "$FAKE_STATE/$name" ]]; exit $?; }; done
+  exit 0
+fi
 if [[ " $* " == *" run --rm migrate "* && -n "$FAKE_MIGRATE_FAILS" ]]; then exit 1; fi
 # The SSH session running the deploy drops while the migrations run.
 if [[ " $* " == *" run --rm migrate "* && -n "$FAKE_MIGRATE_HANGUP" ]]; then kill -HUP "$PPID"; exit 0; fi
@@ -299,7 +304,7 @@ case "$url" in
 esac
 exit 0`,
   );
-  fake('sleep', 'exit 0');
+  fake('sleep', 'echo "sleep $*" >> "$FAKE_LOG"; exit 0');
   /** Which version each colour or worker runs now ('' when stopped). */
   const running = (service) => s.read(`fake/${service}`).trim();
   const colours = () =>

@@ -106,6 +106,17 @@ const server = http.createServer((req, res) => {
     setTimeout(() => res.write('<p>part two</p>'), 400);
     return setTimeout(() => res.end('<p>end</p>'), 800);
   }
+  // A page of this build: its assets exist only on this copy (as a Next build's hashed chunks).
+  if (req.url === '/page') {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    return res.end('<!doctype html><script src="/_next/static/build-' + name + '/app.js"></script>' +
+      '<link rel="stylesheet" href="/_next/static/build-' + name + '/app.css">' + name);
+  }
+  if (req.url.startsWith('/_next/static/build-')) {
+    const mine = req.url.startsWith('/_next/static/build-' + name + '/');
+    res.writeHead(mine ? 200 : 404, { 'cache-control': 'public, max-age=31536000, immutable' });
+    return res.end(mine ? 'asset of ' + name : 'not in this build');
+  }
   if (req.url.startsWith('/_next/static/')) {
     res.writeHead(200, {
       'content-type': 'application/javascript; charset=UTF-8',
@@ -413,6 +424,76 @@ test(
   },
 );
 
+// A browser with a cookie jar: the page, then every /_next/static asset it names. During a switch
+// both builds run; round-robin sent half the assets to the build that lacks them (a 404 per chunk).
+const cookieOf = (headers) =>
+  (headers['set-cookie'] ?? []).map((c) => c.split(';')[0]);
+async function visit(jar, failures) {
+  const send = () => (jar.size ? { Cookie: [...jar.values()].join('; ') } : {});
+  const remember = (headers) => {
+    for (const c of cookieOf(headers)) jar.set(c.split('=')[0], c);
+  };
+  const page = await get(WEB_HOST, '/page', send());
+  remember(page.headers);
+  if (page.status !== 200) return failures.push(`page ${page.status}`);
+  for (const [, asset] of page.body.matchAll(
+    /(?:src|href)="(\/_next\/static\/[^"]+)"/g,
+  )) {
+    const answer = await get(WEB_HOST, asset, send());
+    remember(answer.headers);
+    if (answer.status !== 200)
+      failures.push(
+        `${asset} ${answer.status} after a page from ${page.body.slice(-9)}`,
+      );
+  }
+}
+
+test(
+  "during a website switch every page gets its own build's assets, and a stopped colour's visitors move",
+  { skip },
+  async () => {
+    const failures = [];
+    let visits = 0;
+    let stop = false;
+    // A returning browser keeps its jar for the whole switch; each other visit is a new browser.
+    const returning = new Map();
+    const traffic = (async () => {
+      while (!stop) {
+        await visit(new Map(), failures);
+        await visit(returning, failures);
+        visits += 2;
+        await sleep(20);
+      }
+    })();
+    try {
+      // Both colours serve (the overlap), then the deploy drains the old one and stops it.
+      await sleep(2000);
+      writeFileSync(join(flags, 'web-green.notready'), '');
+      await sleep(6500);
+      const exit = await new Promise((done) =>
+        spawn('docker', ['stop', '-t', '15', `${NET}-web-green`]).on(
+          'exit',
+          done,
+        ),
+      );
+      assert.equal(exit, 0);
+      await sleep(3000);
+    } finally {
+      stop = true;
+      await traffic;
+      rmSync(join(flags, 'web-green.notready'), { force: true });
+    }
+    assert.ok(visits > 40, `only ${visits} visits`);
+    assert.deepEqual(failures, []);
+    // Green back for the tests after this one.
+    assert.equal(docker(['start', `${NET}-web-green`]).status, 0);
+    await waitFor(async () => {
+      const seen = new Set((await burst(10, WEB_HOST)).map((r) => r.body));
+      return seen.has('web-green');
+    }, 'web-green to take traffic again');
+  },
+);
+
 // The deploy stops the old colour once the new one serves: no visitor may see an error.
 test(
   'a website colour stopped mid-traffic costs no failed request',
@@ -420,12 +501,16 @@ test(
   async () => {
     let stop = false;
     const statuses = [];
-    const traffic = (async () => {
-      while (!stop) {
-        statuses.push((await get(WEB_HOST)).status);
-        await sleep(25);
-      }
-    })();
+    // Three browsers at once, with no cookie (each request picks a copy at random) and no drain
+    // first: the worst case, a copy that stopped on its own.
+    const traffic = Promise.all(
+      [1, 2, 3].map(async () => {
+        while (!stop) {
+          statuses.push((await get(WEB_HOST)).status);
+          await sleep(25);
+        }
+      }),
+    );
     await sleep(500);
     // Not spawnSync: the traffic must keep flowing while the copy shuts down.
     const stopped = Date.now();

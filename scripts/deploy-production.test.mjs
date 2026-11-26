@@ -1051,3 +1051,55 @@ test('pruning an old production version removes its web image too', () => {
   assert.match(images, /tipme-web-production:bbbbbbb2/);
   assert.match(images, /tipme-web-production:ccccccc3/);
 });
+
+// Review I1 (26 Nov 2026): the old colour's website is drained before it stops. Its /api/version
+// answers 503, so the edge moves page traffic off it while it still serves the assets of pages it
+// already sent (the edge's static route), then it stops.
+test("the old colour's website is drained, and the edge given time, before it stops", () => {
+  const { run, read, ship } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = lines(read).length;
+  const result = run('deploy-production.sh', [B]);
+  assert.equal(result.status, 0, result.stderr);
+  const calls = lines(read).slice(before);
+  const served = indexOf(calls, /\/api\/version -> bbbbbbb2$/);
+  const drain = indexOf(
+    calls,
+    / exec -T web-blue touch \/tmp\/tipme-draining /,
+  );
+  const wait = indexOf(calls, /^sleep 8$/);
+  const stop = indexOf(calls, / stop -t 20 api-blue web-blue /);
+  assert.ok(served < drain && drain < wait && wait < stop, calls.join('\n'));
+  assert.match(result.stdout, /Draining web-blue/);
+});
+
+test('a first move (the old colour had no website) has nothing to drain and does not wait', () => {
+  const { run, read, ship } = stageProduction();
+  ship(A);
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = lines(read).length;
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const calls = lines(read).slice(before);
+  assert.equal(indexOf(calls, /^sleep 8$/), -1, calls.join('\n'));
+  assert.ok(calls.some((l) => / stop -t 20 api-blue web-blue /.test(l)));
+});
+
+test('a rollback drains the website it leaves too', () => {
+  const { run, read, ship } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const before = lines(read).length;
+  assert.equal(run('rollback-production.sh').status, 0);
+  const calls = lines(read).slice(before);
+  const drain = indexOf(
+    calls,
+    / exec -T web-green touch \/tmp\/tipme-draining /,
+  );
+  const stop = indexOf(calls, / stop -t 20 api-green web-green /);
+  assert.ok(drain >= 0 && drain < stop, calls.join('\n'));
+});
