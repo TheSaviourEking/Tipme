@@ -26,6 +26,7 @@ import {
   type RefetchScheduler,
 } from '@/lib/live-refetch';
 import { firstReadPhase, type FirstReadPhase } from '@/lib/first-read';
+import { livePresence, type LivePresenceMember } from '@/lib/live-presence';
 import { apiUrl } from '@/lib/session-client';
 
 interface LiveContextValue {
@@ -123,6 +124,18 @@ export function LiveProvider({
     timingRef.current = timing;
   });
 
+  // The update notice's registry (src/lib/live-presence.ts). Joined on mount whether or not live
+  // is enabled: a provider with live off counts as "provider, not connected" (5-minute checks).
+  const presence = useRef<LivePresenceMember | null>(null);
+  useEffect(() => {
+    const member = livePresence.join();
+    presence.current = member;
+    return () => {
+      presence.current = null;
+      member.leave();
+    };
+  }, []);
+
   useEffect(() => {
     if (!enabled) return;
     // No EventSource: stay 'idle', so the bell keeps its own poll, as today.
@@ -150,7 +163,11 @@ export function LiveProvider({
       client.onResync(({ immediate }) =>
         scheduler.resyncAll(immediate ? { delayMs: 0 } : undefined),
       ),
-      client.onStatus(setStatus),
+      client.onStatus((next) => {
+        setStatus(next);
+        presence.current?.status(next);
+      }),
+      client.onReady(() => presence.current?.ready()),
       client.onSignedOut(() => signedOut.current?.()),
     ];
     const visibility = () => client.visibilityChanged();
@@ -163,6 +180,8 @@ export function LiveProvider({
       window.removeEventListener('online', online);
       for (const off of offs) off();
       client.stop();
+      // The listeners are gone before stop says 'idle': tell the registry the stream has ended.
+      presence.current?.status('idle');
     };
   }, [stream, scheduler, enabled, keepers]);
 
