@@ -153,6 +153,16 @@ export const opsAnnouncementsChanged: LiveMessage = {
 };
 
 /**
+ * A mail provider's card changed: a test email was sent or failed, a test was confirmed, or its
+ * failover health changed or was cleared. Staff holding `issues.view` or `providers.manage`, the
+ * two the providers read route accepts.
+ */
+export const opsProvidersChanged: LiveMessage = {
+  to: { staff: ['issues.view', 'providers.manage'] },
+  type: 'ops.providers.changed',
+};
+
+/**
  * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
  * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
  * the browser's own client uses the same range. One constant, so the two can't drift apart.

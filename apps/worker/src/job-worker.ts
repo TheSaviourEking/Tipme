@@ -124,6 +124,7 @@ import {
   jobSignalsFor,
   reconcileIssueSignals,
   requestGate,
+  signalProvidersAfter,
   whenRequestMoved,
   PAYOUT_SETUP_JOB_NAME,
   WEEKLY_REPORTS_JOB_NAME,
@@ -1470,12 +1471,15 @@ export async function startJobWorker(
       prefix: config.QUEUE_PREFIX,
     }),
     settings: healthSettings,
-    onChange: mailHealthAlerter({
-      url: config.ALERT_WEBHOOK_URL,
-      labels: MAIL_PROVIDER_LABELS,
-      group: failoverGroup,
-      log: (entry) => logger.warn(entry),
-    }),
+    onChange: signalProvidersAfter(
+      mailHealthAlerter({
+        url: config.ALERT_WEBHOOK_URL,
+        labels: MAIL_PROVIDER_LABELS,
+        group: failoverGroup,
+        log: (entry) => logger.warn(entry),
+      }),
+      publishLive,
+    ),
     log: (entry) => logger.warn(entry),
   });
   // Whether staff fixed the provider in ops, read at most every 5 seconds like the active one.

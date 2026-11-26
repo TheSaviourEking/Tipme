@@ -8,6 +8,7 @@ import {
   approvalsChanged,
   issuesChanged,
   opsAnnouncementsChanged,
+  opsProvidersChanged,
   staffChanged,
   type LiveMessage,
 } from '@tipme/contracts';
@@ -249,4 +250,22 @@ export function announcementSignals(
     'announcements_queued' | 'announcements_idle' | 'announcements_paused',
 ): LiveMessage[] {
   return outcome === 'announcements_queued' ? [opsAnnouncementsChanged] : [];
+}
+
+/**
+ * Mail health's `onChange` (tripped, still down, recovered): the staff alert first, then a signal
+ * for the Providers page. The signal goes even when the alert fails, and the alert's failure still
+ * reaches the breaker, which logs it.
+ */
+export function signalProvidersAfter<E>(
+  alert: (event: E) => Promise<void>,
+  publishLive: (messages: LiveMessage[]) => Promise<void>,
+): (event: E) => Promise<void> {
+  return async (event) => {
+    try {
+      await alert(event);
+    } finally {
+      void publishLive([opsProvidersChanged]);
+    }
+  };
 }

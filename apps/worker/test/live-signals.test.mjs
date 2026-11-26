@@ -17,6 +17,7 @@ import {
   liveSignalFor,
   reconcileIssueSignals,
   requestGate,
+  signalProvidersAfter,
   whenRequestMoved,
 } from '../dist/live-signals.js';
 
@@ -388,4 +389,38 @@ test('a queued batch signals announcement staff; idle and paused do not', () => 
   ]);
   for (const outcome of ['announcements_idle', 'announcements_paused'])
     assert.deepEqual(announcementSignals(outcome), []);
+});
+
+const PROVIDERS = {
+  to: { staff: ['issues.view', 'providers.manage'] },
+  type: 'ops.providers.changed',
+};
+
+test('a mail health change signals providers staff after the alert', async () => {
+  const order = [];
+  const onChange = signalProvidersAfter(
+    async (event) => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      order.push(`alert ${event.change}`);
+    },
+    async (messages) => void order.push(messages),
+  );
+  await onChange({ provider: 'zeptomail', change: 'tripped' });
+  assert.deepEqual(order, ['alert tripped', [PROVIDERS]]);
+});
+
+test('an alert that fails still signals, and the failure still reaches the breaker', async () => {
+  const published = [];
+  const onChange = signalProvidersAfter(
+    async () => {
+      throw new Error('webhook down');
+    },
+    async (messages) => void published.push(messages),
+  );
+  // The breaker logs a failed alert (mail.health_alert_failed): the rejection is passed on.
+  await assert.rejects(
+    onChange({ provider: 'zeptomail', change: 'recovered' }),
+    /webhook down/,
+  );
+  assert.deepEqual(published, [[PROVIDERS]]);
 });

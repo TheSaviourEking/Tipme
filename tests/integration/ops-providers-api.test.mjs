@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { OPS_PERMISSION } from '../../apps/api/dist/ops/ops.guard.js';
 import { OpsProvidersController } from '../../apps/api/dist/ops/providers.controller.js';
@@ -18,7 +18,17 @@ import {
 import {
   createMailHealth,
   memoryMailHealthStore,
+  redisMailHealthStore,
 } from '../../packages/mail/dist/index.js';
+import {
+  REDIS_URL,
+  Redis,
+  WEB,
+  browserHeaders,
+  openEventStream,
+  opsSignIn,
+  startStack,
+} from './helpers.mjs';
 
 const sealing = mailSealing(Buffer.alloc(32, 7));
 const [ADA, TOBI] = DEMO_PROFILES;
@@ -585,4 +595,122 @@ test('only providers in the failover group carry a failover state', async (t) =>
   );
   // mock (the default) and brevo (the fallback) stand in for each other; ses is configured only.
   assert.deepEqual(health, { mock: 'healthy', ses: null, brevo: 'healthy' });
+});
+
+// Live providers screen (addendum §3.3), over HTTP: a confirmed test and a cleared provider signal
+// `ops.providers.changed` to staff holding issues.view or providers.manage, and nobody else.
+async function liveStack(t) {
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  await database.reset();
+  await ensureOwnerRole(database.db);
+  registerRealSeriousActions();
+  const stack = await startStack({
+    databaseUrl: database.url,
+    apiEnv: {
+      WEB_ORIGIN: WEB,
+      LIVE_UPDATES_ENABLED: 'true',
+      RATE_LIMIT_LIVE_CONNECT_PER_MIN: '100000',
+      RATE_LIMIT_AUTH_PER_HOUR: '1000',
+    },
+  });
+  const streams = [];
+  // An open stream holds app.close() forever: streams close first.
+  t.after(async () => {
+    for (const stream of streams) stream.close();
+    await stack.stop();
+  });
+  const q = (text, values = []) =>
+    database.pool.query(text, values).then((result) => result.rows);
+  let n = 0;
+  /** A staff member holding just this one permission, with their ops stream open and ready. */
+  const staffWith = async (permission) => {
+    const phone = `+23481${String(Date.now()).slice(-6)}${String(++n).padStart(2, '0')}`;
+    const person = await opsSignIn(stack.api, database.db, phone);
+    const role = `role_${randomUUID().slice(0, 8)}`;
+    await q(`INSERT INTO roles (id, name) VALUES ($1, $1)`, [role]);
+    await q(
+      `INSERT INTO role_permissions (role_id, permission) VALUES ($1, $2)`,
+      [role, permission],
+    );
+    await q(
+      `UPDATE staff SET role_id = $1 WHERE user_id = (SELECT id FROM users WHERE phone_e164 = $2)`,
+      [role, phone],
+    );
+    const stream = await openEventStream(`${stack.api}/v1/ops/events`, {
+      cookie: person.cookie,
+      origin: WEB,
+    });
+    streams.push(stream);
+    assert.equal(stream.status, 200, permission);
+    await stream.waitFor(/^data: \{"type":"ready"\}$/);
+    return { ...person, phone, stream };
+  };
+  const call = (person, path, body) =>
+    fetch(`${stack.api}/v1/ops/providers${path}`, {
+      method: 'POST',
+      headers: browserHeaders(person.cookie),
+      body: JSON.stringify(body),
+    });
+  /** The two who should hear it get exactly one; the announcements-only person none. */
+  const expectSignal = async ({ manager, viewer, other }) => {
+    const changed = /^data: \{"type":"ops\.providers\.changed"\}$/;
+    await manager.stream.waitFor(changed);
+    await viewer.stream.waitFor(changed);
+    // A beat for a duplicate, or a wrong delivery, to arrive: then there must be none.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const count = (stream) =>
+      stream.frames.filter((f) => changed.test(f)).length;
+    assert.equal(count(manager.stream), 1);
+    assert.equal(count(viewer.stream), 1);
+    assert.equal(count(other.stream), 0);
+  };
+  return { ...database, stack, q, staffWith, call, expectSignal };
+}
+
+test('confirming a test reaches providers staff', async (t) => {
+  const s = await liveStack(t);
+  const manager = await s.staffWith('providers.manage');
+  const viewer = await s.staffWith('issues.view');
+  const other = await s.staffWith('announcements.send');
+  // A test waiting for its link, with a token this test knows.
+  const token = randomBytes(32).toString('base64url');
+  await s.q(
+    `INSERT INTO provider_tests (id, kind, provider, started_by, started_at, target_hint, token_sha256)
+     SELECT gen_random_uuid(), 'mail', 'mock', u.id, now(), 's•••@example.com', $2
+       FROM users u WHERE u.phone_e164 = $1`,
+    [manager.phone, createHash('sha256').update(token).digest('hex')],
+  );
+  const confirmed = await s.call(manager, '/tests/confirm', { token });
+  assert.equal(confirmed.status, 200);
+  assert.equal((await confirmed.json()).data.outcome, 'confirmed');
+  await s.expectSignal({ manager, viewer, other });
+
+  // A link already used changes nothing, so it signals nothing.
+  const again = await s.call(manager, '/tests/confirm', { token });
+  assert.equal((await again.json()).data.outcome, 'invalid');
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  assert.equal(
+    manager.stream.frames.filter((f) => /ops\.providers\.changed/.test(f))
+      .length,
+    1,
+  );
+});
+
+test("clearing a provider's health reaches them too", async (t) => {
+  const s = await liveStack(t);
+  const manager = await s.staffWith('providers.manage');
+  const viewer = await s.staffWith('issues.view');
+  const other = await s.staffWith('announcements.send');
+  // The pretend provider tripped, in the breaker the API reads (Redis, under the stack's prefix).
+  const redis = new Redis(REDIS_URL);
+  t.after(() => redis.quit());
+  await redisMailHealthStore(redis, {
+    ...HEALTH,
+    prefix: s.stack.prefix,
+  }).trip('mock', Date.now(), '4 of 6 codes unused in 10 min', 'codes');
+  const cleared = await s.call(manager, '/mail/mock/health/clear', { reason });
+  assert.equal(cleared.status, 200, await cleared.clone().text());
+  assert.deepEqual((await cleared.json()).data, { cleared: true });
+  await s.expectSignal({ manager, viewer, other });
 });

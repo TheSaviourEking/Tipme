@@ -439,6 +439,13 @@ export interface MailDeliveryDeps {
   warn?(entry: Record<string, string | number | null>): void;
   /** Automatic failover (owner, 23 Nov 2026). Left out, or with no fallbacks: today's behaviour. */
   failover?: MailFailoverDeps;
+  /**
+   * A provider-test email reached a final state: recorded sent, failed for good, or finished unsent
+   * (expired or suppressed, which its card shows as failed). Called after that write resolved; a
+   * retry is not final and does not call it. The worker signals the staff watching the Providers
+   * page. A throw is ignored.
+   */
+  onProviderTestSettled?: () => void;
 }
 
 export interface MailFailoverDeps {
@@ -496,6 +503,15 @@ export async function deliverDueMail(
       /* ignored */
     }
   };
+  // A test email's card moved on: never changes what happens to a mail either.
+  const settled = (mail: { type: string }) => {
+    if (mail.type !== 'provider_test') return;
+    try {
+      deps.onProviderTestSettled?.();
+    } catch {
+      /* ignored */
+    }
+  };
   const claimed = await claimDueMail(deps.db, deps.sealing, input);
   if (claimed.length === 0) return result;
   const active = await deps.activeProvider();
@@ -514,6 +530,8 @@ export async function deliverDueMail(
     const gate = await mailGate(deps.db, deps.sealing, mail, input.now);
     if (gate !== 'send') {
       await finishWithoutSending(deps.db, mail, gate, input.now);
+      // An expired or suppressed test reads "didn't get through" on its card: failed for good.
+      settled(mail);
       if (gate === 'expired') result.expired += 1;
       else if (gate === 'suppressed') result.suppressed += 1;
       else result.skipped += 1;
@@ -587,8 +605,10 @@ export async function deliverDueMail(
         now: input.now,
       });
       if (outcome === 'stale') return;
-      if (outcome === 'failed') result.failed += 1;
-      else result.retried += 1;
+      if (outcome === 'failed') {
+        result.failed += 1;
+        settled(mail);
+      } else result.retried += 1;
       log({
         event: outcome === 'failed' ? 'mail.failed' : 'mail.retry',
         message_id: mail.id,
@@ -797,7 +817,10 @@ export async function deliverDueMail(
       claimedAt: mail.claimedAt,
       now: input.now,
     });
-    if (recorded === 'sent') result.sent += 1;
+    if (recorded === 'sent') {
+      result.sent += 1;
+      settled(mail);
+    }
     log({
       event: recorded === 'sent' ? 'mail.sent' : 'mail.sent_stale_claim',
       message_id: mail.id,
