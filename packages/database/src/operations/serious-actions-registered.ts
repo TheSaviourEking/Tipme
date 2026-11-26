@@ -82,7 +82,7 @@ import {
 import {
   CARD_COSTS_CHANGE_ACTION,
   cardCostRecord,
-  cardCostRowAt,
+  cardCostInForce,
   cardCostAt,
   cardCostWords,
   checkedCardCostPayload,
@@ -695,12 +695,8 @@ const cardCostsChange = acting<{
   permission: 'fees.manage',
   target: () => 'card_costs',
   current: async (tx) => {
-    const now = new Date();
-    const row = await cardCostRowAt(tx, now);
-    return {
-      id: row?.id ?? null,
-      ...cardCostRecord(await cardCostAt(tx, now)),
-    };
+    const { cost, row } = await cardCostInForce(tx, new Date());
+    return { id: row?.id ?? null, ...cardCostRecord(cost) };
   },
   describe: async (tx, payload) => {
     const to = checkedCardCostPayload(payload);

@@ -1,4 +1,4 @@
-import { cardFromMinor } from '@tipme/domain';
+import { cardOfferedFromNaira } from '@tipme/domain';
 import { formatNaira } from './demo-amount.ts';
 import { bpsToPercent, percentToBps } from './fee-percent.ts';
 
@@ -17,7 +17,6 @@ export interface CardCostFigures {
 
 // The web app targets ES2017 (no BigInt literals).
 const HUNDRED = BigInt(100);
-const ONE = BigInt(1);
 
 /** "Card fee 2% + ₦45, margin ₦15". */
 export function cardCostSummary(cost: CardCostFigures): string {
@@ -25,19 +24,17 @@ export function cardCostSummary(cost: CardCostFigures): string {
 }
 
 /**
- * The smallest tip at which a plan rate offers card, rounded up to the next whole naira; null when
- * the rate never covers the card fee rate. The rounding is deliberate: `cardFromMinor` works on an
- * unrounded share while a quote rounds its share to the kobo, so at the exact boundary the two can
- * differ by a kobo. A whole naira above it is where card is offered in practice.
+ * The whole-naira tip from which a checkout on this plan rate offers card, at that amount and every
+ * one above (the share priced as the quote prices it, rounded half up to the kobo); null when the
+ * rate never covers the card fee.
  */
 function cardFromNaira(planBps: number, cost: CardCostFigures): string | null {
-  const from = cardFromMinor(BigInt(planBps), {
+  const from = cardOfferedFromNaira(BigInt(planBps), {
     rateBps: BigInt(cost.rateBps),
     fixedMinor: BigInt(cost.fixedMinor),
     marginMinor: BigInt(cost.marginMinor),
   });
-  if (from === null) return null;
-  return formatNaira(((from + HUNDRED - ONE) / HUNDRED) * HUNDRED);
+  return from === null ? null : formatNaira(from);
 }
 
 /** "Card is offered on Free tips from ₦2,000 and Pro tips from ₦6,000", from the rates in force. */

@@ -17,9 +17,8 @@ import {
   type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
-  cardCostAt,
   cardCostHistory,
-  cardCostRowAt,
+  cardCostInForce,
   requestSeriousAction,
   waitingCardCostsRequest,
   type SeriousActionServices,
@@ -49,12 +48,13 @@ export class OpsCardCostsController {
   private async read(): Promise<OpsCardCosts> {
     const db = this.database.db;
     const now = new Date();
-    const [current, row, history, waitingRequestId] = await Promise.all([
-      cardCostAt(db, now),
-      cardCostRowAt(db, now),
-      cardCostHistory(db, 50),
-      waitingCardCostsRequest(db),
-    ]);
+    // The cost and its row from one query, so "in use since" matches the cost shown.
+    const [{ cost: current, row }, history, waitingRequestId] =
+      await Promise.all([
+        cardCostInForce(db, now),
+        cardCostHistory(db, 50),
+        waitingCardCostsRequest(db),
+      ]);
     return {
       current: {
         rateBps: Number(current.rateBps),

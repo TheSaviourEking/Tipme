@@ -28,10 +28,20 @@ test('where card is offered, from the plan rates in force', () => {
     cardOfferLine(RATES, DEFAULT),
     'Card is offered on Free tips from ₦2,000 and Pro tips from ₦6,000',
   );
-  // cardFromMinor(270) is 857,143 kobo; the screen rounds up to the next whole naira.
+  // cardFromMinor(270) is 857,143 kobo, but the checkout rounds the share half up: at ₦8,571 it is
+  // 23,142 kobo, which covers the cost exactly, so card is offered from ₦8,571.
   assert.equal(
     cardOfferLine({ freeBps: 500, proBps: 270 }, DEFAULT),
-    'Card is offered on Free tips from ₦2,000 and Pro tips from ₦8,572',
+    'Card is offered on Free tips from ₦2,000 and Pro tips from ₦8,571',
+  );
+  // Review fix round 1: rounding up to ₦8,929 would show an amount where the checkout's rounded
+  // share (16,161 kobo) misses the cost; card first appears at ₦8,930.
+  assert.equal(
+    cardOfferLine(
+      { freeBps: 500, proBps: 181 },
+      { rateBps: 125, fixedMinor: '5000', marginMinor: '0' },
+    ),
+    'Card is offered on Free tips from ₦1,334 and Pro tips from ₦8,930',
   );
   // A plan rate at or below the card rate never covers it.
   assert.equal(

@@ -55,6 +55,18 @@ const costOf = (row: CardCostRow): CardCost => ({
 });
 
 /**
+ * The card cost in force at `at` and the row it comes from (null for the coded defaults), from one
+ * query, so a screen's "in use since" always matches the cost it shows.
+ */
+export async function cardCostInForce(
+  db: Database | Tx,
+  at: Date,
+): Promise<{ cost: CardCost; row: CardCostRow | null }> {
+  const row = await cardCostRowAt(db, at);
+  return { cost: row ? costOf(row) : { ...DEFAULT_CARD_COST }, row };
+}
+
+/**
  * The card cost in force at `at`: the latest row with `effective_from` ≤ `at`, or the coded
  * defaults when none is stored. A database error throws (never a silent default).
  */
@@ -62,8 +74,7 @@ export async function cardCostAt(
   db: Database | Tx,
   at: Date,
 ): Promise<CardCost> {
-  const row = await cardCostRowAt(db, at);
-  return row ? costOf(row) : { ...DEFAULT_CARD_COST };
+  return (await cardCostInForce(db, at)).cost;
 }
 
 /** Every stored card cost, newest first, for staff. */

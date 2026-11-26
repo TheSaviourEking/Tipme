@@ -164,9 +164,13 @@ export class AmountOutOfRangeError extends Error {
   override readonly name = 'AmountOutOfRangeError';
 }
 
-/** Basis-point fee, rounded half up to the minor unit, in integer arithmetic. */
-const bpsOf = (amount: bigint, bps: bigint): bigint =>
+/**
+ * Basis-point fee, rounded half up to the minor unit, in integer arithmetic. Exported so the card
+ * offer line on staff screens prices TipMe's share exactly as a quote does.
+ */
+export const basisPointsOf = (amount: bigint, bps: bigint): bigint =>
   (amount * bps + 5000n) / 10000n;
+const bpsOf = basisPointsOf;
 
 /** The version recorded on a quote whose TipMe fee was waived (a fee-free reward, PR-008). */
 export const FEE_FREE_VERSION_SUFFIX = '-fee-free';
