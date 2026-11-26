@@ -120,6 +120,7 @@ import { mailHealthAlerter } from './handlers/mail-failover.js';
 import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
+  announcementSignals,
   jobSignalsFor,
   reconcileIssueSignals,
   requestGate,
@@ -1019,6 +1020,7 @@ export async function startJobWorker(
               log: (entry) => logger.info({ ...entry, ...fields }),
             });
             processed.add(1, { outcome });
+            void publishLive(announcementSignals(outcome));
             return outcome;
           }
           if (job.name === PRO_EXPIRE_JOB) {

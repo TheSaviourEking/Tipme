@@ -11,6 +11,7 @@ import { DOMAIN_EVENT_NAMES } from '../dist/handlers/domain-events.js';
 import { createWorkerLivePublisher } from '../dist/live-publisher.js';
 import {
   LIVE_SIGNAL_MAPPED_EVENTS,
+  announcementSignals,
   businessTipSignals,
   jobSignalsFor,
   liveSignalFor,
@@ -379,4 +380,12 @@ test('a reconcile that opened or resolved nothing signals nothing', () => {
     assert.deepEqual(reconcileIssueSignals(counts), [
       { to: { staff: 'issues.view' }, type: 'ops.issues.changed' },
     ]);
+});
+
+test('a queued batch signals announcement staff; idle and paused do not', () => {
+  assert.deepEqual(announcementSignals('announcements_queued'), [
+    { to: { staff: 'announcements.send' }, type: 'ops.announcements.changed' },
+  ]);
+  for (const outcome of ['announcements_idle', 'announcements_paused'])
+    assert.deepEqual(announcementSignals(outcome), []);
 });

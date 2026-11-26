@@ -7,6 +7,7 @@ import {
   WITHDRAWALS_SWITCH_EVENT,
   approvalsChanged,
   issuesChanged,
+  opsAnnouncementsChanged,
   staffChanged,
   type LiveMessage,
 } from '@tipme/contracts';
@@ -237,4 +238,15 @@ export function reconcileIssueSignals(counts: {
   resolved: number;
 }): LiveMessage[] {
   return counts.opened > 0 || counts.resolved > 0 ? [issuesChanged] : [];
+}
+
+/**
+ * After an announcements tick: only a queued batch moved the "x of N" staff are watching. Idle and
+ * paused ticks (every 10 s while nothing sends, or while the daily limit holds it) change nothing.
+ */
+export function announcementSignals(
+  outcome:
+    'announcements_queued' | 'announcements_idle' | 'announcements_paused',
+): LiveMessage[] {
+  return outcome === 'announcements_queued' ? [opsAnnouncementsChanged] : [];
 }

@@ -146,6 +146,12 @@ export const issuesChanged: LiveMessage = {
   type: 'ops.issues.changed',
 };
 
+/** An announcement's sending progress or state changed (a batch queued, or a send was stopped). Staff holding `announcements.send`. */
+export const opsAnnouncementsChanged: LiveMessage = {
+  to: { staff: 'announcements.send' },
+  type: 'ops.announcements.changed',
+};
+
 /**
  * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
  * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
