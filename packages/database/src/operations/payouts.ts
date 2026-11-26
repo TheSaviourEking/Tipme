@@ -9,7 +9,6 @@ import {
   userPaidWithdrawal,
   canTransition,
   formatMinor,
-  FREE_WITHDRAWALS_PER_DAY,
   lagosDayStart,
   PAYOUT_TRANSITIONS,
 } from '@tipme/domain';
@@ -1933,7 +1932,6 @@ async function quoteFor(
       carrier.route,
       carrier.provider.name,
       carrier.feeMinor,
-      now,
     ),
   );
   const ordinalToday =
@@ -1968,7 +1966,8 @@ async function quoteFor(
     heldElsewhere: reach.heldElsewhere,
     feePaidBy,
     ordinalToday,
-    freePerDay: 'businessId' in owner ? 0 : FREE_WITHDRAWALS_PER_DAY,
+    // Kept for the contract; nobody has free withdrawals now (owner, 25 Nov 2026).
+    freePerDay: 0,
     destination: activeRoute.destination
       ? {
           bankName: activeRoute.destination.bankName,
@@ -1981,8 +1980,7 @@ async function quoteFor(
 /**
  * A person's withdrawal requests on the Lagos calendar day of `now`: those asked for and not wholly
  * failed (`counted`), and how many of them TipMe pays the fee on (`free`, by the parts' stored
- * `fee_payer`). Read under the profile row lock a request already holds, so two at once can't both
- * take the last free slot.
+ * `fee_payer`). The quote shows `counted` as the Nth withdrawal; nothing is free by count now.
  */
 async function personsWithdrawalsToday(
   db: Database | Tx,
@@ -2010,16 +2008,15 @@ async function personsWithdrawalsToday(
 }
 
 /**
- * Who pays the partner's fee on a withdrawal asked for now. A person's own page: TipMe for the first
- * FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day (owner, 18 Nov 2026: withdrawals are free twice
- * a day), counted by the stored `fee_payer` of those not failed; from the next one the user pays from
- * the amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the
- * fee up from the platform payment reserve before the payout (coverFee, or an unused top-up), and
- * books the partner's real fee as its own cost when the payout is paid. A
- * business is unchanged until the owner says otherwise: it pays from the amount (owner, 12 Nov 2026),
- * unless an unused top-up TipMe already sent to its account can pay it (fee-credits.ts). A payout
- * keeps the rule it was asked under (`fee_payer`), so one asked for before this release finishes as
- * it was asked.
+ * Who pays the partner's fee on a withdrawal asked for now. Everyone pays it from the amount (the
+ * existing user-pays path): a person on every withdrawal (owner, 25 Nov 2026; it replaces 18 Nov's
+ * two free a day) and a business since 12 Nov 2026. Two exceptions, both TipMe paying: an unused
+ * top-up TipMe already sent to the account pays it (fee-credits.ts, so that money is neither
+ * stranded nor counted twice), and, for a business only, staff's `business_payout_fee_absorbed`
+ * switch. When TipMe pays, the whole amount is sent, TipMe tops the fee up from the platform
+ * payment reserve before the payout (coverFee, or an unused top-up), and books the partner's real
+ * fee as its own cost when the payout is paid. A payout keeps the rule it was asked under
+ * (`fee_payer`), so one asked for before a rule changed finishes as it was asked.
  */
 async function feePayerFor(
   db: Database | Tx,
@@ -2027,15 +2024,13 @@ async function feePayerFor(
   route: { accountReference: string | null },
   providerName: string,
   feeMinor: bigint,
-  now: Date,
 ): Promise<'user' | 'tipme'> {
-  if (!('businessId' in owner)) {
-    const today = await personsWithdrawalsToday(db, owner.profileId, now);
-    return today.free < FREE_WITHDRAWALS_PER_DAY ? 'tipme' : 'user';
-  }
   // Staff may switch TipMe paying a business's fee on (`business_payout_fee_absorbed`, a money
   // switch: two people, audited). Read uncached, so a quote and the request agree with the switch.
-  if (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
+  if (
+    'businessId' in owner &&
+    (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
+  )
     return 'tipme';
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
@@ -2407,10 +2402,9 @@ async function requestFor(
       if (!head) throw new OperationError('INSUFFICIENT_BALANCE');
       // The fee is decided once for the request (spec §5): whoever pays it pays it once, off the
       // largest part (the first in drain order among equals), so the small parts never fall below
-      // it. TipMe pays every other part's fee. A person's page: TipMe pays on the first two
-      // requests of the Lagos day, however many parts each has (P7); from the 3rd the fee comes off
-      // the amount chosen (owner, 18 Nov 2026). A business: one fee under its own rule (owner, 12
-      // and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when the largest
+      // it. TipMe pays every other part's fee. A person pays it from the amount chosen on every
+      // request, however many parts it has (owner, 25 Nov 2026). A business: one fee under its own
+      // rule (owner, 12 and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when the largest
       // part is not more than its fee.
       const carrier = rest.reduce(
         (best, part) => (part.amountMinor > best.amountMinor ? part : best),
@@ -2422,7 +2416,6 @@ async function requestFor(
         carrier.route,
         carrier.provider.name,
         carrier.feeMinor,
-        input.now ?? new Date(),
       );
       const userPaid =
         feePayer === 'user'

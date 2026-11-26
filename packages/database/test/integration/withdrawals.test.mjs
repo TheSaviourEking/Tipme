@@ -534,10 +534,10 @@ test('withdrawals through the provider', async (t) => {
         partial: false,
         bankDetailsNeeded: false,
         heldElsewhere: false,
-        // TipMe pays it for a person's page (owner, 18 Nov 2026): withdrawals are free.
-        feePaidBy: 'tipme',
+        // The person pays it from the amount (owner, 25 Nov 2026); nothing is free by count.
+        feePaidBy: 'user',
         ordinalToday: 1,
-        freePerDay: 2,
+        freePerDay: 0,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },
       });
       const more = await quoteOf(withBalance(1800000n));
