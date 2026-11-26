@@ -51,6 +51,8 @@ import {
   TOO_SMALL,
   withdrawableNow,
   withdrawDayNote,
+  firstWithdrawalNote,
+  firstWithdrawalRowNote,
   withdrawFee,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
@@ -172,6 +174,7 @@ function History({
             const split = partsView(row.parts);
             const open = view.steps > 0 && view.steps < 3;
             const bank = bankLine(row.bank);
+            const first = firstWithdrawalRowNote(row, rows, next);
             // History, not news: a row has no live role, so nothing here is announced.
             return (
               <li key={row.payoutId} className="withdraw__row" data-open={open}>
@@ -187,6 +190,14 @@ function History({
                   />
                 )}
                 <p className="withdraw__note">{view.note}</p>
+                {first && (
+                  <p
+                    className="withdraw__note"
+                    data-testid="first-withdrawal-row-note"
+                  >
+                    {first}
+                  </p>
+                )}
                 {split && <PartList parts={split.parts} />}
                 {/* Proven: a failed payout is released and its amount no longer reserved
                     (withdraw-and-audit plan, money-safety proofs). Only on a row the API reports failed. */}
@@ -550,6 +561,9 @@ export default function WithdrawPage({
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
   const dayNote = withdrawDayNote(quote);
+  const firstNote = state.canWithdraw
+    ? firstWithdrawalNote(quote, withdrawals, nextWithdrawals)
+    : null;
   // Ready with money to send: the lamp line and the bank chip say what the notice used to.
   const readyWithMoney = state.kind === 'ready' && withdrawable > BigInt(0);
   const notice = state.notice;
@@ -779,6 +793,11 @@ export default function WithdrawPage({
                 {figures && chosen !== null && state.partsFor(chosen) > 1 && (
                   <p className="tm-hint" data-testid="withdraw-split-hint">
                     {WITHDRAW_SPLIT_COPY.mayArrive(state.partsFor(chosen))}
+                  </p>
+                )}
+                {firstNote && (
+                  <p className="tm-hint" data-testid="first-withdrawal-note">
+                    {firstNote}
                   </p>
                 )}
                 {dayNote && (
