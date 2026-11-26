@@ -5,11 +5,13 @@
 #   scripts/rehearse-production.sh                       # images from HEAD
 #   REHEARSAL_REV=8b2db32 scripts/rehearse-production.sh # images from another commit
 #   REHEARSAL_RATE=60 scripts/rehearse-production.sh     # requests per second (default 30)
-#   REHEARSAL_PREBUILT=1 scripts/rehearse-production.sh  # use existing tipme-app:<A>/<B>, keep them
+#   REHEARSAL_PREBUILT=1 scripts/rehearse-production.sh  # use existing tipme-app:<A>/<B> and
+#                                                        # tipme-web-production:<A>/<B>, keep them
 #
 # What it does, all under a temporary TIPME_HOME:
 #   1. Builds tipme-app:<A> from REHEARSAL_REV (git archive, so only committed code) and
-#      tipme-app:<B> = A plus one label, so the two versions differ.
+#      tipme-app:<B> = A plus one label, so the two versions differ; and the website,
+#      tipme-web-production:<A> and :<B> (two builds: the version is baked into the page).
 #   2. Generates a throwaway CA and a server certificate for rehearsal-db, the Postgres 16
 #      stand-in for Aiven (TLS only), so sslmode=verify-full is really checked.
 #   3. Creates edge-production and runs the real edge Caddyfile on it (plain http for
@@ -20,8 +22,9 @@
 #   5. Starts k6 (REHEARSAL_RATE requests/s for REHEARSAL_DURATION) through the edge, deploys B
 #      during the run, then rolls back to A during the run.
 # Passes only if k6 made (nearly) every request it was asked to, no served read failed, readiness
-# answered nothing but 503 `draining` (the drain's signal to Caddy), and /health/release shows B
-# after the deploy and A after the rollback (every answer, not just one).
+# answered nothing but 503 `draining` (the drain's signal to Caddy), /health/release shows B
+# after the deploy and A after the rollback (every answer, not just one), and the website (polled
+# 10 times a second through the edge for the whole run) answered every request, B then A likewise.
 #
 # NOT proven here: production-mode boot. Production's config refuses every payment provider
 # until the payments plan adds bachs-live, so the API and workers run in password-protected
@@ -65,10 +68,14 @@ docker network inspect edge-production >/dev/null 2>&1 && clash+=("network edge-
 PREBUILT=${REHEARSAL_PREBUILT:-0}
 for version in "$A" "$B"; do
   if [[ "$PREBUILT" == 1 ]]; then
-    docker image inspect "tipme-app:$version" >/dev/null 2>&1 ||
-      { echo "REHEARSAL_PREBUILT=1 needs tipme-app:$version to exist." >&2; exit 2; }
+    for image in "tipme-app:$version" "tipme-web-production:$version"; do
+      docker image inspect "$image" >/dev/null 2>&1 ||
+        { echo "REHEARSAL_PREBUILT=1 needs $image to exist." >&2; exit 2; }
+    done
   else
-    docker image inspect "tipme-app:$version" >/dev/null 2>&1 && clash+=("image tipme-app:$version")
+    for image in "tipme-app:$version" "tipme-web-production:$version"; do
+      docker image inspect "$image" >/dev/null 2>&1 && clash+=("image $image")
+    done
   fi
 done
 if ((${#clash[@]})); then
@@ -84,6 +91,7 @@ ENV_FILE="$TIPME_HOME/production.env"
 export TIPME_HOME
 built=()
 made_edge_network=0
+web_load_pid=""
 
 compose() {
   TIPME_VERSION="$A" TIPME_BLUE_VERSION=none TIPME_GREEN_VERSION=none \
@@ -98,6 +106,7 @@ cleanup() {
     compose logs --no-color --timestamps >"$LOGS/stack.log" 2>&1 || true
     docker logs "$EDGE" >"$LOGS/edge.log" 2>&1 || true
   fi
+  [[ -z "$web_load_pid" ]] || kill "$web_load_pid" 2>/dev/null || true
   docker rm -f "$K6" "$EDGE" >/dev/null 2>&1 || true
   if [[ -f "$RELEASES/$A/compose.production.yml" ]]; then
     compose --profile tools down -v --remove-orphans -t 20 >/dev/null 2>&1 || true
@@ -119,7 +128,7 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 if [[ "$PREBUILT" == 1 ]]; then
-  echo "==> Using the existing tipme-app:$A and tipme-app:$B (kept afterwards)"
+  echo "==> Using the existing tipme-app and tipme-web-production images for $A and $B (kept afterwards)"
 else
   echo "==> Building tipme-app:$A from $REV ($commit)"
   git -C "$here" archive --format=tar "$commit" |
@@ -131,6 +140,18 @@ else
     docker build -t "tipme-app:$B" - >"$LOGS/build-b.log" 2>&1 ||
     { tail -n 40 "$LOGS/build-b.log" >&2; exit 1; }
   built+=("tipme-app:$B")
+  # The website's page carries its version (/api/version), so B is a build of its own. The browser
+  # never runs here: the API origin only has to be a valid one.
+  for version in "$A" "$B"; do
+    echo "==> Building tipme-web-production:$version from $REV"
+    git -C "$here" archive --format=tar "$commit" |
+      docker build -f deploy/web.Dockerfile --build-arg TIPME_BUILD_VERSION="$version" \
+        --build-arg SITE_URL=https://www.rehearsal.invalid \
+        --build-arg NEXT_PUBLIC_API_ORIGIN=http://localhost \
+        -t "tipme-web-production:$version" - >"$LOGS/build-web-$version.log" 2>&1 ||
+      { tail -n 40 "$LOGS/build-web-$version.log" >&2; exit 1; }
+    built+=("tipme-web-production:$version")
+  done
 fi
 
 echo "==> Throwaway CA and certificate for rehearsal-db"
@@ -156,11 +177,16 @@ docker run -d --name "$EDGE" --network edge-production -p 127.0.0.1::80 \
   -e ACME_EMAIL=ops@rehearsal.invalid \
   -e STAGING_API_HOST=http://staging.rehearsal.invalid \
   -e PRODUCTION_API_HOST=http://localhost \
+  -e STAGING_WEB_HOST=http://staging-web.rehearsal.invalid \
+  -e PRODUCTION_WEB_HOST=www.localhost:80 \
+  -e PRODUCTION_APEX_HOST=http://apex.rehearsal.invalid \
   -v "$here/deploy/edge/Caddyfile:/etc/caddy/Caddyfile:ro" \
   "$CADDY_IMAGE" >/dev/null
 port=$(docker port "$EDGE" 80/tcp | head -n 1 | awk -F: '{ print $NF }')
 # Caddy's host matcher ignores the port, so this reaches the production site block.
 base="http://localhost:$port"
+# And this the website's (curl sends *.localhost to the loopback without asking DNS).
+web_base="http://www.localhost:$port"
 
 echo "==> Settings ($ENV_FILE, generated; never printed)"
 hex() { openssl rand -hex 32; }
@@ -169,6 +195,7 @@ b64() { openssl rand -base64 "$1"; }
   echo "TIPME_HOME=$TIPME_HOME"
   echo "API_HOST=localhost"
   echo "HEALTH_BASE_URL=$base"
+  echo "WEB_HEALTH_BASE_URL=$web_base"
   # Preview requires https; it is never fetched here.
   echo "WEB_ORIGIN=https://web.rehearsal.invalid"
   runtime=$(hex) migrator=$(hex) backup=$(hex) admin=$(hex)
@@ -226,6 +253,19 @@ all_answer() {
     [[ "$seen" == "\"version\":\"$version\"" ]] || { echo "!! /health/release answered $seen, expected $version" >&2; return 1; }
   done
   echo "    /health/release: 12 of 12 answers are $version"
+  for _ in $(seq 1 12); do
+    seen=$(curl -sf --max-time 5 "$web_base/api/version" | grep -o '"version":"[^"]*"' || echo none)
+    [[ "$seen" == "\"version\":\"$version\"" ]] || { echo "!! the website answered $seen, expected $version" >&2; return 1; }
+  done
+  echo "    website /api/version: 12 of 12 answers are $version"
+}
+
+# The website under load of its own while the colours switch: every answer's status, 10 a second.
+web_load() {
+  while [[ ! -f "$TIPME_HOME/web-load.stop" ]]; do
+    curl -s -o /dev/null -w '%{http_code}\n' --max-time 10 "$web_base/api/version" >>"$LOGS/web-load.log" || true
+    sleep 0.1
+  done
 }
 
 echo "==> Deploying $A (first deploy: roles, migrations, api-blue)"
@@ -237,6 +277,8 @@ docker run -d --name "$K6" --network "container:$EDGE" \
   -v "$here/tests/load:/scripts:ro" \
   -e REHEARSAL_API=http://localhost -e REHEARSAL_RATE="$RATE" -e REHEARSAL_DURATION="$DURATION" \
   "$K6_IMAGE" run /scripts/no-downtime.k6.js >/dev/null
+web_load &
+web_load_pid=$!
 sleep 10
 
 switches=ok
@@ -266,6 +308,12 @@ if [[ "$(docker inspect -f '{{.State.Running}}' "$K6")" != true ]]; then
   switches=failed
 fi
 k6_status=$(docker wait "$K6")
+touch "$TIPME_HOME/web-load.stop"
+wait "$web_load_pid" || true
+web_made=$(wc -l <"$LOGS/web-load.log" | tr -d ' ')
+web_failed=$(grep -vc '^200$' "$LOGS/web-load.log" || true)
+echo "==> Website: $web_made requests through the edge, $web_failed not 200"
+((web_made > 100 && web_failed == 0)) || switches=failed
 docker logs "$K6" >"$LOGS/k6.log" 2>&1
 echo "==> k6 summary"
 # The end-of-test summary, without the progress lines k6 prints every second.
