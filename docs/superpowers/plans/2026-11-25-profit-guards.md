@@ -13,8 +13,8 @@
 ## Global Constraints
 
 - Partner withdrawal fee: `NGN_PAYOUT_FEE_MINOR` = ₦50 (`5000n`), from `packages/payments/src/payout-fee.ts`. Never hard-code another copy.
-- Card cost defaults: rate **200 bps**, fixed **₦45 (`4500n`)**, margin **₦15 (`1500n`)**. Bank transfer is always offered.
-- Lowest plan or page rate staff can set: **200 bps**; a page rate of **0** (fee-free) stays allowed. Database checks (`schema.ts:732`, `schema.ts:3474-3477`) are not changed; no migration in this plan.
+- Card cost defaults: rate **200 bps**, fixed **₦45 (`4500n`)**, margin **₦15 (`1500n`)**, changeable by staff on the ops screen (Task 5). Bank transfer is always offered.
+- Lowest plan or page rate staff can set: **200 bps**; a page rate of **0** (fee-free) stays allowed. Database checks (`schema.ts:732`, `schema.ts:3474-3477`) are not changed. The only migration is Task 5's new table.
 - Payouts and quotes keep the rule they were made under (`payouts.fee_payer`, the quote's share). Nothing is retroactive.
 - Pro subscription checkouts (`initializePlatformCheckout`) keep both methods.
 - Users never see the provider's name ("our payment partner"). Copy: "Each withdrawal costs ₦50, charged by our payment partner."
@@ -26,9 +26,9 @@
 
 ## Review Focus
 
-1. **A rate changed between quote and checkout:** the methods follow the quoted share, never today's rate. Test in Task 5.
-2. **A fee-free tip (credit or 0% page) of any size:** bank transfer only. Tests in Tasks 3 and 5.
-3. **A retried checkout start** (same attempt, same idempotency key) sends the identical method list, so the partner never sees a different body under one key. Test in Task 5.
+1. **A rate changed between quote and checkout:** the methods follow the quoted share, never today's rate. Test in Task 6.
+2. **A fee-free tip (credit or 0% page) of any size:** bank transfer only. Tests in Tasks 3 and 6.
+3. **A retried checkout start** (same attempt, same idempotency key) sends the identical method list, so the partner never sees a different body under one key, even if staff change the card costs in between. Tests in Tasks 5 and 6.
 4. **A person's 3rd withdrawal of a day whose first two were TipMe-paid before the release:** pays ₦50 like any other; nothing still counts free slots. Test in Task 1.
 5. **A whole balance under ₦2,000** (₦1,500) withdraws with ₦50 off (₦1,450 arrives); ₦50 or less stays refused. Test in Task 1.
 
@@ -147,33 +147,83 @@
 - [ ] **Step 4: Run, expect PASS**, plus `pnpm --filter @tipme/payments test`.
 - [ ] **Step 5: Commit** `feat(payments): choose checkout payment methods`.
 
-### Task 5: API chooses the methods from the quote
+### Task 5: Card cost setting and its ops screen
+
+The owner asked for an ops screen (26 Nov 2026) instead of env settings. Same pattern as plan fees: an append-only history table, a serious action, `fees.manage`, a lone admin may change it, owners alerted.
 
 **Files:**
 
-- Modify: `apps/api/src/config.ts` (three settings), `apps/api/src/checkout/checkout.service.ts` (~288-322 Bachs, ~413-432 pretend)
-- Modify: `docs/runbooks/settings-and-switches.md` (the three settings)
-- Test: `apps/api/test/config.test.mjs`, `apps/api/test/checkout-collect.test.mjs`, and a new `apps/api/test/checkout-methods.test.mjs` using the same fake-provider pattern as `checkout-collect.test.mjs`
+- Create: migration `packages/database/drizzle/<next free number>_card_cost_settings.sql` (the next number when the task starts; the fee waivers build may take 0129 first), table `cardCostSettings` in `packages/database/src/schema.ts`
+- Create: `packages/database/src/operations/card-cost-settings.ts`
+- Modify: the serious-action registry (where `plan_fees.change` is registered) for `card_costs.change`; owner alert as `plan_fees.change` does
+- Create: `apps/api/src/ops/card-costs.controller.ts` (`GET`/`POST /v1/ops/card-costs`), contracts in `packages/contracts/src/card-costs.ts`
+- Modify: `apps/web/src/app/ops/plan-fees/page.tsx` (a "Card costs" section under the plan rates), `docs/runbooks/settings-and-switches.md`
+- Test: `packages/database/test/integration/card-cost-settings.test.mjs`, the API controller test beside the plan fees one, a web unit test for the section
 
 **Interfaces:**
 
-- Consumes: Task 3 `checkoutMethodsFor`, `DEFAULT_CARD_COST`; Task 4 `paymentMethods`.
-- Produces: config `CHECKOUT_CARD_RATE_BPS` (default 200, int 0–10000), `CHECKOUT_CARD_FIXED_MINOR` (default 4500, int ≥ 0), `CHECKOUT_CARD_MARGIN_MINOR` (default 1500, int ≥ 0). Ruling: config, not an admin setting, for this release (the spec left it to the builder); the owner changes them in the env file.
+- Consumes: Task 3 `CardCost`, `DEFAULT_CARD_COST`, `cardFromMinor`.
+- Produces:
+
+  ```ts
+  // table card_cost_settings: id uuid, rate_bps int (0–10000), fixed_minor bigint (≥ 0), margin_minor bigint (≥ 0),
+  // effective_from timestamptz, set_by, approved_by, reason text, created_at. Append-only.
+  export async function cardCostAt(db: Database, at: Date): Promise<CardCost>; // latest row with effective_from ≤ at; none → DEFAULT_CARD_COST; a database error throws
+  export async function setCardCosts(
+    tx: Tx,
+    input: {
+      cost: CardCost;
+      actorId: string;
+      approvedBy: string | null;
+      reason: string;
+      now: Date;
+    },
+  ): Promise<void>;
+  export function cardCostHistory(
+    db: Database,
+    limit: number,
+  ): Promise<CardCostRow[]>;
+  ```
+
+  Contract: `opsCardCostsChangeSchema` = reason + `rateBps` int 0–10000, `fixedMinor` and `marginMinor` integer strings ≥ 0 (naira entered on screen, sent in kobo).
 
 - [ ] **Step 1: Write the failing tests:**
-  - config: defaults are 200 / 4500 / 1500; `-1` is refused.
+  - `cardCostAt` with no rows → `{ rateBps: 200n, fixedMinor: 4500n, marginMinor: 1500n }`.
+  - after a change effective at T: `cardCostAt(T − 1 ms)` → the old values, `cardCostAt(T)` → the new ones (Review Focus 3 relies on this).
+  - `card_costs.change` by a lone admin applies at once, writes an audit row and alerts owners; with a second staff member it waits for approval, as `plan_fees.change`.
+  - API: `GET /v1/ops/card-costs` needs `fees.manage` (403 without); `POST` with `rateBps: 10001` → 400; a valid change returns the new values and the history.
+  - Screen: shows "Card fee 2% + ₦45, margin ₦15" and, under it, "Card is offered on Free tips from ₦2,000 and Pro tips from ₦6,000" (from the plan rates in force and `cardFromMinor`); saving asks for a reason.
+- [ ] **Step 2: Run, expect FAIL:** `pnpm build && node --test --test-concurrency=1 packages/database/test/integration/card-cost-settings.test.mjs` and the API/web tests.
+- [ ] **Step 3: Implement** following `plan-fee-rates.ts` and `plan-fees.controller.ts` (`@FreshCode()` on the POST, `@RateLimit('ops_read')` / `('ops_request')`).
+- [ ] **Step 4: Run, expect PASS**, plus `pnpm --filter @tipme/api test` and `pnpm --filter @tipme/web test`.
+- [ ] **Step 5: Commit** `feat(ops): card cost setting`. Screenshots of the section (phone + desktop) on `pr-assets`.
+
+### Task 6: API chooses the methods from the quote
+
+**Files:**
+
+- Modify: `apps/api/src/checkout/checkout.service.ts` (~288-322 Bachs, ~413-432 pretend)
+- Test: `apps/api/test/checkout-collect.test.mjs` and a new `apps/api/test/checkout-methods.test.mjs` using the same fake-provider pattern
+
+**Interfaces:**
+
+- Consumes: Task 3 `checkoutMethodsFor`; Task 4 `paymentMethods`; Task 5 `cardCostAt`.
+- Card costs are read **as they were when the quote was made** (`cardCostAt(db, quote.createdAt)`), so a retried start always sends the same list, and a change applies to tips quoted after it.
+
+- [ ] **Step 1: Write the failing tests:**
   - `a Pro tip of ₦5,000 starts a checkout with bank transfer only`: the fake Bachs records `paymentMethods` `['bank_transfer']`; ₦10,000 records both.
   - `a You collect tip uses the same rule`: collect start, Pro ₦5,000 → `['bank_transfer']`.
-  - `the methods follow the quoted share, not today's rate` (Review Focus 1): quote a Pro ₦10,000 tip at 3%, then change the Pro rate to 2% before starting → both methods (share from the quote).
+  - `the methods follow the quoted share, not today's rate` (Review Focus 1): quote a Pro ₦10,000 tip at 3%, then change the Pro rate to 2% before starting → both methods.
   - `a fee-free tip offers bank transfer only` (Review Focus 2): page with a fee-free credit, ₦50,000 → `['bank_transfer']`.
-  - `a retried start sends the same list` (Review Focus 3): start twice for one attempt → both recorded calls carry the same `paymentMethods` and idempotency key.
+  - `a retried start sends the same list` (Review Focus 3): start once, change the card margin to ₦500 in ops, start the same attempt again → both calls carry the same `paymentMethods` and idempotency key.
+  - `a card cost change applies to tips quoted after it`: margin ₦500, then quote Pro ₦10,000 → `['bank_transfer']`.
   - The share passed is `quote.platformFeeMinor + quote.providerFeeMinor` and the amount `quote.payerTotalMinor`, as today's `tipmeShareMinor`.
-- [ ] **Step 2: Run, expect FAIL:** `pnpm --filter @tipme/api build && node --test apps/api/test/checkout-methods.test.mjs apps/api/test/config.test.mjs apps/api/test/checkout-collect.test.mjs`
-- [ ] **Step 3: Implement.** Compute `paymentMethods` once per start from the quote and config, and pass it to both the direct and the collect call; the pretend path passes it too (the mock ignores it).
+- [ ] **Step 2: Run, expect FAIL:** `pnpm --filter @tipme/api build && node --test apps/api/test/checkout-methods.test.mjs apps/api/test/checkout-collect.test.mjs`
+- [ ] **Step 3: Implement.** Compute `paymentMethods` once per start and pass it to the direct and the collect call; the pretend path passes it too (the mock ignores it). A database error reading the card costs fails the start as other database errors do today (no silent default).
 - [ ] **Step 4: Run, expect PASS**, plus `pnpm --filter @tipme/api test`.
 - [ ] **Step 5: Commit** `feat(checkout): offer card only when TipMe's share covers it`.
 
-### Task 6: 2% floor for staff-set rates
+### Task 7: 2% floor for staff-set rates
 
 **Files:**
 
@@ -184,7 +234,7 @@
 
 **Interfaces:**
 
-- Consumes: Task 3 `cardFromMinor`, `DEFAULT_CARD_COST` (screens use the defaults; they show "with the default card costs").
+- Consumes: Task 3 `cardFromMinor`; Task 5 `cardCostAt(db, now)` (screens use the card costs in force).
 
 - [ ] **Step 1: Write the failing tests:**
   - plan rate 199 bps refused (400 / schema error); 200 accepted.
@@ -197,11 +247,11 @@
 - [ ] **Step 4: Run, expect PASS.** Check staging/prod have no rates below 200: give the owner `SELECT … FROM plan_fee_rates WHERE free_bps < 200 OR pro_bps < 200` and `SELECT count(*) FROM profiles WHERE custom_fee_bps BETWEEN 1 AND 199` (column name from `schema.ts:732`) to run; result goes in the PR.
 - [ ] **Step 5: Commit** `feat(ops): 2% floor for staff-set rates`. Screenshots of both screens (phone + desktop) on `pr-assets`.
 
-### Task 7: Release checks (controller, with the owner)
+### Task 8: Release checks (controller, with the owner)
 
 Not code. Before the release PR:
 
 - [ ] Whole `pnpm test:integration` and `pnpm test` green; staging deploy and `release/staging-full` green.
 - [ ] Sandbox, owner-approved, with a throwaway script (never committed): a transfer-only checkout on a **connected account** (`X-Account-Id`, a person's page) shows bank transfer only, and a transfer-only checkout paid with the partner's sandbox transfer flow completes and confirms on staging. Evidence in the PR.
 - [ ] The fee notice (redrafted #287 copy: lower tip fees, withdrawals now ₦50 each) is approved by the owner and sent before the production release; Terms change ships in the same release.
-- [ ] Production env: no new values needed (config defaults apply).
+- [ ] Production env: no new values needed. The card costs start at the defaults until staff change them in ops; the migration runs with the deploy.
