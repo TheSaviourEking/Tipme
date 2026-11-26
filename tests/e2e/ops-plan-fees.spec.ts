@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { expectAccessible } from './helpers';
-import { enrolOwner, secondOwner } from './ops-helpers';
+import { enrolOwner, secondOwner, sql } from './ops-helpers';
+import { signUpRecipient } from './helpers';
 
 // The owner, 18 Nov 2026: TipMe's fee per plan is an admin setting (Free 5%, Pro 3% to start). A
 // change is a money change: a second person decides it. Nothing is approved here, so the rates every
@@ -142,4 +143,72 @@ test('@alone an owner asks to change the plan fees; it waits for a second person
     main.getByRole('heading', { name: 'Fees', level: 1 }),
   ).toBeVisible();
   expect(await fitsWidth(page)).toBe(true);
+});
+
+// Profit guards, Part 3: a plan rate stored before the 2% floor is flagged. The plan rates table is
+// append-only, so a row can't be seeded and removed without touching every other spec's rates; the
+// screen is given the API's answer for such a row instead (the API side is in the database
+// integration tests: a stored 150 still reads back and prices).
+test('@alone a plan rate stored below the 2% floor is flagged on the plan fees screen', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+  await enrolOwner(page, testInfo);
+  await page.route('**/v1/ops/plan-fees', async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    const response = await route.fetch();
+    const body = await response.json();
+    body.data.current.freeBps = 150;
+    body.data.current.proBps = 150;
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto('/ops/plan-fees');
+  const personal = page
+    .getByRole('main')
+    .getByRole('region', { name: 'Personal fees' });
+  await expect(personal.getByTestId('plan-fees-live')).toHaveText(
+    'Free 1.5% · Pro 1.5% of each tip',
+  );
+  await expect(personal.getByText('Free: Below the 2% floor')).toBeVisible();
+  await expect(personal.getByText('Pro: Below the 2% floor')).toBeVisible();
+  await expect(personal.getByTestId('plan-fees-card-free')).toHaveText(
+    'Free at 1.5%: Card is not offered at this rate.',
+  );
+});
+
+// A page rate stored before the floor (100 bps), seeded on this test's own page only.
+test('@alone a page rate stored below the 2% floor is flagged on page pricing', async ({
+  page,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const { handle } = await signUpRecipient(
+    await (await browser.newContext()).newPage(),
+    testInfo,
+  );
+  await enrolOwner(page, testInfo);
+  await sql(
+    `UPDATE profiles SET custom_fee_bps = 100 WHERE lower(handle) = lower($1)`,
+    [handle],
+  );
+  await page.goto(`/ops/pages?handle=${handle}`);
+  const pricing = page
+    .getByRole('main')
+    .locator('section, div')
+    .filter({
+      has: page.getByRole('heading', { name: 'Pricing', exact: true }),
+    });
+  await expect(pricing.getByText('Below the 2% floor').first()).toBeVisible();
+  // A new rate under the floor is refused on the screen; nothing is asked.
+  await page.getByRole('button', { name: 'Set this page’s fee…' }).click();
+  await page.getByLabel('New TipMe fee (%)').fill('1.5');
+  await page
+    .getByLabel('Reason', { exact: true })
+    .fill('Trying below the floor');
+  await page.getByRole('button', { name: 'Set this page’s fee' }).click();
+  await expect(
+    page.getByText(
+      'Write the fee as a percentage of 2 or more, or 0 for fee-free.',
+    ),
+  ).toBeVisible();
 });

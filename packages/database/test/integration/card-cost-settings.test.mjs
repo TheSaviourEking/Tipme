@@ -154,13 +154,14 @@ test('the card cost table is history, and refuses values out of bounds itself', 
 
 // Review of Task 6: the app's clock must not decide when a card cost starts, because a quote's
 // `created_at` comes from the database clock. A skewed app clock could otherwise make a change apply
-// to quotes made before it. The row's `effective_from` is the transaction's database time.
-test('a change starts at the database time of its transaction, whatever the app clock says', async (t) => {
+// to quotes made before it. The row's `effective_from` is the database clock at the insert, inside the transaction's window.
+test('a change starts at the database clock inside its transaction, whatever the app clock says', async (t) => {
   const { db, staff } = await setup(t);
   const realDate = Date;
   const skewed = realDate.now() - 3 * 24 * 60 * 60 * 1000;
   let result;
-  let dbTime;
+  let txStart;
+  let after;
   // The app's clock runs three days behind while the change is made.
   globalThis.Date = class extends realDate {
     constructor(...args) {
@@ -173,29 +174,40 @@ test('a change starts at the database time of its transaction, whatever the app 
   };
   try {
     await db.db.transaction(async (tx) => {
+      txStart = new realDate(
+        (await tx.execute(sql`SELECT now() AS t`)).rows[0].t,
+      );
       result = await setCardCosts(tx, {
         cost: { rateBps: 250n, fixedMinor: 5000n, marginMinor: 2000n },
         actorId: staff,
         approvedBy: null,
         reason: 'The partner’s new card price',
       });
-      const { rows } = await tx.execute(sql`SELECT now() AS now`);
-      dbTime = new realDate(rows[0].now);
+      after = new realDate(
+        (await tx.execute(sql`SELECT clock_timestamp() AS t`)).rows[0].t,
+      );
     });
   } finally {
     globalThis.Date = realDate;
   }
-  assert.equal(result.effectiveFrom.getTime(), dbTime.getTime());
+  const at = result.effectiveFrom;
+  // Between the transaction's start and the end of the call, by the database's clock; the app's
+  // date (three days behind) never leaks in.
+  assert.ok(
+    at.getTime() >= txStart.getTime() - 1,
+    'not before the transaction',
+  );
+  assert.ok(at.getTime() <= after.getTime(), 'not after the call');
   const [row] = await cardCostHistory(db.db, 1);
-  assert.equal(row.effectiveFrom.getTime(), dbTime.getTime());
+  assert.equal(row.effectiveFrom.getTime(), at.getTime());
   // In force from the database time on, and not before it: the app's date doesn't leak in.
-  assert.deepEqual(await cardCostAt(db.db, dbTime), {
+  assert.deepEqual(await cardCostAt(db.db, at), {
     rateBps: 250n,
     fixedMinor: 5000n,
     marginMinor: 2000n,
   });
   assert.deepEqual(
-    await cardCostAt(db.db, new Date(dbTime.getTime() - 1)),
+    await cardCostAt(db.db, new Date(at.getTime() - 1)),
     DEFAULTS,
   );
 });

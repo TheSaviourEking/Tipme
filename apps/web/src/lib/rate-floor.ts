@@ -1,3 +1,4 @@
+import { PLAN_FEE_MIN_BPS } from '@tipme/contracts';
 import { cardFromNaira, type CardCostFigures } from './card-cost-view.ts';
 import { bpsToPercent, percentToBps } from './fee-percent.ts';
 
@@ -8,8 +9,8 @@ import { bpsToPercent, percentToBps } from './fee-percent.ts';
  * rules can be tested alone. The API checks everything again.
  */
 
-/** Same as PAGE_FEE_MIN_BPS and PLAN_FEE_MIN_BPS in contracts (a test holds them together). */
-export const RATE_FLOOR_BPS = 200;
+/** The contracts' floor for plan rates (a test holds it equal to the page floor). */
+export const RATE_FLOOR_BPS = PLAN_FEE_MIN_BPS;
 
 /** "Below the 2% floor". */
 export const BELOW_FLOOR = `Below the ${bpsToPercent(RATE_FLOOR_BPS)} floor`;

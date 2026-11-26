@@ -176,7 +176,8 @@ export async function setCardCosts(
   const previous = await cardCostAt(tx, readAt);
   if (sameCost(previous, cost)) throw new OperationError('INVALID_INPUT');
   const id = newId();
-  // The database's `now()` cut to the millisecond, so the time reads back as a JS Date exactly.
+  // The database clock at the insert (`clock_timestamp()`, as close to the commit as it gets), cut to
+  // the millisecond so it reads back as a JS Date exactly.
   const [stored] = await tx
     .insert(cardCostSettings)
     .values({
@@ -184,7 +185,7 @@ export async function setCardCosts(
       rateBps: Number(cost.rateBps),
       fixedMinor: cost.fixedMinor,
       marginMinor: cost.marginMinor,
-      effectiveFrom: sql`date_trunc('milliseconds', now())`,
+      effectiveFrom: sql`date_trunc('milliseconds', clock_timestamp())`,
       setBy: input.actorId,
       approvedBy: input.approvedBy,
       reason: input.reason,
