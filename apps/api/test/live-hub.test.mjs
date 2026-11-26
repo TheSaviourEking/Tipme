@@ -407,3 +407,53 @@ test('switches.changed clears this copy’s switches and reaches no browser', ()
   assert.equal(cleared, 1);
   assert.equal(me.writes.length + ops.writes.length, before);
 });
+
+test('a permission list reaches a stream holding any one of them', () => {
+  const { hub } = router();
+  const viewer = sink({
+    kind: 'ops',
+    profileId: null,
+    permissions: new Set(['issues.view']),
+  });
+  const manager = sink({
+    kind: 'ops',
+    userId: B_USER,
+    profileId: null,
+    permissions: new Set(['providers.manage']),
+  });
+  const sender = sink({
+    kind: 'ops',
+    userId: B_USER,
+    profileId: null,
+    permissions: new Set(['announcements.send']),
+  });
+  const me = sink();
+  for (const s of [viewer, manager, sender, me]) hub.register(s);
+  hub.dispatch({
+    to: { staff: ['issues.view', 'providers.manage'] },
+    type: 'ops.providers.changed',
+  });
+  const frame = 'data: {"type":"ops.providers.changed"}\n\n';
+  assert.deepEqual(viewer.writes, [frame]);
+  assert.deepEqual(manager.writes, [frame]);
+  assert.deepEqual(sender.writes, []);
+  assert.deepEqual(me.writes, []);
+});
+
+test('staff.changed closes a stream whose permissions changed', async () => {
+  const { hub } = router();
+  // The route's recheck answers false when the grant's permission set is no longer the one read
+  // at connect; the router then ends the stream like a lost grant, so it reconnects with the new set.
+  const changed = sink({
+    kind: 'ops',
+    profileId: null,
+    permissions: new Set(['issues.view']),
+    recheck: async () => false,
+  });
+  hub.register(changed);
+  hub.dispatch({ to: { staff: 'any' }, type: 'staff.changed' });
+  await tick();
+  assert.deepEqual(changed.writes, ['data: {"type":"session.ended"}\n\n']);
+  assert.equal(changed.closed, 'session_ended');
+  assert.deepEqual(hub.counts(), { me: 0, ops: 0 });
+});

@@ -4,6 +4,7 @@ import {
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
+  staffChanged,
   type LiveMessage,
 } from '@tipme/contracts';
 
@@ -29,6 +30,8 @@ const none: Mapping = () => [];
 const toAll =
   (type: LiveMessage['type']): Mapping =>
   () => [{ to: { all: true }, type }];
+/** Every staff stream checks its grant again (never forwarded to a browser). */
+const toStaffStreams: Mapping = () => [staffChanged];
 const toProfile =
   (type: LiveMessage['type']): Mapping =>
   (payload) => {
@@ -38,7 +41,7 @@ const toProfile =
 
 /**
  * Every event the relay puts on the queue, each mapped explicitly, so a new event type fails the
- * unit test until someone decides its signal. Staff events stay `none` until PR 3.
+ * unit test until someone decides its signal.
  */
 const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   // Written with the tip, attempt and ledger in one transaction (provider-events.ts).
@@ -50,10 +53,11 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'payout.conflict': none,
   'ops.acted_alone': none,
   'ops.approval_pending': none,
-  'ops.last_approver_removed': none,
+  // Who holds what changed: each staff stream re-checks its grant and permission set.
+  'ops.last_approver_removed': toStaffStreams,
   'ops.approval_ran': none,
   'ops.approval_closed': none,
-  'ops.staff_changed': none,
+  'ops.staff_changed': toStaffStreams,
   // The issue's page: `profileId` was added to this payload for live updates (issues.ts).
   'ops.freeze_released': toProfile('withdrawals.changed'),
   'provider_event.conflict': none,

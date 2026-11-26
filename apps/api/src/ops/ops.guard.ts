@@ -23,12 +23,17 @@ export interface OpsContext {
   grantId: string;
   permissions: Set<string>;
   lastTotpAt: Date | null;
+  /** The grant's absolute end, and when it ends unused (last use + the idle hour). */
+  expiresAt: Date;
+  idleDeadline: Date;
 }
 export type OpsRequest = Request & { auth?: AuthContext; ops?: OpsContext };
 
 export const OPS_PERMISSION = 'tipme:ops-permission';
 /** No permission fits the route: the operation behind it decides, per record. */
 export const OPS_ANY_STAFF = 'tipme:ops-any-staff';
+/** Reads the grant without counting as activity: the live stream (an open tab is not use). */
+export const OPS_NO_TOUCH = 'tipme:ops-no-touch';
 
 /**
  * A named permission is always checked. Any-staff only counts where none is named, and a route marked
@@ -89,11 +94,16 @@ export class OpsGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<OpsRequest>();
     const session = await sessionOf(this.database, request);
     const token = readCookie(request, OPS_COOKIE);
+    const noTouch = this.reflector.getAllAndOverride<boolean | undefined>(
+      OPS_NO_TOUCH,
+      [context.getHandler(), context.getClass()],
+    );
     const grant =
       session && token
         ? await resolveOpsGrant(this.database.db, {
             token,
             sessionId: session.sessionId,
+            touch: !noTouch,
           })
         : null;
     if (!session || !grant || grant.userId !== session.userId) throw hidden();

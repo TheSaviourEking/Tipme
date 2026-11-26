@@ -60,3 +60,36 @@ test('the drain retry range is 1 to 10 s, shared by the hub and the browser', as
   const { LIVE_DRAIN_RETRY_MS } = await import('../dist/index.js');
   assert.deepEqual(LIVE_DRAIN_RETRY_MS, { min: 1000, max: 10_000 });
 });
+
+test('a staff target may name a list of permissions', () => {
+  assert.notEqual(
+    parseLiveMessage(
+      '{"to":{"staff":["issues.view","providers.manage"]},"type":"ops.providers.changed"}',
+    ),
+    null,
+  );
+  for (const staff of [[], ['switches.manage'], ['issues.view', 'issues.view']])
+    assert.equal(
+      parseLiveMessage(
+        JSON.stringify({ to: { staff }, type: 'ops.providers.changed' }),
+      ),
+      null,
+      JSON.stringify(staff),
+    );
+});
+
+test('every staff permission a target names parses as one permission', async () => {
+  const { LIVE_STAFF_PERMISSIONS } = await import('../dist/index.js');
+  assert.deepEqual(
+    [...LIVE_STAFF_PERMISSIONS],
+    ['issues.view', 'announcements.send', 'providers.manage'],
+  );
+  for (const staff of LIVE_STAFF_PERMISSIONS)
+    assert.notEqual(
+      parseLiveMessage(
+        JSON.stringify({ to: { staff }, type: 'ops.issues.changed' }),
+      ),
+      null,
+      staff,
+    );
+});

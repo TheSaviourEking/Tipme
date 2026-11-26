@@ -14862,6 +14862,43 @@
         "x-tipme-rate-limit": "auth_verify"
       }
     },
+    "/v1/ops/events": {
+      "get": {
+        "operationId": "OpsLive.ops",
+        "tags": [
+          "OpsLive"
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream of change signals for signed-in staff with a live admin grant: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"<signal>\"}` lines and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. Only the signals the grant's permissions allow; signals carry only a type, never data. Connecting does not count as activity on the grant, and the stream ends at the grant's expiry or idle deadline, or with `session.ended` when the grant ends or its permissions change. 204 while live updates are off. 404 without a live grant. 429 LIVE_LIMIT past 8 streams for one person; 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "staff-any",
+        "x-tipme-rate-limit": "live_connect",
+        "security": [
+          {
+            "session": []
+          }
+        ]
+      }
+    },
     "/v1/ops/grant": {
       "post": {
         "operationId": "OpsAccess.grant",

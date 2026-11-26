@@ -24,6 +24,18 @@ export const LIVE_RECIPIENT_TYPES = [
 export const LIVE_STAFF_TYPES = [
   'ops.approvals.changed',
   'ops.issues.changed',
+  'ops.announcements.changed',
+  'ops.providers.changed',
+] as const;
+
+/**
+ * The permissions a staff target may name (addendum §4). A list means any one of them is enough:
+ * the providers read route accepts either `issues.view` or `providers.manage`.
+ */
+export const LIVE_STAFF_PERMISSIONS = [
+  'issues.view',
+  'announcements.send',
+  'providers.manage',
 ] as const;
 
 /** Handled by the hub, never forwarded. */
@@ -47,13 +59,14 @@ export type LiveStaffType = (typeof LIVE_STAFF_TYPES)[number];
 export type LiveServerType = (typeof LIVE_SERVER_TYPES)[number];
 export type LiveEventType = LiveRecipientType | LiveStaffType;
 export type LiveControlType = (typeof LIVE_CONTROL_TYPES)[number];
+export type LiveStaffPermission = (typeof LIVE_STAFF_PERMISSIONS)[number];
 
 /** The routing key. It never leaves the server. */
 export type LiveTarget =
   | { user: string }
   | { profile: string }
   | { all: true }
-  | { staff: 'any' | 'issues.view' };
+  | { staff: 'any' | LiveStaffPermission | readonly LiveStaffPermission[] };
 
 export interface LiveMessage {
   to: LiveTarget;
@@ -69,7 +82,19 @@ const liveTargetSchema = z.union([
   z.object({ user: z.string().uuid() }).strict(),
   z.object({ profile: z.string().uuid() }).strict(),
   z.object({ all: z.literal(true) }).strict(),
-  z.object({ staff: z.enum(['any', 'issues.view']) }).strict(),
+  z
+    .object({
+      staff: z.union([
+        z.literal('any'),
+        z.enum(LIVE_STAFF_PERMISSIONS),
+        z
+          .array(z.enum(LIVE_STAFF_PERMISSIONS))
+          .min(1)
+          .max(LIVE_STAFF_PERMISSIONS.length)
+          .refine((list) => new Set(list).size === list.length),
+      ]),
+    })
+    .strict(),
 ]);
 
 export const liveMessageSchema: z.ZodType<LiveMessage> = z
@@ -93,16 +118,27 @@ export const sessionsChanged = (userId: string): LiveMessage => ({
   type: 'sessions.changed',
 });
 
-/**
- * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
- * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
- * the browser's own client uses the same range. One constant, so the two can't drift apart.
- */
 /** Published after a feature switch changes, once the change has committed. */
 export const switchesChanged: LiveMessage = {
   to: { all: true },
   type: 'switches.changed',
 };
+
+/**
+ * Who holds what among staff changed, or a grant ended (admin sign-out). Never forwarded: every staff
+ * stream checks its grant again and closes if it is gone or its permissions changed. Published by
+ * the worker's relay and by the API, so it lives here once.
+ */
+export const staffChanged: LiveMessage = {
+  to: { staff: 'any' },
+  type: 'staff.changed',
+};
+
+/**
+ * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
+ * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
+ * the browser's own client uses the same range. One constant, so the two can't drift apart.
+ */
 
 export const LIVE_DRAIN_RETRY_MS = { min: 1000, max: 10_000 } as const;
 

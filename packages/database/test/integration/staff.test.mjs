@@ -11,6 +11,7 @@ import {
   listAudit,
   listPretendOutbox,
   mailSealing,
+  OPS_GRANT_IDLE_MS,
   openOpsGrant,
   openSecret,
   recordAudit,
@@ -357,6 +358,57 @@ test('staff access', async (t) => {
       assert.ok(await resolve(token, later));
       await revokeSession(database.db, { userId, sessionId, now: later });
       assert.equal(await resolve(token, later), null);
+    },
+  );
+
+  await t.test(
+    'a no-touch read leaves the idle clock alone and says when the grant ends',
+    async () => {
+      await database.fresh();
+      const { userId, sessionId, totp } = await enrolledOwner(database.db);
+      const opened = at(MIN);
+      const result = await openOpsGrant(database.db, {
+        userId,
+        sessionId,
+        code: codeAt(totp, opened),
+        key,
+        now: opened,
+      });
+      assert.equal(result.status, 'ok');
+      const lastSeen = async () =>
+        (
+          await q('SELECT last_seen_at FROM ops_sessions WHERE user_id = $1', [
+            userId,
+          ])
+        )[0].last_seen_at.getTime();
+      const seenAtOpen = await lastSeen();
+
+      // A live stream's connect (Review Focus 2): read, but not activity.
+      const quiet = await resolveOpsGrant(database.db, {
+        token: result.token,
+        sessionId,
+        now: at(30 * MIN),
+        touch: false,
+      });
+      assert.equal(quiet.userId, userId);
+      assert.equal(await lastSeen(), seenAtOpen);
+      assert.equal(quiet.expiresAt.getTime(), result.expiresAt.getTime());
+      assert.equal(
+        quiet.idleDeadline.getTime(),
+        seenAtOpen + OPS_GRANT_IDLE_MS,
+      );
+
+      // Without it, a read is activity, as before, and the deadline moves with it.
+      const busy = await resolveOpsGrant(database.db, {
+        token: result.token,
+        sessionId,
+        now: at(40 * MIN),
+      });
+      assert.equal(await lastSeen(), at(40 * MIN).getTime());
+      assert.equal(
+        busy.idleDeadline.getTime(),
+        at(40 * MIN).getTime() + OPS_GRANT_IDLE_MS,
+      );
     },
   );
 

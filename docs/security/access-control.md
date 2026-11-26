@@ -504,6 +504,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/approvals/{id}/approve` | yes | `ops_code` | – |
 | POST | `/v1/ops/approvals/{id}/cancel` | yes | – | – |
 | POST | `/v1/ops/approvals/{id}/reject` | yes | – | – |
+| GET | `/v1/ops/events` | n/a (read) | `live_connect` | – |
 | GET | `/v1/ops/pages/{handle}` | n/a (read) | – | – |
 
 <!-- /generated:routes -->

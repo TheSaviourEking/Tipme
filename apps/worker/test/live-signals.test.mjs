@@ -333,3 +333,12 @@ test('whenRequestMoved keeps the signals only when the request moved', async () 
     messages,
   );
 });
+
+test('staff changes re-check every staff stream', () => {
+  for (const name of ['ops.staff_changed', 'ops.last_approver_removed'])
+    assert.deepEqual(
+      liveSignalFor(name, { action: 'role_changed', requestedBy: null }),
+      [{ to: { staff: 'any' }, type: 'staff.changed' }],
+      name,
+    );
+});

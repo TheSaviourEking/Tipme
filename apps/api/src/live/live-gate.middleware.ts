@@ -6,7 +6,8 @@ import type { LiveMetrics } from './live-metrics.js';
  * In front of the stream routes, before any guard. With live updates off they answer 204 at once,
  * exactly as before the feature: nothing counts against a rate limit and nothing touches Redis or
  * Postgres. With them on, it counts the refusals the route never sees: a 401 from the session guard
- * and a 429 from the address limit. The route marks `res.locals.liveCounted` for those it counted.
+ * (404 from OpsGuard on the staff stream) and a 429 from the address limit. The route marks
+ * `res.locals.liveCounted` for those it counted.
  */
 export function liveGate(o: {
   enabled: boolean;
@@ -21,7 +22,9 @@ export function liveGate(o: {
     }
     res.once('finish', () => {
       if (res.locals['liveCounted']) return;
-      if (res.statusCode === 401) o.metrics.connect('unauthenticated');
+      // The staff stream refuses with OpsGuard's 404 where the recipient one answers 401.
+      if (res.statusCode === 401 || res.statusCode === 404)
+        o.metrics.connect('unauthenticated');
       else if (res.statusCode === 429) o.metrics.connect('rate_limited');
     });
     next();

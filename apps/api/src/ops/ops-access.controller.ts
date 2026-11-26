@@ -13,6 +13,7 @@ import {
 import {
   opsCodeSchema,
   opsEnrolSchema,
+  staffChanged,
   type ApiDataResponse,
   type OpsAuditEntry,
   type OpsStaffActivity,
@@ -51,6 +52,7 @@ import { CurrentUser, type AuthContext } from '../auth/session.guard.js';
 import { CodedHttpException } from '../http/coded.exception.js';
 import { ZodValidationPipe } from '../http/zod-validation.pipe.js';
 import { DatabaseProvider } from '../infra/database.js';
+import { LIVE_PUBLISHER, type PublishLive } from '../live/live-publisher.js';
 import {
   CurrentOps,
   StaffGuard,
@@ -68,6 +70,7 @@ export class OpsAccessController {
     @Inject(API_CONFIG) private readonly config: ApiConfig,
     @Inject(DatabaseProvider) private readonly database: DatabaseProvider,
     @Inject(MAIL_SEALING) private readonly sealing: MailSealing,
+    @Inject(LIVE_PUBLISHER) private readonly publishLive: PublishLive,
   ) {
     this.key = Buffer.from(config.OPS_TOTP_KEY, 'base64');
   }
@@ -93,6 +96,7 @@ export class OpsAccessController {
           state: 'granted',
           role,
           permissions: [...grant.permissions].sort(),
+          liveUpdates: this.config.LIVE_UPDATES_ENABLED,
         },
       };
     }
@@ -191,6 +195,8 @@ export class OpsAccessController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<void> {
     await revokeOpsGrants(this.database.db, auth.userId);
+    // After the revoke committed: every staff stream checks its grant again, so this person's close.
+    void this.publishLive(staffChanged);
     clearOpsCookie(response, this.config);
   }
 

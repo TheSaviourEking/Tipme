@@ -24,7 +24,13 @@ export interface OpsEnrolment {
 export type OpsMe =
   | { state: 'needs_enrolment'; canDecline: boolean }
   | { state: 'needs_code' }
-  | { state: 'granted'; role: string; permissions: string[] };
+  | {
+      state: 'granted';
+      role: string;
+      permissions: string[];
+      /** True when this API serves `GET /v1/ops/events`; the ops shell opens the stream only then. */
+      liveUpdates?: boolean;
+    };
 
 /** One line of who changed what among staff (spec 6.4): fixed names, never the written reason. */
 export interface OpsStaffActivity {

@@ -168,8 +168,14 @@ export function createLiveRouter(o: LiveRouterOptions): LiveRouter {
         (s) => s.kind === 'me',
       );
     if ('all' in to) return [...byId.values()].filter((s) => s.kind === 'me');
-    if (to.staff === 'any') return [...ops];
-    return [...ops].filter((s) => s.permissions?.has(to.staff) === true);
+    const staff = to.staff;
+    if (staff === 'any') return [...ops];
+    // One permission, or a list of which any one is enough.
+    const needed: readonly string[] =
+      typeof staff === 'string' ? [staff] : staff;
+    return [...ops].filter((s) =>
+      needed.some((p) => s.permissions?.has(p) === true),
+    );
   }
 
   return {

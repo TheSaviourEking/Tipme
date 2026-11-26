@@ -68,3 +68,13 @@ test('with the flag on, a 401 counts as unauthenticated and the address limit’
   opened.res.emit('finish');
   assert.deepEqual(m.counted, ['unauthenticated', 'rate_limited']);
 });
+
+test('with the flag on, the staff stream’s 404 (no grant) counts as unauthenticated', () => {
+  const m = metrics();
+  const gate = liveGate({ enabled: true, metrics: m });
+  const hidden = call(gate, { path: '/v1/ops/events' });
+  assert.equal(hidden.passed, true);
+  hidden.res.statusCode = 404;
+  hidden.res.emit('finish');
+  assert.deepEqual(m.counted, ['unauthenticated']);
+});

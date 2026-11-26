@@ -1,7 +1,12 @@
 import { applyDecorators, SetMetadata, UseGuards } from '@nestjs/common';
 import type { OpsPermission as Permission } from '@tipme/database';
 import { CsrfGuard } from '../auth/csrf.guard.js';
-import { OPS_ANY_STAFF, OPS_PERMISSION, OpsGuard } from './ops.guard.js';
+import {
+  OPS_ANY_STAFF,
+  OPS_NO_TOUCH,
+  OPS_PERMISSION,
+  OpsGuard,
+} from './ops.guard.js';
 
 /**
  * Every admin route names its permission; the guard checks it on the server. A route that serves one
@@ -22,3 +27,12 @@ export const OpsAnyStaff = () =>
     SetMetadata(OPS_ANY_STAFF, true),
     UseGuards(CsrfGuard, OpsGuard),
   );
+
+/**
+ * The staff live stream: any staff with a live grant, read without moving the grant's idle clock, so
+ * an open tab never keeps an idle grant alive. The stream itself sends only what the grant's
+ * permissions allow. Put the address rate limit's `UseGuards` BELOW this: decorators apply bottom-up,
+ * so it then runs before CsrfGuard and OpsGuard and grant-less connects count too.
+ */
+export const OpsStream = () =>
+  applyDecorators(SetMetadata(OPS_NO_TOUCH, true), OpsAnyStaff());
