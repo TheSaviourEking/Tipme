@@ -52,6 +52,7 @@ Not decided (listed in the profitability package, waiting for the owner): Pro fr
 What stays:
 
 - The fee is shown before confirming ("Transfer fee: ₦50, charged by our payment partner").
+- **The request carries who the quote showed paying** (`feePaidBy`, Ruling R6 at the final review). If the payer decided under the lock differs (an unused top-up spent meanwhile, a business switch changed), the request is refused `WITHDRAWAL_FEE_CHANGED` (409), nothing is recorded, and the screen reloads the quote, shows the new fee and says "The transfer fee changed. Check the new amount and confirm again." A request without `feePaidBy` (a screen loaded before the release) is decided as before, for one release.
 - A higher or lower actual fee is settled as today (`payout-fee-extra` / `payout-fee-credit`).
 - A balance of ₦50 or less can't be withdrawn; the screen says why.
 - **Split withdrawals** (per-provider balances): the person pays one fee for the request. TipMe pays for each extra part (owner, 23 Nov 2026).

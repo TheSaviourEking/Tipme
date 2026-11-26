@@ -1075,6 +1075,61 @@ test('under the user-pays rule, withdraw ₦10,000: the screen shows the ₦50 f
   await expect(page.getByText(/TipMe pays the ₦50/)).toHaveCount(0);
 });
 
+// Ruling R6 (profit guards): never a fee the person didn't see. The request carries who the quote
+// showed paying; when an unused top-up was used up meanwhile, the API refuses and the screen shows
+// the new ₦50 and asks again.
+test('a fee changed since the quote: the screen shows the new ₦50 and asks to confirm again', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '1000000');
+  const whole = {
+    withdrawableMinor: '1000000',
+    ledgerMinor: '1000000',
+    providerMinor: '1000000',
+    feeMinor: '5000',
+  };
+  await fakeQuote(page, readyQuote({ ...whole, feePaidBy: 'tipme' }));
+  await page.goto('/dashboard/withdraw');
+  await expect(
+    page.getByText(
+      'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
+    ),
+  ).toBeVisible();
+  await page.getByLabel('Amount (NGN)').fill('10000');
+  const summary = page.getByRole('region', { name: 'Summary' });
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦10,000');
+  // By the time it is asked, the top-up is gone: the fresh quote says the person pays.
+  await fakeQuote(page, readyQuote({ ...whole, feePaidBy: 'user' }));
+  const sent: unknown[] = [];
+  await page.route('**/v1/me/withdrawals', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    sent.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 409,
+      json: { error: { code: 'WITHDRAWAL_FEE_CHANGED', message: 'x' } },
+    });
+  });
+  await page.getByRole('button', { name: 'Withdraw ₦10,000' }).click();
+  await expect(page.locator('.tm-field-error')).toHaveText(
+    'The transfer fee changed. Check the new amount and confirm again.',
+  );
+  expect(sent).toEqual([{ amountMinor: '1000000', feePaidBy: 'tipme' }]);
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦9,950');
+  await expect(
+    page.getByText(
+      'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByText('We couldn’t confirm your withdrawal'),
+  ).toHaveCount(0);
+  // The refusal reloads the balance too; a read still on its way when the test ends is dropped.
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test('a balance of ₦50 or less says why it can’t be withdrawn', async ({
   page,
 }, testInfo) => {
