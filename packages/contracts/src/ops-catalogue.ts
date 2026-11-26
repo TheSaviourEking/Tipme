@@ -300,6 +300,12 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
   },
+  'OpsCardCostsController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'What a card payment costs TipMe and its history: rates, amounts, reasons and staff ids, nobody’s private details.',
+  },
   'OpsCollectSettingsController.state': {
     verb: 'GET',
     permission: 'fees.manage',
