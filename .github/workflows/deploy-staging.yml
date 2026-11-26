@@ -1,5 +1,6 @@
-# Builds the API/worker image once, ships it to the staging VPS over SSH and deploys it, then
-# runs the full release check against staging (PR-010, ADR-0011). The server never builds.
+# Builds the API/worker image and the website's image once, ships them to the staging VPS over SSH
+# and deploys them, then runs the full release check against staging (PR-010, ADR-0011). The server
+# never builds. The website runs there too since Vercel paused it (26 Nov 2026).
 #
 # Run it by hand (Actions → Deploy staging → Run workflow), or automatically after the checks pass
 # on a push to dev (staging follows dev) when STAGING_AUTO_DEPLOY is "true" on the staging
@@ -12,6 +13,12 @@
 #              RELEASE_CHECK_TOKEN, RELEASE_OPS_EMAIL, RELEASE_OPS_TOTP_SECRET,
 #              SLACK_WEBHOOK_URL (optional; posts deploy status and fix summaries to Slack)
 #   variables: STAGING_SSH (deploy@<server>), STAGING_WEB_URL, STAGING_API_URL
+# The website's build settings (baked into tipme-web-staging; staging or repository variables, all
+# optional, each with the default staging had on Vercel; never secrets):
+#   STAGING_NEXT_PUBLIC_SENTRY_DSN (the tipme-web DSN; blank: the website sends nothing),
+#   STAGING_NEXT_PUBLIC_SENTRY_ENVIRONMENT (default staging), STAGING_NEXT_PUBLIC_PREVIEW_GATE
+#   (default on), STAGING_NEXT_PUBLIC_PRETEND_DELIVERY (default on: the pretend inbox).
+# SITE_URL is STAGING_WEB_URL and NEXT_PUBLIC_API_ORIGIN is STAGING_API_URL; staging is never indexed.
 # Changelog (optional; docs/runbooks/changelog.md): the repository secret CHANGELOG_SIGNING_SECRET
 # and the repository variable CHANGELOG_API_URL (production's API: "on staging" is recorded in
 # production's changelog). Unset, the changelog step only notes "Changelog not set up".
@@ -91,6 +98,25 @@ jobs:
 
       - name: Build the image (once, here)
         run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
+
+      # The website, with staging's browser settings baked in (deploy/web.Dockerfile).
+      - name: Build the web image (staging)
+        env:
+          SITE_URL: ${{ vars.STAGING_WEB_URL }}
+          SITE_INDEXING: ''
+          NEXT_PUBLIC_API_ORIGIN: ${{ vars.STAGING_API_URL }}
+          NEXT_PUBLIC_PREVIEW_GATE: ${{ vars.STAGING_NEXT_PUBLIC_PREVIEW_GATE || 'on' }}
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.STAGING_NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${{ vars.STAGING_NEXT_PUBLIC_SENTRY_ENVIRONMENT || 'staging' }}
+          NEXT_PUBLIC_PRETEND_DELIVERY: ${{ vars.STAGING_NEXT_PUBLIC_PRETEND_DELIVERY || 'on' }}
+        run: >-
+          docker build -f deploy/web.Dockerfile
+          --build-arg TIPME_BUILD_VERSION="$VERSION"
+          --build-arg SITE_URL --build-arg SITE_INDEXING
+          --build-arg NEXT_PUBLIC_API_ORIGIN --build-arg NEXT_PUBLIC_PREVIEW_GATE
+          --build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT
+          --build-arg NEXT_PUBLIC_PRETEND_DELIVERY
+          -t "tipme-web-staging:$VERSION" .
 
       - name: SSH to the server
         env:
