@@ -128,7 +128,7 @@ test('the withdraw page says every state the provider can put it in', async ({
     ],
     [
       { state: 'setup_needed', requirementsDue: [] },
-      'Finish setting up how you get paid to withdraw.',
+      'Before your first withdrawal, our payment partner needs to confirm who you are. You’ll finish this on their page; it takes a few minutes. Your first withdrawal can then take a few hours.',
       false,
     ],
     [

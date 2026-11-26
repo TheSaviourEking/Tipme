@@ -8,6 +8,7 @@ import {
   COLLECT_COPY,
   COLLECT_HELD_NOTE,
   COLLECT_WITHDRAW_WORDS,
+  FIRST_WITHDRAWAL_COPY,
   WITHDRAW_SPLIT_COPY,
 } from '@tipme/contracts/copy';
 import {
@@ -215,11 +216,11 @@ function decide(input: {
       );
     case 'setup_needed':
       return blocked('setup_needed', {
-        title: 'Finish your setup',
-        body: 'Finish setting up how you get paid to withdraw.',
+        title: FIRST_WITHDRAWAL_COPY.setupTitle,
+        body: FIRST_WITHDRAWAL_COPY.setupBody,
         tone: 'neutral',
         href: quote.onboardingUrl ?? `${SETTINGS}#payments`,
-        linkLabel: 'Continue setup',
+        linkLabel: FIRST_WITHDRAWAL_COPY.setupLink,
       });
     case 'no_destination':
       return {
@@ -422,6 +423,52 @@ export function withdrawDayNote(
   const { freePerDay, ordinalToday } = quote;
   if (!freePerDay || !ordinalToday || ordinalToday <= freePerDay) return null;
   return `This is your ${ordinalOf(ordinalToday)} withdrawal today, so the ${formatNaira(quote.feeMinor)} transfer fee comes off it. Withdrawals are free ${timesWord(freePerDay)} a day.`;
+}
+
+/**
+ * Whether the person has never had a withdrawal paid, from the history the page already reads
+ * (newest first, paged). A paid or reversed withdrawal, or a sent part, means they have; a failed one
+ * doesn't count. Unknown (not loaded, or a later page unread with none paid so far) is false, so the
+ * note is never said to someone it may not be true for.
+ */
+function neverPaid(rows: WithdrawalRow[] | null, next: string | null): boolean {
+  if (rows === null || next !== null) return false;
+  return !rows.some(
+    (row) =>
+      row.state === 'sent' ||
+      row.state === 'reversed' ||
+      (row.parts ?? []).some(
+        (part) => part.state === 'sent' || part.state === 'reversed',
+      ),
+  );
+}
+
+/**
+ * Said before a person confirms their first withdrawal (owner, 26 Nov 2026): it can take a few hours.
+ * Only beside a ready quote, so only where a withdrawal can be asked for; a business's page never
+ * calls this. Null for a second withdrawal on, or when the history isn't known.
+ */
+export function firstWithdrawalNote(
+  quote: WithdrawalQuoteResponse | null,
+  rows: WithdrawalRow[] | null,
+  next: string | null,
+): string | null {
+  if (quote?.state !== 'ready' || !neverPaid(rows, next)) return null;
+  return FIRST_WITHDRAWAL_COPY.beforeConfirm;
+}
+
+/** The same warning on a first withdrawal's row while it is requested, on its way or being checked. */
+export function firstWithdrawalRowNote(
+  row: WithdrawalRow,
+  rows: WithdrawalRow[] | null,
+  next: string | null,
+): string | null {
+  const open =
+    row.state === 'requested' ||
+    row.state === 'processing' ||
+    row.state === 'in_review';
+  if (!open || !neverPaid(rows, next)) return null;
+  return FIRST_WITHDRAWAL_COPY.processing;
 }
 
 /**

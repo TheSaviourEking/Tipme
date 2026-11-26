@@ -10,6 +10,8 @@ import {
   collectWithdrawView,
   withdrawableNow,
   withdrawDayNote,
+  firstWithdrawalNote,
+  firstWithdrawalRowNote,
   withdrawFee,
   withdrawSummary,
   withdrawLamp,
@@ -76,7 +78,7 @@ test('every other state has its own words and no Withdraw', () => {
     ],
     [
       { state: 'setup_needed', requirementsDue: [] },
-      'Finish setting up how you get paid to withdraw.',
+      'Before your first withdrawal, our payment partner needs to confirm who you are. You’ll finish this on their page; it takes a few minutes. Your first withdrawal can then take a few hours.',
     ],
     [
       { state: 'destination_pending' },
@@ -429,7 +431,7 @@ test('no bank is a stamped slip; a pause is a standing warning; the rest stay on
       of({ state: 'setup_needed', requirementsDue: [], inReview: false }),
       0n,
     ),
-    { tone: 'off', text: 'Finish your setup' },
+    { tone: 'off', text: 'Confirm who you are' },
   );
   assert.deepEqual(
     withdrawLamp(of({ state: 'destination_pending', inReview: false }), 0n),
@@ -788,4 +790,117 @@ test('a request’s answer reads as its parts: just asked for is on its way', ()
     ['requested', 'processing', 'sent', 'failed'],
   );
   assert.equal(partsView(parts.slice(0, 2)).parts[0].words, 'on its way');
+});
+
+test('the setup card asks to confirm who you are, and links to the partner’s check', () => {
+  const { notice } = of({
+    state: 'setup_needed',
+    requirementsDue: [],
+    onboardingUrl: 'https://partner.example/check',
+    inReview: false,
+  });
+  assert.equal(notice.title, 'Confirm who you are');
+  assert.equal(notice.linkLabel, 'Continue to verify');
+  assert.equal(notice.href, 'https://partner.example/check');
+  assert.match(notice.body, /our payment partner/);
+  assert.match(notice.body, /first withdrawal can then take a few hours/);
+  assert.doesNotMatch(`${notice.title} ${notice.body}`, /bachs|stripe/i);
+  // Without a link from the partner the href falls back to settings, as before.
+  assert.equal(
+    of({ state: 'setup_needed', requirementsDue: [], inReview: false }).notice
+      .href,
+    '/dashboard/settings#payments',
+  );
+});
+
+const row = (state, over = {}) => ({
+  payoutId: `p-${state}`,
+  requestedAt: '2026-11-20T10:00:00.000Z',
+  paidAt: state === 'sent' ? '2026-11-20T12:00:00.000Z' : null,
+  currency: 'NGN',
+  amountMinor: '500000',
+  state,
+  bank: null,
+  parts: null,
+  ...over,
+});
+const FIRST_NOTE =
+  'Your first withdrawal can take a few hours. After that, they’re usually quicker.';
+const FIRST_ROW = 'First withdrawals can take a few hours.';
+
+test('before a first withdrawal is confirmed, the form says it can take a few hours', () => {
+  const q = ready({ feePaidBy: 'tipme' });
+  // Never had one: an empty list, or only ones that failed.
+  assert.equal(firstWithdrawalNote(q, [], null), FIRST_NOTE);
+  assert.equal(firstWithdrawalNote(q, [row('failed')], null), FIRST_NOTE);
+  assert.equal(firstWithdrawalNote(q, [row('processing')], null), FIRST_NOTE);
+  // A second withdrawal: one was paid (or paid and reversed), so no note.
+  assert.equal(firstWithdrawalNote(q, [row('sent')], null), null);
+  assert.equal(firstWithdrawalNote(q, [row('reversed')], null), null);
+  assert.equal(
+    firstWithdrawalNote(
+      q,
+      [
+        row('processing', {
+          parts: [
+            { amountMinor: '1', state: 'sent' },
+            { amountMinor: '1', state: 'processing' },
+          ],
+        }),
+      ],
+      null,
+    ),
+    null,
+  );
+  // The history isn't loaded, or only its first page is and nothing paid is in it: unknown, no note.
+  assert.equal(firstWithdrawalNote(q, null, null), null);
+  assert.equal(firstWithdrawalNote(q, [row('failed')], 'cursor'), null);
+  assert.equal(firstWithdrawalNote(q, [row('sent')], 'cursor'), null);
+  // Only beside a form that can send.
+  assert.equal(
+    firstWithdrawalNote({ state: 'no_destination' }, [], null),
+    null,
+  );
+  assert.equal(firstWithdrawalNote(null, [], null), null);
+});
+
+test('a first withdrawal that is processing says first withdrawals can take a few hours', () => {
+  for (const state of ['requested', 'processing', 'in_review'])
+    assert.equal(
+      firstWithdrawalRowNote(row(state), [row(state)], null),
+      FIRST_ROW,
+      state,
+    );
+  // Not while it is paid, failed or reversed.
+  for (const state of ['sent', 'failed', 'reversed'])
+    assert.equal(firstWithdrawalRowNote(row(state), [row(state)], null), null);
+  // A second one on its way after a paid one: no note.
+  assert.equal(
+    firstWithdrawalRowNote(
+      row('processing'),
+      [row('processing'), row('sent')],
+      null,
+    ),
+    null,
+  );
+  // More pages unread and none paid so far: unknown, no note.
+  assert.equal(
+    firstWithdrawalRowNote(row('processing'), [row('processing')], 'cursor'),
+    null,
+  );
+});
+
+test('the first-withdrawal words are in the shared copy and are shown by the Withdraw screen only', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(
+    new URL('../src/app/dashboard/withdraw/withdraw-view.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.match(src, /firstWithdrawalNote\(/);
+  assert.match(src, /firstWithdrawalRowNote\(/);
+  // A business's Money section doesn't use these.
+  for (const file of ['../src/lib/business/money-state.ts']) {
+    const business = await readFile(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(business, /firstWithdrawal/);
+  }
 });

@@ -112,6 +112,23 @@ export const WITHDRAW_SPLIT_COPY = {
 } as const;
 
 /**
+ * A person's first withdrawal (owner, 26 Nov 2026): their first time on our payment partner's identity
+ * check, and the first payout then takes hours. Never a provider's name: always "our payment partner".
+ * A business's Money section doesn't use these.
+ */
+export const FIRST_WITHDRAWAL_COPY = {
+  setupTitle: 'Confirm who you are',
+  setupBody:
+    'Before your first withdrawal, our payment partner needs to confirm who you are. You’ll finish this on their page; it takes a few minutes. Your first withdrawal can then take a few hours.',
+  setupLink: 'Continue to verify',
+  /** Before confirming the first withdrawal. */
+  beforeConfirm:
+    'Your first withdrawal can take a few hours. After that, they’re usually quicker.',
+  /** On a first withdrawal's row while it is still processing. */
+  processing: 'First withdrawals can take a few hours.',
+} as const;
+
+/**
  * The same notices on a business's Money section (Task 9 fix round 1), in the business's words.
  * Never a provider's name, never the payment partner's.
  */
