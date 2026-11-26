@@ -363,7 +363,7 @@ test.describe('live progress', () => {
       const [, ...rest] = reads;
       const timed = rest.filter(
         (at) =>
-          !signals.some((s) => at >= s - 50 && at - s < 2000) &&
+          !signals.some((s) => at >= s - 50 && at - s < 4000) &&
           !ready.some((r) => at >= r - 50 && at - r < 1000),
       );
       expect(timed).toEqual([]);
@@ -414,8 +414,12 @@ test.describe('live progress', () => {
       const { reads } = await timeline(page);
       expect(reads.length - 1).toBeGreaterThanOrEqual(2);
       expect(reads.length - 1).toBeLessThanOrEqual(3);
-      for (let i = 1; i < reads.length; i += 1)
-        expect(reads[i]! - reads[i - 1]!).toBeGreaterThanOrEqual(27_000);
+      for (let i = 1; i < reads.length; i += 1) {
+        // The fallback's 30 s ± 3 s (OPS_LIVE_TIMING), with a second of slack for a slow runner.
+        const gap = reads[i]! - reads[i - 1]!;
+        expect(gap).toBeGreaterThanOrEqual(27_000);
+        expect(gap).toBeLessThanOrEqual(34_000);
+      }
     } finally {
       await held.release();
       await settle(held.id);

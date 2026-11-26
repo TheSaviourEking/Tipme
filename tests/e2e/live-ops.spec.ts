@@ -186,8 +186,12 @@ test('issues fall back to 30 s when the stream is refused', async ({
   const after = reads.slice(1);
   expect(after.length).toBeGreaterThanOrEqual(2);
   expect(after.length).toBeLessThanOrEqual(3);
-  for (let i = 1; i < reads.length; i += 1)
-    expect(reads[i] - reads[i - 1]).toBeGreaterThanOrEqual(27_000);
+  for (let i = 1; i < reads.length; i += 1) {
+    const [earlier, later] = [reads[i - 1], reads[i]];
+    if (earlier === undefined || later === undefined)
+      throw new Error(`no read at index ${i - 1} or ${i}`);
+    expect(later - earlier).toBeGreaterThanOrEqual(27_000);
+  }
 });
 
 test('a new issue appears without reloading', async ({
