@@ -153,7 +153,7 @@ export function PagePricing({ profileId }: { profileId: string }) {
         {pricing.customFeeBps === null || capped
           ? ` (${standard}, the plan’s rate)`
           : ' (set by staff for this page)'}
-        , payment and withdrawal fees included.
+        , payment processing included.
         {capped &&
           ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
         Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>

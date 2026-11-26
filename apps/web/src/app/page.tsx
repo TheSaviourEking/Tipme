@@ -106,9 +106,8 @@ export default function Home() {
             <p>
               TipMe keeps <PlanFeePercent plan="free" />% of each tip on Free,
               or <PlanFeePercent plan="pro" />% on Pro, and that covers payment
-              and withdrawal fees. You receive the rest, and see every tip and
-              note. The smallest tip is{' '}
-              <span className="money">{MINIMUM_TIP_TEXT}</span>.
+              processing. You receive the rest, and see every tip and note. The
+              smallest tip is <span className="money">{MINIMUM_TIP_TEXT}</span>.
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">

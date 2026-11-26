@@ -38,7 +38,7 @@ function who(row: OpsPlanFeesRow): string {
 
 /**
  * TipMe's fee per plan (owner, 18 Nov 2026): what TipMe keeps of each new tip on Free and on Pro,
- * payment and withdrawal fees included. A change is a money change: another qualified person
+ * payment processing included. A change is a money change: another qualified person
  * approves it (a lone admin saves it alone, with an alert, as every money switch), it is audited, and
  * it applies to new quotes only. Business tips use the staff member's own plan rate; the business
  * payout fee is a money switch, shown here and changed in Switches.
@@ -156,9 +156,9 @@ export default function PlanFeesPage() {
     <section className="dashboard-section ops-page-body">
       <h1>Fees</h1>
       <p className="tm-hint">
-        What TipMe keeps of each tip, payment and withdrawal fees included. A
-        change applies to new tips only: a price already shown to a supporter,
-        and every tip already paid, keep their fee.
+        What TipMe keeps of each tip, payment processing included. A change
+        applies to new tips only: a price already shown to a supporter, and
+        every tip already paid, keep their fee.
       </p>
 
       <div className="ops-prices">

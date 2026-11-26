@@ -384,8 +384,8 @@ export function ProPlan() {
       {/* The plan sets TipMe's share of each new tip, at the rates staff set (owner, 18 Nov 2026). */}
       <p className="settings-plan__status">
         {onPro
-          ? `TipMe keeps ${proPercent}% of each tip while you’re on Pro, instead of ${freePercent}% on Free. Payment and withdrawal fees are included.`
-          : `TipMe keeps ${freePercent}% of each tip on Free, payment and withdrawal fees included. On Pro it keeps ${proPercent}%.`}
+          ? `TipMe keeps ${proPercent}% of each tip while you’re on Pro, instead of ${freePercent}% on Free. Payment processing is included.`
+          : `TipMe keeps ${freePercent}% of each tip on Free, payment processing included. On Pro it keeps ${proPercent}%.`}
       </p>
       {pro?.next && (
         <p className="settings-plan__status">

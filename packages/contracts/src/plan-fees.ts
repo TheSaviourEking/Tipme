@@ -3,7 +3,7 @@ import { opsReasonSchema } from './ops.js';
 
 /**
  * TipMe's share of each tip per plan (owner, 18 Nov 2026): an admin setting, Free 5% and Pro 3% to
- * start, payment and withdrawal fees included. Rates are whole basis points sent as strings of
+ * start, payment processing included. Rates are whole basis points sent as strings of
  * digits; the server is the only source of them.
  */
 

@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import {
   CURRENT_FEE_POLICY,
   DEFAULT_PLAN_FEE_RATES,
-  FREE_WITHDRAWALS_PER_DAY,
   PLAN_FEE_MAX_BPS,
   PLAN_FEE_MIN_BPS,
   FEE_POLICY_V1,
@@ -146,5 +145,4 @@ test('a Lagos calendar day starts at 23:00 UTC the evening before', () => {
   assert.equal(start('2026-11-18T22:59:59.999Z'), '2026-11-17T23:00:00.000Z');
   assert.equal(start('2026-11-18T23:00:00Z'), '2026-11-18T23:00:00.000Z');
   assert.equal(start('2026-11-18T00:30:00Z'), '2026-11-17T23:00:00.000Z');
-  assert.equal(FREE_WITHDRAWALS_PER_DAY, 2);
 });

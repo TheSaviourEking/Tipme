@@ -176,7 +176,8 @@ test('a payout asked for while TipMe paid: ₦5,000 arrives and TipMe tops up th
   assert.equal(quote.feeMinor, 5000n);
   assert.equal(quote.feePaidBy, 'user');
   const { payoutId } = await s.withdraw(provider, 500_000n);
-  // As the release before wrote it: TipMe pays, the whole amount is sent.
+  // As the release before wrote it: TipMe pays, the whole amount is sent. This UPDATE sets up a
+  // pre-release payout and skips the ledger on purpose.
   await s.q(
     `UPDATE payouts SET fee_payer = 'tipme', user_fee_minor = 0, amount_minor = 500000 WHERE id = $1`,
     [payoutId],
@@ -255,6 +256,7 @@ test('the partner charges ₦70: TipMe books all ₦70 as its cost, Tobi’s bal
   await s.tip();
   const provider = partner();
   const { payoutId } = await s.withdraw(provider, 500_000n);
+  // Sets up a pre-release payout (TipMe paid the fee); skips the ledger on purpose.
   await s.q(
     `UPDATE payouts SET fee_payer = 'tipme', user_fee_minor = 0, amount_minor = 500000 WHERE id = $1`,
     [payoutId],

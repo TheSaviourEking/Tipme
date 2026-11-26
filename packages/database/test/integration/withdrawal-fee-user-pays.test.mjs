@@ -188,6 +188,7 @@ test('two TipMe-paid withdrawals earlier today do not change the third: the pers
   const provider = partner();
   const one = await s.withdraw(provider, 300_000n);
   const two = await s.withdraw(provider, 300_000n);
+  // Sets up pre-release payouts (TipMe paid the fee); skips the ledger on purpose.
   await s.q(
     `UPDATE payouts SET fee_payer = 'tipme', user_fee_minor = 0, amount_minor = 300000
       WHERE id = ANY($1)`,
@@ -233,7 +234,8 @@ test('a payout requested before this release with fee_payer tipme still gets its
   await s.tip();
   const provider = partner();
   const { payoutId } = await s.withdraw(provider, 500_000n);
-  // As the previous release wrote it: TipMe pays, the whole amount is sent.
+  // As the previous release wrote it: TipMe pays, the whole amount is sent. This UPDATE sets up a
+  // pre-release payout and skips the ledger on purpose.
   await s.q(
     `UPDATE payouts SET fee_payer = 'tipme', user_fee_minor = 0, amount_minor = 500000 WHERE id = $1`,
     [payoutId],

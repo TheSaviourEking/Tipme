@@ -1,17 +1,18 @@
 import {
   DEFAULT_PLAN_FEE_RATES,
-  FREE_WITHDRAWALS_PER_DAY,
+  WITHDRAWAL_FEE_COPY_MINOR,
 } from '@tipme/domain';
+import { formatNaira } from './demo-amount.ts';
 
 /**
- * Owner, 18 Nov 2026: the first withdrawals of each Lagos day are free; from the next one the partner's
- * transfer fee comes off the amount. The number is FREE_WITHDRAWALS_PER_DAY (domain), written once.
+ * Owner, 25 Nov 2026: every withdrawal costs the partner's fee, on both plans. The amount is the
+ * domain's mirror of the payout fee, written once.
  */
-export const FREE_WITHDRAWALS_COPY = `The first ${FREE_WITHDRAWALS_PER_DAY} withdrawals each day are free.`;
+export const WITHDRAWAL_FEE_COPY = `Each withdrawal costs ${formatNaira(WITHDRAWAL_FEE_COPY_MINOR)}, charged by our payment partner.`;
 
 /**
- * TipMe's share per plan as percentages (owner, 18 Nov 2026: Free 5%, Pro 3%, payment and withdrawal
- * fees included). The rates are an admin setting: copy that can read it uses getPlanFees() (server) or
+ * TipMe's share per plan as percentages (owner, 18 Nov 2026: Free 5%, Pro 3%, payment processing
+ * included). The rates are an admin setting: copy that can read it uses getPlanFees() (server) or
  * usePlanFees() (client). These coded defaults are for text that must stay fixed, such as the Terms,
  * and for the moment before the live rates are read.
  */

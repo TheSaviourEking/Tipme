@@ -3,13 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
   DEFAULT_PLAN_FEE_PERCENTS,
-  FREE_WITHDRAWALS_COPY,
+  WITHDRAWAL_FEE_COPY,
   FREE_SHARE_PERCENT,
   PRO_SHARE_PERCENT,
   planFeePercentsOf,
 } from '../src/lib/fee-share.ts';
 
-// The owner, 18 Nov 2026: Free 5% and Pro 3%, payment and withdrawal fees included, set in admin.
+// The owner, 18 Nov 2026: Free 5% and Pro 3%, payment processing included (withdrawals cost ₦50, 25 Nov 2026), set in admin.
 // Copy reads the live setting; only fixed text (the Terms) states the starting numbers.
 
 const source = (path) =>
@@ -62,26 +62,34 @@ test('the home, creators, Pro, settings and ops copy read the live rates, never 
   }
 });
 
-test('the copy says payment and withdrawal fees are included, and withdrawals are free', async () => {
-  assert.match(
-    await source('app/page.tsx'),
-    /payment\s+and\s+withdrawal\s+fees/,
-  );
-  assert.match(
-    await source('app/for-creators/page.tsx'),
-    /payment and withdrawal fees included/,
-  );
-  const pro = await source('app/pro/page.tsx');
-  // The daily allowance is one constant (domain), worded once (owner, 18 Nov 2026).
+test('the copy says payment processing is included, and each withdrawal costs the partner fee', async () => {
+  const { NGN_PAYOUT_FEE_MINOR } =
+    await import('../../../packages/payments/src/payout-fee.ts');
+  // The web app cannot import the payments package, so the copy's ₦50 is pinned to it here.
   assert.equal(
-    FREE_WITHDRAWALS_COPY,
-    'The first 2 withdrawals each day are free.',
+    WITHDRAWAL_FEE_COPY,
+    `Each withdrawal costs ₦${NGN_PAYOUT_FEE_MINOR / 100n}, charged by our payment partner.`,
   );
-  assert.match(pro, /FREE_WITHDRAWALS_COPY/);
-  assert.match(
-    pro,
-    /Withdrawals to your bank: the first \$\{FREE_WITHDRAWALS_PER_DAY\} each day are free/,
+  assert.equal(
+    WITHDRAWAL_FEE_COPY,
+    'Each withdrawal costs ₦50, charged by our payment partner.',
   );
+  const home = await source('app/page.tsx');
+  assert.match(home, /payment\s+processing/);
+  assert.doesNotMatch(home, /withdrawal\s+fees/);
+  const creators = await source('app/for-creators/page.tsx');
+  assert.match(creators, /payment processing included/);
+  assert.match(creators, /WITHDRAWAL_FEE_COPY/);
+  assert.doesNotMatch(creators, /for free from|withdrawal fees/);
+  const pro = await source('app/pro/page.tsx');
+  assert.match(pro, /WITHDRAWAL_FEE_COPY/);
+  assert.match(pro, /with payment processing included\./);
+  assert.doesNotMatch(pro, /FREE_WITHDRAW|are free`|withdrawal fees/);
+  assert.doesNotMatch(
+    await source('app/ops/pages/page.tsx'),
+    /withdrawal fees/,
+  );
+  assert.match(await source('app/ops/pages/page.tsx'), /WITHDRAWAL_FEE_COPY/);
 });
 
 test('the Terms read the live rates and work the example nets from them', async () => {
@@ -91,10 +99,13 @@ test('the Terms read the live rates and work the example nets from them', async 
   assert.doesNotMatch(terms, /FREE_SHARE_PERCENT|PRO_SHARE_PERCENT/);
   assert.doesNotMatch(terms, /feePolicyForPlan\('(free|pro)'\)/);
   assert.doesNotMatch(terms, /FEE_POLICY_V2/);
-  assert.match(terms, /withdrawals each day \(Lagos time\) are free/);
-  assert.match(terms, /FREE_WITHDRAWALS_PER_DAY/);
-  assert.doesNotMatch(terms, /Withdrawals are free\./);
+  assert.match(
+    terms,
+    /Each withdrawal costs\{' '\}\s+<span className="money">₦50<\/span>,\s+charged\s+by\s+our\s+payment\s+partner,\s+and comes off the amount\./,
+  );
+  assert.doesNotMatch(terms, /FREE_WITHDRAW|are free|Withdrawals are free\./);
   assert.doesNotMatch(terms, /₦9,950|₦50<\/span> or less/);
+  assert.match(terms, /payment processing/);
   // A business still pays the partner's transfer fee, and the Terms say so without naming it.
   assert.match(
     terms,

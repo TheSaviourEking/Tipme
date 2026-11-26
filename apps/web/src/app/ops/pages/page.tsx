@@ -45,7 +45,7 @@ import { apiFetch } from '@/lib/session-client';
 import { usePlanFees } from '@/lib/use-plan-fees';
 import { naira } from '@/lib/money';
 import { CURRENT_FEE_POLICY } from '@tipme/domain';
-import { FREE_WITHDRAWALS_COPY } from '@/lib/fee-share';
+import { WITHDRAWAL_FEE_COPY } from '@/lib/fee-share';
 
 /** The smallest tip (and withdrawal), from the fee policy, as ₦2,000. */
 const MINIMUM_TIP_TEXT = naira(CURRENT_FEE_POLICY.minTipMinor.toString());
@@ -489,8 +489,8 @@ export default function OpsPagesPage() {
         Pro lets a recipient choose their own tip amounts and minimum (never
         below <span className="money">{MINIMUM_TIP_TEXT}</span>) and change
         their username. TipMe keeps {proPercent}% of each tip on Pro and{' '}
-        {freePercent}% on Free, payment and withdrawal fees included (set in
-        Fees). {FREE_WITHDRAWALS_COPY} {copy.opsBilling}
+        {freePercent}% on Free, payment processing included (set in Fees).{' '}
+        {WITHDRAWAL_FEE_COPY} {copy.opsBilling}
       </p>
       <form className="settings-form" onSubmit={(e) => void find(e)}>
         <InputField

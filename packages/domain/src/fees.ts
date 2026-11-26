@@ -59,7 +59,8 @@ export interface PlanFeeRates {
 
 /**
  * The owner's pricing, 18 Nov 2026 (docs/00-DECISIONS.md D-05 addendum): TipMe Free keeps 5% of each
- * tip and TipMe Pro 3%, processing and withdrawal fees included (TipMe pays both from its share).
+ * tip and TipMe Pro 3%, payment processing included (TipMe pays it from its share). Each withdrawal
+ * costs the person the partner's ₦50 (owner, 25 Nov 2026), so withdrawal fees are not in the rate.
  * Staff can change the two rates at /ops/plan-fees (two people, audited); these are the coded
  * defaults, used only when no rate row exists or the stored one is invalid. A database error is not
  * covered: the quote fails rather than price from defaults.
@@ -301,11 +302,11 @@ export function belowWithdrawalMinimum(
 }
 
 /**
- * Withdrawals from a person's page that are free each Lagos calendar day (owner, 18 Nov 2026): TipMe
- * pays our payment partner's fee on the first this many. From the next one the user pays it from the
- * amount. Businesses are not counted. The one place this number is written.
+ * What our payment partner charges for one NGN withdrawal, for copy only (owner, 25 Nov 2026: people
+ * pay it on every withdrawal). Web copy cannot import @tipme/payments, so this mirrors its
+ * NGN_PAYOUT_FEE_MINOR (the one the payout code uses); a web test fails if the two ever differ.
  */
-export const FREE_WITHDRAWALS_PER_DAY = 2;
+export const WITHDRAWAL_FEE_COPY_MINOR = 5000n;
 
 /** Lagos is UTC+1 all year (no daylight saving). */
 const LAGOS_OFFSET_MS = 3_600_000;

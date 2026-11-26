@@ -403,28 +403,6 @@ export function withdrawFee(
   return `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
 }
 
-const ordinalOf = (n: number): string => {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
-};
-const timesWord = (n: number): string =>
-  n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
-
-/**
- * Said before a person confirms, on a person's page only (owner, 18 Nov 2026): the first withdrawals
- * of the Lagos day are free; from the next one the partner's transfer fee comes off the amount. Null
- * when there is nothing to say (free, a business, no ready quote).
- */
-export function withdrawDayNote(
-  quote: WithdrawalQuoteResponse | null,
-): string | null {
-  if (quote?.state !== 'ready' || quote.feePaidBy !== 'user') return null;
-  const { freePerDay, ordinalToday } = quote;
-  if (!freePerDay || !ordinalToday || ordinalToday <= freePerDay) return null;
-  return `This is your ${ordinalOf(ordinalToday)} withdrawal today, so the ${formatNaira(quote.feeMinor)} transfer fee comes off it. Withdrawals are free ${timesWord(freePerDay)} a day.`;
-}
-
 /**
  * Whether the person has never had a withdrawal paid, from the history the page already reads
  * (newest first, paged). A paid or reversed withdrawal, or a sent part, means they have; a failed one

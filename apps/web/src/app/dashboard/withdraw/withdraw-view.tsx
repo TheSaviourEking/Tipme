@@ -50,7 +50,6 @@ import {
   collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
-  withdrawDayNote,
   firstWithdrawalNote,
   firstWithdrawalRowNote,
   withdrawFee,
@@ -560,7 +559,6 @@ export default function WithdrawPage({
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
   const feeLine = withdrawFee(quote);
-  const dayNote = withdrawDayNote(quote);
   const firstNote = state.canWithdraw
     ? firstWithdrawalNote(quote, withdrawals, nextWithdrawals)
     : null;
@@ -798,11 +796,6 @@ export default function WithdrawPage({
                 {firstNote && (
                   <p className="tm-hint" data-testid="first-withdrawal-note">
                     {firstNote}
-                  </p>
-                )}
-                {dayNote && (
-                  <p className="tm-hint" data-testid="withdrawal-day-note">
-                    {dayNote}
                   </p>
                 )}
                 <Button

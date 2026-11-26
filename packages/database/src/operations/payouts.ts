@@ -1160,16 +1160,15 @@ export type WithdrawalQuoteResult =
       /** A tip went through a provider that is no longer connected; its money isn't counted. */
       heldElsewhere: boolean;
       /**
-       * Who pays `feeMinor` on a withdrawal asked for now: 'tipme' for a person's page (owner, 18 Nov
-       * 2026: withdrawals are free, covered by the plan fee), and for a business while the
-       * absorbed-fee switch is on or an unused top-up can pay it; otherwise 'user' (a business, since
-       * 12 Nov 2026), which takes it from the amount chosen.
+       * Who pays `feeMinor` on a withdrawal asked for now: 'user' for a person's page on every
+       * withdrawal (owner, 25 Nov 2026) and for a business since 12 Nov 2026, which takes it from the
+       * amount chosen; 'tipme' only when an unused top-up can pay it or, for a business, the
+       * absorbed-fee switch is on.
        */
       feePaidBy: 'user' | 'tipme';
       /**
        * A person's page: which withdrawal of the Lagos day this one would be (1 for the first, not
-       * counting failed ones), and how many a day are free. 1 and 0 for a business, which has no daily
-       * allowance.
+       * counting failed ones). 1 for a business. `freePerDay` is always 0, kept for the contract.
        */
       ordinalToday: number;
       freePerDay: number;
@@ -1978,24 +1977,21 @@ async function quoteFor(
 }
 
 /**
- * A person's withdrawal requests on the Lagos calendar day of `now`: those asked for and not wholly
- * failed (`counted`), and how many of them TipMe pays the fee on (`free`, by the parts' stored
- * `fee_payer`). The quote shows `counted` as the Nth withdrawal; nothing is free by count now.
+ * A person's withdrawal requests on the Lagos calendar day of `now` that were asked for and not
+ * wholly failed (`counted`). The quote shows it as the Nth withdrawal.
  */
 async function personsWithdrawalsToday(
   db: Database | Tx,
   profileId: string,
   now: Date,
-): Promise<{ counted: number; free: number }> {
+): Promise<{ counted: number }> {
   const start = lagosDayStart(now);
   const end = new Date(start.getTime() + 86_400_000);
-  // P7: a request is one withdrawal however many parts it has. It counts until every part failed,
-  // and it is free when none of its parts still standing has the person paying the fee.
-  const result = await db.execute<{ counted: number; free: number }>(sql`
-    SELECT count(*)::int AS counted, (count(*) FILTER (WHERE NOT r.paid))::int AS free
+  // P7: a request is one withdrawal however many parts it has. It counts until every part failed.
+  const result = await db.execute<{ counted: number }>(sql`
+    SELECT count(*)::int AS counted
       FROM (
-        SELECT COALESCE(bool_or(${payouts.feePayer} = 'user')
-                          FILTER (WHERE ${payouts.status} <> 'FAILED'), false) AS paid
+        SELECT 1
           FROM ${payouts}
          WHERE ${payouts.profileId} = ${profileId}
            AND ${payouts.createdAt} >= ${start.toISOString()}::timestamptz
@@ -2004,7 +2000,7 @@ async function personsWithdrawalsToday(
         HAVING bool_or(${payouts.status} <> 'FAILED')
       ) r`);
   const row = result.rows[0];
-  return { counted: row?.counted ?? 0, free: row?.free ?? 0 };
+  return { counted: row?.counted ?? 0 };
 }
 
 /**
@@ -2404,8 +2400,8 @@ async function requestFor(
       // largest part (the first in drain order among equals), so the small parts never fall below
       // it. TipMe pays every other part's fee. A person pays it from the amount chosen on every
       // request, however many parts it has (owner, 25 Nov 2026). A business: one fee under its own
-      // rule (owner, 12 and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when the largest
-      // part is not more than its fee.
+      // rule (owner, 12 and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when
+      // the largest part is not more than its fee.
       const carrier = rest.reduce(
         (best, part) => (part.amountMinor > best.amountMinor ? part : best),
         head,
