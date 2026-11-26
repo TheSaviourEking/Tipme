@@ -308,6 +308,7 @@ export class BusinessPayoutsController {
           userId: auth.userId,
           amountMinor: BigInt(body.amountMinor),
           idempotencyKey: key,
+          ...(body.feePaidBy ? { feePaidBy: body.feePaidBy } : {}),
           providers: this.providers,
           onReadFailure: this.logReadFailure('request'),
         }),

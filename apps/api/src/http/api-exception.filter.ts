@@ -229,6 +229,8 @@ const messages: Record<ApiErrorCode, string> = {
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: `The smallest withdrawal is ${wholeNgn(withdrawalMinimumMinor())}.`,
   WITHDRAWAL_BELOW_FEE: `The amount must be more than the ${wholeNgn(NGN_PAYOUT_FEE_MINOR)} transfer fee, which is taken from it.`,
+  WITHDRAWAL_FEE_CHANGED:
+    'The transfer fee changed. Check the new amount and confirm again.',
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:
@@ -373,6 +375,7 @@ const operationErrors: Partial<
   INSUFFICIENT_BALANCE: { status: 409, code: 'INSUFFICIENT_BALANCE' },
   WITHDRAWAL_TOO_SMALL: { status: 409, code: 'WITHDRAWAL_TOO_SMALL' },
   WITHDRAWAL_BELOW_FEE: { status: 409, code: 'WITHDRAWAL_BELOW_FEE' },
+  WITHDRAWAL_FEE_CHANGED: { status: 409, code: 'WITHDRAWAL_FEE_CHANGED' },
   WITHDRAWAL_UNAVAILABLE: { status: 409, code: 'WITHDRAWAL_UNAVAILABLE' },
   // You collect (Task 12). A paused page says no reason, to protect the recipient (spec §2.2).
   PAGE_PAUSED: { status: 409, code: 'PAGE_PAUSED' },

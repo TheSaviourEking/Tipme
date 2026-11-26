@@ -2328,6 +2328,13 @@
                   "amountMinor": {
                     "type": "string",
                     "pattern": "^\\d{1,12}$"
+                  },
+                  "feePaidBy": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "tipme"
+                    ]
                   }
                 },
                 "required": [
@@ -9180,6 +9187,13 @@
                   "amountMinor": {
                     "type": "string",
                     "pattern": "^\\d{1,12}$"
+                  },
+                  "feePaidBy": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "tipme"
+                    ]
                   }
                 },
                 "required": [
@@ -22162,6 +22176,7 @@
                   "INSUFFICIENT_BALANCE",
                   "WITHDRAWAL_TOO_SMALL",
                   "WITHDRAWAL_BELOW_FEE",
+                  "WITHDRAWAL_FEE_CHANGED",
                   "WITHDRAWAL_UNAVAILABLE",
                   "WITHDRAWALS_PAUSED",
                   "WITHDRAWALS_SWITCHED_OFF",

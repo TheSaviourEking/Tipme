@@ -398,6 +398,7 @@ export class DashboardController {
         profileId,
         amountMinor: BigInt(body.amountMinor),
         idempotencyKey: key,
+        ...(body.feePaidBy ? { feePaidBy: body.feePaidBy } : {}),
         providers: this.providers,
         onReadFailure: this.logReadFailure('request'),
       });

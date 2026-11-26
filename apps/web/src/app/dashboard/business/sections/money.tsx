@@ -24,6 +24,7 @@ import {
   quoteParts,
   requestParts,
   withdrawRefusal,
+  withdrawRequestBody,
   withdrawSummary,
 } from '@/lib/withdraw-state';
 import type { PartView } from '@/lib/withdraw-state';
@@ -165,7 +166,7 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
       `${base}/withdrawals`,
       {
         method: 'POST',
-        body: { amountMinor: String(amount) },
+        body: withdrawRequestBody(amount, summary),
         headers: { 'idempotency-key': key.current },
       },
     );

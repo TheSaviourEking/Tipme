@@ -2098,6 +2098,11 @@ export async function providerBalanceAt(
 type RequestInput = {
   amountMinor: bigint;
   idempotencyKey: string;
+  /**
+   * Who the quote the person confirmed showed paying the transfer fee (Ruling R6). Absent from a
+   * screen loaded before this release: then the payer is decided here as it always was.
+   */
+  feePaidBy?: 'user' | 'tipme';
   /** Every configured provider; the request may be paid through those in the owner's set (§5). */
   providers: PayoutProviderSet;
   traceId?: string | null;
@@ -2413,6 +2418,10 @@ async function requestFor(
         carrier.provider.name,
         carrier.feeMinor,
       );
+      // Ruling R6: never a fee the person didn't see. A top-up used up or a switch changed since
+      // the quote: nothing is recorded, and the screen shows the new fee to confirm again.
+      if (input.feePaidBy !== undefined && input.feePaidBy !== feePayer)
+        throw new OperationError('WITHDRAWAL_FEE_CHANGED');
       const userPaid =
         feePayer === 'user'
           ? userPaidWithdrawal({

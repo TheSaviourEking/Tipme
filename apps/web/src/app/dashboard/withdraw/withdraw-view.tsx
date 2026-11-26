@@ -53,6 +53,7 @@ import {
   firstWithdrawalNote,
   firstWithdrawalRowNote,
   withdrawFee,
+  withdrawRequestBody,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
   partsView,
@@ -502,7 +503,7 @@ export default function WithdrawPage({
       '/v1/me/withdrawals',
       {
         method: 'POST',
-        body: { amountMinor: String(amount) },
+        body: withdrawRequestBody(amount, figures),
         headers: { 'idempotency-key': sent },
       },
     );

@@ -181,6 +181,106 @@ test('an unused top-up on the person’s account pays the fee first', async (t) 
   assert.equal(credit.used_by_payout_id, payoutId);
 });
 
+// Ruling R6: a person is never charged a fee they did not see before confirming. The request says
+// who the quote showed paying (`feePaidBy`); when the payer decided under the lock differs, nothing
+// is recorded and the screen asks again with the new fee.
+const leftoverTopUp = async (s, provider) => {
+  const old = await s.withdraw(provider, 300_000n);
+  await s.q(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [
+    old.payoutId,
+  ]);
+  await s.q(
+    `INSERT INTO provider_fee_credits (account_reference, provider, currency, amount_minor, transfer_reference, payout_id)
+     VALUES ($1, 'bachs', 'NGN', 5000, 'tr_leftover', $2)`,
+    [ACCOUNT, old.payoutId],
+  );
+};
+const payoutCount = async (s) =>
+  Number((await s.q('SELECT count(*)::int AS n FROM payouts'))[0].n);
+
+test('a withdrawal quoted as TipMe paying is refused once the top-up is used up, and nothing is recorded', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  await leftoverTopUp(s, provider);
+  const shown = await s.quote(provider);
+  assert.equal(shown.feePaidBy, 'tipme');
+  // Another tab spends the top-up first, as its own quote showed.
+  const other = await s.withdraw(provider, 200_000n, { feePaidBy: 'tipme' });
+  assert.equal((await s.payout(other.payoutId)).fee_payer, 'tipme');
+  const before = await payoutCount(s);
+  assert.equal(
+    await s.codeOf(s.withdraw(provider, 300_000n, { feePaidBy: 'tipme' })),
+    'WITHDRAWAL_FEE_CHANGED',
+  );
+  assert.equal(await payoutCount(s), before);
+  // The new quote shows the fee; confirming that goes ahead with ₦50 off.
+  const again = await s.quote(provider);
+  assert.equal(again.feePaidBy, 'user');
+  const { payoutId } = await s.withdraw(provider, 300_000n, {
+    feePaidBy: again.feePaidBy,
+  });
+  const row = await s.payout(payoutId);
+  assert.equal(row.fee_payer, 'user');
+  assert.equal(row.user_fee_minor, '5000');
+});
+
+test('a withdrawal quoted as the person paying is refused when TipMe would pay instead', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  assert.equal((await s.quote(provider)).feePaidBy, 'user');
+  await leftoverTopUp(s, provider);
+  const before = await payoutCount(s);
+  assert.equal(
+    await s.codeOf(s.withdraw(provider, 300_000n, { feePaidBy: 'user' })),
+    'WITHDRAWAL_FEE_CHANGED',
+  );
+  assert.equal(await payoutCount(s), before);
+});
+
+test('a withdrawal whose quoted payer still holds goes ahead as quoted', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  const { payoutId } = await s.withdraw(provider, 300_000n, {
+    feePaidBy: 'user',
+  });
+  assert.equal((await s.payout(payoutId)).fee_payer, 'user');
+  await leftoverTopUp(s, provider);
+  const covered = await s.withdraw(provider, 300_000n, { feePaidBy: 'tipme' });
+  assert.equal((await s.payout(covered.payoutId)).fee_payer, 'tipme');
+  assert.equal((await s.payout(covered.payoutId)).amount_minor, '300000');
+});
+
+test('a request from an older screen with no quoted payer is decided as before', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  await leftoverTopUp(s, provider);
+  await s.withdraw(provider, 200_000n);
+  // The top-up is spent; an older client sends no payer, so the person pays, as before R6.
+  const { payoutId } = await s.withdraw(provider, 300_000n);
+  assert.equal((await s.payout(payoutId)).fee_payer, 'user');
+});
+
+test('a replay of a recorded request returns it, whatever payer it now sends', async (t) => {
+  const s = await setup(t);
+  await s.tip();
+  const provider = partner();
+  const idempotencyKey = randomUUID();
+  const first = await s.withdraw(provider, 300_000n, {
+    idempotencyKey,
+    feePaidBy: 'user',
+  });
+  const replay = await s.withdraw(provider, 300_000n, {
+    idempotencyKey,
+    feePaidBy: 'tipme',
+  });
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.payoutId, first.payoutId);
+});
+
 test('two TipMe-paid withdrawals earlier today do not change the third: the person pays', async (t) => {
   const s = await setup(t);
   await s.tip();
@@ -321,13 +421,14 @@ test('a business is unchanged: it pays, unless staff switch on TipMe paying its 
         providers: providers(),
       })
     ).feePaidBy;
-  const request = async () => {
+  const request = async (feePaidBy) => {
     const { payoutId } = await requestBusinessWithdrawal(db, {
       businessId,
       userId: OWNER,
-      amountMinor: 500_000n,
+      amountMinor: 400_000n,
       idempotencyKey: randomUUID(),
       providers: providers(),
+      ...(feePaidBy ? { feePaidBy } : {}),
     });
     return (
       await q('SELECT fee_payer FROM payouts WHERE id = $1', [payoutId])
@@ -347,4 +448,19 @@ test('a business is unchanged: it pays, unless staff switch on TipMe paying its 
   );
   assert.equal(await feePayerOf(), 'tipme');
   assert.equal(await request(), 'tipme');
+  assert.equal(await request('tipme'), 'tipme');
+  // Ruling R6: staff switch it off after the owner's quote showed TipMe paying. Refused, so the
+  // business is never charged a fee its owner didn't see.
+  await db.transaction((tx) =>
+    setFeatureSwitch(tx, {
+      key: 'business_payout_fee_absorbed',
+      on: false,
+      staffUserId: OWNER,
+      approvedBy: null,
+      reason: 'Switched back for the user-pays test',
+      now: new Date(),
+    }),
+  );
+  await assert.rejects(request('tipme'), { code: 'WITHDRAWAL_FEE_CHANGED' });
+  assert.equal(await request('user'), 'user');
 });

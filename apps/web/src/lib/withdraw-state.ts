@@ -390,15 +390,16 @@ export function collectWithdrawView(input: {
 
 /**
  * The fee line, when there is one. A person pays the partner's transfer fee from the amount on every
- * withdrawal (owner, 25 Nov 2026), as a business has since 12 Nov 2026. "Free" shows only when TipMe
- * pays it (an unused top-up or a fee waiver covers it). Null for no fee or no ready quote.
+ * withdrawal (owner, 25 Nov 2026), as a business has since 12 Nov 2026. When TipMe pays it (an unused
+ * top-up or a fee waiver covers it) the line says so for this withdrawal only, never that withdrawals
+ * are free: the next one may cost the fee. Null for no fee or no ready quote.
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,
 ): string | null {
   if (quote?.state !== 'ready') return null;
   if (quote.feePaidBy === 'tipme')
-    return 'Withdrawals are free: you receive the whole amount.';
+    return 'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.';
   if (quote.feeMinor === '0') return null;
   return `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
 }
@@ -478,6 +479,20 @@ export function withdrawSummary(
 }
 
 /**
+ * A withdrawal request's body: the amount, and who the summary on screen showed paying the transfer
+ * fee (Ruling R6), so the server refuses rather than charge a fee the person didn't see. No summary,
+ * no payer: the server decides, as for a screen from before this release.
+ */
+export function withdrawRequestBody(
+  amountMinor: bigint | number,
+  shown: { feePaidBy: 'user' | 'tipme' } | null,
+): { amountMinor: string; feePaidBy?: 'user' | 'tipme' } {
+  return shown
+    ? { amountMinor: String(amountMinor), feePaidBy: shown.feePaidBy }
+    : { amountMinor: String(amountMinor) };
+}
+
+/**
  * The one lamp line on the instrument (WithdrawRedesign §1–2), only from the state and what can go
  * now (withdrawableNow()). It states a figure or a condition, never a money reassurance.
  */
@@ -545,6 +560,14 @@ export function withdrawRefusal(code: string | undefined): {
         'The amount must be more than the ₦50 transfer fee, which comes off it.',
       reload: true,
     };
+  // Ruling R6: who pays the fee changed since the quote on screen. Nothing was recorded; the reload
+  // shows the new fee, and confirming again sends that.
+  if (code === 'WITHDRAWAL_FEE_CHANGED')
+    return {
+      message:
+        'The transfer fee changed. Check the new amount and confirm again.',
+      reload: true,
+    };
   if (code === 'IDEMPOTENCY_CONFLICT')
     return {
       message:
@@ -577,7 +600,9 @@ export function withdrawUnsure(
   if (
     (code !== undefined && SHOWN_BY_PAGE.has(code)) ||
     code === 'INSUFFICIENT_BALANCE' ||
-    code === 'WITHDRAWAL_TOO_SMALL'
+    code === 'WITHDRAWAL_TOO_SMALL' ||
+    code === 'WITHDRAWAL_BELOW_FEE' ||
+    code === 'WITHDRAWAL_FEE_CHANGED'
   )
     return null;
   return {

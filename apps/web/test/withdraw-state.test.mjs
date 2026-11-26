@@ -15,6 +15,7 @@ import {
   withdrawSummary,
   withdrawLamp,
   withdrawRefusal,
+  withdrawRequestBody,
   withdrawState,
   withdrawUnsure,
 } from '../src/lib/withdraw-state.ts';
@@ -508,11 +509,11 @@ test('the fee line says who pays the transfer fee, and nothing when there is non
   // When TipMe pays (an unused top-up or a fee waiver covers it), the whole amount arrives.
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme', feeMinor: '0' })),
-    'Withdrawals are free: you receive the whole amount.',
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme' })),
-    'Withdrawals are free: you receive the whole amount.',
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
   assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
   assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
@@ -596,9 +597,10 @@ test('a ready notice says the whole amount arrives when TipMe pays the fee (top-
   assert.equal(view.canWithdraw, true);
   assert.equal(
     view.notice.body,
-    'You can withdraw ₦1,800 to GTBank ••1234. Withdrawals are free: you receive the whole amount.',
+    'You can withdraw ₦1,800 to GTBank ••1234. TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
-  assert.doesNotMatch(view.notice.body, /₦50|transfer fee/);
+  // No fee figure, never the partner's name, and never "free" (the next withdrawal may cost ₦50).
+  assert.doesNotMatch(view.notice.body, /₦50|comes off|free|bachs/i);
 });
 
 test('the withdraw screen shows “Free” for the fee when TipMe pays, and no fee-difference note', async () => {
@@ -863,5 +865,60 @@ test('the first-withdrawal words are in the shared copy and are shown by the Wit
   for (const file of ['../src/lib/business/money-state.ts']) {
     const business = await readFile(new URL(file, import.meta.url), 'utf8');
     assert.doesNotMatch(business, /firstWithdrawal/);
+  }
+});
+
+// Ruling R6 (profit guards): never a fee the person didn't see. The request says who the quote on
+// screen showed paying the transfer fee; when that changed, the page reloads the quote, shows the new
+// fee and asks again.
+test('the request sends who the quote showed paying the fee', () => {
+  assert.deepEqual(
+    withdrawRequestBody(500_000n, withdrawSummary(ready(), 500_000n)),
+    { amountMinor: '500000', feePaidBy: 'user' },
+  );
+  assert.deepEqual(
+    withdrawRequestBody(
+      500_000n,
+      withdrawSummary(ready({ feePaidBy: 'tipme' }), 500_000n),
+    ),
+    { amountMinor: '500000', feePaidBy: 'tipme' },
+  );
+  // No figures on screen: the amount alone, decided by the server as before.
+  assert.deepEqual(withdrawRequestBody(500_000n, null), {
+    amountMinor: '500000',
+  });
+});
+
+test('a changed fee says so at the amount, reloads the quote, and the new fee shows', () => {
+  assert.deepEqual(withdrawRefusal('WITHDRAWAL_FEE_CHANGED'), {
+    message:
+      'The transfer fee changed. Check the new amount and confirm again.',
+    reload: true,
+  });
+  // Nothing was recorded: it is not an unsure answer, and the fee below fits the same rule.
+  assert.equal(withdrawUnsure('WITHDRAWAL_FEE_CHANGED'), null);
+  assert.equal(withdrawUnsure('WITHDRAWAL_BELOW_FEE'), null);
+  // The reloaded quote: the top-up was used up, so the person now pays the ₦50.
+  const fresh = ready({ withdrawableMinor: '500000' });
+  assert.deepEqual(withdrawSummary(fresh, 500_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 495_000n,
+  });
+  assert.equal(
+    withdrawFee(fresh),
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+  );
+});
+
+test('both withdraw screens send the quoted payer with the amount', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const path of [
+    '../src/app/dashboard/withdraw/withdraw-view.tsx',
+    '../src/app/dashboard/business/sections/money.tsx',
+  ]) {
+    const src = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(src, /body: withdrawRequestBody\(amount, (figures|summary)\)/);
+    assert.doesNotMatch(src, /body: \{ amountMinor: String\(amount\) \}/);
   }
 });
