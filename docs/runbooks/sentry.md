@@ -11,13 +11,13 @@ DSNs are public client keys (they only allow sending events), so they live in pl
 
 ## Settings
 
-| Where                                    | Setting                                   | Value                                                                                                                                                                                                 |
-| ---------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Staging server, `/srv/tipme/staging.env` | `SENTRY_DSN`                              | the `tipme-backend` DSN (set 28 October 2026)                                                                                                                                                         |
-| Staging server                           | `SENTRY_ENVIRONMENT`                      | optional; defaults to `staging` on a preview copy                                                                                                                                                     |
-| Vercel, web project                      | `NEXT_PUBLIC_SENTRY_DSN` and `SENTRY_DSN` | the `tipme-web` DSN                                                                                                                                                                                   |
-| Vercel                                   | `NEXT_PUBLIC_SENTRY_ENVIRONMENT`          | `staging` for the staging deployment, `production` later                                                                                                                                              |
-| Vercel                                   | `SENTRY_AUTH_TOKEN`                       | an organization auth token (Sentry → Settings → Auth Tokens, scope `project:releases`), so each build uploads source maps and deletes them from the deployment; without it stack traces stay minified |
+| Where                                    | Setting                                                                               | Value                                                                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Staging server, `/srv/tipme/staging.env` | `SENTRY_DSN`                                                                          | the `tipme-backend` DSN (set 28 October 2026)                                                                     |
+| Staging server                           | `SENTRY_ENVIRONMENT`                                                                  | optional; defaults to `staging` on a preview copy                                                                 |
+| GitHub variables (web build)             | `STAGING_NEXT_PUBLIC_SENTRY_DSN`, `PRODUCTION_NEXT_PUBLIC_SENTRY_DSN`                 | the `tipme-web` DSN, baked in as `NEXT_PUBLIC_SENTRY_DSN`; the web server uses it too (no separate `SENTRY_DSN`)  |
+| GitHub variables (web build)             | `STAGING_NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `PRODUCTION_NEXT_PUBLIC_SENTRY_ENVIRONMENT` | optional; blank is `staging` and `production`                                                                     |
+| Not wired since the move off Vercel      | `SENTRY_AUTH_TOKEN`                                                                   | the self-hosted web build uploads no source maps, so web stack traces stay minified (a follow-up: a build secret) |
 
 Without a DSN nothing is sent: local runs, CI and the e2e suite report nothing.
 
