@@ -260,9 +260,9 @@ function decide(input: {
             tone: 'neutral',
           },
         };
-      // When the user pays the transfer fee from the amount (a business's rule, owner 12 Nov 2026; a
-      // person's withdrawals are free since 18 Nov 2026, so this is a business's case): a balance not
-      // more than the fee would send nothing, so it can't be withdrawn, and the page says why.
+      // When the user pays the transfer fee from the amount (a business since 12 Nov 2026, a person
+      // since 25 Nov 2026): a balance not more than the fee would send nothing, so it can't be
+      // withdrawn, and the page says why.
       if (
         quote.feePaidBy === 'user' &&
         BigInt(quote.withdrawableMinor) <= BigInt(quote.feeMinor)
@@ -389,9 +389,9 @@ export function collectWithdrawView(input: {
 }
 
 /**
- * The fee line, when there is one. A person's page: withdrawals are free (owner, 18 Nov 2026), TipMe
- * pays the partner's transfer fee, and the API reports no fee for them. Under the user-pays rule
- * (businesses, owner 12 Nov 2026) the fee comes off the amount. Null for no fee or no ready quote.
+ * The fee line, when there is one. A person pays the partner's transfer fee from the amount on every
+ * withdrawal (owner, 25 Nov 2026), as a business has since 12 Nov 2026. "Free" shows only when TipMe
+ * pays it (an unused top-up or a fee waiver covers it). Null for no fee or no ready quote.
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,

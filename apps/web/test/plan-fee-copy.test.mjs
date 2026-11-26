@@ -9,7 +9,8 @@ import {
   planFeePercentsOf,
 } from '../src/lib/fee-share.ts';
 
-// The owner, 18 Nov 2026: Free 5% and Pro 3%, payment processing included (withdrawals cost ₦50, 25 Nov 2026), set in admin.
+// The owner, 18 Nov 2026: Free 5% and Pro 3%, payment processing included (withdrawals cost ₦50,
+// 25 Nov 2026), set in admin.
 // Copy reads the live setting; only fixed text (the Terms) states the starting numbers.
 
 const source = (path) =>
@@ -99,10 +100,12 @@ test('the Terms read the live rates and work the example nets from them', async 
   assert.doesNotMatch(terms, /FREE_SHARE_PERCENT|PRO_SHARE_PERCENT/);
   assert.doesNotMatch(terms, /feePolicyForPlan\('(free|pro)'\)/);
   assert.doesNotMatch(terms, /FEE_POLICY_V2/);
+  // The ₦50 is rendered from the domain constant (pinned to the payout fee above), not written here.
   assert.match(
     terms,
-    /Each withdrawal costs\{' '\}\s+<span className="money">₦50<\/span>,\s+charged\s+by\s+our\s+payment\s+partner,\s+and comes off the amount\./,
+    /Withdrawals:<\/strong>\s+each\s+withdrawal\s+costs\{' '\}\s+<Money\s+minor=\{Number\(WITHDRAWAL_FEE_COPY_MINOR\)\}\s+\/>,\s+charged\s+by\s+our\s+payment\s+partner,\s+and\s+comes\s+off\s+the\s+amount\./,
   );
+  assert.doesNotMatch(terms, /₦50/);
   assert.doesNotMatch(terms, /FREE_WITHDRAW|are free|Withdrawals are free\./);
   assert.doesNotMatch(terms, /₦9,950|₦50<\/span> or less/);
   assert.match(terms, /payment processing/);

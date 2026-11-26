@@ -500,12 +500,12 @@ test('the unsure words are today’s sentence, split at the full stop', () => {
 });
 
 test('the fee line says who pays the transfer fee, and nothing when there is none', () => {
-  // Owner, 12 Nov 2026: users pay it, from the amount.
+  // Owner, 25 Nov 2026: a person pays it, from the amount (a business since 12 Nov 2026).
   assert.equal(
     withdrawFee(ready()),
     'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
-  // Owner, 18 Nov 2026: a person's withdrawals are free (TipMe pays). The API sends no fee for them.
+  // When TipMe pays (an unused top-up or a fee waiver covers it), the whole amount arrives.
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme', feeMinor: '0' })),
     'Withdrawals are free: you receive the whole amount.',
@@ -591,7 +591,7 @@ test('the fee line names its source plainly, never the partner, and a different 
     assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
 });
 
-test('a person’s ready notice says withdrawals are free, with no fee figure (owner, 18 Nov 2026)', () => {
+test('a ready notice says the whole amount arrives when TipMe pays the fee (top-up or waiver), with no fee figure', () => {
   const view = of(ready({ feePaidBy: 'tipme', feeMinor: '0' }));
   assert.equal(view.canWithdraw, true);
   assert.equal(

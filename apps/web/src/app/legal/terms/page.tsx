@@ -6,6 +6,7 @@ import {
   termsFeeFigures,
 } from '@/lib/terms-fees';
 import { previewMetadata } from '@/lib/metadata';
+import { WITHDRAWAL_FEE_COPY_MINOR } from '@tipme/domain';
 import { Money } from '@/components/money';
 
 export const metadata = previewMetadata(
@@ -28,9 +29,10 @@ export default async function TermsPlaceholder() {
         'Liability and how these terms change',
       ]}
     >
-      {/* The owner's decisions, 3, 12 and 18 Nov 2026: state the fee here (payment processing
-          included, withdrawals ₦50 each). The rates and the example nets come from the live setting (getPlanFees), so a
-          change in admin shows here; if the API can't be read they are the starting rates, Free 5% and Pro 3%. */}
+      {/* The owner's decisions, 3, 12, 18 and 25 Nov 2026: state the fee here (payment processing
+          included, the withdrawal fee shown). The rates and the example nets come from the live setting
+          (getPlanFees), so a change in admin shows here; if the API can't be read they are the
+          starting rates, Free 5% and Pro 3%. */}
       <section aria-labelledby="fees">
         <h2 id="fees">Fees</h2>
         <p>
@@ -50,10 +52,10 @@ export default async function TermsPlaceholder() {
           shown with if your plan changes afterwards.
         </p>
         <p>
-          <strong>Withdrawals:</strong> Each withdrawal costs{' '}
-          <span className="money">₦50</span>, charged by our payment partner,
-          and comes off the amount. The withdraw screen tells you before you
-          confirm. The smallest withdrawal is{' '}
+          <strong>Withdrawals:</strong> each withdrawal costs{' '}
+          <Money minor={Number(WITHDRAWAL_FEE_COPY_MINOR)} />, charged by our
+          payment partner, and comes off the amount. The withdraw screen tells
+          you before you confirm. The smallest withdrawal is{' '}
           <span className="money">₦2,000</span>, unless you are withdrawing your
           whole balance. Withdrawals from a business’s balance still carry our
           payment partner’s transfer fee, taken from the amount, unless TipMe

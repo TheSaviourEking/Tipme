@@ -552,8 +552,9 @@ export default function WithdrawPage({
     chosen !== null &&
     chosen <= withdrawable &&
     !belowWithdrawalMinimum(chosen, withdrawable);
-  // A person's withdrawals are free (owner, 18 Nov 2026): what arrives is the amount. Under the
-  // user-pays rule it is the amount less the fee. Only an amount that sends something gets figures.
+  // A person pays the partner's fee from the amount on every withdrawal (owner, 25 Nov 2026), so
+  // what arrives is the amount less the fee; only an unused top-up or a fee waiver (TipMe pays)
+  // sends the whole amount. Only an amount that sends something gets figures.
   const figures =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
