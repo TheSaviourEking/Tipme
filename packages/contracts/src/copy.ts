@@ -142,3 +142,19 @@ export const BUSINESS_SPLIT_COPY = {
   heldTitle: 'Some tips can’t be paid out yet',
   held: 'Some of the business’s tips were paid in a way TipMe can’t pay out from yet. They’re safe, and stay in the business’s balance until withdrawals open.',
 } as const;
+
+/**
+ * Fee waivers (spec 2026-11-23 §6, §7; W13): the in-app notices an account gets when TipMe starts or
+ * stops paying one of its fees. A kind-wide waiver sends none. `until` is put in already worded by
+ * `untilWords` ("until 31 Jan": the last Lagos day covered). Never the payment partner's name.
+ */
+export const FEE_WAIVER_NOTICE_COPY = {
+  startedTitle: 'TipMe is covering your fees',
+  /** A business's notice names it: its owners may have pages of their own. */
+  startedTitleFor: (business: string) => `TipMe is covering ${business}’s fees`,
+  started: (fee: 'tip' | 'withdrawal', until: string | null) =>
+    `${fee === 'tip' ? 'TipMe is covering the fee on your tips' : 'TipMe is covering your withdrawal fees'}${until === null ? '' : ` ${until}`}`,
+  endedTitle: 'Your fee cover has ended',
+  endedTitleFor: (business: string) => `${business}’s fee cover has ended`,
+  ended: 'TipMe’s fee cover has ended. Normal fees apply from now.',
+} as const;

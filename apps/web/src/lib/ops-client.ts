@@ -101,6 +101,8 @@ export const ISSUE_KIND_LABELS: Record<string, string> = {
   collect_own_money_wait: 'Waiting on TipMe’s own money',
   provider_split_short: 'Providers hold less than owed',
   provider_unconnected_money: 'Money at a disconnected provider',
+  fee_waiver_ending: 'A fee waiver ends within a day',
+  fee_waivers_paused: 'Fee waivers paused (low balance)',
   provider_in_debt: 'Provider account in debt',
   reserve_empty: 'Payment reserve empty',
   provider_key_refused: 'Provider refused our key',

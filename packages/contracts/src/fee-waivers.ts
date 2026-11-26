@@ -167,3 +167,6 @@ export interface OpsAccountFeeWaivers {
   withdrawal: AccountFeeSetting;
   monthCost: OpsFeeWaiverCost;
 }
+
+// The notices' words live in copy.ts (no zod), so a client page can import them on their own.
+export { FEE_WAIVER_NOTICE_COPY } from './copy.js';

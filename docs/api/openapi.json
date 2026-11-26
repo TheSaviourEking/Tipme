@@ -15265,7 +15265,9 @@
                 "collect_refund_gap",
                 "collect_own_money_wait",
                 "provider_split_short",
-                "provider_unconnected_money"
+                "provider_unconnected_money",
+                "fee_waiver_ending",
+                "fee_waivers_paused"
               ]
             }
           },

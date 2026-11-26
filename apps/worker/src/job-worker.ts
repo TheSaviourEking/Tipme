@@ -92,7 +92,14 @@ import {
 import {
   handlePaymentReserve,
   warnIfNoAlertRoute,
+  webhookAlert,
 } from './handlers/payment-reserve.js';
+import {
+  ensureFeeWaiversSchedule,
+  FEE_WAIVERS_JOB,
+  FEE_WAIVERS_LOCK_TTL_MS,
+  handleFeeWaivers,
+} from './handlers/fee-waivers.js';
 import { handlePlatformRefusal } from './handlers/platform-refusal.js';
 import {
   ensureSplitCheckSchedule,
@@ -789,6 +796,8 @@ export async function startJobWorker(
   // flagged once a day.
   const splitCheckProviders = workerPayoutProviderSet(paymentProviders);
   const splitCheckSchedule = ensureSplitCheckSchedule({ queue, logger });
+  // Fee waivers (W13, W14): account notices, the staff day-before issue and the pause alert.
+  const feeWaiversSchedule = ensureFeeWaiversSchedule({ queue, logger });
   const collectTransfersSchedule = ensureSchedule({
     queue,
     id: COLLECT_TRANSFERS_JOB,
@@ -1199,6 +1208,38 @@ export async function startJobWorker(
             processed.add(1, { outcome: 'split_check' });
             return 'checked';
           }
+          if (job.name === FEE_WAIVERS_JOB) {
+            const result = await runUnlessRunning(
+              markers,
+              {
+                key: `${config.QUEUE_PREFIX}:lock:${FEE_WAIVERS_JOB}`,
+                ttlMs: FEE_WAIVERS_LOCK_TTL_MS,
+              },
+              () =>
+                handleFeeWaivers({
+                  db: database.db,
+                  activeProvider: config.PAYMENT_PROVIDER,
+                  alert: webhookAlert({
+                    url: config.ALERT_WEBHOOK_URL,
+                    log: (entry) => logger.warn({ ...entry, ...fields }),
+                    unroutedEvent: 'fee_waivers.alert_unrouted',
+                  }),
+                  log: (entry) => logger.warn({ ...entry, ...fields }),
+                }),
+            );
+            if (!result.ran) {
+              logger.info({ event: 'fee_waivers.skipped_running', ...fields });
+              processed.add(1, { outcome: 'fee_waivers_skipped' });
+              return 'skipped';
+            }
+            logger.info({
+              event: 'fee_waivers.ran',
+              ...result.value,
+              ...fields,
+            });
+            processed.add(1, { outcome: 'fee_waivers' });
+            return result.value.paused;
+          }
           if (job.name === COLLECT_RECON_JOB) {
             if (!collectRecon) return 'skipped';
             const result = await runUnlessRunning(
@@ -1554,6 +1595,7 @@ export async function startJobWorker(
         await reserveSchedule.stop();
       await collectTransfersSchedule.stop();
       await splitCheckSchedule.stop();
+      await feeWaiversSchedule.stop();
       await collectReconSchedule?.stop();
       await rehearsalSchedule?.stop();
       await approvalsSchedule.stop();
