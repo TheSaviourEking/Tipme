@@ -5,6 +5,7 @@ import {
   FEE_WAIVER_PAYERS,
   feeWaiverShapeProblem,
   feeWaiverWindow,
+  lagosDayStart,
   resolveFeeWaiver,
   type FeeWaiverFee,
   type FeeWaiverKind,
@@ -18,8 +19,10 @@ import {
   desc,
   eq,
   gt,
+  gte,
   isNotNull,
   isNull,
+  lt,
   lte,
   ne,
   sql,
@@ -322,10 +325,13 @@ export function checkedFeeWaiverPayload(p: unknown): FeeWaiverSetPayload {
     throw new OperationError('INVALID_INPUT');
   if (confirmCost !== undefined && confirmCost !== true)
     throw new OperationError('INVALID_INPUT');
-  // A figure is only ever confirmed, so it never comes without the confirm.
+  // A figure is only ever confirmed, and only where it is checked (a kind-wide TipMe-pays rule), so
+  // no unchecked figure reaches the words or the audit.
   if (
     costEstimateMinor !== undefined &&
     (confirmCost !== true ||
+      scope !== 'kind' ||
+      payer !== 'tipme' ||
       typeof costEstimateMinor !== 'string' ||
       !/^(0|[1-9][0-9]{0,15})$/.test(costEstimateMinor))
   )
@@ -380,9 +386,12 @@ export function requireFeeWaiverConfirm(payload: FeeWaiverSetPayload): void {
     throw new OperationError('FEE_WAIVER_CONFIRM_REQUIRED');
 }
 
+const ESTIMATE_MOVED = 'estimate_moved:';
+
 /**
  * When asked (not on approval): the figure confirmed must be the live estimate, so nobody asks on a
- * figure they didn't see. Refused FEE_WAIVER_CONFIRM_REQUIRED, to confirm the new figure.
+ * figure they didn't see. The estimate only moves at Lagos midnight, so this refuses only across it:
+ * FEE_WAIVER_CONFIRM_REQUIRED, carrying the new figure (`currentEstimateOf`) to confirm instead.
  */
 export async function requireFeeWaiverEstimateCurrent(
   db: Database | Tx,
@@ -397,13 +406,31 @@ export async function requireFeeWaiverEstimateCurrent(
     now,
   });
   if (BigInt(payload.costEstimateMinor!) !== live)
-    throw new OperationError('FEE_WAIVER_CONFIRM_REQUIRED', 'estimate_moved');
+    throw new OperationError(
+      'FEE_WAIVER_CONFIRM_REQUIRED',
+      `${ESTIMATE_MOVED}${live}`,
+    );
 }
 
-const ESTIMATE_DAYS_MS = 30 * 86_400_000;
+/** The live estimate an `estimate_moved` refusal carries, for the screen to show; else null. */
+export function currentEstimateOf(error: unknown): bigint | null {
+  if (
+    !(error instanceof OperationError) ||
+    error.code !== 'FEE_WAIVER_CONFIRM_REQUIRED' ||
+    !error.detail?.startsWith(ESTIMATE_MOVED)
+  )
+    return null;
+  const digits = error.detail.slice(ESTIMATE_MOVED.length);
+  return /^(0|[1-9][0-9]*)$/.test(digits) ? BigInt(digits) : null;
+}
+
+const ESTIMATE_DAYS = 30;
+const DAY_MS = 86_400_000;
 
 /**
- * What a kind-wide TipMe-pays rule would have cost over the last 30 days (W11): for the tip fee, the
+ * What a kind-wide TipMe-pays rule would have cost over the last 30 days (W11), counted over whole
+ * Lagos days: the 30 days before today's start in Lagos, so the figure holds all day and a screen's
+ * figure is still the live one when the code is entered. For the tip fee, the
  * fees (platform + provider) of SUCCEEDED tips completed then; for the withdrawal fee, the user fees
  * of that kind's non-FAILED withdrawals asked for then. Giving is 0 until it is built. Team tips
  * count too: their fee is charged like a person's tip. A withdrawal TipMe already covered counts
@@ -415,7 +442,8 @@ export async function estimateFeeWaiverMonthlyCost(
   input: { kind: FeeWaiverKind; fee: FeeWaiverFee; now: Date },
 ): Promise<bigint> {
   const { kind, fee, now } = input;
-  const since = new Date(now.getTime() - ESTIMATE_DAYS_MS);
+  const until = lagosDayStart(now);
+  const since = new Date(until.getTime() - ESTIMATE_DAYS * DAY_MS);
   if (kind === 'giving') return 0n;
   if (fee === 'tip') {
     if (kind !== 'individual') return 0n;
@@ -429,8 +457,8 @@ export async function estimateFeeWaiverMonthlyCost(
       .where(
         and(
           eq(tips.status, 'SUCCEEDED'),
-          gt(tips.completedAt, since),
-          lte(tips.completedAt, now),
+          gte(tips.completedAt, since),
+          lt(tips.completedAt, until),
         ),
       );
     return BigInt(row?.total ?? '0');
@@ -447,8 +475,8 @@ export async function estimateFeeWaiverMonthlyCost(
         kind === 'business'
           ? isNotNull(payouts.businessId)
           : isNotNull(payouts.profileId),
-        gt(payouts.createdAt, since),
-        lte(payouts.createdAt, now),
+        gte(payouts.createdAt, since),
+        lt(payouts.createdAt, until),
       ),
     );
   return BigInt(row?.total ?? '0');

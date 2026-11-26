@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { test } from 'node:test';
-import { endOfLagosDayIso, newTotpSecret, totpAt } from '@tipme/domain';
+import {
+  endOfLagosDayIso,
+  lagosDayStart,
+  newTotpSecret,
+  totpAt,
+} from '@tipme/domain';
 import {
   approveRequest,
   checkedFeeWaiverPayload,
   createPaymentIntent,
+  currentEstimateOf,
   createQuote,
   ensureOwnerRole,
   estimateFeeWaiverMonthlyCost,
@@ -610,6 +616,31 @@ async function actionSetup(t) {
   return { db, person, people, ask, approve, set, rows };
 }
 
+/**
+ * The estimate covers whole Lagos days up to today's start, so what was paid today counts from
+ * tomorrow. Moves every tip and withdrawal so far back a day, into the window.
+ */
+async function intoYesterday(db) {
+  await db.pool.query(
+    `UPDATE tips SET completed_at = completed_at - interval '1 day' WHERE completed_at IS NOT NULL`,
+  );
+  await db.pool.query(
+    `UPDATE payouts SET created_at = created_at - interval '1 day'`,
+  );
+}
+
+/** The asker's last code, entered at `at`: a request made then has a fresh code. */
+const codeEnteredAt = (db, people, actor, at) =>
+  db.pool.query(
+    `UPDATE ops_sessions SET last_totp_at = $2, expires_at = $2::timestamptz + interval '1 hour'
+      WHERE id = $1`,
+    [people.get(actor).grantId, at],
+  );
+
+/** 00:30 tomorrow in Lagos. */
+const lagosTomorrow = () =>
+  new Date(lagosDayStart(new Date()).getTime() + DAY + 30 * 60_000);
+
 /** Moves the clock every `new Date()` reads (the database's own clock stays). */
 const clockAt = (t, at) => {
   t.mock.timers.reset();
@@ -862,38 +893,105 @@ test('the words name a requested start with its year, and the figure the asker s
   );
 });
 
-test('a kind-wide waiver asked with one estimate is approved after another tip, on the asker’s figure', async (t) => {
+const KIND_TIP = {
+  scope: 'kind',
+  kind: 'individual',
+  fee: 'tip',
+  payer: 'tipme',
+  confirmCost: true,
+};
+
+test('a tip completing today leaves today’s estimate, and an approval keeps the asker’s figure', async (t) => {
   const { db, person, ask, approve, rows } = await actionSetup(t);
   const asker = await person();
   const approver = await person();
   await paidTip(db, 'ada', 1_000_000n);
-  const payload = {
-    scope: 'kind',
-    kind: 'individual',
-    fee: 'tip',
-    payer: 'tipme',
-    confirmCost: true,
-    costEstimateMinor: '50000',
-  };
+  await intoYesterday(db);
+  const payload = { ...KIND_TIP, costEstimateMinor: '50000' };
   // A figure that isn't the live one is not a confirm of it.
   await assert.rejects(
     ask(asker, { ...payload, costEstimateMinor: '40000' }),
     (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
   );
-  const outcome = await ask(asker, payload);
-  assert.equal(outcome.state, 'pending', JSON.stringify(outcome));
-  // One more tip moves the live estimate to ₦1,000; the approver confirms the ₦500 they read.
+  // A tip today doesn't move today's figure, so the screen's figure still holds.
   await paidTip(db, 'ada', 1_000_000n);
-  assert.equal(
-    await estimateFeeWaiverMonthlyCost(db.db, {
+  const estimate = (now) =>
+    estimateFeeWaiverMonthlyCost(db.db, {
       kind: 'individual',
       fee: 'tip',
-      now: new Date(),
-    }),
-    100_000n,
-  );
-  const approved = await approve(outcome.requestId, approver);
+      now,
+    });
+  assert.equal(await estimate(new Date()), 50_000n);
+  const outcome = await ask(asker, payload);
+  assert.equal(outcome.state, 'pending', JSON.stringify(outcome));
+  // Tomorrow the live figure is ₦1,000; the approver confirms the ₦500 they read.
+  const approvedAt = lagosTomorrow();
+  assert.equal(await estimate(approvedAt), 100_000n);
+  clockAt(t, approvedAt);
+  const approved = await approve(outcome.requestId, approver, approvedAt);
   assert.equal(approved.status, 'approved', JSON.stringify(approved));
+  assert.equal((await rows()).length, 1);
+});
+
+test('across Lagos midnight the refusal carries the new figure, and asking on it goes through', async (t) => {
+  const { db, person, people, ask, rows } = await actionSetup(t);
+  const lone = await person();
+  await paidTip(db, 'ada', 1_000_000n);
+  // The screen loaded today, when the tip wasn't counted yet; the code is entered after midnight.
+  const askedAt = lagosTomorrow();
+  await codeEnteredAt(db, people, lone, askedAt);
+  clockAt(t, askedAt);
+  let refusal;
+  await assert.rejects(
+    ask(lone, { ...KIND_TIP, costEstimateMinor: '0' }, askedAt),
+    (error) => {
+      refusal = error;
+      return error.code === 'FEE_WAIVER_CONFIRM_REQUIRED';
+    },
+  );
+  assert.equal(currentEstimateOf(refusal), 50_000n);
+  assert.equal(currentEstimateOf(new Error('other')), null);
+  assert.equal((await rows()).length, 0);
+  const outcome = await ask(
+    lone,
+    { ...KIND_TIP, costEstimateMinor: '50000' },
+    askedAt,
+  );
+  assert.equal(outcome.state, 'ran', JSON.stringify(outcome));
+});
+
+test('two staff asking for the same rule the same day share one request; across midnight the pin keeps one', async (t) => {
+  const { db, person, people, ask, approve, rows } = await actionSetup(t);
+  const a = await person();
+  const b = await person();
+  const c = await person();
+  await paidTip(db, 'ada', 1_000_000n);
+  await intoYesterday(db);
+  const first = await ask(a, { ...KIND_TIP, costEstimateMinor: '50000' });
+  const again = await ask(b, { ...KIND_TIP, costEstimateMinor: '50000' });
+  assert.equal(again.repeat, true);
+  assert.equal(again.requestId, first.requestId);
+  // After midnight today's tip counts: different words, so a request of its own for the approver
+  // to read. Both pin the key's same latest row, so approving one makes the other stale.
+  await paidTip(db, 'ada', 1_000_000n);
+  const tomorrow = lagosTomorrow();
+  await codeEnteredAt(db, people, b, tomorrow);
+  clockAt(t, tomorrow);
+  const later = await ask(
+    b,
+    { ...KIND_TIP, costEstimateMinor: '100000' },
+    tomorrow,
+  );
+  assert.equal(later.state, 'pending');
+  assert.notEqual(later.requestId, first.requestId);
+  assert.equal(
+    (await approve(first.requestId, c, tomorrow)).status,
+    'approved',
+  );
+  // The next code step: a code is used once.
+  const nextStep = new Date(tomorrow.getTime() + 30_000);
+  clockAt(t, nextStep);
+  assert.equal((await approve(later.requestId, c, nextStep)).status, 'stale');
   assert.equal((await rows()).length, 1);
 });
 
@@ -944,6 +1042,9 @@ test('a kind-wide TipMe-pays waiver needs confirmCost, and its description names
   });
   const { businessId } = await seedBusiness(db);
   await seedPayout(db, { businessId, userFeeMinor: 7_500n });
+  await intoYesterday(db);
+  // Today's tips count from tomorrow: this one leaves today's figure.
+  await paidTip(db, 'ada', 1_000_000n);
 
   const now = new Date();
   // The tip-fee figure is the tips' fees; the withdrawal-fee figure is the payouts' user fees.
@@ -1045,8 +1146,10 @@ test('a kind-wide TipMe-pays waiver needs confirmCost, and its description names
   });
   await db.pool.query(
     `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
-                          request_fingerprint, fee_payer, user_fee_minor, fee_waiver_id, waived_fee_minor)
-     VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'fp', 'tipme', 0, $4, 2000)`,
+                          request_fingerprint, fee_payer, user_fee_minor, fee_waiver_id, waived_fee_minor,
+                          created_at)
+     VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'fp', 'tipme', 0, $4, 2000,
+             now() - interval '1 day')`,
     [randomUUID(), ADA, randomUUID(), rule],
   );
   assert.equal(
@@ -1229,6 +1332,16 @@ test('the payload is checked: shapes, ids, instants and unknown fields', () => {
       fee: 'tip',
       payer: 'tipme',
       costEstimateMinor: '500',
+    },
+    // A figure only where it is checked: a kind-wide TipMe-pays rule.
+    { ...adaTip, payer: 'tipme', confirmCost: true, costEstimateMinor: '0' },
+    {
+      scope: 'kind',
+      kind: 'individual',
+      fee: 'tip',
+      payer: 'account',
+      confirmCost: true,
+      costEstimateMinor: '0',
     },
     { ...adaTip, payer: 'tipme', extra: 1 },
   ];
