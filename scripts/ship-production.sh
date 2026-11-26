@@ -11,8 +11,9 @@
 #      invalid one stops the ship here, before anything of production changes. A changed
 #      compose.edge.yml is NOT applied (that would restart the edge, and with it staging):
 #      the ship says so, and applying it is a runbook step.
-#   2. This version's deploy files in /srv/tipme-production/releases/<version>/ and its image
-#      (docker load over SSH), then deploy-production.sh from there. The server never builds.
+#   2. This version's deploy files in /srv/tipme-production/releases/<version>/ and its images
+#      (tipme-app and tipme-web-production, docker load over SSH), then deploy-production.sh from
+#      there. The server never builds.
 #
 # PRODUCTION_SKIP_DEPLOY=1 ships without running deploy-production.sh.
 set -euo pipefail
@@ -29,6 +30,11 @@ ssh_opts=(-o BatchMode=yes -o StrictHostKeyChecking=yes)
 [[ -n "${PRODUCTION_SSH_KEY_FILE:-}" ]] && ssh_opts+=(-i "$PRODUCTION_SSH_KEY_FILE")
 here=$(cd "$(dirname "$0")/.." && pwd)
 release="$home/releases/$version"
+# Both images first: a missing one must stop the ship before the edge or production changes.
+images=("tipme-app:$version" "tipme-web-production:$version")
+for image in "${images[@]}"; do
+  docker image inspect "$image" >/dev/null 2>&1 || { echo "$image is not built here: build it first (see the deploy-production workflow)." >&2; exit 2; }
+done
 
 echo "==> Copying the edge files"
 tar -C "$here/deploy/edge" -cz Caddyfile compose.edge.yml |
@@ -70,8 +76,8 @@ echo "==> Copying the production deploy files for $version"
 tar -C "$here/deploy" -cz compose.production.yml scripts |
   ssh "${ssh_opts[@]}" "$target" "mkdir -p '$release' && tar -C '$release' -xz"
 
-echo "==> Sending tipme-app:$version (compressed)"
-docker save "tipme-app:$version" | gzip -1 | ssh "${ssh_opts[@]}" "$target" "gunzip | docker load"
+echo "==> Sending ${images[*]} (compressed, shared layers once)"
+docker save "${images[@]}" | gzip -1 | ssh "${ssh_opts[@]}" "$target" "gunzip | docker load"
 
 if [[ "${PRODUCTION_SKIP_DEPLOY:-}" == "1" ]]; then
   echo "==> Shipped $version (deploy skipped)."

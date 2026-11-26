@@ -41,8 +41,9 @@ bash -c "$cmd"`,
   fake(
     'docker',
     `case "$1" in
-  save) echo "IMAGE-BYTES-$2" ;;
-  load) cat > "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
+  save) shift; for image in "$@"; do echo "IMAGE-BYTES-$image"; done ;;
+  load) cat >> "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
+  image) echo "docker $*" >> "$FAKE_LOG"; [[ "$3" != "$FAKE_MISSING_IMAGE" ]] ;;
   run) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_CADDY_VALID" == "1" ]] ;;
   compose) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_RELOAD_FAIL" != "1" ]] ;;
   *) echo "docker $*" >> "$FAKE_LOG" ;;
@@ -62,9 +63,9 @@ esac`,
     PRODUCTION_SKIP_DEPLOY: '1',
   };
   // A fake deploy script is not needed: nothing is shipped when the edge step fails.
-  const run = (args) =>
+  const run = (args, extra = {}) =>
     spawnSync('bash', [resolve('scripts/ship-production.sh'), ...args], {
-      env,
+      env: { ...env, ...extra },
       encoding: 'utf8',
     });
   const log = () =>
@@ -167,4 +168,31 @@ test('a failed reload puts the previous Caddyfile back and stops before producti
   assert.equal((log().match(/caddy reload/g) ?? []).length, 2);
   assert.equal(existsSync(join(production, 'releases')), false);
   assert.equal(existsSync(join(production, 'loaded')), false);
+});
+
+// The website runs on the server since Vercel paused it (26 Nov 2026): its production image ships
+// in the same stream (the shared base layers travel once).
+test('ship-production sends the production web image with the app image', () => {
+  const { run, production } = stage();
+  const result = run(['abcdef123456']);
+  assert.equal(result.status, 0, result.stderr);
+  const loaded = readFileSync(join(production, 'loaded'), 'utf8');
+  assert.match(loaded, /IMAGE-BYTES-tipme-app:abcdef123456/);
+  assert.match(loaded, /IMAGE-BYTES-tipme-web-production:abcdef123456/);
+  assert.doesNotMatch(loaded, /tipme-web-staging/);
+});
+
+test('ship-production without the web image stops before the edge or production changes', () => {
+  const { run, edge, production, log } = stage();
+  const result = run(['abcdef123456'], {
+    FAKE_MISSING_IMAGE: 'tipme-web-production:abcdef123456',
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /tipme-web-production:abcdef123456/);
+  assert.equal(
+    readFileSync(join(edge, 'Caddyfile'), 'utf8'),
+    'old caddyfile\n',
+  );
+  assert.doesNotMatch(log(), /ssh /);
+  assert.equal(existsSync(join(production, 'releases')), false);
 });

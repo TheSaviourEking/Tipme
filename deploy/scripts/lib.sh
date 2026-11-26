@@ -74,11 +74,32 @@ compose_agrees_on_live() {
   fi
 }
 
-# A version can run only if Actions shipped both its image and its deploy files.
+# --- The website (self-hosted since Vercel paused it, 26 Nov 2026) ---
+# Each version's website runs from its own image, built for this stack (the browser's settings are
+# baked in): tipme-web-staging:<version> or tipme-web-production:<version>. A version from before
+# the move has no website in its compose file, and runs as it always did.
+web_image() { echo "tipme-web-$TIPME_STACK:$1"; }
+has_web() { grep -q 'image: tipme-web-' "$RELEASES/$1/$COMPOSE_FILE" 2>/dev/null; }
+
+# Going back to a version from before the website ran here would stop it (that version's compose
+# file has no website), so a rollback from a version that has it refuses one that doesn't.
+refuse_rollback_without_web() {
+  local current=$1 target=$2
+  if [[ -n "$current" ]] && has_web "$current" && ! has_web "$target"; then
+    echo "$target is from before the website ran on this server: rolling back to it would stop the website. Roll back to a later version, or deploy a fix." >&2
+    exit 2
+  fi
+}
+
+# A version can run only if Actions shipped its image(s) and its deploy files.
 shipped() {
   local version=$1
-  docker image inspect "tipme-app:$version" >/dev/null 2>&1 &&
-    [[ -f "$RELEASES/$version/$COMPOSE_FILE" ]]
+  docker image inspect "tipme-app:$version" >/dev/null 2>&1 || return 1
+  [[ -f "$RELEASES/$version/$COMPOSE_FILE" ]] || return 1
+  if has_web "$version" && ! docker image inspect "$(web_image "$version")" >/dev/null 2>&1; then
+    echo "$(web_image "$version") is not loaded." >&2
+    return 1
+  fi
 }
 
 # Keeps the images and files of the newest KEEP_VERSIONS deployed versions (and the current one,
@@ -93,6 +114,7 @@ prune_versions() {
     [[ "$TIPME_STACK" == production && ("$version" == "$blue_version" || "$version" == "$green_version") ]] && continue
     grep -qx "$version" <<<"$keep" && continue
     docker image rm "tipme-app:$version" >/dev/null 2>&1 || true
+    docker image rm "$(web_image "$version")" >/dev/null 2>&1 || true
     rm -rf "${RELEASES:?}/$version"
   done < <(awk '!seen[$0]++' "$DEPLOYED")
 }
@@ -223,22 +245,42 @@ role_passwords() {
   done
 }
 
-# Waits until the public API answers ready and reports the expected version. In production the
-# edge round-robins over both colours while they overlap, so some polls still reach the old one:
-# it is enough that the new version answers once (only ready copies get traffic).
-# HEALTH_BASE_URL (a setting) replaces https://<API_HOST>, e.g. plain http for a local rehearsal.
+# Waits until the public API answers ready and reports the expected version, and, for a version
+# with the website, until the website's public address reports it too (/api/version, the build id:
+# the same check the edge makes). In production the edge round-robins over both colours while they
+# overlap, so some polls still reach the old one: it is enough that the new version answers once
+# (only ready copies get traffic).
+# HEALTH_BASE_URL (a setting) replaces https://<API_HOST>, and WEB_HEALTH_BASE_URL the website's
+# WEB_ORIGIN, e.g. plain http for a local rehearsal.
 wait_healthy() {
-  local version=$1 base
+  local version=$1 base web="" api_seen="" web_seen=""
   base=$(setting HEALTH_BASE_URL || true)
   [[ -n "$base" ]] || base="https://$(api_host)"
+  if has_web "$version"; then
+    web=$(setting WEB_HEALTH_BASE_URL || true)
+    [[ -n "$web" ]] || web=$(setting WEB_ORIGIN || true)
+    if [[ -z "$web" ]]; then
+      echo "WEB_ORIGIN is required in $ENV_FILE: the deploy checks the website there." >&2
+      return 1
+    fi
+  else
+    web_seen=1
+  fi
   for _ in $(seq 1 "$HEALTH_TRIES"); do
     # --max-time: a hung edge must count as a failed poll, not stall the deploy.
-    if curl -sf --max-time 10 "$base/health/ready" >/dev/null &&
+    if [[ -z "$api_seen" ]] && curl -sf --max-time 10 "$base/health/ready" >/dev/null &&
       curl -sf --max-time 10 "$base/health/release" | grep -q "\"version\":\"$version\""; then
-      return 0
+      api_seen=1
     fi
+    if [[ -z "$web_seen" ]] &&
+      curl -sf --max-time 10 "$web/api/version" | grep -q "\"version\":\"$version\""; then
+      web_seen=1
+    fi
+    [[ -n "$api_seen" && -n "$web_seen" ]] && return 0
     sleep 2
   done
+  [[ -n "$api_seen" ]] || echo "!! The API at $base did not report $version." >&2
+  [[ -n "$web_seen" ]] || echo "!! The website at $web did not report $version." >&2
   return 1
 }
 
@@ -270,13 +312,13 @@ attach_edge() {
     echo "!! Could not attach the API to edge-staging: staging is unreachable through the edge." >&2
 }
 
-# The long-running services a version defines (newer versions add some, e.g. retention), so a
+# The long-running services a version defines (newer versions add some, e.g. retention, web), so a
 # rollback to an older version never asks Compose for a service its file doesn't have.
 # Never caddy: older versions' files still define it, but the edge (deploy/edge) owns 80/443 now.
 app_services() {
   local defined
   defined=$(compose_for "$1" config --services)
-  for service in api worker backup retention; do
+  for service in api worker backup retention web; do
     grep -qx "$service" <<<"$defined" && printf '%s ' "$service"
   done
 }
@@ -367,32 +409,47 @@ record_colours() {
   mv "$COLOURS.tmp" "$COLOURS"
 }
 
-# Brings <version> up on the idle colour and waits until the public API serves it. On failure
-# the new colour is stopped and nothing is recorded: the active colour never stopped.
+# A colour's services in <version>: its API, and its website when the version has one.
+colour_services() {
+  local version=$1 colour=$2
+  printf '%s' "api-$colour"
+  if has_web "$version"; then printf ' %s' "web-$colour"; fi
+}
+
+# Brings <version> up on the idle colour (its API and website together) and waits until the public
+# API, and the website's public address, serve it. On failure the new colour is stopped and nothing
+# is recorded: the active colour never stopped.
 start_idle_colour() {
   local version=$1 idle
+  local -a services
   idle=$(idle_colour)
+  read -r -a services <<<"$(colour_services "$version" "$idle")"
   set_colour_version "$idle" "$version"
-  echo "==> Starting $version on api-$idle"
-  if compose_for "$version" up -d --wait --no-deps "api-$idle" && wait_healthy "$version"; then
+  echo "==> Starting $version on ${services[*]}"
+  if compose_for "$version" up -d --wait --no-deps "${services[@]}" && wait_healthy "$version"; then
     return 0
   fi
-  echo "!! $version did not become healthy on api-$idle: stopping it; api-${active_colour:-none} keeps serving." >&2
-  compose_for "$version" stop -t 20 "api-$idle" || echo "!! Could not stop api-$idle: stop it by hand." >&2
+  echo "!! $version did not become healthy on ${services[*]}: stopping it; the ${active_colour:-none} colour keeps serving." >&2
+  compose_for "$version" stop -t 20 "${services[@]}" || echo "!! Could not stop ${services[*]}: stop them by hand." >&2
   exit 1
 }
 
 # The new colour serves: record it first (if anything later fails, the state names the colour that
-# is serving), then stop the old colour (the edge stops sending it traffic as it fails readiness;
-# 20 s covers its drain) and replace the workers one at a time onto the same version. A worker
+# is serving), then stop the old colour (the edge stops sending its API traffic as it fails
+# readiness, and its website refuses new connections, which the edge retries on the new one; 20 s
+# covers their drain) and replace the workers one at a time onto the same version. A worker
 # paused for the migrations is stopped already: `up` recreates it on the new version all the same.
 switch_to_idle() {
   local version=$1 old=$active_colour
+  local -a services
   active_colour=$(idle_colour)
   record_colours
   if [[ -n "$old" ]]; then
-    echo "==> Stopping api-$old"
-    compose_for "$version" stop -t 20 "api-$old"
+    # The old colour's website too (named in this version's file; a colour from before the website
+    # moved here has none, and stopping a service with no container does nothing).
+    read -r -a services <<<"$(colour_services "$version" "$old")"
+    echo "==> Stopping ${services[*]}"
+    compose_for "$version" stop -t 20 "${services[@]}"
   fi
   for worker in worker-a worker-b; do
     echo "==> Replacing $worker"
