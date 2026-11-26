@@ -194,6 +194,18 @@ export type WithdrawalQuote =
        */
       feePaidBy: 'user' | 'tipme';
       /**
+       * Every provider read, in drain order: what it can pay now, its fee (as `feeMinor`: '0' on a
+       * person's page when TipMe pays) and who would pay it. Who pays can differ by provider (an
+       * unused top-up is held at one only), so the screen decides the amount typed with
+       * `withdrawalFeeFor`, from the same split the request makes, and sends that payer. Absent from
+       * an API before this release: then `feePaidBy` decides.
+       */
+      feeParts?: {
+        capMinor: string;
+        feeMinor: string;
+        feePaidBy: 'user' | 'tipme';
+      }[];
+      /**
        * A person's page: which withdrawal of the Lagos day this one would be (not counting failed
        * ones). A business: 1. Nothing reads it to price a withdrawal now.
        */

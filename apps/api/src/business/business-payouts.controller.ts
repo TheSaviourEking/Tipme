@@ -270,6 +270,11 @@ export class BusinessPayoutsController {
               capsMinor: quote.capsMinor.map((minor) => minor.toString()),
               feeMinor: quote.feeMinor.toString(),
               feePaidBy: quote.feePaidBy,
+              feeParts: quote.feeParts.map((part) => ({
+                capMinor: part.capMinor.toString(),
+                feeMinor: part.feeMinor.toString(),
+                feePaidBy: part.feePaidBy,
+              })),
             }
           : { ...quote, inReview },
     };

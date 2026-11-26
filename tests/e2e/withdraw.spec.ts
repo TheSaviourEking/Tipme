@@ -1130,6 +1130,51 @@ test('a fee changed since the quote: the screen shows the new ₦50 and asks to 
   await page.unrouteAll({ behavior: 'ignoreErrors' });
 });
 
+// Ruling R6 with a split account: a top-up at one provider only. The amount typed decides who pays,
+// split as the request splits it, and that payer is what the request sends.
+test('a split balance: the fee shown and sent is the one for the amount typed', async ({
+  page,
+}, testInfo) => {
+  await signUpRecipient(page, testInfo);
+  await fakeBalance(page, '2800000');
+  await fakeQuote(
+    page,
+    readyQuote({
+      withdrawableMinor: '2800000',
+      ledgerMinor: '2800000',
+      providerMinor: '2800000',
+      capsMinor: ['800000', '2000000'],
+      feeMinor: '5000',
+      feePaidBy: 'user',
+      feeParts: [
+        { capMinor: '800000', feeMinor: '0', feePaidBy: 'tipme' },
+        { capMinor: '2000000', feeMinor: '5000', feePaidBy: 'user' },
+      ],
+    }),
+  );
+  const sent: unknown[] = [];
+  await page.route('**/v1/me/withdrawals', (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    sent.push(route.request().postDataJSON());
+    return route.fulfill({
+      status: 409,
+      json: { error: { code: 'WITHDRAWALS_PAUSED', message: 'x' } },
+    });
+  });
+  await page.goto('/dashboard/withdraw');
+  const summary = page.getByRole('region', { name: 'Summary' });
+  await page.getByLabel('Amount (NGN)').fill('15000');
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦14,950');
+  await page.getByLabel('Amount (NGN)').fill('5000');
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦5,000');
+  await page.getByRole('button', { name: 'Withdraw ₦5,000' }).click();
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent).toEqual([{ amountMinor: '500000', feePaidBy: 'tipme' }]);
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 test('a balance of ₦50 or less says why it can’t be withdrawn', async ({
   page,
 }, testInfo) => {

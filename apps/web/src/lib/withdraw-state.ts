@@ -9,10 +9,13 @@ import {
   COLLECT_HELD_NOTE,
   COLLECT_WITHDRAW_WORDS,
   FIRST_WITHDRAWAL_COPY,
+  WITHDRAW_FEE_COPY,
   WITHDRAW_SPLIT_COPY,
 } from '@tipme/contracts/copy';
 import {
   belowWithdrawalMinimum,
+  WITHDRAWAL_FEE_COPY_MINOR,
+  withdrawalFeeFor,
   withdrawalMinimumMinor,
   withdrawalPartCount,
 } from '@tipme/domain';
@@ -396,12 +399,46 @@ export function collectWithdrawView(input: {
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,
+  chosen?: bigint | null,
 ): string | null {
   if (quote?.state !== 'ready') return null;
-  if (quote.feePaidBy === 'tipme')
-    return 'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.';
-  if (quote.feeMinor === '0') return null;
-  return `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
+  const fee = feeFor(quote, chosen ?? null);
+  if (fee.feePaidBy === 'tipme') return WITHDRAW_FEE_COPY.tipmePays;
+  if (fee.feeMinor === BigInt(0)) return null;
+  return WITHDRAW_FEE_COPY.line(formatNaira(fee.feeMinor));
+}
+
+type ReadyQuote = Extract<WithdrawalQuoteResponse, { state: 'ready' }>;
+
+/**
+ * The fee on withdrawing `chosen`, and who pays it (Ruling R6): from the provider that carries the
+ * largest part of that amount, split as the request splits it (`withdrawalFeeFor`), since an unused
+ * top-up is held at one provider only. With no amount, or a quote without the parts (an older API),
+ * or an amount that can't be split: the quote's overall answer.
+ */
+function feeFor(
+  quote: ReadyQuote,
+  chosen: bigint | null,
+): { feeMinor: bigint; feePaidBy: 'user' | 'tipme' } {
+  const parts = quote.feeParts ?? [];
+  const decided =
+    chosen !== null && chosen > BigInt(0) && parts.length > 0
+      ? withdrawalFeeFor(
+          chosen,
+          parts.map((part) => ({
+            capMinor: BigInt(part.capMinor),
+            feeMinor: BigInt(part.feeMinor),
+            feePaidBy: part.feePaidBy,
+          })),
+          BigInt(quote.withdrawableMinor),
+        )
+      : null;
+  return (
+    decided ?? {
+      feeMinor: BigInt(quote.feeMinor),
+      feePaidBy: quote.feePaidBy,
+    }
+  );
 }
 
 /**
@@ -470,12 +507,12 @@ export function withdrawSummary(
   receiveMinor: bigint;
 } | null {
   if (quote?.state !== 'ready') return null;
-  // What the user pays: nothing when TipMe pays the fee (owner, 18 Nov 2026).
-  const feeMinor =
-    quote.feePaidBy === 'user' ? BigInt(quote.feeMinor) : BigInt(0);
+  // Who pays for this amount (Ruling R6); what the user pays is nothing when TipMe pays it.
+  const fee = feeFor(quote, chosen);
+  const feeMinor = fee.feePaidBy === 'user' ? fee.feeMinor : BigInt(0);
   const receiveMinor = chosen - feeMinor;
   if (receiveMinor <= BigInt(0)) return null;
-  return { feeMinor, feePaidBy: quote.feePaidBy, receiveMinor };
+  return { feeMinor, feePaidBy: fee.feePaidBy, receiveMinor };
 }
 
 /**
@@ -556,16 +593,16 @@ export function withdrawRefusal(code: string | undefined): {
     };
   if (code === 'WITHDRAWAL_BELOW_FEE')
     return {
-      message:
-        'The amount must be more than the ₦50 transfer fee, which comes off it.',
+      message: WITHDRAW_FEE_COPY.belowFee(
+        formatNaira(WITHDRAWAL_FEE_COPY_MINOR),
+      ),
       reload: true,
     };
   // Ruling R6: who pays the fee changed since the quote on screen. Nothing was recorded; the reload
   // shows the new fee, and confirming again sends that.
   if (code === 'WITHDRAWAL_FEE_CHANGED')
     return {
-      message:
-        'The transfer fee changed. Check the new amount and confirm again.',
+      message: WITHDRAW_FEE_COPY.changed,
       reload: true,
     };
   if (code === 'IDEMPOTENCY_CONFLICT')

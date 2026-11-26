@@ -20,6 +20,7 @@ import {
 } from '@tipme/database';
 import { withdrawalMinimumMinor } from '@tipme/domain';
 import type { ErrorReporter, Logger } from '@tipme/observability';
+import { WITHDRAW_FEE_COPY } from '@tipme/contracts/copy';
 import { NGN_PAYOUT_FEE_MINOR } from '@tipme/payments';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import {
@@ -228,9 +229,10 @@ const messages: Record<ApiErrorCode, string> = {
   ALREADY_HAS_PAGE: 'You already have a page.',
   INSUFFICIENT_BALANCE: 'That is more than your available balance.',
   WITHDRAWAL_TOO_SMALL: `The smallest withdrawal is ${wholeNgn(withdrawalMinimumMinor())}.`,
-  WITHDRAWAL_BELOW_FEE: `The amount must be more than the ${wholeNgn(NGN_PAYOUT_FEE_MINOR)} transfer fee, which is taken from it.`,
-  WITHDRAWAL_FEE_CHANGED:
-    'The transfer fee changed. Check the new amount and confirm again.',
+  WITHDRAWAL_BELOW_FEE: WITHDRAW_FEE_COPY.belowFee(
+    wholeNgn(NGN_PAYOUT_FEE_MINOR),
+  ),
+  WITHDRAWAL_FEE_CHANGED: WITHDRAW_FEE_COPY.changed,
   WITHDRAWAL_UNAVAILABLE:
     'Withdrawals are not available yet for tips paid through this payment provider.',
   WITHDRAWALS_SWITCHED_OFF:

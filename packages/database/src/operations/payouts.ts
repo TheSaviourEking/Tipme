@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import {
-  allocateWithdrawal,
   belowWithdrawalMinimum,
   buildPayoutFeePosting,
   buildPayoutPosting,
@@ -11,6 +10,8 @@ import {
   formatMinor,
   lagosDayStart,
   PAYOUT_TRANSITIONS,
+  feeCarrierIndex,
+  requestAllocation,
 } from '@tipme/domain';
 import type { PayoutStatus } from '@tipme/domain';
 import {
@@ -1167,6 +1168,15 @@ export type WithdrawalQuoteResult =
        */
       feePaidBy: 'user' | 'tipme';
       /**
+       * Every provider read, in drain order (zero ones included): what it can pay now (the request's
+       * cap), its fee and who would pay it. withdrawalFeeFor decides an amount's fee from these.
+       */
+      feeParts: {
+        capMinor: bigint;
+        feeMinor: bigint;
+        feePaidBy: 'user' | 'tipme';
+      }[];
+      /**
        * A person's page: which withdrawal of the Lagos day this one would be (1 for the first, not
        * counting failed ones). 1 for a business. `freePerDay` is always 0, kept for the contract.
        */
@@ -1924,15 +1934,17 @@ async function quoteFor(
   );
   const providerMinor = parts.reduce((sum, part) => sum + part.availMinor, 0n);
   const now = input.now ?? new Date();
-  const feePaidBy = await guarded(() =>
-    feePayerFor(
-      db,
-      owner,
-      carrier.route,
-      carrier.provider.name,
-      carrier.feeMinor,
+  // Ruling R6: who pays can differ by provider (an unused top-up is held at one only), so every
+  // provider read says its own; the screen decides for the amount typed (withdrawalFeeFor) from the
+  // same split the request makes. The overall answer is the full balance's carrier's.
+  const payers = await guarded(() =>
+    Promise.all(
+      parts.map((part) =>
+        feePayerFor(db, owner, part.route, part.provider.name, part.feeMinor),
+      ),
     ),
   );
+  const feePaidBy = payers[parts.indexOf(carrier)] ?? 'user';
   const ordinalToday =
     'businessId' in owner
       ? 1
@@ -1964,6 +1976,11 @@ async function quoteFor(
     bankDetailsNeeded: bankDetailsNeeded && heldBack,
     heldElsewhere: reach.heldElsewhere,
     feePaidBy,
+    feeParts: parts.map((part, index) => ({
+      capMinor: part.availMinor,
+      feeMinor: part.feeMinor,
+      feePaidBy: payers[index] ?? 'user',
+    })),
     ordinalToday,
     // Kept for the contract; nobody has free withdrawals now (owner, 25 Nov 2026).
     freePerDay: 0,
@@ -2153,19 +2170,6 @@ export function requestBusinessWithdrawal(
   input: RequestInput & { businessId: string; userId: string },
 ): Promise<RequestResult> {
   return requestFor(db, { businessId: input.businessId }, input, input.userId);
-}
-
-/** What each provider carries of `totalMinor` drawn in drain order (the quote's takes, spec §5). */
-function drainTakes(
-  capsMinor: readonly bigint[],
-  totalMinor: bigint,
-): bigint[] {
-  let remaining = totalMinor;
-  return capsMinor.map((cap) => {
-    const take = lower(remaining, cap);
-    remaining -= take;
-    return take;
-  });
 }
 
 /** One provider the request may draw from: read, usable, and on the bank the screen shows. */
@@ -2386,31 +2390,30 @@ async function requestFor(
       // provider (spec §5). Taking everything is always allowed, also when the ledger, not a
       // provider, is what runs out: then each provider carries what the quote said it would (its
       // take in drain order), so every part empties what it can give.
-      const allocation =
-        allocateWithdrawal(input.amountMinor, capsMinor) ??
-        (input.amountMinor === withdrawable
-          ? allocateWithdrawal(
-              input.amountMinor,
-              drainTakes(capsMinor, withdrawable),
-            )
-          : null);
+      // The same split the screen asks withdrawalFeeFor about (Ruling R6), so both agree on who pays.
+      const allocation = requestAllocation(
+        input.amountMinor,
+        capsMinor,
+        withdrawable,
+      );
       if (!allocation) throw new OperationError('WITHDRAWAL_TOO_SMALL');
       const chosen = read.parts.flatMap((part, index) => {
         const amountMinor = allocation[index] ?? 0n;
         return amountMinor > 0n ? [{ ...part, amountMinor }] : [];
       });
-      const [head, ...rest] = chosen;
-      if (!head) throw new OperationError('INSUFFICIENT_BALANCE');
+      const carrierPart = read.parts[feeCarrierIndex(allocation)];
+      if (chosen.length === 0 || !carrierPart)
+        throw new OperationError('INSUFFICIENT_BALANCE');
       // The fee is decided once for the request (spec §5): whoever pays it pays it once, off the
       // largest part (the first in drain order among equals), so the small parts never fall below
       // it. TipMe pays every other part's fee. A person pays it from the amount chosen on every
       // request, however many parts it has (owner, 25 Nov 2026). A business: one fee under its own
       // rule (owner, 12 and 23 Nov 2026). Decided here under the owner lock. Nothing can be sent when
       // the largest part is not more than its fee.
-      const carrier = rest.reduce(
-        (best, part) => (part.amountMinor > best.amountMinor ? part : best),
-        head,
+      const carrier = chosen.find(
+        (part) => part.provider === carrierPart.provider,
       );
+      if (!carrier) throw new OperationError('INSUFFICIENT_BALANCE');
       const feePayer = await feePayerFor(
         tx,
         owner,
@@ -2420,6 +2423,8 @@ async function requestFor(
       );
       // Ruling R6: never a fee the person didn't see. A top-up used up or a switch changed since
       // the quote: nothing is recorded, and the screen shows the new fee to confirm again.
+      // TODO(next release): require feePaidBy. A screen from before R6 sends none, and is decided
+      // here without the check, so it can still be charged a fee it didn't show.
       if (input.feePaidBy !== undefined && input.feePaidBy !== feePayer)
         throw new OperationError('WITHDRAWAL_FEE_CHANGED');
       const userPaid =

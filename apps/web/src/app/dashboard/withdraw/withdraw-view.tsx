@@ -560,7 +560,8 @@ export default function WithdrawPage({
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
-  const feeLine = withdrawFee(quote);
+  // For the amount typed, once it can be sent: who pays can differ by provider (Ruling R6).
+  const feeLine = withdrawFee(quote, sendable ? chosen : null);
   const firstNote = state.canWithdraw
     ? firstWithdrawalNote(quote, withdrawals, nextWithdrawals)
     : null;

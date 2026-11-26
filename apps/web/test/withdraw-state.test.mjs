@@ -922,3 +922,67 @@ test('both withdraw screens send the quoted payer with the amount', async () => 
     assert.doesNotMatch(src, /body: \{ amountMinor: String\(amount\) \}/);
   }
 });
+
+// Ruling R6 with a split account: an unused top-up is held at one provider only, so who pays depends
+// on which provider carries the amount typed. The quote lists each provider's cap, fee and payer;
+// the summary decides for the amount exactly as the request splits it, so the payer sent is the one
+// the request decides and a confirm never loops on WITHDRAWAL_FEE_CHANGED.
+test('the summary decides the fee for the amount typed from the provider that carries it', () => {
+  const split = ready({
+    withdrawableMinor: '2800000',
+    ledgerMinor: '2800000',
+    providerMinor: '2800000',
+    capsMinor: ['800000', '2000000'],
+    // Overall (the whole balance, mostly from the second provider): the person pays.
+    feePaidBy: 'user',
+    feeMinor: '5000',
+    feeParts: [
+      { capMinor: '800000', feeMinor: '0', feePaidBy: 'tipme' },
+      { capMinor: '2000000', feeMinor: '5000', feePaidBy: 'user' },
+    ],
+  });
+  // ₦5,000 fits the first provider, where the top-up is: TipMe pays, the whole amount arrives.
+  assert.deepEqual(withdrawSummary(split, 500_000n), {
+    feeMinor: 0n,
+    feePaidBy: 'tipme',
+    receiveMinor: 500_000n,
+  });
+  assert.deepEqual(
+    withdrawRequestBody(500_000n, withdrawSummary(split, 500_000n)),
+    { amountMinor: '500000', feePaidBy: 'tipme' },
+  );
+  // ₦15,000 goes from the second alone: the ₦50 comes off.
+  assert.deepEqual(withdrawSummary(split, 1_500_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 1_495_000n,
+  });
+  // The fee line follows the amount typed when there is one.
+  assert.equal(
+    withdrawFee(split, 500_000n),
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
+  );
+  assert.match(withdrawFee(split, 1_500_000n), /^Transfer fee: ₦50/);
+  assert.match(withdrawFee(split), /^Transfer fee: ₦50/);
+  // A quote without the parts (an older API): the overall answer, as before.
+  const { feeParts, ...older } = split;
+  assert.equal(feeParts.length, 2);
+  assert.equal(withdrawSummary(older, 500_000n).feePaidBy, 'user');
+});
+
+test('the fee copy comes from the shared copy, with the fee from its constant', async () => {
+  const { WITHDRAW_FEE_COPY } = await import('@tipme/contracts/copy');
+  assert.equal(
+    withdrawRefusal('WITHDRAWAL_FEE_CHANGED').message,
+    WITHDRAW_FEE_COPY.changed,
+  );
+  assert.equal(
+    withdrawRefusal('WITHDRAWAL_BELOW_FEE').message,
+    WITHDRAW_FEE_COPY.belowFee('₦50'),
+  );
+  assert.equal(
+    withdrawFee(ready({ feePaidBy: 'tipme' })),
+    WITHDRAW_FEE_COPY.tipmePays,
+  );
+  assert.equal(withdrawFee(ready()), WITHDRAW_FEE_COPY.line('₦50'));
+});
