@@ -25,6 +25,7 @@ import {
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
 import { opsLiveEnabled } from '@/lib/live-enabled';
+import { keepsGrantedView } from '@/lib/ops-stream-end';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -142,6 +143,12 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
     void opsState().then(apply);
   }, [apply]);
   const reload = () => void opsState().then(apply);
+  // The staff stream ended with 404: ask where this person stands, but a passing failure of that
+  // question keeps the admin area (and the page's filters and pages) showing.
+  const streamEnded = () =>
+    void opsState().then((next) => {
+      if (!keepsGrantedView(next)) apply(next);
+    });
 
   const signOut = async () => {
     await apiFetch('/v1/ops/sign-out', { method: 'POST', body: {} });
@@ -155,11 +162,12 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
       // Around OpsGranted, not only its frame: the menu's approvals count is read in OpsGranted's
       // own body, and useLiveEvents does nothing outside a provider. A stream that ends because
       // the grant did (404) asks /v1/ops/me again, which shows the step this person is now at.
+      // Until the page reloads, its screens then use their own timers (the stream stays ended).
       <LiveProvider
         stream="ops"
         timing={OPS_LIVE_TIMING}
         enabled={opsLiveEnabled(state.access)}
-        onSignedOut={reload}
+        onSignedOut={streamEnded}
       >
         <OpsGranted
           access={state.access}

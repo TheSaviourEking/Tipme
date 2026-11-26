@@ -83,10 +83,9 @@ test('a second approver sees a new request without reloading', async ({
   browser,
 }, testInfo) => {
   test.setTimeout(120_000);
-  const { handle } = await signUpRecipient(
-    await (await browser.newContext()).newPage(),
-    testInfo,
-  );
+  const recipient = await browser.newContext();
+  const { handle } = await signUpRecipient(await recipient.newPage(), testInfo);
+  await recipient.close();
   await enrolOwner(page, testInfo);
   const other = await secondOwner(browser, testInfo);
   await other.page.goto('/ops/approvals');
@@ -157,17 +156,16 @@ test('issues make no timed requests while connected', async ({
     .filter((m) => m.type === 'ops.issues.changed')
     .map((m) => m.at);
   expect(ready.length).toBeGreaterThanOrEqual(1);
-  // Beyond the first read and the ready's resync, a read must follow a signal (another worker's
-  // issue) within its debounce: none comes from a timer.
+  // Beyond the first read, a read must follow a signal (another worker's issue) within its
+  // debounce, or be a ready's resync (at most one per ready): none comes from a timer.
   const [, ...rest] = reads;
-  const afterReady = rest.filter((at) =>
+  const others = rest.filter(
+    (at) => !signals.some((s) => at >= s - 50 && at - s < 2000),
+  );
+  const afterReady = others.filter((at) =>
     ready.some((r) => at >= r - 50 && at - r < 1000),
   );
-  const timed = rest.filter(
-    (at) =>
-      !afterReady.includes(at) &&
-      !signals.some((s) => at >= s - 50 && at - s < 2000),
-  );
+  const timed = others.filter((at) => !afterReady.includes(at));
   expect(afterReady.length).toBeLessThanOrEqual(ready.length);
   expect(timed).toEqual([]);
 });
@@ -198,10 +196,9 @@ test('a new issue appears without reloading', async ({
   request,
 }, testInfo) => {
   test.setTimeout(120_000);
-  const { handle } = await signUpRecipient(
-    await (await browser.newContext()).newPage(),
-    testInfo,
-  );
+  const recipient = await browser.newContext();
+  const { handle } = await signUpRecipient(await recipient.newPage(), testInfo);
+  await recipient.close();
   await enrolOwner(page, testInfo);
   await page.goto('/ops/issues');
   await expect(page.locator('[data-live="connected"]')).toBeAttached({

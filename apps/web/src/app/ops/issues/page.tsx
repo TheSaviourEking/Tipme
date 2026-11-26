@@ -1,10 +1,22 @@
 'use client';
 import Link from 'next/link';
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import type { LiveEventType, OpsIssue } from '@tipme/contracts';
 import { Badge, Button, EmptyWell, Skeleton, Slip } from '@tipme/ui';
 import { age, ISSUE_KIND_LABELS, SEVERITY_LABELS } from '@/lib/ops-client';
 import { opsFetch } from '@/lib/ops-staff-api';
+import {
+  INITIAL_ISSUES_LIST,
+  issuesListReducer,
+  type FirstPageMode,
+} from '@/lib/issues-list';
 import { ownTimerRuns } from '@/lib/own-timer';
 import { useLiveEvents, useLiveStatus } from '@/components/live/live-provider';
 
@@ -21,10 +33,6 @@ const query = (filters: Filters, cursor?: string) => {
   return `/v1/ops/issues?${params.toString()}`;
 };
 
-/** The rows that decide whether the first page changed: order, status and priority. */
-const shape = (rows: OpsIssue[]) =>
-  rows.map((i) => `${i.id}:${i.status}:${i.priority ? 1 : 0}`).join(',');
-
 /**
  * Everything that needs a person, newest first. With live updates, the first page reads again on
  * `ops.issues.changed`; without them (or while the stream is off), every 30 seconds while open.
@@ -35,54 +43,38 @@ export default function IssuesPage() {
     status: 'open',
     severity: '',
   });
-  const [issues, setIssues] = useState<OpsIssue[] | null>(null);
-  const [more, setMore] = useState(false);
-  const [failed, setFailed] = useState(false);
+  // Every answer applies to the list as it is when it lands (src/lib/issues-list.ts): a first
+  // page and a "Show more" in flight together never drop or mix each other's rows.
+  const [list, dispatch] = useReducer(
+    issuesListReducer<OpsIssue>,
+    INITIAL_ISSUES_LIST,
+  );
+  const { issues, more, newChanges, failed } = list;
   const [now, setNow] = useState(0);
-  // More than the first page is showing: a change then offers to show it, rather than replacing
-  // the rows under the reader (the base design's Tips-page rule).
-  const [extraPages, setExtraPages] = useState(false);
-  const [newChanges, setNewChanges] = useState(false);
-  const latest = useRef({ filters, issues, extraPages });
+  const filtersNow = useRef(filters);
   useEffect(() => {
-    latest.current = { filters, issues, extraPages };
+    filtersNow.current = filters;
   });
   const asked = useRef(0);
 
   /** The first page with the current filters; an older answer never replaces a newer one. */
-  const firstPage = useCallback(async () => {
+  const firstPage = useCallback(async (mode: FirstPageMode) => {
     const mine = ++asked.current;
-    const result = await opsFetch<OpsIssue[]>(query(latest.current.filters));
+    const result = await opsFetch<OpsIssue[]>(query(filtersNow.current));
     if (mine !== asked.current) return;
     setNow(Date.now());
-    if (!result.ok) return setFailed(true);
-    setFailed(false);
-    setIssues(result.data);
-    setMore(result.data.length === 50);
-    setExtraPages(false);
-    setNewChanges(false);
+    if (!result.ok) dispatch({ type: 'firstFailed' });
+    else dispatch({ type: 'first', rows: result.data, mode });
   }, []);
 
-  // A signal means something changed: deeper in the list it may not show on the first page.
-  useLiveEvents(
-    ISSUES_CHANGED,
-    async () => {
-      if (latest.current.extraPages) setNewChanges(true);
-      else await firstPage();
-    },
-    { resync: false },
-  );
-  // A resync (the ready, the fallback poll, the tab coming back) only says "check": with more
-  // pages showing, offer the change only if the first page differs.
-  useLiveEvents(NO_SIGNALS, async () => {
-    if (!latest.current.extraPages) return firstPage();
-    const shown = latest.current.issues?.slice(0, 50) ?? [];
-    const result = await opsFetch<OpsIssue[]>(query(latest.current.filters));
-    if (result.ok && shape(result.data) !== shape(shown)) setNewChanges(true);
-  });
+  // A signal means something changed; with more pages showing it offers the change instead of
+  // replacing rows under the reader (the base design's Tips-page rule).
+  useLiveEvents(ISSUES_CHANGED, () => firstPage('signal'), { resync: false });
+  // A resync (the ready, the fallback poll, the tab coming back) only says "check".
+  useLiveEvents(NO_SIGNALS, () => firstPage('check'));
 
   useEffect(() => {
-    void firstPage();
+    void firstPage('replace');
   }, [filters, firstPage]);
 
   // No stream covering the page (live updates off, or no EventSource): today's 30 s refresh.
@@ -91,7 +83,7 @@ export default function IssuesPage() {
   useEffect(() => {
     if (!ownTimer) return;
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void firstPage();
+      if (document.visibilityState === 'visible') void firstPage('replace');
     }, 30_000);
     return () => clearInterval(timer);
   }, [filters, firstPage, ownTimer]);
@@ -99,12 +91,10 @@ export default function IssuesPage() {
   const loadMore = async () => {
     const last = issues?.at(-1);
     if (!last) return;
+    const generation = list.generation;
     const result = await opsFetch<OpsIssue[]>(query(filters, last.id));
-    if (result.ok) {
-      setIssues([...(issues ?? []), ...result.data]);
-      setMore(result.data.length === 50);
-      setExtraPages(true);
-    }
+    // Dropped by the reducer if a newer first page replaced the list meanwhile.
+    if (result.ok) dispatch({ type: 'more', rows: result.data, generation });
   };
 
   return (
@@ -153,7 +143,7 @@ export default function IssuesPage() {
       )}
       {newChanges && (
         <p>
-          <Button variant="quiet" onClick={() => void firstPage()}>
+          <Button variant="quiet" onClick={() => void firstPage('replace')}>
             New changes: show
           </Button>
         </p>
