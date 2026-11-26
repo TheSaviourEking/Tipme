@@ -1843,3 +1843,15 @@ test('an empty or unknown method list never reaches Bachs', async () => {
     assert.equal(bodies.length, 0);
   }
 });
+
+test('a repeated method never reaches Bachs', async () => {
+  const { provider, bodies } = recordingProvider();
+  await assert.rejects(
+    provider.initializePayment({
+      ...directCheckout,
+      paymentMethods: ['card', 'card'],
+    }),
+    BachsRequestNotSentError,
+  );
+  assert.equal(bodies.length, 0);
+});

@@ -839,3 +839,15 @@ test('an empty or unknown collect method list never reaches Bachs', async () => 
     assert.equal(calls.length, 0);
   }
 });
+
+test('a repeated collect method never reaches Bachs', async () => {
+  const { provider, calls } = fake([]);
+  await assert.rejects(
+    provider.initializeCollectCheckout({
+      ...collectCheckout,
+      paymentMethods: ['card', 'card'],
+    }),
+    BachsRequestNotSentError,
+  );
+  assert.equal(calls.length, 0);
+});

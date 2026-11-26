@@ -602,6 +602,8 @@ export function createBachsProvider(
   function partnerMethods(methods: readonly CheckoutMethod[]): string[] {
     if (methods.length === 0)
       throw new TypeError('A checkout needs at least one payment method');
+    if (new Set(methods).size !== methods.length)
+      throw new TypeError('A checkout payment method may be listed only once');
     return methods.map((method) => {
       if (method === 'card') return 'NGN_CARD';
       if (method === 'bank_transfer') return 'NGN_BANK_TRANSFER';
