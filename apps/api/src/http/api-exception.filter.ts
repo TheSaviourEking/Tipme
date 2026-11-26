@@ -143,6 +143,8 @@ const messages: Record<ApiErrorCode, string> = {
     'Announcement email isn’t set up on this server, so nothing can be sent.',
   PLAN_FEES_CONFIRM_REQUIRED:
     'That moves a rate by more than 2 percentage points. Confirm the big change to go ahead.',
+  FEE_WAIVER_CONFIRM_REQUIRED:
+    'TipMe paying this fee for every account has a cost. Confirm the estimated monthly cost to go ahead.',
   PRO_PRICE_NOT_SET: 'The Pro price isn’t set yet.',
   PRO_PRICE_CHANGED:
     'The Pro price has changed. Check the new price and try again.',
@@ -502,6 +504,10 @@ const operationErrors: Partial<
   PLAN_FEES_CONFIRM_REQUIRED: {
     status: 400,
     code: 'PLAN_FEES_CONFIRM_REQUIRED',
+  },
+  FEE_WAIVER_CONFIRM_REQUIRED: {
+    status: 400,
+    code: 'FEE_WAIVER_CONFIRM_REQUIRED',
   },
   PRO_PRICE_NOT_SET: { status: 404, code: 'PRO_PRICE_NOT_SET' },
   PRO_PRICE_CHANGED: { status: 409, code: 'PRO_PRICE_CHANGED' },

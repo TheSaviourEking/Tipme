@@ -464,6 +464,8 @@ export const SERIOUS_ACTIONS = [
   'collect_dispute.evidence',
   'collect_same_bank.clear',
   'tip_refund.record_paid',
+  // Fee waivers (spec 2026-11-23 §6): who pays the tip or withdrawal fee, by kind or per account.
+  'fee_waiver.set',
 ] as const;
 export type SeriousAction = (typeof SERIOUS_ACTIONS)[number];
 
@@ -507,6 +509,7 @@ export const SERIOUS_ACTION_WORDS: Record<SeriousAction, string> = {
   'collect_same_bank.clear': 'Clear a shared bank account hold',
   'tip_refund.record_paid':
     'Record a refund the payment partner paid that TipMe didn’t book',
+  'fee_waiver.set': 'Set who pays a fee',
 };
 
 /** The permission each action needs, and so who can be the second person (spec 6.9). */
@@ -546,4 +549,5 @@ export const SERIOUS_ACTION_PERMISSIONS: Record<SeriousAction, OpsPermission> =
     'collect_dispute.evidence': 'collect.manage',
     'collect_same_bank.clear': 'collect.manage',
     'tip_refund.record_paid': 'collect.manage',
+    'fee_waiver.set': 'fees.manage',
   };

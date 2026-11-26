@@ -110,6 +110,8 @@ export const apiErrorCodes = [
   'ANNOUNCEMENT_NO_RECIPIENTS',
   'ANNOUNCEMENT_EMAIL_NOT_SET_UP',
   'PLAN_FEES_CONFIRM_REQUIRED',
+  // Fee waivers (W11): a kind-wide TipMe-pays rule needs its estimated monthly cost confirmed.
+  'FEE_WAIVER_CONFIRM_REQUIRED',
   'PRO_PRICE_NOT_SET',
   'PRO_PRICE_CHANGED',
   'PRO_PURCHASE_OPEN',

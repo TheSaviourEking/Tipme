@@ -54,6 +54,18 @@ import {
 import { hasConfirmedMailTest, switchMailProvider } from './provider-admin.js';
 import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
+import {
+  checkedFeeWaiverPayload,
+  estimateFeeWaiverMonthlyCost,
+  FEE_WAIVER_SET_ACTION,
+  feeWaiverKeyOf,
+  feeWaiverNeedsCostConfirm,
+  feeWaiverTarget,
+  latestRowOfKey,
+  requireFeeWaiverConfirm,
+  setFeeWaiver,
+  type FeeWaiverSetPayload,
+} from './fee-waivers.js';
 import { alreadyReversed, reversalsOf, reverseTip } from './reversals.js';
 import { changelogPublishAction } from './changelog-admin.js';
 import { announcementSendAction } from './announcements.js';
@@ -65,6 +77,7 @@ import {
   returnHeldRefundMoney,
   tipRefundFacts,
 } from './tip-refunds.js';
+import { lagosDayStart, untilWords } from '@tipme/domain';
 import {
   checkedProPrice,
   currentProPrice,
@@ -669,6 +682,147 @@ const planFeesChange = acting<{
       proBps: String(set.proBps),
     }));
   },
+});
+
+/* Fee waivers (spec 2026-11-23 §6) */
+
+const FEE_WORDS = { tip: 'tip fee', withdrawal: 'withdrawal fee' } as const;
+const KIND_WORDS = {
+  individual: 'all individuals',
+  business: 'all businesses',
+  giving: 'all Giving accounts',
+} as const;
+const MONTH_WORDS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
+/** "from 5 Dec" (the year when not this Lagos year): the Lagos date a requested start falls on. */
+function fromWords(startsAt: Date, now: Date): string {
+  const lagosDate = (at: Date) =>
+    new Date(lagosDayStart(at).getTime() + 3_600_000);
+  const day = lagosDate(startsAt);
+  const words = `from ${day.getUTCDate()} ${MONTH_WORDS[day.getUTCMonth()]}`;
+  return day.getUTCFullYear() === lagosDate(now).getUTCFullYear()
+    ? words
+    : `${words} ${day.getUTCFullYear()}`;
+}
+
+/** Who the rule is for, in the words staff read: "@ada", "The Yellow Chilli", "all businesses". */
+async function feeWaiverWho(tx: Tx, payload: FeeWaiverSetPayload) {
+  if (payload.profileId !== undefined)
+    return `@${await handleOf(tx, payload.profileId)}`;
+  if (payload.businessId !== undefined)
+    return (await opsBusinessName(tx, payload.businessId)).name;
+  return KIND_WORDS[payload.kind];
+}
+
+/**
+ * The approver's words (W11). The "until" date is the last Lagos day covered (R5), never formatted
+ * here. A kind-wide TipMe-pays rule names its estimated cost, so the approver confirms it.
+ */
+async function describeFeeWaiver(
+  tx: Tx,
+  payload: FeeWaiverSetPayload,
+  now: Date,
+): Promise<string> {
+  const who = await feeWaiverWho(tx, payload);
+  const fee = FEE_WORDS[payload.fee];
+  const when = [
+    payload.startsAt !== undefined &&
+    new Date(payload.startsAt).getTime() > now.getTime()
+      ? ` ${fromWords(new Date(payload.startsAt), now)}`
+      : '',
+    payload.endsAt !== undefined
+      ? ` ${untilWords(new Date(payload.endsAt), now)}`
+      : payload.payer === 'tipme'
+        ? ', with no end date'
+        : '',
+  ].join('');
+  if (payload.payer === 'tipme') {
+    const cost = feeWaiverNeedsCostConfirm(payload)
+      ? ` (about ${nairaOf(
+          await estimateFeeWaiverMonthlyCost(tx, {
+            kind: payload.kind,
+            fee: payload.fee,
+            now,
+          }),
+        )} a month, last 30 days)`
+      : '';
+    return `TipMe pays the ${fee} for ${who}${when}${cost}`;
+  }
+  if (payload.payer === 'inherit')
+    return `The ${fee} for ${who} follows the rule for ${KIND_WORDS[payload.kind]}${when}`;
+  return payload.scope === 'kind'
+    ? `${KIND_WORDS[payload.kind].replace(/^all /, 'All ')} pay the ${fee} as normal${when}`
+    : `${who} pays the ${fee} as normal, whatever the rule for ${KIND_WORDS[payload.kind]}${when}`;
+}
+
+/** The payload if it is well formed, else null: subjects and target run before validation. */
+const feeWaiverPayloadOrNull = (payload: unknown) => {
+  try {
+    return checkedFeeWaiverPayload(payload);
+  } catch {
+    return null;
+  }
+};
+
+/*
+ * Who pays the tip or withdrawal fee, by kind or for one account (spec 2026-11-23 §6): a money
+ * change, so a second person decides, or a lone admin acts alone with the alert. Pinned on the
+ * key's latest row, upcoming included (W10), so any change to the key makes a waiting request
+ * stale. A page's owner, or anyone who runs or ran the business (R12), is its subject.
+ */
+const feeWaiverSet = acting<FeeWaiverSetPayload>({
+  name: FEE_WAIVER_SET_ACTION,
+  permission: 'fees.manage',
+  subjects: async (raw, db) => {
+    const payload = feeWaiverPayloadOrNull(raw);
+    if (payload?.profileId !== undefined)
+      return pageOwner(db, payload.profileId);
+    if (payload?.businessId !== undefined)
+      return payoutOwners(db, { businessId: payload.businessId });
+    return [];
+  },
+  target: (raw) => {
+    const payload = feeWaiverPayloadOrNull(raw);
+    return payload ? feeWaiverTarget(payload) : 'fee_waiver:invalid';
+  },
+  current: async (tx, raw) => {
+    const row = await latestRowOfKey(
+      tx,
+      feeWaiverKeyOf(checkedFeeWaiverPayload(raw)),
+    );
+    return row?.id ?? null;
+  },
+  describe: async (tx, raw) => {
+    const payload = checkedFeeWaiverPayload(raw);
+    // Asked at request time too, so a kind-wide waiver without the confirm never opens a request.
+    requireFeeWaiverConfirm(payload);
+    return describeFeeWaiver(tx, payload, new Date());
+  },
+  act: (tx, raw, context) =>
+    setFeeWaiver(tx, {
+      ...checkedFeeWaiverPayload(raw),
+      staffUserId: context.actorId,
+      approvedBy: context.approverId ?? null,
+      reason: context.reason,
+      now: context.now,
+    }).then((set) => ({
+      id: set.id,
+      startsAt: set.startsAt.toISOString(),
+      endsAt: set.endsAt?.toISOString() ?? null,
+    })),
 });
 
 /*
@@ -1741,6 +1895,7 @@ export function registerRealSeriousActions(): void {
   registerSeriousAction(collectDisputeEvidence);
   registerSeriousAction(collectSameBankClear);
   registerSeriousAction(tipRefundRecordPaid);
+  registerSeriousAction(feeWaiverSet);
 }
 
 /* Routes whose seriousness depends on what is being done */
