@@ -1,4 +1,8 @@
-import { DISPUTE_HOLD_EVENT, SERIOUS_ACTION_WORDS } from '@tipme/contracts';
+import {
+  DISPUTE_HOLD_EVENT,
+  OPS_GRANTS_ENDED_EVENT,
+  SERIOUS_ACTION_WORDS,
+} from '@tipme/contracts';
 import type { Database, MailSealing } from '@tipme/database';
 import {
   evaluateTipMoments,
@@ -24,6 +28,8 @@ export const DOMAIN_EVENT_NAMES: ReadonlySet<string> = new Set([
   'ops.approval_ran',
   'ops.approval_closed',
   'ops.staff_changed',
+  // Someone's admin grants ended (dropOpsAccess): only a live signal, no alert or mail.
+  OPS_GRANTS_ENDED_EVENT,
   'ops.freeze_released',
   'provider_event.conflict',
   'payment.unresolved',

@@ -386,6 +386,12 @@ export const OPS_ANY_STAFF_ROUTES: Record<
   string,
   { verb: 'GET' | 'POST'; freshCode: boolean; reason: string }
 > = {
+  'OpsLiveController.ops': {
+    verb: 'GET',
+    freshCode: false,
+    reason:
+      'The staff live stream: signal types only, and only those the grant’s permissions allow (live-router targets).',
+  },
   'OpsPagesController.page': {
     verb: 'GET',
     freshCode: false,

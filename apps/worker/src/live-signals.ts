@@ -1,5 +1,6 @@
 import {
   DISPUTE_HOLD_EVENT,
+  OPS_GRANTS_ENDED_EVENT,
   PAYOUT_START_EVENT,
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
@@ -58,6 +59,8 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'ops.approval_ran': none,
   'ops.approval_closed': none,
   'ops.staff_changed': toStaffStreams,
+  // Grants ended outside a staff change (an authenticator reset, a resent invitation, a move).
+  [OPS_GRANTS_ENDED_EVENT]: toStaffStreams,
   // The issue's page: `profileId` was added to this payload for live updates (issues.ts).
   'ops.freeze_released': toProfile('withdrawals.changed'),
   'provider_event.conflict': none,

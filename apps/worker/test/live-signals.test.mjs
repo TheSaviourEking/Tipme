@@ -335,7 +335,12 @@ test('whenRequestMoved keeps the signals only when the request moved', async () 
 });
 
 test('staff changes re-check every staff stream', () => {
-  for (const name of ['ops.staff_changed', 'ops.last_approver_removed'])
+  for (const name of [
+    'ops.staff_changed',
+    'ops.last_approver_removed',
+    // Any path that ended someone's admin grants (dropOpsAccess): reset, resend, removal, a move.
+    'ops.grants_ended',
+  ])
     assert.deepEqual(
       liveSignalFor(name, { action: 'role_changed', requestedBy: null }),
       [{ to: { staff: 'any' }, type: 'staff.changed' }],

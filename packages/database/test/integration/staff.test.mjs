@@ -7,6 +7,7 @@ import {
   changePhone,
   confirmTotpEnrolment,
   createSession,
+  dropOpsAccess,
   grantOwner,
   listAudit,
   listPretendOutbox,
@@ -409,6 +410,42 @@ test('staff access', async (t) => {
         busy.idleDeadline.getTime(),
         at(40 * MIN).getTime() + OPS_GRANT_IDLE_MS,
       );
+    },
+  );
+
+  await t.test(
+    'ending admin access raises ops.grants_ended once, only when a grant ended',
+    async () => {
+      await database.fresh();
+      const { userId, sessionId, totp } = await enrolledOwner(database.db);
+      const opened = at(MIN);
+      assert.equal(
+        (
+          await openOpsGrant(database.db, {
+            userId,
+            sessionId,
+            code: codeAt(totp, opened),
+            key,
+            now: opened,
+          })
+        ).status,
+        'ok',
+      );
+      const ended = async () =>
+        (
+          await q(
+            `SELECT payload FROM outbox_events WHERE event_type = 'ops.grants_ended'`,
+          )
+        ).map((row) => row.payload);
+      await database.db.transaction((tx) =>
+        dropOpsAccess(tx, userId, at(2 * MIN)),
+      );
+      assert.deepEqual(await ended(), [{ userId }]);
+      // Nothing left to end: no signal.
+      await database.db.transaction((tx) =>
+        dropOpsAccess(tx, userId, at(3 * MIN)),
+      );
+      assert.equal((await ended()).length, 1);
     },
   );
 

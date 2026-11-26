@@ -103,16 +103,26 @@ before(async () => {
   await sleep(2000);
 });
 after(async () => {
+  // A failed test can leave its stream open, and an open stream holds app.close() forever.
+  for (const stream of opened) stream.close();
   await redis?.quit();
   await stack?.stop();
   await database?.close();
 });
 
+const opened = new Set();
+const track = async (pending) => {
+  const stream = await pending;
+  opened.add(stream);
+  return stream;
+};
 const opsEvents = (cookie, api = stack.api) =>
-  openEventStream(`${api}/v1/ops/events`, {
-    ...(cookie ? { cookie } : {}),
-    origin: WEB,
-  });
+  track(
+    openEventStream(`${api}/v1/ops/events`, {
+      ...(cookie ? { cookie } : {}),
+      origin: WEB,
+    }),
+  );
 const READY = /^data: \{"type":"ready"\}$/;
 const ENDED = /^data: \{"type":"session.ended"\}$/;
 const ISSUES = 'data: {"type":"ops.issues.changed"}';
@@ -258,10 +268,12 @@ test('an issues signal reaches only staff holding issues.view', async () => {
   const recipient = await signIn(stack.api, nextPhone());
   const seeing = await opsEvents(viewer.cookie);
   const blind = await opsEvents(other.cookie);
-  const me = await openEventStream(`${stack.api}/v1/me/events`, {
-    cookie: recipient.cookie,
-    origin: WEB,
-  });
+  const me = await track(
+    openEventStream(`${stack.api}/v1/me/events`, {
+      cookie: recipient.cookie,
+      origin: WEB,
+    }),
+  );
   for (const s of [seeing, blind, me]) await s.waitFor(READY);
   await publish({ to: { staff: 'issues.view' }, type: 'ops.issues.changed' });
   assert.equal(await seeing.waitFor(/ops\.issues\.changed/), ISSUES);
@@ -317,6 +329,33 @@ test('losing issues.view mid-stream closes the stream with session.ended', async
   assert.deepEqual(signals(again), []);
   again.close();
   kept.close();
+});
+
+test("resetting a staff member's authenticator closes their stream", async () => {
+  const lost = await staffWith(['issues.view'], 'Lost phone desk');
+  await database.pool.query(
+    `UPDATE users SET email = $2, email_verified_at = now() WHERE id = $1`,
+    [lost.userId, `lost-${lost.userId.slice(0, 8)}@example.com`],
+  );
+  // Let the role change's own staff.changed land first.
+  await sleep(2000);
+  const stream = await opsEvents(lost.cookie);
+  await stream.waitFor(READY);
+  await database.pool.query(
+    `UPDATE ops_sessions SET last_totp_at = now() WHERE user_id = $1 AND revoked_at IS NULL`,
+    [ownerId],
+  );
+  const reset = await fetch(
+    `${stack.api}/v1/ops/staff/${lost.userId}/reset-authenticator`,
+    {
+      method: 'POST',
+      headers: browserHeaders(owner.cookie),
+      body: JSON.stringify({ reason: REASON }),
+    },
+  );
+  assert.equal(reset.status, 200, await reset.clone().text());
+  await stream.waitFor(ENDED, 10_000);
+  await stream.ended;
 });
 
 test('admin sign-out closes the staff stream', async () => {

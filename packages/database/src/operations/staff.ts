@@ -1,7 +1,10 @@
 import { servingPoolMax } from '../client.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash, randomBytes } from 'node:crypto';
-import { SERIOUS_ACTION_PERMISSIONS } from '@tipme/contracts';
+import {
+  OPS_GRANTS_ENDED_EVENT,
+  SERIOUS_ACTION_PERMISSIONS,
+} from '@tipme/contracts';
 import { newTotpSecret, otpauthUrl, verifyTotp } from '@tipme/domain';
 import {
   and,
@@ -791,18 +794,28 @@ export function staffRole(
  * Voids open enrolment links, removes the authenticator and ends every admin grant. Runs on any
  * number move (phone change, completed recovery) so a moved account must be granted again; a no-op
  * for non-staff. Links go first, so one being used right now can't leave its secret behind.
+ * When it ended a grant it writes OPS_GRANTS_ENDED_EVENT in the same transaction: the relay turns it
+ * into `staff.changed`, so that person's open staff stream closes now, not at its deadline.
  */
 export async function dropOpsAccess(
-  tx: Database | Tx,
+  tx: Tx,
   userId: string,
   now: Date = new Date(),
 ): Promise<void> {
   await voidEnrolments(tx, userId, now);
   await tx.delete(staffTotp).where(eq(staffTotp.userId, userId));
-  await tx
+  const ended = await tx
     .update(opsSessions)
     .set({ revokedAt: now })
-    .where(and(eq(opsSessions.userId, userId), isNull(opsSessions.revokedAt)));
+    .where(and(eq(opsSessions.userId, userId), isNull(opsSessions.revokedAt)))
+    .returning({ id: opsSessions.id });
+  if (ended.length > 0)
+    await enqueueOutbox(tx, {
+      eventType: OPS_GRANTS_ENDED_EVENT,
+      // Each occurrence is its own signal.
+      aggregateId: newId(),
+      payload: { userId },
+    });
 }
 
 /**
