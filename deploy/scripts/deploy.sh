@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Deploys one version to staging (PR-010). GitHub Actions has already built and tested the image
-# and shipped it here (deploy-staging workflow): this only runs it.
-#   backup → pause the worker → migrate (guarded) → switch → health → record → prune old versions.
+# Deploys one version to staging (PR-010). GitHub Actions has already built and tested the images
+# (API/worker and website) and shipped them here (deploy-staging workflow): this only runs them.
+#   backup → pause the worker → migrate (guarded) → switch (API, worker, website) → health (the API's
+#   version, and the website's at WEB_ORIGIN) → record → prune old versions.
 # If the new version is unhealthy it puts the previous one back (no down-migrations: migrations
 # are forward-only and must stay compatible with the previous release).
 #
