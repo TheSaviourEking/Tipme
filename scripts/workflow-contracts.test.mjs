@@ -106,3 +106,14 @@ test('production never builds the pretend inbox or the preview gate into its web
   assert.match(build, /NEXT_PUBLIC_PRETEND_DELIVERY: ''/);
   assert.match(build, /NEXT_PUBLIC_PREVIEW_GATE: ''/);
 });
+
+// PRODUCTION_WEB_URL is documented as the apex (production.md), but the canonical address every
+// prerendered page carries is the www host: production's SITE_URL is its own variable, no fallback.
+test('production bakes SITE_URL from PRODUCTION_SITE_URL only', () => {
+  const build = step(
+    readFileSync('.github/workflows/deploy-production.yml', 'utf8'),
+    'Build the web image (production)',
+  );
+  assert.match(build, /SITE_URL: \$\{\{ vars\.PRODUCTION_SITE_URL \}\}/);
+  assert.doesNotMatch(build, /SITE_URL: .*PRODUCTION_WEB_URL/);
+});
