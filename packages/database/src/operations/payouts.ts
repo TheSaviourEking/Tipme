@@ -63,7 +63,7 @@ import {
   withinCollectLimits,
 } from './collect-guards.js';
 import { freeFeeCredit } from './fee-credits.js';
-import { readFeatureSwitch } from './feature-switches.js';
+import { feeWaiverFor } from './fee-waivers.js';
 import { managerOf } from './business-access.js';
 import { guarded, OperationError, safeError } from './errors.js';
 import { recordAudit } from './audit.js';
@@ -1926,7 +1926,8 @@ async function quoteFor(
   );
   const providerMinor = parts.reduce((sum, part) => sum + part.availMinor, 0n);
   const now = input.now ?? new Date();
-  const feePaidBy = await guarded(() =>
+  // Not binding (W9): the request decides again under the owner lock.
+  const { payer: feePaidBy } = await guarded(() =>
     feePayerFor(
       db,
       owner,
@@ -2010,18 +2011,29 @@ async function personsWithdrawalsToday(
 }
 
 /**
- * Who pays the partner's fee on a withdrawal asked for now. A person's own page: TipMe for the first
- * FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day (owner, 18 Nov 2026: withdrawals are free twice
- * a day), counted by the stored `fee_payer` of those not failed; from the next one the user pays from
- * the amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the
- * fee up from the platform payment reserve before the payout (coverFee, or an unused top-up), and
- * books the partner's real fee as its own cost when the payout is paid. A
- * business is unchanged until the owner says otherwise: it pays from the amount (owner, 12 Nov 2026),
- * unless an unused top-up TipMe already sent to its account can pay it (fee-credits.ts). A payout
- * keeps the rule it was asked under (`fee_payer`), so one asked for before this release finishes as
- * it was asked.
+ * Who pays a withdrawal's fee, and under which fee waiver rule (spec 2026-11-23 §4, W8). `waivedFeeMinor`
+ * is the fee the account would have paid without the waiver (0 when today's rule had TipMe paying
+ * anyway); a request stores it on the part that carries the fee.
  */
-async function feePayerFor(
+export interface FeeDecision {
+  payer: 'user' | 'tipme';
+  waiverId: string | null;
+  waivedFeeMinor: bigint;
+}
+
+/**
+ * Today's rule for who pays the partner's fee on a withdrawal asked for now, with no waiver. A
+ * person's own page: TipMe for the first FREE_WITHDRAWALS_PER_DAY withdrawals of the Lagos day
+ * (owner, 18 Nov 2026: withdrawals are free twice a day), counted by the stored `fee_payer` of those
+ * not failed, waived ones included (they count as free); from the next one the user pays from the
+ * amount (the existing user-pays path). When TipMe pays, the whole amount is sent, TipMe tops the fee
+ * up from the platform payment reserve before the payout (coverFee, or an unused top-up), and books
+ * the partner's real fee as its own cost when the payout is paid. A business pays from the amount
+ * (owner, 12 Nov 2026), unless an unused top-up TipMe already sent to its account can pay it
+ * (fee-credits.ts, a read: nothing is claimed here). The `business_payout_fee_absorbed` switch that
+ * once came first is now the business kind rule (migration 0130).
+ */
+async function defaultFeePayer(
   db: Database | Tx,
   owner: MoneyOwner,
   route: { accountReference: string | null },
@@ -2033,10 +2045,6 @@ async function feePayerFor(
     const today = await personsWithdrawalsToday(db, owner.profileId, now);
     return today.free < FREE_WITHDRAWALS_PER_DAY ? 'tipme' : 'user';
   }
-  // Staff may switch TipMe paying a business's fee on (`business_payout_fee_absorbed`, a money
-  // switch: two people, audited). Read uncached, so a quote and the request agree with the switch.
-  if (await readFeatureSwitch(db, 'business_payout_fee_absorbed'))
-    return 'tipme';
   if (!route.accountReference || feeMinor <= 0n) return 'user';
   const credit = await freeFeeCredit(db, {
     accountRef: route.accountReference,
@@ -2045,6 +2053,41 @@ async function feePayerFor(
     feeMinor,
   });
   return credit ? 'tipme' : 'user';
+}
+
+/**
+ * Who pays the partner's fee on a withdrawal asked for now (spec 2026-11-23 §4): a withdrawal fee
+ * waiver in force for the owner (its account rule, else its kind's) makes TipMe pay; otherwise
+ * today's rule (defaultFeePayer). Withdrawal waivers are never paused: their fee comes from the
+ * payout reserve top-up, not the balance tip processing is charged to (W6). A payout keeps the rule
+ * it was asked under (`fee_payer`, `fee_waiver_id`), so a waiver ending later changes nothing asked.
+ */
+async function feePayerFor(
+  db: Database | Tx,
+  owner: MoneyOwner,
+  route: { accountReference: string | null },
+  providerName: string,
+  feeMinor: bigint,
+  now: Date,
+): Promise<FeeDecision> {
+  // The waiver first, then today's rule, which a waiver still needs: only a fee the account would
+  // have paid counts as waived (W8). One read after the other: a transaction is one connection.
+  const waiver = await feeWaiverFor(db, { owner, fee: 'withdrawal', now });
+  const payer = await defaultFeePayer(
+    db,
+    owner,
+    route,
+    providerName,
+    feeMinor,
+    now,
+  );
+  if (waiver.payer === 'tipme')
+    return {
+      payer: 'tipme',
+      waiverId: waiver.ruleId,
+      waivedFeeMinor: payer === 'user' ? feeMinor : 0n,
+    };
+  return { payer, waiverId: null, waivedFeeMinor: 0n };
 }
 
 /** What stands in for an account reference with the pretend provider, which has none. */
@@ -2416,7 +2459,9 @@ async function requestFor(
         (best, part) => (part.amountMinor > best.amountMinor ? part : best),
         head,
       );
-      const feePayer = await feePayerFor(
+      // Under a fee waiver every part is TipMe's and records the rule; only the carrier records the
+      // one fee the account would have paid (W8, spec §7a).
+      const decision = await feePayerFor(
         tx,
         owner,
         carrier.route,
@@ -2425,13 +2470,13 @@ async function requestFor(
         input.now ?? new Date(),
       );
       const userPaid =
-        feePayer === 'user'
+        decision.payer === 'user'
           ? userPaidWithdrawal({
               chosenMinor: carrier.amountMinor,
               feeMinor: carrier.feeMinor,
             })
           : null;
-      if (feePayer === 'user' && !userPaid)
+      if (decision.payer === 'user' && !userPaid)
         throw new OperationError('WITHDRAWAL_BELOW_FEE');
       for (const part of chosen) {
         const destinationId = part.route.destination?.id;
@@ -2466,6 +2511,8 @@ async function requestFor(
             amountMinor,
             feePayer: paysFee ? 'user' : 'tipme',
             userFeeMinor: paysFee ? userPaid.feeMinor : 0n,
+            feeWaiverId: decision.waiverId,
+            waivedFeeMinor: part === carrier ? decision.waivedFeeMinor : 0n,
             status: 'REQUESTED',
             // Client keys are UUIDs, so `<key>:<n>` never meets another request's key (P6).
             idempotencyKey:

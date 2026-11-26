@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
-import Link from 'next/link';
 import type { OpsPlanFees, OpsPlanFeesRow } from '@tipme/contracts';
 import {
   Button,
@@ -240,19 +239,6 @@ export default function PlanFeesPage() {
             <p>
               A tip at a business uses the staff member’s own plan fee above
               (Free or Pro). Business and Business Pro have no separate tip fee.
-            </p>
-            <p data-testid="business-payout-fee">
-              Business withdrawals:{' '}
-              <strong>
-                {state.business.payoutFeeAbsorbed
-                  ? 'TipMe pays the transfer fee'
-                  : 'the business pays the transfer fee from the amount'}
-              </strong>
-              .
-            </p>
-            <p className="tm-hint">
-              Changed in <Link href="/ops/switches">Switches</Link> (“TipMe pays
-              business payout fees”), with a second person.
             </p>
           </Card>
         </section>

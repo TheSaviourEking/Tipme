@@ -19,7 +19,6 @@ import {
   type OpsSeriousPending,
 } from '@tipme/contracts';
 import {
-  featureOn,
   planFeeRateHistory,
   planFeeRatesInForce,
   requestSeriousAction,
@@ -50,13 +49,11 @@ export class OpsPlanFeesController {
 
   private async read(): Promise<OpsPlanFees> {
     const db = this.database.db;
-    const [current, history, waitingRequestId, payoutFeeAbsorbed] =
-      await Promise.all([
-        planFeeRatesInForce(db),
-        planFeeRateHistory(db),
-        waitingPlanFeesRequest(db),
-        featureOn(db, 'business_payout_fee_absorbed'),
-      ]);
+    const [current, history, waitingRequestId] = await Promise.all([
+      planFeeRatesInForce(db),
+      planFeeRateHistory(db),
+      waitingPlanFeesRequest(db),
+    ]);
     return {
       current: {
         freeBps: Number(current.freeBps),
@@ -76,7 +73,6 @@ export class OpsPlanFeesController {
       })),
       limits: { minBps: PLAN_FEE_MIN_BPS, maxBps: PLAN_FEE_MAX_BPS },
       waitingRequestId,
-      business: { payoutFeeAbsorbed },
     };
   }
 

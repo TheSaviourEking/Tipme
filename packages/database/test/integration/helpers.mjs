@@ -63,3 +63,42 @@ export async function atLaunchProPrice(database) {
              'personal', 'Test fixture: the launch price', clock_timestamp())`,
   );
 }
+
+/**
+ * Fee waivers (spec 2026-11-23 §4): one rule row straight into the append-only table, in force
+ * from now. It starts no earlier than the newest row already on its key (the reset's carried-over
+ * business withdrawal rule included) and is created after it, so it is the key's row in force. Returns
+ * its id once this process's clock is past its start: a request's `now` is a JS Date, whole
+ * milliseconds, so one in the same millisecond would read the rule as not yet started.
+ */
+export async function waiveFee(
+  database,
+  {
+    scope = 'kind',
+    kind = 'individual',
+    profileId = null,
+    businessId = null,
+    fee = 'withdrawal',
+    payer = 'tipme',
+    reason = 'Test fixture: a fee waiver',
+  } = {},
+) {
+  const {
+    rows: [row],
+  } = await database.pool.query(
+    `INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at,
+       ends_at, reason, set_by, approved_by, created_at)
+     SELECT gen_random_uuid(), $1, $2, $3::uuid, $4::uuid, $5, $6,
+            GREATEST(clock_timestamp(), (
+              SELECT max(starts_at) FROM fee_waivers
+               WHERE scope = $1 AND kind = $2 AND fee = $5
+                 AND profile_id IS NOT DISTINCT FROM $3::uuid
+                 AND business_id IS NOT DISTINCT FROM $4::uuid)),
+            NULL, $7, NULL, NULL, clock_timestamp()
+     RETURNING id, starts_at`,
+    [scope, kind, profileId, businessId, fee, payer, reason],
+  );
+  while (Date.now() <= row.starts_at.getTime() + 1)
+    await new Promise((done) => setTimeout(done, 2));
+  return row.id;
+}

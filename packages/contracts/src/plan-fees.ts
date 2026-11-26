@@ -43,8 +43,8 @@ export interface OpsPlanFeesRow {
 /**
  * `GET /v1/ops/plan-fees`: the rates in force (from the setting, or the coded defaults when none is
  * stored), their history, and a change waiting for a second person, if any. Business tips use the
- * staff member's own plan rate; the business payout fee is the `business_payout_fee_absorbed`
- * switch, shown here for reading.
+ * staff member's own plan rate; who pays a business's withdrawal fee is a fee waiver rule (spec
+ * 2026-11-23 §5), which replaced the `business_payout_fee_absorbed` switch.
  */
 export interface OpsPlanFees {
   current: {
@@ -56,7 +56,6 @@ export interface OpsPlanFees {
   history: OpsPlanFeesRow[];
   limits: { minBps: number; maxBps: number };
   waitingRequestId: string | null;
-  business: { payoutFeeAbsorbed: boolean };
 }
 
 /**

@@ -22131,6 +22131,7 @@
                   "ANNOUNCEMENT_NO_RECIPIENTS",
                   "ANNOUNCEMENT_EMAIL_NOT_SET_UP",
                   "PLAN_FEES_CONFIRM_REQUIRED",
+                  "FEE_WAIVER_CONFIRM_REQUIRED",
                   "PRO_PRICE_NOT_SET",
                   "PRO_PRICE_CHANGED",
                   "PRO_PURCHASE_OPEN",

@@ -48,13 +48,12 @@ other needs a reason and a fresh code. Every change is in the audit log and the 
 
 Registered for open pull requests, so they can read the switch instead of adding a variable:
 
-| Variable                       | Switch key                     | Money | Default | Pull request                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------ | ----- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PAGE_STUDIO_ENABLED`          | `page_studio`                  | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it. **Do not turn on until** the web reads #283's tall cover crops (`tall` on the public cover data) through `<picture>` with a media/aspect query, using them only where the cover box is 4:5 or taller, so Stage and Horizon photo covers meet the 2000 ms lab LCP (about 3.3 s on a phone without it; `tests/e2e-perf/lcp.spec.ts`, the parked real-photo test). Then, on merged dev, re-run `pnpm perf:lab` for `/@tobi` and every `/@style*` fixture first |
-| `REFUND_FEE_RETURN`            | `refund_fee_return`            | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff; that is all it does. A chargeback always returns TipMe's fee, with no switch (owner, 14 Nov 2026). No deploy file names the variable                                                                                                                                                                                                                                                                                             |
-| `TIP_REFUNDS`                  | `tip_refunds`                  | yes   | off     | #221 `feat/tip-refund`: staff "Refund tip" (`tip.refund`, a second person); the supporter gets back the tip minus TipMe's fee. An approval after it is turned off records nothing; a refund already approved is still sent. No deploy file names the variable                                                                                                                                                                                                                                                                                            |
-| `BUSINESS_PAYOUT_FEE_ABSORBED` | `business_payout_fee_absorbed` | yes   | off     | `feat/plan-fees-setting` (owner, 18 Nov 2026: "the admin should be able to set business fees too"): on, TipMe pays a business's payout fee from the payment reserve and the business receives the whole amount; off keeps today's rule (the business pays it from the amount). A withdrawal keeps the rule it was asked under. No deploy file names the variable                                                                                                                                                                                         |
-| `YOU_COLLECT`                  | `you_collect`                  | yes   | off     | You collect plan, Tasks 3–16 (ADR-0016, **PROPOSED**): on, new sign-ups take tips through TipMe's own partner account and add bank details at their first withdrawal. Built (Task 16), **off in every environment**: production stays off until the owner turns it on, after the preconditions in `live-activation.md` (ADR-0016 accepted, P1 in writing). D-04, D-06 and D-07 stay open. What on and off do: [below](#you-collect-turning-it-on-and-off). No deploy file names the variable                                                             |
+| Variable              | Switch key          | Money | Default | Pull request                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------- | ------------------- | ----- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PAGE_STUDIO_ENABLED` | `page_studio`       | no    | off     | #210 `feat/page-studio-1` (no variable: the switch alone, owner 14 Nov 2026); #222 reads it. **Do not turn on until** the web reads #283's tall cover crops (`tall` on the public cover data) through `<picture>` with a media/aspect query, using them only where the cover box is 4:5 or taller, so Stage and Horizon photo covers meet the 2000 ms lab LCP (about 3.3 s on a phone without it; `tests/e2e-perf/lcp.spec.ts`, the parked real-photo test). Then, on merged dev, re-run `pnpm perf:lab` for `/@tobi` and every `/@style*` fixture first |
+| `REFUND_FEE_RETURN`   | `refund_fee_return` | yes   | off     | #193 `feat/business-r2-b`, wired in the API and the worker: a final refund is recorded at once instead of by two staff; that is all it does. A chargeback always returns TipMe's fee, with no switch (owner, 14 Nov 2026). No deploy file names the variable                                                                                                                                                                                                                                                                                             |
+| `TIP_REFUNDS`         | `tip_refunds`       | yes   | off     | #221 `feat/tip-refund`: staff "Refund tip" (`tip.refund`, a second person); the supporter gets back the tip minus TipMe's fee. An approval after it is turned off records nothing; a refund already approved is still sent. No deploy file names the variable                                                                                                                                                                                                                                                                                            |
+| `YOU_COLLECT`         | `you_collect`       | yes   | off     | You collect plan, Tasks 3–16 (ADR-0016, **PROPOSED**): on, new sign-ups take tips through TipMe's own partner account and add bank details at their first withdrawal. Built (Task 16), **off in every environment**: production stays off until the owner turns it on, after the preconditions in `live-activation.md` (ADR-0016 accepted, P1 in writing). D-04, D-06 and D-07 stay open. What on and off do: [below](#you-collect-turning-it-on-and-off). No deploy file names the variable                                                             |
 
 Switches from merge train 2 (owner, 14 Nov 2026: each PR's flag became a switch before it shipped). None of
 these variables was ever in a deploy file, so nothing needs deleting from the servers; each still seeds its
@@ -287,3 +286,39 @@ up, Pro 300 and up), one `fee.capped` audit row each. A per-page fee staff set
 (`fee.change`, ADR-0014) still wins below the plan's rate. A person's first 2 withdrawals each Lagos day are free
 (`FREE_WITHDRAWALS_PER_DAY`); from the 3rd the partner's fee comes off the amount. Business tips use the staff member's own plan rate:
 there is no separate business per-tip rate.
+
+## Fee waivers: who pays the fees (spec 2026-11-23)
+
+Not a switch: rules in `fee_waivers` (append-only history, read on every tip quote and every withdrawal
+request, no cache). Each rule names a scope (a whole kind of account, or one account), a kind (`individual`,
+`business`, `giving`), a fee (`tip` or `withdrawal`) and who pays:
+
+- `tipme`: TipMe pays that fee. A waived tip is priced with no TipMe fee; a waived withdrawal is sent whole,
+  with the fee topped up from the platform payment reserve, as for the first 2 free withdrawals of the day.
+- `account`: the normal rules. On one account it opts that account out of a kind-wide waiver.
+- `inherit` (account rules only): the account follows its kind's rule.
+
+An account rule other than `inherit` beats its kind's rule. With neither, today's rules apply: the plan rate
+for tips (with any per-page rate and fee-free credits), and for withdrawals 2 free a Lagos day for a person, the business pays. A rule may have an end
+date (within 24 months). A newer row for the same key replaces the older one from its start. Rows are never
+edited. A change is the serious action `fee_waiver.set` (permission `fees.manage`, a reason, a fresh code and a
+second person when one exists), audited with before and after. A kind-wide TipMe-pays rule asks the approver to
+confirm its estimated monthly cost.
+
+What is recorded:
+
+- A tip quote records the rule (`tip_quotes.fee_waiver_id`) and keeps its terms if the rule ends before payment.
+- A withdrawal records it on every part (`payouts.fee_waiver_id`). `waived_fee_minor` holds the one fee the
+  account would have paid; it is 0 when the withdrawal was free anyway. A waived withdrawal still counts toward
+  the person's 2 free a day.
+
+**The `business_payout_fee_absorbed` switch is retired.** Migration `0130_fee_waiver_carry_over` wrote one kind
+rule (`business`, `withdrawal`, reason "Carried over from the switch") matching the switch's stored value: TipMe
+pays if it was on, the business pays otherwise. It has a system audit row. The switch has left `/ops/switches`;
+its stored row stays and nothing reads it, and `BUSINESS_PAYOUT_FEE_ABSORBED` seeds nothing.
+
+**Before approving a kind-wide tip waiver, fund TipMe's balance at the partner** (§5). The processing on a
+waived tip is charged to TipMe's own balance there. If that balance can't cover it, the partner may charge the
+recipient instead (ADR-0004). While the active provider's latest reserve reading is low (payments) or
+critical (You collect), new quotes ignore tip waivers and price normally until it recovers. Withdrawal waivers
+are not paused.

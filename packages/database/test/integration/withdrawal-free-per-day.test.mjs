@@ -11,7 +11,7 @@ import {
   withdrawalQuote,
 } from '../../dist/index.js';
 import { FREE_WITHDRAWALS_PER_DAY } from '@tipme/domain';
-import { AT_12_NOV_PLAN_FEES, useDatabase } from './helpers.mjs';
+import { AT_12_NOV_PLAN_FEES, useDatabase, waiveFee } from './helpers.mjs';
 
 const [, TOBI] = DEMO_PROFILES;
 
@@ -208,6 +208,95 @@ test('withdrawals per day: 2 free, then the partner fee comes off', async (t) =>
     for (const [payer, sent, fee] of rows)
       if (payer === 'user') assert.deepEqual([sent, fee], ['195000', '5000']);
   });
+  // Fee waivers (spec 2026-11-23 §4, W8): a withdrawal waiver makes TipMe pay the fee on every
+  // request. Only a fee the person would have paid counts as waived, and a waived request still
+  // takes one of the day's two free slots (P7 counts it free).
+  const waived = () =>
+    q(
+      `SELECT fee_payer, user_fee_minor::text AS fee, fee_waiver_id, waived_fee_minor::text AS waived
+         FROM payouts ORDER BY created_at, id`,
+    );
+  const tobiWaiver = (payer = 'tipme') =>
+    waiveFee(database, {
+      scope: 'account',
+      kind: 'individual',
+      profileId: TOBI.id,
+      payer,
+    });
+
+  await t.test(
+    'a person under a withdrawal waiver pays no fee on the third withdrawal of the day',
+    async () => {
+      await ready();
+      await withdraw();
+      await withdraw();
+      const rule = await tobiWaiver();
+      await withdraw();
+      const third = (await waived()).at(-1);
+      assert.deepEqual(third, {
+        fee_payer: 'tipme',
+        fee: '0',
+        fee_waiver_id: rule,
+        waived: '5000',
+      });
+      assert.equal((await payers()).at(-1)[1], '200000');
+    },
+  );
+
+  await t.test(
+    'a waived withdrawal that would have been free anyway costs the waiver nothing',
+    async () => {
+      await ready();
+      const rule = await tobiWaiver();
+      await withdraw();
+      await withdraw();
+      assert.deepEqual(await waived(), [
+        { fee_payer: 'tipme', fee: '0', fee_waiver_id: rule, waived: '0' },
+        { fee_payer: 'tipme', fee: '0', fee_waiver_id: rule, waived: '0' },
+      ]);
+    },
+  );
+
+  await t.test(
+    'a waived withdrawal still counts toward the daily two',
+    async () => {
+      await ready();
+      await tobiWaiver();
+      await withdraw();
+      await withdraw();
+      // The waiver ends: Tobi follows the kind (none), so today's rule is back.
+      await tobiWaiver('inherit');
+      const next = await quote();
+      assert.equal(next.feePaidBy, 'user');
+      assert.equal(next.ordinalToday, 3);
+      await withdraw();
+      assert.deepEqual((await waived()).at(-1), {
+        fee_payer: 'user',
+        fee: '5000',
+        fee_waiver_id: null,
+        waived: '0',
+      });
+    },
+  );
+
+  await t.test(
+    'the withdrawal quote says tipme while the waiver is in force',
+    async () => {
+      await ready();
+      await withdraw();
+      await withdraw();
+      assert.equal((await quote()).feePaidBy, 'user');
+      // A kind-wide waiver for every person reaches Tobi too.
+      await waiveFee(database, { scope: 'kind', kind: 'individual' });
+      const during = await quote();
+      assert.equal(during.feePaidBy, 'tipme');
+      assert.equal(during.ordinalToday, 3);
+      // Tobi opted out of it ("normal rules"): the person pays again.
+      await tobiWaiver('account');
+      assert.equal((await quote()).feePaidBy, 'user');
+    },
+  );
+
   await t.test('a split counts as one withdrawal of the day', async () => {
     await database.fresh();
     /** A ₦4,000 tip through the accountless `provider`: 372,000 to withdraw. */

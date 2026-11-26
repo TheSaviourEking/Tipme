@@ -177,10 +177,11 @@ export type WithdrawalQuote =
       /** Some money is held where withdrawals can't reach it now; it isn't in this quote. */
       heldElsewhere: boolean;
       /**
-       * Who pays the partner's fee. 'tipme' for every new withdrawal from a person's page (owner, 18
-       * Nov 2026: withdrawals are free), and for a business while the `business_payout_fee_absorbed`
-       * switch is on or an unused top-up can pay it. Otherwise 'user', a business's rule since 12 Nov
-       * 2026: the fee comes off the amount chosen (a business withdrawing ₦10,000 receives less).
+       * Who pays the partner's fee. 'tipme' while a withdrawal fee waiver is in force for the account
+       * (spec 2026-11-23 §4: its own rule, else its kind's), for a person's first two withdrawals of the
+       * Lagos day (owner, 18 Nov 2026), and for a business when an unused top-up can pay it. Otherwise
+       * 'user', a business's rule since 12 Nov 2026: the fee comes off the amount chosen (a business
+       * withdrawing ₦10,000 receives less). Not binding: the request decides again.
        */
       feePaidBy: 'user' | 'tipme';
       /**

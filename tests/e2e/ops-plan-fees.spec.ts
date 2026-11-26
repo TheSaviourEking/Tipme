@@ -35,8 +35,11 @@ test('@alone an owner asks to change the plan fees; it waits for a second person
   await expect(
     main.getByRole('heading', { name: 'Business: tips / Business Pro' }),
   ).toBeVisible();
-  await expect(main.getByTestId('business-payout-fee')).toContainText(
-    'the business pays the transfer fee from the amount',
+  // Fee waivers (spec 2026-11-23 §5) retired the business payout fee switch: who pays a business's
+  // withdrawal fee is a fee waiver rule now, so this screen no longer shows the switch's line.
+  await expect(main.getByTestId('business-payout-fee')).toHaveCount(0);
+  await expect(main.getByText('TipMe pays business payout fees')).toHaveCount(
+    0,
   );
   await expectAccessible(page);
 

@@ -911,6 +911,13 @@
       "when": 1795665862984,
       "tag": "0129_fee_waivers",
       "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1795679072083,
+      "tag": "0130_fee_waiver_carry_over",
+      "breakpoints": true
     }
   ]
 }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { readdir, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
   endOfLagosDayIso,
@@ -26,11 +27,12 @@ import {
   sealSecret,
   setFeeWaiver,
 } from '../../dist/index.js';
+import { openTestDatabase } from '../../dist/test-support.js';
 import { seedBusiness, seedManager } from './business-fixtures.mjs';
 import { ADA, TOBI, useDatabase } from './helpers.mjs';
 
 // Fee waivers (spec 2026-11-23 §4, plan Task 2): the append-only rule table and its reads. The
-// switch carry-over and its reset seed belong to Task 5 (pre-flight ruling R2).
+// switch carry-over (W15) and its reset seed came with Task 5 (pre-flight rulings R2, R3).
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-12-10T12:00:00.000Z');
@@ -87,6 +89,144 @@ const refusal = async (promise, pattern) => {
   });
 };
 
+/** The fixed id of the business withdrawal rule carried over from the switch (W15, R3). */
+const CARRIED_OVER = '00000000-0000-4000-8000-000000000130';
+
+/** The carry-over migration's statements, as drizzle runs them. */
+async function carryOverStatements() {
+  const drizzle = new URL('../../drizzle/', import.meta.url);
+  const [file] = (await readdir(drizzle)).filter((f) =>
+    f.endsWith('_fee_waiver_carry_over.sql'),
+  );
+  assert.ok(file, 'the carry-over migration exists');
+  return (await readFile(new URL(file, drizzle), 'utf8'))
+    .split('--> statement-breakpoint')
+    .filter((statement) => statement.trim() !== '');
+}
+
+const carriedOverAudit = (pool) =>
+  pool
+    .query(
+      `SELECT staff_user_id, action, permission, subject_type, reason FROM audit_events
+        WHERE subject_id = $1 ORDER BY created_at`,
+      [CARRIED_OVER],
+    )
+    .then((r) => r.rows);
+
+test('a freshly migrated database holds one business withdrawal rule carried over from the switch, payer account', async (t) => {
+  // This process's own copy of the migrated template, read before any test resets it.
+  const database = await openTestDatabase();
+  t.after(() => database.close());
+  const { rows } = await database.pool.query(
+    `SELECT id, scope, kind, profile_id, business_id, fee, payer, ends_at, reason, set_by, approved_by
+       FROM fee_waivers`,
+  );
+  assert.deepEqual(rows, [
+    {
+      id: CARRIED_OVER,
+      scope: 'kind',
+      kind: 'business',
+      profile_id: null,
+      business_id: null,
+      fee: 'withdrawal',
+      payer: 'account',
+      ends_at: null,
+      reason: 'Carried over from the switch',
+      set_by: null,
+      approved_by: null,
+    },
+  ]);
+  const audit = await carriedOverAudit(database.pool);
+  assert.equal(audit.length, 1);
+  assert.deepEqual(
+    { ...audit[0], reason: undefined },
+    {
+      staff_user_id: null,
+      action: 'fee_waiver.set',
+      permission: 'fees.manage',
+      subject_type: 'fee_waiver',
+      reason: undefined,
+    },
+  );
+  assert.match(
+    audit[0].reason,
+    /^Carried over from the switch \[change: \{.*"from":\{"switch":"business_payout_fee_absorbed","on":false\},"to":\{"payer":"account"/,
+  );
+  // A business follows today's rule under it: it pays its own fee.
+  assert.equal(
+    (
+      await feeWaiverFor(database.db, {
+        owner: { businessId: randomUUID() },
+        fee: 'withdrawal',
+        now: new Date(Date.now() + 1000),
+      })
+    ).payer,
+    'default',
+  );
+});
+
+test('re-running the carry-over with the switch row on writes payer tipme; a second run adds nothing', async (t) => {
+  const db = await setup(t);
+  // Only the rules and the audit, with the test opt-in: both are history and refuse it otherwise.
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL tipme.allow_truncate = 'on'`);
+    await client.query('TRUNCATE fee_waivers, audit_events CASCADE');
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+  await db.pool.query(
+    `INSERT INTO feature_switches (key, enabled, source, changed_at, reason)
+     VALUES ('business_payout_fee_absorbed', true, 'staff', now(), 'On before the retirement')`,
+  );
+  for (let run = 0; run < 2; run += 1)
+    for (const statement of await carryOverStatements())
+      await db.pool.query(statement);
+  const { rows } = await db.pool.query(
+    `SELECT id, payer, reason FROM fee_waivers`,
+  );
+  assert.deepEqual(rows, [
+    {
+      id: CARRIED_OVER,
+      payer: 'tipme',
+      reason: 'Carried over from the switch',
+    },
+  ]);
+  const audit = await carriedOverAudit(db.pool);
+  assert.equal(audit.length, 1);
+  assert.match(audit[0].reason, /"on":true\},"to":\{"payer":"tipme"/);
+  const decided = await feeWaiverFor(db.db, {
+    owner: { businessId: randomUUID() },
+    fee: 'withdrawal',
+    now: new Date(Date.now() + 1000),
+  });
+  assert.deepEqual(
+    { payer: decided.payer, ruleId: decided.ruleId },
+    { payer: 'tipme', ruleId: CARRIED_OVER },
+  );
+});
+
+test('the test reset seeds the carried-over rule as the migration writes it', async (t) => {
+  const db = await setup(t);
+  const { rows } = await db.pool.query(
+    `SELECT id, scope, kind, fee, payer, reason, set_by FROM fee_waivers`,
+  );
+  assert.deepEqual(rows, [
+    {
+      id: CARRIED_OVER,
+      scope: 'kind',
+      kind: 'business',
+      fee: 'withdrawal',
+      payer: 'account',
+      reason: 'Carried over from the switch',
+      set_by: null,
+    },
+  ]);
+  assert.equal((await carriedOverAudit(db.pool)).length, 1);
+});
+
 test('the rules table is history: rows cannot be updated, deleted or truncated', async (t) => {
   const db = await setup(t);
   const id = await insertRule(db);
@@ -105,7 +245,8 @@ test('the rules table is history: rows cannot be updated, deleted or truncated',
     db.pool.query(`TRUNCATE fee_waivers CASCADE`),
     /append-only table fee_waivers: TRUNCATE is not allowed/,
   );
-  assert.equal(await db.count('fee_waivers'), 1);
+  // This row and the reset's carried-over business rule.
+  assert.equal(await db.count('fee_waivers'), 2);
 });
 
 test('the table refuses inherit on a kind rule, a business tip rule, and an end before the start', async (t) => {
@@ -143,7 +284,8 @@ test('the table refuses inherit on a kind rule, a business tip rule, and an end 
     /fee_waivers_account/,
   );
   await refusal(insertRule(db, { payer: 'nobody' }), /fee_waivers_payer/);
-  assert.equal(await db.count('fee_waivers'), 0);
+  // Only the reset's carried-over business rule.
+  assert.equal(await db.count('fee_waivers'), 1);
   // The shapes the table does allow.
   await insertRule(db, {
     scope: 'account',
@@ -158,7 +300,8 @@ test('the table refuses inherit on a kind rule, a business tip rule, and an end 
     fee: 'withdrawal',
   });
   await insertRule(db, { kind: 'giving', fee: 'withdrawal' });
-  assert.equal(await db.count('fee_waivers'), 3);
+  // These three and the reset's carried-over business rule.
+  assert.equal(await db.count('fee_waivers'), 4);
 });
 
 test('an account rule beats a kind rule, read from the database', async (t) => {
@@ -292,8 +435,12 @@ test('a newer row that has ended leaves the key with no rule, never the older on
     }),
     { payer: 'default', ruleId: null, endsAt: null },
   );
+  // Only the reset's carried-over business rule is left in force.
   const { inForce } = await feeWaiverRules(db.db, { now: NOW });
-  assert.deepEqual(inForce, []);
+  assert.deepEqual(
+    inForce.map((r) => r.id),
+    [CARRIED_OVER],
+  );
   // The same for an account key: its ended row does not revive its older one, and the kind
   // (now ruleless) gives the default.
   await insertRule(db, {
@@ -377,7 +524,7 @@ test('upcoming rules are listed apart and not applied', async (t) => {
   const all = await feeWaiverRules(db.db, { now: NOW });
   assert.deepEqual(
     all.inForce.map((r) => r.id).sort(),
-    [current, businessCurrent].sort(),
+    [current, businessCurrent, CARRIED_OVER].sort(),
   );
   assert.deepEqual(
     all.upcoming.map((r) => r.id),
@@ -419,8 +566,8 @@ test('upcoming rules are listed apart and not applied', async (t) => {
     filter: { kind: 'business' },
   });
   assert.deepEqual(
-    business.inForce.map((r) => r.id),
-    [businessCurrent],
+    business.inForce.map((r) => r.id).sort(),
+    [businessCurrent, CARRIED_OVER].sort(),
   );
   assert.deepEqual(business.upcoming, []);
   const ada = await feeWaiverRules(db.db, {
@@ -620,9 +767,13 @@ async function actionSetup(t) {
         ...input,
       }),
     );
+  // The rows each test writes: the reset's carried-over business rule (tested above) aside.
   const rows = () =>
     db.pool
-      .query(`SELECT * FROM fee_waivers ORDER BY created_at, starts_at`)
+      .query(
+        `SELECT * FROM fee_waivers WHERE id <> $1 ORDER BY created_at, starts_at`,
+        [CARRIED_OVER],
+      )
       .then((r) => r.rows);
   return { db, person, people, ask, approve, set, rows };
 }
