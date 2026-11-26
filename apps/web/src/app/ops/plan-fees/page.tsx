@@ -1,6 +1,22 @@
 'use client';
-import { useCallback, useEffect, useId, useState, type FormEvent } from 'react';
-import type { OpsPlanFees, OpsPlanFeesRow } from '@tipme/contracts';
+import Link from 'next/link';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
+import type {
+  FeeWaiverFeeName,
+  FeeWaiverKindName,
+  OpsFeeWaiverCell,
+  OpsFeeWaivers,
+  OpsPlanFees,
+  OpsPlanFeesRow,
+} from '@tipme/contracts';
+import { FEE_WAIVER_STAFF_COPY as C } from '@tipme/contracts/copy';
 import {
   Button,
   Card,
@@ -15,17 +31,31 @@ import {
   outcomeOf,
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
+import {
+  normalWords,
+  tipmePaysWords,
+  WaiverCost,
+} from '@/components/ops/account-fee-waivers';
+import { withAmount } from '@/components/dashboard/collect-status';
 import { LoadFailed } from '@/components/dashboard/load-failed';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
-import { refusalWords } from '@/lib/ops-answers';
-import { when } from '@/lib/ops-client';
+import {
+  endOfLagosDay,
+  lagosToday,
+  startOfLagosDay,
+} from '@/lib/fee-waiver-dates';
+import { refusalWords, type OpsAnswer } from '@/lib/ops-answers';
+import {
+  loadFeeWaivers,
+  setFeeWaiver,
+  staffWord,
+  when,
+} from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
 
 const PATH = '/v1/ops/plan-fees';
 // Matches PLAN_FEE_LARGE_CHANGE_BPS (contracts): the API refuses a bigger move without the flag.
 const LARGE_CHANGE_BPS = 200;
-
-const staffWord = (id: string | null) => (id ? `staff …${id.slice(-6)}` : '');
 
 function who(row: OpsPlanFeesRow): string {
   if (!row.setBy) return 'Starting rates (owner’s decision)';
@@ -39,8 +69,8 @@ function who(row: OpsPlanFeesRow): string {
  * TipMe's fee per plan (owner, 18 Nov 2026): what TipMe keeps of each new tip on Free and on Pro,
  * payment and withdrawal fees included. A change is a money change: another qualified person
  * approves it (a lone admin saves it alone, with an alert, as every money switch), it is audited, and
- * it applies to new quotes only. Business tips use the staff member's own plan rate; the business
- * payout fee is a money switch, shown here and changed in Switches.
+ * it applies to new quotes only. Business tips use the staff member's own plan rate. Below, who pays
+ * the tip and withdrawal fees for each kind of account (fee waivers, spec 2026-11-23 §6).
  */
 export default function PlanFeesPage() {
   const id = useId();
@@ -244,6 +274,8 @@ export default function PlanFeesPage() {
         </section>
       </div>
 
+      <WhoPays />
+
       <Card className="settings-section">
         <h2 id={`${id}-history`}>History</h2>
         {state.history.length === 0 ? (
@@ -267,5 +299,415 @@ export default function PlanFeesPage() {
         )}
       </Card>
     </section>
+  );
+}
+
+const KINDS = ['individual', 'business', 'giving'] as const;
+const FEES = ['tip', 'withdrawal'] as const;
+
+/** One grid cell's words: who pays this kind's fee now. */
+function cellWords(
+  kind: FeeWaiverKindName,
+  fee: FeeWaiverFeeName,
+  cell: OpsFeeWaiverCell,
+): string {
+  // The cell's `ruleId` can name a row that is in no list (the carried-over business switch, a
+  // kind-wide end): the grid reads only the cell, never a lookup that could miss.
+  if (kind === 'business' && fee === 'tip') return C.noFee;
+  return cell.payer === 'tipme'
+    ? tipmePaysWords(cell.endsAt)
+    : normalWords(kind, fee);
+}
+
+type Payer = 'tipme' | 'account';
+type Estimate = { minor: string; moved: boolean };
+
+/**
+ * The kind-wide change (spec §6: who pays · optional start · optional end · reason). A kind-wide
+ * "TipMe pays" first comes back with the live monthly estimate, which the person ticks to confirm;
+ * an estimate that moved meanwhile comes back again with its own words. The native dialog keeps
+ * focus inside, Escape leaves, and focus goes back to "Change…".
+ */
+function ChangeWhoPays({
+  onClose,
+  onAnswered,
+}: {
+  onClose: () => void;
+  onAnswered: (answer: OpsAnswer<OpsFeeWaivers>) => void;
+}) {
+  const id = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [kind, setKind] = useState<FeeWaiverKindName>('individual');
+  const [fee, setFee] = useState<FeeWaiverFeeName>('tip');
+  const [payer, setPayer] = useState<Payer>('tipme');
+  const [estimate, setEstimate] = useState<Estimate | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const before = document.activeElement;
+    const element = dialog.current;
+    element?.showModal();
+    return () => {
+      element?.close();
+      if (before instanceof HTMLElement && before.isConnected)
+        before.focus({ preventScroll: true });
+    };
+  }, []);
+
+  // A figure confirmed for one change is not a figure for another.
+  const forget = () => {
+    setEstimate(null);
+    setConfirmed(false);
+  };
+  const chooseKind = (next: FeeWaiverKindName) => {
+    setKind(next);
+    // Businesses have no tip fee (spec §2).
+    if (next === 'business') setFee('withdrawal');
+    forget();
+  };
+
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const start = String(data.get('start') ?? '');
+    const end = String(data.get('end') ?? '');
+    const reason = String(data.get('reason') ?? '').trim();
+    const today = lagosToday();
+    if (start && start < today) return setError(C.startPast);
+    if (end && end < today) return setError(C.endPast);
+    if (start && end && end < start) return setError(C.endBeforeStart);
+    if (reason.length < 10) return setError(C.reasonShort);
+    if (estimate && !confirmed) return setError(C.confirmMissing);
+    setBusy(true);
+    setError('');
+    const answer = await setFeeWaiver({
+      scope: 'kind',
+      kind,
+      fee,
+      payer,
+      ...(start ? { startsAt: startOfLagosDay(start) } : {}),
+      ...(end ? { endsAt: endOfLagosDay(end) } : {}),
+      reason,
+      ...(payer === 'tipme' && estimate && confirmed
+        ? { confirmCost: true as const, costEstimateMinor: estimate.minor }
+        : {}),
+    });
+    setBusy(false);
+    if (answer.kind !== 'refused') return onAnswered(answer);
+    if (
+      answer.code === 'FEE_WAIVER_CONFIRM_REQUIRED' &&
+      answer.costEstimateMinor !== undefined
+    ) {
+      setEstimate({
+        minor: answer.costEstimateMinor,
+        moved: answer.reason === 'estimate_moved',
+      });
+      setConfirmed(false);
+      return;
+    }
+    setError(
+      answer.code === 'VALIDATION_FAILED' || answer.code === 'INVALID_INPUT'
+        ? C.outOfBounds
+        : refusalWords(answer),
+    );
+  };
+
+  return (
+    <dialog
+      ref={dialog}
+      className="ops-code-dialog"
+      aria-labelledby={`${id}-title`}
+      onCancel={(event) => {
+        // Escape: closing is ours, so React's state and the dialog can't disagree.
+        event.preventDefault();
+        if (!busy) onClose();
+      }}
+    >
+      <form className="settings-form" onSubmit={(e) => void send(e)} noValidate>
+        <h2 id={`${id}-title`}>{C.dialogTitle}</h2>
+        <div className="tm-field">
+          <label htmlFor={`${id}-kind`}>{C.forLabel}</label>
+          <select
+            id={`${id}-kind`}
+            className="tm-input"
+            value={kind}
+            onChange={(e) => chooseKind(e.target.value as FeeWaiverKindName)}
+            autoFocus
+          >
+            {KINDS.map((value) => (
+              <option key={value} value={value}>
+                {C.kinds[value]}
+                {value === 'giving' ? ` ${C.notLive}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="tm-field">
+          <label htmlFor={`${id}-fee`}>{C.feeLabel}</label>
+          {kind === 'business' && (
+            <p id={`${id}-fee-hint`} className="tm-hint">
+              {C.businessTipNote}
+            </p>
+          )}
+          <select
+            id={`${id}-fee`}
+            className="tm-input"
+            value={fee}
+            aria-describedby={
+              kind === 'business' ? `${id}-fee-hint` : undefined
+            }
+            onChange={(e) => {
+              setFee(e.target.value as FeeWaiverFeeName);
+              forget();
+            }}
+          >
+            {FEES.map((value) => (
+              <option
+                key={value}
+                value={value}
+                disabled={kind === 'business' && value === 'tip'}
+              >
+                {C.fees[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <fieldset className="ops-picker">
+          <legend>{C.payerLegend}</legend>
+          {(
+            [
+              ['tipme', C.tipmePaysChoice, C.tipmePaysHint],
+              ['account', C.normalChoice, C.normalHint],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <label key={value} className="ops-radio">
+              <input
+                type="radio"
+                name={`${id}-payer`}
+                value={value}
+                checked={payer === value}
+                onChange={() => {
+                  setPayer(value);
+                  forget();
+                }}
+              />
+              <span>
+                <strong>{label}</strong>
+                <span className="tm-hint">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        <InputField
+          id={`${id}-start`}
+          name="start"
+          type="date"
+          label={C.startLabel}
+          hint={C.startHint}
+          min={lagosToday()}
+        />
+        <InputField
+          id={`${id}-end`}
+          name="end"
+          type="date"
+          label={C.endLabel}
+          hint={C.endHint}
+          min={lagosToday()}
+        />
+        <TextareaField
+          id={`${id}-reason`}
+          name="reason"
+          label={C.reasonLabel}
+          hint={C.reasonHint}
+          maxLength={500}
+        />
+        {estimate && (
+          <>
+            <Slip dense tone="waiting" title={C.monthlyCostTitle}>
+              {withAmount(
+                estimate.moved ? C.estimateMoved : C.confirmCost,
+                estimate.minor,
+              )}
+            </Slip>
+            <label className="ops-recovery__confirm">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />{' '}
+              {withAmount(C.confirmBox, estimate.minor)}
+            </label>
+          </>
+        )}
+        {error && (
+          <Slip dense tone="error" title="Not done">
+            {error}
+          </Slip>
+        )}
+        <div className="ops-actions">
+          <Button
+            variant="continue"
+            type="submit"
+            disabled={busy}
+            aria-busy={busy}
+          >
+            {C.submit}
+          </Button>
+          <Button variant="quiet" disabled={busy} onClick={onClose}>
+            {C.cancel}
+          </Button>
+        </div>
+      </form>
+    </dialog>
+  );
+}
+
+/**
+ * "Who pays the fees" (spec 2026-11-23 §6): the kind-wide rule for each kind and fee, what waivers
+ * cost this Lagos month (two figures, never added), the low-balance pause, and the change dialog.
+ */
+function WhoPays() {
+  const id = useId();
+  const [state, setState] = useState<OpsFeeWaivers | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
+
+  const load = useCallback(async () => {
+    const result = await loadFeeWaivers();
+    if (!result.ok) return setFailed(true);
+    setFailed(false);
+    setState(result.data);
+  }, []);
+  useEffect(() => {
+    void loadFeeWaivers().then((result) => {
+      if (!result.ok) return setFailed(true);
+      setState(result.data);
+    });
+  }, []);
+
+  const answered = (answer: OpsAnswer<OpsFeeWaivers>) => {
+    if (answer.kind === 'refused') return;
+    setChanging(false);
+    if (answer.kind === 'done') setState(answer.data);
+    setOutcome(outcomeOf(answer, C.done, C.meanwhile));
+  };
+
+  const tipHead = (
+    <>
+      {C.fees.tip}
+      {state?.tipWaiversPaused && ` · ${C.paused}`}
+    </>
+  );
+  const tipLabel = state?.tipWaiversPaused
+    ? `${C.fees.tip} · ${C.paused}`
+    : C.fees.tip;
+  return (
+    <Card className="settings-section ops-section">
+      <section aria-labelledby={`${id}-title`}>
+        <h2 id={`${id}-title`}>{C.title}</h2>
+        <p className="tm-hint">{C.hint}</p>
+        {failed ? (
+          <LoadFailed dense title="Couldn’t load who pays" onRetry={load}>
+            Your role may not include it, or the connection failed.
+          </LoadFailed>
+        ) : !state ? (
+          <Skeleton label="Loading who pays the fees" />
+        ) : (
+          <>
+            {state.tipWaiversPaused && (
+              <Slip
+                dense
+                tone="waiting"
+                title={C.pausedTitle}
+                data-testid="fee-waivers-paused"
+              >
+                {C.pausedBody}
+              </Slip>
+            )}
+            <div
+              className="ops-table-wrap"
+              role="region"
+              aria-label="Fees by kind of account"
+              tabIndex={0}
+            >
+              <table className="ops-table ops-table--stack">
+                <thead>
+                  <tr>
+                    <th scope="col">
+                      <span className="sr-only">Kind of account</span>
+                    </th>
+                    <th scope="col">{tipHead}</th>
+                    <th scope="col">{C.fees.withdrawal}</th>
+                    <th scope="col">{C.monthCost}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {KINDS.map((kind) => (
+                    <tr key={kind}>
+                      <th scope="row">
+                        {C.kinds[kind]}
+                        {!state.grid[kind].tip.live && (
+                          <>
+                            {' '}
+                            <span className="tm-hint">{C.notLive}</span>
+                          </>
+                        )}
+                      </th>
+                      <td data-label={tipLabel}>
+                        {cellWords(kind, 'tip', state.grid[kind].tip)}
+                      </td>
+                      <td data-label={C.fees.withdrawal}>
+                        {cellWords(
+                          kind,
+                          'withdrawal',
+                          state.grid[kind].withdrawal,
+                        )}
+                      </td>
+                      <td data-label={C.monthCost}>
+                        {state.grid[kind].tip.live ? (
+                          <WaiverCost cost={state.monthCost[kind]} />
+                        ) : (
+                          C.noFee
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {outcome && <ActionOutcome outcome={outcome} />}
+            {state.waitingRequestIds.length > 0 && !outcome && (
+              <Slip dense tone="waiting" title="Waiting for a second person">
+                {C.waiting(state.waitingRequestIds.length)}
+              </Slip>
+            )}
+            <div className="ops-actions">
+              <Button
+                variant="secondary"
+                aria-haspopup="dialog"
+                onClick={() => {
+                  setOutcome(null);
+                  setChanging(true);
+                }}
+              >
+                {C.change}
+              </Button>
+            </div>
+            <p>
+              <Link href="/ops/plan-fees/waivers">{C.seeAll}</Link>
+            </p>
+            {changing && (
+              <ChangeWhoPays
+                onClose={() => setChanging(false)}
+                onAnswered={answered}
+              />
+            )}
+          </>
+        )}
+      </section>
+    </Card>
   );
 }

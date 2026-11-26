@@ -14,6 +14,7 @@ import {
   outcomeOf,
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
+import { AccountFeeWaivers } from '@/components/ops/account-fee-waivers';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
   changeBusiness,
@@ -79,7 +80,7 @@ const refusal = (
 
 /**
  * One business for staff (PR B2): masked facts, a reveal with a reason, its locations and managers,
- * and the three changes. Verifying is a serious action and may wait for a second person.
+ * who pays its withdrawal fee, and the three changes. Verifying is a serious action and may wait for a second person.
  */
 export default function OpsBusinessPage() {
   const { businessId } = useParams<{ businessId: string }>();
@@ -324,6 +325,11 @@ export default function OpsBusinessPage() {
           </p>
         )}
       </Section>
+
+      {/* Who pays its withdrawal fee (fee waivers, spec 2026-11-23 §6): businesses have no tip fee. */}
+      {can(access, 'fees.manage') && (
+        <AccountFeeWaivers owner={{ businessId: business.id }} />
+      )}
 
       {manage && business.status === 'pending' && (
         <Section title="Verify">

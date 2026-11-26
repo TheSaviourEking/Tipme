@@ -56,6 +56,19 @@ test('a failure is refused, never done or waiting', () => {
   assert.equal(answer.code, 'ISSUE_RESOLVED');
 });
 
+test('a refusal keeps the live cost estimate it carries (a kind-wide fee waiver to confirm)', () => {
+  const answer = answerOf(
+    no(400, 'FEE_WAIVER_CONFIRM_REQUIRED', {
+      reason: 'estimate_moved',
+      costEstimateMinor: '1235000',
+    }),
+  );
+  assert.equal(answer.kind, 'refused');
+  assert.equal(answer.reason, 'estimate_moved');
+  assert.equal(answer.costEstimateMinor, '1235000');
+  assert.equal('costEstimateMinor' in answerOf(no(409, 'X')), false);
+});
+
 test('asks for a code once, on that one refusal, and only then tries again', async () => {
   let sends = 0;
   let prompts = 0;
