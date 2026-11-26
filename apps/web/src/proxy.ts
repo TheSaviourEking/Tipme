@@ -6,6 +6,7 @@ import { gateDecision, PREVIEW_COOKIE } from '@/lib/preview-gate';
 import { launchTargetFrom } from '@/lib/display-settings';
 import { readDisplaySettings } from '@/lib/display-settings-api';
 import { launchDecision, legacyProfileTarget } from '@/lib/production-launch';
+import { serverApiOrigin } from '@/lib/server-api-origin';
 
 /**
  * Short links (/kemi → /@kemi; the example people are reserved, so they have none) are a real 308 before anything else. Then, on staging/preview only:
@@ -13,10 +14,11 @@ import { launchDecision, legacyProfileTarget } from '@/lib/production-launch';
  * sent to the password page (and back afterwards). A business page with one open place is a 307
  * to that place, once the gate has let the visitor through.
  */
-const API_ORIGIN =
-  process.env.API_INTERNAL_ORIGIN ??
-  process.env.NEXT_PUBLIC_API_ORIGIN ??
-  'http://localhost:4000';
+const API_ORIGIN = serverApiOrigin({
+  // Literal reads: the build inlines NEXT_PUBLIC_API_ORIGIN only where it is named.
+  API_INTERNAL_ORIGIN: process.env.API_INTERNAL_ORIGIN,
+  NEXT_PUBLIC_API_ORIGIN: process.env.NEXT_PUBLIC_API_ORIGIN,
+});
 
 /** `/b/<business>` with one open place: a real 307 to it (BusinessProfile board). */
 const singlePlace = createSinglePlaceRedirect(async (slug) => {

@@ -14,9 +14,7 @@ export function sentryOptions(
     dsn,
     enabled: Boolean(dsn),
     environment:
-      process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ??
-      process.env.NEXT_PUBLIC_VERCEL_ENV ??
-      process.env.NODE_ENV,
+      process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
     sendDefaultPii: false,
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
     // @sentry/nextjs 11 defaults to span streaming ('stream'), which ignores beforeSendTransaction,
