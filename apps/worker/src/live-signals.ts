@@ -5,6 +5,8 @@ import {
   PLATFORM_REFUSAL_EVENT,
   WITHDRAWAL_FREEZE_OPENED_EVENT,
   WITHDRAWALS_SWITCH_EVENT,
+  approvalsChanged,
+  issuesChanged,
   staffChanged,
   type LiveMessage,
 } from '@tipme/contracts';
@@ -33,6 +35,7 @@ const toAll =
   () => [{ to: { all: true }, type }];
 /** Every staff stream checks its grant again (never forwarded to a browser). */
 const toStaffStreams: Mapping = () => [staffChanged];
+const toApprovalsStaff: Mapping = () => [approvalsChanged];
 const toProfile =
   (type: LiveMessage['type']): Mapping =>
   (payload) => {
@@ -53,11 +56,12 @@ const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
   'payout.failed': toProfile('withdrawals.changed'),
   'payout.conflict': none,
   'ops.acted_alone': none,
-  'ops.approval_pending': none,
+  // Written with the request, its decision or its close (serious-actions.ts): the approvals list moved.
+  'ops.approval_pending': toApprovalsStaff,
   // Who holds what changed: each staff stream re-checks its grant and permission set.
   'ops.last_approver_removed': toStaffStreams,
-  'ops.approval_ran': none,
-  'ops.approval_closed': none,
+  'ops.approval_ran': toApprovalsStaff,
+  'ops.approval_closed': toApprovalsStaff,
   'ops.staff_changed': toStaffStreams,
   // Grants ended outside a staff change (an authenticator reset, a resent invitation, a move).
   [OPS_GRANTS_ENDED_EVENT]: toStaffStreams,
@@ -170,6 +174,8 @@ export function jobSignalsFor(
   outcome: string,
   data: unknown,
 ): LiveMessage[] {
+  // A domain event whose handler opened an issue: the inbox of staff who may read issues.
+  if (outcome === 'issue_opened') return [issuesChanged];
   if (jobName === PAYOUT_START_EVENT)
     return PAYOUT_START_CHANGED.has(outcome)
       ? toProfile('withdrawals.changed')(data)
@@ -220,4 +226,15 @@ export async function businessTipSignals(
   } catch {
     return [];
   }
+}
+
+/**
+ * After the reconcile sweep: the inbox changed only if it opened or auto-resolved something. One
+ * signal for the whole sweep, however many issues moved.
+ */
+export function reconcileIssueSignals(counts: {
+  opened: number;
+  resolved: number;
+}): LiveMessage[] {
+  return counts.opened > 0 || counts.resolved > 0 ? [issuesChanged] : [];
 }

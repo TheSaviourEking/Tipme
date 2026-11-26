@@ -14,6 +14,7 @@ import {
   businessTipSignals,
   jobSignalsFor,
   liveSignalFor,
+  reconcileIssueSignals,
   requestGate,
   whenRequestMoved,
 } from '../dist/live-signals.js';
@@ -346,4 +347,36 @@ test('staff changes re-check every staff stream', () => {
       [{ to: { staff: 'any' }, type: 'staff.changed' }],
       name,
     );
+});
+
+test('approval events reach every staff stream', () => {
+  for (const name of [
+    'ops.approval_pending',
+    'ops.approval_ran',
+    'ops.approval_closed',
+  ])
+    assert.deepEqual(liveSignalFor(name, { requestId: TIP }), [
+      { to: { staff: 'any' }, type: 'ops.approvals.changed' },
+    ]);
+});
+
+test('an opened issue reaches issues staff', () => {
+  for (const name of DOMAIN_EVENT_NAMES)
+    assert.deepEqual(jobSignalsFor(name, 'issue_opened', { tipId: TIP }), [
+      { to: { staff: 'issues.view' }, type: 'ops.issues.changed' },
+    ]);
+  // Only an issue that opened counts: a duplicate or a logged event changed nothing.
+  for (const outcome of ['duplicate', 'logged', 'skipped'])
+    assert.deepEqual(jobSignalsFor('payment.unresolved', outcome, {}), []);
+});
+
+test('a reconcile that opened or resolved nothing signals nothing', () => {
+  assert.deepEqual(reconcileIssueSignals({ opened: 0, resolved: 0 }), []);
+  for (const counts of [
+    { opened: 1, resolved: 0 },
+    { opened: 0, resolved: 2 },
+  ])
+    assert.deepEqual(reconcileIssueSignals(counts), [
+      { to: { staff: 'issues.view' }, type: 'ops.issues.changed' },
+    ]);
 });

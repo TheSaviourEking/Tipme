@@ -121,6 +121,7 @@ import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
   jobSignalsFor,
+  reconcileIssueSignals,
   requestGate,
   whenRequestMoved,
   PAYOUT_SETUP_JOB_NAME,
@@ -908,6 +909,13 @@ export async function startJobWorker(
             // Then the admin inbox: open issues for what still needs a person, close cleared ones.
             const detected = await runIssueDetectors(database.db, now);
             const cleared = await autoResolveIssues(database.db, now);
+            // Staff with issues.view re-read their inbox; not awaited, a lost signal waits for a refresh.
+            void publishLive(
+              reconcileIssueSignals({
+                opened: detected.opened,
+                resolved: cleared.resolved,
+              }),
+            );
             logger.info({
               event: 'reconcile.completed',
               issues_opened: detected.opened,

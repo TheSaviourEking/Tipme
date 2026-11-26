@@ -134,6 +134,18 @@ export const staffChanged: LiveMessage = {
   type: 'staff.changed',
 };
 
+/** The approvals list changed (a request was made, decided, run, cancelled or closed). Any staff stream. */
+export const approvalsChanged: LiveMessage = {
+  to: { staff: 'any' },
+  type: 'ops.approvals.changed',
+};
+
+/** The issues inbox changed (one opened, was resolved or auto-resolved). Staff holding `issues.view`. */
+export const issuesChanged: LiveMessage = {
+  to: { staff: 'issues.view' },
+  type: 'ops.issues.changed',
+};
+
 /**
  * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub
  * sends each stream a random `retry:` in this range; EventSource hides that value from the page, so
