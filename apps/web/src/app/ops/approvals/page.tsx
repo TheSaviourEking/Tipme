@@ -18,6 +18,7 @@ import {
   Slip,
   TextareaField,
 } from '@tipme/ui';
+import { useLiveEvents } from '@/components/live/live-provider';
 import { ReasonAction } from '@/components/ops/reason-action';
 import { when } from '@/lib/ops-client';
 import {
@@ -28,6 +29,8 @@ import {
 } from '@/lib/ops-answers';
 import { actionWords, opsFetch } from '@/lib/ops-staff-api';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+
+const APPROVALS_CHANGED = ['ops.approvals.changed'] as const;
 
 type Said = {
   tone: 'success' | 'error' | 'neutral';
@@ -287,6 +290,8 @@ export default function ApprovalsPage() {
     setHistoryFailed(!everything.ok);
     if (everything.ok) setAll(everything.data);
   }, []);
+  // Another staff member asks, decides or cancels: the queue reads again (any staff hears it).
+  useLiveEvents(APPROVALS_CHANGED, load);
   useEffect(() => {
     // Only the first read waits on this: load's state changes come after its answers.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- nothing is set before the await

@@ -7,6 +7,7 @@ import {
   ApprovalsCount,
   useApprovalsCount,
 } from '@/components/ops/approvals-count';
+import { LiveProvider, OPS_LIVE_TIMING } from '@/components/live/live-provider';
 import { FreshCodePrompt } from '@/components/ops/fresh-code';
 import { OpsFrame } from '@/components/ops/ops-frame';
 import { OpsCode, OpsEnrol } from '@/components/ops/ops-steps';
@@ -23,6 +24,7 @@ import {
 } from '@/lib/ops-client';
 import { loadBusinessRoles } from '@/lib/business/roles-api';
 import { isTemporaryFailure, keepsEnrolLink } from '@/lib/ops-enrol-link';
+import { opsLiveEnabled } from '@/lib/live-enabled';
 import { apiFetch } from '@/lib/session-client';
 
 /** Where this visitor stands: signed out, not staff, the authenticator step, or in. */
@@ -32,7 +34,11 @@ async function opsState(): Promise<State | 'signed_out'> {
     return me.data.state === 'granted'
       ? {
           step: 'granted',
-          access: { role: me.data.role, permissions: me.data.permissions },
+          access: {
+            role: me.data.role,
+            permissions: me.data.permissions,
+            liveUpdates: me.data.liveUpdates === true,
+          },
         }
       : me.data.state === 'needs_enrolment'
         ? { step: 'needs_enrolment', canDecline: me.data.canDecline }
@@ -146,13 +152,23 @@ export function OpsShell({ children }: { children: React.ReactNode }) {
     return <PageUnavailable showDemo={mode === 'test'} />;
   if (state.step === 'granted')
     return (
-      <OpsGranted
-        access={state.access}
-        pathname={pathname}
-        onLeave={() => void signOut()}
+      // Around OpsGranted, not only its frame: the menu's approvals count is read in OpsGranted's
+      // own body, and useLiveEvents does nothing outside a provider. A stream that ends because
+      // the grant did (404) asks /v1/ops/me again, which shows the step this person is now at.
+      <LiveProvider
+        stream="ops"
+        timing={OPS_LIVE_TIMING}
+        enabled={opsLiveEnabled(state.access)}
+        onSignedOut={reload}
       >
-        {children}
-      </OpsGranted>
+        <OpsGranted
+          access={state.access}
+          pathname={pathname}
+          onLeave={() => void signOut()}
+        >
+          {children}
+        </OpsGranted>
+      </LiveProvider>
     );
   return (
     <main id="main" tabIndex={-1} className="dashboard-page ops-page">

@@ -6,6 +6,8 @@ import { OPS_ISSUE_OUTCOME_WORDS } from '@tipme/contracts';
 export interface OpsAccess {
   role: string;
   permissions: string[];
+  /** GET /v1/ops/me said this API serves the staff stream: the shell opens it only then. */
+  liveUpdates: boolean;
 }
 export const OpsAccessContext = createContext<OpsAccess | null>(null);
 

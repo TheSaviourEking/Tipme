@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { firstReadPhase } from '../src/lib/first-read.ts';
-import { liveProviderEnabled } from '../src/lib/live-enabled.ts';
+import {
+  liveProviderEnabled,
+  opsLiveEnabled,
+} from '../src/lib/live-enabled.ts';
 
 // With LIVE_UPDATES_ENABLED off, a page must behave exactly as before the feature: no stream, no
 // probe, and every panel reads at once (review M3; re-review item 1).
@@ -21,6 +24,17 @@ test('the shell opens a stream only when the profile says live updates are on', 
     liveProviderEnabled({ profile: { handle: 'ada' }, liveUpdates: true }),
     true,
   );
+});
+
+test('the ops shell opens a stream only when ops/me says liveUpdates', () => {
+  const access = (liveUpdates) => ({
+    role: 'Owner',
+    permissions: ['issues.view'],
+    liveUpdates,
+  });
+  assert.equal(opsLiveEnabled(null), false, 'not granted yet');
+  assert.equal(opsLiveEnabled(access(false)), false);
+  assert.equal(opsLiveEnabled(access(true)), true);
 });
 
 test('with live updates off, every panel reads at once, whatever the status', () => {

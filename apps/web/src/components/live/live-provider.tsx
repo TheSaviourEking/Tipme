@@ -14,8 +14,10 @@ import {
 } from '@tipme/contracts';
 import {
   createLiveClient,
+  probeAnswer,
   type LiveClientDeps,
   type LiveProbe,
+  type LiveTimingOverrides,
   type LiveStatus,
 } from '@/lib/live-client';
 import {
@@ -43,10 +45,20 @@ const PATHS = { me: '/v1/me/events', ops: '/v1/ops/events' } as const;
 const PROBE_TIMEOUT_MS = 5000;
 
 /**
- * Why the stream failed. EventSource can't read a status code, so this asks the same URL with
- * fetch and drops the body at once: 204 is "turned off", 401 signed out, 429/503 a refusal.
+ * The staff stream's timing (addendum §3.4): its fallback polls every 30 s ± 3 s, and there is no
+ * safety refresh, so a connected staff screen makes no timed requests.
  */
-async function probe(url: string): Promise<LiveProbe> {
+export const OPS_LIVE_TIMING = {
+  pollMs: 30_000,
+  pollJitterMs: 3_000,
+  safetyMs: null,
+} as const satisfies LiveTimingOverrides;
+
+/**
+ * Why the stream failed. EventSource can't read a status code, so this asks the same URL with
+ * fetch and drops the body at once; probeAnswer says what the status means.
+ */
+async function probe(url: string, stream: 'me' | 'ops'): Promise<LiveProbe> {
   const abort = new AbortController();
   const timer = window.setTimeout(() => abort.abort(), PROBE_TIMEOUT_MS);
   try {
@@ -56,10 +68,7 @@ async function probe(url: string): Promise<LiveProbe> {
       headers: { accept: 'text/event-stream' },
     });
     abort.abort();
-    if (response.status === 204) return 'disabled';
-    if (response.status === 401) return 'unauthenticated';
-    if (response.status === 429 || response.status === 503) return 'refused';
-    return response.ok ? 'ok' : 'error';
+    return probeAnswer(response.status, stream);
   } catch {
     return 'error';
   } finally {
@@ -78,9 +87,12 @@ export function LiveProvider({
   keepOpenWhenHidden,
   onSignedOut,
   enabled = true,
+  timing,
 }: {
   stream: 'me' | 'ops';
   children: ReactNode;
+  /** Overrides of the client's timing (OPS_LIVE_TIMING for the staff stream). */
+  timing?: LiveTimingOverrides;
   /** False until the page knows who is signed in: nothing connects before then. */
   enabled?: boolean;
   keepOpenWhenHidden?: () => boolean;
@@ -103,9 +115,12 @@ export function LiveProvider({
   const [keepers] = useState(() => new Set<() => boolean>());
   const keepOpen = useRef(keepOpenWhenHidden);
   const signedOut = useRef(onSignedOut);
+  // Read once per connection: a stream's timing is fixed for its life.
+  const timingRef = useRef(timing);
   useEffect(() => {
     keepOpen.current = keepOpenWhenHidden;
     signedOut.current = onSignedOut;
+    timingRef.current = timing;
   });
 
   useEffect(() => {
@@ -123,9 +138,10 @@ export function LiveProvider({
       clearTimeout: (timer) => window.clearTimeout(timer as number),
       random: Math.random,
       visible: () => document.visibilityState === 'visible',
-      probe: () => probe(url),
+      probe: () => probe(url, stream),
       keepOpenWhenHidden: () =>
         (keepOpen.current?.() ?? false) || [...keepers].some((keep) => keep()),
+      timing: timingRef.current,
     });
     const offs = [
       ...[...LIVE_RECIPIENT_TYPES, ...LIVE_STAFF_TYPES].map((type) =>
