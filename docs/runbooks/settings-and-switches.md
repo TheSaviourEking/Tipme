@@ -283,6 +283,6 @@ never touched. Bounds (owner, 18 Nov 2026): whole basis points 150 to 1000 (1.5%
 a move of more than 200 bps on either plan needs the explicit confirm (`confirmLargeChange` in the request, a
 ticked box on the screen). Migration `0118` also cleared per-page deals no longer below the new rate (Free 500 and
 up, Pro 300 and up), one `fee.capped` audit row each. A per-page fee staff set
-(`fee.change`, ADR-0014) still wins below the plan's rate. A person's first 2 withdrawals each Lagos day are free
-(`FREE_WITHDRAWALS_PER_DAY`); from the 3rd the partner's fee comes off the amount. Business tips use the staff member's own plan rate:
+(`fee.change`, ADR-0014) still wins below the plan's rate. Each personal withdrawal pays the partner's ₦50 from the amount,
+unless an unused top-up or a fee waiver covers it (owner, 25 Nov 2026). Business tips use the staff member's own plan rate:
 there is no separate business per-tip rate.

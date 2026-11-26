@@ -67,9 +67,9 @@ test('the withdraw page: ready, nothing yet, and a real pause', async ({
   await tipAsVisitor(browser, handle, { name: 'Ada M.', message: 'Thanks' });
   await page.reload();
   await expect(meter(page)).toContainText('Ready to withdraw ₦1,900');
-  // Owner, 18 Nov 2026: a person's withdrawals are free; TipMe pays the transfer fee.
+  // Owner, 25 Nov 2026: a person pays the partner's ₦50 on every withdrawal, from the amount.
   await expect(meter(page)).toContainText(
-    'Withdrawals are free: you receive the whole amount.',
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
   const chip = meter(page).locator('.withdraw__chip');
   await expect(chip).toContainText(/to .+ ••\d{4}/);
@@ -341,9 +341,9 @@ test('the summary says where it goes, what arrives and what is left', async ({
   );
   await expect(summary.getByText('Going to')).toHaveCount(0);
   await expect(summary.getByText('You’ll receive')).toBeVisible();
-  // Withdrawals are free for a person (owner, 18 Nov 2026): Everything sends all of it.
-  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
-  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,900');
+  // A person pays the ₦50 on every withdrawal (owner, 25 Nov 2026): Everything sends ₦1,900 less it.
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦1,850');
   await expect(summary.getByText('Balance afterwards')).toBeVisible();
   await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
   await expectAccessible(page);
@@ -459,7 +459,7 @@ test('an older withdrawal stays listed after many tips', async ({
     );
   await page.goto('/dashboard/withdraw');
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,850' });
   await expect(row).toHaveCount(1);
   await expect(row).toContainText(/Requested|On its way|Paid/);
   await expect(row).toContainText('to GTBank ••6789');
@@ -479,7 +479,7 @@ test('a past withdrawal keeps its bank after the bank changes', async ({
   await saveBank(handle, 'Kuda', '9876');
   await page.reload();
   const history = page.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,850' });
   await expect(row).toContainText('to GTBank ••6789');
   await expect(row).not.toContainText('9876');
   await expect(row).not.toContainText('Kuda');
@@ -717,7 +717,7 @@ test('figures are shown only for an amount that can be sent', async ({
   await page.getByLabel('Amount (NGN)').fill('5000');
   await expect(page.getByTestId('you-receive')).toHaveText('—');
   await page.getByRole('button', { name: 'Everything' }).click();
-  await expect(page.getByTestId('you-receive')).toHaveText('₦1,900');
+  await expect(page.getByTestId('you-receive')).toHaveText('₦1,850');
   await expect(
     page.getByRole('button', { name: 'Withdraw ₦1,900' }),
   ).toBeEnabled();
@@ -812,7 +812,7 @@ test('a pretend payout paid changes the status in an open tab without a reload, 
   await expect(page.getByText('Withdrawal requested')).toBeVisible();
 
   const history = watching.getByRole('region', { name: 'Your withdrawals' });
-  const row = history.getByRole('listitem').filter({ hasText: '₦1,900' });
+  const row = history.getByRole('listitem').filter({ hasText: '₦1,850' });
   // Requested, then paid: the pretend partner pays within seconds. This tab knows of no withdrawal
   // on its way (its list was empty), so by design it re-reads a `withdrawals.changed` only after a
   // random 0-10 s spread (live-refetch.ts), plus the debounce and the read itself.
@@ -927,7 +927,7 @@ test('withdrawal requested is a done slip, and the instrument shows what the API
   await expect(done.locator('.tm-slip__title')).toHaveText(
     'Withdrawal requested',
   );
-  await expect(done).toContainText('₦1,900 is on its way to your test bank.');
+  await expect(done).toContainText('₦1,850 is on its way to your test bank.');
   await expect(
     done.getByRole('link', { name: 'Back to your dashboard' }),
   ).toHaveAttribute('href', '/dashboard');
@@ -1018,8 +1018,8 @@ test('a visit reads the quote once, and a refusal over the amount reads it once 
   expect(reads).toBe(2);
 });
 
-// Owner, 18 Nov 2026: a person's withdrawals are free. The API reports no fee and TipMe pays it.
-test('withdraw ₦10,000: the fee reads Free and ₦10,000 arrives', async ({
+// Owner, 25 Nov 2026: a person pays the partner's ₦50 on every withdrawal, from the amount.
+test('withdraw ₦10,000 as a person: the ₦50 transfer fee comes off and ₦9,950 arrives', async ({
   page,
 }, testInfo) => {
   await signUpRecipient(page, testInfo);
@@ -1030,20 +1030,21 @@ test('withdraw ₦10,000: the fee reads Free and ₦10,000 arrives', async ({
       withdrawableMinor: '1000000',
       ledgerMinor: '1000000',
       providerMinor: '1000000',
-      feeMinor: '0',
-      feePaidBy: 'tipme',
+      feeMinor: '5000',
+      feePaidBy: 'user',
     }),
   );
   await page.goto('/dashboard/withdraw');
   await expect(
-    page.getByText('Withdrawals are free: you receive the whole amount.'),
+    page.getByText(
+      'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+    ),
   ).toBeVisible();
   await page.getByLabel('Amount (NGN)').fill('10000');
   const summary = page.getByRole('region', { name: 'Summary' });
-  await expect(summary.getByTestId('transfer-fee')).toHaveText('Free');
-  await expect(summary.getByTestId('you-receive')).toHaveText('₦10,000');
+  await expect(summary.getByTestId('transfer-fee')).toHaveText('₦50');
+  await expect(summary.getByTestId('you-receive')).toHaveText('₦9,950');
   await expect(summary.getByTestId('balance-afterwards')).toHaveText('₦0');
-  await expect(page.getByText(/₦50|transfer fee:/i)).toHaveCount(0);
   await expectAccessible(page);
 });
 
