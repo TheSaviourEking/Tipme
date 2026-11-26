@@ -5,6 +5,7 @@ import {
   feePolicyForPlan,
   planShareBps,
   priceTip,
+  waivedFeeVersion,
   type FeeBreakdown,
 } from '@tipme/domain';
 import { and, eq, sql } from 'drizzle-orm';
@@ -22,6 +23,8 @@ import {
   type CollectionMode,
 } from './collection-mode.js';
 import { refuseOverHoldingCap } from './collect-guards.js';
+import { feeWaiverFor } from './fee-waivers.js';
+import { tipWaiversPausedNow } from './fee-waiver-pause.js';
 
 export const QUOTE_TTL_MS = 15 * 60 * 1000;
 
@@ -33,8 +36,10 @@ export interface QuoteResult {
   currency: string;
   breakdown: FeeBreakdown;
   feePolicyVersion: string;
-  /** TipMe's fee is waived on this quote (a fee-free reward). */
+  /** TipMe's fee is waived on this quote (a fee-free reward, or a fee waiver). */
   feeFree: boolean;
+  /** Fee waivers (W7): the TipMe-pays rule this quote was priced under; null for every other. */
+  feeWaiverId: string | null;
   expiresAt: Date;
   /** Business release 2 (R2-C2): the share in force at the business, shown before paying. */
   share?: { businessBps: number; businessName: string };
@@ -51,6 +56,11 @@ type QuoteInput = {
   businessMemberId?: string;
   /** The `business` and `business_shares` switches. Off unless passed: no share is ever looked up. */
   sharesOn?: boolean;
+  /**
+   * Fee waivers (W6): the active adapter (`PAYMENT_PROVIDER`), whose reserve readings can pause tip
+   * waivers. Required; a caller without one (untyped tests) reads as "no reading", never paused.
+   */
+  activeProvider: string;
 } & (
   | {
       /**
@@ -137,19 +147,45 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     waivedPlatformFeeMinor,
     finalBreakdown,
     feePolicyVersion,
+    feeWaiverId,
     shared,
     collectionMode,
   } = await db.transaction(async (tx) => {
-    const [credits] = await tx
-      .select({ remaining: feeFreeCredits.remaining })
-      .from(feeFreeCredits)
-      .where(eq(feeFreeCredits.profileId, profile.id))
-      .for('update');
     let waived = 0n;
     let chosen = priced;
     let version: string = baseVersion;
+    let ruleId: string | null = null;
     const share = priced.platformFeeMinor + priced.providerFeeMinor;
-    if ((credits?.remaining ?? 0) > 0 && share > 0n) {
+    // Fee waivers (§4, W7): a TipMe-pays tip rule beats a custom rate and fee-free credits, unless
+    // TipMe's balance at the partner reads low (W6). It neither reserves nor uses a credit.
+    const waiver = await feeWaiverFor(tx, {
+      owner: { profileId: profile.id },
+      fee: 'tip',
+      now: input.now ?? new Date(),
+    });
+    if (
+      waiver.payer === 'tipme' &&
+      waiver.ruleId !== null &&
+      !(await tipWaiversPausedNow(tx, input.activeProvider))
+    ) {
+      // What the plan or custom rate would have taken, processing included (as a credit stores).
+      waived = share;
+      chosen = priceTip(input.tipMinor, policy, {
+        feeFree: true,
+        minTipMinor,
+      });
+      version = waivedFeeVersion(baseVersion, waiver.ruleId);
+      ruleId = waiver.ruleId;
+    }
+    const [credits] =
+      ruleId === null
+        ? await tx
+            .select({ remaining: feeFreeCredits.remaining })
+            .from(feeFreeCredits)
+            .where(eq(feeFreeCredits.profileId, profile.id))
+            .for('update')
+        : [];
+    if (ruleId === null && (credits?.remaining ?? 0) > 0 && share > 0n) {
       const open = await openFeeFreeQuotes(
         tx,
         profile.id,
@@ -200,6 +236,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
       recipientNetMinor: chosen.recipientNetMinor,
       feePolicyVersion: version,
       waivedPlatformFeeMinor: waived,
+      feeWaiverId: ruleId,
       collectionMode,
       expiresAt,
     });
@@ -207,6 +244,7 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
       waivedPlatformFeeMinor: waived,
       finalBreakdown: chosen,
       feePolicyVersion: version,
+      feeWaiverId: ruleId,
       shared,
       collectionMode,
     };
@@ -220,7 +258,9 @@ async function quote(db: Database, input: QuoteInput): Promise<QuoteResult> {
     currency: input.currency,
     breakdown,
     feePolicyVersion,
-    feeFree: waivedPlatformFeeMinor > 0n,
+    // A waived quote is fee-free even when nothing was waived (a 0% custom rate, ruling R8).
+    feeFree: waivedPlatformFeeMinor > 0n || feeWaiverId !== null,
+    feeWaiverId,
     expiresAt,
     collectionMode,
     ...(shared
@@ -272,7 +312,10 @@ export function findQuoteCharge(
   });
 }
 
-/** Fee-free quotes still open (not expired, not paid, not failed): each holds a credit. */
+/**
+ * Fee-free quotes still open (not expired, not paid, not failed): each holds a credit. A waived
+ * quote (W7) holds none.
+ */
 async function openFeeFreeQuotes(
   tx: Tx,
   profileId: string,
@@ -284,6 +327,7 @@ async function openFeeFreeQuotes(
       LEFT JOIN payment_intents i ON i.quote_id = q.id
       LEFT JOIN tips t ON t.intent_id = i.id
      WHERE q.profile_id = ${profileId} AND q.waived_platform_fee_minor > 0
+       AND q.fee_waiver_id IS NULL
        AND q.expires_at > ${new Date(nowMs).toISOString()}::timestamptz
        AND (t.id IS NULL OR t.status IN ('AWAITING_PAYMENT', 'PENDING_VERIFICATION'))`);
   const row = result.rows[0];

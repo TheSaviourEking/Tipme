@@ -155,6 +155,8 @@ export class CheckoutService {
       handle: request.handle,
       tipMinor: BigInt(request.amountMinor),
       currency: request.currency,
+      // Fee waivers (W6): this adapter's reserve readings can pause tip waivers.
+      activeProvider: this.config.PAYMENT_PROVIDER,
       ...(sharesOn && request.businessMemberId
         ? { businessMemberId: request.businessMemberId, sharesOn: true }
         : {}),

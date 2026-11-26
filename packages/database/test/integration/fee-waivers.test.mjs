@@ -502,6 +502,17 @@ test('payouts and quotes record the rule; a waived fee needs its rule; notices a
   assert.equal(checks.length, 1);
   assert.match(checks[0].def, /waived_fee_minor >= 0/);
   assert.match(checks[0].def, /fee_waiver_id IS NOT NULL/);
+  // And it binds: a waived fee with no rule is refused; with its rule it is kept.
+  const payout = (feeWaiverId, waivedFeeMinor) =>
+    db.pool.query(
+      `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                            request_fingerprint, fee_waiver_id, waived_fee_minor)
+       VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'fp', $4, $5)`,
+      [randomUUID(), ADA, randomUUID(), feeWaiverId, waivedFeeMinor],
+    );
+  await refusal(payout(null, 5000), /payouts_waived_fee/);
+  await refusal(payout(rule, -1), /payouts_waived_fee/);
+  await payout(rule, 5000);
 
   await db.pool.query(
     `INSERT INTO fee_waiver_notices (rule_id, kind) VALUES ($1, 'started'), ($1, 'ended')`,
