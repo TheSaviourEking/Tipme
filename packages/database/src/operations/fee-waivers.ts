@@ -20,6 +20,7 @@ import {
   eq,
   gt,
   gte,
+  inArray,
   isNotNull,
   isNull,
   lt,
@@ -30,6 +31,7 @@ import {
 } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import {
+  approvalRequests,
   businesses,
   feeWaivers,
   paymentIntents,
@@ -215,6 +217,54 @@ export async function latestRowOfKey(
     .orderBy(...newestFirst)
     .limit(1);
   return row ? toRow(row) : null;
+}
+
+/** Changes to the rules still waiting for a second person, newest first, so the screen says so. */
+export async function waitingFeeWaiverRequests(
+  db: Database | Tx,
+): Promise<string[]> {
+  const rows = await db
+    .select({ id: approvalRequests.id })
+    .from(approvalRequests)
+    .where(
+      and(
+        eq(approvalRequests.action, FEE_WAIVER_SET_ACTION),
+        eq(approvalRequests.status, 'pending'),
+      ),
+    )
+    .orderBy(desc(approvalRequests.createdAt));
+  return rows.map((row) => row.id);
+}
+
+/**
+ * What staff call the accounts rules are for: a page's handle and a business's name, by id. An id
+ * that names nothing is left out, so a caller can tell an unknown account.
+ */
+export async function feeWaiverAccountNames(
+  db: Database | Tx,
+  ids: { profileIds: readonly string[]; businessIds: readonly string[] },
+): Promise<{
+  handles: Map<string, string>;
+  businessNames: Map<string, string>;
+}> {
+  const pages =
+    ids.profileIds.length === 0
+      ? []
+      : await db
+          .select({ id: profiles.id, handle: profiles.handle })
+          .from(profiles)
+          .where(inArray(profiles.id, [...ids.profileIds]));
+  const firms =
+    ids.businessIds.length === 0
+      ? []
+      : await db
+          .select({ id: businesses.id, name: businesses.name })
+          .from(businesses)
+          .where(inArray(businesses.id, [...ids.businessIds]));
+  return {
+    handles: new Map(pages.map((p) => [p.id, p.handle])),
+    businessNames: new Map(firms.map((b) => [b.id, b.name])),
+  };
 }
 
 /* Setting a rule: the serious action `fee_waiver.set` (plan Task 3) */

@@ -300,6 +300,25 @@ export const OPS_FRESH_CODE_EXEMPT: Record<
     reason:
       'TipMe’s fee per plan and its history: rates, reasons and staff ids, nobody’s private details.',
   },
+  // Fee waivers (spec 2026-11-23 §6): "Who pays the fees" and one account's settings.
+  'OpsFeeWaiversController.state': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'Who pays the fees: rules, handles, business names, reasons, staff ids and cost totals, nobody’s private details; changes nothing.',
+  },
+  'OpsFeeWaiversController.profile': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'One page’s fee waiver settings and this month’s waived cost: no contact, card or bank details; changes nothing.',
+  },
+  'OpsFeeWaiversController.business': {
+    verb: 'GET',
+    permission: 'fees.manage',
+    reason:
+      'One business’s withdrawal fee setting and this month’s waived cost: no contact, card or bank details; changes nothing.',
+  },
   'OpsCollectSettingsController.state': {
     verb: 'GET',
     permission: 'fees.manage',

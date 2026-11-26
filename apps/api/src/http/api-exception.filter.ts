@@ -24,6 +24,7 @@ import { NGN_PAYOUT_FEE_MINOR } from '@tipme/payments';
 import { RateLimitedException } from '../checkout/rate-limit.guard.js';
 import {
   CodedHttpException,
+  FeeWaiverConfirmException,
   StudioCheckFailedException,
 } from './coded.exception.js';
 import { isRetryablePersistenceError } from '../webhooks/retryable.js';
@@ -765,6 +766,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     // The person's own draft, checked by the server: what the editor lists with its fixes.
     if (exception instanceof StudioCheckFailedException)
       body.error.issues = exception.issues;
+    if (exception instanceof FeeWaiverConfirmException)
+      body.error.costEstimateMinor = exception.costEstimateMinor;
     const limit = withdrawalLimitMessage(exception);
     if (limit) body.error.message = limit;
     const problems = changelogProblemsOf(exception);

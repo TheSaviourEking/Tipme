@@ -21,3 +21,17 @@ export class StudioCheckFailedException extends CodedHttpException {
     super(422, 'STUDIO_DESIGN_CHECK_FAILED');
   }
 }
+
+/**
+ * 400 FEE_WAIVER_CONFIRM_REQUIRED with the live estimate of a kind-wide waiver's monthly cost, so the
+ * screen shows the figure and asks once more. `reason` is `confirm_cost` (none confirmed) or
+ * `estimate_moved` (the figure sent is no longer the live one).
+ */
+export class FeeWaiverConfirmException extends CodedHttpException {
+  constructor(
+    reason: 'confirm_cost' | 'estimate_moved',
+    readonly costEstimateMinor: string,
+  ) {
+    super(400, 'FEE_WAIVER_CONFIRM_REQUIRED', reason);
+  }
+}
