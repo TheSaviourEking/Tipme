@@ -122,6 +122,8 @@ test(
       'db-roles',
       'migrate',
       'redis',
+      'web-blue',
+      'web-green',
       'worker-a',
       'worker-b',
     ]);
@@ -237,6 +239,131 @@ test(
   },
 );
 
+// The website, self-hosted since Vercel paused it (26 Nov 2026): one copy per colour, beside the
+// API's, so the deploy's blue/green switch and rollback move both together.
+test(
+  'production runs the website as two colours on the edge network, read-only, with only its own settings',
+  { skip },
+  () => {
+    const { services } = parse();
+    for (const colour of ['blue', 'green']) {
+      const name = `web-${colour}`;
+      const web = services[name];
+      assert.equal(web.image, 'tipme-web-production:dummy', name);
+      assert.equal(web.restart, 'unless-stopped');
+      assert.equal(web.read_only, true, `${name} root must be read-only`);
+      assert.deepEqual(web.security_opt, ['no-new-privileges:true']);
+      assert.ok(web.tmpfs.includes('/tmp'), `${name} tmpfs`);
+      for (const path of [
+        '/app/apps/web/.next/cache',
+        '/app/apps/web/.next/server/route-cache',
+      ])
+        assert.ok(
+          web.tmpfs.some(
+            (t) => t.startsWith(`${path}:`) && /size=\d+m/.test(t),
+          ),
+          `${name} needs a bounded tmpfs at ${path}`,
+        );
+      // The edge reaches it by container name; it reaches the API and Sentry through the edge.
+      // Never the internal network: Redis has no password.
+      assert.deepEqual(Object.keys(web.networks).sort(), [
+        'edge-production',
+        'egress',
+      ]);
+      assert.equal(web.mem_limit, String(768 * 1024 * 1024));
+      assert.equal(web.stop_grace_period, '20s');
+      assert.ok(!web.deploy?.replicas || web.deploy.replicas === 1, name);
+      assert.match(
+        web.healthcheck.test.join(' '),
+        /127\.0\.0\.1:3000\/api\/version/,
+      );
+      assert.ok(!web.ports, `${name} publishes a port`);
+      const env = web.environment;
+      assert.ok(
+        env.WEB_REVALIDATE_SECRET,
+        `${name} needs WEB_REVALIDATE_SECRET`,
+      );
+      // Production has no preview gate, and the web's own settings only: no database, payment or
+      // mail secret, and no API Sentry DSN (the web's DSN is baked in at build).
+      for (const key of [
+        'PREVIEW_PASSWORD',
+        'PREVIEW_COOKIE_DOMAIN',
+        'DATABASE_URL',
+        'REDIS_URL',
+        'AUTH_CODE_SECRET',
+        'STATUS_TOKEN_SECRET',
+        'MAIL_SEAL_KEY',
+        'OPS_TOTP_KEY',
+        'BACHS_LIVE_API_KEY',
+        'SENTRY_DSN',
+        // Shapes prerendered pages, so it is a build value baked into the image.
+        'SITE_URL',
+        'SITE_INDEXING',
+      ])
+        assert.ok(!(key in env), `${name} must not get ${key}`);
+      // Passed only when set: blank would be read as a malformed launch time.
+      assert.equal(env.PRODUCTION_LAUNCH_AT, null);
+    }
+    assert.match(
+      raw,
+      /image: tipme-web-production:\$\{TIPME_BLUE_VERSION:-none\}/,
+    );
+    assert.match(
+      raw,
+      /image: tipme-web-production:\$\{TIPME_GREEN_VERSION:-none\}/,
+    );
+  },
+);
+
+test(
+  'staging runs one website copy beside its API, reaching it over the edge network',
+  { skip },
+  () => {
+    const stagingUrl = new URL(
+      '../deploy/compose.staging.yml',
+      import.meta.url,
+    );
+    const stagingRaw = readFileSync(stagingUrl, 'utf8');
+    const env = { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' };
+    for (const [, name] of stagingRaw.matchAll(/\$\{([A-Z][A-Z0-9_]*)/g))
+      env[name] = /_(DIR|FILE)$/.test(name) ? '/srv/dummy' : 'dummy';
+    const result = spawnSync(
+      'docker',
+      ['compose', '-f', stagingUrl.pathname, 'config', '--format', 'json'],
+      { encoding: 'utf8', env },
+    );
+    assert.equal(result.status, 0, `compose config failed: ${result.stderr}`);
+    const { services } = JSON.parse(result.stdout);
+    const web = services.web;
+    assert.ok(web, 'staging has no web service');
+    assert.equal(web.image, 'tipme-web-staging:dummy');
+    assert.equal(web.read_only, true);
+    assert.deepEqual(Object.keys(web.networks).sort(), [
+      'edge-staging',
+      'egress',
+    ]);
+    assert.deepEqual(web.networks['edge-staging'].aliases, ['staging-web']);
+    assert.equal(
+      web.environment.API_INTERNAL_ORIGIN,
+      'http://staging-api:4000',
+    );
+    for (const key of [
+      'PREVIEW_PASSWORD',
+      'PREVIEW_COOKIE_DOMAIN',
+      'WEB_REVALIDATE_SECRET',
+    ])
+      assert.ok(key in web.environment, `staging web needs ${key}`);
+    for (const key of ['DATABASE_URL', 'REDIS_URL', 'SENTRY_DSN', 'SITE_URL'])
+      assert.ok(!(key in web.environment), `staging web must not get ${key}`);
+    assert.equal(web.mem_limit, String(768 * 1024 * 1024));
+    assert.match(web.healthcheck.test.join(' '), /\/api\/version/);
+    // The API keeps its edge alias, which the web uses.
+    assert.deepEqual(services.api.networks['edge-staging'].aliases, [
+      'staging-api',
+    ]);
+  },
+);
+
 const CAPPED_LOGS = {
   driver: 'json-file',
   options: { 'max-size': '10m', 'max-file': '3' },
@@ -244,7 +371,15 @@ const CAPPED_LOGS = {
 
 test('every production service caps its json-file logs', { skip }, () => {
   const { services } = parse();
-  for (const name of ['api-blue', 'api-green', 'worker-a', 'worker-b', 'redis'])
+  for (const name of [
+    'api-blue',
+    'api-green',
+    'web-blue',
+    'web-green',
+    'worker-a',
+    'worker-b',
+    'redis',
+  ])
     assert.ok(name in services, `${name} is missing`);
   for (const [name, service] of Object.entries(services))
     assert.deepEqual(service.logging, CAPPED_LOGS, `${name} has no log limit`);
@@ -285,6 +420,7 @@ test(
     const { services } = JSON.parse(result.stdout);
     for (const name of [
       'api',
+      'web',
       'worker',
       'postgres',
       'redis',
@@ -323,7 +459,8 @@ test('production.env.example names every ${VAR} the compose file reads, with no 
     if (secret.test(name))
       assert.equal(value, '', `${name} must be blank in the example`);
   assert.match(example, /openssl rand/);
-  assert.match(example, /^# .*SITE_INDEXING.*Vercel/m);
+  // Baked into the web image at build (deploy/web.Dockerfile), from a GitHub variable.
+  assert.match(example, /^# .*SITE_INDEXING.*PRODUCTION_SITE_INDEXING/m);
   assert.ok(!values.has('SITE_INDEXING'));
 });
 
