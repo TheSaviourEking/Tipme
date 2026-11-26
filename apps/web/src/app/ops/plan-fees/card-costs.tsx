@@ -45,8 +45,11 @@ function who(row: OpsCardCostsRow): string {
  */
 export function CardCosts({
   rates,
+  onLoaded,
 }: {
   rates: { freeBps: number; proBps: number };
+  /** Told the card cost in force each time it loads, so the plan fee boxes can say where card starts. */
+  onLoaded?: (current: OpsCardCosts['current']) => void;
 }) {
   const id = useId();
   const [state, setState] = useState<OpsCardCosts | null>(null);
@@ -60,14 +63,16 @@ export function CardCosts({
     if (!result.ok) return setFailed(true);
     setFailed(false);
     setState(result.data);
-  }, []);
+    onLoaded?.(result.data.current);
+  }, [onLoaded]);
 
   useEffect(() => {
     void opsFetch<OpsCardCosts>(PATH).then((result) => {
       if (!result.ok) return setFailed(true);
       setState(result.data);
+      onLoaded?.(result.data.current);
     });
-  }, []);
+  }, [onLoaded]);
 
   if (failed)
     return (

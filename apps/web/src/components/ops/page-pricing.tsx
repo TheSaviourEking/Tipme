@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import type { OpsPagePricing } from '@tipme/contracts';
+import type { OpsCardCosts, OpsPagePricing } from '@tipme/contracts';
 import { Button, Card, InputField, Slip, TextareaField } from '@tipme/ui';
 import { ReasonAction } from '@/components/ops/reason-action';
 import {
@@ -8,9 +8,16 @@ import {
   outcomeOf,
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
+import type { CardCostFigures } from '@/lib/card-cost-view';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
 import { outcomeIsUnknown, refusalWords } from '@/lib/ops-answers';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
+import {
+  BELOW_FLOOR,
+  RATE_FLOOR_BPS,
+  pageRateBelowFloor,
+  rateCardLine,
+} from '@/lib/rate-floor';
 
 const problem = (answer: { status: number; code: string; message?: string }) =>
   answer.code === 'VALIDATION_FAILED'
@@ -27,6 +34,7 @@ export function ValueWithReason({
   hint,
   submit,
   parse,
+  invalid,
   onSubmit,
 }: {
   open: string;
@@ -34,6 +42,8 @@ export function ValueWithReason({
   hint: string;
   submit: string;
   parse: (raw: string) => number | null;
+  /** What to say when `parse` refuses; the default names the field. */
+  invalid?: string;
   onSubmit: (value: number, reason: string) => Promise<string | null>;
 }) {
   const id = useId();
@@ -46,7 +56,8 @@ export function ValueWithReason({
     const data = new FormData(form);
     const value = parse(String(data.get('value') ?? ''));
     const reason = String(data.get('reason') ?? '').trim();
-    if (value === null) return setError(`Check the ${label.toLowerCase()}.`);
+    if (value === null)
+      return setError(invalid ?? `Check the ${label.toLowerCase()}.`);
     if (reason.length < 10)
       return setError('Please write a reason of at least 10 characters.');
     setBusy(true);
@@ -111,12 +122,18 @@ export function ValueWithReason({
 export function PagePricing({ profileId }: { profileId: string }) {
   const [pricing, setPricing] = useState<OpsPagePricing | null>(null);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
+  // The card cost in force, to say where card starts at this page's rate (staff without the fees
+  // permission don't get it, and the line is left out).
+  const [cardCost, setCardCost] = useState<CardCostFigures | null>(null);
   const base = `/v1/ops/pages/${profileId}`;
 
   useEffect(() => {
     let current = true;
     void opsFetch<OpsPagePricing>(`${base}/pricing`).then((result) => {
       if (current && result.ok) setPricing(result.data);
+    });
+    void opsFetch<OpsCardCosts>('/v1/ops/card-costs').then((result) => {
+      if (current && result.ok) setCardCost(result.data.current);
     });
     return () => {
       current = false;
@@ -158,6 +175,18 @@ export function PagePricing({ profileId }: { profileId: string }) {
           ` A staff-set ${bpsToPercent(pricing.customFeeBps!)} is stored, but no page pays more than its plan’s rate.`}{' '}
         Fee-free tips left: <strong>{pricing.feeFreeRemaining}</strong>
       </p>
+      {rateCardLine(pricing.feeBps, cardCost) && (
+        <p data-testid="page-fee-card">
+          {rateCardLine(pricing.feeBps, cardCost)}
+        </p>
+      )}
+      {pageRateBelowFloor(pricing.customFeeBps) && (
+        <Slip dense tone="waiting" title={BELOW_FLOOR}>
+          This page’s stored {bpsToPercent(pricing.customFeeBps!)} was set
+          before the floor. It stays until it is changed here; a new fee must be{' '}
+          {bpsToPercent(RATE_FLOOR_BPS)} or more (or 0 for fee-free).
+        </Slip>
+      )}
       <p className="tm-hint">
         Changes apply to new tips only; a price already shown to a supporter is
         kept. Nothing here is automatic.
@@ -167,9 +196,15 @@ export function PagePricing({ profileId }: { profileId: string }) {
         <ValueWithReason
           open="Set this page’s fee…"
           label="New TipMe fee (%)"
-          hint={`For example 4 or 2.5. Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
+          hint={`${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, for example 4 or 2.5 (0 is fee-free). Only a fee below the plan’s rate (${bpsToPercent(pricing.planFeeBps)}) changes anything.`}
           submit="Set this page’s fee"
-          parse={percentToBps}
+          parse={(raw) => {
+            const bps = percentToBps(raw);
+            return bps === 0 || (bps !== null && bps >= RATE_FLOOR_BPS)
+              ? bps
+              : null;
+          }}
+          invalid={`Write the fee as a percentage of ${bpsToPercent(RATE_FLOOR_BPS).replace('%', '')} or more, or 0 for fee-free.`}
           onSubmit={(bps, reason) =>
             act(
               'fee',

@@ -7,8 +7,8 @@ import { opsReasonSchema } from './ops.js';
  * digits; the server is the only source of them.
  */
 
-/** Bounds for each rate, in basis points (owner, 18 Nov 2026: 1.5% to 10%). */
-export const PLAN_FEE_MIN_BPS = 150;
+/** Bounds for each newly set rate, in basis points: 2% to 10% (profit guards, 26 Nov 2026; was 1.5%). */
+export const PLAN_FEE_MIN_BPS = 200;
 export const PLAN_FEE_MAX_BPS = 1000;
 /** A move of more than this, on either plan, needs an explicit confirm (`confirmLargeChange`). */
 export const PLAN_FEE_LARGE_CHANGE_BPS = 200;

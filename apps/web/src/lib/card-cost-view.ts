@@ -28,7 +28,10 @@ export function cardCostSummary(cost: CardCostFigures): string {
  * one above (the share priced as the quote prices it, rounded half up to the kobo); null when the
  * rate never covers the card fee.
  */
-function cardFromNaira(planBps: number, cost: CardCostFigures): string | null {
+export function cardFromNaira(
+  planBps: number,
+  cost: CardCostFigures,
+): string | null {
   const from = cardOfferedFromNaira(BigInt(planBps), {
     rateBps: BigInt(cost.rateBps),
     fixedMinor: BigInt(cost.fixedMinor),

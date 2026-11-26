@@ -1,5 +1,5 @@
 import { DEFAULT_CARD_COST, type CardCost } from '@tipme/domain';
-import { and, desc, eq, lte } from 'drizzle-orm';
+import { and, desc, eq, lte, sql } from 'drizzle-orm';
 import type { Database, Tx } from '../client.js';
 import { approvalRequests, cardCostSettings } from '../schema.js';
 import { recordAudit } from './audit.js';
@@ -152,9 +152,12 @@ const sameCost = (a: CardCost, b: CardCost) =>
   a.marginMinor === b.marginMinor;
 
 /**
- * Stores a new card cost from `now`. Runs inside the serious action, so `approvedBy` is the second
- * person (or null when a lone admin acted alone, with the acted-alone alert). Refuses a cost out of
- * bounds or the one already in force.
+ * Stores a new card cost, in force from the transaction's database time. The database clock decides
+ * (not the app's `new Date()`), because a quote's `created_at` is the database clock too: a skewed
+ * app clock could otherwise date a change before quotes already made and change their checkout
+ * methods. Runs inside the serious action, so `approvedBy` is the second person (or null when a lone
+ * admin acted alone, with the acted-alone alert). Refuses a cost out of bounds or the one already in
+ * force. Returns the time the change starts.
  */
 export async function setCardCosts(
   tx: Tx,
@@ -163,24 +166,31 @@ export async function setCardCosts(
     actorId: string;
     approvedBy: string | null;
     reason: string;
-    now: Date;
   },
-): Promise<void> {
+): Promise<{ effectiveFrom: Date }> {
   const cost = checkedCost(input.cost);
-  const previous = await cardCostAt(tx, input.now);
+  const found = await tx.execute<{ now: Date | string }>(
+    sql`SELECT now() AS now`,
+  );
+  const readAt = new Date(found.rows[0]!.now);
+  const previous = await cardCostAt(tx, readAt);
   if (sameCost(previous, cost)) throw new OperationError('INVALID_INPUT');
   const id = newId();
-  await tx.insert(cardCostSettings).values({
-    id,
-    rateBps: Number(cost.rateBps),
-    fixedMinor: cost.fixedMinor,
-    marginMinor: cost.marginMinor,
-    effectiveFrom: input.now,
-    setBy: input.actorId,
-    approvedBy: input.approvedBy,
-    reason: input.reason,
-    createdAt: input.now,
-  });
+  // The database's `now()` cut to the millisecond, so the time reads back as a JS Date exactly.
+  const [stored] = await tx
+    .insert(cardCostSettings)
+    .values({
+      id,
+      rateBps: Number(cost.rateBps),
+      fixedMinor: cost.fixedMinor,
+      marginMinor: cost.marginMinor,
+      effectiveFrom: sql`date_trunc('milliseconds', now())`,
+      setBy: input.actorId,
+      approvedBy: input.approvedBy,
+      reason: input.reason,
+    })
+    .returning({ effectiveFrom: cardCostSettings.effectiveFrom });
+  const effectiveFrom = stored!.effectiveFrom;
   await recordAudit(tx, {
     staffUserId: input.actorId,
     action: 'card_costs.changed',
@@ -192,8 +202,9 @@ export async function setCardCosts(
       to: cardCostRecord(cost),
       approvedBy: input.approvedBy,
     }),
-    now: input.now,
+    now: effectiveFrom,
   });
+  return { effectiveFrom };
 }
 
 /** A card cost change still waiting for a second person, so the screen says so. */

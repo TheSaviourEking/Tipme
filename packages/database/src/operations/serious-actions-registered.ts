@@ -709,7 +709,6 @@ const cardCostsChange = acting<{
       actorId: context.actorId,
       approvedBy: context.approverId ?? null,
       reason: context.reason,
-      now: context.now,
     }).then(() => cardCostRecord(checkedCardCostPayload(payload))),
 });
 

@@ -17,7 +17,14 @@ import {
   type ActionOutcomeState,
 } from '@/components/ops/action-outcome';
 import { LoadFailed } from '@/components/dashboard/load-failed';
+import type { CardCostFigures } from '@/lib/card-cost-view';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
+import {
+  BELOW_FLOOR,
+  planRateBelowFloor,
+  rateCardLine,
+  typedRateCardLine,
+} from '@/lib/rate-floor';
 import { refusalWords } from '@/lib/ops-answers';
 import { when } from '@/lib/ops-client';
 import { opsAct, opsFetch } from '@/lib/ops-staff-api';
@@ -53,6 +60,13 @@ export default function PlanFeesPage() {
   // A move of more than 2 percentage points on either plan shows a box the person must tick.
   const [bigMove, setBigMove] = useState(false);
   const [outcome, setOutcome] = useState<ActionOutcomeState | null>(null);
+  // The card cost in force (the Card costs section loads it) and what is typed in the two fee boxes,
+  // so the screen can say, before asking, from what tip amount card is offered at that rate.
+  const [cardCost, setCardCost] = useState<CardCostFigures | null>(null);
+  const [typed, setTyped] = useState<{
+    free: string | null;
+    pro: string | null;
+  }>({ free: null, pro: null });
 
   const load = useCallback(async () => {
     const result = await opsFetch<OpsPlanFees>(PATH);
@@ -142,6 +156,7 @@ export default function PlanFeesPage() {
             : refusalWords(answer),
       );
     form.reset();
+    setTyped({ free: null, pro: null });
     setBigMove(false);
     setOutcome(
       outcomeOf(
@@ -178,6 +193,38 @@ export default function PlanFeesPage() {
                 ? `In use since ${when(current.effectiveFrom)}`
                 : 'TipMe’s starting fees (none set here yet)'}
             </p>
+            {(
+              [
+                ['Free', current.freeBps],
+                ['Pro', current.proBps],
+              ] as const
+            ).map(([plan, bps]) => (
+              <p
+                key={plan}
+                data-testid={`plan-fees-card-${plan.toLowerCase()}`}
+              >
+                {plan} at {bpsToPercent(bps)}: {rateCardLine(bps, cardCost)}
+              </p>
+            ))}
+            {(
+              [
+                ['Free', current.freeBps],
+                ['Pro', current.proBps],
+              ] as const
+            )
+              .filter(([, bps]) => planRateBelowFloor(bps))
+              .map(([plan, bps]) => (
+                <Slip
+                  key={plan}
+                  dense
+                  tone="waiting"
+                  title={`${plan}: ${BELOW_FLOOR}`}
+                >
+                  {plan} is {bpsToPercent(bps)}, set before the floor. It stays
+                  until it is changed here; a new fee must be{' '}
+                  {bpsToPercent(state.limits.minBps)} or more.
+                </Slip>
+              ))}
             {outcome && <ActionOutcome outcome={outcome} />}
             {state.waitingRequestId && !outcome && (
               <Slip dense tone="waiting" title="Waiting for a second person">
@@ -193,10 +240,20 @@ export default function PlanFeesPage() {
                 id={`${id}-free`}
                 name="free"
                 label="Free plan fee (%)"
-                hint="From 1.5 to 10, for example 5 or 4.5."
+                hint={`From ${bpsToPercent(state.limits.minBps).replace('%', '')} to ${bpsToPercent(state.limits.maxBps).replace('%', '')}, for example 5 or 4.5.`}
                 defaultValue={bpsToPercent(current.freeBps).replace('%', '')}
                 inputMode="decimal"
+                onChange={(e) => {
+                  const value = e.currentTarget.value;
+                  setTyped((was) => ({ ...was, free: value }));
+                }}
               />
+              {typed.free !== null &&
+                typedRateCardLine(typed.free, cardCost) && (
+                  <p className="tm-hint" data-testid="plan-fees-typed-free">
+                    {typedRateCardLine(typed.free, cardCost)}
+                  </p>
+                )}
               <InputField
                 id={`${id}-pro`}
                 name="pro"
@@ -204,7 +261,16 @@ export default function PlanFeesPage() {
                 hint="No higher than Free’s."
                 defaultValue={bpsToPercent(current.proBps).replace('%', '')}
                 inputMode="decimal"
+                onChange={(e) => {
+                  const value = e.currentTarget.value;
+                  setTyped((was) => ({ ...was, pro: value }));
+                }}
               />
+              {typed.pro !== null && typedRateCardLine(typed.pro, cardCost) && (
+                <p className="tm-hint" data-testid="plan-fees-typed-pro">
+                  {typedRateCardLine(typed.pro, cardCost)}
+                </p>
+              )}
               <TextareaField
                 id={`${id}-reason`}
                 name="reason"
@@ -260,7 +326,10 @@ export default function PlanFeesPage() {
       </div>
 
       {/* Owner, 26 Nov 2026: card is offered only where the plan rate above covers the card cost. */}
-      <CardCosts rates={{ freeBps: current.freeBps, proBps: current.proBps }} />
+      <CardCosts
+        rates={{ freeBps: current.freeBps, proBps: current.proBps }}
+        onLoaded={setCardCost}
+      />
 
       <Card className="settings-section">
         <h2 id={`${id}-history`}>Plan fee history</h2>

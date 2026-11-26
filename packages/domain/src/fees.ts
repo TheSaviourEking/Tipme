@@ -76,24 +76,46 @@ const V3_VERSION_PREFIX: Record<FeePlan, string> = {
   pro: 'v3-pro',
 };
 
-/** The owner's bounds, 18 Nov 2026: each plan's rate is from 1.5% to 10% (150 to 1000 bps). */
-export const PLAN_FEE_MIN_BPS = 150n;
+/**
+ * The bounds for a rate staff set: 2% to 10% (200 to 1000 bps). The floor is the profit guard of
+ * 26 Nov 2026 (it was 1.5% from the owner's 18 Nov bounds): below the 1.5% transfer cost a tip loses.
+ */
+export const PLAN_FEE_MIN_BPS = 200n;
 export const PLAN_FEE_MAX_BPS = 1000n;
+/**
+ * The lowest rate a stored row may hold: the table still allows 150 to 199, so an existing row stays
+ * valid, priceable and visible (flagged on the ops screens) rather than silently replaced.
+ */
+export const PLAN_FEE_STORED_MIN_BPS = 150n;
+
+function planFeeRatesProblemFrom(
+  rates: { freeBps: bigint; proBps: bigint },
+  min: bigint,
+): 'freeBps' | 'proBps' | 'proAboveFree' | null {
+  const inRange = (bps: bigint) => bps >= min && bps <= PLAN_FEE_MAX_BPS;
+  if (!inRange(rates.freeBps)) return 'freeBps';
+  if (!inRange(rates.proBps)) return 'proBps';
+  if (rates.proBps > rates.freeBps) return 'proAboveFree';
+  return null;
+}
 
 /**
- * Why a pair of plan rates is not allowed, or null when it is: each a whole number of basis points
- * from 150 to 1000 (1.5% to 10%), and Pro never above Free (the owner, 18 Nov 2026).
+ * Why a pair of plan rates may not be newly set, or null when it may: each a whole number of basis
+ * points from 200 to 1000 (2% to 10%), and Pro never above Free.
  */
 export function planFeeRatesProblem(rates: {
   freeBps: bigint;
   proBps: bigint;
 }): 'freeBps' | 'proBps' | 'proAboveFree' | null {
-  const inRange = (bps: bigint) =>
-    bps >= PLAN_FEE_MIN_BPS && bps <= PLAN_FEE_MAX_BPS;
-  if (!inRange(rates.freeBps)) return 'freeBps';
-  if (!inRange(rates.proBps)) return 'proBps';
-  if (rates.proBps > rates.freeBps) return 'proAboveFree';
-  return null;
+  return planFeeRatesProblemFrom(rates, PLAN_FEE_MIN_BPS);
+}
+
+/** The same check for a pair already stored or in force: floor 150, so older rows still price. */
+export function storedPlanFeeRatesProblem(rates: {
+  freeBps: bigint;
+  proBps: bigint;
+}): 'freeBps' | 'proBps' | 'proAboveFree' | null {
+  return planFeeRatesProblemFrom(rates, PLAN_FEE_STORED_MIN_BPS);
 }
 
 /**
@@ -105,7 +127,7 @@ export function feePolicyForPlan(
   plan: FeePlan,
   rates: PlanFeeRates = DEFAULT_PLAN_FEE_RATES,
 ): FeePolicy {
-  if (planFeeRatesProblem(rates) !== null)
+  if (storedPlanFeeRatesProblem(rates) !== null)
     throw new RangeError('plan fee rates out of bounds');
   const bps = plan === 'pro' ? rates.proBps : rates.freeBps;
   return {

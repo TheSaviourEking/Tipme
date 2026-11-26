@@ -6,6 +6,7 @@ import {
   grantOwner,
   setCardCosts,
 } from '../../dist/index.js';
+import { sql } from 'drizzle-orm';
 import { useDatabase } from './helpers.mjs';
 
 // Owner, 26 Nov 2026: what a card payment costs TipMe (rate, 3D Secure fixed cost, margin) is an ops
@@ -19,14 +20,13 @@ async function setup(t) {
   const { userId: staff } = await grantOwner(db.db, {
     phone: '+2348000007789',
   });
-  const set = (cost, now = new Date(), approvedBy = null) =>
+  const set = (cost, approvedBy = null) =>
     db.db.transaction((tx) =>
       setCardCosts(tx, {
         cost,
         actorId: staff,
         approvedBy,
         reason: 'The partner’s new card price',
-        now,
       }),
     );
   return { db, staff, set };
@@ -41,9 +41,8 @@ test('with no stored card cost the coded defaults apply: 2% + ₦45, margin ₦1
 
 test('a change applies from its time: a moment before reads the old cost, from then the new', async (t) => {
   const { db, set, staff } = await setup(t);
-  const at = new Date();
   const next = { rateBps: 250n, fixedMinor: 5000n, marginMinor: 2000n };
-  await set(next, at);
+  const { effectiveFrom: at } = await set(next);
   assert.deepEqual(
     await cardCostAt(db.db, new Date(at.getTime() - 1)),
     DEFAULTS,
@@ -54,9 +53,9 @@ test('a change applies from its time: a moment before reads the old cost, from t
     next,
   );
   // A second change, later: each moment reads the row in force then.
-  const later = new Date(at.getTime() + 1000);
   const after = { rateBps: 180n, fixedMinor: 4500n, marginMinor: 0n };
-  await set(after, later);
+  const { effectiveFrom: later } = await set(after);
+  assert.ok(later.getTime() > at.getTime());
   assert.deepEqual(
     await cardCostAt(db.db, new Date(later.getTime() - 1)),
     next,
@@ -77,11 +76,7 @@ test('a change is audited with from, to and approver', async (t) => {
   const { userId: approver } = await grantOwner(db.db, {
     phone: '+2348000007790',
   });
-  await set(
-    { rateBps: 250n, fixedMinor: 5000n, marginMinor: 2000n },
-    new Date(),
-    approver,
-  );
+  await set({ rateBps: 250n, fixedMinor: 5000n, marginMinor: 2000n }, approver);
   const [row] = await cardCostHistory(db.db, 1);
   assert.equal(row.approvedBy, approver);
   const { rows } = await db.pool.query(
@@ -155,4 +150,52 @@ test('the card cost table is history, and refuses values out of bounds itself', 
        VALUES (gen_random_uuid(), $1, $2, $3, now() + interval '1 day', 'edge')`,
       [rate, fixed, margin],
     );
+});
+
+// Review of Task 6: the app's clock must not decide when a card cost starts, because a quote's
+// `created_at` comes from the database clock. A skewed app clock could otherwise make a change apply
+// to quotes made before it. The row's `effective_from` is the transaction's database time.
+test('a change starts at the database time of its transaction, whatever the app clock says', async (t) => {
+  const { db, staff } = await setup(t);
+  const realDate = Date;
+  const skewed = realDate.now() - 3 * 24 * 60 * 60 * 1000;
+  let result;
+  let dbTime;
+  // The app's clock runs three days behind while the change is made.
+  globalThis.Date = class extends realDate {
+    constructor(...args) {
+      if (args.length === 0) super(skewed);
+      else super(...args);
+    }
+    static now() {
+      return skewed;
+    }
+  };
+  try {
+    await db.db.transaction(async (tx) => {
+      result = await setCardCosts(tx, {
+        cost: { rateBps: 250n, fixedMinor: 5000n, marginMinor: 2000n },
+        actorId: staff,
+        approvedBy: null,
+        reason: 'The partner’s new card price',
+      });
+      const { rows } = await tx.execute(sql`SELECT now() AS now`);
+      dbTime = new realDate(rows[0].now);
+    });
+  } finally {
+    globalThis.Date = realDate;
+  }
+  assert.equal(result.effectiveFrom.getTime(), dbTime.getTime());
+  const [row] = await cardCostHistory(db.db, 1);
+  assert.equal(row.effectiveFrom.getTime(), dbTime.getTime());
+  // In force from the database time on, and not before it: the app's date doesn't leak in.
+  assert.deepEqual(await cardCostAt(db.db, dbTime), {
+    rateBps: 250n,
+    fixedMinor: 5000n,
+    marginMinor: 2000n,
+  });
+  assert.deepEqual(
+    await cardCostAt(db.db, new Date(dbTime.getTime() - 1)),
+    DEFAULTS,
+  );
 });

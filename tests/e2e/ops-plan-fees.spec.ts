@@ -46,6 +46,17 @@ test('@alone an owner asks to change the plan fees; it waits for a second person
   await expect(cards.getByTestId('card-costs-offer')).toHaveText(
     'Card is offered on Free tips from ₦2,000 and Pro tips from ₦6,000',
   );
+  // Where card starts at each plan's rate (profit guards, Part 3), in the Personal fees region.
+  const personalRates = main.getByRole('region', { name: 'Personal fees' });
+  await expect(personalRates.getByTestId('plan-fees-card-free')).toHaveText(
+    'Free at 5%: Card is offered on tips from ₦2,000.',
+  );
+  await expect(personalRates.getByTestId('plan-fees-card-pro')).toHaveText(
+    'Pro at 3%: Card is offered on tips from ₦6,000.',
+  );
+  await expect(
+    personalRates.getByText('Below the 2% floor', { exact: false }),
+  ).toHaveCount(0);
   // Saving asks for a reason before anything is asked.
   await cards.getByLabel('Margin (₦)').fill('20');
   await cards.getByRole('button', { name: 'Ask for approval' }).click();
@@ -66,11 +77,28 @@ test('@alone an owner asks to change the plan fees; it waits for a second person
     main.getByText('Pro’s fee can’t be higher than Free’s.'),
   ).toBeVisible();
 
-  // Each fee is from 1.5% to 10% (owner, 18 Nov 2026), refused on the screen.
+  // Typing a fee says where card would start at it; 2% never offers card.
+  await personal.getByLabel('Free plan fee (%)').fill('3');
+  await expect(personal.getByTestId('plan-fees-typed-free')).toHaveText(
+    'Card is offered on tips from ₦6,000.',
+  );
+  await personal.getByLabel('Free plan fee (%)').fill('2');
+  await expect(personal.getByTestId('plan-fees-typed-free')).toHaveText(
+    'Card is not offered at this rate.',
+  );
+  // Below the 2% floor is refused on the screen (1.5% was allowed before 26 Nov 2026).
+  await personal.getByLabel('Free plan fee (%)').fill('1.5');
+  await personal.getByLabel('Pro plan fee (%)').fill('1.5');
+  await personal.getByRole('button', { name: 'Ask for approval' }).click();
+  await expect(
+    main.getByText('Each fee must be from 2% to 10%.'),
+  ).toBeVisible();
+
+  // Each fee is from 2% to 10% (profit guards, 26 Nov 2026), refused on the screen.
   await personal.getByLabel('Free plan fee (%)').fill('12');
   await personal.getByRole('button', { name: 'Ask for approval' }).click();
   await expect(
-    main.getByText('Each fee must be from 1.5% to 10%.'),
+    main.getByText('Each fee must be from 2% to 10%.'),
   ).toBeVisible();
 
   // A move of more than 2 percentage points needs the box ticked before anything is asked.
