@@ -195,13 +195,26 @@ export function endOfLagosDayIso(date: string): string {
   return new Date(midnightUtc + DAY_MS - LAGOS_OFFSET_MS).toISOString();
 }
 
+/** "31 Jan 2027": a Lagos calendar date (YYYY-MM-DD) in words. */
+function dateWords(date: string, withYear: boolean): string {
+  const [y, m, day] = date.split('-').map(Number) as [number, number, number];
+  const words = `${day} ${MONTHS[m - 1]}`;
+  return withYear ? `${words} ${y}` : words;
+}
+
 /** "until 31 Jan", with the year ("until 31 Jan 2027") when it is not the current Lagos year. */
 export function untilWords(endsAt: Date, now: Date): string {
-  const [y, m, day] = lastCoveredLagosDate(endsAt).split('-').map(Number) as [
-    number,
-    number,
-    number,
-  ];
-  const words = `until ${day} ${MONTHS[m - 1]}`;
-  return y === Number(lagosDate(now).slice(0, 4)) ? words : `${words} ${y}`;
+  const last = lastCoveredLagosDate(endsAt);
+  return `until ${dateWords(last, last.slice(0, 4) !== lagosDate(now).slice(0, 4))}`;
 }
+
+/**
+ * "until 31 Jan 2027", always with the year: for words stored and compared later (an approval's
+ * summary), which must not change with the clock.
+ */
+export const untilWordsWithYear = (endsAt: Date): string =>
+  `until ${dateWords(lastCoveredLagosDate(endsAt), true)}`;
+
+/** "from 5 Dec 2026": the Lagos date a rule starts on, always with the year (as untilWordsWithYear). */
+export const fromWordsWithYear = (startsAt: Date): string =>
+  `from ${dateWords(lagosDate(startsAt), true)}`;

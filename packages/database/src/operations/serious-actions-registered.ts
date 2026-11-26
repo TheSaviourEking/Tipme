@@ -56,13 +56,13 @@ import { readFeatureSwitch, setFeatureSwitch } from './feature-switches.js';
 import { takeBackAction } from './username-take-backs.js';
 import {
   checkedFeeWaiverPayload,
-  estimateFeeWaiverMonthlyCost,
   FEE_WAIVER_SET_ACTION,
   feeWaiverKeyOf,
   feeWaiverNeedsCostConfirm,
   feeWaiverTarget,
   latestRowOfKey,
   requireFeeWaiverConfirm,
+  requireFeeWaiverEstimateCurrent,
   setFeeWaiver,
   type FeeWaiverSetPayload,
 } from './fee-waivers.js';
@@ -77,7 +77,7 @@ import {
   returnHeldRefundMoney,
   tipRefundFacts,
 } from './tip-refunds.js';
-import { lagosDayStart, untilWords } from '@tipme/domain';
+import { fromWordsWithYear, untilWordsWithYear } from '@tipme/domain';
 import {
   checkedProPrice,
   currentProPrice,
@@ -189,7 +189,11 @@ function acting<Payload>(
     act(
       tx: Tx,
       payload: Payload,
-      context: SeriousActionCheck & { approverId?: string | null },
+      context: SeriousActionCheck & {
+        approverId?: string | null;
+        /** Set only when running an approved request. */
+        requestId?: string | null;
+      },
     ): Promise<unknown>;
   },
 ): SeriousActionDefinition<Payload> {
@@ -692,31 +696,6 @@ const KIND_WORDS = {
   business: 'all businesses',
   giving: 'all Giving accounts',
 } as const;
-const MONTH_WORDS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
-/** "from 5 Dec" (the year when not this Lagos year): the Lagos date a requested start falls on. */
-function fromWords(startsAt: Date, now: Date): string {
-  const lagosDate = (at: Date) =>
-    new Date(lagosDayStart(at).getTime() + 3_600_000);
-  const day = lagosDate(startsAt);
-  const words = `from ${day.getUTCDate()} ${MONTH_WORDS[day.getUTCMonth()]}`;
-  return day.getUTCFullYear() === lagosDate(now).getUTCFullYear()
-    ? words
-    : `${words} ${day.getUTCFullYear()}`;
-}
 
 /** Who the rule is for, in the words staff read: "@ada", "The Yellow Chilli", "all businesses". */
 async function feeWaiverWho(tx: Tx, payload: FeeWaiverSetPayload) {
@@ -728,37 +707,33 @@ async function feeWaiverWho(tx: Tx, payload: FeeWaiverSetPayload) {
 }
 
 /**
- * The approver's words (W11). The "until" date is the last Lagos day covered (R5), never formatted
- * here. A kind-wide TipMe-pays rule names its estimated cost, so the approver confirms it.
+ * The approver's words (W11). They are stored when asked and compared on approval, so they read no
+ * clock and no live figure: dates always carry the year, the start is the one requested (it begins
+ * on approval if that is later, W3), and the cost is the estimate the asker confirmed. The "until"
+ * date is the last Lagos day covered (R5).
  */
 async function describeFeeWaiver(
   tx: Tx,
   payload: FeeWaiverSetPayload,
-  now: Date,
 ): Promise<string> {
   const who = await feeWaiverWho(tx, payload);
   const fee = FEE_WORDS[payload.fee];
   const when = [
-    payload.startsAt !== undefined &&
-    new Date(payload.startsAt).getTime() > now.getTime()
-      ? ` ${fromWords(new Date(payload.startsAt), now)}`
+    payload.startsAt !== undefined
+      ? ` ${fromWordsWithYear(new Date(payload.startsAt))} (or on approval, if later)`
       : '',
     payload.endsAt !== undefined
-      ? ` ${untilWords(new Date(payload.endsAt), now)}`
+      ? ` ${untilWordsWithYear(new Date(payload.endsAt))}`
       : payload.payer === 'tipme'
         ? ', with no end date'
         : '',
   ].join('');
   if (payload.payer === 'tipme') {
-    const cost = feeWaiverNeedsCostConfirm(payload)
-      ? ` (about ${nairaOf(
-          await estimateFeeWaiverMonthlyCost(tx, {
-            kind: payload.kind,
-            fee: payload.fee,
-            now,
-          }),
-        )} a month, last 30 days)`
-      : '';
+    const cost =
+      payload.costEstimateMinor !== undefined &&
+      feeWaiverNeedsCostConfirm(payload)
+        ? ` (about ${nairaOf(BigInt(payload.costEstimateMinor))} a month, last 30 days)`
+        : '';
     return `TipMe pays the ${fee} for ${who}${when}${cost}`;
   }
   if (payload.payer === 'inherit')
@@ -809,20 +784,27 @@ const feeWaiverSet = acting<FeeWaiverSetPayload>({
     const payload = checkedFeeWaiverPayload(raw);
     // Asked at request time too, so a kind-wide waiver without the confirm never opens a request.
     requireFeeWaiverConfirm(payload);
-    return describeFeeWaiver(tx, payload, new Date());
+    return describeFeeWaiver(tx, payload);
   },
-  act: (tx, raw, context) =>
-    setFeeWaiver(tx, {
-      ...checkedFeeWaiverPayload(raw),
+  act: async (tx, raw, context) => {
+    const payload = checkedFeeWaiverPayload(raw);
+    // When asked, or acting alone: the figure confirmed is the live one. On approval the approver
+    // confirms the figure they read, so a tip since then doesn't undo the approval.
+    if (context.requestId == null)
+      await requireFeeWaiverEstimateCurrent(tx, payload, context.now);
+    const set = await setFeeWaiver(tx, {
+      ...payload,
       staffUserId: context.actorId,
       approvedBy: context.approverId ?? null,
       reason: context.reason,
       now: context.now,
-    }).then((set) => ({
+    });
+    return {
       id: set.id,
       startsAt: set.startsAt.toISOString(),
       endsAt: set.endsAt?.toISOString() ?? null,
-    })),
+    };
+  },
 });
 
 /*

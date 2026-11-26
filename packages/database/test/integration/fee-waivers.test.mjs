@@ -571,7 +571,7 @@ async function actionSetup(t) {
   registerRealSeriousActions();
   const people = new Map();
   const person = () => staffPerson(db, people);
-  const ask = (actorId, payload) =>
+  const ask = (actorId, payload, now = undefined) =>
     requestSeriousAction(db.db, {
       name: 'fee_waiver.set',
       payload,
@@ -579,6 +579,7 @@ async function actionSetup(t) {
       grantId: people.get(actorId).grantId,
       reason: REASON,
       services: services(),
+      ...(now ? { now } : {}),
     });
   const approve = (requestId, actorId, now = new Date()) =>
     approveRequest(db.db, {
@@ -606,8 +607,14 @@ async function actionSetup(t) {
     db.pool
       .query(`SELECT * FROM fee_waivers ORDER BY created_at, starts_at`)
       .then((r) => r.rows);
-  return { db, person, ask, approve, set, rows };
+  return { db, person, people, ask, approve, set, rows };
 }
+
+/** Moves the clock every `new Date()` reads (the database's own clock stays). */
+const clockAt = (t, at) => {
+  t.mock.timers.reset();
+  t.mock.timers.enable({ apis: ['Date'], now: at.getTime() });
+};
 
 const adaTip = {
   scope: 'account',
@@ -789,10 +796,105 @@ test('a waiver approved after its requested start begins at approval', async (t)
     startsAt: start.toISOString(),
   });
   const approvedAt = new Date(start.getTime() + 3 * HOUR);
+  // Everything that reads the time reads the approval's, so the words can't depend on it.
+  clockAt(t, approvedAt);
   const outcome = await approve(requestId, approver, approvedAt);
   assert.equal(outcome.status, 'approved', JSON.stringify(outcome));
   const [row] = await rows();
   assert.equal(row.starts_at.toISOString(), approvedAt.toISOString());
+});
+
+test('a request made on 31 Dec for "until 31 Jan" is approved on 1 Jan: the words keep the year', async (t) => {
+  const { db, person, people, ask, approve, rows } = await actionSetup(t);
+  const asker = await person();
+  const approver = await person();
+  // 23:30 on 31 Dec in Lagos; the asker's code was entered just then.
+  const askedAt = new Date(`${nextYear() - 1}-12-31T22:30:00.000Z`);
+  await db.pool.query(
+    `UPDATE ops_sessions SET last_totp_at = $2, expires_at = $2::timestamptz + interval '1 hour'
+      WHERE id = $1`,
+    [people.get(asker).grantId, askedAt],
+  );
+  clockAt(t, askedAt);
+  const endsAt = endOfJanNextYear();
+  const outcome = await ask(
+    asker,
+    { ...adaTip, payer: 'tipme', endsAt },
+    askedAt,
+  );
+  assert.equal(outcome.state, 'pending', JSON.stringify(outcome));
+  const [request] = (
+    await db.pool.query(`SELECT summary FROM approval_requests WHERE id = $1`, [
+      outcome.requestId,
+    ])
+  ).rows;
+  assert.equal(
+    request.summary,
+    `TipMe pays the tip fee for @ada until 31 Jan ${nextYear()}`,
+  );
+  // 01:30 on 1 Jan in Lagos: now the same year as the end.
+  const approvedAt = new Date(askedAt.getTime() + 2 * HOUR);
+  clockAt(t, approvedAt);
+  const approved = await approve(outcome.requestId, approver, approvedAt);
+  assert.equal(approved.status, 'approved', JSON.stringify(approved));
+  assert.equal((await rows())[0].ends_at.toISOString(), endsAt);
+});
+
+test('the words name a requested start with its year, and the figure the asker saw', async (t) => {
+  const { db, person, ask } = await actionSetup(t);
+  const asker = await person();
+  await person();
+  const start = endOfLagosDayIso(`${nextYear()}-01-04`);
+  const outcome = await ask(asker, {
+    ...adaTip,
+    payer: 'tipme',
+    startsAt: start,
+    endsAt: endOfJanNextYear(),
+  });
+  const [request] = (
+    await db.pool.query(`SELECT summary FROM approval_requests WHERE id = $1`, [
+      outcome.requestId,
+    ])
+  ).rows;
+  assert.equal(
+    request.summary,
+    `TipMe pays the tip fee for @ada from 5 Jan ${nextYear()} (or on approval, if later) until 31 Jan ${nextYear()}`,
+  );
+});
+
+test('a kind-wide waiver asked with one estimate is approved after another tip, on the asker’s figure', async (t) => {
+  const { db, person, ask, approve, rows } = await actionSetup(t);
+  const asker = await person();
+  const approver = await person();
+  await paidTip(db, 'ada', 1_000_000n);
+  const payload = {
+    scope: 'kind',
+    kind: 'individual',
+    fee: 'tip',
+    payer: 'tipme',
+    confirmCost: true,
+    costEstimateMinor: '50000',
+  };
+  // A figure that isn't the live one is not a confirm of it.
+  await assert.rejects(
+    ask(asker, { ...payload, costEstimateMinor: '40000' }),
+    (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
+  );
+  const outcome = await ask(asker, payload);
+  assert.equal(outcome.state, 'pending', JSON.stringify(outcome));
+  // One more tip moves the live estimate to ₦1,000; the approver confirms the ₦500 they read.
+  await paidTip(db, 'ada', 1_000_000n);
+  assert.equal(
+    await estimateFeeWaiverMonthlyCost(db.db, {
+      kind: 'individual',
+      fee: 'tip',
+      now: new Date(),
+    }),
+    100_000n,
+  );
+  const approved = await approve(outcome.requestId, approver);
+  assert.equal(approved.status, 'approved', JSON.stringify(approved));
+  assert.equal((await rows()).length, 1);
 });
 
 test('an end date more than 24 months ahead, or before the start, is refused and stores nothing', async (t) => {
@@ -899,13 +1001,23 @@ test('a kind-wide TipMe-pays waiver needs confirmCost, and its description names
     (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
   );
   assert.equal(await db.count('approval_requests'), 0);
-  const tip = await ask(asker, { ...kindTip, confirmCost: true });
+  // The confirm without the figure the asker saw is not enough either.
+  await assert.rejects(
+    ask(asker, { ...kindTip, confirmCost: true }),
+    (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
+  );
+  const tip = await ask(asker, {
+    ...kindTip,
+    confirmCost: true,
+    costEstimateMinor: '100000',
+  });
   assert.equal(tip.state, 'pending', JSON.stringify(tip));
   const withdrawal = await ask(asker, {
     ...kindTip,
     fee: 'withdrawal',
     endsAt: endOfJanNextYear(),
     confirmCost: true,
+    costEstimateMinor: '5000',
   });
   const summaries = (
     await db.pool.query(
@@ -923,10 +1035,32 @@ test('a kind-wide TipMe-pays waiver needs confirmCost, and its description names
     `TipMe pays the withdrawal fee for all individuals until 31 Jan ${nextYear()} (about ₦50 a month, last 30 days)`,
   );
   assert.equal((await rows()).length, 0);
+  // A withdrawal TipMe already covered counts the fee it would have charged, once (W8: its user
+  // fee is 0), so renewing a waiver does not read as free.
+  const rule = await insertRule(db, {
+    scope: 'account',
+    profileId: ADA,
+    fee: 'withdrawal',
+    startsAt: new Date(Date.now() - DAY),
+  });
+  await db.pool.query(
+    `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, idempotency_key,
+                          request_fingerprint, fee_payer, user_fee_minor, fee_waiver_id, waived_fee_minor)
+     VALUES ($1, $2, 'NGN', 100000, 'REQUESTED', $3, 'fp', 'tipme', 0, $4, 2000)`,
+    [randomUUID(), ADA, randomUUID(), rule],
+  );
+  assert.equal(
+    await estimateFeeWaiverMonthlyCost(db.db, {
+      kind: 'individual',
+      fee: 'withdrawal',
+      now: new Date(),
+    }),
+    7_000n,
+  );
 });
 
 test('setFeeWaiver refuses a kind-wide TipMe-pays rule without confirmCost', async (t) => {
-  const { set, rows } = await actionSetup(t);
+  const { db, set, rows } = await actionSetup(t);
   const kindTip = {
     scope: 'kind',
     kind: 'individual',
@@ -937,9 +1071,20 @@ test('setFeeWaiver refuses a kind-wide TipMe-pays rule without confirmCost', asy
     set(kindTip),
     (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
   );
+  // The confirm names the figure confirmed; without it there is nothing confirmed.
+  await assert.rejects(
+    set({ ...kindTip, confirmCost: true }),
+    (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
+  );
   assert.equal((await rows()).length, 0);
-  await set({ ...kindTip, confirmCost: true });
+  const { id } = await set({
+    ...kindTip,
+    confirmCost: true,
+    costEstimateMinor: '0',
+  });
   assert.equal((await rows()).length, 1);
+  const [audit] = await auditOf(db, id);
+  assert.match(audit.reason, /"costEstimateMinor":"0"/);
 });
 
 test('ending a waiver now writes inherit (account) or account (kind)', async (t) => {
@@ -975,7 +1120,12 @@ test('ending a waiver now writes inherit (account) or account (kind)', async (t)
     kind: 'individual',
     fee: 'withdrawal',
   };
-  await set({ ...kindWithdrawal, payer: 'tipme', confirmCost: true });
+  await set({
+    ...kindWithdrawal,
+    payer: 'tipme',
+    confirmCost: true,
+    costEstimateMinor: '0',
+  });
   assert.equal(await payerNow('withdrawal'), 'tipme');
   await assert.rejects(
     set({ ...kindWithdrawal, payer: 'inherit' }),
@@ -1019,6 +1169,7 @@ test('a Giving account waiver is refused', async (t) => {
     fee: 'withdrawal',
     payer: 'tipme',
     confirmCost: true,
+    costEstimateMinor: '0',
   });
   assert.equal(outcome.state, 'ran', JSON.stringify(outcome));
 });
@@ -1048,6 +1199,37 @@ test('the payload is checked: shapes, ids, instants and unknown fields', () => {
     { ...adaTip, payer: 'tipme', endsAt: 'tomorrow' },
     { ...adaTip, payer: 'tipme', startsAt: 42 },
     { ...adaTip, payer: 'tipme', confirmCost: false },
+    {
+      scope: 'kind',
+      kind: 'individual',
+      fee: 'tip',
+      payer: 'tipme',
+      confirmCost: true,
+      costEstimateMinor: '-1',
+    },
+    {
+      scope: 'kind',
+      kind: 'individual',
+      fee: 'tip',
+      payer: 'tipme',
+      confirmCost: true,
+      costEstimateMinor: '1.5',
+    },
+    {
+      scope: 'kind',
+      kind: 'individual',
+      fee: 'tip',
+      payer: 'tipme',
+      confirmCost: true,
+      costEstimateMinor: 500,
+    },
+    {
+      scope: 'kind',
+      kind: 'individual',
+      fee: 'tip',
+      payer: 'tipme',
+      costEstimateMinor: '500',
+    },
     { ...adaTip, payer: 'tipme', extra: 1 },
   ];
   for (const payload of bad)

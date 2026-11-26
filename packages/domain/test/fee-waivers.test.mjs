@@ -13,7 +13,9 @@ import {
   lagosMonthStart,
   lastCoveredLagosDate,
   resolveFeeWaiver,
+  fromWordsWithYear,
   untilWords,
+  untilWordsWithYear,
   waivedFeeVersion,
 } from '../dist/index.js';
 
@@ -365,5 +367,25 @@ test('an account inherit row replaces an older account tipme row', () => {
     resolveFeeWaiver({ accountRows: [older, newer], kindRows: [k2], now: NOW })
       .ruleId,
     k2.id,
+  );
+});
+
+// Words stored for an approver (fee_waiver.set) must not change with the clock: always the year.
+test('untilWordsWithYear and fromWordsWithYear always name the year, on Lagos dates', () => {
+  assert.equal(
+    untilWordsWithYear(d('2027-01-31T23:00:00Z')),
+    'until 31 Jan 2027',
+  );
+  // An end at 00:00 WAT covers the day before (R5).
+  assert.equal(
+    untilWordsWithYear(d('2026-12-31T23:00:00Z')),
+    'until 31 Dec 2026',
+  );
+  assert.equal(fromWordsWithYear(d('2026-12-04T23:00:00Z')), 'from 5 Dec 2026');
+  // 31 Dec 23:30 UTC is already 1 Jan in Lagos.
+  assert.equal(fromWordsWithYear(d('2026-12-31T23:30:00Z')), 'from 1 Jan 2027');
+  assert.equal(
+    fromWordsWithYear(d('2026-12-31T22:59:59Z')),
+    'from 31 Dec 2026',
   );
 });

@@ -230,6 +230,11 @@ export type FeeWaiverSetPayload = {
   endsAt?: string;
   /** The explicit confirm of the estimated monthly cost, for a kind-wide TipMe-pays rule (W11). */
   confirmCost?: true;
+  /**
+   * The estimate confirmed, in minor units as a digit string: what the approver reads, fixed when
+   * asked so the words don't move while the request waits. It must be the live figure when asked.
+   */
+  costEstimateMinor?: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -245,6 +250,7 @@ const PAYLOAD_KEYS = new Set([
   'startsAt',
   'endsAt',
   'confirmCost',
+  'costEstimateMinor',
 ]);
 
 const oneOf = <T extends string>(
@@ -273,7 +279,16 @@ export function checkedFeeWaiverPayload(p: unknown): FeeWaiverSetPayload {
   const raw = p as Record<string, unknown>;
   if (Object.keys(raw).some((key) => !PAYLOAD_KEYS.has(key)))
     throw new OperationError('INVALID_INPUT');
-  const { scope, kind, fee, payer, profileId, businessId, confirmCost } = raw;
+  const {
+    scope,
+    kind,
+    fee,
+    payer,
+    profileId,
+    businessId,
+    confirmCost,
+    costEstimateMinor,
+  } = raw;
   if (
     !oneOf(['kind', 'account'] as const, scope) ||
     !oneOf(FEE_WAIVER_KINDS, kind) ||
@@ -307,6 +322,14 @@ export function checkedFeeWaiverPayload(p: unknown): FeeWaiverSetPayload {
     throw new OperationError('INVALID_INPUT');
   if (confirmCost !== undefined && confirmCost !== true)
     throw new OperationError('INVALID_INPUT');
+  // A figure is only ever confirmed, so it never comes without the confirm.
+  if (
+    costEstimateMinor !== undefined &&
+    (confirmCost !== true ||
+      typeof costEstimateMinor !== 'string' ||
+      !/^(0|[1-9][0-9]{0,15})$/.test(costEstimateMinor))
+  )
+    throw new OperationError('INVALID_INPUT');
   const startsAt = instant(raw.startsAt);
   const endsAt = instant(raw.endsAt);
   return {
@@ -319,6 +342,7 @@ export function checkedFeeWaiverPayload(p: unknown): FeeWaiverSetPayload {
     ...(startsAt === undefined ? {} : { startsAt }),
     ...(endsAt === undefined ? {} : { endsAt }),
     ...(confirmCost === true ? { confirmCost } : {}),
+    ...(typeof costEstimateMinor === 'string' ? { costEstimateMinor } : {}),
   };
 }
 
@@ -347,10 +371,33 @@ export const feeWaiverNeedsCostConfirm = (
   payload: FeeWaiverSetPayload,
 ): boolean => payload.scope === 'kind' && payload.payer === 'tipme';
 
-/** Refuses a kind-wide TipMe-pays rule whose estimated cost was not explicitly confirmed. */
+/** Refuses a kind-wide TipMe-pays rule whose estimated cost was not explicitly confirmed, figure and all. */
 export function requireFeeWaiverConfirm(payload: FeeWaiverSetPayload): void {
-  if (feeWaiverNeedsCostConfirm(payload) && payload.confirmCost !== true)
+  if (
+    feeWaiverNeedsCostConfirm(payload) &&
+    (payload.confirmCost !== true || payload.costEstimateMinor === undefined)
+  )
     throw new OperationError('FEE_WAIVER_CONFIRM_REQUIRED');
+}
+
+/**
+ * When asked (not on approval): the figure confirmed must be the live estimate, so nobody asks on a
+ * figure they didn't see. Refused FEE_WAIVER_CONFIRM_REQUIRED, to confirm the new figure.
+ */
+export async function requireFeeWaiverEstimateCurrent(
+  db: Database | Tx,
+  payload: FeeWaiverSetPayload,
+  now: Date,
+): Promise<void> {
+  requireFeeWaiverConfirm(payload);
+  if (!feeWaiverNeedsCostConfirm(payload)) return;
+  const live = await estimateFeeWaiverMonthlyCost(db, {
+    kind: payload.kind,
+    fee: payload.fee,
+    now,
+  });
+  if (BigInt(payload.costEstimateMinor!) !== live)
+    throw new OperationError('FEE_WAIVER_CONFIRM_REQUIRED', 'estimate_moved');
 }
 
 const ESTIMATE_DAYS_MS = 30 * 86_400_000;
@@ -358,9 +405,10 @@ const ESTIMATE_DAYS_MS = 30 * 86_400_000;
 /**
  * What a kind-wide TipMe-pays rule would have cost over the last 30 days (W11): for the tip fee, the
  * fees (platform + provider) of SUCCEEDED tips completed then; for the withdrawal fee, the user fees
- * of that kind's non-FAILED withdrawals asked for then. Giving is 0 until it is built. A tip or
- * withdrawal TipMe already covered under a waiver counts what it would have cost, so renewing a
- * waiver does not read as free. Team tips count too: their fee is charged like a person's tip.
+ * of that kind's non-FAILED withdrawals asked for then. Giving is 0 until it is built. Team tips
+ * count too: their fee is charged like a person's tip. A withdrawal TipMe already covered counts
+ * the fee it would have charged (`waived_fee_minor`) instead of its user fee, which is then 0 (W8),
+ * so each payout counts once and renewing a waiver doesn't read as free.
  */
 export async function estimateFeeWaiverMonthlyCost(
   db: Database | Tx,
@@ -373,8 +421,7 @@ export async function estimateFeeWaiverMonthlyCost(
     if (kind !== 'individual') return 0n;
     const [row] = await db
       .select({
-        total: sql<string>`coalesce(sum(${tipQuotes.platformFeeMinor} + ${tipQuotes.providerFeeMinor}
-          + CASE WHEN ${tipQuotes.feeWaiverId} IS NOT NULL THEN ${tipQuotes.waivedPlatformFeeMinor} ELSE 0 END), 0)::text`,
+        total: sql<string>`coalesce(sum(${tipQuotes.platformFeeMinor} + ${tipQuotes.providerFeeMinor}), 0)::text`,
       })
       .from(tips)
       .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))
@@ -390,7 +437,8 @@ export async function estimateFeeWaiverMonthlyCost(
   }
   const [row] = await db
     .select({
-      total: sql<string>`coalesce(sum(${payouts.userFeeMinor} + ${payouts.waivedFeeMinor}), 0)::text`,
+      total: sql<string>`coalesce(sum(CASE WHEN ${payouts.feeWaiverId} IS NOT NULL
+        THEN ${payouts.waivedFeeMinor} ELSE ${payouts.userFeeMinor} END), 0)::text`,
     })
     .from(payouts)
     .where(
@@ -521,6 +569,9 @@ export async function setFeeWaiver(
         startsAt: iso(window.startsAt),
         endsAt: iso(window.endsAt),
       },
+      ...(payload.costEstimateMinor === undefined
+        ? {}
+        : { costEstimateMinor: payload.costEstimateMinor }),
       approvedBy,
     }),
     now,
