@@ -1,12 +1,13 @@
-# TipMe production: two API colours (blue/green, three copies each), two workers and Redis on
-# one server. Postgres is Aiven's (no local database, backup or retention service here). The web
-# app runs on Vercel. Nothing is published: the one edge Caddy (deploy/edge, its own Compose
-# project) owns 80/443 and reaches the API copies by their default container names
-# tipme-production-api-{blue,green}-{1,2,3} on the external network edge-production.
+# TipMe production: two colours (blue/green) of the API (three copies each) and the website (one
+# copy each), two workers and Redis on one server. Postgres is Aiven's (no local database, backup or
+# retention service here). Nothing is published: the one edge Caddy (deploy/edge, its own Compose
+# project) owns 80/443 and reaches the copies by their default container names
+# tipme-production-api-{blue,green}-{1,2,3} and tipme-production-web-{blue,green}-1 on the external
+# network edge-production. (The website ran on Vercel until 26 Nov 2026.)
 #
 # The deploy script drives this file (one colour at a time, the other keeps serving):
 #   TIPME_VERSION=<sha> TIPME_BLUE_VERSION=<sha> TIPME_GREEN_VERSION=<sha> \
-#     docker compose -f deploy/compose.production.yml --env-file /srv/tipme-production/production.env up -d api-green
+#     docker compose -f deploy/compose.production.yml --env-file /srv/tipme-production/production.env up -d api-green web-green
 # Compose reads the whole file for any command, so the script always passes all three versions.
 name: tipme-production
 
@@ -236,6 +237,44 @@ x-worker: &worker
     redis: { condition: service_healthy }
   mem_limit: 512m
 
+# The website (Next.js standalone, deploy/web.Dockerfile). Built for production (the browser's
+# settings are baked in), so its image is tipme-web-production, never staging's. Each colour runs
+# the same version as that colour's API, so the switch and a rollback move both together. It reaches
+# the API at its public address through the edge (Caddy knows which API copies are ready), and
+# Sentry, through edge-production and `egress`; never `internal` (Redis has no password).
+x-web: &web
+  <<: *app
+  # The root stays read-only; Next writes only its image cache and regenerated pages, each on a
+  # bounded tmpfs (they count toward mem_limit).
+  tmpfs:
+    - /tmp
+    - /app/apps/web/.next/cache:size=128m,uid=1000,gid=1000
+    - /app/apps/web/.next/server/route-cache:size=64m,uid=1000,gid=1000
+  # Its own settings only. SITE_URL and SITE_INDEXING shape pages prerendered at build, so they are
+  # baked into the image with the browser's settings, as is the web's Sentry DSN.
+  environment:
+    WEB_REVALIDATE_SECRET: ${WEB_REVALIDATE_SECRET:?}
+    # Deprecated (set in admin at /ops/switches): read only until staff set it there.
+    PILOT_NOTICE: ${PILOT_NOTICE:-}
+    # Passed only when set in the env file: a blank value would be read as a malformed launch time.
+    PRODUCTION_LAUNCH_AT:
+  healthcheck:
+    test:
+      [
+        'CMD',
+        'node',
+        '-e',
+        "fetch('http://127.0.0.1:3000/api/version').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+      ]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+  mem_limit: 768m
+  # On SIGTERM Next stops taking connections and finishes the requests it has (a streamed page
+  # included); the edge sends new ones to the other colour.
+  stop_grace_period: 20s
+  networks: [edge-production, egress]
+
 services:
   # The colours differ only in the image (and GIT_SHA): the deploy script starts the idle colour
   # on the new version, waits for /health/ready, then lets the edge send traffic to it.
@@ -252,6 +291,15 @@ services:
     environment:
       <<: *api-env
       GIT_SHA: ${TIPME_GREEN_VERSION:-none}
+
+  # The website's colours, switched with the API's (deploy/scripts/lib.sh, start_idle_colour).
+  web-blue:
+    <<: *web
+    image: tipme-web-production:${TIPME_BLUE_VERSION:-none}
+
+  web-green:
+    <<: *web
+    image: tipme-web-production:${TIPME_GREEN_VERSION:-none}
 
   # Two workers (BullMQ shares the queues between them), so one can restart without a pause.
   worker-a:

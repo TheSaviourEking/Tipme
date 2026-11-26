@@ -155,3 +155,17 @@ test('before launch the email logos are exempt (sent mail must show them)', () =
   ])
     assert.equal(decide(path), 'rewrite', path);
 });
+
+// Self-hosting (Vercel paused, 26 Nov 2026): the edge's health check and the deploy's version check
+// ask /api/version. A countdown must not turn it into the holding page, or a deploy could not tell
+// which build serves.
+test('before launch /api/version is exempt, exactly that path', () => {
+  const decide = (path) => launchDecision({ path, target, now: target - 1 });
+  assert.equal(decide('/api/version'), 'exempt');
+  for (const path of [
+    '/api/version/../dashboard',
+    '/api/versions',
+    '/api/version/x',
+  ])
+    assert.equal(decide(path), 'rewrite', path);
+});

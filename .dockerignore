@@ -1,8 +1,9 @@
 # Build context for deploy/Dockerfile: sources only, never local secrets or outputs.
 .git
-.env
-.env.*
-!.env.example
+# At any depth: a checkout's apps/web/.env.local would otherwise reach `next build` in a hand build.
+**/.env
+**/.env.*
+!**/.env.example
 **/node_modules
 **/dist
 **/.next

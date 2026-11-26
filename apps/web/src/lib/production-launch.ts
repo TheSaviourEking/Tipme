@@ -24,6 +24,8 @@ export function launchDecision({
   if (
     isHoldingPage ||
     path === '/api/revalidate' ||
+    // The build id: the edge's health check and the deploy's version check read it.
+    path === '/api/version' ||
     path === '/robots.txt' ||
     path === '/sitemap.xml' ||
     path === '/favicon.ico' ||
