@@ -1447,7 +1447,16 @@ test('a fee request below the 2% floor is refused when asked, and one edited dow
       code: 'INVALID_INPUT',
     },
   );
+  const staleWhy = async (requestId) => {
+    const [stale] = await q(
+      `SELECT reason FROM audit_events WHERE action = 'serious_action.stale' AND subject_id = $1`,
+      [requestId],
+    );
+    return stale?.reason ?? '';
+  };
   // A pending request whose stored payload is then set to 100 bps, as one stored before the floor.
+  // Approval re-checks the facts before it compares the words the approver read, so the floor stops
+  // it first: stale, the raw INVALID_INPUT in the log, and nothing changes.
   const asked = await ask(requester, 'fee.change', {
     profileId: id,
     feeBps: 300,
@@ -1457,10 +1466,11 @@ test('a fee request below the 2% floor is refused when asked, and one edited dow
     `UPDATE approval_requests SET payload = jsonb_set(payload, '{feeBps}', '100') WHERE id = $1`,
     [asked.requestId],
   );
-  // Editing the payload changes what the request was pinned on, so it stops as stale (and the act's
-  // own floor check, seen above in the dry run, would refuse it anyway): it is never approved.
-  const out = await approve(asked.requestId, second).catch((e) => e);
-  assert.notEqual(out?.status, 'approved');
+  assert.deepEqual(await approve(asked.requestId, second), {
+    status: 'stale',
+    why: 'facts_changed',
+  });
+  assert.match(await staleWhy(asked.requestId), /"detail":"INVALID_INPUT"/);
   assert.equal(await feeOf(), before);
 });
 
