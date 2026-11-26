@@ -12,6 +12,7 @@
         "SITE_INDEXING",
         "TIPME_BUILD_VERSION",
         "GIT_SHA",
+        "TIPME_EDGE_COMPRESSES",
         "API_INTERNAL_ORIGIN",
         "NEXT_PUBLIC_PREVIEW_GATE",
         "NEXT_PUBLIC_SENTRY_DSN",

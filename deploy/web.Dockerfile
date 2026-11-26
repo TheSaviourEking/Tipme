@@ -40,6 +40,8 @@ RUN for name in TIPME_BUILD_VERSION SITE_URL NEXT_PUBLIC_API_ORIGIN; do \
       eval "value=\${$name}"; \
       [ -n "$value" ] || { echo "Build arg $name is required." >&2; exit 1; }; \
     done
+# The edge compresses (zstd, gzip), so this build's Next does not (apps/web/src/lib/edge-compression.ts).
+ENV TIPME_EDGE_COMPRESSES=on
 RUN pnpm turbo run build --filter=@tipme/web
 
 FROM node:24.22.0-alpine AS web

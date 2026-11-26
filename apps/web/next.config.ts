@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
 import { buildVersion } from './src/lib/build-version';
+import { nextCompresses } from './src/lib/edge-compression';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
 import {
   PUBLIC_PAGE_SOURCE,
@@ -63,9 +64,8 @@ const nextConfig: NextConfig = {
   // workspace packages come along.
   output: 'standalone',
   outputFileTracingRoot: join(__dirname, '../..'),
-  // The edge compresses (zstd, gzip) and leaves streamed pages unbuffered; Next's own gzip would
-  // only be passed through it.
-  compress: false,
+  // Off only in the self-hosted image, whose edge compresses (src/lib/edge-compression.ts).
+  compress: nextCompresses(process.env),
   env: { TIPME_BUILD_VERSION: version },
   // Public profiles live at /@handle (PRD). A folder starting with "@" is a parallel-route slot
   // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy

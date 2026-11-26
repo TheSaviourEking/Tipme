@@ -99,6 +99,18 @@ const server = http.createServer((req, res) => {
     res.writeHead(notReady ? 503 : 200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
     return res.end(JSON.stringify({ version: name }));
   }
+  // As a Next that compresses its own answers (next start): a streamed page, gzipped here, each part
+  // flushed through the encoder as it is written.
+  if (req.url === '/stream-gzipped') {
+    const zlib = require('node:zlib');
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-encoding': 'gzip' });
+    const gz = zlib.createGzip();
+    gz.pipe(res);
+    gz.write('<!doctype html><p>shell</p>' + '<!-- ' + 's'.repeat(700) + ' -->');
+    gz.flush();
+    setTimeout(() => { gz.write('<p>part two</p>'); gz.flush(); }, 400);
+    return setTimeout(() => gz.end('<p>end</p>'), 800);
+  }
   if (req.url === '/stream') {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     // Past the encoder's 512-byte minimum, so compression applies to the stream too.
@@ -374,6 +386,30 @@ for (const host of [STAGING_WEB_HOST, WEB_HOST]) {
       ]);
       assert.equal(encoding, 'gzip');
       // The page's parts are 400 ms apart; a buffering edge would send them together at the end.
+      assert.ok(seen.shell < 300, `the shell came after ${seen.shell} ms`);
+      assert.ok(
+        seen['part two'] - seen.shell > 250,
+        `the parts came together (${JSON.stringify(seen)})`,
+      );
+    },
+  );
+
+  // Whichever side compresses: a page Next already gzipped is passed on encoded once (never
+  // gzip inside gzip), decodes to the page, and still arrives part by part.
+  test(
+    `an answer the app already compressed is not compressed again, and still streams (${host})`,
+    { skip },
+    async () => {
+      const { encoding, seen } = await decodedArrival(host, '/stream-gzipped', [
+        'shell',
+        'part two',
+        'end',
+      ]);
+      assert.equal(encoding, 'gzip');
+      assert.ok(
+        'end' in seen,
+        `the page did not decode to its end (${JSON.stringify(seen)})`,
+      );
       assert.ok(seen.shell < 300, `the shell came after ${seen.shell} ms`);
       assert.ok(
         seen['part two'] - seen.shell > 250,
