@@ -149,6 +149,10 @@ export async function move(
   row.status = to;
 }
 
+/** PENDING, COLLECTING or UNKNOWN: the partner's answer is still awaited. */
+export const isOpenPurchase = (status: string): boolean =>
+  status === 'PENDING' || status === 'COLLECTING' || status === 'UNKNOWN';
+
 export async function lockPurchase(
   tx: Tx,
   purchaseId: string,
@@ -607,11 +611,18 @@ export async function confirmProCheckout(
   profileId: string | null;
   businessId: string | null;
   handleLower: string | null;
+  /**
+   * True only when this call moved the purchase out of PENDING, COLLECTING or UNKNOWN (to PAID,
+   * FAILED, EXPIRED or REVIEW): `pro.changed` goes once per settle (addendum §3.7). False for
+   * `already`, `pending`, and a late credit on a purchase that had already closed.
+   */
+  settled: boolean;
 }> {
   const { verified, now } = input;
   return guarded(() =>
     db.transaction(async (tx) => {
       const row = await lockPurchase(tx, input.purchaseId);
+      const wasOpen = isOpenPurchase(row.status);
       const done = (
         outcome: ProConfirmOutcome,
         planChanged = false,
@@ -622,6 +633,8 @@ export async function confirmProCheckout(
         profileId: row.profileId,
         businessId: row.businessId,
         handleLower,
+        // `move` updates row.status, so this reads where the purchase ended up.
+        settled: wasOpen && !isOpenPurchase(row.status),
       });
       const cause = input.providerEventRowId ? 'provider_event' : 'system';
       const event = input.providerEventRowId
@@ -815,6 +828,8 @@ export async function reconcileProPurchases(
     handleLower: string | null;
     planChanged: boolean;
   }[];
+  /** Each purchase this run moved out of the open states, whatever the outcome (`pro.changed`). */
+  settled: { profileId: string | null }[];
   checked: number;
   failed: number;
 }> {
@@ -845,6 +860,7 @@ export async function reconcileProPurchases(
     handleLower: string | null;
     planChanged: boolean;
   }[] = [];
+  const settled: { profileId: string | null }[] = [];
   let failed = 0;
   for (const row of rows) {
     try {
@@ -888,12 +904,13 @@ export async function reconcileProPurchases(
           handleLower: result.handleLower,
           planChanged: result.planChanged,
         });
+      if (result.settled) settled.push({ profileId: result.profileId });
     } catch {
       // One purchase's trouble never stops the others; it is asked again next run.
       failed += 1;
     }
   }
-  return { paid, checked: rows.length, failed };
+  return { paid, settled, checked: rows.length, failed };
 }
 
 /** A Pro month ended early by a paid refund or a lost dispute (ADR-0015): Pro ends at once. */

@@ -39,3 +39,31 @@ test('the balance read-back runs for every adapter, card checkout or not', async
     { profileId: 'p', handleLower: 'ada', planChanged: true },
   ]);
 });
+
+// Live updates (addendum §3.7): the read-backs' settled purchases sum across adapters, and each
+// one with a page becomes one pro.changed; a business's purchase has no page (ruling L-R15).
+test('the balance read-back sums settled purchases across adapters', async () => {
+  const totals = await readBackProCollections(
+    [
+      ['mock', {}],
+      ['bachs', {}],
+    ],
+    async (name) => ({
+      checked: 1,
+      failed: 0,
+      paid: [],
+      settled: name === 'bachs' ? [{ profileId: 'p2' }] : [{ profileId: 'p1' }],
+    }),
+  );
+  assert.deepEqual(totals.settled, [{ profileId: 'p1' }, { profileId: 'p2' }]);
+});
+
+test('each settled purchase with a page is one pro.changed to that page; none for a business', async () => {
+  const { proSettledSignals } = await import('../dist/job-worker.js');
+  const PAGE = '0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d';
+  assert.deepEqual(
+    proSettledSignals([{ profileId: PAGE }, { profileId: null }]),
+    [{ to: { profile: PAGE }, type: 'pro.changed' }],
+  );
+  assert.deepEqual(proSettledSignals([]), []);
+});

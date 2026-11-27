@@ -126,3 +126,13 @@ test('a tip target needs a uuid and only tip.changed is a tip type', async () =>
   for (const control of LIVE_CONTROL_TYPES)
     assert.equal(LIVE_TIP_TYPES.includes(control), false, control);
 });
+
+test('pro.changed is a recipient type', () => {
+  assert.ok(LIVE_RECIPIENT_TYPES.includes('pro.changed'));
+  assert.deepEqual(
+    parseLiveMessage(
+      JSON.stringify({ to: { profile: PROFILE }, type: 'pro.changed' }),
+    ),
+    { to: { profile: PROFILE }, type: 'pro.changed' },
+  );
+});

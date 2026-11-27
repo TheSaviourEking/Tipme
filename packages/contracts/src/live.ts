@@ -18,6 +18,9 @@ export const LIVE_RECIPIENT_TYPES = [
   'account.changed',
   // TipMe for businesses (plan B9 Task 23): the Business and Work pages re-read.
   'business.changed',
+  // A Pro purchase left PENDING, COLLECTING or UNKNOWN, whatever the outcome (addendum §3.7):
+  // Settings' "confirming" slip re-reads it. profile.changed still says when the plan changed.
+  'pro.changed',
 ] as const;
 
 /** Signals a staff stream may receive. */
@@ -179,6 +182,12 @@ export const opsProvidersChanged: LiveMessage = {
   to: { staff: ['issues.view', 'providers.manage'] },
   type: 'ops.providers.changed',
 };
+
+/** A Pro purchase of this page's settled (paid, failed, expired or sent for review). */
+export const proChanged = (profileId: string): LiveMessage => ({
+  to: { profile: profileId },
+  type: 'pro.changed',
+});
 
 /**
  * A tip moved (paid, failed, still being confirmed, or cancelled as stale): its open receipts
