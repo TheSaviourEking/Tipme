@@ -271,7 +271,16 @@ test('@alone staff set a tip and a withdrawal waiver; a second person approves; 
     );
     await expect(receipt.getByTestId('fee-covered')).toHaveCount(0);
     await expect(me.getByRole('main')).not.toContainText(PROVIDER_NAMES);
-    await shoot(me, 't10-tip-after');
+    await expectAccessible(me);
+    // shoot reloads for each width: wait for the receipt each time, not the skeleton.
+    await shoot(me, 't10-tip-after', async () => {
+      await expect(receipt.getByText('You received')).toBeVisible({
+        timeout: 15_000,
+      });
+      await expect(receipt.locator('.rrow').nth(1).locator('dt')).toHaveText(
+        'TipMe fee (5%, includes processing)',
+      );
+    });
     // The tip it covered still says so: its quote recorded the waiver.
     receipt = await openTip(me, waivedTip);
     await expect(receipt.getByTestId('fee-covered')).toBeVisible();
@@ -282,7 +291,11 @@ test('@alone staff set a tip and a withdrawal waiver; a second person approves; 
     await expect(main.getByTestId('tip-fee-waiver')).toHaveCount(0);
     await expect(main).not.toContainText(/covering the fee/);
     await expectAccessible(me);
-    await shoot(me, 't10-dashboard-after');
+    await shoot(me, 't10-dashboard-after', async () => {
+      await expect(main.getByTestId('balance')).toBeVisible({
+        timeout: 15_000,
+      });
+    });
 
     // The third withdrawal shows its fee again.
     summary = await chooseEverything(me);

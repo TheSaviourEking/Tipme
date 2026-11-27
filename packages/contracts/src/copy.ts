@@ -166,8 +166,9 @@ export const FEE_WAIVER_NOTICE_COPY = {
  * payment partner's name.
  */
 export const FEE_WAIVER_RECIPIENT_COPY = {
+  /** The started notice's words, so the notice and the dashboard never drift apart. */
   tipsCovered: (until: string | null) =>
-    `TipMe is covering the fee on your tips${until === null ? '' : ` ${until}`}`,
+    FEE_WAIVER_NOTICE_COPY.started('tip', until),
   tipCovered: 'TipMe covered the fee on this tip.',
   /** A business's Money section, while TipMe pays its transfer fee; the amount follows. */
   businessTransferFree: 'Transfer fee: Free.',
