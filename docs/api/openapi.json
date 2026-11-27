@@ -21676,6 +21676,48 @@
         "x-tipme-rate-limit": "business_note"
       }
     },
+    "/v1/tips/{tipId}/events": {
+      "get": {
+        "operationId": "TipLive.events",
+        "tags": [
+          "TipLive"
+        ],
+        "parameters": [
+          {
+            "name": "tipId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A text/event-stream for one tip's receipt, with the receipt's status token as `Authorization: Bearer <token>`: `retry: 5000`, then `data: {\"type\":\"ready\"}`, then `data: {\"type\":\"tip.changed\"}` whenever the tip moves, and a heartbeat (a `: hb` comment and an `hb` event) every 20 s. On a signal, re-read `GET /v1/tips/{tipId}/status`. The stream ends after 15 minutes, or once the tip is final. 204 while live updates are off, and for a tip that is already paid, declined or cancelled. 404, as the status route, for a missing or wrong token or an unknown tip. 429 past 10 connects per tip in 15 minutes, or past 3 open streams for one tip (LIVE_LIMIT); 503 LIVE_UNAVAILABLE (Retry-After: 30) when this copy is full or stopping.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "An error with a stable code; never echoes request values.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-tipme-access": "status-token",
+        "x-tipme-rate-limit": "live_connect"
+      }
+    },
     "/v1/tips/{tipId}/recognition/stop": {
       "post": {
         "operationId": "Status.stopRecognition",

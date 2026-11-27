@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
+import { ReceiptCheckService } from '../../apps/api/dist/checkout/receipt-check.service.js';
 import { StatusController } from '../../apps/api/dist/checkout/status.controller.js';
 import { createStatusToken } from '../../apps/api/dist/checkout/status-token.js';
 import {
@@ -71,7 +72,7 @@ function receipt(db, tipId, bachs) {
   const controller = new StatusController(
     { STATUS_TOKEN_SECRET: SECRET },
     { db },
-    bachs,
+    new ReceiptCheckService({ db }, bachs),
   );
   return () =>
     controller
@@ -140,7 +141,7 @@ async function viewOf(t, bachs) {
   const controller = new StatusController(
     { STATUS_TOKEN_SECRET: SECRET },
     { db },
-    bachs,
+    new ReceiptCheckService({ db }, bachs),
   );
   return (
     await controller.status(

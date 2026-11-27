@@ -121,6 +121,7 @@ import { startOutboxRelay } from './outbox-relay-loop.js';
 import { createWorkerLivePublisher } from './live-publisher.js';
 import {
   announcementSignals,
+  expiredTipSignals,
   jobSignalsFor,
   reconcileIssueSignals,
   requestGate,
@@ -908,6 +909,8 @@ export async function startJobWorker(
               provider: providerForExpiry,
               now,
             });
+            // Each cancelled tip's open receipt re-reads (after the commit; not awaited).
+            void publishLive(expiredTipSignals(expiry.expiredTipIds));
             // Then the admin inbox: open issues for what still needs a person, close cleared ones.
             const detected = await runIssueDetectors(database.db, now);
             const cleared = await autoResolveIssues(database.db, now);

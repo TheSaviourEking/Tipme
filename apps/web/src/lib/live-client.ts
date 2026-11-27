@@ -2,6 +2,7 @@ import {
   LIVE_DRAIN_RETRY_MS,
   LIVE_RECIPIENT_TYPES,
   LIVE_STAFF_TYPES,
+  LIVE_TIP_TYPES,
   type LiveEventType,
 } from '@tipme/contracts';
 
@@ -94,6 +95,8 @@ const CLOSED = 2;
 const KNOWN: ReadonlySet<string> = new Set([
   ...LIVE_RECIPIENT_TYPES,
   ...LIVE_STAFF_TYPES,
+  // A receipt's stream (tip-live.ts): its one signal.
+  ...LIVE_TIP_TYPES,
 ]);
 
 /**

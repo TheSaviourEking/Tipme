@@ -47,6 +47,7 @@ function router(overrides = {}) {
   const clock = fakeClock();
   const hub = createLiveRouter({
     maxPerUser: 8,
+    maxPerTip: 3,
     maxStreams: 2000,
     coalesceMs: 250,
     random: seeded(),
@@ -63,6 +64,7 @@ function sink({
   userId = A_USER,
   profileId = A_PROFILE,
   permissions = null,
+  tipId = null,
   recheck,
 } = {}) {
   const s = {
@@ -71,6 +73,7 @@ function sink({
     userId,
     profileId,
     permissions,
+    tipId,
     writes: [],
     closed: null,
     write(frame) {
@@ -198,7 +201,7 @@ test('sessions.changed is never forwarded', async () => {
   assert.equal(kept.closed, null);
   assert.deepEqual(other.writes, []);
   assert.equal(other.closed, null);
-  assert.deepEqual(hub.counts(), { me: 2, ops: 0 });
+  assert.deepEqual(hub.counts(), { me: 2, ops: 0, tip: 0 });
 });
 
 test('a recheck that throws counts as gone', async () => {
@@ -351,7 +354,7 @@ test('drain writes a retry between 1000 and 10000 to every stream and closes it'
   assert.ok(retries.size > 1, 'retries must differ across streams');
   assert.equal(hub.draining, true);
   assert.deepEqual(hub.register(sink()), { ok: false, reason: 'draining' });
-  assert.deepEqual(hub.counts(), { me: 0, ops: 0 });
+  assert.deepEqual(hub.counts(), { me: 0, ops: 0, tip: 0 });
   assert.equal(clock.pending, 0, 'drain clears coalescing timers');
 });
 
@@ -378,7 +381,7 @@ test('unregister removes a stream and clears its timer', () => {
   hub.dispatch({ to: { profile: A_PROFILE }, type: 'tips.changed' });
   hub.unregister(a.id);
   hub.unregister(a.id);
-  assert.deepEqual(hub.counts(), { me: 0, ops: 0 });
+  assert.deepEqual(hub.counts(), { me: 0, ops: 0, tip: 0 });
   assert.equal(clock.pending, 0);
   hub.dispatch({ to: { profile: A_PROFILE }, type: 'moments.changed' });
   assert.equal(a.writes.length, 1);
@@ -455,5 +458,65 @@ test('staff.changed closes a stream whose permissions changed', async () => {
   await tick();
   assert.deepEqual(changed.writes, ['data: {"type":"session.ended"}\n\n']);
   assert.equal(changed.closed, 'session_ended');
-  assert.deepEqual(hub.counts(), { me: 0, ops: 0 });
+  assert.deepEqual(hub.counts(), { me: 0, ops: 0, tip: 0 });
+});
+
+const TIP_A = '66666666-6666-4666-8666-666666666666';
+const TIP_B = '77777777-7777-4777-8777-777777777777';
+/** A receipt's stream, as the tip route registers it. */
+const tipSink = (tipId) =>
+  sink({ kind: 'tip', tipId, userId: `tip:${tipId}`, profileId: null });
+
+test('a tip signal reaches only that tip’s streams', () => {
+  const { hub } = router();
+  const a = tipSink(TIP_A);
+  const b = tipSink(TIP_B);
+  // The recipient of tip A, and a staff member: neither is the receipt.
+  const recipient = sink();
+  const ops = sink({
+    kind: 'ops',
+    profileId: null,
+    permissions: new Set(['issues.view']),
+  });
+  for (const s of [a, b, recipient, ops]) hub.register(s);
+  hub.dispatch({ to: { tip: TIP_A }, type: 'tip.changed' });
+  assert.deepEqual(a.writes, ['data: {"type":"tip.changed"}\n\n']);
+  assert.deepEqual(b.writes, []);
+  assert.deepEqual(recipient.writes, []);
+  assert.deepEqual(ops.writes, []);
+});
+
+test('a broadcast never reaches a tip stream', () => {
+  const { hub } = router();
+  const a = tipSink(TIP_A);
+  hub.register(a);
+  hub.dispatch({ to: { all: true }, type: 'withdrawals.changed' });
+  hub.dispatch({ to: { user: `tip:${TIP_A}` }, type: 'profile.changed' });
+  hub.dispatch({ to: { profile: A_PROFILE }, type: 'tips.changed' });
+  hub.dispatch({ to: { staff: 'any' }, type: 'ops.approvals.changed' });
+  assert.deepEqual(a.writes, []);
+});
+
+test('a fourth stream for one tip is refused with limit_user', () => {
+  const { hub } = router({ maxPerTip: 3 });
+  for (let i = 0; i < 3; i += 1)
+    assert.deepEqual(hub.register(tipSink(TIP_A)), { ok: true });
+  assert.deepEqual(hub.register(tipSink(TIP_A)), {
+    ok: false,
+    reason: 'limit_user',
+  });
+  // Another tip has its own three.
+  assert.deepEqual(hub.register(tipSink(TIP_B)), { ok: true });
+  // Tip streams count towards the process limit and are counted apart.
+  assert.deepEqual(hub.counts(), { me: 0, ops: 0, tip: 4 });
+});
+
+test('tip streams count towards the process limit', () => {
+  const { hub } = router({ maxStreams: 2, maxPerTip: 3 });
+  hub.register(sink());
+  hub.register(tipSink(TIP_A));
+  assert.deepEqual(hub.register(tipSink(TIP_B)), {
+    ok: false,
+    reason: 'limit_process',
+  });
 });

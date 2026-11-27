@@ -15,6 +15,7 @@ import {
   createLiveRouter,
   type LiveRouter,
   type LiveSink,
+  type LiveStreamCounts,
   type RegisterResult,
 } from './live-router.js';
 import {
@@ -24,6 +25,8 @@ import {
 } from './live-subscriber.js';
 
 const MAX_STREAMS_PER_USER = 8;
+/** Open receipt streams per tip on one copy (addendum §3.6): a supporter's few tabs. */
+const MAX_STREAMS_PER_TIP = 3;
 const COALESCE_MS = 250;
 
 export interface LiveHub {
@@ -36,7 +39,7 @@ export interface LiveHub {
   readonly draining: boolean;
   readonly subscriberUp: boolean;
   readonly invalidCount: number;
-  counts(): { me: number; ops: number };
+  counts(): LiveStreamCounts;
 }
 
 /** The router plus this process's one subscriber. Framework-free, so it is unit-tested directly. */
@@ -51,6 +54,7 @@ export function createLiveHub(o: {
 }): LiveHub {
   const router: LiveRouter = createLiveRouter({
     maxPerUser: MAX_STREAMS_PER_USER,
+    maxPerTip: MAX_STREAMS_PER_TIP,
     maxStreams: o.maxStreams,
     coalesceMs: COALESCE_MS,
     random: Math.random,
@@ -117,7 +121,7 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
   ) {
     let hub: LiveHub | null = null;
     this.metrics = createLiveMetrics({
-      counts: () => hub?.counts() ?? { me: 0, ops: 0 },
+      counts: () => hub?.counts() ?? { me: 0, ops: 0, tip: 0 },
       subscriberUp: () => hub?.subscriberUp ?? false,
     });
     hub = createLiveHub({
@@ -164,7 +168,7 @@ export class LiveHubService implements OnModuleInit, OnApplicationShutdown {
     return this.hub.subscriberUp;
   }
 
-  counts(): { me: number; ops: number } {
+  counts(): LiveStreamCounts {
     return this.hub.counts();
   }
 }

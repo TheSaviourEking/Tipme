@@ -38,6 +38,12 @@ export const LIVE_STAFF_PERMISSIONS = [
   'providers.manage',
 ] as const;
 
+/**
+ * The one signal a tip's receipt stream may receive (addendum §3.6): "this tip changed", nothing
+ * more. It goes to a `{ tip }` target only, and a `{ tip }` target carries nothing else.
+ */
+export const LIVE_TIP_TYPES = ['tip.changed'] as const;
+
 /** Handled by the hub, never forwarded. */
 export const LIVE_SERVER_TYPES = [
   'sessions.changed',
@@ -56,8 +62,9 @@ export const LIVE_CONTROL_TYPES = [
 
 export type LiveRecipientType = (typeof LIVE_RECIPIENT_TYPES)[number];
 export type LiveStaffType = (typeof LIVE_STAFF_TYPES)[number];
+export type LiveTipType = (typeof LIVE_TIP_TYPES)[number];
 export type LiveServerType = (typeof LIVE_SERVER_TYPES)[number];
-export type LiveEventType = LiveRecipientType | LiveStaffType;
+export type LiveEventType = LiveRecipientType | LiveStaffType | LiveTipType;
 export type LiveControlType = (typeof LIVE_CONTROL_TYPES)[number];
 export type LiveStaffPermission = (typeof LIVE_STAFF_PERMISSIONS)[number];
 
@@ -66,7 +73,9 @@ export type LiveTarget =
   | { user: string }
   | { profile: string }
   | { all: true }
-  | { staff: 'any' | LiveStaffPermission | readonly LiveStaffPermission[] };
+  | { staff: 'any' | LiveStaffPermission | readonly LiveStaffPermission[] }
+  /** One tip's receipt streams, by the tip id its status token was verified for. */
+  | { tip: string };
 
 export interface LiveMessage {
   to: LiveTarget;
@@ -97,16 +106,25 @@ const liveTargetSchema = z.union([
     .strict(),
 ]);
 
-export const liveMessageSchema: z.ZodType<LiveMessage> = z
-  .object({
-    to: liveTargetSchema,
-    type: z.enum([
-      ...LIVE_RECIPIENT_TYPES,
-      ...LIVE_STAFF_TYPES,
-      ...LIVE_SERVER_TYPES,
-    ]),
-  })
-  .strict();
+const tipTargetSchema = z.object({ tip: z.string().uuid() }).strict();
+
+/**
+ * A tip target pairs with `tip.changed` only, and `tip.changed` with a tip target only (ruling
+ * L-R4): the public receipt stream must not rest on every publisher being correct.
+ */
+export const liveMessageSchema: z.ZodType<LiveMessage> = z.union([
+  z
+    .object({
+      to: liveTargetSchema,
+      type: z.enum([
+        ...LIVE_RECIPIENT_TYPES,
+        ...LIVE_STAFF_TYPES,
+        ...LIVE_SERVER_TYPES,
+      ]),
+    })
+    .strict(),
+  z.object({ to: tipTargetSchema, type: z.enum(LIVE_TIP_TYPES) }).strict(),
+]);
 
 /**
  * The one signal for "this person's sessions changed". Publish it after anything that ends sessions
@@ -161,6 +179,15 @@ export const opsProvidersChanged: LiveMessage = {
   to: { staff: ['issues.view', 'providers.manage'] },
   type: 'ops.providers.changed',
 };
+
+/**
+ * A tip moved (paid, failed, still being confirmed, or cancelled as stale): its open receipts
+ * re-read their status. Published by the worker's relay and expiry and by the API's webhooks.
+ */
+export const tipChanged = (tipId: string): LiveMessage => ({
+  to: { tip: tipId },
+  type: 'tip.changed',
+});
 
 /**
  * How long a browser waits before reconnecting after a copy drains its streams (a deploy). The hub

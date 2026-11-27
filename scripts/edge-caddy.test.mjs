@@ -66,7 +66,7 @@ http.createServer((req, res) => {
   // The live stream: event-stream headers, a heartbeat every 500 ms, and it never ends. No
   // Cache-Control: no-transform here (the real API sends it, and Caddy honours it), so this tests
   // the Caddyfile's own path matcher.
-  if (req.url === '/v1/me/events') {
+  if (req.url === '/v1/me/events' || /^\\/v1\\/tips\\/[^/]+\\/(events|status)$/.test(req.url)) {
     res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
     // A first frame past the encoder's 512-byte minimum: without the matcher it would be compressed.
     res.write(': ' + 'p'.repeat(600) + '\\n\\n');
@@ -712,6 +712,37 @@ for (const host of [STAGING_HOST, PRODUCTION_HOST]) {
         chunks[1].ms - chunks[0].ms < 1000,
         `the heartbeat came ${chunks[1].ms - chunks[0].ms} ms after the first chunk`,
       );
+    },
+  );
+
+  test(
+    `a receipt's stream is not compressed and streams (${host})`,
+    { skip },
+    async () => {
+      const path = '/v1/tips/0b5e0d43-4b1f-4b8e-9d3f-4c8f3f3c6a11/events';
+      const { status, headers, chunks } = await firstChunks(
+        host,
+        path,
+        { 'Accept-Encoding': 'gzip, zstd' },
+        2,
+      );
+      assert.equal(status, 200);
+      assert.equal(headers['content-encoding'], undefined);
+      assert.match(chunks[0].text, /^: p+/);
+      assert.match(chunks[1].text, /^: hb/);
+      assert.ok(chunks[0].ms < 2000, `first chunk after ${chunks[0].ms} ms`);
+      assert.ok(
+        chunks[1].ms - chunks[0].ms < 1000,
+        `the heartbeat came ${chunks[1].ms - chunks[0].ms} ms after the first chunk`,
+      );
+      // The matcher is one path segment wide: the same stand-in stream under the tip's other
+      // route is compressed, so the exemption is no wider than the events path.
+      const other = await firstChunk(
+        host,
+        '/v1/tips/0b5e0d43-4b1f-4b8e-9d3f-4c8f3f3c6a11/status',
+        { 'Accept-Encoding': 'gzip, zstd' },
+      );
+      assert.match(other.headers['content-encoding'] ?? '', /^(zstd|gzip)$/);
     },
   );
 

@@ -39,6 +39,7 @@ type RateLimitedRoute =
   | 'bank_read'
   | 'live_connect'
   | 'live_connect_user'
+  | 'tip_live_connect'
   | 'business_public'
   | 'business_note'
   | 'business_apply'
@@ -51,6 +52,10 @@ const BANK_RESOLVES_PER_USER_PER_DAY = 10;
 const DAY_MS = 86_400_000;
 // Live stream connects per signed-in person per minute: a tab reconnecting with backoff uses few.
 const LIVE_CONNECTS_PER_USER_PER_MIN = 30;
+// A receipt's stream connects per tip (addendum §3.6): a supporter's tabs reconnecting use few in
+// 15 minutes; past them the receipt polls as it does with live updates off.
+const TIP_LIVE_CONNECTS_PER_WINDOW = 10;
+const TIP_LIVE_CONNECT_WINDOW_MS = 900_000;
 // Applying for a business (PR B1), per signed-in person: each one opens an issue for TipMe staff.
 // A real owner applies once or twice; a script filling the staff inbox stops here.
 const BUSINESS_APPLICATIONS_PER_USER_PER_HOUR = 10;
@@ -123,6 +128,8 @@ export class RateLimitGuard implements CanActivate {
         limit: LIVE_CONNECTS_PER_USER_PER_MIN,
         windowMs: 60_000,
       });
+    // Counted by the receipt's stream route itself, per tip and only once its token checked out.
+    if (route === 'tip_live_connect') return true;
     if (route === 'business_apply')
       return this.count(route, `user:${userId}`, {
         limit: BUSINESS_APPLICATIONS_PER_USER_PER_HOUR,
@@ -280,6 +287,17 @@ export class RateLimitGuard implements CanActivate {
           }
         : { limit: LIVE_CONNECTS_PER_USER_PER_MIN, windowMs: 60_000 },
     );
+  }
+
+  /**
+   * A receipt's stream connect, counted per tip after its status token checked out (so only a
+   * token holder can use up a tip's allowance). Fails open, as count() does (threat model X5).
+   */
+  async consumeForTip(tipId: string): Promise<void> {
+    await this.count('tip_live_connect', `tip:${tipId}`, {
+      limit: TIP_LIVE_CONNECTS_PER_WINDOW,
+      windowMs: TIP_LIVE_CONNECT_WINDOW_MS,
+    });
   }
 
   private async count(

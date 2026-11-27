@@ -13,6 +13,7 @@ import {
   LIVE_SIGNAL_MAPPED_EVENTS,
   announcementSignals,
   businessTipSignals,
+  expiredTipSignals,
   jobSignalsFor,
   liveSignalFor,
   reconcileIssueSignals,
@@ -26,9 +27,38 @@ const TIP = '55555555-5555-4555-8555-555555555555';
 
 test('tip.succeeded and tip.failed map to tips.changed for their profile', () => {
   for (const type of ['tip.succeeded', 'tip.failed'])
+    assert.deepEqual(
+      liveSignalFor(type, { tipId: TIP, profileId: PROFILE })[0],
+      { to: { profile: PROFILE }, type: 'tips.changed' },
+    );
+});
+
+test('a paid or failed tip also reaches its receipt', () => {
+  for (const type of ['tip.succeeded', 'tip.failed']) {
     assert.deepEqual(liveSignalFor(type, { tipId: TIP, profileId: PROFILE }), [
       { to: { profile: PROFILE }, type: 'tips.changed' },
+      { to: { tip: TIP }, type: 'tip.changed' },
     ]);
+    // Without a valid tip id, only the recipient's signal; without a profile, only the receipt's.
+    assert.deepEqual(
+      liveSignalFor(type, { tipId: 'nope', profileId: PROFILE }),
+      [{ to: { profile: PROFILE }, type: 'tips.changed' }],
+    );
+    assert.deepEqual(liveSignalFor(type, { tipId: TIP }), [
+      { to: { tip: TIP }, type: 'tip.changed' },
+    ]);
+  }
+});
+
+test('stale tips the expiry cancelled each signal their receipt', () => {
+  const other = '88888888-8888-4888-8888-888888888888';
+  assert.deepEqual(expiredTipSignals([TIP, other, 'junk']), [
+    { to: { tip: TIP }, type: 'tip.changed' },
+    { to: { tip: other }, type: 'tip.changed' },
+  ]);
+  assert.deepEqual(expiredTipSignals([]), []);
+  for (const message of expiredTipSignals([TIP]))
+    assert.notEqual(parseLiveMessage(JSON.stringify(message)), null);
 });
 
 test('every outbox event type the database writes has an explicit mapping, even if []', () => {

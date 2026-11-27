@@ -93,3 +93,36 @@ test('every staff permission a target names parses as one permission', async () 
       staff,
     );
 });
+
+test('a tip target needs a uuid and only tip.changed is a tip type', async () => {
+  const { LIVE_TIP_TYPES, tipChanged } = await import('../dist/index.js');
+  const TIP = '9b2c3d4e-5f60-4a7b-8c9d-0e1f2a3b4c5d';
+  assert.deepEqual([...LIVE_TIP_TYPES], ['tip.changed']);
+  const line = { to: { tip: TIP }, type: 'tip.changed' };
+  assert.deepEqual(parseLiveMessage(JSON.stringify(line)), line);
+  assert.deepEqual(tipChanged(TIP), line);
+  const refused = [
+    // A tip target needs a uuid.
+    { to: { tip: 'not-a-uuid' }, type: 'tip.changed' },
+    { to: { tip: TIP, user: USER }, type: 'tip.changed' },
+    // A tip target carries tip.changed and nothing else (ruling L-R4): a publisher bug must
+    // never put a recipient, staff or server type on a public stream.
+    { to: { tip: TIP }, type: 'tips.changed' },
+    { to: { tip: TIP }, type: 'ops.issues.changed' },
+    { to: { tip: TIP }, type: 'sessions.changed' },
+    // And tip.changed goes to a tip target only.
+    { to: { user: USER }, type: 'tip.changed' },
+    { to: { profile: PROFILE }, type: 'tip.changed' },
+    { to: { all: true }, type: 'tip.changed' },
+    { to: { staff: 'any' }, type: 'tip.changed' },
+  ];
+  for (const message of refused)
+    assert.equal(
+      parseLiveMessage(JSON.stringify(message)),
+      null,
+      JSON.stringify(message),
+    );
+  // Disjoint from the control types, like every event type.
+  for (const control of LIVE_CONTROL_TYPES)
+    assert.equal(LIVE_TIP_TYPES.includes(control), false, control);
+});

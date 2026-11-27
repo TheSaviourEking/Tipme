@@ -1,4 +1,4 @@
-import { LIVE_PATHS } from '@tipme/observability';
+import { isLivePath } from '@tipme/observability';
 import type { NextFunction, Request, Response } from 'express';
 import type { LiveMetrics } from './live-metrics.js';
 
@@ -14,7 +14,7 @@ export function liveGate(o: {
   metrics: Pick<LiveMetrics, 'connect'>;
 }) {
   return (req: Request, res: Response, next: NextFunction): void => {
-    if (req.method !== 'GET' || !LIVE_PATHS.has(req.path)) return next();
+    if (req.method !== 'GET' || !isLivePath(req.path)) return next();
     if (!o.enabled) {
       o.metrics.connect('disabled');
       res.status(204).end();
@@ -22,7 +22,8 @@ export function liveGate(o: {
     }
     res.once('finish', () => {
       if (res.locals['liveCounted']) return;
-      // The staff stream refuses with OpsGuard's 404 where the recipient one answers 401.
+      // The staff stream refuses with OpsGuard's 404, and a receipt's with the status route's
+      // 404, where the recipient one answers 401.
       if (res.statusCode === 401 || res.statusCode === 404)
         o.metrics.connect('unauthenticated');
       else if (res.statusCode === 429) o.metrics.connect('rate_limited');

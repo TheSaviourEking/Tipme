@@ -78,3 +78,31 @@ test('with the flag on, the staff stream’s 404 (no grant) counts as unauthenti
   hidden.res.emit('finish');
   assert.deepEqual(m.counted, ['unauthenticated']);
 });
+
+test('the tip events path is a live path and answers 204 when off', async () => {
+  const { isLivePath } = await import('@tipme/observability');
+  const TIP = '66666666-6666-4666-8666-666666666666';
+  assert.equal(isLivePath(`/v1/tips/${TIP}/events`), true);
+  assert.equal(isLivePath('/v1/me/events'), true);
+  assert.equal(isLivePath('/v1/ops/events'), true);
+  for (const other of [
+    `/v1/tips/${TIP}/status`,
+    `/v1/tips/${TIP}/events/more`,
+    '/v1/tips//events',
+    `/v1/tips/${TIP}/x/events`,
+  ])
+    assert.equal(isLivePath(other), false, other);
+  const m = metrics();
+  const off = liveGate({ enabled: false, metrics: m });
+  const { res, passed } = call(off, { path: `/v1/tips/${TIP}/events` });
+  assert.equal(passed, false);
+  assert.equal(res.statusCode, 204);
+  assert.deepEqual(m.counted, ['disabled']);
+  // On, it passes to the route; a wrong token's 404 counts as unauthenticated.
+  const on = liveGate({ enabled: true, metrics: m });
+  const hidden = call(on, { path: `/v1/tips/${TIP}/events` });
+  assert.equal(hidden.passed, true);
+  hidden.res.statusCode = 404;
+  hidden.res.emit('finish');
+  assert.deepEqual(m.counted, ['disabled', 'unauthenticated']);
+});

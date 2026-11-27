@@ -11,6 +11,20 @@ import type {
 const API_ORIGIN =
   process.env.NEXT_PUBLIC_API_ORIGIN ?? 'http://localhost:4000';
 
+/** A path on the API, for the checkout and receipt routes. */
+export const checkoutApiUrl = (path: string): string => `${API_ORIGIN}${path}`;
+
+/**
+ * The checkout and receipt routes' credentials: none (they are never credentialed), except the
+ * preview cookie on staging and previews, which every call must carry (PR-010).
+ */
+export const checkoutCredentials = (): RequestCredentials =>
+  process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
+    ? 'include'
+    : API_ORIGIN === ''
+      ? 'same-origin'
+      : 'omit';
+
 /** `NETWORK` means the API could not be reached; the request can be retried as is. */
 export type ApiFailure = { ok: false; status: number; code: string };
 export type ApiResult<T> = { ok: true; data: T } | ApiFailure;
@@ -23,12 +37,7 @@ async function call<T>(path: string, init: RequestInit): Promise<ApiResult<T>> {
       // Statuses and prices are always fresh; nothing here may be cached.
       cache: 'no-store',
       // Staging/preview: every call carries the preview cookie (PR-010).
-      credentials:
-        process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
-          ? 'include'
-          : API_ORIGIN === ''
-            ? 'same-origin'
-            : 'omit',
+      credentials: checkoutCredentials(),
     });
   } catch {
     return { ok: false, status: 0, code: 'NETWORK' };
@@ -100,12 +109,7 @@ export async function stopRecognition(
         method: 'POST',
         headers: { authorization: `Bearer ${token}` },
         cache: 'no-store',
-        credentials:
-          process.env.NEXT_PUBLIC_PREVIEW_GATE === 'on'
-            ? 'include'
-            : API_ORIGIN === ''
-              ? 'same-origin'
-              : 'omit',
+        credentials: checkoutCredentials(),
       },
     );
   } catch {

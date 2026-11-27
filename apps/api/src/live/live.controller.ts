@@ -63,7 +63,17 @@ export function clientGone(res: Response): boolean {
   return res.destroyed || res.writableEnded;
 }
 
-/** Shared by /v1/me/events and /v1/ops/events. */
+/** An open stream, for a route that ends it itself (the receipt's, on a final tip). */
+export interface OpenStream {
+  /** Writes an already-framed SSE block while the stream is open. */
+  write(frame: string): void;
+  close(reason: LiveCloseReason): void;
+}
+
+/**
+ * Shared by /v1/me/events, /v1/ops/events and /v1/tips/:tipId/events. Returns the stream's handle,
+ * or null when the client left first; throws the refusal (429, 503) when the hub has no place.
+ */
 export function openStream(o: {
   req: Request;
   res: Response;
@@ -76,7 +86,9 @@ export function openStream(o: {
   lifetimeMs?: number;
   /** 20 s. */
   heartbeatMs?: number;
-}): void {
+  /** After every close, whatever its reason (client, lifetime, drain, error, the route's own). */
+  onClose?: (reason: LiveCloseReason) => void;
+}): OpenStream | null {
   const { req, res, hub } = o;
   // Counted here, so the gate in front (live-gate.middleware.ts) doesn't count it again.
   const metrics = {
@@ -90,7 +102,7 @@ export function openStream(o: {
   // fired, and writes to it raise nothing: registering would hold a slot for half an hour.
   if (clientGone(res)) {
     metrics.connect('client_gone');
-    return;
+    return null;
   }
   let open = true;
   // Started only once the stream is registered; cleared by whichever close comes first.
@@ -105,6 +117,7 @@ export function openStream(o: {
     hub.unregister(id);
     metrics.close(reason);
     res.end();
+    o.onClose?.(reason);
   };
   const sink: LiveSink = {
     ...o.sink,
@@ -162,10 +175,14 @@ export function openStream(o: {
   // The response's close fires however the connection ends (the request's may have passed).
   res.on('close', () => finish('client'));
   res.on('error', () => finish('error'));
+  return { write: sink.write, close: finish };
 }
 
 /** The hub's metrics, marking the response as counted so the gate doesn't count it again. */
-function countedMetrics(hub: LiveHubService, res: Response): LiveMetrics {
+export function countedMetrics(
+  hub: LiveHubService,
+  res: Response,
+): LiveMetrics {
   return {
     ...hub.metrics,
     connect: (outcome: Parameters<LiveMetrics['connect']>[0]) => {
@@ -258,6 +275,7 @@ export class LiveController {
         userId,
         profileId,
         permissions: null,
+        tipId: null,
         recheck: async () => {
           const session = await resolveSession(db, token, new Date());
           return session?.userId === userId;
@@ -336,6 +354,7 @@ export class OpsLiveController {
         userId,
         profileId: null,
         permissions,
+        tipId: null,
         // Gone, someone else's, or a different permission set: closed, so the reconnect reads the
         // new set. A read, never activity.
         recheck: async () => {

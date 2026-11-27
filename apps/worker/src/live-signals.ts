@@ -10,6 +10,7 @@ import {
   opsAnnouncementsChanged,
   opsProvidersChanged,
   staffChanged,
+  tipChanged,
   type LiveMessage,
 } from '@tipme/contracts';
 
@@ -30,6 +31,12 @@ function profileOf(payload: unknown): string | null {
   return typeof id === 'string' && UUID.test(id) ? id : null;
 }
 
+function tipOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const id = (payload as { tipId?: unknown }).tipId;
+  return typeof id === 'string' && UUID.test(id) ? id : null;
+}
+
 type Mapping = (payload: unknown) => LiveMessage[];
 const none: Mapping = () => [];
 const toAll =
@@ -45,14 +52,24 @@ const toProfile =
     return profile ? [{ to: { profile }, type }] : [];
   };
 
+/** A tip that became final: its page's tips, and its own receipt streams. */
+const toProfileAndReceipt: Mapping = (payload) => {
+  const tip = tipOf(payload);
+  return [
+    ...toProfile('tips.changed')(payload),
+    ...(tip ? [tipChanged(tip)] : []),
+  ];
+};
+
 /**
  * Every event the relay puts on the queue, each mapped explicitly, so a new event type fails the
  * unit test until someone decides its signal.
  */
 const OUTBOX_SIGNALS: Readonly<Record<string, Mapping>> = {
-  // Written with the tip, attempt and ledger in one transaction (provider-events.ts).
-  'tip.succeeded': toProfile('tips.changed'),
-  'tip.failed': toProfile('tips.changed'),
+  // Written with the tip, attempt and ledger in one transaction (provider-events.ts): the
+  // recipient's dashboards, and the supporter's open receipt (addendum §3.6).
+  'tip.succeeded': toProfileAndReceipt,
+  'tip.failed': toProfileAndReceipt,
   // Written with the payout's outcome (payouts.ts): its status, and the balance when it failed.
   'payout.paid': toProfile('withdrawals.changed'),
   'payout.failed': toProfile('withdrawals.changed'),
@@ -228,6 +245,14 @@ export async function businessTipSignals(
   } catch {
     return [];
   }
+}
+
+/**
+ * After the expiry pass: each tip it cancelled as never paid tells its open receipt (addendum
+ * §3.6). Ids that are not uuids are dropped.
+ */
+export function expiredTipSignals(tipIds: readonly string[]): LiveMessage[] {
+  return tipIds.filter((id) => UUID.test(id)).map((id) => tipChanged(id));
 }
 
 /**

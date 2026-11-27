@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import type { MockWebhook } from '@tipme/contracts';
+import { tipChanged, type MockWebhook } from '@tipme/contracts';
 import {
   bachsAccountReadiness,
   disputeAsReversal,
@@ -195,19 +195,21 @@ export class WebhookService {
   }
 
   /**
-   * After a provider event moved a tip to "still being confirmed": its page's dashboards re-read.
-   * Called once recordProviderEvent has resolved, so outside its transaction. A paid or failed tip
-   * is signalled by the outbox relay instead.
+   * After a provider event moved a tip to "still being confirmed": its page's dashboards and its
+   * open receipt re-read. Called once recordProviderEvent has resolved, so outside its
+   * transaction. A paid or failed tip is signalled by the outbox relay instead.
    */
   private signalPending(result: EventResult): void {
     if (
-      result.outcome === 'applied' &&
-      result.tipStatus === 'PENDING_VERIFICATION'
+      result.outcome !== 'applied' ||
+      result.tipStatus !== 'PENDING_VERIFICATION'
     )
-      void this.publishLive({
-        to: { profile: result.profileId },
-        type: 'tips.changed',
-      });
+      return;
+    void this.publishLive({
+      to: { profile: result.profileId },
+      type: 'tips.changed',
+    });
+    void this.publishLive(tipChanged(result.tipId));
   }
 
   async apply(event: MockWebhook): Promise<string> {

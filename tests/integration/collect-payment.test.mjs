@@ -751,7 +751,12 @@ test('a collect tip found paid when its quote expires is booked as held money, w
     provider: bachs,
     now: new Date(),
   });
-  assert.deepEqual(result, { expired: 0, paid: 1, errors: 0 });
+  assert.deepEqual(result, {
+    expired: 0,
+    paid: 1,
+    errors: 0,
+    expiredTipIds: [],
+  });
   // Like reconciliation: TipMe's own checkout has no platform fee to expect.
   assert.deepEqual(bachs.calls, [[tip.reference, undefined]]);
   assert.equal(await tipStatusOf(tip.tipId), 'SUCCEEDED');

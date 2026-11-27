@@ -212,6 +212,14 @@ export const apiConfigSchema = z
     LIVE_MAX_STREAMS: z.coerce.number().int().min(1).default(2000),
     // The stream's heartbeat comment. Tests shorten it; production keeps 20 s.
     LIVE_HEARTBEAT_MS: z.coerce.number().int().min(1000).default(20000),
+    // How long one receipt stream stays open (addendum §3.6). Tests shorten it; production keeps
+    // 15 minutes, the receipt's own give-up time.
+    LIVE_TIP_LIFETIME_MS: z.coerce
+      .number()
+      .int()
+      .min(1000)
+      .max(900_000)
+      .default(900_000),
     // On SIGTERM, how long readiness answers 503 before the server closes, so the load balancer
     // (health checks every 2 s) stops routing here first. Keep above two check intervals.
     SHUTDOWN_DRAIN_MS: z.coerce.number().int().min(0).max(30000).default(5000),
