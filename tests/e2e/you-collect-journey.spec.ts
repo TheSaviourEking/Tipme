@@ -250,8 +250,9 @@ test('a new recipient takes a tip before verifying and withdraws after adding ba
     await expect(page.getByTestId('withdraw-available')).toHaveText('₦0');
     await expect(page.getByText('Withdrawal requested')).toBeVisible();
     const history = page.getByRole('region', { name: 'Your withdrawals' });
+    // What is sent: the ₦1,900 less the ₦50 transfer fee (owner, 25 Nov 2026).
     await expect(
-      history.getByRole('listitem').filter({ hasText: '₦1,900' }),
+      history.getByRole('listitem').filter({ hasText: '₦1,850' }),
     ).toContainText(/Requested|On its way|Paid/);
     expect(await fitsViewport(page)).toBe(true);
     await expect(page.locator('body')).not.toContainText(/bachs/i);

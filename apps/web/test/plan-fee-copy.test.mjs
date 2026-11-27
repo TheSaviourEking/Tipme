@@ -86,6 +86,11 @@ test('the copy says payment processing is included, and each withdrawal costs th
   assert.match(pro, /WITHDRAWAL_FEE_COPY/);
   assert.match(pro, /with payment processing included\./);
   assert.doesNotMatch(pro, /FREE_WITHDRAW|are free`|withdrawal fees/);
+  // Free still keeps withdrawals to the bank: the line stays, with the fee instead of a free count.
+  assert.match(
+    pro,
+    /`Withdrawals to your bank: \$\{formatNaira\(WITHDRAWAL_FEE_COPY_MINOR\)\} each, taken from the amount`/,
+  );
   assert.doesNotMatch(
     await source('app/ops/pages/page.tsx'),
     /withdrawal fees/,

@@ -237,7 +237,7 @@ test('the terms set out Free 5%, Pro 3%, ₦50 withdrawals and the NGN 2,000 min
   await expect(fees).toContainText('The smallest tip is ₦2,000');
   await expect(fees).toContainText('The smallest withdrawal is ₦2,000');
   await expect(fees).toContainText(
-    'Each withdrawal costs ₦50, charged by our payment partner, and comes off the amount.',
+    'Withdrawals: each withdrawal costs ₦50, charged by our payment partner, and comes off the amount.',
   );
   await expect(fees).not.toContainText('₦9,950');
 });

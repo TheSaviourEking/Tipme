@@ -536,6 +536,9 @@ test('withdrawals through the provider', async (t) => {
         heldElsewhere: false,
         // The person pays it from the amount (owner, 25 Nov 2026); nothing is free by count.
         feePaidBy: 'user',
+        // The one provider read: what it can pay now (its whole balance; the ledger is the cap on
+        // the total), its fee and who pays it (Ruling R6: the screen decides an amount from these).
+        feeParts: [{ capMinor: 240000n, feeMinor: 5000n, feePaidBy: 'user' }],
         ordinalToday: 1,
         freePerDay: 0,
         destination: { bankName: 'Guaranty Trust Bank', last4: '4321' },

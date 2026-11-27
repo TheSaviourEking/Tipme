@@ -1,4 +1,4 @@
-import { CURRENT_FEE_POLICY } from '@tipme/domain';
+import { CURRENT_FEE_POLICY, WITHDRAWAL_FEE_COPY_MINOR } from '@tipme/domain';
 import { Container, ProBadge } from '@tipme/ui';
 import { ProOffer } from '@/components/marketing/pro-offer';
 import { formatNaira } from '@/lib/demo-amount';
@@ -109,6 +109,7 @@ const freeKeeps = ({ freePercent }: PlanFeePercents) => [
   `Receiving tips, with no monthly fee: TipMe keeps ${freePercent}% of each tip, payment processing included`,
   'Your page, username, photo and cover',
   'Your QR code in three looks, ready to print',
+  `Withdrawals to your bank: ${formatNaira(WITHDRAWAL_FEE_COPY_MINOR)} each, taken from the amount`,
   'Your full tip history, and a CSV download',
   'Sign-in codes, recovery and security alerts',
   'Up to 3 social links',
