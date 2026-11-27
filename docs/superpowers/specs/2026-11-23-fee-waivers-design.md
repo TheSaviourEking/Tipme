@@ -123,6 +123,8 @@ Giving          Account pays     Account pays                    (not live)
 [ Change… ]   each change: who pays · optional start · optional end · reason
 ```
 
+**Addendum (final review I4):** each grid cell also lists the kind-wide changes set to start later ("From 1 Dec: TipMe pays · until 12 Dec"). Choosing "Normal rules" (or "Follow the global setting" on an account) also cancels every TipMe-pays change of that key set to start later, in the same approved action: one ending row at each scheduled start, each audited, and the approver's words name the waivers it cancels.
+
 **Per account** (the user's, business's or Giving organisation's ops page): "Fees: follow the global setting / TipMe pays / normal rules", for the tip fee and the withdrawal fee separately, each with an optional end date and the cost so far.
 
 **Ops → Plan & fees → Waivers** lists every rule in force or upcoming, with its scope, end date, who set it, who approved it and its cost so far.

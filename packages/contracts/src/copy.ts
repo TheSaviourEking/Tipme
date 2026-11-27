@@ -219,6 +219,9 @@ export const FEE_WAIVER_STAFF_COPY = {
   pausedTitle: 'Tip fee waivers paused',
   pausedBody:
     'TipMe’s balance at the payment partner is low, so new tips are priced normally until it recovers. Tips already priced keep their terms. Fund the balance before approving a kind-wide tip waiver.',
+  /** A grid cell's change set to start later: "From 1 Dec: TipMe pays · until 12 Dec". */
+  upcomingChange: (from: string, words: string) =>
+    `${from.charAt(0).toUpperCase()}${from.slice(1)}: ${words}`,
   seeAll: 'See every waiver',
   change: 'Change…',
   waiting: (count: number) =>

@@ -208,6 +208,12 @@ export function untilWords(endsAt: Date, now: Date): string {
   return `until ${dateWords(last, last.slice(0, 4) !== lagosDate(now).slice(0, 4))}`;
 }
 
+/** "from 1 Dec": the Lagos date a rule starts on, with the year when it is not the current Lagos year. */
+export function fromWords(startsAt: Date, now: Date): string {
+  const first = lagosDate(startsAt);
+  return `from ${dateWords(first, first.slice(0, 4) !== lagosDate(now).slice(0, 4))}`;
+}
+
 /**
  * "until 31 Jan 2027", always with the year: for words stored and compared later (an approval's
  * summary), which must not change with the clock.

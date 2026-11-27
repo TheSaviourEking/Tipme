@@ -63,6 +63,7 @@ import {
   latestRowOfKey,
   requireFeeWaiverConfirm,
   requireFeeWaiverEstimateCurrent,
+  scheduledWaiversEndedBy,
   setFeeWaiver,
   type FeeWaiverSetPayload,
 } from './fee-waivers.js';
@@ -736,11 +737,43 @@ async function describeFeeWaiver(
         : '';
     return `TipMe pays the ${fee} for ${who}${when}${cost}`;
   }
-  if (payload.payer === 'inherit')
-    return `The ${fee} for ${who} follows the rule for ${KIND_WORDS[payload.kind]}${when}`;
-  return payload.scope === 'kind'
-    ? `${KIND_WORDS[payload.kind].replace(/^all /, 'All ')} pay the ${fee} as normal${when}`
-    : `${who} pays the ${fee} as normal, whatever the rule for ${KIND_WORDS[payload.kind]}${when}`;
+  const ends =
+    payload.payer === 'inherit'
+      ? `The ${fee} for ${who} follows the rule for ${KIND_WORDS[payload.kind]}${when}`
+      : payload.scope === 'kind'
+        ? `${KIND_WORDS[payload.kind].replace(/^all /, 'All ')} pay the ${fee} as normal${when}`
+        : `${who} pays the ${fee} as normal, whatever the rule for ${KIND_WORDS[payload.kind]}${when}`;
+  return `${ends}${await cancelledWords(tx, payload)}`;
+}
+
+/**
+ * ", and the waiver set to start on 6 Dec 2026 is cancelled": the TipMe-pays rows an ending change
+ * cancels (I4). The one clock read in these words: if such a waiver starts while the request waits,
+ * the words change and the request must be asked again, since what it described has changed.
+ */
+async function cancelledWords(
+  tx: Tx,
+  payload: FeeWaiverSetPayload,
+): Promise<string> {
+  const now = new Date();
+  const asked =
+    payload.startsAt === undefined ? now : new Date(payload.startsAt);
+  const scheduled = await scheduledWaiversEndedBy(
+    tx,
+    payload,
+    asked.getTime() > now.getTime() ? asked : now,
+  );
+  if (scheduled.length === 0) return '';
+  const days = scheduled.map((row) =>
+    fromWordsWithYear(row.startsAt).replace(/^from /, ''),
+  );
+  const list =
+    days.length === 1
+      ? days[0]
+      : `${days.slice(0, -1).join(', ')} and ${days.at(-1)}`;
+  return days.length === 1
+    ? `, and the waiver set to start on ${list} is cancelled`
+    : `, and the waivers set to start on ${list} are cancelled`;
 }
 
 /** The payload if it is well formed, else null: subjects and target run before validation. */

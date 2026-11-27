@@ -3444,3 +3444,9 @@ a.ops-people__card:hover {
   margin: 0;
   font-weight: 600;
 }
+
+/* Fee waivers (final review I4): a grid cell's change set to start later, on its own line. */
+.ops-cell-next {
+  display: block;
+  margin-top: 0.25rem;
+}

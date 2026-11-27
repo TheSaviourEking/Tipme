@@ -20,6 +20,7 @@ import {
   type OpsAccountFeeWaivers,
   type OpsActedAlone,
   type OpsFeeWaiverCell,
+  type OpsFeeWaiverCellChange,
   type OpsFeeWaiverCost,
   type OpsFeeWaiverRule,
   type OpsFeeWaivers,
@@ -167,7 +168,7 @@ export class OpsFeeWaiversController {
       monthCost[kind] = costOf(kindCosts[i]!);
       grid[kind] = {} as Record<FeeWaiverFeeName, OpsFeeWaiverCell>;
       for (const fee of FEE_WAIVER_FEE_NAMES)
-        grid[kind][fee] = gridCell(rules.inForce, kind, fee);
+        grid[kind][fee] = gridCell(rules, kind, fee);
     });
     const [inForce, upcoming] = await Promise.all([
       this.rulesOut(rules.inForce.filter(changesWhoPays), now, true),
@@ -318,25 +319,68 @@ export class OpsFeeWaiversController {
 }
 
 /**
- * The kind-wide rule in force for one cell. Businesses have no tip fee, so that cell is always the
- * normal rules, whatever is stored (the rules refuse such a row anyway). Giving isn't built, so its
- * cells are not live.
+ * The kind-wide rule in force for one cell, and the changes set to start later (final review I4), so
+ * staff see a scheduled waiver before it starts. Businesses have no tip fee, so that cell is always
+ * the normal rules, whatever is stored (the rules refuse such a row anyway). Giving isn't built, so
+ * its cells are not live.
  */
 function gridCell(
-  inForce: FeeWaiverRow[],
+  rules: { inForce: FeeWaiverRow[]; upcoming: FeeWaiverRow[] },
   kind: FeeWaiverKindName,
   fee: FeeWaiverFeeName,
 ): OpsFeeWaiverCell {
   const live = kind !== 'giving';
   if (kind === 'business' && fee === 'tip')
-    return { payer: 'account', ruleId: null, endsAt: null, live };
-  const row = inForce.find(
-    (r) => r.scope === 'kind' && r.kind === kind && r.fee === fee,
-  );
+    return { payer: 'account', ruleId: null, endsAt: null, live, upcoming: [] };
+  const ofCell = (r: FeeWaiverRow) =>
+    r.scope === 'kind' && r.kind === kind && r.fee === fee;
+  const row = rules.inForce.find(ofCell);
+  const payer = row?.payer === 'tipme' ? 'tipme' : 'account';
   return {
-    payer: row?.payer === 'tipme' ? 'tipme' : 'account',
+    payer,
     ruleId: row?.id ?? null,
     endsAt: iso(row?.endsAt ?? null),
     live,
+    upcoming: upcomingChanges(rules.upcoming.filter(ofCell), {
+      payer,
+      endsAt: row?.endsAt ?? null,
+    }),
   };
+}
+
+/**
+ * One key's rows not started yet (soonest first) as the changes they make: the row that wins each
+ * start (W2: the latest created), kept when it changes who pays then. `before` is who pays now and
+ * until when; a waiver with an end is followed by the normal rules.
+ */
+function upcomingChanges(
+  rows: FeeWaiverRow[],
+  before: { payer: 'tipme' | 'account'; endsAt: Date | null },
+): OpsFeeWaiverCellChange[] {
+  const winners = new Map<number, FeeWaiverRow>();
+  for (const row of rows) {
+    const at = row.startsAt.getTime();
+    const seen = winners.get(at);
+    if (!seen || row.createdAt.getTime() >= seen.createdAt.getTime())
+      winners.set(at, row);
+  }
+  const changes: OpsFeeWaiverCellChange[] = [];
+  let state = before;
+  for (const row of [...winners.values()].sort(
+    (a, b) => a.startsAt.getTime() - b.startsAt.getTime(),
+  )) {
+    const paysThen =
+      state.payer === 'tipme' &&
+      (state.endsAt === null ||
+        state.endsAt.getTime() > row.startsAt.getTime());
+    const payer = row.payer === 'tipme' ? 'tipme' : 'account';
+    if (payer === 'tipme' || paysThen)
+      changes.push({
+        payer,
+        startsAt: row.startsAt.toISOString(),
+        endsAt: iso(row.endsAt),
+      });
+    state = { payer, endsAt: row.endsAt };
+  }
+  return changes;
 }

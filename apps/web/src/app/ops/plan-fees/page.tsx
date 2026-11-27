@@ -41,6 +41,7 @@ import { LoadFailed } from '@/components/dashboard/load-failed';
 import { bpsToPercent, percentToBps } from '@/lib/fee-percent';
 import {
   endOfLagosDay,
+  fromLabel,
   lagosToday,
   startOfLagosDay,
 } from '@/lib/fee-waiver-dates';
@@ -317,6 +318,40 @@ function cellWords(
   return cell.payer === 'tipme'
     ? tipmePaysWords(cell.endsAt)
     : normalWords(kind, fee);
+}
+
+/**
+ * A grid cell: who pays now, then each change set to start later (final review I4), so a scheduled
+ * waiver is seen before it starts. One element, so a stacked cell on a phone keeps it together.
+ */
+function CellWords({
+  kind,
+  fee,
+  cell,
+}: {
+  kind: FeeWaiverKindName;
+  fee: FeeWaiverFeeName;
+  cell: OpsFeeWaiverCell;
+}) {
+  return (
+    <span>
+      {cellWords(kind, fee, cell)}
+      {cell.upcoming.map((change) => (
+        <span
+          key={change.startsAt}
+          className="tm-hint ops-cell-next"
+          data-testid="fee-waiver-upcoming"
+        >
+          {C.upcomingChange(
+            fromLabel(change.startsAt),
+            change.payer === 'tipme'
+              ? tipmePaysWords(change.endsAt)
+              : normalWords(kind, fee),
+          )}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 type Payer = 'tipme' | 'account';
@@ -657,14 +692,18 @@ function WhoPays() {
                         )}
                       </th>
                       <td data-label={tipLabel}>
-                        {cellWords(kind, 'tip', state.grid[kind].tip)}
+                        <CellWords
+                          kind={kind}
+                          fee="tip"
+                          cell={state.grid[kind].tip}
+                        />
                       </td>
                       <td data-label={C.fees.withdrawal}>
-                        {cellWords(
-                          kind,
-                          'withdrawal',
-                          state.grid[kind].withdrawal,
-                        )}
+                        <CellWords
+                          kind={kind}
+                          fee="withdrawal"
+                          cell={state.grid[kind].withdrawal}
+                        />
                       </td>
                       <td data-label={C.monthCost}>
                         {state.grid[kind].tip.live ? (

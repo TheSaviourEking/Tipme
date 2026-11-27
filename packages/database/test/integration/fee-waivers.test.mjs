@@ -4,6 +4,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import {
   endOfLagosDayIso,
+  fromWordsWithYear,
   lagosDayStart,
   newTotpSecret,
   totpAt,
@@ -1607,4 +1608,101 @@ test('a business waiver names every manager, past ones included, as its subjects
     now: new Date(),
   });
   assert.equal(now.payer, 'tipme');
+});
+
+test('ending a kind-wide waiver now while one is scheduled later leaves TipMe paying nothing on the scheduled day', async (t) => {
+  const { db, person, ask, approve, set, rows } = await actionSetup(t);
+  const asker = await person();
+  const approver = await person();
+  const kindTip = { scope: 'kind', kind: 'individual', fee: 'tip' };
+  const firstDay = new Date(Date.now() + 5 * DAY);
+  const later = new Date(Date.now() + 40 * DAY);
+  const payerOn = async (at) =>
+    (
+      await feeWaiverFor(db.db, {
+        owner: { profileId: ADA },
+        fee: 'tip',
+        now: at,
+      })
+    ).payer;
+  // Approved earlier: TipMe pays every individual's tip fee from 5 days on, and again from 40.
+  const scheduled = await set({
+    ...kindTip,
+    payer: 'tipme',
+    startsAt: firstDay.toISOString(),
+    endsAt: new Date(firstDay.getTime() + 10 * DAY).toISOString(),
+    confirmCost: true,
+    costEstimateMinor: '0',
+  });
+  const again = await set({
+    ...kindTip,
+    payer: 'tipme',
+    startsAt: later.toISOString(),
+    confirmCost: true,
+    costEstimateMinor: '0',
+  });
+  assert.equal(await payerOn(new Date(firstDay.getTime() + HOUR)), 'tipme');
+  // Staff change their mind: "Normal rules", no first day. The approver reads that it cancels both.
+  const outcome = await ask(asker, { ...kindTip, payer: 'account' });
+  const [{ summary }] = (
+    await db.pool.query(`SELECT summary FROM approval_requests WHERE id = $1`, [
+      outcome.requestId,
+    ])
+  ).rows;
+  const words = (at) => fromWordsWithYear(at).replace(/^from /, '');
+  assert.equal(
+    summary,
+    `All individuals pay the tip fee as normal, and the waivers set to start on ${words(firstDay)} and ${words(later)} are cancelled`,
+  );
+  const approved = await approve(outcome.requestId, approver);
+  assert.equal(approved.status, 'approved', JSON.stringify(approved));
+  for (const at of [
+    new Date(),
+    new Date(firstDay.getTime() + HOUR),
+    new Date(later.getTime() + HOUR),
+  ])
+    assert.equal(await payerOn(at), 'default', at.toISOString());
+  // One row ends it now, and one per scheduled start cancels that waiver; each is audited.
+  const written = (await rows()).filter(
+    (r) => r.id !== scheduled.id && r.id !== again.id,
+  );
+  assert.deepEqual(
+    written.map((r) => [r.payer, r.starts_at.getTime() > Date.now()]).sort(),
+    [
+      ['account', false],
+      ['account', true],
+      ['account', true],
+    ],
+  );
+  for (const row of written) {
+    assert.equal(row.approved_by, approver);
+    assert.equal((await auditOf(db, row.id)).length, 1);
+  }
+  const cancels = written.filter((r) => r.starts_at.getTime() > Date.now());
+  assert.deepEqual(
+    cancels.map((r) => r.starts_at.toISOString()).sort(),
+    [firstDay.toISOString(), later.toISOString()].sort(),
+  );
+  for (const row of cancels)
+    assert.match(
+      (await auditOf(db, row.id))[0].reason,
+      new RegExp(`"cancels":"(${scheduled.id}|${again.id})"`),
+    );
+});
+
+test("ending an account's waiver now cancels its scheduled one too", async (t) => {
+  const { db, set } = await actionSetup(t);
+  const firstDay = new Date(Date.now() + 3 * DAY);
+  await set({ ...adaTip, payer: 'tipme', startsAt: firstDay.toISOString() });
+  await set({ ...adaTip, payer: 'inherit' });
+  assert.equal(
+    (
+      await feeWaiverFor(db.db, {
+        owner: { profileId: ADA },
+        fee: 'tip',
+        now: new Date(firstDay.getTime() + HOUR),
+      })
+    ).payer,
+    'default',
+  );
 });

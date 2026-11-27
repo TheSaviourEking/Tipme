@@ -174,6 +174,7 @@ test('the grid starts on today’s rules: no business tip fee, Giving not live, 
     ruleId: null,
     endsAt: null,
     live: true,
+    upcoming: [],
   });
   // The reset's carried-over business rule (the switch was off) is "account pays": the default, so
   // the grid points at it but the list of rules in force doesn't show it as a waiver.
@@ -532,4 +533,32 @@ test('a lone admin’s change runs at once and answers with the new state, sayin
       secondId,
     ]);
   }
+});
+
+test('the grid shows the changes set to start later in each cell', async () => {
+  // Giving's rules are stored and read by nothing, so this leaves every other test's fees alone.
+  const day = 86_400_000;
+  const starts = new Date(Date.now() + 3 * day);
+  const ends = new Date(Date.now() + 10 * day);
+  const back = new Date(Date.now() + 20 * day);
+  for (const [payer, startsAt, endsAt] of [
+    ['tipme', starts, ends],
+    ['account', back, null],
+  ])
+    await q(
+      `INSERT INTO fee_waivers (id, scope, kind, fee, payer, starts_at, ends_at, reason, created_at)
+       VALUES ($1, 'kind', 'giving', 'tip', $2, $3, $4, 'Scheduled for the grid test', now())`,
+      [randomUUID(), payer, startsAt, endsAt],
+    );
+  const data = await read('/v1/ops/fee-waivers');
+  assert.equal(data.grid.giving.tip.payer, 'account');
+  // The end row after a waiver that has already ended by then changes nothing, so isn't shown.
+  assert.deepEqual(data.grid.giving.tip.upcoming, [
+    {
+      payer: 'tipme',
+      startsAt: starts.toISOString(),
+      endsAt: ends.toISOString(),
+    },
+  ]);
+  assert.deepEqual(data.grid.giving.withdrawal.upcoming, []);
 });

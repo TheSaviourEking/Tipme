@@ -1,5 +1,6 @@
 import {
   endOfLagosDayIso,
+  fromWords,
   lagosDateOf,
   lagosDayStart,
   untilWords,
@@ -24,3 +25,7 @@ export const untilLabel = (iso: string, now: Date = new Date()): string =>
 
 /** Today's Lagos date (YYYY-MM-DD): the earliest day a date field offers. */
 export const lagosToday = (now: Date = new Date()): string => lagosDateOf(now);
+
+/** "from 1 Dec" (the first Lagos day of a change set to start later), with the year when not this one. */
+export const fromLabel = (iso: string, now: Date = new Date()): string =>
+  fromWords(new Date(iso), now);

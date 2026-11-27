@@ -14,6 +14,7 @@ import {
   lastCoveredLagosDate,
   resolveFeeWaiver,
   fromWordsWithYear,
+  fromWords,
   untilWords,
   untilWordsWithYear,
   waivedFeeVersion,
@@ -387,5 +388,14 @@ test('untilWordsWithYear and fromWordsWithYear always name the year, on Lagos da
   assert.equal(
     fromWordsWithYear(d('2026-12-31T22:59:59Z')),
     'from 31 Dec 2026',
+  );
+});
+
+test('fromWords names the first Lagos day, with the year only when it is not this one', () => {
+  const now = new Date('2026-11-26T12:00:00Z');
+  assert.equal(fromWords(new Date('2026-11-30T23:00:00Z'), now), 'from 1 Dec');
+  assert.equal(
+    fromWords(new Date('2027-01-05T23:00:00Z'), now),
+    'from 6 Jan 2027',
   );
 });

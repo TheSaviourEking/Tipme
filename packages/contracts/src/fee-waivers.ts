@@ -121,6 +121,18 @@ export interface OpsFeeWaiverCell {
   endsAt: string | null;
   /** False for Giving, which isn't built yet: its rules are stored but nothing reads them. */
   live: boolean;
+  /**
+   * The kind-wide changes set to start later, soonest first, each one that changes who pays (a
+   * change to the normal rules after a waiver that has already ended by then is left out).
+   */
+  upcoming: OpsFeeWaiverCellChange[];
+}
+
+/** A kind-wide change set to start later, on the grid. */
+export interface OpsFeeWaiverCellChange {
+  payer: 'tipme' | 'account';
+  startsAt: string;
+  endsAt: string | null;
 }
 
 /**

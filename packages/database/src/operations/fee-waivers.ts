@@ -538,6 +538,36 @@ export async function estimateFeeWaiverMonthlyCost(
   return BigInt(row?.total ?? '0');
 }
 
+/** Whether a payload only ends a waiver: `inherit` on an account, `account` on a kind (spec §4). */
+const endsAWaiver = (payload: FeeWaiverSetPayload): boolean =>
+  payload.payer === (payload.scope === 'account' ? 'inherit' : 'account');
+
+/**
+ * The TipMe-pays rows of the payload's key set to start after `from`, soonest first, when the
+ * payload ends a waiver (final review I4). A row ending the waiver from `from` would leave each of
+ * them to start later (W2: the greatest start wins), so `setFeeWaiver` cancels them in the same
+ * action, and the approver's words name them.
+ */
+export async function scheduledWaiversEndedBy(
+  db: Database | Tx,
+  payload: FeeWaiverSetPayload,
+  from: Date,
+): Promise<FeeWaiverRow[]> {
+  if (!endsAWaiver(payload)) return [];
+  const rows = await db
+    .select()
+    .from(feeWaivers)
+    .where(
+      and(
+        keyIs(feeWaiverKeyOf(payload)),
+        eq(feeWaivers.payer, 'tipme'),
+        gt(feeWaivers.startsAt, from),
+      ),
+    )
+    .orderBy(asc(feeWaivers.startsAt), asc(feeWaivers.createdAt));
+  return rows.map(toRow);
+}
+
 const sameInstant = (a: Date | null, b: Date | null) =>
   a === null || b === null ? a === b : a.getTime() === b.getTime();
 
@@ -572,7 +602,8 @@ const iso = (at: Date | null) => (at === null ? null : at.toISOString());
  * (or null when a lone admin acted alone, with the acted-alone alert). Under the key's advisory lock
  * (W10) it fixes the dates at act time (W3: never retroactive; W4: bounds), checks the account, the
  * cost confirm (W11) and that something changes, then appends the row and audits from, to and
- * approver. Ending a waiver now is `payer: 'inherit'` (account) or `'account'` (kind) with no end.
+ * approver. Ending a waiver now is `payer: 'inherit'` (account) or `'account'` (kind) with no end;
+ * it also cancels every TipMe-pays row of the key scheduled to start later (I4).
  */
 export async function setFeeWaiver(
   tx: Tx,
@@ -614,7 +645,8 @@ export async function setFeeWaiver(
   }
   requireFeeWaiverConfirm(payload);
   const current = await latestRowOfKey(tx, feeWaiverKeyOf(payload));
-  if (changesNothing(current, payload, window))
+  const scheduled = await scheduledWaiversEndedBy(tx, payload, window.startsAt);
+  if (scheduled.length === 0 && changesNothing(current, payload, window))
     throw new OperationError('INVALID_INPUT', 'That changes nothing.');
   const id = newId();
   await tx.insert(feeWaivers).values({
@@ -660,5 +692,45 @@ export async function setFeeWaiver(
     }),
     now,
   });
+  // Ending a waiver ends what is scheduled after it too (I4): an ending row at each scheduled
+  // waiver's start, created after it so it wins that start's tie (W2), each audited.
+  for (const row of scheduled) {
+    const cancelId = newId();
+    await tx.insert(feeWaivers).values({
+      id: cancelId,
+      scope: payload.scope,
+      kind: payload.kind,
+      profileId: payload.profileId ?? null,
+      businessId: payload.businessId ?? null,
+      fee: payload.fee,
+      payer: payload.payer,
+      startsAt: row.startsAt,
+      endsAt: null,
+      reason,
+      setBy: staffUserId,
+      approvedBy,
+      createdAt: new Date(Math.max(now.getTime(), row.createdAt.getTime() + 1)),
+    });
+    await recordAudit(tx, {
+      staffUserId,
+      action: FEE_WAIVER_SET_ACTION,
+      permission: 'fees.manage',
+      subjectType: 'fee_waiver',
+      subjectId: cancelId,
+      reason: withAuditChange(reason, {
+        key: target,
+        cancels: row.id,
+        from: {
+          id: row.id,
+          payer: row.payer,
+          startsAt: iso(row.startsAt),
+          endsAt: iso(row.endsAt),
+        },
+        to: { payer: payload.payer, startsAt: iso(row.startsAt), endsAt: null },
+        approvedBy,
+      }),
+      now,
+    });
+  }
   return { id, startsAt: window.startsAt, endsAt: window.endsAt };
 }

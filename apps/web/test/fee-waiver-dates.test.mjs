@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { FEE_WAIVER_STAFF_COPY as C } from '@tipme/contracts/copy';
 import {
   endOfLagosDay,
+  fromLabel,
   lagosToday,
   startOfLagosDay,
   untilLabel,
@@ -34,4 +36,18 @@ test('a start date is the start of that Lagos day, sent as a UTC Z string', () =
 test('today is the Lagos date, which is ahead of UTC late in the evening', () => {
   assert.equal(lagosToday(new Date('2026-11-26T23:30:00.000Z')), '2026-11-27');
   assert.equal(lagosToday(new Date('2026-11-26T22:59:00.000Z')), '2026-11-26');
+});
+
+test('a change set to start later reads with its first Lagos day (final review I4)', () => {
+  const now = new Date('2026-11-26T12:00:00.000Z');
+  // 1 Dec 00:00 in Lagos is 30 Nov 23:00 UTC.
+  assert.equal(fromLabel('2026-11-30T23:00:00.000Z', now), 'from 1 Dec');
+  assert.equal(fromLabel('2027-01-05T23:00:00.000Z', now), 'from 6 Jan 2027');
+  assert.equal(
+    C.upcomingChange(
+      fromLabel('2026-11-30T23:00:00.000Z', now),
+      'TipMe pays · until 12 Dec',
+    ),
+    'From 1 Dec: TipMe pays · until 12 Dec',
+  );
 });
