@@ -1,4 +1,5 @@
 import { LIVE_BACKGROUND_HEADER, type LiveEventType } from '@tipme/contracts';
+import { WITHDRAWALS_SPREAD_MS } from './live-timing.ts';
 
 /**
  * Every read the scheduler runs was started by the stream (a signal, a resync, the fallback poll),
@@ -110,9 +111,6 @@ export function createRefetchScheduler(o: {
     },
   };
 }
-
-/** The most a `withdrawals.changed` refetch waits when nothing of this person's is in flight. */
-export const WITHDRAWALS_SPREAD_MS = 10_000;
 
 /**
  * `withdrawals.changed` also comes as a broadcast (the TipMe-wide switch), and the browser never

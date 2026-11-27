@@ -6,7 +6,7 @@ import {
   tipAsVisitor,
 } from './helpers';
 import { LONG_NAME, UNBROKEN_NAME } from './profile-fixtures';
-import { WITHDRAWALS_SPREAD_MS } from '../../apps/web/src/lib/live-refetch';
+import { WITHDRAWALS_SPREAD_MS } from '../../apps/web/src/lib/live-timing';
 import {
   enrolOwner,
   noOtherStaff,
