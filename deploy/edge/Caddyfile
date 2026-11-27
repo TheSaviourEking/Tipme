@@ -1,7 +1,8 @@
-# The only public entry on the server: HTTPS for the staging and production API hosts,
-# certificates automatic. Hosts and the certificate contact come from /srv/tipme-edge/edge.env.
-# Each project's API answers on its own network (edge-staging, edge-production) under a fixed
-# name, so a project can be redeployed or rolled back without touching this file.
+# The only public entry on the server: HTTPS for the staging and production API and website hosts
+# (the websites since Vercel paused them, 26 Nov 2026), certificates automatic. Hosts and the
+# certificate contact come from /srv/tipme-edge/edge.env. Each project answers on its own network
+# (edge-staging, edge-production) under fixed names, so a project can be redeployed or rolled back
+# without touching this file.
 {
 	email {$ACME_EMAIL}
 	# The stopped production colour's three names fail an active health check every 2 s, for
@@ -55,4 +56,92 @@
 		health_fails 2
 		health_status 200
 	}
+}
+
+# --- Websites (Next.js, deploy/web.Dockerfile) ---
+# The app sets its own security headers (next.config.ts: CSP, X-Frame-Options, nosniff, Referrer-
+# and Permissions-Policy); the edge adds only HSTS (Vercel sent max-age=63072000) and drops Server.
+# `encode` compresses as each part of a streamed page arrives, without waiting for the rest, and the
+# proxy flushes as the app writes (no Content-Length). Next marks /_next/static/* immutable itself;
+# nothing here changes Cache-Control.
+(website) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=63072000"
+		-Server
+	}
+}
+
+# A new connection per request (a local connect, no TLS). On SIGTERM Next stops listening and waits
+# for its open connections to end; a kept-alive one (health checks every 2 s reuse it) never would,
+# so a stopping copy went on taking requests until it was killed mid-request. Without keep-alive
+# it refuses new connections at once, the edge retries them on the other copy, and it exits.
+(website_transport) {
+	transport http {
+		keepalive off
+	}
+}
+
+# One copy; a restart's gap of a second or two is held by lb_try_duration rather than refused.
+{$STAGING_WEB_HOST} {
+	import website
+	reverse_proxy staging-web:3000 {
+		lb_try_duration 10s
+		lb_try_interval 250ms
+		import website_transport
+	}
+}
+
+# One copy per colour, only one colour at a time outside a deploy (as the API's above). During a
+# switch both builds run, and a page from one needs its own build's /_next/static chunks (the other
+# build lacks them: 404). So a browser is pinned to one colour by a cookie (tipme_web: a hash of the
+# copy's address, nothing about the visitor). The deploy then drains the old colour before stopping
+# it (lib.sh, drain_web): its /api/version answers 503, page requests move to the new colour (a new
+# cookie), and its own assets stay reachable on the static route below until it stops.
+{$PRODUCTION_WEB_HOST} {
+	import website
+	# Assets: the pinned copy, with no active check, so a draining copy still serves the chunks of the
+	# pages it sent. Passive: a copy refusing connections (stopped) is left out after 3 tries for 2 s.
+	@static path /_next/static/*
+	handle @static {
+		reverse_proxy {
+			to tipme-production-web-blue-1:3000 tipme-production-web-green-1:3000
+			lb_policy cookie tipme_web
+			lb_try_duration 5s
+			lb_try_interval 50ms
+			max_fails 3
+			fail_duration 2s
+			import website_transport
+		}
+	}
+	handle {
+		reverse_proxy {
+			to tipme-production-web-blue-1:3000 tipme-production-web-green-1:3000
+			lb_policy cookie tipme_web
+			# A visitor pinned to a copy that stopped without draining waits here until two active
+			# checks take it out (up to about 6 s), then moves; no passive fail_duration: outside a
+			# deploy only one colour runs, and one refused connection would take the only copy out.
+			lb_try_duration 10s
+			lb_try_interval 50ms
+			# The build id (no API call, open on every copy): the same check the deploy waits for.
+			health_uri /api/version
+			health_interval 2s
+			health_timeout 3s
+			health_fails 2
+			health_status 200
+			import website_transport
+		}
+	}
+}
+
+# The bare domain: a permanent redirect to the www host (308 keeps the method, as Vercel's did).
+{$PRODUCTION_APEX_HOST} {
+	redir https://{$PRODUCTION_WEB_HOST}{uri} 308
+}
+
+# www on staging: the same permanent redirect, to the staging host. Its name is built from
+# STAGING_WEB_HOST, so no new edge.env key (and no edge recreate) is needed. Its DNS record must
+# exist before this file reaches the edge, or the certificate request fails and backs off.
+www.{$STAGING_WEB_HOST} {
+	redir https://{$STAGING_WEB_HOST}{uri} 308
 }

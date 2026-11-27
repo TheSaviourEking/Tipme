@@ -384,3 +384,107 @@ test('the staging worker can reach the payment provider (it asks Bachs whether t
   assert.match(networks, /\begress\b/);
   assert.match(networks, /\binternal\b/);
 });
+
+// --- The website on this server (self-hosted since Vercel paused it, 26 Nov 2026) ---
+const W1 = 'aaaaaaa1';
+const W2 = 'bbbbbbb2';
+const callLines = (read) => read('calls.log').split('\n').filter(Boolean);
+
+test('a version with the website needs its web image too, or nothing runs', () => {
+  const { run, read, ship } = stage();
+  ship(W1, undefined, { web: true, webImage: false });
+  const result = run('deploy.sh', [W1]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /tipme-web-staging:aaaaaaa1/);
+  assert.equal(
+    callLines(read).filter((l) => / up | run --rm /.test(l)).length,
+    0,
+    'nothing was started, backed up or migrated',
+  );
+});
+
+test('the switch starts the website with the API, and the deploy waits until it serves this version', () => {
+  const { run, read, ship } = stage();
+  ship(W1, undefined, { web: true });
+  const result = run('deploy.sh', [W1]);
+  assert.equal(result.status, 0, result.stderr);
+  const calls = callLines(read);
+  const up = calls.findIndex((l) =>
+    /up -d --remove-orphans api .*\bweb\b/.test(l),
+  );
+  const asked = calls.findIndex((l) =>
+    /^curl https:\/\/staging\.example\.test\/api\/version$/.test(l),
+  );
+  assert.ok(up >= 0 && up < asked, calls.join('\n'));
+  assert.equal(read('web-running').trim(), W1);
+  assert.equal(read('releases/current').trim(), W1);
+});
+
+test('a website that does not serve the new version fails the deploy and puts the previous one back', () => {
+  const { run, read, ship } = stage();
+  ship(W1, undefined, { web: true });
+  ship(W2, undefined, { web: true });
+  assert.equal(run('deploy.sh', [W1]).status, 0);
+  const result = run('deploy.sh', [W2], { FAKE_WEB_BROKEN: W2 });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /bbbbbbb2 did not become healthy/);
+  assert.equal(read('releases/current').trim(), W1);
+  assert.equal(read('web-running').trim(), W1);
+  assert.equal(read('running').trim(), W1);
+});
+
+test('a version from before the website deploys and rolls back as before (no web check)', () => {
+  const { run, read, ship } = stage();
+  ship(W1);
+  ship(W2);
+  assert.equal(run('deploy.sh', [W1]).status, 0);
+  assert.equal(run('deploy.sh', [W2]).status, 0);
+  assert.equal(run('rollback.sh').status, 0);
+  assert.ok(callLines(read).every((l) => !/api\/version|\bweb\b/.test(l)));
+});
+
+test('rolling back from a version with the website to one from before it is refused', () => {
+  const { run, read, ship } = stage();
+  ship(W1);
+  ship(W2, undefined, { web: true });
+  assert.equal(run('deploy.sh', [W1]).status, 0);
+  assert.equal(run('deploy.sh', [W2]).status, 0);
+  const before = callLines(read).length;
+  const result = run('rollback.sh');
+  assert.equal(result.status, 2);
+  assert.match(
+    result.stderr,
+    /aaaaaaa1 is from before the website ran on this server/,
+  );
+  assert.equal(read('releases/current').trim(), W2);
+  assert.equal(
+    callLines(read)
+      .slice(before)
+      .filter((l) => / up /.test(l)).length,
+    0,
+  );
+});
+
+test('rolling back between versions with the website brings the website back too', () => {
+  const { run, read, ship } = stage();
+  ship(W1, undefined, { web: true });
+  ship(W2, undefined, { web: true });
+  assert.equal(run('deploy.sh', [W1]).status, 0);
+  assert.equal(run('deploy.sh', [W2]).status, 0);
+  const result = run('rollback.sh');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(read('web-running').trim(), W1);
+  assert.equal(read('releases/current').trim(), W1);
+});
+
+test('pruning an old version removes its web image with its app image', () => {
+  const { run, read, ship } = stage();
+  const versions = ['a0000001', 'a0000002', 'a0000003'];
+  for (const v of versions) ship(v, undefined, { web: true });
+  for (const v of versions)
+    assert.equal(run('deploy.sh', [v], { KEEP_VERSIONS: '1' }).status, 0);
+  const images = read('images');
+  assert.doesNotMatch(images, /tipme-web-staging:a0000001/);
+  assert.doesNotMatch(images, /tipme-app:a0000001/);
+  assert.match(images, /tipme-web-staging:a0000003/);
+});

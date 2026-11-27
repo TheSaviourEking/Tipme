@@ -98,3 +98,49 @@ test('the preview password does not hold the email logos', () => {
   ])
     assert.equal(decide(path, undefined), 'login', path);
 });
+
+// Self-hosting (26 Nov 2026): the edge's health check and the deploy's version check have no ticket.
+// /api/version shows only the build id, which the API's public /health/release already shows.
+test('/api/version is open without the password, exactly that path', () => {
+  assert.equal(decide('/api/version', undefined), 'exempt');
+  for (const path of [
+    '/api/version/../dashboard',
+    '/api/versions',
+    '/api/version/x',
+  ])
+    assert.equal(decide(path, undefined), 'login', path);
+});
+
+// Self-hosted, Next's image optimiser fetches the picture from this same server with no headers at
+// all, so no ticket: behind the gate every <Image> of a portrait or cover failed (500). These files
+// are the repository's own public/ folder (public on GitHub), never anyone's data.
+test('the public folder pictures the image optimiser reads are open, and nothing else there', () => {
+  for (const path of [
+    '/portraits/ada.webp',
+    '/covers/vinyl.webp',
+    '/illustrations/hero-phone.png',
+    '/brand/tipme-wordmark-ink.png',
+    '/pro/studio-preview.webp',
+    '/covers/studio/a-b.svg',
+  ])
+    assert.equal(decide(path, undefined), 'exempt', path);
+  for (const path of [
+    // Pages that share a folder name with public/: still gated.
+    '/pro',
+    '/pro/',
+    '/email/unsubscribed',
+    '/portraits',
+    '/portraits/ada',
+    // Not a picture, or not one of those folders.
+    '/portraits/ada.html',
+    '/sounds/tip.wav',
+    '/dashboard/ada.png',
+    '/people/ada.png',
+    // Tricks.
+    '/portraits/../dashboard.png',
+    '/portraits/%2e%2e/dashboard.png',
+    '//portraits/ada.webp',
+    '/portraits/ada.webp/',
+  ])
+    assert.equal(decide(path, undefined), 'login', path);
+});

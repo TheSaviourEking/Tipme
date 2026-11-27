@@ -25,3 +25,28 @@ test('the transaction scrubber strips the query from the request URL', () => {
   });
   assert.equal(out.request.url, 'https://tipme.test/tip/1');
 });
+
+// Off Vercel (26 Nov 2026): the environment is NEXT_PUBLIC_SENTRY_ENVIRONMENT, else NODE_ENV.
+test('the environment never comes from a Vercel variable', () => {
+  const saved = {
+    env: process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT,
+    vercel: process.env.NEXT_PUBLIC_VERCEL_ENV,
+  };
+  try {
+    delete process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT;
+    process.env.NEXT_PUBLIC_VERCEL_ENV = 'preview';
+    assert.equal(
+      sentryOptions(undefined, sdk).environment,
+      process.env.NODE_ENV,
+    );
+    process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT = 'staging';
+    assert.equal(sentryOptions(undefined, sdk).environment, 'staging');
+  } finally {
+    for (const [key, name] of [
+      ['env', 'NEXT_PUBLIC_SENTRY_ENVIRONMENT'],
+      ['vercel', 'NEXT_PUBLIC_VERCEL_ENV'],
+    ])
+      if (saved[key] === undefined) delete process.env[name];
+      else process.env[name] = saved[key];
+  }
+});

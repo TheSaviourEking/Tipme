@@ -933,3 +933,173 @@ test('compose.sh on production runs compose for the current version with both co
     /releases\/bbbbbbb2\/compose\.production\.yml .* ps \| version=bbbbbbb2 blue=aaaaaaa1 green=bbbbbbb2 /,
   );
 });
+
+// --- The website on this server (self-hosted since Vercel paused it, 26 Nov 2026) ---
+// Each colour runs the website beside its API, on the same version, so a switch and a rollback move
+// both; the old colour's website stops only once the public address serves the new version.
+const webCurls = (read) =>
+  lines(read).filter((l) => /^curl .*\/api\/version /.test(l));
+
+test('a version with the website starts it with the idle colour and waits for it before stopping the old one', () => {
+  const { run, read, ship, running, colours } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.equal(running('web-blue'), A);
+  const before = lines(read).length;
+  const result = run('deploy-production.sh', [B]);
+  assert.equal(result.status, 0, result.stderr);
+  const calls = lines(read).slice(before);
+  const start = indexOf(calls, /up -d --wait --no-deps api-green web-green \|/);
+  const served = indexOf(
+    calls,
+    /^curl https:\/\/www\.production\.example\.test\/api\/version -> bbbbbbb2$/,
+  );
+  const stop = indexOf(calls, / stop -t 20 api-blue web-blue \|/);
+  assert.ok(start >= 0 && start < served && served < stop, calls.join('\n'));
+  assert.equal(running('web-blue'), '');
+  assert.equal(running('web-green'), B);
+  assert.deepEqual(colours(), { blue: A, green: B, active: 'green' });
+});
+
+test('a version with the website needs its web image too, or nothing runs', () => {
+  const { run, read, ship } = stageProduction();
+  ship(A, undefined, { web: true, webImage: false });
+  const result = run('deploy-production.sh', [A]);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /tipme-web-production:aaaaaaa1/);
+  assert.equal(indexOf(composeCalls(read), / up | run --rm /), -1);
+});
+
+test('a website that never serves the new version stops the new colour; the old one keeps serving', () => {
+  const { run, read, ship, running, colours } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const result = run('deploy-production.sh', [B], { FAKE_WEB_BROKEN: B });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /api-green web-green/);
+  assert.equal(running('api-green'), '');
+  assert.equal(running('web-green'), '');
+  assert.equal(running('api-blue'), A);
+  assert.equal(running('web-blue'), A);
+  assert.deepEqual(colours(), { blue: A, active: 'blue' });
+  assert.ok(webCurls(read).length > 0);
+});
+
+test('the first deploy with the website, after one without, starts it and stops only the old API', () => {
+  const { run, read, ship, running } = stageProduction();
+  ship(A);
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = lines(read).length;
+  const result = run('deploy-production.sh', [B]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(running('web-green'), B);
+  assert.equal(running('api-blue'), '');
+  // The old colour had no website; stopping its name is harmless.
+  assert.ok(
+    lines(read)
+      .slice(before)
+      .some((l) => / stop -t 20 api-blue web-blue \|/.test(l)),
+  );
+});
+
+test('rollback brings the previous version back on both the API and the website', () => {
+  const { run, ship, running, colours } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const result = run('rollback-production.sh');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(running('web-blue'), A);
+  assert.equal(running('api-blue'), A);
+  assert.equal(running('web-green'), '');
+  assert.equal(colours().active, 'blue');
+});
+
+test('rolling back to a version from before the website is refused and changes nothing', () => {
+  const { run, read, ship, running, colours } = stageProduction();
+  ship(A);
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const before = composeCalls(read).length;
+  const result = run('rollback-production.sh');
+  assert.equal(result.status, 2);
+  assert.match(
+    result.stderr,
+    /aaaaaaa1 is from before the website ran on this server/,
+  );
+  assert.equal(composeCalls(read).length, before, 'no compose call');
+  assert.equal(running('web-green'), B);
+  assert.equal(colours().active, 'green');
+});
+
+test('pruning an old production version removes its web image too', () => {
+  const { run, read, ship } = stageProduction();
+  for (const v of [A, B, C]) ship(v, undefined, { web: true });
+  for (const v of [A, B, C])
+    assert.equal(
+      run('deploy-production.sh', [v], { KEEP_VERSIONS: '1' }).status,
+      0,
+    );
+  // A is neither colour's version any more (blue=C, green=B) nor among the newest: pruned.
+  const images = read('images');
+  assert.doesNotMatch(images, /tipme-web-production:aaaaaaa1/);
+  assert.match(images, /tipme-web-production:bbbbbbb2/);
+  assert.match(images, /tipme-web-production:ccccccc3/);
+});
+
+// Review I1 (26 Nov 2026): the old colour's website is drained before it stops. Its /api/version
+// answers 503, so the edge moves page traffic off it while it still serves the assets of pages it
+// already sent (the edge's static route), then it stops.
+test("the old colour's website is drained, and the edge given time, before it stops", () => {
+  const { run, read, ship } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = lines(read).length;
+  const result = run('deploy-production.sh', [B]);
+  assert.equal(result.status, 0, result.stderr);
+  const calls = lines(read).slice(before);
+  const served = indexOf(calls, /\/api\/version -> bbbbbbb2$/);
+  const drain = indexOf(
+    calls,
+    / exec -T web-blue touch \/tmp\/tipme-draining /,
+  );
+  const wait = indexOf(calls, /^sleep 8$/);
+  const stop = indexOf(calls, / stop -t 20 api-blue web-blue /);
+  assert.ok(served < drain && drain < wait && wait < stop, calls.join('\n'));
+  assert.match(result.stdout, /Draining web-blue/);
+});
+
+test('a first move (the old colour had no website) has nothing to drain and does not wait', () => {
+  const { run, read, ship } = stageProduction();
+  ship(A);
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  const before = lines(read).length;
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const calls = lines(read).slice(before);
+  assert.equal(indexOf(calls, /^sleep 8$/), -1, calls.join('\n'));
+  assert.ok(calls.some((l) => / stop -t 20 api-blue web-blue /.test(l)));
+});
+
+test('a rollback drains the website it leaves too', () => {
+  const { run, read, ship } = stageProduction();
+  ship(A, undefined, { web: true });
+  ship(B, undefined, { web: true });
+  assert.equal(run('deploy-production.sh', [A]).status, 0);
+  assert.equal(run('deploy-production.sh', [B]).status, 0);
+  const before = lines(read).length;
+  assert.equal(run('rollback-production.sh').status, 0);
+  const calls = lines(read).slice(before);
+  const drain = indexOf(
+    calls,
+    / exec -T web-green touch \/tmp\/tipme-draining /,
+  );
+  const stop = indexOf(calls, / stop -t 20 api-green web-green /);
+  assert.ok(drain >= 0 && drain < stop, calls.join('\n'));
+});

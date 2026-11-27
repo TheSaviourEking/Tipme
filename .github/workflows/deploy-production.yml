@@ -1,6 +1,6 @@
-# Builds the API/worker image once, ships it to the production server over SSH, deploys it
-# (blue/green, see deploy/scripts/deploy-production.sh) and runs the read-only release check
-# against production. The server never builds. Hand-run only (Actions → Deploy production →
+# Builds the API/worker image and the website's image once, ships them to the production server over
+# SSH, deploys them (blue/green, see deploy/scripts/deploy-production.sh) and runs the read-only
+# release check against production. The website runs there too since Vercel paused it (26 Nov 2026). The server never builds. Hand-run only (Actions → Deploy production →
 # Run workflow), and only from main: any other ref stops at once.
 #
 # Two guards before anything is built:
@@ -23,6 +23,13 @@
 # Repository settings → Secrets and variables → Actions → Variables (repository variables, not
 # environment ones: watch-production's `if:` cannot see environment variables):
 #   PRODUCTION_SSH (deploy@<server>), PRODUCTION_WEB_URL, PRODUCTION_API_URL
+# The website's build settings (baked into tipme-web-production; repository variables; never
+# secrets): PRODUCTION_SITE_URL (required: https://www.<domain>, the canonical address; not
+# PRODUCTION_WEB_URL, which may be the apex), PRODUCTION_NEXT_PUBLIC_SENTRY_DSN (the tipme-web DSN;
+# blank: the website sends nothing), PRODUCTION_NEXT_PUBLIC_SENTRY_ENVIRONMENT (default production)
+# and PRODUCTION_SITE_INDEXING (on lets search engines index; blank keeps it off, as in the pilot).
+# NEXT_PUBLIC_API_ORIGIN is PRODUCTION_API_URL. The pretend inbox and the preview gate are fixed
+# off here, never variables.
 # Also read, as a repository variable already used by Deploy staging: STAGING_API_URL
 # (the gate asks it which version staging runs).
 # Changelog (optional; docs/runbooks/changelog.md): the repository secret CHANGELOG_SIGNING_SECRET
@@ -127,6 +134,27 @@ jobs:
 
       - name: Build the image (once, here)
         run: docker build -f deploy/Dockerfile -t "tipme-app:$VERSION" .
+
+      # The website, with production's browser settings baked in (deploy/web.Dockerfile).
+      - name: Build the web image (production)
+        env:
+          # The canonical www address, never the apex (the image build stops if this is empty).
+          SITE_URL: ${{ vars.PRODUCTION_SITE_URL }}
+          SITE_INDEXING: ${{ vars.PRODUCTION_SITE_INDEXING }}
+          NEXT_PUBLIC_API_ORIGIN: ${{ vars.PRODUCTION_API_URL }}
+          # On, these open /dev/inbox (every sign-in code) and send preview credentials: never here.
+          NEXT_PUBLIC_PREVIEW_GATE: ''
+          NEXT_PUBLIC_PRETEND_DELIVERY: ''
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.PRODUCTION_NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${{ vars.PRODUCTION_NEXT_PUBLIC_SENTRY_ENVIRONMENT || 'production' }}
+        run: >-
+          docker build -f deploy/web.Dockerfile
+          --build-arg TIPME_BUILD_VERSION="$VERSION"
+          --build-arg SITE_URL --build-arg SITE_INDEXING
+          --build-arg NEXT_PUBLIC_API_ORIGIN --build-arg NEXT_PUBLIC_PREVIEW_GATE
+          --build-arg NEXT_PUBLIC_SENTRY_DSN --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT
+          --build-arg NEXT_PUBLIC_PRETEND_DELIVERY
+          -t "tipme-web-production:$VERSION" .
 
       - name: SSH to the server
         env:

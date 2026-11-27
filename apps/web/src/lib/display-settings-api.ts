@@ -3,11 +3,13 @@ import {
   createDisplaySettingsReader,
   type DisplaySettings,
 } from './display-settings.ts';
+import { serverApiOrigin } from './server-api-origin.ts';
 
-const API_ORIGIN =
-  process.env.API_INTERNAL_ORIGIN ??
-  process.env.NEXT_PUBLIC_API_ORIGIN ??
-  'http://localhost:4000';
+const API_ORIGIN = serverApiOrigin({
+  // Literal reads: the build inlines NEXT_PUBLIC_API_ORIGIN only where it is named.
+  API_INTERNAL_ORIGIN: process.env.API_INTERNAL_ORIGIN,
+  NEXT_PUBLIC_API_ORIGIN: process.env.NEXT_PUBLIC_API_ORIGIN,
+});
 
 /** One reader per web instance: the proxy and the pages share it. */
 export const readDisplaySettings = createDisplaySettingsReader({

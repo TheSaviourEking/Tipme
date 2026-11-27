@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Rolls production back to the version deployed before the current one, with no downtime: the
-# target starts on the idle colour (usually it is still there, stopped), the current colour stops
+# target (API and website) starts on the idle colour (usually it is still there, stopped), the current colour stops
 # once the target serves, then the workers move one at a time. No migration and no role setup run:
 # the database stays on the newer schema, which the earlier release must accept (expand/contract).
-# Rolling back again goes further back, never forward. The web app rolls back in Vercel.
+# Rolling back again goes further back, never forward. The website rolls back with the API: each
+# colour runs both on one version.
 #
 #   deploy/scripts/rollback-production.sh            # to the version deployed before the current one
 #   deploy/scripts/rollback-production.sh <version>  # to a specific earlier version (still shipped)
@@ -16,6 +17,7 @@ current=$(current_version)
 target=${1:-$(version_before "$current")}
 [[ -n "$target" && "$target" != "$current" ]] || { echo "No earlier version to roll back to." >&2; exit 2; }
 shipped "$target" || { echo "tipme-app:$target is no longer on this server; ship and deploy it instead." >&2; exit 2; }
+refuse_rollback_without_web "$current" "$target"
 # Only a version deployed before the current one: its code already ran against this schema's
 # predecessors and the expand/contract rule covers it. A newer one should be deployed instead.
 awk -v cur="$current" -v want="$target" '$0 == want { seen = 1 } $0 == cur { if (seen) found = 1 } END { exit !found }' "$DEPLOYED" || {

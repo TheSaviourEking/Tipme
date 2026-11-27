@@ -22,15 +22,20 @@
 
 ```sh
 docker build -f deploy/Dockerfile -t tipme-app:$(git rev-parse --short=12 HEAD) .
+# The website, with staging's build args (the workflow's "Build the web image (staging)" step lists them):
+docker build -f deploy/web.Dockerfile --build-arg TIPME_BUILD_VERSION=$(git rev-parse --short=12 HEAD) \
+  --build-arg SITE_URL=https://staging.<domain> --build-arg NEXT_PUBLIC_API_ORIGIN=https://api.staging.<domain> \
+  --build-arg NEXT_PUBLIC_PREVIEW_GATE=on --build-arg NEXT_PUBLIC_PRETEND_DELIVERY=on \
+  --build-arg NEXT_PUBLIC_SENTRY_ENVIRONMENT=staging -t tipme-web-staging:$(git rev-parse --short=12 HEAD) .
 STAGING_SSH=deploy@<server> scripts/ship-staging.sh $(git rev-parse --short=12 HEAD)
 ```
 
-The web app deploys in Vercel from the same push.
+The website ships and deploys with the API, on the same version (since 26 Nov 2026; it was on Vercel before).
 
 ## Roll back
 
-1. **API and worker:** on the server, `/srv/tipme/live/scripts/rollback.sh` returns to the version deployed before the current one, or `rollback.sh <version>` to an earlier one still on the server (the last 5 are kept). No migration runs, nothing is built or downloaded: the image is already there.
-2. **Web app:** in Vercel, **Deployments → the previous one → Instant Rollback**.
+1. **API, worker and website:** on the server, `/srv/tipme/live/scripts/rollback.sh` returns to the version deployed before the current one, or `rollback.sh <version>` to an earlier one still on the server (the last 5 are kept). No migration runs, nothing is built or downloaded: the image is already there.
+2. **Website:** it rolls back with them (that version's `tipme-web-staging` image). A version from before the website ran on the server is refused, since going back to it would stop the site.
 3. **Prove it:** run the release check (`--expect-version <old sha>`, then `--full`).
 4. **Rolling back past PR-011** (to a version without point-in-time recovery) restarts Postgres with WAL archiving off; `rollback.sh` warns, and the staging watcher reports it within 15 minutes. Daily logical backups continue. Deploy a newer version again to turn it back on.
 

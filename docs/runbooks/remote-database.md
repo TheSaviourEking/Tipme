@@ -99,7 +99,7 @@ These assume 3 reserved. Aiven says some services reserve 6; the server's own se
 | `ops:grant-owner`, `set-email`, `move-photos-to-r2` and other scripts | as run           | 1 each          | by hand: from the margin                                         |
 | A person's `psql`, Aiven's console                                    | as run           | 1 each          | by hand: from the margin                                         |
 | Aiven's own sessions                                                  | `postgres`       | 5 measured      | always: from the margin                                          |
-| Web app on Vercel                                                     | none             | 0               | talks to the API; `apps/web` has no database client              |
+| Web app (on the server since 26 Nov 2026)                             | none             | 0               | talks to the API; `apps/web` has no database client              |
 | Release check, `watch-production`                                     | none             | 0               | HTTP only                                                        |
 | Staging                                                               | its own Postgres | 0 here          | not on Aiven                                                     |
 
