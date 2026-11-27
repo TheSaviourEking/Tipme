@@ -12,7 +12,7 @@
 ## Release to staging
 
 - [ ] **API and worker:** the **Deploy staging** workflow succeeds (checks, build, ship, deploy, full release check).
-- [ ] **Web app:** Vercel shows the same commit for the web app.
+- [ ] **Web app:** `https://staging.<domain>/api/version` shows the same commit (the deploy waits for it).
 - [ ] **Read-only check:** `pnpm release:check --web … --api … --expect-version <sha>` passes.
 - [ ] **Full check:** `pnpm release:check … --full` passes. That proves the whole story:
   1. QR visit → tip → paid;
@@ -25,7 +25,7 @@
 ## Practise going back (at least once per release cycle)
 
 - [ ] `/srv/tipme/live/scripts/rollback.sh` → the read-only check passes on the previous version.
-- [ ] Vercel Instant Rollback → the web app serves the previous deployment.
+- [ ] The same rollback brings the website back too: `/api/version` shows the previous sha.
 - [ ] Redeploy the new version → the full check passes again.
 
 ## If the read-only check says the API does not match the web address

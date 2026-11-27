@@ -2,8 +2,8 @@
 # Deploys one version to production with no downtime (blue/green). GitHub Actions has already
 # built, tested and shipped the image and this version's files (deploy-production workflow).
 #   roles → pause the old workers → migrate (as the migrator; Aiven backs up continuously) → roles
-#   → start the idle colour on the new version → wait until the public API serves it → stop the old
-#   colour → replace the workers one at a time → record. Old workers paused and not yet replaced
+#   → start the idle colour (API and website) on the new version → wait until the public API and the
+#   public website serve it → stop the old colour → replace the workers one at a time → record. Old workers paused and not yet replaced
 #   are started again whenever the deploy stops early.
 # If the new colour is unhealthy it is stopped and the old colour keeps serving (nothing else
 # changes). Migrations are forward-only and must stay compatible with the release still serving.

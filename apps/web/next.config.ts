@@ -1,6 +1,9 @@
 import { execSync } from 'node:child_process';
+import { join } from 'node:path';
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
+import { buildVersion } from './src/lib/build-version';
+import { nextCompresses } from './src/lib/edge-compression';
 import { parseProductionLaunchAt } from './src/lib/production-launch';
 import {
   PUBLIC_PAGE_SOURCE,
@@ -12,22 +15,12 @@ import {
 // indefinitely hide the site. The request-time gate reads the same server-only value.
 parseProductionLaunchAt(process.env.PRODUCTION_LAUNCH_AT);
 
-// The build's identity. The same value is inlined into the pages and into /api/version, so a page
-// can tell when the server has moved on to a newer build.
-function buildVersion(): string {
-  const fromHost =
-    process.env.VERCEL_DEPLOYMENT_ID || process.env.VERCEL_GIT_COMMIT_SHA;
-  if (fromHost) return fromHost;
-  try {
-    return execSync('git rev-parse HEAD', {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-      .toString()
-      .trim();
-  } catch {
-    return String(Date.now());
-  }
-}
+// The build's identity (src/lib/build-version.ts): the deploy passes TIPME_BUILD_VERSION.
+const version = buildVersion(process.env, () =>
+  execSync('git rev-parse HEAD', {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  }).toString(),
+);
 
 const apiOrigin = process.env.NEXT_PUBLIC_API_ORIGIN || 'http://localhost:4000';
 const apiUrl = new URL(apiOrigin);
@@ -66,7 +59,14 @@ const studioPreviewHeaders = securityHeaders({
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  env: { TIPME_BUILD_VERSION: buildVersion() },
+  // Self-hosted on the server behind the edge Caddy (deploy/web.Dockerfile, 26 Nov 2026): a
+  // standalone server with only the files it needs. Traced from the repository root, so the
+  // workspace packages come along.
+  output: 'standalone',
+  outputFileTracingRoot: join(__dirname, '../..'),
+  // Off only in the self-hosted image, whose edge compresses (src/lib/edge-compression.ts).
+  compress: nextCompresses(process.env),
+  env: { TIPME_BUILD_VERSION: version },
   // Public profiles live at /@handle (PRD). A folder starting with "@" is a parallel-route slot
   // in the App Router, so /@handle is rewritten to the internal people/[handle] route. The legacy
   // /people/handle redirect lives in Proxy so the production launch gate runs before it.
@@ -101,7 +101,13 @@ const nextConfig: NextConfig = {
   // The portraits are 960px wide, so a candidate above that only re-encodes the same pixels under
   // another URL (and the resizer never enlarges). Cap the ladder at the real width.
   // Cover artwork asks for quality 85 so the optimiser doesn't add a second visible lossy pass.
-  images: { deviceSizes: [640, 750, 828, 960], qualities: [75, 85] },
+  // The resized copies are kept on a 128 MB tmpfs in the self-hosted container
+  // (deploy/compose.*.yml), so the cache stays well inside it.
+  images: {
+    deviceSizes: [640, 750, 828, 960],
+    qualities: [75, 85],
+    maximumDiskCacheSize: 64 * 1024 * 1024,
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

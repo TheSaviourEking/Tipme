@@ -1,12 +1,14 @@
 import { cacheLife, cacheTag } from 'next/cache';
 import type { PublicCampaignPage, PublicProfile } from '@tipme/contracts';
 import { previewServerKey } from '@tipme/domain';
+import { serverApiOrigin } from './server-api-origin.ts';
 
 /** The API as reached from the web server (may differ from the browser's address). */
-export const API_ORIGIN =
-  process.env.API_INTERNAL_ORIGIN ??
-  process.env.NEXT_PUBLIC_API_ORIGIN ??
-  'http://localhost:4000';
+export const API_ORIGIN = serverApiOrigin({
+  // Literal reads: the build inlines NEXT_PUBLIC_API_ORIGIN only where it is named.
+  API_INTERNAL_ORIGIN: process.env.API_INTERNAL_ORIGIN,
+  NEXT_PUBLIC_API_ORIGIN: process.env.NEXT_PUBLIC_API_ORIGIN,
+});
 
 const LOOKUP_TIMEOUT_MS = 4000;
 

@@ -22,7 +22,8 @@ and what happens to each.
 - **Display setting** (what the web app shows): moves to admin (owner, 14 Nov 2026): the pilot notice and
   the launch time.
 
-Where: **A** API, **W** worker, **Web** the web app (Vercel), **P** production deploy files, **S** staging deploy
+Where: **A** API, **W** worker, **Web** the web app (on the server since 26 Nov 2026: a build arg from a GitHub
+variable, or a line in the server's env file; `apps/web/DEPLOYMENT.md`), **P** production deploy files, **S** staging deploy
 files.
 
 ## Product switches: moved to admin
@@ -142,7 +143,7 @@ read, and before any read the code default, which is off for every money switch.
 | `MAIL_DEFAULT_PROVIDER`                       | Mail provider until staff choose one in Providers                            | A W P S   | Already a fallback only: staff choose the provider in admin. The deploy refuses a missing value so production never mails a pretend inbox.                                                                                                                                                  |
 | `BREVO_TRANSACTIONAL`                         | on: Brevo is offered in Providers for codes, receipts and alerts             | A W P S   | Owner, 23 Nov 2026: opt-in, off by default. Builds a provider at start, so it needs a restart; needs `BREVO_API_KEY` and `BREVO_WEBHOOK_TOKEN`. Staff still switch to Brevo by hand (a confirmed test, a reason, a fresh code); it becomes a backup only through `MAIL_FALLBACK_PROVIDERS`. |
 | `MAIL_FALLBACK_PROVIDERS`                     | Automatic email failover: the backup provider(s), e.g. `brevo`; empty is off | A W P S   | Owner, 23 Nov 2026: empty by default, so nothing changes until it is set. Builds the failover group at start (a restart); a listed provider must be configured. Staff can still fix the provider or clear a trip in Providers (`admin-roles.md`, "Automatic email failover").               |
-| `SITE_INDEXING`                               | Search engines may index this copy (Vercel)                                  | Web       | A staging copy must never be indexed; it is read while rendering metadata, before any API answer.                                                                                                                                                                                           |
+| `SITE_INDEXING`                               | Search engines may index this copy (built in: `PRODUCTION_SITE_INDEXING`)    | Web       | A staging copy must never be indexed; it is read while rendering metadata, before any API answer.                                                                                                                                                                                           |
 | `NEXT_PUBLIC_PRETEND_DELIVERY`                | The pretend inbox and crash pages in a production build                      | Web       | Built into the web bundle; test copies only.                                                                                                                                                                                                                                                |
 | `NEXT_PUBLIC_PREVIEW_GATE`                    | Sends credentials to the password-gated preview                              | Web       | Built into the bundle; describes the preview gateway.                                                                                                                                                                                                                                       |
 
@@ -170,19 +171,19 @@ tips** but still pay out money already held there, and still serve refunds, disp
 
 ## Display settings: moved to admin
 
-The web app's two Vercel settings (owner, 14 Nov 2026). Set at `/ops/switches`, under "What the web app shows",
+The web app's two old settings (owner, 14 Nov 2026; on Vercel then, in the server's env file since 26 Nov 2026). Set at `/ops/switches`, under "What the web app shows",
 with a reason and a fresh code (not money), audited, with history. The API serves them on its public
 `/health/release` (`display`), which the web already reads; each web instance asks at most once a minute, so a
 change shows within about a minute.
 
-| Variable (Vercel)      | Setting                | What it does                                                                        |
+| Variable (old)         | Setting                | What it does                                                                        |
 | ---------------------- | ---------------------- | ----------------------------------------------------------------------------------- |
 | `PILOT_NOTICE`         | `pilot_notice`         | The pilot line where money moves; still shown only while payments are live          |
 | `PRODUCTION_LAUNCH_AT` | `production_launch_at` | Before it, every page shows "coming soon"; none means TipMe is open (stored as UTC) |
 
 - **Release day:** a display setting has no value until staff first set it. Until then the web keeps reading its
-  own Vercel setting, so nothing changes on deploy. Once both are set at `/ops/switches`, delete the two Vercel
-  lines and redeploy the web app.
+  own setting (the env file's line), so nothing changes on deploy. Once both are set at `/ops/switches`, delete
+  the two lines from the env files.
 - **If the API can't be read:** the web keeps the last value it read; with none, there is no pilot notice and no
   launch gate. That is what an unset `PILOT_NOTICE` and an unset `PRODUCTION_LAUNCH_AT` always meant.
 - **The countdown check** (`tests/e2e/countdown.config.ts`, run by hand) runs the web app alone, so it starts a
@@ -226,7 +227,7 @@ under "Limits". Each replaced no variable; while unset its default applies. Not 
 | `LOG_LEVEL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_TRACES_SAMPLER_RATIO`, `API_METRICS_PORT`, `WORKER_METRICS_PORT`, `OPS_TRACE_URL_TEMPLATE`, `SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`             | Observability                                                | A W Web P S |
 | `SES_REGION`, `ZEPTOMAIL_API_BASE`, `ZEPTOMAIL_BOUNCE_ADDRESS`, `SES_CONFIGURATION_SET`, `SES_CONFIGURATION_SET_UNTRACKED`, `SES_SNS_TOPIC_ARN`, `BACHS_PLATFORM_ORGANIZATION_ID`, `R2_ACCOUNT_ID`, `R2_BUCKET`  | Provider account identifiers (configured with their secrets) | A W P S     |
 | `MAIL_PRETEND_DOMAINS`, `TRACE_PROBE_TEST_DELAY_MS`                                                                                                                                                              | Test copies only                                             | A W S       |
-| `NEXT_RUNTIME`, `NEXT_PUBLIC_VERCEL_ENV`, `VERCEL_DEPLOYMENT_ID`, `VERCEL_GIT_COMMIT_SHA`                                                                                                                        | Set by Next.js and Vercel                                    | Web         |
+| `NEXT_RUNTIME`, `TIPME_BUILD_VERSION` (the deployed sha, a build arg)                                                                                                                                            | Set by Next.js and Vercel                                    | Web         |
 
 ## Secrets: stay
 

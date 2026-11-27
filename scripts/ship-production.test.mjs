@@ -41,10 +41,14 @@ bash -c "$cmd"`,
   fake(
     'docker',
     `case "$1" in
-  save) echo "IMAGE-BYTES-$2" ;;
-  load) cat > "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
+  save) shift; for image in "$@"; do echo "IMAGE-BYTES-$image"; done ;;
+  load) cat >> "$FAKE_PRODUCTION/loaded"; echo "Loaded image" ;;
+  image) echo "docker $*" >> "$FAKE_LOG"; [[ "$3" != "$FAKE_MISSING_IMAGE" ]] ;;
   run) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_CADDY_VALID" == "1" ]] ;;
-  compose) echo "docker $*" >> "$FAKE_LOG"; [[ "$FAKE_RELOAD_FAIL" != "1" ]] ;;
+  compose) echo "docker $*" >> "$FAKE_LOG"
+    # The running edge's own environment (it read edge.env when it was created).
+    if [[ " $* " == *" printenv "* ]]; then [[ " $FAKE_EDGE_ENV_MISSING " != *" \${!#} "* ]]; exit $?; fi
+    [[ " $* " != *" reload "* || "$FAKE_RELOAD_FAIL" != "1" ]] ;;
   *) echo "docker $*" >> "$FAKE_LOG" ;;
 esac`,
   );
@@ -62,9 +66,9 @@ esac`,
     PRODUCTION_SKIP_DEPLOY: '1',
   };
   // A fake deploy script is not needed: nothing is shipped when the edge step fails.
-  const run = (args) =>
+  const run = (args, extra = {}) =>
     spawnSync('bash', [resolve('scripts/ship-production.sh'), ...args], {
-      env,
+      env: { ...env, ...extra },
       encoding: 'utf8',
     });
   const log = () =>
@@ -167,4 +171,62 @@ test('a failed reload puts the previous Caddyfile back and stops before producti
   assert.equal((log().match(/caddy reload/g) ?? []).length, 2);
   assert.equal(existsSync(join(production, 'releases')), false);
   assert.equal(existsSync(join(production, 'loaded')), false);
+});
+
+// The website runs on the server since Vercel paused it (26 Nov 2026): its production image ships
+// in the same stream (the shared base layers travel once).
+test('ship-production sends the production web image with the app image', () => {
+  const { run, production } = stage();
+  const result = run(['abcdef123456']);
+  assert.equal(result.status, 0, result.stderr);
+  const loaded = readFileSync(join(production, 'loaded'), 'utf8');
+  assert.match(loaded, /IMAGE-BYTES-tipme-app:abcdef123456/);
+  assert.match(loaded, /IMAGE-BYTES-tipme-web-production:abcdef123456/);
+  assert.doesNotMatch(loaded, /tipme-web-staging/);
+});
+
+test('ship-production without the web image stops before the edge or production changes', () => {
+  const { run, edge, production, log } = stage();
+  const result = run(['abcdef123456'], {
+    FAKE_MISSING_IMAGE: 'tipme-web-production:abcdef123456',
+  });
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /tipme-web-production:abcdef123456/);
+  assert.equal(
+    readFileSync(join(edge, 'Caddyfile'), 'utf8'),
+    'old caddyfile\n',
+  );
+  assert.doesNotMatch(log(), /ssh /);
+  assert.equal(existsSync(join(production, 'releases')), false);
+});
+
+// Review C1: the edge reads edge.env only when its container is created. A Caddyfile naming a
+// setting the running container lacks would reload with it empty, so the ship stops first and says
+// to recreate the edge.
+test('a Caddyfile naming a setting the running edge lacks stops the ship before anything changes', () => {
+  const { run, edge, production, log } = stage();
+  const result = run(['abcdef123456'], {
+    FAKE_EDGE_ENV_MISSING: 'PRODUCTION_WEB_HOST STAGING_WEB_HOST',
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /PRODUCTION_WEB_HOST/);
+  assert.match(result.stderr, /STAGING_WEB_HOST/);
+  assert.match(result.stderr, /up -d/);
+  assert.equal(
+    readFileSync(join(edge, 'Caddyfile'), 'utf8'),
+    'old caddyfile\n',
+  );
+  assert.doesNotMatch(log(), /caddy reload/);
+  assert.equal(existsSync(join(production, 'releases')), false);
+});
+
+test('the ship asks the running edge for every setting the new Caddyfile reads', () => {
+  const { run, log } = stage();
+  assert.equal(run(['abcdef123456']).status, 0);
+  const caddyfile = readFileSync(resolve('deploy/edge/Caddyfile'), 'utf8');
+  const keys = new Set(
+    [...caddyfile.matchAll(/\{\$([A-Z][A-Z0-9_]*)/g)].map((m) => m[1]),
+  );
+  for (const key of keys)
+    assert.match(log(), new RegExp(`exec -T caddy printenv ${key}\\b`), key);
 });
