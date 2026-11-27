@@ -804,6 +804,17 @@ const codeEnteredAt = (db, people, actor, at) =>
 const lagosTomorrow = () =>
   new Date(lagosDayStart(new Date()).getTime() + DAY + 30 * 60_000);
 
+/**
+ * When a test asks today and approves at lagosTomorrow(): noon in Lagos, or now if later. Never
+ * before now (no row the test wrote is in the asker's future), and at most 12½ hours before
+ * lagosTomorrow(), well inside a request's 24 hours. Asking at the real clock instead failed CI
+ * run just after Lagos midnight: 00:11 to 00:30 the next night is past 24 hours, so expired.
+ */
+const askedToday = () =>
+  new Date(
+    Math.max(Date.now(), lagosDayStart(new Date()).getTime() + 12 * HOUR),
+  );
+
 /** Moves the clock every `new Date()` reads (the database's own clock stays). */
 const clockAt = (t, at) => {
   t.mock.timers.reset();
@@ -1065,15 +1076,18 @@ const KIND_TIP = {
 };
 
 test('a tip completing today leaves today’s estimate, and an approval keeps the asker’s figure', async (t) => {
-  const { db, person, ask, approve, rows } = await actionSetup(t);
+  const { db, person, people, ask, approve, rows } = await actionSetup(t);
   const asker = await person();
   const approver = await person();
   await paidTip(db, 'ada', 1_000_000n);
   await intoYesterday(db);
+  const askedAt = askedToday();
+  await codeEnteredAt(db, people, asker, askedAt);
+  clockAt(t, askedAt);
   const payload = { ...KIND_TIP, costEstimateMinor: '50000' };
   // A figure that isn't the live one is not a confirm of it.
   await assert.rejects(
-    ask(asker, { ...payload, costEstimateMinor: '40000' }),
+    ask(asker, { ...payload, costEstimateMinor: '40000' }, askedAt),
     (error) => error.code === 'FEE_WAIVER_CONFIRM_REQUIRED',
   );
   // A tip today doesn't move today's figure, so the screen's figure still holds.
@@ -1084,8 +1098,8 @@ test('a tip completing today leaves today’s estimate, and an approval keeps th
       fee: 'tip',
       now,
     });
-  assert.equal(await estimate(new Date()), 50_000n);
-  const outcome = await ask(asker, payload);
+  assert.equal(await estimate(askedAt), 50_000n);
+  const outcome = await ask(asker, payload, askedAt);
   assert.equal(outcome.state, 'pending', JSON.stringify(outcome));
   // Tomorrow the live figure is ₦1,000; the approver confirms the ₦500 they read.
   const approvedAt = lagosTomorrow();
@@ -1130,8 +1144,20 @@ test('two staff asking for the same rule the same day share one request; across 
   const c = await person();
   await paidTip(db, 'ada', 1_000_000n);
   await intoYesterday(db);
-  const first = await ask(a, { ...KIND_TIP, costEstimateMinor: '50000' });
-  const again = await ask(b, { ...KIND_TIP, costEstimateMinor: '50000' });
+  const askedAt = askedToday();
+  await codeEnteredAt(db, people, a, askedAt);
+  await codeEnteredAt(db, people, b, askedAt);
+  clockAt(t, askedAt);
+  const first = await ask(
+    a,
+    { ...KIND_TIP, costEstimateMinor: '50000' },
+    askedAt,
+  );
+  const again = await ask(
+    b,
+    { ...KIND_TIP, costEstimateMinor: '50000' },
+    askedAt,
+  );
   assert.equal(again.repeat, true);
   assert.equal(again.requestId, first.requestId);
   // After midnight today's tip counts: different words, so a request of its own for the approver
