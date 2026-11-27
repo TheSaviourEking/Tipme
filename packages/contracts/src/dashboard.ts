@@ -151,8 +151,17 @@ export interface TipTotals {
   paidTipCount: number;
 }
 
+/**
+ * `feePaidBy` is who the quote on screen showed paying the transfer fee (Ruling R6, profit guards):
+ * when the request decides otherwise it is refused `WITHDRAWAL_FEE_CHANGED`, so nobody is charged a
+ * fee they did not see. Optional for one release so a screen loaded before it still works: without
+ * it the request decides the payer as it always has.
+ */
 export const withdrawalRequestSchema = z
-  .object({ amountMinor: z.string().regex(/^\d{1,12}$/) })
+  .object({
+    amountMinor: z.string().regex(/^\d{1,12}$/),
+    feePaidBy: z.enum(['user', 'tipme']).optional(),
+  })
   .strict();
 
 /** What the recipient can withdraw now and, if nothing, why. Amounts are minor units of NGN. */
@@ -177,17 +186,31 @@ export type WithdrawalQuote =
       /** Some money is held where withdrawals can't reach it now; it isn't in this quote. */
       heldElsewhere: boolean;
       /**
-       * Who pays the partner's fee. 'tipme' for every new withdrawal from a person's page (owner, 18
-       * Nov 2026: withdrawals are free), and for a business while the `business_payout_fee_absorbed`
-       * switch is on or an unused top-up can pay it. Otherwise 'user', a business's rule since 12 Nov
-       * 2026: the fee comes off the amount chosen (a business withdrawing ₦10,000 receives less).
+       * Who pays the partner's fee. 'user' by default, for a person (owner, 25 Nov 2026; it replaces
+       * 18 Nov's two free a day) and a business (since 12 Nov 2026): the fee comes off the amount
+       * chosen (withdrawing ₦10,000 receives ₦9,950). 'tipme' only when an unused top-up TipMe already
+       * sent to the account can pay it, or, for a business, while the `business_payout_fee_absorbed`
+       * switch is on. The request sends it back (Ruling R6) so a change since is refused.
        */
       feePaidBy: 'user' | 'tipme';
       /**
+       * Every provider read, in drain order: what it can pay now, its fee (as `feeMinor`: '0' on a
+       * person's page when TipMe pays) and who would pay it. Who pays can differ by provider (an
+       * unused top-up is held at one only), so the screen decides the amount typed with
+       * `withdrawalFeeFor`, from the same split the request makes, and sends that payer. Absent from
+       * an API before this release: then `feePaidBy` decides.
+       */
+      feeParts?: {
+        capMinor: string;
+        feeMinor: string;
+        feePaidBy: 'user' | 'tipme';
+      }[];
+      /**
        * A person's page: which withdrawal of the Lagos day this one would be (not counting failed
-       * ones), and how many a day are free (owner, 18 Nov 2026). A business: 1 and 0.
+       * ones). A business: 1. Nothing reads it to price a withdrawal now.
        */
       ordinalToday: number;
+      /** Always 0: nobody has free withdrawals (owner, 25 Nov 2026). Kept for older screens. */
       freePerDay: number;
       destination: { bankName: string; last4: string };
     }

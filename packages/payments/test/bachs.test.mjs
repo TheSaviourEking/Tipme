@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import {
   BachsApiError,
   BachsProtocolError,
+  BachsRequestNotSentError,
   UncertainProviderOutcomeError,
   createBachsProvider,
   decimalToMinor,
@@ -1774,4 +1775,83 @@ test('account creation refuses a country outside the payout list before any requ
     );
   }
   assert.equal(requests, 0);
+});
+
+const directCheckout = {
+  attemptId: 'attempt-methods',
+  amountMinor: 100000n,
+  currency: 'NGN',
+  recipientAccountReference: 'acct_123abc',
+  tipmeShareMinor: 10500n,
+  successUrl: 'https://usetipme.xyz/checkout/return',
+  cancelUrl: 'https://usetipme.xyz/checkout/cancel',
+};
+
+function recordingProvider() {
+  const bodies = [];
+  const provider = makeProvider(async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return jsonResponse(
+      {
+        checkout_id: 'chk_123abc',
+        checkout_url: 'https://checkout.bachs.io/session/chk_123abc',
+        status: 'open',
+      },
+      201,
+    );
+  });
+  return { provider, bodies };
+}
+
+test('checkout sends only bank transfer when asked', async () => {
+  const { provider, bodies } = recordingProvider();
+  await provider.initializePayment({
+    ...directCheckout,
+    paymentMethods: ['bank_transfer'],
+  });
+  assert.deepEqual(bodies[0].payment_method_types, ['NGN_BANK_TRANSFER']);
+});
+
+test('checkout without paymentMethods sends both, as before', async () => {
+  const { provider, bodies } = recordingProvider();
+  await provider.initializePayment(directCheckout);
+  assert.deepEqual(bodies[0].payment_method_types, [
+    'NGN_CARD',
+    'NGN_BANK_TRANSFER',
+  ]);
+});
+
+test('checkout sends the methods in the order given', async () => {
+  const { provider, bodies } = recordingProvider();
+  await provider.initializePayment({
+    ...directCheckout,
+    paymentMethods: ['bank_transfer', 'card'],
+  });
+  assert.deepEqual(bodies[0].payment_method_types, [
+    'NGN_BANK_TRANSFER',
+    'NGN_CARD',
+  ]);
+});
+
+test('an empty or unknown method list never reaches Bachs', async () => {
+  for (const paymentMethods of [[], ['crypto']]) {
+    const { provider, bodies } = recordingProvider();
+    await assert.rejects(
+      provider.initializePayment({ ...directCheckout, paymentMethods }),
+      BachsRequestNotSentError,
+    );
+    assert.equal(bodies.length, 0);
+  }
+});
+
+test('a repeated method never reaches Bachs', async () => {
+  const { provider, bodies } = recordingProvider();
+  await assert.rejects(
+    provider.initializePayment({
+      ...directCheckout,
+      paymentMethods: ['card', 'card'],
+    }),
+    BachsRequestNotSentError,
+  );
+  assert.equal(bodies.length, 0);
 });

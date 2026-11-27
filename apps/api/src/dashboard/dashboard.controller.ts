@@ -350,6 +350,12 @@ export class DashboardController {
               feeMinor:
                 quote.feePaidBy === 'tipme' ? '0' : quote.feeMinor.toString(),
               feePaidBy: quote.feePaidBy,
+              feeParts: quote.feeParts.map((part) => ({
+                capMinor: part.capMinor.toString(),
+                feeMinor:
+                  part.feePaidBy === 'tipme' ? '0' : part.feeMinor.toString(),
+                feePaidBy: part.feePaidBy,
+              })),
             }
           : { ...quote, inReview },
     };
@@ -398,6 +404,7 @@ export class DashboardController {
         profileId,
         amountMinor: BigInt(body.amountMinor),
         idempotencyKey: key,
+        ...(body.feePaidBy ? { feePaidBy: body.feePaidBy } : {}),
         providers: this.providers,
         onReadFailure: this.logReadFailure('request'),
       });

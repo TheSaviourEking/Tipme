@@ -67,7 +67,7 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | `collect.view` | GET `/v1/ops/collect/disputes`<br>GET `/v1/ops/collect/disputes/{id}`<br>GET `/v1/ops/collect/held`<br>GET `/v1/ops/collect/reserve`<br>GET `/v1/ops/collect/same-bank`<br>GET `/v1/ops/collect/transfers`<br>GET `/v1/ops/collect/unclaimed` |
 | `email.export` | GET `/v1/ops/email/export.csv`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
 | `email.read` | GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/messages/{id}/content`<br>GET `/v1/ops/email/messages/{id}/timeline`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary` |
-| `fees.manage` | GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
+| `fees.manage` | GET `/v1/ops/card-costs`<br>POST `/v1/ops/card-costs`<br>GET `/v1/ops/collect-settings`<br>POST `/v1/ops/collect-settings`<br>POST `/v1/ops/pages/{profileId}/fee`<br>POST `/v1/ops/pages/{profileId}/fee-free`<br>GET `/v1/ops/pages/{profileId}/pricing`<br>GET `/v1/ops/plan-fees`<br>POST `/v1/ops/plan-fees` |
 | `issues.resolve` | POST `/v1/ops/business-notes/{tipId}/review`<br>POST `/v1/ops/issues/{id}/resolve` |
 | `issues.view` | GET `/v1/ops/database-budget`<br>GET `/v1/ops/email/messages`<br>GET `/v1/ops/email/series`<br>GET `/v1/ops/email/summary`<br>GET `/v1/ops/issues`<br>GET `/v1/ops/issues/{id}`<br>POST `/v1/ops/issues/{id}/notes`<br>GET `/v1/ops/providers/mail`<br>POST `/v1/ops/providers/tests/confirm`<br>GET `/v1/ops/split-accounts`<br>POST `/v1/ops/split-accounts/read` |
 | `market.edit` | POST `/v1/ops/market`<br>PATCH `/v1/ops/market/{id}`<br>POST `/v1/ops/market/{id}/archive` |
@@ -373,6 +373,8 @@ Serious actions wait for a second qualified person, and run alone with an alert 
 | POST | `/v1/ops/businesses/{id}/reveal` | `private.view` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/suspend` | `businesses.manage` | yes | – | – |
 | POST | `/v1/ops/businesses/{id}/verify` | `businesses.manage` | yes | `ops_request` | – |
+| GET | `/v1/ops/card-costs` | `fees.manage` | n/a (read) | `ops_read` | – |
+| POST | `/v1/ops/card-costs` | `fees.manage` | yes | `ops_request` | – |
 | GET | `/v1/ops/changelog` | `changelog.edit,changelog.publish` | n/a (read) | `ops_read` | – |
 | GET | `/v1/ops/changelog/{number}` | `changelog.edit,changelog.publish` | n/a (read) | `ops_read` | – |
 | PUT | `/v1/ops/changelog/{number}` | `changelog.edit,changelog.publish` | yes | `ops_request` | – |

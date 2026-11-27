@@ -56,6 +56,16 @@ const CASES = [
     'TipMe’s fee per plan: Free 7%, Pro 5% → Free 5%, Pro 3%; approved by staff …00c3d4',
   ],
   [
+    'card_costs.changed',
+    'card_cost_settings',
+    {
+      from: { rateBps: '200', fixedMinor: '4500', marginMinor: '1500' },
+      to: { rateBps: '250', fixedMinor: '4550', marginMinor: '2000' },
+      approvedBy: null,
+    },
+    'Card cost: 2% + ₦45, margin ₦15 → 2.5% + ₦45.50, margin ₦20',
+  ],
+  [
     'collect_settings.changed',
     'c',
     {

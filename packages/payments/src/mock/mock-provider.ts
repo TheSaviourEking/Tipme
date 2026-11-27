@@ -12,6 +12,7 @@ import {
   TipRefundRefusedError,
 } from '../provider.js';
 import type {
+  CheckoutMethod,
   DisputeStatus,
   PaymentProvider,
   PayoutPort,
@@ -136,6 +137,8 @@ export interface MockProvider
     amountMinor: bigint;
     currency: string;
     scenario?: Scenario;
+    /** Accepted and ignored: the pretend provider has one flow. */
+    paymentMethods?: readonly CheckoutMethod[];
   }): Promise<{ providerReference: string }>;
   initiatePayout(input: {
     payoutId: string;

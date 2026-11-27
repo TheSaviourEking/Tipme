@@ -1,5 +1,4 @@
 import { LegalPlaceholder } from '@/components/legal-placeholder';
-import { FREE_WITHDRAWALS_PER_DAY } from '@tipme/domain';
 import { getPlanFees } from '@/lib/plan-fees-api';
 import {
   TERMS_EXAMPLE_TIP_MINOR,
@@ -7,6 +6,7 @@ import {
   termsFeeFigures,
 } from '@/lib/terms-fees';
 import { previewMetadata } from '@/lib/metadata';
+import { WITHDRAWAL_FEE_COPY_MINOR } from '@tipme/domain';
 import { Money } from '@/components/money';
 
 export const metadata = previewMetadata(
@@ -29,9 +29,10 @@ export default async function TermsPlaceholder() {
         'Liability and how these terms change',
       ]}
     >
-      {/* The owner's decisions, 3, 12 and 18 Nov 2026: state the fee here (payment and withdrawal fees
-          included). The rates and the example nets come from the live setting (getPlanFees), so a
-          change in admin shows here; if the API can't be read they are the starting rates, Free 5% and Pro 3%. */}
+      {/* The owner's decisions, 3, 12, 18 and 25 Nov 2026: state the fee here (payment processing
+          included, the withdrawal fee shown). The rates and the example nets come from the live setting
+          (getPlanFees), so a change in admin shows here; if the API can't be read they are the
+          starting rates, Free 5% and Pro 3%. */}
       <section aria-labelledby="fees">
         <h2 id="fees">Fees</h2>
         <p>
@@ -43,22 +44,18 @@ export default async function TermsPlaceholder() {
           <strong>If you receive tips,</strong> TipMe keeps {fees.freePercent}%
           of each tip on the Free plan, or {fees.proPercent}% on TipMe Pro,
           unless we have agreed a lower fee with you, and you receive the rest.
-          The fee includes the cost of processing the payment and of your
-          withdrawals. From a <Money minor={Number(TERMS_EXAMPLE_TIP_MINOR)} />{' '}
-          tip, you receive <Money minor={fees.exampleNet.free} /> on Free, or{' '}
+          The fee includes the cost of processing the payment. From a{' '}
+          <Money minor={Number(TERMS_EXAMPLE_TIP_MINOR)} /> tip, you receive{' '}
+          <Money minor={fees.exampleNet.free} /> on Free, or{' '}
           <Money minor={fees.exampleNet.pro} /> on Pro. The fee is set by your
           plan when the supporter sees the amount, so a tip keeps the fee it was
           shown with if your plan changes afterwards.
         </p>
         <p>
-          <strong>Withdrawals:</strong> The first {FREE_WITHDRAWALS_PER_DAY}{' '}
-          withdrawals each day (Lagos time) are free: TipMe pays our payment
-          partner’s transfer fee, and you receive the whole amount you withdraw.
-          If you withdraw <span className="money">₦10,000</span>, you receive{' '}
-          <span className="money">₦10,000</span>. After those, in the same day,
-          our payment partner’s transfer fee (<span className="money">₦50</span>{' '}
-          today) comes off the amount, and the withdraw screen tells you before
-          you confirm. The smallest withdrawal is{' '}
+          <strong>Withdrawals:</strong> each withdrawal costs{' '}
+          <Money minor={Number(WITHDRAWAL_FEE_COPY_MINOR)} />, charged by our
+          payment partner, and comes off the amount. The withdraw screen tells
+          you before you confirm. The smallest withdrawal is{' '}
           <span className="money">₦2,000</span>, unless you are withdrawing your
           whole balance. Withdrawals from a business’s balance still carry our
           payment partner’s transfer fee, taken from the amount, unless TipMe

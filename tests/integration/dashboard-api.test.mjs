@@ -147,9 +147,9 @@ test('a withdrawal needs a key, respects the balance and is confirmed by reconci
     .data;
   assert.equal(quote.state, 'ready');
   assert.equal(quote.withdrawableMinor, before);
-  // A person's withdrawals are free (owner, 18 Nov 2026): TipMe pays, the user pays nothing.
-  assert.equal(quote.feeMinor, '0');
-  assert.equal(quote.feePaidBy, 'tipme');
+  // A person pays the partner's ₦50 from the amount on every withdrawal (owner, 25 Nov 2026).
+  assert.equal(quote.feeMinor, '5000');
+  assert.equal(quote.feePaidBy, 'user');
   const ok = await withdraw('200000');
   assert.equal(ok.status, 201);
   const { payoutId } = (await ok.json()).data;

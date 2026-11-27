@@ -50,10 +50,10 @@ import {
   collectWithdrawView,
   TOO_SMALL,
   withdrawableNow,
-  withdrawDayNote,
   firstWithdrawalNote,
   firstWithdrawalRowNote,
   withdrawFee,
+  withdrawRequestBody,
   withdrawSummary,
   FEE_DIFFERENCE_NOTE,
   partsView,
@@ -503,7 +503,7 @@ export default function WithdrawPage({
       '/v1/me/withdrawals',
       {
         method: 'POST',
-        body: { amountMinor: String(amount) },
+        body: withdrawRequestBody(amount, figures),
         headers: { 'idempotency-key': sent },
       },
     );
@@ -553,14 +553,15 @@ export default function WithdrawPage({
     chosen !== null &&
     chosen <= withdrawable &&
     !belowWithdrawalMinimum(chosen, withdrawable);
-  // A person's withdrawals are free (owner, 18 Nov 2026): what arrives is the amount. Under the
-  // user-pays rule it is the amount less the fee. Only an amount that sends something gets figures.
+  // A person pays the partner's fee from the amount on every withdrawal (owner, 25 Nov 2026), so
+  // what arrives is the amount less the fee; only an unused top-up or a fee waiver (TipMe pays)
+  // sends the whole amount. Only an amount that sends something gets figures.
   const figures =
     sendable && chosen !== null ? withdrawSummary(quote, chosen) : null;
   const covered = figures !== null;
   const lamp = withdrawLamp(state, withdrawable);
-  const feeLine = withdrawFee(quote);
-  const dayNote = withdrawDayNote(quote);
+  // For the amount typed, once it can be sent: who pays can differ by provider (Ruling R6).
+  const feeLine = withdrawFee(quote, sendable ? chosen : null);
   const firstNote = state.canWithdraw
     ? firstWithdrawalNote(quote, withdrawals, nextWithdrawals)
     : null;
@@ -798,11 +799,6 @@ export default function WithdrawPage({
                 {firstNote && (
                   <p className="tm-hint" data-testid="first-withdrawal-note">
                     {firstNote}
-                  </p>
-                )}
-                {dayNote && (
-                  <p className="tm-hint" data-testid="withdrawal-day-note">
-                    {dayNote}
                   </p>
                 )}
                 <Button

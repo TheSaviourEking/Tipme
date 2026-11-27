@@ -247,6 +247,8 @@ export function findQuoteCharge(
   /** You collect: the mode the quote was made under, which the checkout follows. */
   collectionMode: CollectionMode;
   expiresAt: Date;
+  /** Profit guards: the card cost in force at this moment picks the quote's checkout methods. */
+  createdAt: Date;
 } | null> {
   return guarded(async () => {
     const [row] = await db
@@ -258,6 +260,7 @@ export function findQuoteCharge(
         currency: tipQuotes.currency,
         collectionMode: tipQuotes.collectionMode,
         expiresAt: tipQuotes.expiresAt,
+        createdAt: tipQuotes.createdAt,
       })
       .from(tipQuotes)
       .where(eq(tipQuotes.id, quoteId));

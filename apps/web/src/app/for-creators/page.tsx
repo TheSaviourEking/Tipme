@@ -3,6 +3,7 @@ import { ActionLink, Container } from '@tipme/ui';
 import { WhereYouMeetPeople } from '@/components/marketing/where-you-meet-people';
 import { PlanFeePercent } from '@/components/plan-fee-percent';
 import { formatNaira } from '@/lib/demo-amount';
+import { WITHDRAWAL_FEE_COPY } from '@/lib/fee-share';
 import { marketingMetadata } from '@/lib/metadata';
 
 export const metadata = marketingMetadata(
@@ -65,10 +66,9 @@ export default function ForCreators() {
             <h2 id="creators-band-title">Your name, your page.</h2>
             <p>
               Free to start. TipMe keeps <PlanFeePercent plan="free" />% of each
-              tip, payment and withdrawal fees included, and you withdraw to
-              your bank for free from{' '}
-              <span className="money">{MIN_WITHDRAWAL}</span>, or take your
-              whole balance if it is less.
+              tip, payment processing included, and you withdraw to your bank
+              from <span className="money">{MIN_WITHDRAWAL}</span>, or take your
+              whole balance if it is less. {WITHDRAWAL_FEE_COPY}
             </p>
           </div>
           <ActionLink variant="secondary" href="/sign-up">
