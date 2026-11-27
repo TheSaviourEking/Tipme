@@ -1220,7 +1220,7 @@ export const tipQuotes = pgTable(
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: createdAt(),
   },
-  () => [
+  (table) => [
     currencyCheck('tip_quotes'),
     check(
       'tip_quotes_collection_mode',
@@ -1235,6 +1235,10 @@ export const tipQuotes = pgTable(
       sql`tip_minor > 0 AND platform_fee_minor >= 0 AND provider_fee_minor >= 0 AND recipient_net_minor > 0`,
     ),
     check('tip_quotes_payer_total', sql`payer_total_minor = tip_minor`),
+    // The pages a waiver covered, for its ended notice (R22): waived quotes only.
+    index('tip_quotes_fee_waiver')
+      .on(table.feeWaiverId, table.profileId)
+      .where(sql`fee_waiver_id IS NOT NULL`),
     check(
       'tip_quotes_net',
       sql`recipient_net_minor = tip_minor - platform_fee_minor - provider_fee_minor`,
@@ -1477,6 +1481,10 @@ export const payouts = pgTable(
       'payouts_group_part',
       sql`(withdrawal_group_id IS NULL) = (group_part IS NULL)`,
     ),
+    // The accounts a waiver covered, for its ended notice (R22): waived payouts only.
+    index('payouts_fee_waiver')
+      .on(table.feeWaiverId)
+      .where(sql`fee_waiver_id IS NOT NULL`),
     // A request's parts, found from any one of them (P13).
     index('payouts_withdrawal_group')
       .on(table.withdrawalGroupId)
@@ -3591,6 +3599,38 @@ export const feeWaiverNotices = pgTable(
     check(
       'fee_waiver_notices_kind',
       sql`${table.kind} IN ('started', 'ended')`,
+    ),
+  ],
+);
+
+/**
+ * A kind-wide waiver's ended notice, per account that used its cover (ruling R22: at least one tip or
+ * withdrawal waived under it), each once. `fee_waiver_notices (rule_id, 'ended')` on the kind rule
+ * then records that every such account has been seen to.
+ */
+export const feeWaiverAccountNotices = pgTable(
+  'fee_waiver_account_notices',
+  {
+    id: uuid('id').primaryKey(),
+    ruleId: uuid('rule_id')
+      .notNull()
+      .references(() => feeWaivers.id),
+    profileId: uuid('profile_id').references(() => profiles.id),
+    businessId: uuid('business_id').references(() => businesses.id),
+    kind: text('kind').notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    uniqueIndex('fee_waiver_account_notices_profile')
+      .on(table.ruleId, table.kind, table.profileId)
+      .where(sql`profile_id IS NOT NULL`),
+    uniqueIndex('fee_waiver_account_notices_business')
+      .on(table.ruleId, table.kind, table.businessId)
+      .where(sql`business_id IS NOT NULL`),
+    check('fee_waiver_account_notices_kind', sql`${table.kind} IN ('ended')`),
+    check(
+      'fee_waiver_account_notices_account',
+      sql`(profile_id IS NULL) <> (business_id IS NULL)`,
     ),
   ],
 );

@@ -144,9 +144,12 @@ export const BUSINESS_SPLIT_COPY = {
 } as const;
 
 /**
- * Fee waivers (spec 2026-11-23 §6, §7; W13): the in-app notices an account gets when TipMe starts or
- * stops paying one of its fees. A kind-wide waiver sends none. `until` is put in already worded by
- * `untilWords` ("until 31 Jan": the last Lagos day covered). Never the payment partner's name.
+ * Fee waivers (spec 2026-11-23 §6, §7; W13, ruling R22): the in-app notices an account gets when TipMe
+ * starts or stops paying one of its fees. An account waiver is told when it starts and when TipMe
+ * stops paying that fee; a kind-wide waiver's start is told to nobody, and its end to each account
+ * that used its cover. An ended notice names the fee that ended, so it is never false while TipMe
+ * still pays the other one. `until` is put in already worded by `untilWords` ("until 31 Jan": the
+ * last Lagos day covered). Never the payment partner's name.
  */
 export const FEE_WAIVER_NOTICE_COPY = {
   startedTitle: 'TipMe is covering your fees',
@@ -154,9 +157,16 @@ export const FEE_WAIVER_NOTICE_COPY = {
   startedTitleFor: (business: string) => `TipMe is covering ${business}’s fees`,
   started: (fee: 'tip' | 'withdrawal', until: string | null) =>
     `${fee === 'tip' ? 'TipMe is covering the fee on your tips' : 'TipMe is covering your withdrawal fees'}${until === null ? '' : ` ${until}`}`,
-  endedTitle: 'Your fee cover has ended',
-  endedTitleFor: (business: string) => `${business}’s fee cover has ended`,
-  ended: 'TipMe’s fee cover has ended. Normal fees apply from now.',
+  endedTitle: (fee: 'tip' | 'withdrawal') =>
+    fee === 'tip'
+      ? 'Your tip fee cover has ended'
+      : 'Your withdrawal fee cover has ended',
+  endedTitleFor: (business: string, fee: 'tip' | 'withdrawal') =>
+    `${business}’s ${fee === 'tip' ? 'tip' : 'withdrawal'} fee cover has ended`,
+  ended: (fee: 'tip' | 'withdrawal') =>
+    fee === 'tip'
+      ? 'TipMe has stopped covering the fee on your tips. The normal tip fee applies from now.'
+      : 'TipMe has stopped covering your withdrawal fees. The normal withdrawal fees apply from now.',
 } as const;
 
 /**

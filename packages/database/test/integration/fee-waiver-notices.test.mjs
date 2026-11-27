@@ -38,9 +38,9 @@ async function insertRule(
     startsAt = new Date('2027-01-01T00:00:00Z'),
     endsAt = null,
     createdAt = startsAt,
+    id = randomUUID(),
   } = {},
 ) {
-  const id = randomUUID();
   await database.pool.query(
     `INSERT INTO fee_waivers (id, scope, kind, profile_id, business_id, fee, payer, starts_at,
        ends_at, reason, set_by, approved_by, created_at)
@@ -107,6 +107,56 @@ async function collectReading(database, { level, readAt }) {
   );
   return id;
 }
+
+const TIP_ENDED =
+  'TipMe has stopped covering the fee on your tips. The normal tip fee applies from now.';
+const WITHDRAWAL_ENDED =
+  'TipMe has stopped covering your withdrawal fees. The normal withdrawal fees apply from now.';
+
+/** A paid tip on a page whose fee TipMe covered under `ruleId` (quote, intent and tip, SUCCEEDED). */
+async function usedTip(database, ruleId, profileId = ADA) {
+  const quote = randomUUID();
+  const intent = randomUUID();
+  await database.pool.query(
+    `INSERT INTO tip_quotes (id, profile_id, currency, tip_minor, platform_fee_minor, provider_fee_minor,
+       payer_total_minor, recipient_net_minor, fee_policy_version, waived_platform_fee_minor,
+       fee_waiver_id, expires_at)
+     VALUES ($1, $2, 'NGN', 100000, 0, 0, 100000, 100000, 'test-waived', 5000, $3, now())`,
+    [quote, profileId, ruleId],
+  );
+  await database.pool.query(
+    `INSERT INTO payment_intents (id, quote_id, profile_id, idempotency_key, request_fingerprint,
+       status, expires_at)
+     VALUES ($1, $2, $3, $4, 'fp', 'SUCCEEDED', now())`,
+    [intent, quote, profileId, randomUUID()],
+  );
+  await database.pool.query(
+    `INSERT INTO tips (id, intent_id, profile_id, currency, gross_minor, status, completed_at)
+     VALUES ($1, $2, $3, 'NGN', 100000, 'SUCCEEDED', now())`,
+    [randomUUID(), intent, profileId],
+  );
+}
+
+/** A withdrawal whose fee TipMe covered under `ruleId`. */
+async function usedWithdrawal(
+  database,
+  ruleId,
+  { profileId = null, businessId = null, status = 'PAID' } = {},
+) {
+  await database.pool.query(
+    `INSERT INTO payouts (id, profile_id, business_id, currency, amount_minor, status, idempotency_key,
+                          request_fingerprint, fee_payer, user_fee_minor, fee_waiver_id, waived_fee_minor)
+     VALUES ($1, $2, $3, 'NGN', 100000, $4::payout_status, $5, 'fp', 'tipme', 0, $6, 5000)`,
+    [randomUUID(), profileId, businessId, status, randomUUID(), ruleId],
+  );
+}
+
+/** The ended notices sent, as [user, title, body], sorted. */
+const endedNotices = async (database) =>
+  (await notices(database))
+    .filter((n) => n.kind === 'fee_waiver_ended')
+    .map((n) => [n.user_id, n.title, n.body])
+    .sort((a, b) => `${a}`.localeCompare(`${b}`));
 
 test('an account waiver starting sends its owner one notification, however often the job runs', async (t) => {
   const database = await setup(t);
@@ -228,11 +278,16 @@ test('an account waiver ending or replaced sends one ended notice', async (t) =>
     ended.map((n) => n.user_id).sort(),
     [ADA_USER, TOBI_USER].sort(),
   );
-  for (const notice of ended)
-    assert.equal(
-      notice.body,
-      'TipMe’s fee cover has ended. Normal fees apply from now.',
-    );
+  // Each names the fee that ended.
+  assert.deepEqual(
+    ended
+      .map((n) => [n.user_id, n.title, n.body])
+      .sort((a, b) => `${a}`.localeCompare(`${b}`)),
+    [
+      [ADA_USER, 'Your tip fee cover has ended', TIP_ENDED],
+      [TOBI_USER, 'Your withdrawal fee cover has ended', WITHDRAWAL_ENDED],
+    ].sort((a, b) => `${a}`.localeCompare(`${b}`)),
+  );
   const rows = (
     await database.pool.query(
       `SELECT rule_id, kind FROM fee_waiver_notices ORDER BY rule_id, kind`,
@@ -252,7 +307,7 @@ test('an account waiver ending or replaced sends one ended notice', async (t) =>
   );
 });
 
-test('a waiver renewed, or still covered kind-wide, is not told it ended', async (t) => {
+test('a waiver renewed is not told it ended, and one still covered kind-wide is told when the kind-wide one ends', async (t) => {
   const database = await setup(t);
   await insertRule(database, {
     endsAt: new Date(endOfLagosDayIso('2027-01-31')),
@@ -279,21 +334,47 @@ test('a waiver renewed, or still covered kind-wide, is not told it ended', async
   const result = await run(database, later(NOW, 2));
   assert.equal(result.started, 1);
   assert.equal(result.ended, 0);
-  const sent = await notices(database);
-  assert.equal(sent.filter((n) => n.kind === 'fee_waiver_ended').length, 0);
+  assert.deepEqual(await endedNotices(database), []);
   assert.deepEqual(
-    sent.filter((n) => n.user_id === ADA_USER).map((n) => n.body),
+    (await notices(database))
+      .filter((n) => n.user_id === ADA_USER)
+      .map((n) => n.body),
     [
       'TipMe is covering the fee on your tips until 31 Jan',
       'TipMe is covering the fee on your tips until 28 Feb',
     ],
   );
+  // Held, not claimed: nothing records Tobi's end yet.
+  assert.equal(
+    (
+      await database.pool.query(
+        `SELECT count(*)::int AS n FROM fee_waiver_notices WHERE kind = 'ended'`,
+      )
+    ).rows[0].n,
+    0,
+  );
+  // The kind-wide waiver ends: now Tobi pays the withdrawal fee again, and is told once.
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'withdrawal',
+    payer: 'account',
+    startsAt: later(NOW, 5),
+  });
+  assert.equal((await run(database, later(NOW, 6))).ended, 1);
+  assert.equal((await run(database, later(NOW, 7))).ended, 0);
+  assert.deepEqual(await endedNotices(database), [
+    [TOBI_USER, 'Your withdrawal fee cover has ended', WITHDRAWAL_ENDED],
+  ]);
 });
 
-test('a kind waiver sends no notifications', async (t) => {
+test('a kind waiver starting sends no notifications, and its end tells the accounts that used it', async (t) => {
   const database = await setup(t);
-  await insertRule(database, { scope: 'kind', fee: 'tip' });
-  await insertRule(database, { scope: 'kind', fee: 'withdrawal' });
+  const tip = await insertRule(database, { scope: 'kind', fee: 'tip' });
+  const withdrawal = await insertRule(database, {
+    scope: 'kind',
+    fee: 'withdrawal',
+  });
+  const { businessId } = await seedBusiness(database.db, { name: 'Unused' });
   await insertRule(database, {
     scope: 'kind',
     kind: 'business',
@@ -305,6 +386,235 @@ test('a kind waiver sends no notifications', async (t) => {
   assert.equal(result.ended, 0);
   assert.equal((await notices(database)).length, 0);
   assert.equal(await database.count('fee_waiver_notices'), 0);
+  // Ada had a tip covered, Tobi a withdrawal; a failed withdrawal is no use, and the business used
+  // nothing.
+  await usedTip(database, tip, ADA);
+  await usedWithdrawal(database, withdrawal, { profileId: TOBI });
+  await usedWithdrawal(database, withdrawal, {
+    profileId: ADA,
+    status: 'FAILED',
+  });
+  for (const [kind, fee] of [
+    ['individual', 'tip'],
+    ['individual', 'withdrawal'],
+    ['business', 'withdrawal'],
+  ])
+    await insertRule(database, {
+      scope: 'kind',
+      kind,
+      fee,
+      payer: 'account',
+      startsAt: later(NOW, 1),
+    });
+  assert.equal((await run(database, later(NOW, 2))).ended, 2);
+  assert.deepEqual(
+    await endedNotices(database),
+    [
+      [ADA_USER, 'Your tip fee cover has ended', TIP_ENDED],
+      [TOBI_USER, 'Your withdrawal fee cover has ended', WITHDRAWAL_ENDED],
+    ].sort((a, b) => `${a}`.localeCompare(`${b}`)),
+  );
+  assert.equal(
+    (await notices(database)).filter((n) => n.business_id === businessId)
+      .length,
+    0,
+  );
+});
+
+test('an account waiver ending under a kind-wide waiver is told once, when the kind-wide one ends', async (t) => {
+  const database = await setup(t);
+  await insertRule(database, { profileId: TOBI, fee: 'withdrawal' });
+  assert.equal((await run(database)).started, 1);
+  const kind = await insertRule(database, {
+    scope: 'kind',
+    fee: 'withdrawal',
+    startsAt: later(NOW, 1),
+  });
+  await insertRule(database, {
+    profileId: TOBI,
+    fee: 'withdrawal',
+    payer: 'inherit',
+    startsAt: later(NOW, 1),
+  });
+  assert.equal((await run(database, later(NOW, 2))).ended, 0);
+  // He then withdraws under the kind-wide waiver: both his own rule and it now end with him.
+  await usedWithdrawal(database, kind, { profileId: TOBI });
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'withdrawal',
+    payer: 'account',
+    startsAt: later(NOW, 3),
+  });
+  assert.equal((await run(database, later(NOW, 4))).ended, 1);
+  for (let i = 0; i < 3; i++)
+    assert.equal((await run(database, later(NOW, 5 + i))).ended, 0);
+  assert.deepEqual(await endedNotices(database), [
+    [TOBI_USER, 'Your withdrawal fee cover has ended', WITHDRAWAL_ENDED],
+  ]);
+});
+
+test('a kind-wide waiver ending tells each affected account once, however often the job runs', async (t) => {
+  const database = await setup(t);
+  const kind = await insertRule(database, { scope: 'kind', fee: 'tip' });
+  await usedTip(database, kind, ADA);
+  await usedTip(database, kind, ADA);
+  await usedTip(database, kind, TOBI);
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'tip',
+    payer: 'account',
+    startsAt: later(NOW, 1),
+  });
+  // Two overlapping runs, then more.
+  const [a, b] = await Promise.all([
+    run(database, later(NOW, 2)),
+    run(database, later(NOW, 2)),
+  ]);
+  assert.equal(a.ended + b.ended, 2);
+  for (let i = 0; i < 3; i++)
+    assert.equal((await run(database, later(NOW, 3 + i))).ended, 0);
+  assert.deepEqual(
+    await endedNotices(database),
+    [
+      [ADA_USER, 'Your tip fee cover has ended', TIP_ENDED],
+      [TOBI_USER, 'Your tip fee cover has ended', TIP_ENDED],
+    ].sort((x, y) => `${x}`.localeCompare(`${y}`)),
+  );
+});
+
+test('an account still covered by its own waiver is told when that one ends, not when the kind-wide one does', async (t) => {
+  const database = await setup(t);
+  const kind = await insertRule(database, { scope: 'kind', fee: 'tip' });
+  await usedTip(database, kind, ADA);
+  // Ada's own waiver, until the end of February.
+  await insertRule(database, {
+    startsAt: later(NOW, 1),
+    endsAt: new Date(endOfLagosDayIso('2027-02-28')),
+  });
+  assert.equal((await run(database, later(NOW, 2))).started, 1);
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'tip',
+    payer: 'account',
+    startsAt: later(NOW, 3),
+  });
+  assert.equal((await run(database, later(NOW, 4))).ended, 0);
+  assert.deepEqual(await endedNotices(database), []);
+  const afterEnd = new Date('2027-03-01T08:00:00Z');
+  assert.equal((await run(database, afterEnd)).ended, 1);
+  assert.equal((await run(database, afterEnd)).ended, 0);
+  assert.deepEqual(await endedNotices(database), [
+    [ADA_USER, 'Your tip fee cover has ended', TIP_ENDED],
+  ]);
+});
+
+test('an account opted out (payer account) of the kind waiver is not told', async (t) => {
+  const database = await setup(t);
+  const kind = await insertRule(database, { scope: 'kind', fee: 'tip' });
+  await usedTip(database, kind, ADA);
+  await insertRule(database, { payer: 'account', startsAt: later(NOW, 1) });
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'tip',
+    payer: 'account',
+    startsAt: later(NOW, 2),
+  });
+  assert.equal((await run(database, later(NOW, 3))).ended, 0);
+  assert.deepEqual(await endedNotices(database), []);
+});
+
+test('a kind-wide waiver renewed by a newer TipMe-pays row tells nobody', async (t) => {
+  const database = await setup(t);
+  const first = await insertRule(database, { scope: 'kind', fee: 'tip' });
+  await usedTip(database, first, ADA);
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'tip',
+    startsAt: later(NOW, 1),
+    endsAt: new Date(endOfLagosDayIso('2027-02-28')),
+  });
+  assert.equal((await run(database, later(NOW, 2))).ended, 0);
+  assert.deepEqual(await endedNotices(database), []);
+  // Once the renewal ends, Ada (who used the cover) is told, once.
+  const afterEnd = new Date('2027-03-01T08:00:00Z');
+  assert.equal((await run(database, afterEnd)).ended, 1);
+  assert.equal((await run(database, afterEnd)).ended, 0);
+  assert.deepEqual(await endedNotices(database), [
+    [ADA_USER, 'Your tip fee cover has ended', TIP_ENDED],
+  ]);
+});
+
+test('held rows do not starve the batch', async (t) => {
+  const database = await setup(t);
+  // 201 of Ada's withdrawal waivers, told as started, each replaced, while a kind-wide waiver
+  // covers her: all held. Their ids sort before Tobi's due one.
+  const held = [];
+  for (let i = 0; i < 201; i++) {
+    const id = `00000000-0000-4000-9000-${String(i).padStart(12, '0')}`;
+    held.push(id);
+    await insertRule(database, {
+      id,
+      fee: 'withdrawal',
+      startsAt: new Date(Date.parse('2027-01-01T00:00:00Z') + i * 1000),
+    });
+  }
+  await database.pool.query(
+    `INSERT INTO fee_waiver_notices (rule_id, kind) SELECT unnest($1::uuid[]), 'started'`,
+    [held],
+  );
+  await insertRule(database, {
+    fee: 'withdrawal',
+    payer: 'inherit',
+    startsAt: later(NOW, -2),
+  });
+  await insertRule(database, {
+    scope: 'kind',
+    fee: 'withdrawal',
+    startsAt: later(NOW, -2),
+  });
+  // Tobi's tip waiver has ended, and nothing else covers his tips.
+  const due = await insertRule(database, {
+    id: 'ffffffff-ffff-4fff-bfff-ffffffffffff',
+    profileId: TOBI,
+    endsAt: later(NOW, -1),
+  });
+  await database.pool.query(
+    `INSERT INTO fee_waiver_notices (rule_id, kind) VALUES ($1, 'started')`,
+    [due],
+  );
+  assert.equal((await run(database)).ended, 1);
+  assert.deepEqual(await endedNotices(database), [
+    [TOBI_USER, 'Your tip fee cover has ended', TIP_ENDED],
+  ]);
+  assert.equal(
+    (
+      await database.pool.query(
+        `SELECT count(*)::int AS n FROM fee_waiver_notices WHERE kind = 'ended'`,
+      )
+    ).rows[0].n,
+    1,
+  );
+});
+
+test('the tip waiver ending names the tip fee while withdrawals stay covered', async (t) => {
+  const database = await setup(t);
+  await insertRule(database, {
+    endsAt: new Date(endOfLagosDayIso('2027-01-31')),
+  });
+  await insertRule(database, { fee: 'withdrawal' });
+  assert.equal((await run(database)).started, 2);
+  assert.equal(
+    (await run(database, new Date('2027-02-01T08:00:00Z'))).ended,
+    1,
+  );
+  const [notice] = await endedNotices(database);
+  assert.deepEqual(notice, [
+    ADA_USER,
+    'Your tip fee cover has ended',
+    TIP_ENDED,
+  ]);
+  // Never "normal fees" in general: her withdrawals are still free.
+  assert.doesNotMatch(notice[2], /Normal fees/);
 });
 
 test('staff get one fee_waiver_ending issue the day before a waiver ends', async (t) => {
@@ -333,6 +643,9 @@ test('staff get one fee_waiver_ending issue the day before a waiver ends', async
     assert.equal(issue.severity, 'info');
     assert.equal(issue.status, 'open');
     assert.match(issue.summary, /^A fee waiver ends within a day/);
+    // Lagos words, not a raw UTC instant: it ends at 16:00 Lagos on 11 Jan.
+    assert.match(issue.summary, /until 11 Jan 2027 \(rule /);
+    assert.doesNotMatch(issue.summary, /T\d{2}:\d{2}/);
   }
   assert.equal(
     opened.find((i) => i.dedupe_key.endsWith(account)).subject.profileId,
@@ -451,4 +764,31 @@ test('paused with no tip waiver in force opens nothing', async (t) => {
   await paymentReading(database, { low: true, readAt: ago(10) });
   assert.equal((await pausedRun(database)).paused, 'none');
   assert.equal((await issuesOf(database, 'fee_waivers_paused')).length, 0);
+});
+
+test('a tip waiver starting during a pause is told once the pause lifts', async (t) => {
+  const database = await setup(t);
+  await insertRule(database, { startsAt: ago(60) });
+  // Withdrawal waivers are not paused: told now.
+  await insertRule(database, {
+    profileId: TOBI,
+    fee: 'withdrawal',
+    startsAt: ago(60),
+  });
+  await paymentReading(database, { low: true, readAt: ago(50) });
+  assert.equal((await pausedRun(database)).started, 1);
+  assert.equal((await pausedRun(database)).started, 0);
+  assert.deepEqual(
+    (await notices(database)).map((n) => [n.user_id, n.body]),
+    [[TOBI_USER, 'TipMe is covering your withdrawal fees']],
+  );
+  await paymentReading(database, { low: false, readAt: ago(40) });
+  assert.equal((await pausedRun(database)).started, 1);
+  assert.equal((await pausedRun(database)).started, 0);
+  assert.deepEqual(
+    (await notices(database))
+      .filter((n) => n.user_id === ADA_USER)
+      .map((n) => n.body),
+    ['TipMe is covering the fee on your tips'],
+  );
 });

@@ -138,6 +138,14 @@ Giving          Account pays     Account pays                    (not live)
 - An **account** waiver starting or ending sends that account the existing account or service notice.
 - A **kind-wide** waiver sends no mass email. Affected accounts see the line on their dashboard (§7), and staff can send an announcement through the existing announcement flow if they want to.
 
+**Addendum (owner, 27 Nov 2026; ruling R22): people are told when a waiver ends.**
+
+- An account is told its cover ended when TipMe really stops paying that fee for it, never while TipMe still pays it. A renewal ends quietly, and so does an account waiver ending while a kind-wide waiver still covers the account: that account is told when the kind-wide one ends.
+- When a **kind-wide** waiver ends (and isn't renewed), the in-app ended notice goes to each account that used its cover: at least one tip or withdrawal waived under it. An account still covered by its own waiver is told when that one ends. An account opted out of the kind-wide waiver isn't told. Still no email.
+- A kind-wide waiver's **start** still tells nobody.
+- The ended notice names the fee ("TipMe has stopped covering the fee on your tips. The normal tip fee applies from now."), so it is never false while the other fee is still covered. One notice per account and fee, however many rules end together.
+- A tip waiver's started notice waits while tip waivers are paused (§5) and is sent once the pause lifts.
+
 ## 7. What the person sees
 
 - **Tip page (supporters):** no change. Supporters always pay exactly the tip.

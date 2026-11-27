@@ -54,6 +54,7 @@
   - Account notices are in-app `notifications` of new kinds `fee_waiver_started` and `fee_waiver_ended`. A business's go to its owners (`businessManagerUsers(..., { owners: true })`). There is no new email.
   - The worker job writes them within 15 minutes. The new table `fee_waiver_notices (rule_id, kind)` (unique) makes each one once.
   - "Ended" means a `tipme` account rule that was noticed as started and is no longer the in-force row of its key (it ended, or was replaced).
+  - *Final fix wave (owner 27 Nov, R20 reversed; ruling R22):* an ended notice is sent only when TipMe no longer pays that fee for the account, and is held (not claimed) until then. A kind-wide `tipme` rule that is over and not renewed tells each account that used it (a SUCCEEDED tip or a non-FAILED payout with its `fee_waiver_id`) and now follows the kind-wide rule, recorded per account in `fee_waiver_account_notices`; `fee_waiver_notices (rule_id, 'ended')` on the kind rule marks it done. One notice per account and fee under an advisory lock, whichever rules end. The notice names the fee. A tip waiver's started notice waits out a pause.
   - The staff "day before" notice is an issue `fee_waiver_ending` (dedupe `fee_waiver_ending.<ruleId>`) once `ends_at - now <= 24 h`.
 - **W14. Pause alert.** The issue `fee_waivers_paused` is opened while paused **and** some tip rule with `payer = 'tipme'` is in force. Its dedupe key is `fee_waivers_paused.<spellStartReadingId>`: the earliest low (payments) or critical/breach (collect) reading after the last moment neither signal was set. It posts one `webhookAlert` only when `openIssue` returns `opened: true`. It auto-resolves (`markResolved`, `resolvedBy: 'system'`) once neither signal is set.
 - **W15. Switch retirement.**
@@ -391,9 +392,9 @@ These are the inputs the spec implies but its test list doesn't name, most likel
 - Consumes: Tasks 2 and 4 (`feeWaiversPaused`), `openIssue`, `markResolved`, `businessManagerUsers`, `webhookAlert`.
 - Produces:
   - `runFeeWaiverNotices(db, input: { activeProvider: string; now: Date }): Promise<{ endingSoon: number; started: number; ended: number; paused: 'opened' | 'open' | 'resolved' | 'none' }>`. It is idempotent through `fee_waiver_notices` and issue dedupe keys (W13, W14).
-  - In-app copy: started "TipMe is covering the fee on your tips" or "TipMe is covering your withdrawal fees", plus " until {d MMM}" when it ends. Ended: "TipMe’s fee cover has ended. Normal fees apply from now."
+  - In-app copy: started "TipMe is covering the fee on your tips" or "TipMe is covering your withdrawal fees", plus " until {d MMM}" when it ends. Ended (final fix wave, I2): names the fee, "TipMe has stopped covering the fee on your tips. The normal tip fee applies from now." or "TipMe has stopped covering your withdrawal fees. The normal withdrawal fees apply from now."
   - The handler `handleFeeWaivers({ db, activeProvider, alert, now })` posts "Fee waivers paused: TipMe's balance is low" through `alert` only when `paused === 'opened'`.
-  - Kind-wide rules send no notifications (§6).
+  - Kind-wide rules send no started notifications (§6); their end tells the accounts that used them (R22, final fix wave).
 
 - [ ] **Step 1: Write the failing tests:**
   - `an account waiver starting sends its owner one notification, however often the job runs`;
