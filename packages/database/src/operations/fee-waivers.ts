@@ -485,7 +485,8 @@ const DAY_MS = 86_400_000;
  * of that kind's non-FAILED withdrawals asked for then. Giving is 0 until it is built. Team tips
  * count too: their fee is charged like a person's tip. A withdrawal TipMe already covered counts
  * the fee it would have charged (`waived_fee_minor`) instead of its user fee, which is then 0 (W8),
- * so each payout counts once and renewing a waiver doesn't read as free.
+ * and a tip it covered counts `waived_platform_fee_minor` (R23), so each counts once and renewing
+ * a waiver doesn't read as free.
  */
 export async function estimateFeeWaiverMonthlyCost(
   db: Database | Tx,
@@ -499,7 +500,12 @@ export async function estimateFeeWaiverMonthlyCost(
     if (kind !== 'individual') return 0n;
     const [row] = await db
       .select({
-        total: sql<string>`coalesce(sum(${tipQuotes.platformFeeMinor} + ${tipQuotes.providerFeeMinor}), 0)::text`,
+        // A tip TipMe already covered stores 0 and 0, and what it would have kept in
+        // waived_platform_fee_minor (W7): that counts instead (R23). A fee-free credit's tip
+        // (no rule) stays at its stored 0.
+        total: sql<string>`coalesce(sum(CASE WHEN ${tipQuotes.feeWaiverId} IS NOT NULL
+          THEN ${tipQuotes.waivedPlatformFeeMinor}
+          ELSE ${tipQuotes.platformFeeMinor} + ${tipQuotes.providerFeeMinor} END), 0)::text`,
       })
       .from(tips)
       .innerJoin(paymentIntents, eq(paymentIntents.id, tips.intentId))

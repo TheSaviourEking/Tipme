@@ -1324,6 +1324,37 @@ test('a kind-wide TipMe-pays waiver needs confirmCost, and its description names
   );
 });
 
+test('a tip TipMe already covered counts the fee it would have kept in the estimate (R23)', async (t) => {
+  const { db } = await actionSetup(t);
+  // Ada's tips are waived: the quote stores platform 0 and provider 0, and what TipMe would have
+  // kept (platform + provider at her plan rate) in waived_platform_fee_minor (W7).
+  await insertRule(db, {
+    scope: 'account',
+    profileId: ADA,
+    fee: 'tip',
+    startsAt: new Date(Date.now() - 2 * DAY),
+  });
+  assert.equal(await paidTip(db, 'ada', 1_000_000n), 0n);
+  // Tobi's tip is priced normally (₦10,000 at Free 5%: ₦500).
+  assert.equal(await paidTip(db, 'tobi', 1_000_000n), 50_000n);
+  const waived = (
+    await db.pool.query(
+      `SELECT waived_platform_fee_minor::text AS waived FROM tip_quotes WHERE fee_waiver_id IS NOT NULL`,
+    )
+  ).rows;
+  assert.deepEqual(waived, [{ waived: '50000' }]);
+  await intoYesterday(db);
+  // Renewing a kind-wide tip waiver doesn't read as free: each tip counts once.
+  assert.equal(
+    await estimateFeeWaiverMonthlyCost(db.db, {
+      kind: 'individual',
+      fee: 'tip',
+      now: new Date(),
+    }),
+    100_000n,
+  );
+});
+
 test('setFeeWaiver refuses a kind-wide TipMe-pays rule without confirmCost', async (t) => {
   const { db, set, rows } = await actionSetup(t);
   const kindTip = {
