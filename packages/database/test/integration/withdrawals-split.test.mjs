@@ -25,6 +25,7 @@ import {
   withdrawalsAvailable,
   withdrawalSignalDue,
 } from '../../dist/index.js';
+import { withdrawalFeeFor } from '@tipme/domain';
 import {
   seedAgreement,
   seedBusiness,
@@ -613,17 +614,6 @@ test('per-provider withdrawal quote', async (t) => {
     );
   const count = async (table) =>
     (await q(`SELECT count(*)::int AS n FROM ${table}`))[0].n;
-  /** Two withdrawals already asked for today, so the next one is the 3rd (P7). */
-  const twoToday = async () => {
-    for (let i = 0; i < 2; i += 1)
-      await q(
-        `INSERT INTO payouts (id, profile_id, currency, amount_minor, status, provider,
-                              provider_reference, idempotency_key, request_fingerprint,
-                              fee_minor, paid_at)
-         VALUES ($1, $2, 'NGN', 1000, 'PAID', 'mock', $3, $4, 'test', 5000, now())`,
-        [randomUUID(), TOBI.id, `mock_po_${randomUUID()}`, randomUUID()],
-      );
-  };
   /** The old provider connected-account, on the same bank as the active (pretend) one. */
   const sameBankAtBoth = async () => {
     await tip('bachs');
@@ -655,7 +645,8 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(first.provider, 'bachs');
       assert.equal(first.account_reference, 'acct_tobi');
       assert.equal(first.destination_id, destinations.old);
-      assert.equal(first.amount, '372000');
+      // The person pays one fee, off the largest part (372,000): 4,000 of it, so 368,000 is sent.
+      assert.equal(first.amount, '368000');
       assert.equal(first.fee, '4000');
       assert.equal(second.provider, 'mock');
       assert.equal(second.account_reference, null);
@@ -668,10 +659,10 @@ test('per-provider withdrawal quote', async (t) => {
       assert.deepEqual([first.group_part, second.group_part], [1, 2]);
       assert.equal(first.idempotency_key, key);
       assert.equal(second.idempotency_key, `${key}:2`);
-      // The first withdrawal of the day: TipMe pays every part's fee.
+      // The person pays one fee (the largest part's); TipMe pays the other part's.
       assert.deepEqual(
         [first.fee_payer, second.fee_payer, first.user_fee, second.user_fee],
-        ['tipme', 'tipme', '0', '0'],
+        ['user', 'tipme', '4000', '0'],
       );
       assert.deepEqual(
         (await starts()).map((row) => row.aggregate_id).sort(),
@@ -683,7 +674,7 @@ test('per-provider withdrawal quote', async (t) => {
         replayed: false,
         groupId: first.withdrawal_group_id,
         parts: [
-          { payoutId: first.id, amountMinor: 372000n, status: 'REQUESTED' },
+          { payoutId: first.id, amountMinor: 368000n, status: 'REQUESTED' },
           { payoutId: second.id, amountMinor: 228000n, status: 'REQUESTED' },
         ],
       });
@@ -708,7 +699,8 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(more.length, 0);
       // The first in drain order that covers it alone.
       assert.equal(only.provider, 'bachs');
-      assert.equal(only.amount, '300000');
+      // The person pays the ₦50 (here the provider's 5,000) from the amount.
+      assert.equal(only.amount, '295000');
       assert.equal(only.withdrawal_group_id, null);
       assert.equal(only.group_part, null);
       assert.equal(only.idempotency_key, key);
@@ -718,7 +710,7 @@ test('per-provider withdrawal quote', async (t) => {
         replayed: false,
         groupId: null,
         parts: [
-          { payoutId: only.id, amountMinor: 300000n, status: 'REQUESTED' },
+          { payoutId: only.id, amountMinor: 295000n, status: 'REQUESTED' },
         ],
       });
     },
@@ -872,7 +864,7 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(result.groupId, null);
       assert.deepEqual(
         (await rows()).map((row) => [row.provider, row.amount]),
-        [['mock', '300000']],
+        [['mock', '295000']],
       );
       assert.deepEqual(failures, ['mock_alt', 'mock_alt']);
       // More than the ledger holds is too little money, whatever could be read (T6-R2).
@@ -929,7 +921,7 @@ test('per-provider withdrawal quote', async (t) => {
   );
 
   await t.test(
-    'a request whose only user-paid part failed is free again (P7)',
+    'a request counts as one withdrawal today until every part failed (P7), and always pays the fee',
     async () => {
       await database.fresh();
       for (let i = 0; i < 3; i += 1) {
@@ -941,7 +933,6 @@ test('per-provider withdrawal quote', async (t) => {
           reader('mock', { balance: 1_000_000n }),
           reader('mock_alt', { balance: 1_000_000n }),
         );
-      const feePaidBy = async () => (await quoteOf(providers())).feePaidBy;
       const failOne = (id) =>
         db.transaction((tx) =>
           failPayoutByStaff(tx, {
@@ -951,26 +942,35 @@ test('per-provider withdrawal quote', async (t) => {
             status: 'REQUESTED',
           }),
         );
-      // Two free requests, then a split whose largest part pays the fee.
-      assert.equal((await ask(providers(), 1_100_000n)).parts.length, 2);
+      const split = await ask(providers(), 1_100_000n);
+      assert.equal(split.parts.length, 2);
       const single = await ask(providers(), 200000n);
       assert.equal(single.groupId, null);
-      const paid = await ask(providers(), 650000n);
-      assert.deepEqual(
+      const third = await ask(providers(), 650000n);
+      assert.equal(third.parts.length, 2);
+      // Every request pays one fee, the 1st, 2nd and 3rd alike (owner, 25 Nov 2026).
+      const userPaid = async (groupId, payoutId) =>
         (await rows())
-          .filter((row) => row.withdrawal_group_id === paid.groupId)
-          .map((row) => [row.amount, row.fee_payer]),
-        [
-          ['100000', 'tipme'],
-          ['545000', 'user'],
-        ],
-      );
-      // One free request failed: a free slot is open again.
+          .filter((row) =>
+            groupId ? row.withdrawal_group_id === groupId : row.id === payoutId,
+          )
+          .filter((row) => row.fee_payer === 'user').length;
+      assert.equal(await userPaid(split.groupId), 1);
+      assert.equal(await userPaid(null, single.payoutId), 1);
+      assert.equal(await userPaid(third.groupId), 1);
+      const ordinal = async () => (await quoteOf(providers())).ordinalToday;
+      assert.equal(await ordinal(), 4);
+      assert.equal((await quoteOf(providers())).feePaidBy, 'user');
+      assert.equal((await quoteOf(providers())).freePerDay, 0);
+      // One request failed: it no longer counts.
       await failOne(single.payoutId);
-      assert.equal(await feePaidBy(), 'tipme');
-      // The user-paid part failed too: that request paid nothing, so it is a free one.
-      await failOne(paid.parts[1].payoutId);
-      assert.equal(await feePaidBy(), 'user');
+      assert.equal(await ordinal(), 3);
+      // A split with one part failed still counts; with every part failed it does not.
+      await failOne(third.parts[0].payoutId);
+      assert.equal(await ordinal(), 3);
+      await failOne(third.parts[1].payoutId);
+      assert.equal(await ordinal(), 2);
+      assert.equal((await quoteOf(providers())).feePaidBy, 'user');
     },
   );
 
@@ -978,7 +978,6 @@ test('per-provider withdrawal quote', async (t) => {
     await database.fresh();
     await tip('mock_alt');
     await tip('mock');
-    await twoToday();
     const active = reader('mock', { balance: 372000n, fee: 5000n });
     const old = reader('mock_alt', { balance: 372000n, fee: 1000n });
     const result = await ask(set(active, old), 600000n);
@@ -1004,13 +1003,12 @@ test('per-provider withdrawal quote', async (t) => {
     await database.fresh();
     await tip('mock_alt');
     await tip('mock');
-    await twoToday();
     const costly = reader('mock_alt', { balance: 372000n, fee: 372000n });
     await assert.rejects(
       ask(set(reader('mock', { balance: 372000n }), costly), 600000n),
       { code: 'WITHDRAWAL_BELOW_FEE' },
     );
-    assert.equal(await count('payouts'), 2);
+    assert.equal(await count('payouts'), 0);
   });
 
   await t.test('a business split pays at most one fee', async () => {
@@ -1160,7 +1158,7 @@ test('per-provider withdrawal quote', async (t) => {
     const result = await ask(providers(), 5_000_000n);
     assert.deepEqual(
       result.parts.map((part) => part.amountMinor),
-      [3_000_000n, 2_000_000n],
+      [2_995_000n, 2_000_000n],
     );
     // One request is one first withdrawal: the cap is behind them now.
     assert.equal(
@@ -1195,7 +1193,7 @@ test('per-provider withdrawal quote', async (t) => {
       const result = await ask(providers(), 250000n);
       assert.deepEqual(
         result.parts.map((part) => part.amountMinor),
-        [100000n, 150000n],
+        [100000n, 145000n],
       );
     },
   );
@@ -1246,13 +1244,13 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(page.items.length, 2);
       const [newest, older] = page.items;
       assert.equal(newest.payoutId, single.payoutId);
-      assert.equal(newest.amountMinor, '250000');
+      assert.equal(newest.amountMinor, '245000');
       assert.equal(newest.parts, null);
       assert.equal(older.payoutId, split.payoutId);
-      assert.equal(older.amountMinor, '600000');
+      assert.equal(older.amountMinor, '595000');
       assert.equal(older.state, 'requested');
       assert.deepEqual(older.parts, [
-        { amountMinor: '372000', state: 'requested' },
+        { amountMinor: '367000', state: 'requested' },
         { amountMinor: '228000', state: 'requested' },
       ]);
       assert.doesNotMatch(JSON.stringify(page), /mock/);
@@ -1286,9 +1284,9 @@ test('per-provider withdrawal quote', async (t) => {
       // The failed part's money is back in the balance: the row is what is still coming.
       const partly = await stateOf();
       assert.equal(partly.state, 'requested');
-      assert.equal(partly.amountMinor, '372000');
+      assert.equal(partly.amountMinor, '367000');
       assert.deepEqual(partly.parts, [
-        { amountMinor: '372000', state: 'requested' },
+        { amountMinor: '367000', state: 'requested' },
         { amountMinor: '228000', state: 'failed' },
       ]);
       await q(
@@ -1298,7 +1296,7 @@ test('per-provider withdrawal quote', async (t) => {
       // Sent and failed: sent, for what was sent, paid when that part was.
       const sentAndFailed = await stateOf();
       assert.equal(sentAndFailed.state, 'sent');
-      assert.equal(sentAndFailed.amountMinor, '372000');
+      assert.equal(sentAndFailed.amountMinor, '367000');
       assert.ok(sentAndFailed.paidAt);
       assert.deepEqual(
         sentAndFailed.parts.map((part) => part.state),
@@ -1351,7 +1349,7 @@ test('per-provider withdrawal quote', async (t) => {
       const [only, ...more] = await withdrawalsOf();
       assert.equal(more.length, 0);
       assert.equal(only.id, split.payoutId);
-      assert.equal(only.amountMinor, '600000');
+      assert.equal(only.amountMinor, '595000');
       assert.equal(only.state, 'requested');
       // One part failed: what is still coming, as the withdrawals list says.
       await db.transaction((tx) =>
@@ -1363,7 +1361,7 @@ test('per-provider withdrawal quote', async (t) => {
         }),
       );
       const [partly] = await withdrawalsOf();
-      assert.equal(partly.amountMinor, '372000');
+      assert.equal(partly.amountMinor, '367000');
       assert.equal(partly.state, 'requested');
       await q(
         `UPDATE payouts SET status = 'PAID', paid_at = now() WHERE id = $1`,
@@ -1371,7 +1369,7 @@ test('per-provider withdrawal quote', async (t) => {
       );
       const [sent] = await withdrawalsOf();
       assert.equal(sent.state, 'sent');
-      assert.equal(sent.amountMinor, '372000');
+      assert.equal(sent.amountMinor, '367000');
     },
   );
 
@@ -1511,7 +1509,7 @@ test('per-provider withdrawal quote', async (t) => {
         parts.map((row) => [row.provider, row.amount]),
         [
           ['mock_alt', (net - share).toString()],
-          ['mock', '372000'],
+          ['mock', '367000'],
         ],
       );
       // Once the sweep has taken it (its leg in still to go), nothing is held back for it.
@@ -1767,6 +1765,105 @@ test('per-provider withdrawal quote', async (t) => {
       assert.equal(bought.status, 'PAID');
       assert.equal(alt.collects.length, 0);
       assert.equal(active.collects.length, 1);
+    },
+  );
+
+  // Ruling R6 with a split account (fix wave re-review): an unused top-up sits at one provider only,
+  // so who pays depends on which provider carries the amount chosen. The quote gives each provider's
+  // cap, fee and payer; the screen decides for the amount typed exactly as the request allocates it,
+  // so a confirm never loops on WITHDRAWAL_FEE_CHANGED and the fee shown is the fee charged.
+  await t.test(
+    'a top-up at one provider: the fee shown for the amount is the fee charged, and a confirm goes through',
+    async () => {
+      await database.fresh();
+      await tip('bachs', 'tobi', {}, 1_000_000n);
+      await tip('mock', 'tobi', {}, 2_500_000n);
+      await seedAccount();
+      await seedDestination('mock', '4321');
+      await seedDestination('bachs', '4321');
+      const bachs = reader('bachs-sandbox', {
+        connected: true,
+        balance: 800_000n,
+      });
+      const active = reader('mock', { balance: 2_000_000n });
+      const providers = set(active, bachs);
+      // A leftover ₦50 top-up at the first provider in drain order, from a failed withdrawal.
+      const old = await ask(providers, 300_000n);
+      assert.equal(
+        (
+          await q('SELECT provider FROM payouts WHERE id = $1', [old.payoutId])
+        )[0].provider,
+        'bachs',
+      );
+      await q(`UPDATE payouts SET status = 'FAILED' WHERE id = $1`, [
+        old.payoutId,
+      ]);
+      await q(
+        `INSERT INTO provider_fee_credits (account_reference, provider, currency, amount_minor, transfer_reference, payout_id)
+         VALUES ('acct_tobi', 'bachs', 'NGN', 5000, 'tr_split_leftover', $1)`,
+        [old.payoutId],
+      );
+      const quote = await quoteOf(providers);
+      assert.equal(quote.state, 'ready');
+      // The whole balance would be carried mostly by the second provider: the person pays.
+      assert.equal(quote.feePaidBy, 'user');
+      assert.deepEqual(
+        quote.feeParts.map((part) => [
+          part.capMinor,
+          part.feeMinor,
+          part.feePaidBy,
+        ]),
+        [
+          [800_000n, 5000n, 'tipme'],
+          [2_000_000n, 5000n, 'user'],
+        ],
+      );
+      const shownFor = (amountMinor) =>
+        withdrawalFeeFor(amountMinor, quote.feeParts, quote.withdrawableMinor);
+      // ₦5,000 fits the first provider alone, where the top-up is: TipMe pays.
+      assert.deepEqual(shownFor(500_000n), {
+        feeMinor: 5000n,
+        feePaidBy: 'tipme',
+      });
+      // The quote's overall answer, as a screen before this fix sent it, is refused...
+      await assert.rejects(ask(providers, 500_000n, { feePaidBy: 'user' }), {
+        code: 'WITHDRAWAL_FEE_CHANGED',
+      });
+      // ...and confirming what the screen now shows for that amount goes through, as shown.
+      const covered = await ask(providers, 500_000n, {
+        feePaidBy: shownFor(500_000n).feePaidBy,
+      });
+      const [row] = await q(
+        `SELECT provider, fee_payer, user_fee_minor::text AS user_fee, amount_minor::text AS amount
+           FROM payouts WHERE id = $1`,
+        [covered.payoutId],
+      );
+      assert.deepEqual(row, {
+        provider: 'bachs',
+        fee_payer: 'tipme',
+        user_fee: '0',
+        amount: '500000',
+      });
+      // ₦15,000 goes from the second provider alone: the person pays the ₦50 shown.
+      const again = await quoteOf(providers);
+      const shown = withdrawalFeeFor(
+        1_500_000n,
+        again.feeParts,
+        again.withdrawableMinor,
+      );
+      assert.deepEqual(shown, { feeMinor: 5000n, feePaidBy: 'user' });
+      const paid = await ask(providers, 1_500_000n, {
+        feePaidBy: shown.feePaidBy,
+      });
+      const [second] = await q(
+        `SELECT provider, fee_payer, user_fee_minor::text AS user_fee FROM payouts WHERE id = $1`,
+        [paid.payoutId],
+      );
+      assert.deepEqual(second, {
+        provider: 'mock',
+        fee_payer: 'user',
+        user_fee: shown.feeMinor.toString(),
+      });
     },
   );
 });

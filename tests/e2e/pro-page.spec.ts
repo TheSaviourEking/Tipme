@@ -20,12 +20,12 @@ test('Pro keeps 3% instead of 5%, said in the offer, the Free list and the FAQ',
   const main = page.getByRole('main');
   await expect(
     main.getByText(
-      'Receiving tips, with no monthly fee: TipMe keeps 5% of each tip, payment and withdrawal fees included',
+      'Receiving tips, with no monthly fee: TipMe keeps 5% of each tip, payment processing included',
     ),
   ).toBeVisible();
   await expect(
     main.getByText(
-      'On Pro, TipMe keeps 3% of each tip instead of 5%, with payment and withdrawal fees included.',
+      'On Pro, TipMe keeps 3% of each tip instead of 5%, with payment processing included.',
       {
         exact: false,
       },

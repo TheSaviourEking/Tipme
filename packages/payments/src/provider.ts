@@ -167,6 +167,12 @@ export type WebhookVerification<TEvent = NormalizedProviderEvent> =
     };
 
 /**
+ * The ways a checkout can be paid. Declared here, identical to the domain's union, so this package
+ * keeps its boundary (no @tipme/domain dependency).
+ */
+export type CheckoutMethod = 'card' | 'bank_transfer';
+
+/**
  * What every payment provider adapter must offer (subset of PRD 6.5). Provider-specific formats
  * (signatures, status names, references) stay inside each adapter.
  */
@@ -188,6 +194,11 @@ export interface PaymentProvider<
     successUrl?: string;
     cancelUrl?: string;
     idempotencyKey?: string;
+    /**
+     * Methods to offer, in order. Omitted: card and bank transfer. Empty, unknown or repeated is
+     * refused. The idempotency key does not include the methods: the caller must fix them per attempt.
+     */
+    paymentMethods?: readonly CheckoutMethod[];
   }): Promise<{ providerReference: string; checkoutUrl?: string }>;
   /** Returns null only for a definite absence; unsupported lookup must fail as uncertain. */
   findPayment(attemptId: string): Promise<{ providerReference: string } | null>;
@@ -225,6 +236,11 @@ export interface PaymentProvider<
     successUrl: string;
     cancelUrl: string;
     idempotencyKey: string;
+    /**
+     * Methods to offer, in order. Omitted: card and bank transfer. Empty, unknown or repeated is
+     * refused. The idempotency key does not include the methods: the caller must fix them per attempt.
+     */
+    paymentMethods?: readonly CheckoutMethod[];
   }): Promise<{
     providerReference: `platform:${string}`;
     checkoutUrl: string;

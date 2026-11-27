@@ -141,3 +141,77 @@ export function withdrawalPartCount(
   const parts = allocateWithdrawal(amountMinor, capsMinor, minimumMinor);
   return parts === null ? null : parts.filter((part) => part > 0n).length;
 }
+
+/** What each provider carries of `totalMinor` drawn in drain order (the quote's takes, spec §5). */
+export function drainTakes(
+  capsMinor: readonly bigint[],
+  totalMinor: bigint,
+): bigint[] {
+  let remaining = totalMinor;
+  return capsMinor.map((cap) => {
+    const take = cap < remaining ? cap : remaining;
+    remaining -= take;
+    return take;
+  });
+}
+
+/**
+ * How the request splits an amount across the providers: `allocateWithdrawal`, and, to take all
+ * that can be taken when only the ledger runs out, each provider's take in drain order. Null when
+ * it can't be split.
+ */
+export function requestAllocation(
+  amountMinor: bigint,
+  capsMinor: readonly bigint[],
+  withdrawableMinor: bigint,
+): bigint[] | null {
+  return (
+    allocateWithdrawal(amountMinor, capsMinor) ??
+    (amountMinor === withdrawableMinor
+      ? allocateWithdrawal(
+          amountMinor,
+          drainTakes(capsMinor, withdrawableMinor),
+        )
+      : null)
+  );
+}
+
+/** The part that pays the one fee: the largest, the first in drain order among equals. */
+export function feeCarrierIndex(partsMinor: readonly bigint[]): number {
+  let best = -1;
+  partsMinor.forEach((part, index) => {
+    if (part > 0n && (best === -1 || part > (partsMinor[best] ?? 0n)))
+      best = index;
+  });
+  return best;
+}
+
+/** A provider the quote read: what it can pay now, its transfer fee, and who would pay that fee. */
+export interface WithdrawalFeePart {
+  capMinor: bigint;
+  feeMinor: bigint;
+  feePaidBy: 'user' | 'tipme';
+}
+
+/**
+ * The transfer fee on withdrawing `amountMinor`, and who pays it (Ruling R6): the fee of the
+ * provider carrying the largest part, split exactly as the request splits it. Who pays can differ
+ * by provider (an unused top-up is held at one provider only), so the screen asks this for the
+ * amount typed and the request decides from the same part. Null when the amount can't be split.
+ */
+export function withdrawalFeeFor(
+  amountMinor: bigint,
+  parts: readonly WithdrawalFeePart[],
+  withdrawableMinor: bigint,
+): { feeMinor: bigint; feePaidBy: 'user' | 'tipme' } | null {
+  if (amountMinor <= 0n || parts.length === 0) return null;
+  const allocation = requestAllocation(
+    amountMinor,
+    parts.map((part) => part.capMinor),
+    withdrawableMinor,
+  );
+  const carrier = allocation ? parts[feeCarrierIndex(allocation)] : undefined;
+  return carrier
+    ? { feeMinor: carrier.feeMinor, feePaidBy: carrier.feePaidBy }
+    : null;
+}

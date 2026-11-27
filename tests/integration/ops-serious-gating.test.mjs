@@ -566,6 +566,25 @@ const wired = {
         JSON.stringify(await latest()) === JSON.stringify(next),
     };
   },
+  // The card cost (owner, 26 Nov 2026): one kobo more margin than the cost in force.
+  'card_costs.change': async () => {
+    const latest = async () => {
+      const [row] = await q(
+        `SELECT margin_minor FROM card_cost_settings
+          ORDER BY effective_from DESC, created_at DESC LIMIT 1`,
+      );
+      return row ? BigInt(row.margin_minor) : 1500n;
+    };
+    const next = (await latest()) + 1n;
+    return {
+      payload: {
+        rateBps: 200,
+        fixedMinor: '4500',
+        marginMinor: String(next),
+      },
+      happened: async () => (await latest()) === next,
+    };
+  },
   // You collect (plan Task 12): one day more on the holding cap than the settings in force.
   'collect_settings.change': async () => {
     const latest = async () => {
@@ -1334,14 +1353,14 @@ test('I4: a page owner on staff cannot approve their own fee, by id or by mailbo
     `SELECT email FROM users WHERE id = $1`,
     [pageOwner],
   );
-  const payload = { profileId: await profileId(), feeBps: 111 };
+  const payload = { profileId: await profileId(), feeBps: 311 };
   // Nobody else: the page owner doesn't count, so it runs alone.
   assert.equal((await ask(requester, 'fee.change', payload)).state, 'ran');
   const other = await person({ recovery: ownerEmail ?? 'none@example.com' });
   const third = await person();
   const pending = await ask(requester, 'fee.change', {
     profileId: payload.profileId,
-    feeBps: 222,
+    feeBps: 322,
   });
   await assert.rejects(approve(pending.requestId, pageOwner), {
     code: 'APPROVAL_SUBJECT',
@@ -1351,7 +1370,7 @@ test('I4: a page owner on staff cannot approve their own fee, by id or by mailbo
       code: 'APPROVAL_SUBJECT',
     });
   assert.equal((await approve(pending.requestId, third)).status, 'approved');
-  assert.equal(await feeOf(), 222);
+  assert.equal(await feeOf(), 322);
 });
 
 test("the page's owner can't approve a take-back of their own page", async () => {
@@ -1414,6 +1433,45 @@ test('I6: an older fee request cannot overwrite a fee that has moved', async () 
   const third = await person();
   assert.equal((await approve(old.requestId, third)).status, 'stale');
   assert.equal(await feeOf(), 400);
+});
+
+test('a fee request below the 2% floor is refused when asked, and one edited down to 100 bps is never approved', async () => {
+  const requester = await person();
+  const second = await person();
+  const id = await profileId();
+  const before = await feeOf();
+  // Asked now: the dry run refuses it.
+  await assert.rejects(
+    ask(requester, 'fee.change', { profileId: id, feeBps: 100 }),
+    {
+      code: 'INVALID_INPUT',
+    },
+  );
+  const staleWhy = async (requestId) => {
+    const [stale] = await q(
+      `SELECT reason FROM audit_events WHERE action = 'serious_action.stale' AND subject_id = $1`,
+      [requestId],
+    );
+    return stale?.reason ?? '';
+  };
+  // A pending request whose stored payload is then set to 100 bps, as one stored before the floor.
+  // Approval re-checks the facts before it compares the words the approver read, so the floor stops
+  // it first: stale, the raw INVALID_INPUT in the log, and nothing changes.
+  const asked = await ask(requester, 'fee.change', {
+    profileId: id,
+    feeBps: 300,
+  });
+  assert.equal(asked.state, 'pending');
+  await q(
+    `UPDATE approval_requests SET payload = jsonb_set(payload, '{feeBps}', '100') WHERE id = $1`,
+    [asked.requestId],
+  );
+  assert.deepEqual(await approve(asked.requestId, second), {
+    status: 'stale',
+    why: 'facts_changed',
+  });
+  assert.match(await staleWhy(asked.requestId), /"detail":"INVALID_INPUT"/);
+  assert.equal(await feeOf(), before);
 });
 
 test('N2: an identical request from someone who cannot count does not run again after a lone action', async () => {
@@ -1544,7 +1602,7 @@ test('the worker: pending mail obeys the real rules, and alone reaches the webho
   const able = await person();
   const asked = await ask(requester, 'fee.change', {
     profileId: await profileId(),
-    feeBps: 123,
+    feeBps: 323,
   });
   const logger = { info() {}, warn() {} };
   const posted = [];

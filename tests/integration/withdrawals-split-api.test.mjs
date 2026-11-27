@@ -150,9 +150,12 @@ test('one request paid as two parts, with amounts only and no provider named', a
   const result = JSON.parse(text).data;
   assert.match(result.groupId, /^[0-9a-f-]{36}$/);
   assert.equal(result.status, 'REQUESTED');
+  // The person pays one ₦50 fee for the request, off the largest part (owner, 25 Nov 2026); TipMe
+  // pays the other part's.
+  const fee = 5000n;
   assert.deepEqual(
     result.parts.map((part) => part.amountMinor),
-    [each.toString(), '200000'],
+    [(each - fee).toString(), '200000'],
   );
   assert.equal(result.payoutId, result.parts[0].payoutId);
   // A retry of the same key returns the same group.
@@ -171,10 +174,11 @@ test('one request paid as two parts, with amounts only and no provider named', a
   const rows = JSON.parse(listText).data.items;
   assert.equal(rows.length, 1);
   assert.equal(rows[0].payoutId, result.payoutId);
-  assert.equal(rows[0].amountMinor, amount.toString());
+  // What is sent: the amount chosen less the one fee.
+  assert.equal(rows[0].amountMinor, (amount - fee).toString());
   assert.deepEqual(
     rows[0].parts.map((part) => part.amountMinor),
-    [each.toString(), '200000'],
+    [(each - fee).toString(), '200000'],
   );
 });
 

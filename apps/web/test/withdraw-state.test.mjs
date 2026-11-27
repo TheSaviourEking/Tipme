@@ -9,13 +9,13 @@ import {
   collectDelayLine,
   collectWithdrawView,
   withdrawableNow,
-  withdrawDayNote,
   firstWithdrawalNote,
   firstWithdrawalRowNote,
   withdrawFee,
   withdrawSummary,
   withdrawLamp,
   withdrawRefusal,
+  withdrawRequestBody,
   withdrawState,
   withdrawUnsure,
 } from '../src/lib/withdraw-state.ts';
@@ -501,19 +501,19 @@ test('the unsure words are today’s sentence, split at the full stop', () => {
 });
 
 test('the fee line says who pays the transfer fee, and nothing when there is none', () => {
-  // Owner, 12 Nov 2026: users pay it, from the amount.
+  // Owner, 25 Nov 2026: a person pays it, from the amount (a business since 12 Nov 2026).
   assert.equal(
     withdrawFee(ready()),
     'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
   );
-  // Owner, 18 Nov 2026: a person's withdrawals are free (TipMe pays). The API sends no fee for them.
+  // When TipMe pays (an unused top-up or a fee waiver covers it), the whole amount arrives.
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme', feeMinor: '0' })),
-    'Withdrawals are free: you receive the whole amount.',
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
   assert.equal(
     withdrawFee(ready({ feePaidBy: 'tipme' })),
-    'Withdrawals are free: you receive the whole amount.',
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
   assert.equal(withdrawFee(ready({ feeMinor: '0' })), null);
   assert.equal(withdrawFee({ state: 'no_destination', inReview: false }), null);
@@ -592,14 +592,15 @@ test('the fee line names its source plainly, never the partner, and a different 
     assert.doesNotMatch(text, /bachs|paystack|flutterwave/i);
 });
 
-test('a person’s ready notice says withdrawals are free, with no fee figure (owner, 18 Nov 2026)', () => {
+test('a ready notice says the whole amount arrives when TipMe pays the fee (top-up or waiver), with no fee figure', () => {
   const view = of(ready({ feePaidBy: 'tipme', feeMinor: '0' }));
   assert.equal(view.canWithdraw, true);
   assert.equal(
     view.notice.body,
-    'You can withdraw ₦1,800 to GTBank ••1234. Withdrawals are free: you receive the whole amount.',
+    'You can withdraw ₦1,800 to GTBank ••1234. TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
   );
-  assert.doesNotMatch(view.notice.body, /₦50|transfer fee/);
+  // No fee figure, never the partner's name, and never "free" (the next withdrawal may cost ₦50).
+  assert.doesNotMatch(view.notice.body, /₦50|comes off|free|bachs/i);
 });
 
 test('the withdraw screen shows “Free” for the fee when TipMe pays, and no fee-difference note', async () => {
@@ -610,44 +611,6 @@ test('the withdraw screen shows “Free” for the fee when TipMe pays, and no f
   );
   assert.match(src, /figures\.feePaidBy === 'tipme' \? \(\s*'Free'/);
   assert.doesNotMatch(src, /Paid by TipMe/);
-});
-
-test('the 3rd withdrawal of the day says plainly that the transfer fee comes off it', () => {
-  const personal = (over) =>
-    ready({ feePaidBy: 'user', freePerDay: 2, ordinalToday: 3, ...over });
-  assert.equal(
-    withdrawDayNote(personal()),
-    'This is your 3rd withdrawal today, so the ₦50 transfer fee comes off it. Withdrawals are free twice a day.',
-  );
-  assert.match(
-    withdrawDayNote(personal({ ordinalToday: 4 })),
-    /your 4th withdrawal today/,
-  );
-  assert.match(
-    withdrawDayNote(personal({ ordinalToday: 11 })),
-    /your 11th withdrawal/,
-  );
-  assert.match(
-    withdrawDayNote(personal({ ordinalToday: 12 })),
-    /your 12th withdrawal/,
-  );
-  assert.match(
-    withdrawDayNote(personal({ ordinalToday: 23 })),
-    /your 23rd withdrawal/,
-  );
-  // The first two are free: no note. A business has no daily allowance: no note.
-  assert.equal(
-    withdrawDayNote(
-      ready({ feePaidBy: 'tipme', freePerDay: 2, ordinalToday: 2 }),
-    ),
-    null,
-  );
-  assert.equal(
-    withdrawDayNote(ready({ freePerDay: 0, ordinalToday: 1 })),
-    null,
-  );
-  assert.equal(withdrawDayNote(ready()), null);
-  assert.equal(withdrawDayNote({ state: 'no_destination' }), null);
 });
 
 // You collect (owner, 23 Nov 2026; ADR-0016): each tip's share moves to the recipient's own account
@@ -903,4 +866,123 @@ test('the first-withdrawal words are in the shared copy and are shown by the Wit
     const business = await readFile(new URL(file, import.meta.url), 'utf8');
     assert.doesNotMatch(business, /firstWithdrawal/);
   }
+});
+
+// Ruling R6 (profit guards): never a fee the person didn't see. The request says who the quote on
+// screen showed paying the transfer fee; when that changed, the page reloads the quote, shows the new
+// fee and asks again.
+test('the request sends who the quote showed paying the fee', () => {
+  assert.deepEqual(
+    withdrawRequestBody(500_000n, withdrawSummary(ready(), 500_000n)),
+    { amountMinor: '500000', feePaidBy: 'user' },
+  );
+  assert.deepEqual(
+    withdrawRequestBody(
+      500_000n,
+      withdrawSummary(ready({ feePaidBy: 'tipme' }), 500_000n),
+    ),
+    { amountMinor: '500000', feePaidBy: 'tipme' },
+  );
+  // No figures on screen: the amount alone, decided by the server as before.
+  assert.deepEqual(withdrawRequestBody(500_000n, null), {
+    amountMinor: '500000',
+  });
+});
+
+test('a changed fee says so at the amount, reloads the quote, and the new fee shows', () => {
+  assert.deepEqual(withdrawRefusal('WITHDRAWAL_FEE_CHANGED'), {
+    message:
+      'The transfer fee changed. Check the new amount and confirm again.',
+    reload: true,
+  });
+  // Nothing was recorded: it is not an unsure answer, and the fee below fits the same rule.
+  assert.equal(withdrawUnsure('WITHDRAWAL_FEE_CHANGED'), null);
+  assert.equal(withdrawUnsure('WITHDRAWAL_BELOW_FEE'), null);
+  // The reloaded quote: the top-up was used up, so the person now pays the ₦50.
+  const fresh = ready({ withdrawableMinor: '500000' });
+  assert.deepEqual(withdrawSummary(fresh, 500_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 495_000n,
+  });
+  assert.equal(
+    withdrawFee(fresh),
+    'Transfer fee: ₦50, charged by our payment partner. It comes off the amount you withdraw.',
+  );
+});
+
+test('both withdraw screens send the quoted payer with the amount', async () => {
+  const { readFile } = await import('node:fs/promises');
+  for (const path of [
+    '../src/app/dashboard/withdraw/withdraw-view.tsx',
+    '../src/app/dashboard/business/sections/money.tsx',
+  ]) {
+    const src = await readFile(new URL(path, import.meta.url), 'utf8');
+    assert.match(src, /body: withdrawRequestBody\(amount, (figures|summary)\)/);
+    assert.doesNotMatch(src, /body: \{ amountMinor: String\(amount\) \}/);
+  }
+});
+
+// Ruling R6 with a split account: an unused top-up is held at one provider only, so who pays depends
+// on which provider carries the amount typed. The quote lists each provider's cap, fee and payer;
+// the summary decides for the amount exactly as the request splits it, so the payer sent is the one
+// the request decides and a confirm never loops on WITHDRAWAL_FEE_CHANGED.
+test('the summary decides the fee for the amount typed from the provider that carries it', () => {
+  const split = ready({
+    withdrawableMinor: '2800000',
+    ledgerMinor: '2800000',
+    providerMinor: '2800000',
+    capsMinor: ['800000', '2000000'],
+    // Overall (the whole balance, mostly from the second provider): the person pays.
+    feePaidBy: 'user',
+    feeMinor: '5000',
+    feeParts: [
+      { capMinor: '800000', feeMinor: '0', feePaidBy: 'tipme' },
+      { capMinor: '2000000', feeMinor: '5000', feePaidBy: 'user' },
+    ],
+  });
+  // ₦5,000 fits the first provider, where the top-up is: TipMe pays, the whole amount arrives.
+  assert.deepEqual(withdrawSummary(split, 500_000n), {
+    feeMinor: 0n,
+    feePaidBy: 'tipme',
+    receiveMinor: 500_000n,
+  });
+  assert.deepEqual(
+    withdrawRequestBody(500_000n, withdrawSummary(split, 500_000n)),
+    { amountMinor: '500000', feePaidBy: 'tipme' },
+  );
+  // ₦15,000 goes from the second alone: the ₦50 comes off.
+  assert.deepEqual(withdrawSummary(split, 1_500_000n), {
+    feeMinor: 5000n,
+    feePaidBy: 'user',
+    receiveMinor: 1_495_000n,
+  });
+  // The fee line follows the amount typed when there is one.
+  assert.equal(
+    withdrawFee(split, 500_000n),
+    'TipMe pays the transfer fee on this withdrawal: you receive the whole amount.',
+  );
+  assert.match(withdrawFee(split, 1_500_000n), /^Transfer fee: ₦50/);
+  assert.match(withdrawFee(split), /^Transfer fee: ₦50/);
+  // A quote without the parts (an older API): the overall answer, as before.
+  const { feeParts, ...older } = split;
+  assert.equal(feeParts.length, 2);
+  assert.equal(withdrawSummary(older, 500_000n).feePaidBy, 'user');
+});
+
+test('the fee copy comes from the shared copy, with the fee from its constant', async () => {
+  const { WITHDRAW_FEE_COPY } = await import('@tipme/contracts/copy');
+  assert.equal(
+    withdrawRefusal('WITHDRAWAL_FEE_CHANGED').message,
+    WITHDRAW_FEE_COPY.changed,
+  );
+  assert.equal(
+    withdrawRefusal('WITHDRAWAL_BELOW_FEE').message,
+    WITHDRAW_FEE_COPY.belowFee('₦50'),
+  );
+  assert.equal(
+    withdrawFee(ready({ feePaidBy: 'tipme' })),
+    WITHDRAW_FEE_COPY.tipmePays,
+  );
+  assert.equal(withdrawFee(ready()), WITHDRAW_FEE_COPY.line('₦50'));
 });

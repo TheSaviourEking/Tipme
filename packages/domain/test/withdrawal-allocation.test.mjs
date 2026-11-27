@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   allocateWithdrawal,
+  drainTakes,
+  withdrawalFeeFor,
   withdrawalMinimumMinor,
   withdrawalPartCount,
 } from '../dist/index.js';
@@ -171,5 +173,57 @@ describe('allocateWithdrawal', () => {
     assert.throws(() => allocateWithdrawal(-1n, [M]), RangeError);
     assert.throws(() => allocateWithdrawal(1n, [-1n, M]), RangeError);
     assert.throws(() => allocateWithdrawal(1n, [M], -1n), RangeError);
+  });
+});
+
+// Ruling R6 with a split account: who pays the transfer fee is the provider that carries the largest
+// part of the amount chosen (first in drain order among equals), allocated exactly as the request
+// allocates it, so the screen and the request always agree.
+describe('withdrawalFeeFor', () => {
+  const parts = [
+    { capMinor: 800_000n, feeMinor: 5000n, feePaidBy: 'tipme' },
+    { capMinor: 2_000_000n, feeMinor: 7000n, feePaidBy: 'user' },
+  ];
+  it('takes the fee and payer of the one provider that carries it all', () => {
+    assert.deepEqual(withdrawalFeeFor(500_000n, parts, 2_800_000n), {
+      feeMinor: 5000n,
+      feePaidBy: 'tipme',
+    });
+    // Too big for the first, so the second carries it alone.
+    assert.deepEqual(withdrawalFeeFor(1_500_000n, parts, 2_800_000n), {
+      feeMinor: 7000n,
+      feePaidBy: 'user',
+    });
+  });
+  it('takes the largest part of a split, the first among equals', () => {
+    assert.deepEqual(withdrawalFeeFor(2_800_000n, parts, 2_800_000n), {
+      feeMinor: 7000n,
+      feePaidBy: 'user',
+    });
+    const even = [
+      { capMinor: 300_000n, feeMinor: 5000n, feePaidBy: 'tipme' },
+      { capMinor: 300_000n, feeMinor: 5000n, feePaidBy: 'user' },
+    ];
+    assert.deepEqual(withdrawalFeeFor(600_000n, even, 600_000n), {
+      feeMinor: 5000n,
+      feePaidBy: 'tipme',
+    });
+  });
+  it('one provider covering the amount carries it, even under a smaller ledger', () => {
+    // The ledger allows ₦9,000: the second provider covers it alone, as the request would send it.
+    assert.deepEqual(withdrawalFeeFor(900_000n, parts, 900_000n), {
+      feeMinor: 7000n,
+      feePaidBy: 'user',
+    });
+    // Each provider's take when everything is withdrawn and the ledger, not a provider, runs out.
+    assert.deepEqual(drainTakes([800_000n, 2_000_000n], 900_000n), [
+      800_000n,
+      100_000n,
+    ]);
+  });
+  it('null when the amount can’t be split, or there are no parts', () => {
+    assert.equal(withdrawalFeeFor(0n, parts, 2_800_000n), null);
+    assert.equal(withdrawalFeeFor(3_000_000n, parts, 2_800_000n), null);
+    assert.equal(withdrawalFeeFor(500_000n, [], 0n), null);
   });
 });

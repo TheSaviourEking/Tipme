@@ -107,6 +107,8 @@ test('switch on: a new sign-up is collect and can be tipped with no payment acco
         successUrl: `${WEB_ORIGIN}/tip/${created.tipId}`,
         cancelUrl: `${WEB_ORIGIN}/tip/${created.tipId}`,
         idempotencyKey: `tipme-checkout-${attempt.id}`,
+        // Profit guards: a ₦2,000 Free tip's share covers the card cost.
+        paymentMethods: ['bank_transfer', 'card'],
       },
     ],
   ]);

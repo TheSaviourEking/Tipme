@@ -289,7 +289,7 @@ test('withdrawals below ₦1,000 are refused, unless they take the whole balance
   const part = await withdraw('100000');
   assert.equal(part.status, 409);
   assert.equal(await code(part), 'WITHDRAWAL_TOO_SMALL');
-  // ₦1,800 is left of the ₦3,800 net (Free 5%, owner 18 Nov 2026), and withdrawals are free.
+  // ₦1,800 is left of the ₦3,800 net (Free 5%, owner 18 Nov 2026); the whole of it may go, ₦50 off.
   assert.equal((await withdraw('180000')).status, 201);
   const { availableMinor } = await json(
     await call('GET', '/v1/me/dashboard', cookie),

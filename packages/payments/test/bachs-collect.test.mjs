@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { after, before, test } from 'node:test';
 import {
+  BachsRequestNotSentError,
   CollectTransferRefusedError,
   PlatformRefusalError,
   UncertainProviderOutcomeError,
@@ -814,4 +815,39 @@ test('the platform payout schedule is read without an account header', async () 
   assert.equal(call.method, 'GET');
   assert.equal(call.path, '/v1/balance_settings');
   assert.equal(Object.hasOwn(call.headers, 'X-Account-Id'), false);
+});
+
+test('collect checkout passes the methods through', async () => {
+  const { provider, calls } = fake([answer('checkout-created', 201)]);
+  await provider.initializeCollectCheckout({
+    ...collectCheckout,
+    paymentMethods: ['bank_transfer'],
+  });
+  assert.deepEqual(calls[0].body.payment_method_types, ['NGN_BANK_TRANSFER']);
+});
+
+test('an empty or unknown collect method list never reaches Bachs', async () => {
+  for (const paymentMethods of [[], ['crypto']]) {
+    const { provider, calls } = fake([]);
+    await assert.rejects(
+      provider.initializeCollectCheckout({
+        ...collectCheckout,
+        paymentMethods,
+      }),
+      BachsRequestNotSentError,
+    );
+    assert.equal(calls.length, 0);
+  }
+});
+
+test('a repeated collect method never reaches Bachs', async () => {
+  const { provider, calls } = fake([]);
+  await assert.rejects(
+    provider.initializeCollectCheckout({
+      ...collectCheckout,
+      paymentMethods: ['card', 'card'],
+    }),
+    BachsRequestNotSentError,
+  );
+  assert.equal(calls.length, 0);
 });

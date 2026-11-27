@@ -146,7 +146,8 @@ test('quotes', async (t) => {
           ['fee.cleared', 'fees.manage', 'Partnership ended'],
         ],
       );
-      for (const bad of [-1, 10001, 2.5])
+      // Profit guards, Part 3: 1 to 199 bps is below the 2% floor; 0 (fee-free) and 200 are not.
+      for (const bad of [-1, 10001, 2.5, 1, 100, 199])
         await assert.rejects(
           setAccountFee(database.db, {
             profileId: ADA,

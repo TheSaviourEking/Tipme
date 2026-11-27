@@ -9,10 +9,13 @@ import {
   COLLECT_HELD_NOTE,
   COLLECT_WITHDRAW_WORDS,
   FIRST_WITHDRAWAL_COPY,
+  WITHDRAW_FEE_COPY,
   WITHDRAW_SPLIT_COPY,
 } from '@tipme/contracts/copy';
 import {
   belowWithdrawalMinimum,
+  WITHDRAWAL_FEE_COPY_MINOR,
+  withdrawalFeeFor,
   withdrawalMinimumMinor,
   withdrawalPartCount,
 } from '@tipme/domain';
@@ -260,9 +263,9 @@ function decide(input: {
             tone: 'neutral',
           },
         };
-      // When the user pays the transfer fee from the amount (a business's rule, owner 12 Nov 2026; a
-      // person's withdrawals are free since 18 Nov 2026, so this is a business's case): a balance not
-      // more than the fee would send nothing, so it can't be withdrawn, and the page says why.
+      // When the user pays the transfer fee from the amount (a business since 12 Nov 2026, a person
+      // since 25 Nov 2026): a balance not more than the fee would send nothing, so it can't be
+      // withdrawn, and the page says why.
       if (
         quote.feePaidBy === 'user' &&
         BigInt(quote.withdrawableMinor) <= BigInt(quote.feeMinor)
@@ -389,40 +392,53 @@ export function collectWithdrawView(input: {
 }
 
 /**
- * The fee line, when there is one. A person's page: withdrawals are free (owner, 18 Nov 2026), TipMe
- * pays the partner's transfer fee, and the API reports no fee for them. Under the user-pays rule
- * (businesses, owner 12 Nov 2026) the fee comes off the amount. Null for no fee or no ready quote.
+ * The fee line, when there is one. A person pays the partner's transfer fee from the amount on every
+ * withdrawal (owner, 25 Nov 2026), as a business has since 12 Nov 2026. When TipMe pays it (an unused
+ * top-up or a fee waiver covers it) the line says so for this withdrawal only, never that withdrawals
+ * are free: the next one may cost the fee. Null for no fee or no ready quote.
  */
 export function withdrawFee(
   quote: WithdrawalQuoteResponse | null,
+  chosen?: bigint | null,
 ): string | null {
   if (quote?.state !== 'ready') return null;
-  if (quote.feePaidBy === 'tipme')
-    return 'Withdrawals are free: you receive the whole amount.';
-  if (quote.feeMinor === '0') return null;
-  return `Transfer fee: ${formatNaira(quote.feeMinor)}, charged by our payment partner. It comes off the amount you withdraw.`;
+  const fee = feeFor(quote, chosen ?? null);
+  if (fee.feePaidBy === 'tipme') return WITHDRAW_FEE_COPY.tipmePays;
+  if (fee.feeMinor === BigInt(0)) return null;
+  return WITHDRAW_FEE_COPY.line(formatNaira(fee.feeMinor));
 }
 
-const ordinalOf = (n: number): string => {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
-};
-const timesWord = (n: number): string =>
-  n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
+type ReadyQuote = Extract<WithdrawalQuoteResponse, { state: 'ready' }>;
 
 /**
- * Said before a person confirms, on a person's page only (owner, 18 Nov 2026): the first withdrawals
- * of the Lagos day are free; from the next one the partner's transfer fee comes off the amount. Null
- * when there is nothing to say (free, a business, no ready quote).
+ * The fee on withdrawing `chosen`, and who pays it (Ruling R6): from the provider that carries the
+ * largest part of that amount, split as the request splits it (`withdrawalFeeFor`), since an unused
+ * top-up is held at one provider only. With no amount, or a quote without the parts (an older API),
+ * or an amount that can't be split: the quote's overall answer.
  */
-export function withdrawDayNote(
-  quote: WithdrawalQuoteResponse | null,
-): string | null {
-  if (quote?.state !== 'ready' || quote.feePaidBy !== 'user') return null;
-  const { freePerDay, ordinalToday } = quote;
-  if (!freePerDay || !ordinalToday || ordinalToday <= freePerDay) return null;
-  return `This is your ${ordinalOf(ordinalToday)} withdrawal today, so the ${formatNaira(quote.feeMinor)} transfer fee comes off it. Withdrawals are free ${timesWord(freePerDay)} a day.`;
+function feeFor(
+  quote: ReadyQuote,
+  chosen: bigint | null,
+): { feeMinor: bigint; feePaidBy: 'user' | 'tipme' } {
+  const parts = quote.feeParts ?? [];
+  const decided =
+    chosen !== null && chosen > BigInt(0) && parts.length > 0
+      ? withdrawalFeeFor(
+          chosen,
+          parts.map((part) => ({
+            capMinor: BigInt(part.capMinor),
+            feeMinor: BigInt(part.feeMinor),
+            feePaidBy: part.feePaidBy,
+          })),
+          BigInt(quote.withdrawableMinor),
+        )
+      : null;
+  return (
+    decided ?? {
+      feeMinor: BigInt(quote.feeMinor),
+      feePaidBy: quote.feePaidBy,
+    }
+  );
 }
 
 /**
@@ -491,12 +507,26 @@ export function withdrawSummary(
   receiveMinor: bigint;
 } | null {
   if (quote?.state !== 'ready') return null;
-  // What the user pays: nothing when TipMe pays the fee (owner, 18 Nov 2026).
-  const feeMinor =
-    quote.feePaidBy === 'user' ? BigInt(quote.feeMinor) : BigInt(0);
+  // Who pays for this amount (Ruling R6); what the user pays is nothing when TipMe pays it.
+  const fee = feeFor(quote, chosen);
+  const feeMinor = fee.feePaidBy === 'user' ? fee.feeMinor : BigInt(0);
   const receiveMinor = chosen - feeMinor;
   if (receiveMinor <= BigInt(0)) return null;
-  return { feeMinor, feePaidBy: quote.feePaidBy, receiveMinor };
+  return { feeMinor, feePaidBy: fee.feePaidBy, receiveMinor };
+}
+
+/**
+ * A withdrawal request's body: the amount, and who the summary on screen showed paying the transfer
+ * fee (Ruling R6), so the server refuses rather than charge a fee the person didn't see. No summary,
+ * no payer: the server decides, as for a screen from before this release.
+ */
+export function withdrawRequestBody(
+  amountMinor: bigint | number,
+  shown: { feePaidBy: 'user' | 'tipme' } | null,
+): { amountMinor: string; feePaidBy?: 'user' | 'tipme' } {
+  return shown
+    ? { amountMinor: String(amountMinor), feePaidBy: shown.feePaidBy }
+    : { amountMinor: String(amountMinor) };
 }
 
 /**
@@ -563,8 +593,16 @@ export function withdrawRefusal(code: string | undefined): {
     };
   if (code === 'WITHDRAWAL_BELOW_FEE')
     return {
-      message:
-        'The amount must be more than the ₦50 transfer fee, which comes off it.',
+      message: WITHDRAW_FEE_COPY.belowFee(
+        formatNaira(WITHDRAWAL_FEE_COPY_MINOR),
+      ),
+      reload: true,
+    };
+  // Ruling R6: who pays the fee changed since the quote on screen. Nothing was recorded; the reload
+  // shows the new fee, and confirming again sends that.
+  if (code === 'WITHDRAWAL_FEE_CHANGED')
+    return {
+      message: WITHDRAW_FEE_COPY.changed,
       reload: true,
     };
   if (code === 'IDEMPOTENCY_CONFLICT')
@@ -599,7 +637,9 @@ export function withdrawUnsure(
   if (
     (code !== undefined && SHOWN_BY_PAGE.has(code)) ||
     code === 'INSUFFICIENT_BALANCE' ||
-    code === 'WITHDRAWAL_TOO_SMALL'
+    code === 'WITHDRAWAL_TOO_SMALL' ||
+    code === 'WITHDRAWAL_BELOW_FEE' ||
+    code === 'WITHDRAWAL_FEE_CHANGED'
   )
     return null;
   return {

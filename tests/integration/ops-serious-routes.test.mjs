@@ -799,7 +799,7 @@ test('M4, M6: asking is limited per person, not per address, and routine closes 
   }
   const ask = (person) =>
     call(limited.api, 'POST', `/v1/ops/pages/${id}/fee`, person.cookie, {
-      feeBps: 77,
+      feeBps: 277,
       reason: REASON,
     });
   for (let i = 0; i < 3; i += 1) assert.equal((await ask(a)).status, 202);
@@ -858,6 +858,9 @@ test('alone, a serious route says it acted alone; with a second person it never 
       feeBps,
       reason: REASON,
     });
+  // Profit guards (Part 3): a page rate is 0 or 200 bps and up; 199 never reaches an approval.
+  const refused = await fee(199);
+  assert.equal(refused.status, 400);
   const waited = await fee(700);
   assert.equal(waited.status, 202);
   assert.equal((await waited.json()).data.actedAlone, undefined);

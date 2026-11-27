@@ -59,8 +59,8 @@ test('usernames.manage is a sensitive people permission', () => {
   });
 });
 
-test('the serious actions are the agreed thirty-four', () => {
-  assert.equal(new Set(SERIOUS_ACTIONS).size, 34);
+test('the serious actions are the agreed thirty-five', () => {
+  assert.equal(new Set(SERIOUS_ACTIONS).size, 35);
   // You collect staff screens (plan Task 15): every money action there needs collect.manage.
   for (const name of [
     'collect_transfer.retry',
