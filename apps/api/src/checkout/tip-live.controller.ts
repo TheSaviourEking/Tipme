@@ -103,6 +103,7 @@ export class TipLiveController {
       return;
     }
     let checks: { stop(): void } | null = null;
+    let checkFailed = false;
     const stream = openStream({
       req,
       res,
@@ -137,12 +138,16 @@ export class TipLiveController {
         stream.write(sseFrame({ type: 'tip.changed' }));
         stream.close('final');
       },
-      onError: (error) =>
-        // The error's name only: no ids.
+      onError: (error) => {
+        // Once per stream, so a Bachs outage is not a line every 4 s per receipt. The error's
+        // name only: no ids.
+        if (checkFailed) return;
+        checkFailed = true;
         this.logger.warn({
           event: 'live.receipt_check_failed',
           error: error instanceof Error ? error.name : 'unknown',
-        }),
+        });
+      },
       now: Date.now,
       setTimer: (fn, ms) => {
         const timer = setTimeout(fn, ms);

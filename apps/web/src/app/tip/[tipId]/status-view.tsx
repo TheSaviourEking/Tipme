@@ -19,7 +19,7 @@ import { AvatarImage } from '@/components/avatar';
 import { hasAvatar } from '@/lib/avatar-source';
 import { BusinessNote } from './business-note';
 import { readPendingTip, statusTokenKey } from '@/lib/pending-tip';
-import { GIVE_UP_AFTER_MS, nextCheckDelay } from '@/lib/status-polling';
+import { startReceiptLoop } from '@/lib/receipt-loop';
 import { followTip } from '@/lib/tip-live';
 import type { LiveStatus } from '@/lib/live-client';
 import { forgetSupporterKeys } from '@/lib/supporter-keys';
@@ -121,147 +121,51 @@ export function StatusView({ pilotNotice }: { pilotNotice?: ReactNode }) {
 
   useEffect(() => {
     if (!token) return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const started = Date.now();
-    /** Reads finished this round: nextCheckDelay's attempt count, as before. */
-    let reads = 0;
-    let inFlight = false;
-    /** A signal came during a read, which may have started before the change: read once more. */
-    let again = false;
-    /** Final, not found, or given up: no more reads this round. */
-    let done = false;
-    // The receipt's stream (addendum §3.6), only when the first answer says live updates are on.
-    let followed = false;
-    let follower: { stop(): void } | null = null;
-    /** The current follower's identity, so a stopped one's late callbacks are ignored. */
-    let current: object | null = null;
-    let connected = false;
-    let deadline: ReturnType<typeof setTimeout> | undefined;
-
-    const stopFollowing = () => {
-      const stopping = follower;
-      follower = null;
-      current = null;
-      connected = false;
-      stopping?.stop();
-      setLive('idle');
-    };
-    const finish = () => {
-      done = true;
-      clearTimeout(timer);
-      clearTimeout(deadline);
-      timer = undefined;
-      stopFollowing();
-    };
-    // Today's loop, unchanged, whenever the stream is not connected; while it is, nothing is timed
-    // and the stream says when to read.
-    const schedule = () => {
-      if (done || cancelled || connected || inFlight || timer !== undefined)
-        return;
-      const delay = nextCheckDelay(
-        Math.max(0, reads - 1),
-        Date.now() - started,
-      );
-      if (delay === null) {
-        finish();
-        setStopped(true);
-        return;
-      }
-      timer = setTimeout(() => {
-        timer = undefined;
-        void read();
-      }, delay);
-    };
-    const follow = () => {
-      const self = {};
-      current = self;
-      // The round's end, as nextCheckDelay's: the stream stops too, and a connected receipt (no
-      // timer of its own) then offers "Check again"; a polling one ends on its next check, as
-      // today. Armed only with a stream, so with live updates off the timers are today's.
-      deadline = setTimeout(
-        () => {
-          if (done) return;
-          stopFollowing();
-          schedule();
-        },
-        Math.max(0, started + GIVE_UP_AFTER_MS - Date.now()),
-      );
-      follower = followTip({
-        tipId,
-        token,
-        onChange: () => {
-          if (current === self) void read();
-        },
-        onStatus: (status) => {
-          if (current !== self) return;
-          setLive(status);
-          connected = status === 'connected';
-          if (connected) {
-            clearTimeout(timer);
-            timer = undefined;
-          } else schedule();
-        },
-      });
-    };
-    const read = async () => {
-      if (done) return;
-      if (inFlight) {
-        again = true;
-        return;
-      }
-      clearTimeout(timer);
-      timer = undefined;
-      inFlight = true;
-      const result = await tipStatus(tipId, token);
-      inFlight = false;
-      if (cancelled) return;
-      reads += 1;
-      if (result.ok) {
-        setNoAnswer(false);
-        setResult({ kind: 'tip', view: result.data });
-        if (result.data.state === 'paid') celebrate(result.data);
-        if (FINAL.has(result.data.state)) {
-          finish();
-          return;
+    // One round of checks (src/lib/receipt-loop.ts): polling as before, or following the tip's
+    // stream when the API says live updates are on.
+    let active = true;
+    const loop = startReceiptLoop({
+      read: async () => {
+        const result = await tipStatus(tipId, token);
+        // Left the page meanwhile: show nothing (the loop has stopped and ignores this).
+        if (!active) return { kind: 'failed' };
+        if (result.ok) {
+          setNoAnswer(false);
+          setResult({ kind: 'tip', view: result.data });
+          if (result.data.state === 'paid') celebrate(result.data);
+          return {
+            kind: 'ok',
+            final: FINAL.has(result.data.state),
+            live: result.data.live === true,
+          };
         }
-        if (!followed && result.data.live === true) {
-          followed = true;
-          follow();
+        if (result.status === 404) {
+          setResult({ kind: 'not-found' });
+          return { kind: 'not_found' };
         }
-      } else if (result.status === 404) {
-        setResult({ kind: 'not-found' });
-        finish();
-        return;
-      } else {
         setNoAnswer(true);
-      }
-      if (again) {
-        again = false;
-        void read();
-        return;
-      }
-      schedule();
-    };
-    // Back online: check at once instead of waiting out the timer. A connected receipt has no
-    // timer, and a signal may have been lost while offline: it checks at once too.
+        return { kind: 'failed' };
+      },
+      follow: ({ onChange, onStatus }) =>
+        followTip({ tipId, token, onChange, onStatus }),
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (timer) => window.clearTimeout(timer as number),
+      now: () => Date.now(),
+      onLive: setLive,
+      onGiveUp: () => setStopped(true),
+    });
+    // Back online: check at once instead of waiting out the timer.
     let disarm = () => {};
     const arm = () => {
       disarm = onReconnect(window, () => {
         arm();
-        if (timer === undefined && !connected) return;
-        clearTimeout(timer);
-        timer = undefined;
-        void read();
+        loop.reconnected();
       });
     };
     arm();
-    void read();
     return () => {
-      cancelled = true;
-      clearTimeout(timer);
-      clearTimeout(deadline);
-      stopFollowing();
+      active = false;
+      loop.stop();
       disarm();
     };
     // celebrate only reads refs and storage; polling restarts on the token or "Check again".

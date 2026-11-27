@@ -103,6 +103,39 @@ test('a receipt turns paid without polling while connected', async ({
   expect(reads.length).toBe(settled);
 });
 
+test('a failed read while connected is retried, and the receipt turns paid', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const tip = await startTip(page);
+  // From the payment for 1.5 s every status read gets a 503: the reads both signals (pending,
+  // then paid) ask for fail, and the stream will not say the same thing again.
+  let failUntil = 0;
+  let refused = 0;
+  await page.route(STATUS, (route) => {
+    if (route.request().method() !== 'GET' || Date.now() >= failUntil)
+      return route.continue();
+    refused += 1;
+    return route.fulfill({
+      status: 503,
+      headers: {
+        'access-control-allow-origin':
+          route.request().headers()['origin'] ?? '*',
+      },
+      json: { error: { code: 'UNAVAILABLE' } },
+    });
+  });
+  await page.goto(`/tip/${tip.tipId}`);
+  await expect(receipt(page)).toHaveAttribute('data-live', 'connected');
+  await page.waitForTimeout(1000);
+  failUntil = Date.now() + 1500;
+  await pay(page, tip.reference);
+  // The retry comes on nextCheckDelay (2 s at this point), not at the 15-minute give-up.
+  await expect(paidHeading(page)).toBeVisible({ timeout: 8000 });
+  expect(refused).toBeGreaterThanOrEqual(1);
+  await page.unroute(STATUS);
+});
+
 test('the receipt polls as today when the stream is refused', async ({
   page,
 }) => {
