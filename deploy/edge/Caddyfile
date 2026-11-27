@@ -138,3 +138,10 @@
 {$PRODUCTION_APEX_HOST} {
 	redir https://{$PRODUCTION_WEB_HOST}{uri} 308
 }
+
+# www on staging: the same permanent redirect, to the staging host. Its name is built from
+# STAGING_WEB_HOST, so no new edge.env key (and no edge recreate) is needed. Its DNS record must
+# exist before this file reaches the edge, or the certificate request fails and backs off.
+www.{$STAGING_WEB_HOST} {
+	redir https://{$STAGING_WEB_HOST}{uri} 308
+}

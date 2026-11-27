@@ -29,16 +29,18 @@ const CADDY = `${NET}-caddy`;
 const STAGING_HOST = 'staging.edge.test';
 const PRODUCTION_HOST = 'production.edge.test';
 // The websites (self-hosted since 26 Nov 2026). The production web host is given with :80 rather
-// than http://, because the apex redirect names it after https:// (as edge.env does: a bare host).
+// than http://, because the redirects name it after https:// (as edge.env does: a bare host).
+// The staging web host takes :80 too, since www.<staging host> is built from it.
 // Caddy serves a site on the HTTP port without certificates, so no test switch is needed.
 const STAGING_WEB_HOST = 'staging-web.edge.test';
+const WWW_STAGING_HOST = `www.${STAGING_WEB_HOST}`;
 const WEB_HOST = 'www.edge.test';
 const APEX_HOST = 'apex.edge.test';
 const EDGE_ENV = [
   'ACME_EMAIL=ops@edge.test',
   `STAGING_API_HOST=http://${STAGING_HOST}`,
   `PRODUCTION_API_HOST=http://${PRODUCTION_HOST}`,
-  `STAGING_WEB_HOST=http://${STAGING_WEB_HOST}`,
+  `STAGING_WEB_HOST=${STAGING_WEB_HOST}:80`,
   `PRODUCTION_WEB_HOST=${WEB_HOST}:80`,
   `PRODUCTION_APEX_HOST=http://${APEX_HOST}`,
 ];
@@ -358,6 +360,22 @@ test(
     const { status, headers } = await get(APEX_HOST, '/@ada?from=qr&x=1');
     assert.equal(status, 308);
     assert.equal(headers.location, `https://${WEB_HOST}:80/@ada?from=qr&x=1`);
+  },
+);
+
+test(
+  'www.<staging host> redirects permanently to the staging host, path and query kept',
+  { skip },
+  async () => {
+    const { status, headers } = await get(
+      WWW_STAGING_HOST,
+      '/@ada?from=qr&x=1',
+    );
+    assert.equal(status, 308);
+    assert.equal(
+      headers.location,
+      `https://${STAGING_WEB_HOST}:80/@ada?from=qr&x=1`,
+    );
   },
 );
 
