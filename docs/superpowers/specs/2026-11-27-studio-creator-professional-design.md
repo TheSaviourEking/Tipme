@@ -179,7 +179,7 @@ Both styles show links in two forms, an **icon row** and **rows** (owner decided
 
 - **Both offer light, dark and auto (owner decided, 16 Nov: every style).** Creator light is a soft lilac-white page. Professional dark is a near-black page with a lifted card.
 - **"Dark by default" / "light by default"** sets `naturalMode`. That drives the style card, the boards, the snapshots and the examples.
-- **Switching keeps the person's mode,** as §10 already does for Stage. Someone in Light who picks Creator stays in Light, one tap from Dark. **(my call:** §10's "switching keeps everything the new style can use" holds for every style, and a mode that changes by itself would surprise people more than it helps them)
+- **Switching keeps the person's mode,** as §10 already does for Stage. Someone in Light who picks Creator stays in Light, one tap from Dark. **(owner decided, 27 Nov:** "keep their current mode")
 - Auto is plain CSS, as built.
 
 ### 6.3 Identity
@@ -443,4 +443,4 @@ Each item below is the builder's call:
 
 ## 13. Open questions for the owner
 
-None. The (my call) items can be changed through the coordinator. The one most likely to need the owner is 6.2: whether switching to Creator should also switch the page to Dark. This document keeps the person's mode, as every style does today.
+None. The (my call) items can be changed through the coordinator. Switching to Creator keeps the person's light or dark mode (owner decided, 27 Nov; §6.2).
