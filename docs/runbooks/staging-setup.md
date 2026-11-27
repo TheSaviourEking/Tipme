@@ -13,10 +13,11 @@ Secrets are typed on the server, never into chat or the repository. (The website
 
 ## 1. DNS
 
-| Name                   | Type                             | Points to                             |
-| ---------------------- | -------------------------------- | ------------------------------------- |
-| `api.staging.<domain>` | A (and AAAA if the VPS has IPv6) | the VPS address                       |
-| `staging.<domain>`     | A (and AAAA if the VPS has IPv6) | the VPS address (the website, step 4) |
+| Name                   | Type                             | Points to                                                                 |
+| ---------------------- | -------------------------------- | ------------------------------------------------------------------------- |
+| `api.staging.<domain>` | A (and AAAA if the VPS has IPv6) | the VPS address                                                           |
+| `staging.<domain>`     | A (and AAAA if the VPS has IPv6) | the VPS address (the website, step 4)                                     |
+| `www.staging.<domain>` | A (and AAAA if the VPS has IPv6) | the VPS address (redirects to `staging.<domain>`; "www on staging" below) |
 
 ## 2. Harden the server (as root, once)
 
@@ -115,6 +116,16 @@ docker compose -p tipme-edge -f compose.edge.yml up -d
 ```
 
 `edge.env` holds `ACME_EMAIL`, `STAGING_API_HOST`, `PRODUCTION_API_HOST`, `STAGING_WEB_HOST`, `PRODUCTION_WEB_HOST` and `PRODUCTION_APEX_HOST` (the Caddyfile refuses to load without any of them). Until production exists, none of the production containers (`tipme-production-api-{blue,green}-{1,2,3}`, `tipme-production-web-{blue,green}-1`) exist, so the production hosts return 502; that is expected.
+
+### www on staging
+
+`https://www.staging.<domain>/<anything>` redirects (308) to `https://staging.<domain>/<same path and query>`. The edge builds the name from `STAGING_WEB_HOST`, so there is no new `edge.env` key and the edge container is not recreated.
+
+1. **First, add the DNS record:** `www.staging` A (and AAAA if the VPS has IPv6) to the server's address, in Cloudflare set to "DNS only" (grey cloud). Wait until `dig +short www.staging.<domain>` shows the server's address. Do this **before** the new Caddyfile reaches the edge: otherwise Caddy's certificate request for the name fails and it backs off for hours.
+2. **Then the Caddyfile reaches the edge**, either way:
+   - the next production deploy installs it by itself (`scripts/ship-production.sh` validates, replaces and reloads); or
+   - by hand: copy it to `/srv/tipme-edge/incoming/Caddyfile`, run the `caddy validate` command from step 5.2 of "Website on this server: the move from Vercel" below, then `cat incoming/Caddyfile > Caddyfile` and `docker compose -p tipme-edge -f compose.edge.yml exec -T caddy caddy reload --config /etc/caddy/Caddyfile`. A reload is enough here: no new `edge.env` key.
+3. Check: `curl -sI 'https://www.staging.<domain>/@ada?x=1' | grep -iE '^HTTP|^location'` shows `308` and `https://staging.<domain>/@ada?x=1`.
 
 ## 4. The website (on this server)
 
@@ -252,6 +263,8 @@ Staging turns live updates on first: `LIVE_UPDATES_ENABLED=true` in `staging.env
 4. **DNS, for all three website names at once.** Move staging's and production's names together, so the edge never asks for a certificate while a name still points at Vercel (a failed challenge makes Caddy back off for hours and counts against Let's Encrypt's limits). At your DNS provider, for each of `staging.<domain>`, `www.<domain>` and the bare `<domain>`:
    - remove Vercel's record (a CNAME to Vercel, or Vercel's A/AAAA on the bare domain);
    - add an A record (and AAAA if the server has IPv6) for the server's address.
+
+   `www.staging.<domain>` (A record to the server, Cloudflare "DNS only") is added the same way, before the Caddyfile that serves it reaches the edge; see "www on staging" in section 3a.
 
    Touch nothing else: the bare domain's MX, SPF, DKIM and DMARC records stay. If the domain has a CAA record, it must allow `letsencrypt.org`. Wait until each `dig +short <name>` shows the server's address. Until the edge has these sites (step 5), the names fail to connect, as they failed under Vercel's pause.
 
