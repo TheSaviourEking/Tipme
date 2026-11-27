@@ -35,6 +35,7 @@ import { usePaymentMode } from '@/components/payment-mode-context';
 import { paymentModeCopy } from '@/lib/payment-mode-copy';
 import { isPaymentAttention } from '@/lib/owner-attention';
 import { withdrawableNow } from '@/lib/withdraw-state';
+import { tipsCoveredLine } from '@/lib/fee-waiver-recipient';
 import { Money } from '@/components/money';
 import { naira } from '@/lib/money';
 
@@ -192,6 +193,17 @@ export default function DashboardHome() {
     />
   );
 
+  // Fee waivers (spec 2026-11-23 §7, W17): said only while a new tip would be waived.
+  const tipsCovered = tipsCoveredLine(summary.tipFeeWaiver);
+  const feeWaiverNotice = tipsCovered && (
+    <Slip
+      tone="neutral"
+      title={tipsCovered}
+      className="fee-waiver-slip"
+      data-testid="tip-fee-waiver"
+    />
+  );
+
   const shareStatus = (
     <p role="status" className="tm-hint dashboard-share-status">
       {shared}
@@ -208,6 +220,7 @@ export default function DashboardHome() {
         <WhatsNewSlip />
         {collectNotice}
         {disputeNotice}
+        {feeWaiverNotice}
         {firstDay ? (
           <section className="first-day recipient-setup" aria-labelledby="next">
             <div>

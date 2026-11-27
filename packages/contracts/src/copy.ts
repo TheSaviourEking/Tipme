@@ -160,6 +160,21 @@ export const FEE_WAIVER_NOTICE_COPY = {
 } as const;
 
 /**
+ * Fee waivers (spec 2026-11-23 §7, W17): what a recipient reads while TipMe pays a fee. The
+ * dashboard line is said only while a new tip would be waived; the tip's own line is past tense,
+ * from what its quote recorded. `until` comes in worded by `untilWords` ("until 31 Jan"). Never the
+ * payment partner's name.
+ */
+export const FEE_WAIVER_RECIPIENT_COPY = {
+  tipsCovered: (until: string | null) =>
+    `TipMe is covering the fee on your tips${until === null ? '' : ` ${until}`}`,
+  tipCovered: 'TipMe covered the fee on this tip.',
+  /** A business's Money section, while TipMe pays its transfer fee; the amount follows. */
+  businessTransferFree: 'Transfer fee: Free.',
+  businessReceives: 'The business receives',
+} as const;
+
+/**
  * Who pays the fees, for staff (spec 2026-11-23 §6): the grid on Fees, its change dialog, the
  * Waivers list and the per-account control. Dates come in already worded by `untilWords` ("until 31
  * Jan"), amounts already formatted (₦12,350). These words reach components the provider-name rule

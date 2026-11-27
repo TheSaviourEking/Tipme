@@ -8,7 +8,10 @@ import type {
   WithdrawalQuoteResponse,
   WithdrawalRequestResult,
 } from '@tipme/contracts';
-import { WITHDRAW_SPLIT_COPY } from '@tipme/contracts/copy';
+import {
+  FEE_WAIVER_RECIPIENT_COPY,
+  WITHDRAW_SPLIT_COPY,
+} from '@tipme/contracts/copy';
 import { withdrawalMinimumMinor } from '@tipme/domain';
 import { Button, InputField, Skeleton, Slip } from '@tipme/ui';
 import { GetPaidCard } from '@/components/account/get-paid-card';
@@ -336,6 +339,13 @@ export function MoneyCard({ business }: { business: BusinessDetail }) {
                 payment partner. It comes off the amount: the business receives{' '}
                 <Money minor={summary.receiveMinor} />. If the fee is different,
                 the difference is settled on the business’s balance.
+              </>
+            ) : summary.feePaidBy === 'tipme' ? (
+              // TipMe pays the transfer fee (a fee waiver, or a free top-up): spec 2026-11-23 §7.
+              <>
+                {FEE_WAIVER_RECIPIENT_COPY.businessTransferFree}{' '}
+                {FEE_WAIVER_RECIPIENT_COPY.businessReceives}{' '}
+                <Money minor={summary.receiveMinor} />.
               </>
             ) : (
               <>
